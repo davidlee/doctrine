@@ -22,13 +22,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// Write `root/<rel>` with `body`, creating parent dirs.
 fn write(root: &Path, rel: &str, body: &str) {
@@ -95,7 +91,7 @@ fn run(root: &Path, args: &[&str]) -> Output {
     a.push("-p");
     let root_s = root.to_str().expect("utf8 path");
     a.push(root_s);
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(&a)
         .output()
         .expect("spawn doctrine")

@@ -33,10 +33,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -88,8 +84,8 @@ fn stamp_marker(root: &Path) {
 /// binary inherits no jail target redirect — the fork's `target/` is in-tree
 /// (SL-156); gc no longer reads CARGO_TARGET_DIR at all.
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    let mut cmd = Command::new(bin());
-    cmd.args(args).current_dir(cwd);
+    let mut cmd = common::doctrine_cmd(cwd);
+    cmd.args(args);
     cmd.env_remove("CARGO_TARGET_DIR");
     match worker {
         Some(true) => {

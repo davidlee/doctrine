@@ -30,10 +30,6 @@ use std::process::{Command, Output, Stdio};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 const CREATE: &[&str] = &["worktree", "create-fork"];
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -90,11 +86,9 @@ fn payload(cwd: &Path, name: &str) -> String {
 /// so provisioning into the fork is deterministic and the worker guard sees a clean
 /// (markerless) parent.
 fn run(cwd: &Path, payload: &str, args: &[&str]) -> Output {
-    let mut child = Command::new(bin())
+    let mut child = common::doctrine_cmd(cwd)
         .args(args)
-        .current_dir(cwd)
         .env_remove("CARGO_TARGET_DIR")
-        .env_remove("DOCTRINE_WORKER")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

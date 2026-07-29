@@ -19,7 +19,6 @@
 )]
 
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
@@ -73,7 +72,7 @@ fn memory_validate_dangling_relation_byte_exact_golden() {
         &[("related", "mem_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")],
     );
 
-    let output = Command::new(common::doctrine_bin())
+    let output = common::doctrine_cmd(root)
         .args(["memory", "validate"])
         .arg("-p")
         .arg(root)

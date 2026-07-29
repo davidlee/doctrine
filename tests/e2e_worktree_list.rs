@@ -24,10 +24,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -81,8 +77,8 @@ fn commit_in(wt: &Path, rel: &str, body: &str) {
 }
 
 fn run(cwd: &Path, args: &[&str]) -> Output {
-    let mut cmd = Command::new(bin());
-    cmd.args(args).current_dir(cwd);
+    let mut cmd = common::doctrine_cmd(cwd);
+    cmd.args(args);
     cmd.env_remove("CARGO_TARGET_DIR");
     cmd.env_remove("DOCTRINE_WORKER");
     cmd.output().expect("spawn doctrine")

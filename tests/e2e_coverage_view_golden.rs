@@ -31,13 +31,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 // --- seed helpers ---------------------------------------------------------
 
@@ -138,7 +134,7 @@ fn clear_coverage(root: &Path, slice_id: u32) {
 // --- run / output helpers -------------------------------------------------
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(args)
         .arg("-p")
         .arg(root)

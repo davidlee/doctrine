@@ -14,23 +14,17 @@
 )]
 
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
-/// Create a backlog issue with the given title under `dir`. `DOCTRINE_WORKER` is
-/// explicitly UNSET — `backlog new` is an authored write the worker-mode guard
-/// refuses under a leaked env leg; strip it so the write proceeds regardless of the
-/// caller's shell (the established `mem.pattern.dispatch.worker-verify-unset` idiom).
+/// Create a backlog issue with the given title under `dir`. `common::doctrine_cmd`
+/// roots the child in `dir` and declares both worker-mode legs down — `backlog new`
+/// is an authored write the guard refuses under either one, and a fixture operating
+/// on a scratch root must not inherit the harness's tree (IMP-352).
 fn new_issue(dir: &Path, title: &str) {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(dir)
         .args(["backlog", "new", "issue", title, "-p"])
         .arg(dir)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine");
     assert!(
@@ -42,12 +36,8 @@ fn new_issue(dir: &Path, title: &str) {
 
 /// Run `backlog list` with the given extra args, returning stdout.
 fn list(dir: &Path, extra: &[&str]) -> String {
-    let mut cmd = Command::new(bin());
-    cmd.args(["backlog", "list"])
-        .args(extra)
-        .arg("-p")
-        .arg(dir)
-        .env_remove("DOCTRINE_WORKER");
+    let mut cmd = common::doctrine_cmd(dir);
+    cmd.args(["backlog", "list"]).args(extra).arg("-p").arg(dir);
     let out = cmd.output().expect("spawn doctrine");
     assert!(
         out.status.success(),

@@ -27,10 +27,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 // The stable dual-cause tokens (design §3). Goldens assert this substance.
 const DUAL_CAUSE: &str = "`DOCTRINE_WORKER` set outside a worker worktree";
 
@@ -70,20 +66,17 @@ fn init_repo(dir: &Path) {
 /// `doctrine <args...>` under `DOCTRINE_WORKER=1`, rooted in a throwaway cwd so a
 /// (never-reached) write could not touch the repo.
 fn run_worker(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(cwd)
         .args(args)
         .env("DOCTRINE_WORKER", "1")
-        .current_dir(cwd)
         .output()
         .expect("spawn doctrine")
 }
 
 /// `doctrine <args...>` with `DOCTRINE_WORKER` explicitly UNSET, in `cwd`.
 fn run_no_env(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(cwd)
         .args(args)
-        .env_remove("DOCTRINE_WORKER")
-        .current_dir(cwd)
         .output()
         .expect("spawn doctrine")
 }

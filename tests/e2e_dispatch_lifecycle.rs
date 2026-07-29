@@ -32,10 +32,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// The coordination branch for slice 64 — `dispatch/{64:03}`.
 const COORD_BRANCH: &str = "dispatch/064";
 
@@ -70,10 +66,8 @@ fn ref_exists(dir: &Path, refname: &str) -> bool {
 /// orchestrator path is never worker-mode (mem.pattern.dispatch.worker-verify-
 /// unset-doctrine-worker).
 fn run(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(cwd)
         .args(args)
-        .current_dir(cwd)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine")
 }

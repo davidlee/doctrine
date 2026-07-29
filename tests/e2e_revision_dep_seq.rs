@@ -25,10 +25,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// A throwaway git repo with a pinned identity and the `.doctrine/revision` tree
 /// pre-materialised (REV scaffolds eagerly into an existing dir). `revision status`
 /// captures a born-frame from git, so the repo is a real git repo (mirrors the
@@ -69,11 +65,10 @@ impl Repo {
     /// would spuriously red an authored round-trip
     /// (mem.pattern.dispatch.worker-verify-unset).
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(&self.path)
             .args(args)
             .arg("-p")
             .arg(&self.path)
-            .env_remove("DOCTRINE_WORKER")
             .output()
             .expect("spawn doctrine")
     }

@@ -22,14 +22,10 @@
 )]
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Output};
 
 mod common;
-
-fn bin() -> PathBuf {
-    common::doctrine_bin()
-}
 
 /// The `bwrap` token as bytes — the wrap prefix's first argv element.
 const BWRAP: &[u8] = b"bwrap";
@@ -76,13 +72,10 @@ fn jail_prefix(
         args.push("--extra-rw".into());
         args.push(g.to_str().unwrap().into());
     }
-    let mut cmd = Command::new(bin());
-    cmd.args(&args);
     // Non-worker cwd (see fn doc): out's parent is a clean tempdir with no doctrine
     // root above it, so the orchestrator-class guard resolves non-worker ⇒ allowed.
-    if let Some(parent) = out.parent() {
-        cmd.current_dir(parent);
-    }
+    let mut cmd = common::doctrine_cmd(out.parent().unwrap_or(out));
+    cmd.args(&args);
     if let Some(p) = path_env {
         cmd.env("PATH", p);
     }

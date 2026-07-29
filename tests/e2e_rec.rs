@@ -20,10 +20,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// A throwaway git repo with a `.doctrine/rec` tree, pinned identity on `main`.
 struct RecRepo {
     _dir: tempfile::TempDir,
@@ -58,7 +54,7 @@ impl RecRepo {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(&self.path)
             .args(args)
             .arg("-p")
             .arg(&self.path)

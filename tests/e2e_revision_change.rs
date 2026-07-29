@@ -23,10 +23,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// A throwaway git repo seeded with the authored-truth targets a Revision revises.
 struct Repo {
     _dir: tempfile::TempDir,
@@ -104,7 +100,7 @@ impl Repo {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(&self.path)
             .args(args)
             .arg("-p")
             .arg(&self.path)

@@ -19,10 +19,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
 }
@@ -61,8 +57,8 @@ fn init_repo(dir: &Path) {
 /// than inherited, so a `DOCTRINE_WORKER` in the runner's own environment
 /// cannot silently reclassify an unrelated test.
 fn spawn(cwd: &Path, args: &[&str], worker_env: bool) -> Output {
-    let mut cmd = Command::new(bin());
-    cmd.args(args).current_dir(cwd);
+    let mut cmd = common::doctrine_cmd(cwd);
+    cmd.args(args);
     if worker_env {
         cmd.env("DOCTRINE_WORKER", "1");
     } else {
@@ -91,10 +87,8 @@ fn run_with_stdin(cwd: &Path, args: &[&str], stdin_text: &str) -> Output {
     use std::io::Write as _;
     use std::process::Stdio;
 
-    let mut child = Command::new(bin())
+    let mut child = common::doctrine_cmd(cwd)
         .args(args)
-        .current_dir(cwd)
-        .env_remove("DOCTRINE_WORKER")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -13,20 +13,14 @@
 )]
 
 use std::path::Path;
-use std::process::Command;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// Run `doctrine <args…>` rooted at `cwd`, returning (success, stdout). Does NOT
 /// assert success — the no-root case must exit 0 too, but callers verify intent.
 fn run(cwd: &Path, args: &[&str]) -> (bool, String) {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(cwd)
         .args(args)
-        .current_dir(cwd)
         .output()
         .expect("spawn doctrine");
     (

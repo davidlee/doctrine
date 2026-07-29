@@ -25,10 +25,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
         .arg("-C")
@@ -82,7 +78,7 @@ fn fixture_root(selectors: &[(&str, &str)]) -> tempfile::TempDir {
 
 /// Run `doctrine slice selector doctor 1 [--assert] -p <root>`.
 fn doctor(root: &Path, assert: bool) -> Output {
-    let mut cmd = Command::new(bin());
+    let mut cmd = common::doctrine_cmd(root);
     cmd.args(["slice", "selector", "doctor", "1"]);
     if assert {
         cmd.arg("--assert");

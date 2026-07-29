@@ -13,18 +13,12 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn install(root: &Path) -> std::process::Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .current_dir(root)
-        .env_remove("DOCTRINE_WORKER")
         .args(["install", "--agent", "claude", "--yes", "-p"])
         .arg(root)
         .output()

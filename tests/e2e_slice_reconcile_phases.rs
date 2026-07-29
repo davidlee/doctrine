@@ -21,10 +21,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -84,8 +80,7 @@ fn land_phase_ref(primary: &Path, slice3: &str, nn: &str) {
 
 /// Run `doctrine slice reconcile-phases <id> -p <root>`.
 fn reconcile(root: &Path, id: &str) -> Output {
-    Command::new(bin())
-        .current_dir(root)
+    common::doctrine_cmd(root)
         .args([
             "slice",
             "reconcile-phases",

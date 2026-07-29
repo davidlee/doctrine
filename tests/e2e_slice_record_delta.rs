@@ -21,10 +21,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -55,8 +51,7 @@ fn init_repo(dir: &Path) -> std::path::PathBuf {
 /// Run `doctrine slice record-delta <id> <phase> --start <a> --end <b> -p <root>`
 /// from `cwd` (which may differ from the project root passed via `-p`).
 fn record_delta(cwd: &Path, root: &Path, id: &str, phase: &str, start: &str, end: &str) -> Output {
-    Command::new(bin())
-        .current_dir(cwd)
+    common::doctrine_cmd(cwd)
         .args([
             "slice",
             "record-delta",
@@ -80,8 +75,7 @@ fn record_delta_raw(cwd: &Path, root: &Path, id: &str, phase: &str, extra: &[&st
     args.extend_from_slice(extra);
     let root = root.to_str().unwrap();
     args.extend_from_slice(&["-p", root]);
-    Command::new(bin())
-        .current_dir(cwd)
+    common::doctrine_cmd(cwd)
         .args(&args)
         .output()
         .expect("spawn doctrine")

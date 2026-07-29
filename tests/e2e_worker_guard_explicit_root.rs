@@ -37,13 +37,9 @@
 )]
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> PathBuf {
-    common::doctrine_bin()
-}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -56,10 +52,8 @@ fn stderr(out: &Output) -> String {
 /// `doctrine <args…>` in `cwd` with `DOCTRINE_WORKER` explicitly UNSET — isolates
 /// the MARKER leg, which is what root-resolution skew affects.
 fn run_no_env(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(cwd)
         .args(args)
-        .env_remove("DOCTRINE_WORKER")
-        .current_dir(cwd)
         .output()
         .expect("spawn doctrine")
 }
@@ -109,10 +103,9 @@ fn env_leg_stays_root_independent_under_explicit_root() {
     let target = target_root(out_dir.path());
     let cwd = tmp();
 
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(cwd.path())
         .args(["adr", "new", "vt-d", "-p", target.to_str().unwrap()])
         .env("DOCTRINE_WORKER", "1")
-        .current_dir(cwd.path())
         .output()
         .expect("spawn doctrine");
     let err = stderr(&out);

@@ -18,6 +18,37 @@ pub(crate) use test_support::{WORKER_MARKER_REL, doctrine_bin, repo_root, under_
 /// integration tests can't import from a binary-only crate).
 pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
 
+/// The built binary, spawned with `cwd` **bound** and the worker-mode env leg
+/// stripped — the single spawn seam for every integration test (IMP-352).
+///
+/// Two inputs a fixture must declare rather than inherit from the harness:
+///
+/// * **cwd.** `worker_guard` resolves its root from CWD alone
+///   (`crate::root::find(None, …)` in `src/commands/guard.rs` — RV-319 F-1 pins
+///   that it ignores `-p`). So an unbound cwd silently roots the child in the
+///   *ambient* tree instead of the scratch root the fixture passes to `-p`.
+///   Inside a dispatch worker fork that ambient tree is marked, and the guard
+///   correctly refuses an authored write the fixture never aimed there.
+/// * **`DOCTRINE_WORKER`.** The env leg is root-independent, so binding cwd does
+///   not reach it — the two legs are orthogonal and both must be declared.
+///
+/// This is a *declared* stand-down, not a bypass: the child of a test binary is a
+/// fixture process operating on a scratch root, not the worker agent the marker
+/// identifies. It grants nothing a worker does not already have — the marker leg
+/// is CWD-keyed, so leaving the fork's directory already lifts it on any HEAD.
+///
+/// A test whose subject IS the ambient signal (the worker-guard goldens) sets it
+/// back: `doctrine_cmd(dir).env("DOCTRINE_WORKER", "1")` — a later `env` call
+/// overrides this `env_remove`.
+///
+/// Pass the root the test actually operates on: its scratch tempdir, or
+/// [`repo_root`] for the few goldens that read the real tree.
+pub(crate) fn doctrine_cmd(cwd: &std::path::Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(doctrine_bin());
+    cmd.current_dir(cwd).env_remove("DOCTRINE_WORKER");
+    cmd
+}
+
 /// A temp base whose ancestry to `/` carries no project marker
 /// (`.git`/`.jj`/`.project`/`Cargo.toml`), for tests exercising the **no-root**
 /// path: `root::find` (src/root.rs) walks CWD up to `/`, so a stray marker above

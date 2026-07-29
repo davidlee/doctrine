@@ -23,10 +23,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// A throwaway git repo with `main` as the initial branch + pinned identity, so
 /// `trunk_tree_ish` resolves `main` (no origin, no `DOCTRINE_TRUNK_REF`).
 struct TrunkRepo {
@@ -78,7 +74,7 @@ impl TrunkRepo {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(&self.path)
             .args(args)
             .arg("-p")
             .arg(&self.path)

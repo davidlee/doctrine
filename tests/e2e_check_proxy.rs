@@ -15,7 +15,7 @@
 )]
 
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
 
@@ -34,7 +34,7 @@ fn root_with(body: &str) -> tempfile::TempDir {
 
 /// Run `doctrine check <args…> -p <root>` against the built binary.
 fn run_check(root: &Path, args: &[&str]) -> Output {
-    Command::new(common::doctrine_bin())
+    common::doctrine_cmd(root)
         .arg("check")
         .args(args)
         .arg("-p")

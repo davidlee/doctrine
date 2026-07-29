@@ -55,13 +55,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -69,7 +65,7 @@ fn tmp() -> tempfile::TempDir {
 
 /// `doctrine <kind> list <extra...> -p <root>` over the built binary.
 fn list(root: &Path, kind: &str, extra: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .arg(kind)
         .arg("list")
         .args(extra)

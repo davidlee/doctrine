@@ -20,13 +20,7 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
 )]
 
-use std::process::Command;
-
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 const FAMILY_ORDER: &[&str] = &[
     "change",
@@ -40,7 +34,7 @@ const FAMILY_ORDER: &[&str] = &[
 ];
 
 fn boot_map_stdout() -> String {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(&common::repo_root())
         .args(["--help", "--boot-map"])
         .output()
         .expect("spawn doctrine --help --boot-map");
@@ -170,7 +164,7 @@ fn boot_map_leaf_command_has_no_subline() {
 /// `--boot-map` wins over `--commands` when both are passed (documented precedence).
 #[test]
 fn boot_map_takes_precedence_over_commands() {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(&common::repo_root())
         .args(["--help", "--commands", "--boot-map"])
         .output()
         .expect("spawn with both flags");

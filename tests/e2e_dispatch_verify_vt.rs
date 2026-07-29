@@ -29,10 +29,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -114,7 +110,7 @@ fn coord_tree(plan: &str) -> tempfile::TempDir {
     let end_sha = head_sha(root);
 
     // Record the source delta so verify-vt can attribute the test file.
-    let rec = Command::new(bin())
+    let rec = common::doctrine_cmd(root)
         .args([
             "slice",
             "record-delta",
@@ -140,7 +136,7 @@ fn coord_tree(plan: &str) -> tempfile::TempDir {
 
 /// Run the conclude gate: `doctrine slice verify-vt <id> -p <coord-root>`.
 fn run_conclude_gate(root: &Path, id: &str) -> Output {
-    let mut cmd = Command::new(common::doctrine_bin());
+    let mut cmd = common::doctrine_cmd(root);
     cmd.arg("slice").arg("verify-vt").arg(id);
     cmd.arg("-p").arg(root);
     cmd.output().expect("spawn doctrine slice verify-vt")

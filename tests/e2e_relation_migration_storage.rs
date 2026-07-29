@@ -27,11 +27,6 @@
 //!   link-then-other-label-then-link CAN interleave a label's rows, and must not.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 mod common;
 
@@ -533,11 +528,10 @@ fn template_source_is_post_cut_shape_kind_specific() {
 fn scaffold(new_args: &[&str], toml_rel: &str) -> String {
     let t = tempfile::tempdir().expect("tempdir");
     let root = t.path();
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(root)
         .args(new_args)
         .arg("-p")
         .arg(root)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine");
     assert!(

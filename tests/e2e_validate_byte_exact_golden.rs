@@ -11,13 +11,11 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic"
 )]
 
-use std::process::Command;
-
 mod common;
 
 #[test]
 fn validate_byte_exact_golden() {
-    let output = Command::new(common::doctrine_bin())
+    let output = common::doctrine_cmd(&common::repo_root())
         .args(["validate"])
         .arg("-p")
         .arg(common::repo_root())

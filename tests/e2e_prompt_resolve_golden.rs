@@ -13,16 +13,11 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn run(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(args)
         .arg("-p")
         .arg(root)

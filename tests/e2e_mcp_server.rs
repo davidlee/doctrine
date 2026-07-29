@@ -16,13 +16,9 @@ use serde_json::Value;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -57,12 +53,11 @@ fn seed_slice(root: &Path, id: u32, title: &str, slug: &str) {
 
 /// Spawn the MCP server subprocess with piped stdin/stdout.
 fn spawn_server(root: &Path) -> Child {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .arg("serve")
         .arg("--mcp")
         .arg("--path")
         .arg(root)
-        .env_remove("DOCTRINE_WORKER")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1506,12 +1501,10 @@ fn observation_record_receipt_matches_cli_receipt_shape() {
     // `current_dir` is load-bearing: the worker-fork guard resolves the root from
     // the CWD, so driving the CLI from the seeded fixture keeps this hermetic —
     // it must not inherit whatever tree the test binary happens to run in.
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(root)
         .args(["observation", "record", "friction", "captured over the CLI"])
         .arg("--path")
         .arg(root)
-        .current_dir(root)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("run observation record");
     assert!(out.status.success(), "CLI record failed: {out:?}");

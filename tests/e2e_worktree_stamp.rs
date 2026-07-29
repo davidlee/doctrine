@@ -31,10 +31,6 @@ use std::process::{Command, Output, Stdio};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -94,9 +90,8 @@ fn marker_path(root: &Path) -> PathBuf {
 /// Some(true) sets DOCTRINE_WORKER=1; None removes it. CARGO_TARGET_DIR removed so
 /// provisioning into the fork is deterministic under the test.
 fn run(cwd: &Path, worker: Option<bool>, payload: &str, args: &[&str]) -> Output {
-    let mut cmd = Command::new(bin());
+    let mut cmd = common::doctrine_cmd(cwd);
     cmd.args(args)
-        .current_dir(cwd)
         .env_remove("CARGO_TARGET_DIR")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

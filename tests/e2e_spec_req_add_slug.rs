@@ -28,10 +28,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 const SLUG_MAX: usize = 100;
 
 /// A throwaway git repo on `main` with pinned identity — enough for the minting
@@ -69,11 +65,10 @@ impl Repo {
     /// Run the built binary against this root with `DOCTRINE_WORKER` removed (a
     /// dispatch worker exports it; minting would otherwise refuse).
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(&self.path)
             .args(args)
             .arg("-p")
             .arg(&self.path)
-            .env_remove("DOCTRINE_WORKER")
             .output()
             .expect("spawn doctrine")
     }

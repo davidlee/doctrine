@@ -12,17 +12,12 @@
 )]
 
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Install `code-review` for Claude rooted at `dir`, asserting success; return stdout.
 fn install(dir: &Path) -> String {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(dir)
         .args([
             "install",
             "--agent",

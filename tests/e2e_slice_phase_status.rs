@@ -22,10 +22,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -75,8 +71,7 @@ fn across(root: &Path, id: &str, assert: bool) -> Output {
         args.push("--assert");
     }
     args.extend_from_slice(&["-p", root.to_str().unwrap()]);
-    Command::new(bin())
-        .current_dir(root)
+    common::doctrine_cmd(root)
         .args(&args)
         .output()
         .expect("spawn doctrine")

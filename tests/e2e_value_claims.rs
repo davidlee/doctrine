@@ -22,13 +22,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 fn write(root: &Path, rel: &str, body: &str) {
     let path = root.join(rel);
@@ -61,10 +57,8 @@ fn seed_slice(root: &Path, id: u32) {
 /// stdin left empty (so `.output()`'s null stdin is a non-TTY — the pin gate's
 /// piped-stdin case).
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(args)
-        .current_dir(root)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine")
 }

@@ -21,13 +21,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// Hand-seed one record's authored tree (`.doctrine/knowledge/<dir>/NNN/record-NNN.{toml,md}`)
 /// — fixed dates make show/list deterministic.
@@ -40,7 +36,7 @@ fn seed(root: &Path, dir: &str, id: u32, toml: &str) {
 
 /// `doctrine knowledge <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .arg("knowledge")
         .args(args)
         .arg("-p")

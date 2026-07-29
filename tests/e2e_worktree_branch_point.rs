@@ -19,10 +19,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `git -C <dir> <args>`, asserting success; returns trimmed stdout.
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -60,7 +56,7 @@ fn branch_point_check(root: &Path, args: &[&str]) -> Output {
         root.to_str().unwrap(),
     ];
     full.extend_from_slice(args);
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(&full)
         .output()
         .expect("spawn doctrine")

@@ -6,12 +6,10 @@
 //! sibling lookup), NOT a compile-time baked path — CHR-014 / SL-162 ban `env!`
 //! path-baking, which breaks under the shared jail target-dir.
 
-use std::process::Command;
-
 mod common;
 
 fn run(args: &[&str]) -> (bool, i32, String) {
-    let out = Command::new(common::doctrine_bin())
+    let out = common::doctrine_cmd(&common::repo_root())
         .args(args)
         .output()
         .expect("spawn doctrine");

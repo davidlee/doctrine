@@ -24,13 +24,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -40,11 +36,10 @@ fn tmp() -> tempfile::TempDir {
 /// self-arm guard refuses authored writes under it, and a stray inherited var would
 /// spuriously red an authored round-trip (mem.pattern.dispatch.worker-verify-unset).
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(args)
         .arg("-p")
         .arg(root)
-        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine")
 }

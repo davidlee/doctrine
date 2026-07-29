@@ -22,10 +22,6 @@ use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// A throwaway git repo with identity configured, so `git add` works headless.
 fn git_repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -46,7 +42,7 @@ fn git(root: &Path, args: &[&str]) -> std::process::Output {
 }
 
 fn doctrine(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(args)
         .arg("-p")
         .arg(root)

@@ -27,10 +27,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -123,8 +119,8 @@ fn build_fixture(dir: &Path) -> Fixture {
 }
 
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
-    let mut cmd = Command::new(bin());
-    cmd.args(args).current_dir(cwd);
+    let mut cmd = common::doctrine_cmd(cwd);
+    cmd.args(args);
     match worker {
         Some(true) => {
             cmd.env("DOCTRINE_WORKER", "1");

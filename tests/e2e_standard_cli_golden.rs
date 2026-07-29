@@ -23,13 +23,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// Hand-seed one standard's authored tree
 /// (`.doctrine/standard/NNN/standard-NNN.{toml,md}`) with the caller's exact toml +
@@ -43,7 +39,7 @@ fn seed(root: &Path, id: u32, toml: &str, md: &str) {
 
 /// `doctrine standard <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .arg("standard")
         .args(args)
         .arg("-p")

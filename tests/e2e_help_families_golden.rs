@@ -19,13 +19,7 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic, and test fns live at crate root by construction"
 )]
 
-use std::process::Command;
-
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// The 8 family keys, in their canonical render order (FAMILIES declaration order).
 const FAMILY_ORDER: &[&str] = &[
@@ -40,7 +34,7 @@ const FAMILY_ORDER: &[&str] = &[
 ];
 
 fn help_stdout() -> String {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(&common::repo_root())
         .arg("--help")
         .output()
         .expect("spawn doctrine --help");

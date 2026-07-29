@@ -19,13 +19,9 @@
 )]
 
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// The kinds that ride the shared list spine (SL-025), including the three
 /// governance kinds (adr/policy/standard, SL-030/SL-033) — closing the gap that
@@ -66,7 +62,7 @@ const SPINE_FLAGS: [&[&str]; 14] = [
 
 /// Run `<kind> list <extra...> -p <dir>` over the built binary.
 fn list(kind: &str, dir: &Path, extra: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(dir)
         .arg(kind)
         .arg("list")
         .args(extra)
@@ -173,7 +169,7 @@ fn relation_list_and_census_accept_columns() {
     let dir = tmp.path();
 
     let relation = |extra: &[&str]| -> Output {
-        Command::new(bin())
+        common::doctrine_cmd(dir)
             .arg("relation")
             .args(extra)
             .arg("-p")

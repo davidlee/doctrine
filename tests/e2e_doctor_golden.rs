@@ -15,14 +15,12 @@
     reason = "integration test: fail-fast unwrap/expect are idiomatic"
 )]
 
-use std::process::Command;
-
 mod common;
 
 /// ---- helpers ----
 
 fn run_doctor(args: &[&str]) -> std::process::Output {
-    Command::new(common::doctrine_bin())
+    common::doctrine_cmd(&common::repo_root())
         .arg("doctor")
         .args(args)
         .output()
@@ -30,7 +28,7 @@ fn run_doctor(args: &[&str]) -> std::process::Output {
 }
 
 fn run_doctor_in(root: &std::path::Path, args: &[&str]) -> std::process::Output {
-    Command::new(common::doctrine_bin())
+    common::doctrine_cmd(root)
         .arg("doctor")
         .args(args)
         .arg("-p")
@@ -108,7 +106,7 @@ fn doctor_json_produces_envelope_with_severity_rows() {
 fn doctor_is_superset_of_validate() {
     // Run both against the real project corpus.
     let doctor_out = run_doctor(&[]);
-    let validate_out = Command::new(common::doctrine_bin())
+    let validate_out = common::doctrine_cmd(&common::repo_root())
         .arg("validate")
         .arg("-p")
         .arg(common::repo_root())

@@ -30,13 +30,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -61,7 +57,7 @@ fn run(root: &Path, args: &[&str]) -> Output {
     let mut a: Vec<&str> = args.to_vec();
     a.push("-p");
     a.push(root.to_str().expect("utf8 path"));
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(&a)
         .output()
         .expect("spawn doctrine")

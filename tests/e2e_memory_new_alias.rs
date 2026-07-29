@@ -12,17 +12,12 @@
 )]
 
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `doctrine <args…>` rooted at `dir`, asserting success; return stdout.
 fn doctrine(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(dir)
         .args(args)
         .arg("-p")
         .arg(dir)

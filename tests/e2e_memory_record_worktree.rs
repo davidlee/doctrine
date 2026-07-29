@@ -9,10 +9,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `git -C <dir> <args>`, asserting success.
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -57,7 +53,7 @@ fn add_worktree(source: &Path, fork: &Path) {
 }
 
 fn record(root: &Path) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .args(["memory", "record", "--type", "fact", "A fact", "-p"])
         .arg(root)
         .output()

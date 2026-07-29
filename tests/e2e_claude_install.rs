@@ -19,20 +19,15 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use serde_json::Value;
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `doctrine install --agent claude --skill code-review` rooted at `dir`,
 /// asserting success; return stdout.
 fn install(dir: &Path) -> String {
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(dir)
         .args([
             "install",
             "--agent",
@@ -154,7 +149,7 @@ fn install_agent_pi_dry_run_prints_delegation_plan() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    let out = Command::new(bin())
+    let out = common::doctrine_cmd(dir)
         .args(["install", "--agent", "pi", "--dry-run", "-p"])
         .arg(dir)
         .output()

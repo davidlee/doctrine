@@ -19,7 +19,7 @@
 )]
 
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
 
@@ -89,7 +89,7 @@ fn set_suite(root: &Path, suite: &str) {
 
 /// Run `doctrine check regression <args…> -p <root>` (optionally with env).
 fn run(root: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
-    let mut cmd = Command::new(common::doctrine_bin());
+    let mut cmd = common::doctrine_cmd(root);
     cmd.arg("check").arg("regression").args(args);
     cmd.arg("-p").arg(root);
     for (k, v) in env {

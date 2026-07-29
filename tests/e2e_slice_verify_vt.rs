@@ -26,10 +26,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -112,7 +108,7 @@ fn fixture_root() -> tempfile::TempDir {
 
     // Record source deltas for both phases so verify-vt can attribute the files.
     for phase in ["PHASE-01", "PHASE-02"] {
-        let rec = Command::new(bin())
+        let rec = common::doctrine_cmd(root)
             .args([
                 "slice",
                 "record-delta",
@@ -139,7 +135,7 @@ fn fixture_root() -> tempfile::TempDir {
 
 /// Run `doctrine slice verify-vt <id> -p <root>`.
 fn run(root: &Path, id: &str) -> Output {
-    let mut cmd = Command::new(common::doctrine_bin());
+    let mut cmd = common::doctrine_cmd(root);
     cmd.arg("slice").arg("verify-vt").arg(id);
     cmd.arg("-p").arg(root);
     cmd.output().expect("spawn doctrine slice verify-vt")

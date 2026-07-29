@@ -22,10 +22,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `git -C <dir> <args>`, asserting success.
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -71,7 +67,7 @@ fn add_worktree(source: &Path, fork: &Path) {
 }
 
 fn provision(source: &Path, fork: &Path) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(source)
         .args(["worktree", "provision"])
         .arg(fork)
         .arg("-p")
@@ -81,7 +77,7 @@ fn provision(source: &Path, fork: &Path) -> Output {
 }
 
 fn check_allowlist(source: &Path) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(source)
         .args(["worktree", "check-allowlist", "-p"])
         .arg(source)
         .output()

@@ -19,10 +19,6 @@ use std::process::{Command, Output};
 
 mod common;
 
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
-
 /// Run `git -C <dir> <args>`, asserting success; returns trimmed stdout.
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -72,7 +68,7 @@ fn verify_worker(base: &str, wt: &Path, branch: Option<&str>) -> Output {
         args.push("--branch".to_string());
         args.push(s.to_string());
     }
-    Command::new(bin())
+    common::doctrine_cmd(wt)
         .args(&args)
         .output()
         .expect("spawn doctrine")

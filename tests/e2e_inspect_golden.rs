@@ -21,13 +21,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
-
-fn bin() -> std::path::PathBuf {
-    common::doctrine_bin()
-}
 
 /// Write `root/<rel>` with `body`, creating parent dirs.
 fn write(root: &Path, rel: &str, body: &str) {
@@ -169,7 +165,7 @@ fn seed_memory(root: &Path, uid: &str, key: Option<&str>, relations: &[(&str, &s
 
 /// `doctrine inspect <args...> -p <root>` over the built binary.
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(bin())
+    common::doctrine_cmd(root)
         .arg("inspect")
         .args(args)
         .arg("-p")
