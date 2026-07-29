@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "019facf2-c623-7ac0-986e-54f01e7d5ec7"
+date = "2026-07-29"
+
+[[judgement]]
+uid = "019facf2-c623-7ac0-986e-550950a7466d"
+seq = 0
+a = "IMP-355"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 2.0
+est_upper = 6.0
+rater = "agent"
+by = "orchestrator (SL-233 RV-323 r6)"
+note = "Write-path hook plus an idempotence check; unknown is whether one file per kind folder or one per record-writing call site."
+date = "2026-07-29"

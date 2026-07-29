@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "019facf2-c61e-71e3-916b-a4eb77b42559"
+date = "2026-07-29"
+
+[[judgement]]
+uid = "019facf2-c61e-71e3-916b-a4f21e38d837"
+seq = 0
+a = "IMP-355"
+domain = "value"
+frame = "value-anchor"
+form = "anchor"
+magnitude = 2.0
+rater = "agent"
+by = "orchestrator (SL-233 RV-323 r6)"
+note = "Avoids a one-time whole-document re-review after a stray format run. Not data loss: markers survive, TOML is untouchable, and adopt recovers. Low by construction."
+date = "2026-07-29"
