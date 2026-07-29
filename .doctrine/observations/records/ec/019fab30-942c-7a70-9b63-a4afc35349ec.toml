@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fab30-942c-7a70-9b63-a4afc35349ec"
+recorded_at = "2026-07-29T00:05:15.436311628Z"
+kind = "friction"
+summary = "/phase-plan: no read verb for a single phase's plan entry — 'slice phase' is a status setter"
+detail = "Reading PHASE-03's authored plan entry (objective + EN/EX/VT) required grepping plan.toml for the id, computing the line span against the next phase marker, and Read-ing a 57-line window. 'doctrine slice phase <id> <phase>' looks like the read verb but is a status SETTER (errors: --status required); 'slice phases <id>' only reports 'Phases up to date.' The routing table sends /phase-plan at exactly this artefact, so every phase plan pays raw-file navigation the 'read entities via show, not raw files' guardrail exists to prevent. A 'slice phase show <id> <PHASE-NN>' would collapse ~4 calls to 1."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
