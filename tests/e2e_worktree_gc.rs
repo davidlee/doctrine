@@ -119,6 +119,17 @@ fn assert_refusal(out: &Output, token: &str) {
     );
 }
 
+/// Assert a refusal NAMES `verb` the way the guard renders it — backtick-delimited
+/// (`refusing authored write \`land\``, `src/commands/guard.rs`). The delimiters are
+/// the point (IMP-054): a bare `contains(verb)` is a PROXY that a regression naming
+/// the WRONG verb still satisfies, because the surrounding prose carries the token
+/// anyway — the marker-leg message opens `worker fork (signal: …)`, so bare `"fork"`
+/// passes for every member of the loop, and the env-leg dual-cause is a constant
+/// shared by all four. Asserting the delimited verb asserts the property.
+fn assert_refusal_names_verb(out: &Output, verb: &str) {
+    assert_refusal(out, &format!("`{verb}`"));
+}
+
 /// Create `<branch>` via a live linked worktree at `holder/<branch>`, off `<src>`
 /// HEAD. Each entry in `commits` is `(rel, body)` committed as its own commit.
 /// Returns the live linked worktree path.
@@ -588,17 +599,7 @@ fn every_orchestrator_verb_refused_from_a_marked_linked_worktree() {
     stamp_marker(&fork);
 
     for (verb, argv) in orchestrator_verbs() {
-        let out = run(&fork, None, &argv);
-        assert!(
-            !out.status.success(),
-            "{verb} refused from a marked linked worktree; stdout: {}",
-            stdout(&out)
-        );
-        assert!(
-            stderr(&out).contains(verb),
-            "{verb} refusal names the verb; stderr: {}",
-            stderr(&out)
-        );
+        assert_refusal_names_verb(&run(&fork, None, &argv), verb);
     }
 }
 
@@ -609,11 +610,11 @@ fn every_orchestrator_verb_refused_under_worker_env() {
 
     for (verb, argv) in orchestrator_verbs() {
         let out = run(src.path(), Some(true), &argv);
-        assert!(
-            !out.status.success(),
-            "{verb} refused when DOCTRINE_WORKER set; stdout: {}",
-            stdout(&out)
-        );
+        // The property: THIS verb is the one refused (IMP-054 / RV-016 F-11).
+        assert_refusal_names_verb(&out, verb);
+        // Independently, the env leg on a non-linked tree must carry the dual-cause
+        // guidance rather than a bare worker refusal — a distinct claim about the
+        // message, kept because it is not implied by naming the verb.
         assert!(
             stderr(&out).contains("DOCTRINE_WORKER"),
             "{verb} env refusal carries the dual-cause; stderr: {}",
