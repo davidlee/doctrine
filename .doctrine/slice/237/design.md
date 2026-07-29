@@ -168,12 +168,23 @@ concurrent drives touch disjoint `<NNN>` directories.
 tier: the `run_*` entry points in `slice.rs`, `dispatch.rs`,
 `mcp_server/dispatch.rs`, and `lazyspec.rs:535`.
 
-**The fan-out fix is structural, not disciplinary.** `list_rows` resolves
-*before* the `.map()` at `slice.rs:2161`. After this change a 221× fan-out is
-not merely avoided but **inexpressible**: `phase_rollup` takes a `&PrimaryRoot`
-that cannot be constructed without an impure call the pure layer does not have.
-Consequently **no performance regression test is required** — the type is the
-test.
+**There are TWO fan-outs, not one** (R-2 of the adversarial pass). Both resolve
+once, outside their loop:
+
+| Site | Loop | Fix |
+|---|---|---|
+| `list_rows` (`slice.rs:2145`) | `.map()` at `:2161` over every surviving `Meta` | resolve before the `.map()` |
+| `load_slices` (`lazyspec.rs:495`) | `for id in scan_ids(&tree)` → `load_plan` (`:518`) → `phase_rollup` (`:535`) | resolve before the loop; thread through `load_plan` |
+
+The pre-design round found only the first. Missing the second would have left
+half the regression in place — `lazyspec` projects **every** slice.
+
+**What the type does and does not buy.** It makes each resolution an explicit,
+reviewable act at the command tier instead of a hidden cost inside a path join.
+It does **not** make a fan-out impossible — a caller can still put
+`PrimaryRoot::resolve` inside a loop. R-2 is the proof: a second fan-out existed
+and a type would not have prevented it, only made it visible at review. The
+design claims visibility, not impossibility.
 
 **`run_phases` splits deliberately (`slice.rs:796`).** It reads `plan.toml` from
 the **invoked** root and writes sheets to the **primary**. Today both are one
@@ -219,11 +230,19 @@ drive races the drive's own writer on the **same** file.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — `slice.rs:2855` and `slice.rs:3028` propagate `read_source_deltas`
-  errors. Under DEC-098 a non-repo cwd stops erroring and yields an empty
-  registry. Confirm per-site that "no repo ⇒ empty registry" is correct rather
-  than a real misconfiguration rendered benign. **Resolve during the DEC-098
-  phase, not before.**
+- **OQ-1 — CLOSED in the adversarial pass (R-1), with evidence.** The question
+  was whether DEC-098's contract change (non-repo cwd stops erroring, yields an
+  empty registry) turns a real misconfiguration benign at the two propagating
+  sites. It does not:
+  - `slice.rs:3028` (`record-delta`, a **write**) calls
+    `crate::git::resolve_ref(&root, …)` *before* `record_source_delta`, so a
+    non-repo root fails there first. The write is unreachable in the changed
+    case.
+  - `slice.rs:2855` (`conformance_outcome`, a **read**) already documents
+    *"Fails closed: an empty registry → `Unavailable`"*. A non-repo root yielding
+    empty lands on an outcome the function is already designed around.
+
+  No action needed in the DEC-098 phase beyond a regression test.
 - **OQ-2** — `.doctrine/state/dispatch/` and `.doctrine/state/review/` are
   suspected of the same defect. Deliberately out of scope; audited under
   CHR-050.
@@ -309,14 +328,20 @@ change under D3.
   *Mitigation:* the comment required in §5.4, plus the RV-312 F-6 test.
 - **R4 — Landing code that falsifies an accepted Decision.** *Mitigation:* the
   REV is opened in this slice, not deferred to reconcile.
-- **R5 — DEC-098's contract change hides a real misconfiguration.**
-  *Mitigation:* OQ-1, resolved inside the DEC-098 phase.
+- **R5 — DEC-098's contract change hides a real misconfiguration.** *Retired* —
+  closed with evidence in the adversarial pass (§10 R-1); both propagating sites
+  fail closed for other reasons. Carried only as regression test V-10.
+- **R6 — a fan-out site is missed.** One already was (§10 R-2), and the type does
+  not prevent it (§10 R-3). *Mitigation:* V-9 reviews **both** known sites at the
+  call site; any new `phase_rollup` caller must be checked for loop context at
+  review, not assumed safe because it takes a `&PrimaryRoot`.
 
 ## 9. Quality Engineering & Validation
 
 | # | Mode | What |
 |---|---|---|
-| V-1 | VT | Existing suites green, assertions unchanged (behaviour-preservation gate) |
+| V-1a | VT | Existing suites green (behaviour-preservation gate) |
+| V-1b | VA | Diff review confirms existing **assertions** are unchanged and only construction sites were adapted — a judgement, not a test, so it cannot ride V-1a's mode (R-4) |
 | V-2 | VT | Non-repo tempdir: `phases_dir` resolves to the given root (I-1) |
 | V-3 | VT | Fallback under a visible `.git` emits the named warning (I-2) |
 | V-4 | VT | e2e: `slice conformance <ID>` agrees from the primary and a linked worktree — **ISS-269's reproduction inverting** |
@@ -324,8 +349,61 @@ change under D3.
 | V-6 | VT | Landed-but-`in_progress`, no coord tree → `Conflict(Rework)`; `--truth --assert` non-zero (DEC-096) |
 | V-7 | VT | No `phases` symlink in a linked worktree; still minted in the primary (DEC-097) |
 | V-8 | VT | Phase-status write against a read-only primary fails with the named error, not a raw permission denial (I-3) |
-| V-9 | VA | `slice list` performs one primary resolution — argued structurally from the type, not measured |
+| V-9 | VA | **Both** fan-out sites resolve once outside their loop — `list_rows` (`slice.rs:2161`) and `load_slices` (`lazyspec.rs:495`). Reviewed at the call site, **not** inferred from the type: R-2 showed the type makes a fan-out visible, not impossible |
+| V-10 | VT | `read_source_deltas` against a non-repo root yields an empty registry, and `conformance_outcome` reports `Unavailable` rather than erroring (OQ-1 / R-1) |
 
 ## 10. Review Notes
 
-Adversarial pass and dispositions are recorded here once run.
+### Internal adversarial pass — 2026-07-29, `/design`
+
+Eight attacks run against this design. Four land; all four are integrated above.
+
+**R-1 — DEC-098's contract change could turn a real misconfiguration benign.
+LANDS as an improvement — OQ-1 closes early rather than deferring.** Both
+propagating sites were read. `slice.rs:3028` resolves a git ref *before* the
+registry write, so the non-repo case never reaches it; `slice.rs:2855` already
+documents empty-registry → `Unavailable` as fail-closed behaviour. Deferring this
+to the DEC-098 phase (as first written) would have carried a resolvable unknown
+through planning for no reason. **§6 OQ-1, V-10.**
+
+**R-2 — the design named only ONE fan-out. LANDS; a second exists.**
+`lazyspec::load_slices` (`src/lazyspec.rs:495`) loops `scan_ids` → `load_plan`
+(`:518`) → `phase_rollup` (`:535`) over every slice. The pre-design round found
+`list_rows` only. Fixing one and not the other would have left half the
+regression in place. **§5.4.**
+
+**R-3 — "a 221× fan-out becomes inexpressible" was an overclaim, and R-2
+refutes it empirically.** A caller can still call `PrimaryRoot::resolve` inside a
+loop; the type buys *visibility at review*, not impossibility. That a second
+fan-out existed and no type would have caught it is the proof. The doc now claims
+visibility only, and V-9 is re-graded from "argued structurally from the type" to
+"reviewed at the call site". **§5.4, §9 V-9.**
+
+**R-4 — V-1 conflated two verification modes.** "Suites green" is VT; "assertions
+unchanged, only construction adapted" is a human/agent judgement (VA). Split into
+V-1a / V-1b, so the behaviour-preservation gate cannot be signed off by a green
+run alone — which is exactly the risk R1 in §8 flags. **§9.**
+
+Attacks that did **not** land, recorded so they are not re-run:
+
+- **The `--truth` rename breaks a shipped consumer.** Searched `.agents/skills`,
+  `install`, `docs`, `memory` with a positive control (`slice status` *is* found
+  in those trees; `across-trees` is not). Only `src/slice.rs` and SL-190's own
+  artefacts reference it.
+- **I-3's named error should degrade like boundary capture.** No — boundary
+  capture is recoverable (the registry can be re-recorded); a lost status flip is
+  not. The asymmetry is deliberate.
+- **`PrimaryRoot` in `git.rs` inverts ADR-001.** No — `state.rs` already imports
+  `crate::git`, so this is engine ← leaf, the sanctioned direction.
+- **ISS-269's mechanism is asserted, not verified.** Verified: `conformance_outcome`
+  (`slice.rs:2852`) says so in its own doc comment — *"`root` resolves both the
+  shared registry (via the primary worktree) and the local phase-sheet state
+  tree."* That sentence is the defect. V-4 is grounded.
+
+### Method note
+
+Two findings (R-1, R-2) came from reading call sites the pre-design round had
+only inventoried. A third (R-3) came from checking the doc's own strongest claim
+against the evidence the pass had just produced. The pattern worth carrying: the
+research artefact's ✓ rows were reliable, but its *completeness* was not — and
+its own header said so ("a strong start, not a closed sweep").
