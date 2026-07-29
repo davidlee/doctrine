@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad59-d75e-7c13-80c5-3baebdcc4786"
+recorded_at = "2026-07-29T10:09:34.046217339Z"
+kind = "friction"
+summary = "/plan: Bash cwd silently reset from the coord worktree to the primary tree mid-task, so a mutating script ran against the wrong repo"
+detail = "SL-233 plan revision, claude arm. I ran a python script with a RELATIVE path (.doctrine/slice/233/plan.toml) to rewrite plan.toml in the coord tree /workspace/doctrine/.dispatch/SL-233. Between two Bash calls the tool's cwd reset to the primary tree /workspace/doctrine — the harness printed 'Shell cwd was reset to /workspace/doctrine' only as a trailing note on an unrelated heredoc call — and the next invocation resolved that relative path against the PRIMARY worktree, which is on edge. It failed safe purely by luck: the primary tree's plan.toml is an older revision lacking EX-13, so the script's criterion lookup errored BEFORE its single write at the end. Had the two trees agreed on that criterion, the script would have written a dispatch-branch plan revision into the primary tree on edge, under another agent's concurrent commits. The handover packet warns about this cwd reset in prose ('prefix every coord-tree command with cd ...'), and I was prefixing interactive commands — but the hazard is sharper than the warning suggests: a prefix on the INVOKING command does not protect a relative path INSIDE the script it invokes, and the reset is announced after the fact rather than before. Two mitigations, either would do: (a) any script that MUTATES an entity tree should take an absolute path or resolve one from an explicit repo-root argument, never cwd — cheap and fully in the agent's control; (b) the harness note about a cwd reset would be far more useful attached to the call that gets the new cwd than to the one that lost it. Cost here was ~5 minutes plus a two-tree damage check; the tail risk was a cross-branch authored write."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
