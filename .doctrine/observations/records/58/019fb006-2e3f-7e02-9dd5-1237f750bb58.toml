@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb006-2e3f-7e02-9dd5-1237f750bb58"
+recorded_at = "2026-07-29T22:37:02.911806122Z"
+kind = "friction"
+summary = "phase-plan: `slice research <id>` silently MINTS a baseline instead of reporting an advisory"
+detail = "The /phase-plan process step 4 says 'Check the research advisory — doctrine slice research <id>'. On SL-233 (which has no research.md) the verb printed only 'Minted research artefact + baseline: .../research/baseline.toml' — it is a write verb wearing an inspect verb's name in the skill text. Cost: a moment establishing whether authored state had just been polluted (it is gitignored, so no harm), plus no advisory signal was actually obtained. Same class as `slice phase <id> <PHASE>` requiring --status and mutating with no read verb available."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
