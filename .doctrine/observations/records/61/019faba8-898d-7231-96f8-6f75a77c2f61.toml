@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faba8-898d-7231-96f8-6f75a77c2f61"
+recorded_at = "2026-07-29T02:16:17.037613427Z"
+kind = "friction"
+summary = "Local plugins/ skill edits cannot reach .agents/ — that tree is npx-fetched from the published remote, not projected from the working tree"
+detail = "Follow-up to 019faba6 (IMP-350). After correcting the skill edit in the canonical plugins/doctrine/skills/ master, touching src/install.rs, rebuilding, and running both 'doctrine install -y' and the targeted 'doctrine install -s spec-coverage-assessment -y', .agents/skills/spec-coverage-assessment/SKILL.md still carried the OLD text. Verified the new content IS in the binary (grep -a 'may parent another feature' target/debug/doctrine → 4 hits; the earlier miss was my own grep lacking -a on a binary — a negative grep without a positive control, exactly mem_019fa18161f47651af7687d8dccbbc67). The actual mechanism only surfaced in install's full stdout: skills for codex/pi/universal are installed by delegating to 'npx skills add davidlee/doctrine ... --skill <id>', which fetches from the PUBLISHED GitHub repo (reported 'already at the latest version (0.33.2)'), not from local plugins/. So .agents/ reflects the last release, and an unreleased local skill edit is unreachable there by any install invocation. Consequence for agents: after editing a skill master, do not attempt to verify the change via .agents/ — it will read as a failed edit and invite re-editing the wrong tree. mem_019eae55811f7412b11559068fe8a279 ('doctrine install -s <id> -y + touch src/install.rs to re-embed') is incomplete: it refreshes the embed but not the npx-delegated harness trees."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

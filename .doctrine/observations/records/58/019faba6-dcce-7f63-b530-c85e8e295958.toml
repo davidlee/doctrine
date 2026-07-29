@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faba6-dcce-7f63-b530-c85e8e295958"
+recorded_at = "2026-07-29T02:14:27.278127073Z"
+kind = "friction"
+summary = "IMP-350 cleanup: edited .agents/skills/ (gitignored install projection) before finding the canonical master under plugins/"
+detail = "Sweeping a stale doc string across the repo surfaced two copies of the same SKILL.md — .agents/skills/spec-coverage-assessment/ and plugins/doctrine/skills/spec-coverage-assessment/. I edited .agents/ first because project-orientation.md and the CLAUDE.md structure list both describe '.agents/skills/ — agent skill definitions (Markdown)', which reads as canonical. It is not: .gitignore:5 ignores /.agents, and the RustEmbed root is plugins/ (src/install.rs:21). The edit would have been silently discarded at the next doctrine install. Cost: one wasted edit plus three probes (git log, git check-ignore, grep for #[folder]) to establish which tree was authoritative. mem_019ed423e5c07040837d4d0d5a677594 records the correct rule but only surfaced on the Read of the plugins/ path — i.e. after the wrong edit had already landed. The doc-side defect is that project-orientation.md describes the projection without naming it as one."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
