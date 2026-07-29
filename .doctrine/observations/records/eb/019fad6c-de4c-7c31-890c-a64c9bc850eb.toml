@@ -1,0 +1,8 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad6c-de4c-7c31-890c-a64c9bc850eb"
+recorded_at = "2026-07-29T10:30:21.004505347Z"
+kind = "supersession"
+old_uid = "019fad63-2454-7d93-8ca6-4c0939106a0e"
+replacement_uid = "019fad6c-b50a-7d41-9987-bf5498c04eee"
+reason = "Diagnosis was false: install has not copied reference docs since SL-227/ADR-019 minimal projection, so there is no refresh step to have missed. Replacement records the real finding — orphaned copies from the retired projection policy."

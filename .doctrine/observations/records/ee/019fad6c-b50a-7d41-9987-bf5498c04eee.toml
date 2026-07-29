@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad6c-b50a-7d41-9987-bf5498c04eee"
+recorded_at = "2026-07-29T10:30:10.442211597Z"
+kind = "friction"
+summary = "orphaned .doctrine/*.md reference copies outlive the projection policy that wrote them"
+detail = "Editing install/using-doctrine.md for IMP-263 led me to diagnose the divergent .doctrine/using-doctrine.md as an un-run 'doctrine install' refresh. That cause is false. Post-SL-227/ADR-019 (minimal projection, D8/FR-007/FR-008) install eagerly projects ONLY install/manifest.toml [base].backings = {.gitignore, doctrine.toml, project-orientation.md}; every other embedded asset is PUBLISHED and served on demand via 'doctrine library show reference/<file>'. Reference docs are therefore never copied into a client and cannot go stale — library show streams the binary's embed (verified: it already carries the IMP-263 paragraph). The friction is that the PREVIOUS policy's output was left behind and committed: 8 tracked orphan copies under .doctrine/ (boot-footer, dispatch-mechanics, glossary, harvest, model-band, review-ledger, routing-process, using-doctrine) with no read path in src/. They are live-looking bait: an agent that greps the worktree finds them before it finds the verb, reads stale bytes, and gets no warning. Second-order cost: IMP-252 added a doctor prose-cite EXCLUSION for .doctrine/glossary.md — noise suppression for an orphan that should have been deleted. Cost this turn: a wrong diagnosis committed to the record, a wrong scope call ('refreshing is the missing step'), and a user correction to unwind both. Only .doctrine/governance.md (boot GOVERNANCE_REL) and .doctrine/project-orientation.md (a backing) are live."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
