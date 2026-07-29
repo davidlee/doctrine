@@ -55,9 +55,13 @@ a real dependency:
   internally once its callers already hold a resolved root to hand in.
 - PHASE-05 consumes the root types, so it follows PHASE-01 too.
 
-Only PHASE-02..05 are mutually independent, and DEC-098 deliberately made
-PHASE-04 separable. If phases are dispatched in parallel, 02/03/04/05 are the
-candidates; 01 is a barrier.
+PHASE-02..05 are mutually independent in *logic* — DEC-098 deliberately made
+PHASE-04 separable — but they are **not parallelisable**: all four edit
+`src/state.rs`, and PHASE-02/03/04 also edit `src/slice.rs`. Dispatching them
+concurrently would put four workers in the same two files, which the
+report-and-halt conflict posture would (correctly) refuse. Execution is serial
+whichever mode is used; the independence buys reordering freedom and the ability
+to drop or defer PHASE-04, not concurrency.
 
 **Where the plan makes a call the design left to it.** `design.md` § 5.2 assigns
 each function a root type; § 8a assigns phases, but does not name every function.
