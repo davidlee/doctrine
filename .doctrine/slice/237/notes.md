@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 4 integrated, NOT locked · f5657f2b
+fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 5 integrated + REV-043 split, NOT locked · 73e94ecd
 
 ### Produced
 
@@ -33,13 +33,21 @@ fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 4 integrated, NO
   single-copy Harvest section (112 lines → 14). Restored from HEAD.
 - `design.md` — authored; internal pass (§10, 4 findings) **and** external
   RV-322 pass (9 findings) integrated.
-- **RV-322** — external design review, raiser codex/GPT-5.5. **17 findings over
-  4 rounds, all accepted, all dispositioned.** `active`, await=**raiser**.
-  Rounds 3 and 4 raised **no new findings** — they contested the fixes to the
-  same two blockers (F-10 corpus sweep, F-1/F-12 REQ-296) and both contests
-  landed. (Renumbered by hand from RV-320 after an id collision — see ISS-277.)
+- obs `019fac8e-812d`, `019fac8e-813a`, `019fac94-746c` — round-5 reviewer obs.
+- **RV-322** — external design review, raiser codex/GPT-5.5. **18 findings over
+  5 rounds, all accepted, all dispositioned.** `active`, await=**raiser**.
+  No finding ever attacked the core mechanism. Rounds 3–5 hit only
+  governance-document accuracy; round 5 verified F-10's sweep clean and raised
+  F-18 (sweep frontier too narrow). (Renumbered by hand from RV-320 after an id
+  collision — see ISS-277.)
 - **DEC-095..098** — the four locked design decisions.
-- **REV-043** — restates ADR-006 D2/D4 + SPEC-012 § tier merge-safety.
+- **REV-043** — one claim at three authorities: ADR-006 D2/D4/**D9**, four
+  SPEC-012 surfaces, five PRD-015 surfaces, + REQ-296 revision. **Split at
+  round 5** — confinement-model argument removed, not resolved.
+- **QUE-199** — is REQ-304's "by construction" accurate given cooperative
+  confinement? Parked out of REV-043. Not caused by SL-237.
+- **IMP-354** — platform-agnostic seatbelt/bwrap worker confinement wrapper.
+  Parked. Not a precondition for this slice.
 - design-target selectors recorded (6 paths).
 
 ### Learned
@@ -101,20 +109,42 @@ From RV-322 (external), all verified at source:
   most reusable defect this slice produced. Candidate memory at close.
 - **A correction is not complete until every sibling assertion is dispositioned.**
   Read-and-patch failed three consecutive rounds. What worked: turn the accepted
-  claim into a corpus-wide grep **with a positive control**, then patch the list —
-  not the reviewer's citations. Round 4: 12 sites, 6 named. The unnamed half
-  included both `.toml` tiers, a diagram contradicting its own contract table, and
-  an instance no finding mentioned. Candidate memory at close.
+  claim into a grep **with a positive control**, then patch the list — not the
+  reviewer's citations. Round 4: 12 sites, 6 named. The unnamed half included both
+  `.toml` tiers, a diagram contradicting its own contract table, and an instance
+  no finding mentioned. Candidate memory at close.
+- **An enumeration is only as complete as the frontier you point it at.** Round 5
+  (F-18) caught the sequel: round 4's sweep ran over a *hand-picked file list*
+  (the docs already under revision), so ADR-006 D9 and three SPEC-012 surfaces
+  survived. Fixing instance-blindness left scope-blindness. Pick the frontier
+  from the *claim's* authorities, not from the files you happen to be editing.
+  Candidate memory at close.
+- **A line-oriented grep misses line-wrapped prose claims.** The round-5 control
+  for "worker-sole-writer free" did NOT hit `adr-006.md:222` — the phrase wraps.
+  Multiline (`re.S`) sweep found it. A control proves the pattern works on the
+  instance you already know; it does not prove the pattern's *shape* fits the
+  corpus. Candidate memory at close.
+- **De-duplicate, don't align.** Round 4 "fixed" drift between two surfaces by
+  making them say the same sentence; round 5 showed that is the drift mechanism,
+  not the cure. DEC-098's title was fixed by *removing* a restatement. Prefer
+  each surface saying the minimum it needs.
 
 ### Open
 
 All pre-design opens are settled. Remaining:
 
-- **RV-322 is `active`, await=`raiser`.** All 17 findings dispositioned across 4
-  rounds. Round 4's three contests are answered and swept mechanically; the
-  raiser has not yet verified them. No new findings in rounds 3 or 4.
-- **Design lock NOT granted.** All passes are integrated, but the user has not
-  approved. `/plan` is gated on that.
+- **RV-322 is `active`, await=`raiser`.** All 18 findings dispositioned across 5
+  rounds. Round 5's three dispositions (F-1, F-12, F-18) are unverified by the
+  raiser. **Recommendation on record:** don't spend round 6 on the whole design —
+  if another pass is wanted, target REV-043's proposed text alone, where the last
+  three rounds' defects all lived.
+- **Design lock NOT granted.** All passes integrated and the design assessed
+  ready; the user has not approved. `/plan` is gated on that.
+- **Residual ripple risk (the live one for implementation).** F-5/F-13 proved the
+  census axis was wrong — `integrity.rs` hand-builds `root.join(kind.state_dir)`
+  and never calls `phases_dir`, so a call-site census cannot find such sites.
+  No guarantee another exists. §5.2's contract table + V-11/V-17 pin the known
+  ones. Expect this to surface as a red test, not a design rewrite.
 - **REV-043 is `proposed`** — not approved, not applied. `SL-237 needs REV-043`
   is now an authored gate (RV-322 F-7): **PHASE-01 does not start until REV-043
   is `approved`**. Its `[[change]]` rows are ADR-006, SPEC-012, PRD-015.
@@ -129,19 +159,30 @@ Settled this session:
   `--across-trees` → `--truth`.
 - **DEC-097** — mint the `phases` symlink in the primary only.
 - **DEC-098** — migrate `boundaries_path` in-slice; it becomes infallible.
-- **QUE (settled)** — spec sweep: no blocking REQ in SPEC-012 / SPEC-021 / PRD-015.
+- ~~**QUE (settled)** — spec sweep: no blocking REQ in SPEC-012 / SPEC-021 /
+  PRD-015.~~ **FALSIFIED by RV-322 F-1.** The pre-design sweep checked REQ-297 and
+  stopped. PRD-015 REQ-296 **is** revised (rows 3b); REQ-304 is parked as QUE-199.
+  The original claim is left struck rather than deleted — it is why F-1 existed.
 - **QUE (settled)** — worker read exposure: **accepted explicitly**, not fenced
   (`design.md` §7 D5); now a stated non-goal and named in REV-043.
 - **OQ-1 (closed in review)** — DEC-098's contract change hides nothing; both
   propagating sites fail closed for independent reasons (`design.md` §10 R-1).
 - **Correction landed** — `slice-237.md` objective 5 now reads "narrow", and
   objectives 6/7 were added.
-- **DEC-095 amended ×3** (RV-322 F-3/F-6/F-9) — two-root split; `resolve` is
-  fallible for a fault and total only for "no repo"; `PrimaryRoot::assume` added
-  as a production seam. The newtype survived; the *parameter* split.
+- **DEC-095 amended ×6** — F-3 (two-root split), F-6 (`resolve` fallible for a
+  fault, total only for "no repo"), F-9/F-C (`assume` is a **test** seam;
+  amendment 5 supersedes 3), F-B (fallible constructor for writers only),
+  **F-10 (amendment 6: the split is by TYPE — `PrimaryRoot` / `ReadRoot`, one-way
+  `From`, no reverse conversion; amendment 4's API superseded in place)**. The
+  newtype survived every round; what moved was the parameter, then the type.
 
 Follow-ups raised, not owned by this slice:
 
 - **ISS-277** — `reseat` cannot renumber a review.
-- **ADR-008 D-B3 staleness** — the claude-arm confinement concession. Named in
-  REV-043 as a follow-up; **no backlog item filed yet**.
+- **QUE-199** — REQ-304 "by construction" vs cooperative confinement. Filed.
+- **IMP-354** — platform-agnostic seatbelt/bwrap confinement wrapper; the
+  normative `dispatch-subprocess` skill spawns unconfined and its
+  "Confined (bwrap)" annotation is not implemented. Filed.
+- **ADR-008 D-B3 staleness** — the claude-arm "cannot be wrapped" concession is
+  stale. Named in REV-043 as a follow-up; **still no backlog item** — distinct
+  from IMP-354, which is the codex/pi arm.
