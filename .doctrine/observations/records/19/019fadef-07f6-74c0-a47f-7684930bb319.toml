@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadef-07f6-74c0-a47f-7684930bb319"
+recorded_at = "2026-07-29T12:52:31.350880655Z"
+kind = "friction"
+summary = "/dispatch-agent: distilled worker brief under-declared the editable file set vs the slice selector, making a reachable remedy look unreachable"
+detail = """
+SL-233 PHASE-14, claude arm. The orchestrator's distilled worker prompt listed an explicit "declared scope" file set (src/slice.rs, src/design_run/**, src/commands/design.rs, tests/e2e_design_*.rs, tests/architecture_layering.rs, tests/common/**) as a convenience summary of `slice selector list 233`. That summary OMITTED src/commands/cli.rs and src/commands/mod.rs, both of which ARE declared design-targets on the slice.
+
+Cost: the worker hit a genuine ADR-001 layering blocker (EX-4's shim live arm needs `slice -> commands`, which 2-cycles against the existing `commands -> slice` at cli.rs:1488; measured TangleGrew{Command, baseline 76, actual 135}). It identified the correct cheap remedy — move `run_design` into src/commands/design.rs and route the variant at cli.rs:1488 — but reported it as "needs one file outside my declared set" and reverted the work, shipping the phase 7/8 complete with one VT-1 pattern and EX-8's "exactly eight" unmet. The remedy was inside the slice's real declared scope the whole time; only the brief's paraphrase excluded it.
+
+Lesson: a distilled brief should either quote `slice selector list <N>` output verbatim or point the worker at the command, never hand-summarise the scope set. A paraphrased allowlist is a silent capability reduction, and the worker correctly refuses to cross what it was told is a wall."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

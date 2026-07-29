@@ -1,0 +1,31 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fae03-0226-7341-823f-1936a95852e5"
+recorded_at = "2026-07-29T13:14:20.582095191Z"
+kind = "friction"
+summary = "/dispatch-agent: no guard warns that arming a second worker on a phase already at `verified` leaves it with no commit path — discovered only after the work is done"
+detail = """
+SL-233 PHASE-14, claude arm. The first worker delivered 7 of 8 exit criteria; the funnel ran import + verify, reaching position `verified`. The orchestrator then armed and spawned a completion worker for the same phase to deliver the eighth.
+
+Nothing refused, warned, or hinted at any point in that sequence: `check prove` passed, `worktree marker --clear` passed, `check regression capture` passed, `dispatch arm-spawn --slice 233 --phase PHASE-14` printed "armed SL-233 at base <B>" with no complaint, and the WorktreeCreate hook forked and provisioned the worker normally. The worker then did ~14 minutes of correct, green work and hit the wall at the very end:
+
+  {"Refused":{"reason":"already-verified","detail":"record-worker-commit refused at position `verified` — already-verified; expected: conclude"}}
+
+The refusal is correct and well-worded. The problem is purely WHERE it fires: `worker_commit` is the last action of the worker's life, so a positional precondition enforced there costs a full worker run to discover. Every earlier step that could have refused — `arm-spawn` above all, which already takes `--slice` AND `--phase` and therefore knows exactly which funnel row it is arming against — passed silently.
+
+Cost: one stranded worker run, plus the orchestrator having to fall back to the live-worktree import path (`worktree import --from-worktree`) and a manual coord commit, because the delta was fine and only the commit path was gone.
+
+Suggested fix: `dispatch arm-spawn --slice N --phase PHASE-NN` should refuse (or at minimum warn loudly) when that phase's funnel position is past `imported` — the position at which a worker commit can still be accepted. The information is available at arming time and the failure is otherwise unrecoverable-in-place.
+
+Secondary: the funnel models one worker per phase, and a phase that lands partially complete has no first-class "more work needed here" path. `dispatch next` prescribed `conclude` for a phase whose VT-1 was failing, because verify runs the test suite and does not consult the VT anchors. An orchestrator that obeyed the oracle would have concluded an incomplete phase."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -56,3 +56,47 @@ priority of the two.
 
 Found while concluding SL-233's coordinator-only PHASE-01 by hand — the interim
 posture recorded in [[IMP-346]].
+
+## 2026-07-29 — the sibling check is answered: it is FOUR verbs, not one
+
+The "worth checking the sibling verbs" note above is now measured. Driving
+SL-233 PHASE-14 through the full claude-arm funnel, the stale index appeared
+after **every** funnel-writing verb:
+
+| verb | staged artefact |
+|---|---|
+| `dispatch_import` | the imported source files + `funnel.toml` |
+| `dispatch verify` | `funnel.toml` |
+| `dispatch_conclude_phase` | `boundaries.toml` + `funnel.toml` |
+| `dispatch_reap` | `funnel.toml` |
+
+`dispatch_conclude_phase` **does** share the defect, so by this item's own
+prioritisation it is the higher-priority leg.
+
+**It is not always a pure deletion.** After `conclude` the staged diff was
+`2 insertions(+), 11 deletions(-)` — a *modification reversion* of the funnel
+row plus deletion of the boundary row. That matters because a reader checking
+only for `D ` in `git status --porcelain` will not recognise it.
+
+### It caused a real bad commit, and the trap has a specific shape
+
+The predicted blast radius landed. `slice record-delta` had just been run (it is
+required on the claude arm, ISS-241) and legitimately writes *somewhere*, so a
+single staged `funnel.toml` read as "that must be record-delta's write". It was
+`dispatch verify`'s stale index. The path-limited `git commit` reverted PHASE-14
+from `verified` to `imported` and deleted the whole `[phase.verify]` row.
+
+Caught only because the diffstat shape was wrong for an additive record;
+restored from the pre-commit tip.
+
+**The stale index is most dangerous when a legitimate write is expected in the
+same window** — that is what defeats "is this mine?" reasoning. Two mitigations
+short of the real fix, both cheap: have the funnel verbs clear their own index
+entry, or have `record-delta` report the path it wrote.
+
+Standing rule until then: read every staged diff before committing in a
+coordination tree, and never infer authorship from the path alone.
+`doctrine dispatch commit` structurally refuses the reversion signature and is
+the correct verb for orchestrator writes there — a raw `git commit` is not.
+
+Second confirmation from SL-233 PHASE-14.

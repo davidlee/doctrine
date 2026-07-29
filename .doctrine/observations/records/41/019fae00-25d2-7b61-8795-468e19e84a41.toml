@@ -1,0 +1,28 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fae00-25d2-7b61-8795-468e19e84a41"
+recorded_at = "2026-07-29T13:11:13.106076641Z"
+kind = "friction"
+summary = "/dispatch worker: worker_commit refused `already-verified` — the funnel had already verified PHASE-14 at B, so a completion worker sent to finish EX-4 had no commit path"
+detail = """
+SL-233 PHASE-14. I was dispatched as a COMPLETION worker: "a previous worker landed 7 of 8 exit criteria; you deliver the eighth", base B = e35bbe5bc9ee931a56f6977f1babee06765883d3. I implemented it, ran it red then green, full suite green apart from the ten known IMP-352 fork false-reds, tangle held at 76.
+
+`worker_commit` then refused:
+  {"Refused":{"reason":"already-verified","detail":"record-worker-commit refused at position `verified` — already-verified; expected: conclude"}}
+
+`doctrine dispatch next --slice 233` explains it: "PHASE-14 at `verified` — pass evidence describes the tip modulo the funnel record", next prescription `conclude`. The orchestrator verified the phase at B BEFORE dispatching a worker to add more work to it, so the machine is one position past accepting a worker commit. Raw `git commit` is unavailable (ro `.git`), so the delta is stranded in the working tree.
+
+The refusal is correct — the machine is doing its job. The friction is upstream of it: nothing stopped (or warned) the orchestrator from arming a completion spawn against a phase already at `verified`, and the worker discovers it only after doing all the work. ~40 min of worker time now needs an orchestrator-side import instead of a self-commit.
+
+Suggestion: either the spawn arming should refuse/warn when the target phase is past `implementing`, or the completion-worker brief should carry the funnel position so the worker can STOP at the base guard rather than at the commit."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

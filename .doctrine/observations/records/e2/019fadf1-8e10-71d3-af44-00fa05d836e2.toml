@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadf1-8e10-71d3-af44-00fa05d836e2"
+recorded_at = "2026-07-29T12:55:16.752370529Z"
+kind = "friction"
+summary = "/dispatch-agent: ISS-274 stale index committed as if it were a record-delta write, clobbering the PHASE-14 verify row"
+detail = """
+SL-233 PHASE-14, claude arm, orchestrator side. After `slice record-delta` flipped VT-2 from UNATTRIBUTABLE to PASS, `git status --porcelain` showed a single staged path, `.doctrine/dispatch/233/funnel.toml`. I read that as record-delta's write and committed it path-limited (7514ca8a) without reading the diff.
+
+It was not record-delta's write. It was the stale index `dispatch verify` had left (ISS-274) — the staged content was PRE-verify, so the commit reverted PHASE-14 from `verified` to `imported` and deleted the whole `[phase.verify]` row. Caught only because the diffstat (2 insertions, 8 deletions) was the wrong shape for an additive record. Restored from 6ca6371a in e35bbe5b.
+
+Two compounding factors worth separating:
+1. ISS-274 itself: funnel-writing verbs leave a stale index whose diff SILENTLY REVERTS the verb that just ran. The handover flags it for import/conclude/reap; `verify` belongs on that list too.
+2. The attribution trap: because record-delta ran between the funnel verb and the commit, and record-delta legitimately writes SOMEWHERE, a single staged funnel path reads as "that must be my write". The stale index is most dangerous when a legitimate write is expected in the same window.
+
+Mitigation that would have caught it: the funnel verbs could clear their own index entry, or `record-delta` could report the path it wrote. Absent either, the rule is unconditional — read every staged diff before committing in a coord tree, never infer authorship from the path alone."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

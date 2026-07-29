@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadff-57ad-7fa0-930a-8f2bcdc86078"
+recorded_at = "2026-07-29T13:10:20.3338517Z"
+kind = "friction"
+summary = "/dispatch worker: the primary tree's .doctrine/slice/233/plan.toml is stale and silently answers a citation meant for the fork's copy"
+detail = """
+SL-233 PHASE-14. The brief cited "`.doctrine/slice/233/plan.toml` PHASE-14 EX/VT/VA (lines 374-417)" as the authority order's top entry. Reading `/workspace/doctrine/.doctrine/slice/233/plan.toml` (the primary/edge tree, the absolute path a worker types by habit) returned lines 374-417 of a DIFFERENT, older plan: PHASE-06 criteria about design delegation, `tests/e2e_design_delegation.rs`, `stale_proposal_is_refused_and_left_inspectable`. Plausible-looking, entirely wrong, and PHASE-14 does not exist in that file at all — `rg 'id = "PHASE-14"'` returned nothing, which is the only reason I noticed.
+
+The fork's own `.doctrine/slice/233/plan.toml` has PHASE-14 at 375-417, one line off the cited range. Two trees, one relative path, no signal which one you read: the stale one answers confidently and the line numbers nearly line up.
+
+Cost: ~2 round trips plus the risk of implementing against superseded criteria. Suggestion: dispatch briefs should cite plan/design paths as worktree-RELATIVE and say so explicitly ("relative to your worktree root, not /workspace/doctrine"), or the orchestrator should inline the criteria text it is making authoritative."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

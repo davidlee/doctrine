@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faddb-83fe-7461-a3fb-836aa0aa4a5d"
+recorded_at = "2026-07-29T12:31:12.382710488Z"
+kind = "friction"
+summary = "/dispatch PHASE-14 worker: EX-4's shim live-run arm is unimplementable inside the declared file set — slice→commands blows the ADR-001 tangle ratchet 76→135"
+detail = """SL-233 PHASE-14 EX-4 mandates the deprecated `doctrine slice design` shim forward to `design materialise` "through the same implementation and foreign-edit guard". The incumbent lives in src/slice.rs; `materialise` is private in src/commands/design.rs. Any call from slice.rs is `crate::commands::design::…`, i.e. a production edge slice→commands. src/commands/cli.rs:1488 already carries commands→slice, so the new edge is a 2-cycle that drags the whole `commands` umbrella into the command-tier SCC: measured tangle_baseline.command 76 → 135 (cargo test --test architecture_layering, TangleGrew{baseline:76, actual:135}). Two remedies, neither reachable by the worker: (a) bump .doctrine/adr/001/layering.toml tangle_baseline.command (worker-forbidden `.doctrine/` — the SL-220 PHASE-06 precedent recorded in that file's own comments says the bump is an orchestrator-owned governance edit); (b) move run_design into src/commands/design.rs and route SliceCommand::Design at src/commands/cli.rs:1488 — ZERO new tangle, because commands→slice already exists, but cli.rs is outside the worker's declared file set. Cost: ~40 minutes of the worker's budget spent discovering this after the phase sheet was written, and EX-4/VT-1(1 of 6)/VA-3 land undelivered. The phase-plan could have caught it: the sheet named the seam (`materialise` is private; add a pub(crate) entry) without checking the module-edge consequence, and it declared tests/architecture_layering.rs in scope — the test that then refused the design."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+skill = "dispatch"
+skill_origin = "explicit"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-14"
+phase_origin = "explicit"

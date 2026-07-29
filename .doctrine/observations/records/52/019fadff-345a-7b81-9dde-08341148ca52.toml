@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadff-345a-7b81-9dde-08341148ca52"
+recorded_at = "2026-07-29T13:10:11.290482192Z"
+kind = "friction"
+summary = '/dispatch worker: architecture_layering prints no tangle count when green, so "baseline held at 76" is unprovable without a shadow tree'
+detail = """
+SL-233 PHASE-14. The phase's whole remedy was "move run_design so the command-tier tangle does not grow", and the hand-back had to report the actual number. `cargo test --test architecture_layering` only emits a count via `Violation::TangleGrew` — i.e. only when it FAILS. A green run says nothing, so "actual == 76" and "actual == 40" are indistinguishable, and a silent tangle DROP (which should prompt a baseline tighten) is invisible by construction. `dump_real_graph --ignored` dumps edges but no tangle counts.
+
+Cost: ~10 min building a scratch directory with symlinked `src`/`Cargo.toml` and a copied `.doctrine/adr/001/layering.toml` whose `[tangle_baseline] command` was set to 0, then running the compiled test binary with that cwd, just to read `actual: 76` out of the failure. A worker cannot do the obvious thing (edit layering.toml, run, revert) because `.doctrine/` is a forbidden zone.
+
+Suggestion: have the gate print the per-tier actual counts unconditionally (`--nocapture`-visible), or add a non-ignored reporting test. It is one println and it turns a criterion currently verified by an elaborate workaround into one verified by reading the output."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

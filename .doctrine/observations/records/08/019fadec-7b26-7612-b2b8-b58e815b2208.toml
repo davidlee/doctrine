@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadec-7b26-7612-b2b8-b58e815b2208"
+recorded_at = "2026-07-29T12:49:44.230304154Z"
+kind = "friction"
+summary = "/dispatch PHASE-14 worker: VA-NC mandated a red kind (wrong acceptance) that is unreachable for 2 of the 5 refusals, costing a probe round to establish honestly"
+detail = "SL-233 PHASE-14 VA-NC requires each of the five §5.5 refusal tests to be observed red as a WRONG ACCEPTANCE. Measured at head: duplicate marker, unknown marker and marker-free addition do red as wrong acceptances (run mutated, revision advanced); MISSING MARKER and STRUCTURAL DELETION cannot, by construction — a deleted marker or an emptied region produces no entry in `authored_section_digests`, so the caller's declared map can never match and adoption already refuses with the generic `AdoptionMarkersInvalid`. Their honest red is a WRONG REFUSAL REASON. The phase sheet's §4 predicted this for StructuralDeletion and UnterminatedDocument but NOT for MissingMarker, so establishing it needed a round of arm-by-arm probing (temporarily neutralising the earlier assertion in each multi-arm test so the later arms' reds became observable, then restoring) — roughly 6 extra binary runs and 3 file round-trips. Cheaper shape for a future sheet: state the expected red KIND per test in the sheet, and where a multi-arm test hides later arms behind an early assertion, ask for the arms to be probed once via a helper that reports both channels rather than panicking."
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+skill = "dispatch"
+skill_origin = "explicit"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-14"
+phase_origin = "explicit"
