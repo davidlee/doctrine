@@ -5,10 +5,10 @@ id = 177
 slug = "memory-record-cli-add-trust-and-severity-flags-currently-toml-only"
 title = "memory record CLI: add --trust and --severity flags (currently TOML-only)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "obsolete"
 created = "2026-06-26"
-updated = "2026-07-20"
+updated = "2026-07-29"
 tags = ["area:cli", "area:memory", "cluster:cli-ux", "cluster:memory-system"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

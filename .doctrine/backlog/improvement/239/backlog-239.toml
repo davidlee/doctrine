@@ -5,10 +5,10 @@ id = 239
 slug = "onboard-model-copy-reflect-repeatable-trait-set-contract"
 title = "Onboard --model copy: reflect repeatable trait-set contract"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-03"
-updated = "2026-07-03"
+updated = "2026-07-29"
 tags = ["area:onboarding", "area:prompt-cascade"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
