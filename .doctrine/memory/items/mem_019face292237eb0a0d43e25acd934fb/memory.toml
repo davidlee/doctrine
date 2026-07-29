@@ -1,0 +1,46 @@
+memory_uid = "mem_019face292237eb0a0d43e25acd934fb"
+memory_key = "mem.fact.doctrine.agents-skill-mirror-is-published-source"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "The .agents/ skill mirror is fetched from the published repo, not the working tree"
+summary = "Editing a skill master under plugins/ never updates .agents/skills/ until the change is published — the mirror is npx-fetched from the github slug."
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = ["plugins/doctrine/skills", "src/install.rs"]
+globs = []
+commands = ["doctrine install"]
+tags = ["area:install", "area:skills", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "aa3412b3c20f9cf2c4cae532ecfb6b88bcee110d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "47e1f78b3de00c20a02ca60c2361f8ba741b8231e0337281d24db7a18af5a1c1"
+base_commit = "845eaad97b0e727fc2583c6f3d0cc87e84e42eb1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "backlog"
+ref = "IMP-345"
+
