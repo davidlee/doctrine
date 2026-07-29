@@ -73,6 +73,18 @@ Two assignments are the plan's:
    F-3 two-root split — a *signature* concern — not DEC-098's contract concern,
    and § 8a puts the two-root split in phase 1.
 
+3. **The `init_phases` / `refresh_symlink` root sets are split across PHASE-01
+   and PHASE-05.** § 5.2 gives `init_phases` one root and `refresh_symlink` two,
+   and they are caller and *sole* callee (`state.rs:219`) — so the two rows
+   cannot both hold at once. PHASE-01 honours the `init_phases` row as written,
+   which incidentally delivers DEC-097's *mint* half: with a `&PrimaryRoot` in,
+   the symlink lands in the primary from that phase onward. PHASE-05 then adds
+   the second param, because *retirement* is the first thing that needs the
+   invoked tree. Splitting it this way means no § 5.2 row is contradicted at the
+   phase that owns it. Worth naming that the second root here is not a `git_cwd`:
+   retiring a link is a filesystem op on the invoked tree, not a git query, so it
+   borrows F-3's shape without being an F-3 case.
+
 Consequence: PHASE-01 leaves a transitional redundancy. Those two functions are
 handed a resolved primary which `boundaries_path` then re-resolves internally.
 It is correct but wasteful — `primary_worktree` forks `git worktree list` per
