@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use clap::Subcommand;
 
 mod shared;
-pub(crate) use shared::{classify_worktree_role, is_linked_worktree};
+pub(crate) use shared::{classify_worktree_role, coord_branch_slice, is_linked_worktree};
 
 mod allowlist;
 

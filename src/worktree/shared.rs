@@ -78,10 +78,30 @@ pub(crate) fn classify_worktree_role(branch: Option<&str>, linked: bool) -> &'st
     if !linked {
         return "primary";
     }
-    match branch.and_then(|b| b.strip_prefix(COORD_BRANCH_SHORT_PREFIX)) {
-        Some(suffix) if !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()) => "coord",
-        _ => "fork",
+    if coord_branch_suffix(branch).is_some() {
+        "coord"
+    } else {
+        "fork"
     }
+}
+
+/// The numeric suffix of a COORD-SHAPED branch (`dispatch/<NNN>`) — the ONE place the
+/// `dispatch/` prefix and the load-bearing all-digits test live (STD-001). `None` for a
+/// worker fork's non-numeric `dispatch/<agent>`, any other branch, or a detached HEAD.
+/// Isolation is not consulted; shape only.
+fn coord_branch_suffix(branch: Option<&str>) -> Option<&str> {
+    branch
+        .and_then(|b| b.strip_prefix(COORD_BRANCH_SHORT_PREFIX))
+        .filter(|suffix| !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()))
+}
+
+/// PURE — the slice id a coordination branch names, iff `branch` is coord-shaped
+/// (IMP-268). `None` for every non-coord branch, and for a numeric suffix too large to
+/// be a slice id. Shares [`coord_branch_suffix`] with [`classify_worktree_role`], so the
+/// prefix rule is stated once: a caller pairing this with `linked` gets the same coord
+/// verdict the role classifier gives.
+pub(crate) fn coord_branch_slice(branch: Option<&str>) -> Option<u32> {
+    coord_branch_suffix(branch)?.parse().ok()
 }
 
 pub(super) fn resolve_commit(root: &Path, reference: &str) -> anyhow::Result<String> {
@@ -155,6 +175,40 @@ mod tests {
         // Any other linked worktree is a `fork` — a `review/*` ref or a detached HEAD.
         assert_eq!(classify_worktree_role(Some("review/064"), true), "fork");
         assert_eq!(classify_worktree_role(None, true), "fork");
+    }
+
+    // --- IMP-268: the coord branch's slice id, over the SAME shape test ---
+
+    #[test]
+    fn coord_branch_slice_reads_the_id_only_from_a_coord_shaped_branch() {
+        // Zero-padded and bare forms both parse to the numeric id, so a caller can
+        // compare against a bare `--slice N` without re-formatting.
+        assert_eq!(coord_branch_slice(Some("dispatch/228")), Some(228));
+        assert_eq!(coord_branch_slice(Some("dispatch/007")), Some(7));
+        assert_eq!(coord_branch_slice(Some("dispatch/7")), Some(7));
+
+        // Every non-coord shape yields None — including the worker fork that shares the
+        // prefix, which is exactly the case a bare prefix match would misread.
+        for branch in [
+            Some("dispatch/agent-abc"),
+            Some("dispatch/"),
+            Some("main"),
+            Some("edge"),
+            Some("review/064"),
+            None,
+        ] {
+            assert_eq!(coord_branch_slice(branch), None, "branch: {branch:?}");
+        }
+
+        // A digits-only suffix too large for a u32 keeps the coord ROLE (the shape test
+        // passes) but yields no id — so a caller cross-checking the slice must treat
+        // `None` as "cannot compare", never as a mismatch.
+        assert_eq!(coord_branch_slice(Some("dispatch/99999999999999")), None);
+        assert_eq!(
+            classify_worktree_role(Some("dispatch/99999999999999"), true),
+            "coord",
+            "shape and parse disagree only here — documented, not a mismatch"
+        );
     }
 
     // --- branch-point-check pure compare (SL-031 PHASE-02, VT-1) ---

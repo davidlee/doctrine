@@ -718,14 +718,21 @@ fn run_arm_spawn(
     // honored unchanged. Resolve through the crate's shared git shell (same helper
     // `run_refresh_base` uses), never a hand-rolled Command.
     //
-    // A7 caveat: the DEFAULTED base is NOT self-catching on a confined arm. This
-    // resolves against the root this process sees; if that is the wrong-but-consistent
-    // tree, a wrong base can land silently — there is no cross-check here. The deferred
-    // spawn-time guard (IMP-268) is the real net for that, not this default; do not
-    // mistake this resolution for one.
-    let resolved = match base {
-        Some(b) => b.trim().to_string(),
-        None => git::git_text(&root, &["rev-parse", "HEAD"])?,
+    // A7 (was a caveat, now guarded — IMP-268): the DEFAULT resolves against whatever
+    // root this process sees, so a wrong-but-consistent tree would silently yield a
+    // wrong base. [`classify_default_base_root`] closes that: the default is admitted
+    // ONLY from the bound slice's coordination tree, whose HEAD actually is B. The
+    // guard is DEFAULT-ONLY — an explicit `--base` remains the ungated escape hatch.
+    let resolved = if let Some(b) = base {
+        b.trim().to_string()
+    } else {
+        classify_default_base_root(
+            git::current_branch(&root)?.as_deref(),
+            crate::worktree::is_linked_worktree(&root)?,
+            binding.bound_slice(),
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+        git::git_text(&root, &["rev-parse", "HEAD"])?
     };
 
     // Fail closed on a base outside the reader's accepted envelope (4..=64 hex), so a
@@ -787,6 +794,16 @@ enum ArmingBinding {
     Unbound,
 }
 
+impl ArmingBinding {
+    /// The slice this arm binds, if any — `None` for an [`ArmingBinding::Unbound`] arm.
+    fn bound_slice(&self) -> Option<u32> {
+        match self {
+            ArmingBinding::Bound { slice, .. } => Some(*slice),
+            ArmingBinding::Unbound => None,
+        }
+    }
+}
+
 /// PURE — classify the `--slice`/`--phase` pair, failing closed on a HALF arm (IMP-331).
 ///
 /// The fork point drops a half pair to `None` (it would otherwise forge provenance), so
@@ -817,6 +834,51 @@ fn classify_arming_binding(
         (None, None) => Ok(ArmingBinding::Unbound),
         (Some(_), None) => half("--slice", "--phase"),
         (None, Some(_)) => half("--phase", "--slice"),
+    }
+}
+
+/// PURE — admit or refuse a DEFAULTED `--base`, given the invoking root's branch,
+/// isolation, and the arm's bound slice (IMP-268). Called only on the default path; an
+/// explicit `--base` never reaches here.
+///
+/// An omitted `--base` resolves to *this root's* HEAD. That is B only in the bound
+/// slice's coordination tree: the primary tree's HEAD is a moving `edge`/`main`, and a
+/// worker fork's is a worker's tip. A wrong base taken here is not caught until
+/// `worker_commit`'s `C^==B` precondition refuses at hand-back — AFTER the whole worker
+/// turn is spent (~265k tokens observed for the sibling defect, IMP-331). Refusing here
+/// converts that end-loaded loss into a free error.
+///
+/// Two refusals, because a wrong root and a right-role-wrong-slice root are different
+/// mistakes with different fixes. Rides [`classify_worktree_role`] and
+/// [`crate::worktree::coord_branch_slice`] rather than re-spelling the `dispatch/` shape
+/// test — coord and worker-fork branches SHARE that prefix, so a bare prefix match would
+/// misread every fork as a coord.
+fn classify_default_base_root(
+    branch: Option<&str>,
+    linked: bool,
+    bound_slice: Option<u32>,
+) -> Result<(), String> {
+    let named = || branch.unwrap_or("<detached>");
+    let role = classify_worktree_role(branch, linked);
+    if role != "coord" {
+        return Err(format!(
+            "default-base-off-coord: an omitted `--base` defaults to THIS root's HEAD, but \
+             this worktree is `{role}` (branch `{}`), not a `dispatch/<NNN>` coordination \
+             tree — its HEAD is not the phase base B, and the miss is not caught until \
+             `worker_commit` refuses at hand-back. Re-run from the coordination worktree, \
+             or pass `--base <B>` explicitly.",
+            named()
+        ));
+    }
+    match (crate::worktree::coord_branch_slice(branch), bound_slice) {
+        (Some(on), Some(bound)) if on != bound => Err(format!(
+            "default-base-wrong-slice: arming slice {bound} from slice {on}'s coordination \
+             tree (branch `{}`) — its HEAD is slice {on}'s base B, not slice {bound}'s. \
+             Re-run from slice {bound}'s coordination worktree, or pass `--base <B>` \
+             explicitly.",
+            named()
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -8178,23 +8240,45 @@ mod tests {
 
     // ---- A1 / VT-2: an omitted --base defaults to the coord-root HEAD ---------------
 
+    /// A primary repo plus a LINKED coordination worktree on `dispatch/<NNN>` at
+    /// `<tmp>/coord`, both carrying the `.doctrine` root marker. Unlike
+    /// [`primary_with_coord`] this reuses `init_repo`/`git` and provisions the marker
+    /// in the linked tree — `init_repo` creates `.doctrine` EMPTY, so git never tracks
+    /// it and `worktree add` alone would leave the coord rootless.
+    fn coord_repo(slice: u32) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = std::fs::canonicalize(tmp.path()).unwrap();
+        let primary = base.join("primary");
+        init_repo(&primary);
+        let coord = base.join("coord");
+        git(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                &format!("dispatch/{slice:03}"),
+                coord.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        let coord = std::fs::canonicalize(&coord).unwrap();
+        std::fs::create_dir_all(coord.join(".doctrine")).unwrap();
+        (tmp, primary, coord)
+    }
+
     #[test]
     fn arm_spawn_defaults_base_to_head_when_omitted() {
-        let repo = tempfile::tempdir().unwrap();
-        init_repo(repo.path());
-        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+        // The default is admitted FROM THE COORD TREE — the only root whose HEAD is B
+        // (IMP-268). Fixture is a real linked `dispatch/<NNN>` worktree, matching what
+        // the assertion has always claimed.
+        let (_tmp, _primary, coord) = coord_repo(239);
+        let spawn = coord.join(crate::worktree::ARMING_SUBPATH);
 
-        // base = None ⇒ the arming `base` file equals the repo's `git rev-parse HEAD`.
-        run_arm_spawn(
-            Some(repo.path().to_path_buf()),
-            None,
-            None,
-            None,
-            vec![],
-            false,
-        )
-        .unwrap();
-        let head = git(repo.path(), &["rev-parse", "HEAD"]);
+        // base = None ⇒ the arming `base` file equals the coord root's `rev-parse HEAD`.
+        run_arm_spawn(Some(coord.clone()), None, None, None, vec![], false).unwrap();
+        let head = git(&coord, &["rev-parse", "HEAD"]);
         let written = std::fs::read_to_string(spawn.join("base")).unwrap();
         assert_eq!(
             written.trim(),
@@ -8204,7 +8288,7 @@ mod tests {
 
         // base = Some(<explicit sha>) ⇒ that sha is written unchanged.
         run_arm_spawn(
-            Some(repo.path().to_path_buf()),
+            Some(coord.clone()),
             Some("abcd1234"),
             None,
             None,
@@ -8218,6 +8302,152 @@ mod tests {
             "abcd1234",
             "explicit base honored unchanged"
         );
+    }
+
+    // ---- IMP-268: the DEFAULTED base is admitted only from the bound coord tree ------
+
+    #[test]
+    fn classify_default_base_root_truth_table() {
+        // Coord (linked + numeric `dispatch/` suffix) with no binding ⇒ admitted: an
+        // unbound arm still needs a right base, but has no slice to cross-check.
+        assert_eq!(
+            classify_default_base_root(Some("dispatch/239"), true, None),
+            Ok(())
+        );
+        // Coord whose branch names the SAME slice as the binding ⇒ admitted. The suffix
+        // is compared NUMERICALLY, so the zero-padded ref matches the bare id.
+        assert_eq!(
+            classify_default_base_root(Some("dispatch/007"), true, Some(7)),
+            Ok(())
+        );
+        assert_eq!(
+            classify_default_base_root(Some("dispatch/239"), true, Some(239)),
+            Ok(())
+        );
+
+        // Not a coord ⇒ refused, whatever the binding. The primary tree's HEAD is a
+        // moving `edge`/`main`, never B; a fork's HEAD is a worker's, not the coord's.
+        for (branch, linked) in [
+            (Some("main"), false),            // primary
+            (Some("edge"), false),            // primary
+            (None, false),                    // primary, detached
+            (Some("review/239"), true),       // fork
+            (Some("dispatch/agent-a"), true), // worker fork — SHARES the `dispatch/` prefix
+            (None, true),                     // fork, detached
+        ] {
+            for bound in [None, Some(239)] {
+                let err = classify_default_base_root(branch, linked, bound)
+                    .expect_err("a non-coord root must refuse the default");
+                assert!(
+                    err.starts_with("default-base-off-coord:"),
+                    "refusal leads with the off-coord token; got: {err}"
+                );
+                assert!(
+                    err.contains("--base"),
+                    "refusal must name the explicit escape; got: {err}"
+                );
+            }
+        }
+
+        // Right role, WRONG slice ⇒ refused separately: one coord tree per slice, so
+        // arming slice 240 from `dispatch/239`'s tree is always a mistake.
+        let err = classify_default_base_root(Some("dispatch/239"), true, Some(240))
+            .expect_err("a coord tree for another slice must refuse");
+        assert!(
+            err.starts_with("default-base-wrong-slice:"),
+            "refusal leads with the wrong-slice token; got: {err}"
+        );
+        assert!(
+            err.contains("239") && err.contains("240"),
+            "refusal must name both slices; got: {err}"
+        );
+    }
+
+    /// No arming slot exists under `spawn` — the whole-dir assertion a refused arm owes.
+    fn assert_nothing_armed(spawn: &Path) {
+        for slot in [
+            crate::worktree::ARMING_BASE_FILE,
+            crate::worktree::ARMING_SLICE_FILE,
+            crate::worktree::ARMING_PHASE_FILE,
+        ] {
+            assert!(
+                !spawn.join(slot).exists(),
+                "a refused arm must not write `{slot}`"
+            );
+        }
+    }
+
+    #[test]
+    fn arm_spawn_refuses_a_defaulted_base_off_the_coord_tree() {
+        // The wrong-root case IMP-268 exists for: run from the primary tree, where the
+        // defaulted HEAD is a moving `main`, not B. Caught at arm time rather than
+        // end-loaded at `worker_commit`'s `C^==B` precondition.
+        let (_tmp, primary, _coord) = coord_repo(239);
+        let spawn = primary.join(crate::worktree::ARMING_SUBPATH);
+
+        let err = run_arm_spawn(
+            Some(primary.clone()),
+            None,
+            Some(239),
+            Some("PHASE-01"),
+            vec![],
+            false,
+        )
+        .expect_err("a defaulted base off the coord tree must refuse");
+        assert!(
+            format!("{err}").starts_with("default-base-off-coord:"),
+            "got: {err}"
+        );
+        assert_nothing_armed(&spawn);
+    }
+
+    #[test]
+    fn arm_spawn_honours_an_explicit_base_off_the_coord_tree() {
+        // The guard is DEFAULT-ONLY (the card's boundary): an explicit `--base` always
+        // wins, from any root. This is the orchestrator's documented escape hatch, so it
+        // must stay open exactly as before.
+        let (_tmp, primary, _coord) = coord_repo(239);
+        let spawn = primary.join(crate::worktree::ARMING_SUBPATH);
+
+        run_arm_spawn(
+            Some(primary.clone()),
+            Some("abcd1234"),
+            Some(239),
+            Some("PHASE-01"),
+            vec![],
+            false,
+        )
+        .unwrap();
+        let written =
+            std::fs::read_to_string(spawn.join(crate::worktree::ARMING_BASE_FILE)).unwrap();
+        assert_eq!(
+            written.trim(),
+            "abcd1234",
+            "explicit base ungated off-coord"
+        );
+    }
+
+    #[test]
+    fn arm_spawn_refuses_a_defaulted_base_from_another_slices_coord() {
+        // Right role, wrong slice: sitting in `dispatch/239`'s coord tree while arming
+        // slice 240. Its HEAD is slice 239's B — a plausible-looking wrong base.
+        let (_tmp, _primary, coord) = coord_repo(239);
+        let spawn = coord.join(crate::worktree::ARMING_SUBPATH);
+
+        let err = run_arm_spawn(
+            Some(coord.clone()),
+            None,
+            Some(240),
+            Some("PHASE-01"),
+            vec![],
+            false,
+        )
+        .expect_err("a defaulted base from another slice's coord must refuse");
+        assert!(
+            format!("{err}").starts_with("default-base-wrong-slice:"),
+            "got: {err}"
+        );
+        assert_nothing_armed(&spawn);
     }
 
     // ---- IMP-331: a HALF arm fails closed at arm time, not end-loaded at hand-back ---
