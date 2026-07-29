@@ -38,3 +38,11 @@ role = "concerns"
 descriptor = "where a traverses / exercises / involves scenario relation vocabulary would have to register"
 target = "SPEC-018"
 
+[[relation]]
+label = "related"
+target = "REV-042"
+
+[[relation]]
+label = "related"
+target = "IMP-350"
+
