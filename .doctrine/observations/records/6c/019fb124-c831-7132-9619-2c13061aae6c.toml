@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb124-c831-7132-9619-2c13061aae6c"
+recorded_at = "2026-07-30T03:50:05.617263352Z"
+kind = "friction"
+summary = "/preflight: pi rpc stream grows to 50-150MB per turn, and the shipped spawn scripts poll for agent_end by grepping the whole growing file every 2s"
+detail = """pi --mode rpc re-serializes accumulated conversation state on every event, so an ordinary single-turn worker produces a 50-150MB stdout stream (observed: 54MB, 56MB, 130MB, 139MB, 152MB across seven review turns; none was a loop — all were legitimate reasoning). scripts/pi-spawn-confined.sh's completion poll is 'grep -qE ... "$OUT"' inside a 2s while-loop, so it re-reads the entire growing file every tick — I/O cost is quadratic in turn length and can exceed the model cost. Fixed in the new scripts/pi-review.sh by polling 'tail -c 131072 "$OUT" | grep -q' instead; agent_end is at the end by construction. pi-spawn-confined.sh and pi-spawn.sh still carry the original. Second-order cost: the log size READS AS a runaway to an orchestrator monitoring progress — I killed four in-flight reviewers on that misread; two had already written their output, two had to be re-run. Anything that surfaces progress by log size will make that same mistake."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

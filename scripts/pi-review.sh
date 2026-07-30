@@ -95,8 +95,13 @@ PI=$!
 
 END=$(($(date +%s) + BACKSTOP))
 REASON=timeout
+# Poll the TAIL, not the whole file. pi's rpc stream re-serializes accumulated
+# conversation state on every event, so $OUT grows super-linearly — 50-150MB for
+# an ordinary turn is normal, not a runaway. `grep -q` over the whole file every
+# 2s therefore costs more I/O than the model costs tokens, and it degrades as the
+# turn goes on. `agent_end` is always at the end by construction.
 while [ "$(date +%s)" -lt "$END" ]; do
-  if grep -qE '"(type|event)":"agent_end"|"agent_end"' "$OUT" 2>/dev/null; then
+  if tail -c 131072 "$OUT" 2>/dev/null | grep -qE '"agent_end"'; then
     REASON=agent_end
     break
   fi
