@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb0ef-fb66-7d02-aea8-227b30a20776"
+recorded_at = "2026-07-30T02:52:25.318605097Z"
+kind = "friction"
+summary = "/preflight: pi-scout and pi-research are wired to the opposite deepseek models from what their docs claim, misdirecting cost/quality routing"
+detail = "scripts/pi-scout's header comment says '(deepseek-v4-flash)' but it reads .pi/agents/scout.md, whose frontmatter is 'model: deepseek/deepseek-v4-pro'. scripts/pi-research's header says '(deepseek-v4-pro)' but reads .pi/agents/researcher.md, whose frontmatter is 'model: deepseek/deepseek-v4-flash'. So the mapping is inverted at both ends. CLAUDE.md and AGENTS.md both repeat the wrong version ('pi-scout (quicker, cheaper)' / 'pi-research (smarter)'), so an agent routing a cheap mechanical thread to pi-scout actually pays for the pro model, and a judgement thread sent to pi-research gets flash. Additionally .doctrine-adjacent config .pi/agents/researcher.md carries 'name: scout' in its frontmatter — a copy-paste of scout.md. Surfaced while costing a cheap-tier fan-out for the SL-233 implementation code review."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

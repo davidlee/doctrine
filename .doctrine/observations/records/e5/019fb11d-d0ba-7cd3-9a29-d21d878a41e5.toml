@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb11d-d0ba-7cd3-9a29-d21d878a41e5"
+recorded_at = "2026-07-30T03:42:29.050906826Z"
+kind = "friction"
+summary = "/preflight: ISS-279 id collisions have a zero-cost fix already in the engine — DOCTRINE_TRUNK_REF pointed at the live coord branch — but the documented workaround is a manual cross-tree max ritual"
+detail = "next_id(local, trunk) already unions working-tree numeric dirs with trunk's committed dirs (ADR-006 D3, src/entity.rs:215), and trunk is the peeled ladder DOCTRINE_TRUNK_REF / origin/HEAD / main / master (src/git.rs trunk_entity_ids/trunk_ladder). So an edge-side allocation run as 'DOCTRINE_TRUNK_REF=refs/heads/dispatch/233 doctrine review new ...' sees the coord branch's ids and cannot collide. Verified the exact read the engine performs: 'git ls-tree -d --name-only refs/heads/dispatch/233 -- .doctrine/review/' from the primary tree returns 319..323, including the coord-only 321 and 323. ISS-279's Current workaround section instead prescribes a manual 'check both trees and take max+1' ritual and states 'the only lever is allocating from a tree whose counter is already ahead' — the env override is a better lever and is not mentioned. Separately: the empty-directory reservation idea is unsafe — an empty .doctrine/review/NNN/ makes 'doctrine doctor' hard-fail with 'Error: read review NNN', and a placeholder toml is worse still, because RV-323 is a REAL coord-tree entity with 8 live citations on edge (memories, backlog-355, comparisons, observations); stubbing it silenced 8 correct dangling-citation findings (doctor 66 -> 58), which is precisely the silent-misdirection failure ISS-279 argues is worse than a gapped id."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
