@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb0dd-a26c-7351-806f-b7c2c23f5afb"
+recorded_at = "2026-07-30T02:32:22.892711326Z"
+kind = "friction"
+summary = "/execute (SL-233 PHASE-07): handover-packet finding F-13 under-surveyed the terrain — claimed one fixture where seven exist, biasing the decision it framed"
+detail = "F-13 in the phase-07 sheet, restated in handover.md's fenced decision block, asserted 'the only bootstrap is Fixture at tests/e2e_design_projection.rs:47-70' and framed the fork as lift-that-one vs duplicate-it. A single rg across tests/ found SEVEN local design-run Fixture bootstraps (e2e_design_{state,checkpoint,delegation,import,materialise,projection,review}.rs) with byte-identical struct + start() bodies, differing only in spawner name and doc comment. The owner challenged the premise ('why hoist design-run internals into common?') before the error was caught, costing a round-trip. Two cost classes: (1) the packet's option set was wrong — the real justification for the lift is an existing sevenfold duplication, not a speculative second consumer, which is a stronger argument the packet could not make; (2) I inherited and relayed the false premise, and built a three-option analysis on it, because a handover finding reads as already-verified. Handover findings that assert an absence or a cardinality ('the only X') are the same vacuous-absence-criterion class already recorded this session — they need the positive control run at the moment they are relied upon, not trusted from the packet."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

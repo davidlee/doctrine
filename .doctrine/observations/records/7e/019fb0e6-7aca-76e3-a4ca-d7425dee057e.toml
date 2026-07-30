@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb0e6-7aca-76e3-a4ca-d7425dee057e"
+recorded_at = "2026-07-30T02:42:02.570520736Z"
+kind = "friction"
+summary = "/execute (SL-233 PHASE-07): 'slice selector <ID>' is not the read verb — three probes to reach 'slice selector list <ID>'"
+detail = "Reading a slice's selector list cost three commands: 'slice selector 233' (error: unrecognized subcommand '233'), then '--help' to enumerate, then 'selector list 233'. The spine convention is '<kind> <verb> <ID>' and most read verbs take the ID positionally, so the bare form is the natural first guess; selector instead interposes a subcommand group (add|note|list|rm|doctor) with no default. Two wasted round-trips plus a help dump. Cheap fixes: make the ID-positional form default to 'list', or name the group's error with the intended form ('did you mean: slice selector list 233'). Same class as the packet's noted 'no read verb for one phase's plan entry' — read paths through subcommand groups are where the spine convention stops holding."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb0ed-1f0a-75a1-8e12-6f93a6050792"
+recorded_at = "2026-07-30T02:49:17.834494662Z"
+kind = "friction"
+summary = "/record-memory: 'memory edit' carries three of four scope axes but not --tag; tags need the separate 'memory tag' verb"
+detail = "memory record accepts all four scope axes (--path-scope, --glob, --command, --tag). memory edit accepts three of them (--path-scope, --glob, --command, each documented as 'Replace the ... array') but silently lacks --tag, so 'memory edit <ref> --tag x' dies on a bare clap usage error with no hint that the capability lives elsewhere. Cost: one failed command plus a --help enumeration to discover that tags are owned by 'memory tag <ref> [TAGS]... -d <remove>' (add/remove semantics, not replace — a different model from edit's replace-array). Two asymmetries compound: capability split across verbs, and replace-vs-add semantics differing for the same conceptual field. Cheap fix: clap-visible refusal on 'edit --tag' naming 'memory tag', mirroring how 'record --body-mode' is present-but-refused precisely so the refusal is worded and discoverable."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

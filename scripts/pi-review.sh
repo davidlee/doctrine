@@ -85,6 +85,15 @@ echo "[review] $LABEL: ro=$REVIEW_ROOT rw=$OUT_DIR thinking=${PI_THINKING:-low}"
 # --no-context-files matters for cost, not just hygiene: without it pi slurps
 # the tree's AGENTS.md + CLAUDE.md, which `@`-import the ~28KB boot snapshot
 # into every single reviewer. The bucket prompt carries what the reviewer needs.
+# `set -m` (job control) puts the next background job in its OWN process group,
+# pgid == $PI, so the reap below can signal the WHOLE group. Without it,
+# `kill -9 $PI` fells only `timeout`; the real pi is a grandchild
+# (timeout -> bwrap -> pi wrapper -> pi) and survives as an orphan holding its
+# API session open and blocking any caller that `wait`s on this script. Observed:
+# two such orphans still live 16 minutes after writing output and reporting
+# agent_end. `setsid` would also work but is ABSENT from this jail — do not
+# "simplify" to it, and do not go back to a bare kill.
+set -m
 timeout "$BACKSTOP" "${PREFIX[@]}" \
   pi --mode rpc --thinking "${PI_THINKING:-low}" \
   --session-dir "$SESSION_DIR" \
@@ -111,9 +120,17 @@ while [ "$(date +%s)" -lt "$END" ]; do
   fi
   sleep 2
 done
-kill -9 "$PI" 2>/dev/null
+# Negative pid = signal the whole process group (see the `setsid` note above).
+# Fall back to the bare pid if the group is already gone.
+kill -9 -"$PI" 2>/dev/null || kill -9 "$PI" 2>/dev/null
 kill -9 "$KEEP" 2>/dev/null
 rm -f "$PI_FIFO"
+
+# Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
+# an API session open and silently blocks any caller that `wait`s on this script.
+if ps -eo pid,args 2>/dev/null | grep -q "[-]-session-dir $SESSION_DIR"; then
+  echo "[review] $LABEL WARNING: pi survived the reap for $SESSION_DIR" >&2
+fi
 
 echo "[review] $LABEL terminated reason=$REASON"
 if [ -s "$OUT_DIR/$LABEL.md" ]; then

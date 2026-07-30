@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb137-d615-7ae2-8476-e60d05e294b6"
+recorded_at = "2026-07-30T04:10:54.357798307Z"
+kind = "friction"
+summary = "/preflight: confined pi spawns orphan their real pi process — kill $PI reaps only the timeout wrapper, and the orphan silently blocks any caller that waits on the script"
+detail = "The spawn chain is timeout -> bwrap -> pi wrapper -> libexec/pi, so the shell's $! is the timeout process. 'kill -9 $PI' at agent_end fells timeout but the grandchild pi survives, holding its API session open. Observed two orphans (pids 23641/23642, session-dirs .pi-session-b3/-b4) still alive 16 minutes after both had written their findings files and reported agent_end. Second-order cost: a background 'wait' on the spawning script does not return until the orphan dies, so completion notifications arrive minutes late and look like the job is still running — I reported two reviewers as 'still running' when their output had been on disk for minutes. bwrap's --die-with-parent did not cover this. Fix: 'set -m' before the background launch puts it in its own process group, then 'kill -9 -$PI' signals the group. NOTE setsid is NOT available in this jail (setsid: command not found) — the obvious fix fails closed and breaks the spawn entirely, which is worth knowing before someone 'simplifies' to it. Added a belt check that greps for a surviving --session-dir and warns. pi-spawn-confined.sh and pi-spawn.sh carry the same bare-kill reap."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb04b-57d1-7801-8ebf-ae0ac0b02971"
+recorded_at = "2026-07-29T23:52:35.537037881Z"
+kind = "friction"
+summary = "/phase-plan: a VA criterion can be vacuously satisfiable as worded — SL-233 PHASE-07 VA-3 checks a working-tree diff that is always empty post-commit"
+detail = """
+Planning SL-233 PHASE-07. VA-3 reads: RUN `git diff --stat src/install.rs` for this phase — EMPTY, per EX-6. But `git diff --stat <path>` compares the working tree against the index/HEAD, so once the phase's work is committed the command reads EMPTY whether or not src/install.rs was ever touched. The criterion cannot fail at the moment it is checked, so it verifies nothing about the absence obligation EX-6 actually states. The intent-faithful form is a two-point diff against the phase base: `git diff --stat <phase-base>..HEAD -- src/install.rs`.
+
+This is a DIFFERENT defect from IMP-365. IMP-365 says "pre-run VA greps at phase-plan time" and its instances so far were criteria that were RED at head for the wrong reason (PHASE-10 VA-3: bare `exec` matching `execution`). This one is the inverse failure: GREEN at head and green forever, i.e. theatre rather than a false alarm. Pre-running it does not surface the problem — pre-running returns the same empty output that the exit-time run will, so the pre-run ritual actively conceals this class. Detecting it needs reasoning about whether the command's reference point moves with the phase, not just executing it.
+
+Cost this session: ~3 tool calls plus the reasoning to notice that an EMPTY result at head and an EMPTY result at exit are not the same evidence. Cheap here only because IMP-365 had already put me in a run-and-inspect posture.
+
+Suggested durable fix: when authoring VA criteria that assert an ABSENCE over a diff, require a two-point ref range (`<base>..HEAD -- <paths>`) rather than a working-tree diff. Criteria ids are immutable, so existing instances become reconcile disclosures, not edits."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

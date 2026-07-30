@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb061-fa09-7591-bad9-8a835f9ef327"
+recorded_at = "2026-07-30T00:17:18.857768752Z"
+kind = "friction"
+summary = "/execute: an absence criterion that fences a whole FILE collides with Rust inline test modules — SL-233 PHASE-07 VA-3 vs its own EX-1"
+detail = """
+Executing SL-233 PHASE-07. EX-1 mandates adding `stage/design` to `[hymns].seal`. VA-3 mandates that `git diff --stat src/install.rs` be EMPTY (EX-6's don't-touch, escalated from the constant to the whole file). These are jointly unsatisfiable: the seal set's cardinality is asserted by `install::tests_hymns::embedded_seal_set_from_live_manifest`, an inline `#[cfg(test)] mod` INSIDE src/install.rs. Sealing a new slot flips the count 1 -> 2 and reds that test, so making the suite green necessarily diffs the fenced file. No task ordering avoids it.
+
+The general lesson, which is what makes this worth recording: in Rust, a criterion that fences a whole file also fences that file's tests, because inline test modules are in the same file. An absence obligation about PRODUCTION code (here: do not extend KNOWN_STAGE_LABELS) should be scoped to the item, as the sibling EX-6 correctly was, never to the file. Escalating item-scope to file-scope looks stricter and reads as more rigorous, but it silently annexes the test module and converts a legitimate test update into a criterion violation.
+
+Cost: the collision surfaced as a red in `check commit` after the assets landed, then needed adjudication mid-phase plus a permanent reconcile item, because criteria ids are immutable. Cheap to detect here only because the phase plan had already pre-run the VA criteria and flagged VA-3 as suspect (IMP-365).
+
+Resolution taken: minimal edit confined to that one test, re-expressed as membership of the two sealed slots rather than a bare count (the count was never the property under test; pinning it makes every future seal a false red). Disclosed in the commit message and the phase sheet as F-10.
+
+Suggested durable fix: when authoring a VA criterion that asserts an absence over source, scope it to the named item (`rg` for the constant, or a diff filtered to the item's line range) rather than to the file — and never to a file that carries inline tests for the behaviour the phase changes."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
