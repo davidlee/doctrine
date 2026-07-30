@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb2a1-4899-7583-9674-f463a7c6f789"
+recorded_at = "2026-07-30T10:45:42.169704866Z"
+kind = "friction"
+summary = "/execute (slice phase --status): completion mirror into the primary tree fails silently-ish for phases the primary tree never materialised"
+detail = "Flipping PHASE-15 to completed from the dispatch worktree (.dispatch/SL-233) emitted: 'phase-binding capture skipped for PHASE-15: mirroring completion into the primary tree failed: Phase tracking not found at /workspace/doctrine/.doctrine/state/slice/233/phases/phase-15.toml — run doctrine slice phases first'. Cause: the primary tree's runtime phase tracking stops at PHASE-12 (12 toml files); PHASE-13/14/15 were only ever materialised in the dispatch worktree. The flip itself succeeded there, so the warning is a partial success whose consequence is invisible: the primary tree's tracking disagrees about the last three phases, and the phase-binding capture is skipped rather than deferred. Cost: a diagnostic detour to establish whether the warning was benign. Suggestion: either name the recovery in the warning at the point of failure (it does name 'slice phases', but not what is lost by skipping) or make the mirror materialise the missing tracking, since it is disposable runtime state."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
