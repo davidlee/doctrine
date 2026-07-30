@@ -1,0 +1,51 @@
+memory_uid = "mem_019fb0ea18f37e60be2b0eb6d6a67865"
+memory_key = "mem.pattern.tests.shared-helper-placement"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "tests/common is universal-only; concern helpers go in an opt-in sibling module"
+summary = "Integration-test helpers specific to one concern belong in tests/<concern>_fixture/mod.rs, opted into per crate; tests/common/ is for genuinely universal helpers only."
+created = "2026-07-30"
+updated = "2026-07-30"
+
+[scope]
+paths = []
+globs = ["tests/common/**", "tests/*_fixture/**"]
+commands = []
+tags = ["cohesion", "helpers", "testing", "tests"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7a070d35fba0859ae8513ef8fd5bcbcf04f574bd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3b130c8edbd17f4ef611d7fa15c7fe9f7ae8c2756f8150bd0c839e922f852513"
+base_commit = "e124d0ce40700f2f115e9fd2dbc662fcdfdd2759"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
+[[relation]]
+label = "related"
+target = "mem_019edeb71fbe7982869dc8d19bc541e0"
+
