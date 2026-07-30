@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb17f-4ac8-74f1-a804-b17e7f3924f0"
+recorded_at = "2026-07-30T05:28:57.288447635Z"
+kind = "friction"
+summary = "code-review/feedback: shipped review-ledger.md says the review verbs refuse a worktree-resolved root, but they work fine from the dispatch coord tree"
+detail = "install/review-ledger.md's closing 'Parent-tree caveat' states: 'Drive reviews from the parent tree — the doctrine review verbs refuse a worktree/fork-resolved root. Run a review from the main tree (or merge the fork first), never from inside an isolated worktree.' RV-324 was RAISED from the SL-233 dispatch coord tree and all six findings were DISPOSED from it without complaint. Either the caveat is stale or it means a worker fork specifically and does not say so. Cost: a real hesitation before the first dispose, and an agent that trusts the doc would relocate to the primary tree — where .doctrine/review/** edits do not belong for a dispatched slice. The doc should distinguish a coordination worktree (sole authored writer, ADR-006/ADR-012) from a worker fork."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
