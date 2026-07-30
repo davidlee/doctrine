@@ -3,3 +3,101 @@
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
+
+## Operational notes — RV-324, run by hand 2026-07-30
+
+A large review was fanned across eight parallel raisers into one ledger, by hand,
+with no funnel support. It worked. These are the observations a design should
+answer to, not a proposed design.
+
+**Shape that worked.** Eight raisers over ~4.2k changed lines (19 files), two
+model tiers, one RV. Five mechanical *census* passes and two *review* buckets on
+a cheap model; one adversarial pass on a top-shelf model; the orchestrator raised
+every finding serially. Six findings survived to the ledger — 2 blocker, 2 major,
+2 minor.
+
+### 1. The split that made a cheap tier safe
+
+The load-bearing rule was **give the cheap tier only work whose output can be
+mechanically re-verified.** Not "give it the easy parts" — give it the parts
+where being wrong is *detectable*. Enumeration, census, and correspondence tables
+qualify; "is this subtly wrong" does not.
+
+Two enforcement details made it hold:
+
+- every claim ships **the command that reproduces it**; a claim without one is
+  discarded unread;
+- every negative result ships **a positive control**. This is not ceremony — in
+  the prior session on this code, four of four reported zero-hit results were
+  wrong until a control was added. The cheap tier followed it and self-caught.
+
+### 2. Adjudication is a distinct stage, and it earned its keep
+
+The cheap tier produced a confident, well-evidenced finding that
+`ApplyRequest::writer_act()` omitted a field and nothing enforced the
+correspondence. Every fact in it was true. The *conclusion* was wrong — the
+top-shelf pass rejected it with reasoning (`writer_act()` is consulted only when
+`act.is_proposal()`, so coordinator acts may lawfully coexist with coordinator
+declarations). Only the test-coverage half survived.
+
+A funnel that let raisers write straight to the ledger would have landed that as
+a finding and cost a disposition round. **Evidence and findings are different
+kinds, and the seam between them is where the funnel's value is.** Cheap raisers
+should emit *candidate* findings into a staging tier; promotion to the ledger is
+a judgement act.
+
+Corollary: the top-shelf pass should receive the cheap tier's tables explicitly
+framed as *evidence to verify, not conclusions to trust*. That framing was in the
+prompt and the model used it exactly as intended.
+
+### 3. Serial raising, parallel finding
+
+Findings were raised by one writer, serially, after all raisers returned. This
+was deliberate and is worth preserving: the ledger is append-only with derived
+status, and N concurrent `review raise` calls contend on it. It also puts dedup
+in one place — all six findings had to be checked against 32 already logged
+during execution, plus a disclosed-and-adjudicated set. **Dedup is not
+parallelisable**; it is inherently a whole-set operation.
+
+This maps cleanly onto ADR-006's sole-writer posture: raisers fan out spatially,
+the ledger write is funnelled.
+
+### 4. Redundancy is cheap and it corroborated
+
+Two independent cheap raisers hit the same `WRITER_ACTS` gap and graded it
+differently (minor / nit). Independent convergence on a finding is a real
+confidence signal a funnel could compute for free. Divergent *severity* on a
+converged finding is also signal — it marks the ones a human should grade.
+
+### 5. What a funnel must supply that hand-running did not
+
+- **A staging tier.** Raisers wrote findings files to a scratch directory; the
+  ledger was written later by hand. That intermediate is the missing kind.
+- **A dedup corpus.** The single highest-ROI pass compressed 81KB of phase sheets
+  into 36 lines of prior findings that every downstream raiser reused. A funnel
+  should build this once and inject it, not hope each raiser reads the sheets.
+- **Cost asymmetry as a first-class input.** The budget constraint was *number of
+  top-shelf invocations*, not context. One call did two buckets plus adjudication
+  because the cheap tier had pre-computed its enumeration. Routing should be by
+  verifiability and invocation cost, not by surface size.
+- **Confinement.** Raisers are read-only by nature. Dropping the worktree fork
+  (nothing is written) removed the entire ISS-034 wrong-base hazard class. A
+  review funnel does **not** need `/dispatch`'s worktree machinery, and should not
+  inherit it — see `scripts/pi-review.sh`.
+
+### 6. Sharp edges hit while running it
+
+- Log size is not a progress signal. pi's rpc stream re-serializes accumulated
+  state per event (50–150MB/turn is normal); reading that as a runaway cost four
+  in-flight raisers. A funnel must surface progress as typed events.
+- Orphaned raiser processes block a `wait` on the spawner, so completion reports
+  arrive late and look like "still running".
+- Both are recorded as friction observations, and both are fixed in
+  `scripts/pi-review.sh` rather than worked around.
+
+### Links
+
+- Live instance: **RV-324** (SL-233 PHASE-11/12/10 implementation review), ledger
+  `## Brief` carries the method and the tier split.
+- Spawn tool: `scripts/pi-review.sh` — confined, read-only, no worktree fork.
+- Id allocation across trees while a coordination branch is live: **ISS-279**.
