@@ -1,0 +1,42 @@
+memory_uid = "mem_019fb18153d97ef191eea954ea04e0b9"
+memory_key = "mem.fact.revision.no-knowledge-record-target"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A Revision cannot revise a knowledge record — DEC/QUE/ASM go through supersede"
+summary = "`revises` accepts only [SPEC, PRD, REQ, ADR, POL, STD]; correcting an accepted DEC is `knowledge new` + `doctrine supersede`, and supersede leaves the predecessor's status untouched."
+created = "2026-07-30"
+updated = "2026-07-30"
+
+[scope]
+paths = []
+globs = []
+commands = ["revision change add", "supersede", "knowledge status"]
+tags = ["revision", "knowledge", "governance", "supersede", "command-shape"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bf552c5e970e5da1eb11bae7d4cbbfb108047759"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d45dffda7e559a65027de7a0089f68c80fdabb41ad2a8fd82fc5825136908ac9"
+base_commit = "3819f292dd75ae931ecc2860d761ecbc7b02091a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
