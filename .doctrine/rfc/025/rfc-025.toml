@@ -1,0 +1,16 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 25
+slug = "discrete-dispatch-execution-capsules"
+title = "Discrete dispatch execution capsules"
+status = "open"
+created = "2026-07-31"
+updated = "2026-07-31"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+

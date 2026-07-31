@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb731-da4e-7110-95d6-1e881ebc267a"
+recorded_at = "2026-07-31T08:02:05.518263677Z"
+kind = "friction"
+summary = "/execute: harness LSP diagnostics reported resolution errors that no longer existed, costing a build round-trip to disbelieve"
+detail = "Mid-refactor (SL-233 PHASE-16 T7), moving a type between sibling modules, the editor diagnostics kept reporting 'struct import is private' against paths I had already rewritten — line numbers matched the post-edit file, so the report looked current. Ran cargo build to adjudicate: zero errors. The diagnostics were stale by one edit. Cost: one full build invocation plus the reading of four bogus errors. The general shape: inline diagnostics arriving as tool-result side-channels carry no freshness stamp, so an agent cannot tell a real error from one already fixed, and the only way to settle it is the compiler. Cheap here; on a slower build it would be worse."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

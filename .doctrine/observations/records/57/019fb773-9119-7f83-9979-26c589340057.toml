@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb773-9119-7f83-9979-26c589340057"
+recorded_at = "2026-07-31T09:13:52.155990545Z"
+kind = "friction"
+summary = "/execute: runtime phase-sheet path is ambiguous across the primary and dispatch trees — both hold the same gitignored file, so a relative path in a handover reads against the wrong one"
+detail = """
+SL-233 PHASE-16 T8. The handover named the runtime sheet as `.doctrine/state/slice/233/phases/phase-16.md`. Read against `/workspace/doctrine/` (the session's primary-tree cwd) it does not exist; the live sheet is under `/workspace/doctrine/.dispatch/SL-233/`. Cost two failed tool calls (one Read, one Edit) plus the re-issue.
+
+This is the same shape the handover itself opens with a warning about for `handover.md`: runtime-tier files are gitignored, so BOTH trees carry same-named copies, neither ages out, and neither says which it is. The handover author had to hand-write a warning banner for one such file; the sheet has the same hazard and no banner.
+
+Compounding it: a bare `cd` inside a compound Bash command moved the shell cwd, which then reset to the PRIMARY tree — so a later `git diff <path>` silently ran against the wrong worktree and failed with an ambiguous-argument error rather than a wrong-tree error.
+
+What would have cost nothing: a handover convention of absolute paths for every runtime-tier artefact, or a `doctrine` verb that resolves the live runtime sheet for a slice regardless of which tree you are standing in (the same service `doctrine <kind> paths` already provides for authored entities)."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

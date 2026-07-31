@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb70a-f041-78b3-ace4-f947a18e9a41"
+recorded_at = "2026-07-31T07:19:35.233422697Z"
+kind = "friction"
+summary = "/execute: check quick buries the one real clippy error under ~700 expected warnings"
+detail = "During SL-233 PHASE-16 T5/T6, 'doctrine check quick' exit-101'd on a single clippy denial. Its stdout is ~700 lines dominated by expected 'unresolved citation' warnings and a raw-label census, so the actual error is invisible in a tail and unfindable in a scroll. Twice I had to redirect the whole run to a scratch file and grep '^error' to find one line. The exit code says something failed; the output does not say what without a second pass. A failing leg's diagnostic should lead, or the expected-noise legs should be summarised rather than enumerated when another leg has failed."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

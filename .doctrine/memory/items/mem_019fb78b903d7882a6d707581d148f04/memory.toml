@@ -1,0 +1,43 @@
+memory_uid = "mem_019fb78b903d7882a6d707581d148f04"
+memory_key = "mem.pattern.testing.census-count-stderr-contamination"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Test-census counts are stderr-sensitive; 2>&1 inflates them and silences the shrinkage alarm"
+summary = "`cargo test -- --list | wc -l` captured with 2>&1 gains ~1 line per test binary, reading as census growth when nothing changed"
+created = "2026-07-31"
+updated = "2026-07-31"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "verification", "escape-sweep", "va-es", "measurement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5dc782d4ae022cdc1d26fb7d35c855355bf02df5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d54fc1ce5a38ab320b82336ac8fff1b4012570358a2f01fc02615ffb6f218e75"
+base_commit = "1d21ff1ccc8f7dda793df33a50cdecf469f6c15d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

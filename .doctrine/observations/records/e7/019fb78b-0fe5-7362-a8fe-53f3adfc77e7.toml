@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb78b-0fe5-7362-a8fe-53f3adfc77e7"
+recorded_at = "2026-07-31T09:39:31.941444961Z"
+kind = "friction"
+summary = "/execute PHASE-16 close: automatic phase-binding capture silently skips in a coord worktree, leaving the boundary unrecorded unless record-delta already ran"
+detail = "Flipping PHASE-16 to completed from the coordination worktree .dispatch/SL-233 printed: 'phase-binding capture skipped for PHASE-16: mirroring completion into the primary tree failed: Phase tracking not found at /workspace/doctrine/.doctrine/state/slice/233/phases/phase-16.toml — run doctrine slice phases first'. The phase-materialised runtime tracking lives in the DISPATCH worktree, not the primary, so the mirror target does not exist. The transition still reports 'Updated PHASE-16: completed', so the failure is a warning on an otherwise successful-looking command. /execute documents the completed flip as the deterministic on-the-critical-path recorder ('not a remember-to-also-record step'), with record-delta as the manual fallback — but in this topology the deterministic path is exactly what degrades, and it degrades quietly. Here the boundary was already recorded because PHASE-16 is multi-commit and record-delta --start/--end had been run minutes earlier for an unrelated reason (closing two UNATTRIBUTABLE verify-vt rows). A single-commit phase in the same topology would have taken the --commit path or none at all, and the phase would have closed with no boundary row and no error exit. Cost: one verification round-trip to confirm the registry row survived. Suggested: either make the mirror failure non-silent (non-zero exit or a louder refusal), or have the transition fall back to recording locally and reconcile at integration."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

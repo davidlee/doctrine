@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fb6a7-426f-7730-a9de-50fafa9eb46e"
+recorded_at = "2026-07-31T05:30:42.671857727Z"
+kind = "friction"
+summary = "/phase-plan: slice phases reported 'up to date' and left a stale revision-1 objective in the runtime phase sheet"
+detail = "PHASE-16's plan.toml objective was amended twice (two adversarial reviews). `doctrine slice phases 233` reported 'Phases up to date' and did not refresh phase-16.md, so the disposable sheet still carried the revision-1 objective naming `gate::can_advance` and a 'per-obligation cursor' — both clauses now false at design revision 3. A fresh agent reading the runtime sheet (the tier the skill points at for working detail) would read superseded design as current. Cost: the sheet had to be rewritten wholesale rather than filled. The materialiser appears to seed the objective once at creation and never reconcile it against an amended plan entry."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
