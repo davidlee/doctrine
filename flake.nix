@@ -150,12 +150,12 @@
             subagents = ["pi" "dirge"];
             maxSubagentDepth = 2;
           };
-          # jailed-codex = jailLib.makeJailedCodex {
-          #   profile = "specDev";
-          #   extraPkgs = projectPkgs;
-          #   extraOptions = jailEnvOptions;
-          #   inherit workspaceDeps;
-          # };
+          jailed-codex = jailLib.makeJailedCodex {
+            profile = "specDev";
+            extraPkgs = projectPkgs;
+            extraOptions = jailEnvOptions;
+            subagents = ["claude" "pi" "codex"];
+          };
           jailed-dirge = jailLib.makeJailedDirge {
             profile = "specDev";
             # exposePostgres = true;
@@ -367,6 +367,11 @@
               name = "jpi";
               help = "jailed-pi";
               command = "jailed-pi $@";
+            }
+            {
+              name = "jcx";
+              help = "jailed-codex";
+              command = "jailed-codex $@";
             }
             {
               name = "jcl";
