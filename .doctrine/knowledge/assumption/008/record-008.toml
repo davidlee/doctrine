@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 8
+slug = "interpretation-surface-responsibility-split"
+title = "Interpretation-surface responsibility split"
+record_kind = "assumption"
+status = "held"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = ["interpretation-surface", "responsibility", "POL-002", "portability"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim           = "CPT-001's classes divide cleanly by WHO OWNS THEM: classes 1-3 (explicit execution, build-system evaluation, toolchain auto-load) are language-bound and are the CLIENT PROJECT's to declare; 3g, 4 and 5 (git-level auto-load, path-shaped data, resource shape) are universal and are DOCTRINE's to ship. The split is sound and stays sound as the class list changes."
+confidence      = "medium"
+basis           = "design-inference"
+validation_plan = "Falsified by finding a trigger that is language-bound but cannot be declared by the client (doctrine would have to hardcode a host-project convention, violating POL-002), or one that is universal but cannot be shipped by doctrine without knowing the client's toolchain. NOT falsified by finding a new class — a new class is placed on one side of the split or the other, which is the split working. The SL-241 light fixture is the live test: the same DQ-4 audit must run unchanged against a Rust and a TypeScript project, reading only what each declared."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "SL-241 PHASE-04 step 0: all four residue items (R1-R4) place cleanly on one side of the split — R2 and R4 universal, R3 universal, R1 language-independent — so the split absorbed a taxonomy failure without itself moving.",
+  "SL-241 PHASE-04 step 0: three unforced Rust/TypeScript parallels (binding.gyp = build.rs; packageManager = rust-toolchain.toml; .mise.toml = .envrc) land in the same class from opposite ecosystems.",
+  "RFC-012 section 2 'Resource taxonomy by responsibility' — an independent Doctrine-duty / Project-duty matrix for containment, arrived at for a different problem. Same shape, different subject (operator ruling, 2026-08-02).",
+]
+contradicts = []
+notes       = [
+  "Replaces ASM-007, which claimed EXHAUSTIVENESS and was invalidated. This claim is deliberately NOT an exhaustiveness claim — see ASM-007's body for why that shape fails.",
+  "This is what POL-002 actually rests on: doctrine cannot ship classes 1-3 without hardcoding a host project's conventions.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

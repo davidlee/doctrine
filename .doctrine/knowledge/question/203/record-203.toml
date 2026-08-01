@@ -1,0 +1,34 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 203
+slug = "downstream-interpreter-classification"
+title = "Downstream-interpreter classification"
+record_kind = "question"
+status = "open"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = ["interpretation-surface", "threat-model", "prompt-injection", "speculative"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = "Can CPT-001's taxonomy usefully name interpreters that sit DOWNSTREAM of the toolchain — an LLM agent, a terminal emulator, a human reviewer — given that their trigger paths are not enumerable and so cannot be expressed in a per-project `interpret:` declaration?"
+why_matters = "The declaration format assumes a deterministic interpreter with a defined grammar reachable from a declarable set of paths, which is what makes a trigger-path list a sufficient defence. Downstream interpreters violate all three. If the taxonomy cannot name them, the shipped audit is silently narrower than the concept it claims to implement — but a class nobody can enforce may be worse than an honest omission."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "SL-241 PHASE-04 step 0 R2 — terminal escape sequences: no CPT-001 class describes content interpreted by the display channel.",
+  "SL-241 PHASE-04 step 0 R1 — an LLM reading arbitrary tree content; fixed-name agent files are class 3 and fit, the unbounded-carrier case does not.",
+]
+contradicts = []
+notes       = [
+  "OPERATOR IS DOUBTFUL this resolves usefully (ruling 2026-08-02) — recorded to be tracked, not to be worked. Do not treat as scheduled work.",
+  "CON-005 already names R1 as a known unbounded threat, ruled out of scope for the RFC-025 spike with a structural mitigation. This question is about whether the TAXONOMY can name it, which is separate from whether the spike defends it.",
+  "ASM-007's body warns against adding a sixth class and re-asserting exhaustiveness. Any answer here must not re-run that error.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
