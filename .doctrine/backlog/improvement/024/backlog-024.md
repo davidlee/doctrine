@@ -113,6 +113,46 @@ Two operational consequences:
   *disagreements* as the work list. A finding only one pass raised is not thereby
   weaker; it may simply be the pass that read the file properly.
 
+#### 4b. Measured: SL-233 S2, two phases, two passes each
+
+Run 2026-08-02 on `RV-342`. Four raisers, same model, same prompts, same range;
+the two passes launched concurrently so neither could anchor on the other. The
+result is a cleaner argument for §4a than the theory was.
+
+**Agreement was worthless.** Both PHASE-04 passes independently raised the same
+`serde_json::to_string(declaration).unwrap_or_default()` at `commands/design.rs:836`.
+Convergence — and both were wrong about what mattered: the line is **not in the
+PHASE-04 range at all**. Only pass B checked, with
+`git diff <range> -- <file> | grep`, and said so. Pass A raised it as its
+headline candidate without ever testing scope. Two correlated samples agreeing
+on an out-of-scope finding is precisely the false corroboration §4a warns about.
+
+**Disagreement carried everything.**
+
+- Pass B killed pass A's headline candidate (the scope check above).
+- Adjudication killed pass B's headline candidate: `TraversalDeclaration::is_empty()`
+  ignores `authority` while gating `skip_serializing_if`, which pass B called
+  round-trip data loss. Every fact was true. Nothing serializes an `ApplyRequest`,
+  and `direct_traversal` consults `authority` only inside the pin / cursor /
+  posture arms, so an authority-only declaration asserts nothing and `is_empty()`
+  is correct by design. §2's case, reproduced exactly.
+- Pass B alone found that PHASE-16 shipped a real three-way bound disagreement
+  (validator 64, declaration `Token` 32, constructor `label` 16), already repaired
+  two phases later. Pass A missed it; pass B rated it `blocker` while itself
+  noting it was fixed, which is the wrong severity for an audit of what ships.
+
+**Neither pass produced the finding that mattered.** `RV-342` F-1 — that nothing
+verifies declaration against construction, and the test that appears to is
+tautological — came from reading the two passes *against each other*: pass B's
+historical instance supplied the demonstrated escape for a structural gap pass A
+had walked past and called clean. The second pass did not confirm anything. It
+changed where the expensive attention went, which is the whole claim of §4a.
+
+**Net.** Of five candidates across the four raisers, two were out of scope or
+refuted, two survived as `F-2` / `F-3`, and the major finding was synthesised
+rather than reported. Cost: four cheap runs, ~26 minutes wall-clock, fully
+parallel. Cheap enough that not doing it is the expensive choice.
+
 ### 5. What a funnel must supply that hand-running did not
 
 - **A staging tier.** Raisers wrote findings files to a scratch directory; the
