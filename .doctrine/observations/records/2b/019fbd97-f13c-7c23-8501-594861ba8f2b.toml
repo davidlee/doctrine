@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd97-f13c-7c23-8501-594861ba8f2b"
+recorded_at = "2026-08-01T13:51:19.357016965Z"
+kind = "friction"
+summary = "/phase-plan's mandatory reading list destroys a contamination-sensitive criterion in the phase it is planning"
+detail = "SL-241 PHASE-04 EX-9 requires step 0's enumeration to be authored by a context that has NOT read design 5.4, notes.md, or CPT-001. /phase-plan mandates reading exactly those. The handover carried both instructions and they cannot both be honoured. Resolved by inverting: bank the enumeration first (one Write + commit), then phase-plan. Cost was a lifecycle-order blemish; the alternative silently voids the phase's only falsifier and returns an empty residue that reads as the assumption surviving. Generalisable: when a phase's criteria constrain what its planner may READ, the phase sheet cannot be authored before the criterion is discharged, and no skill currently says so."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
