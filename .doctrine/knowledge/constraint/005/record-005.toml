@@ -32,3 +32,15 @@ label = "references"
 role = "concerns"
 descriptor = "RFC-025 capsule spike rig design"
 target = "SL-241"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "unbounded half: agent trust"
+target = "RFC-022"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "unbounded half: adversarial TDD"
+target = "RFC-023"
