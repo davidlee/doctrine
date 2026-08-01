@@ -1,0 +1,562 @@
+#!/usr/bin/env bash
+# control/pipeline.sh — the closed FOUR-stage pipeline (EX-1..EX-10, VT-1).
+#
+#   sourced:   . control/pipeline.sh
+#                → pipeline_setup / pipeline_capsule / pipeline_run
+#                  assert_outcome / pipeline_first_refusal / pipeline_teardown
+#   executed:  pipeline.sh <label> <fixture> <declaration> <fetch|bundle>
+#
+# There are FOUR stages and the set is CLOSED. Provisioning is capsule-side and
+# cannot refuse a *result*, so it is not a stage.
+#
+#   1 harvest   capsule → QUARANTINE, fsck, caps, pin the OID
+#   2 conform   ancestry · declared scope · forbidden paths · tree mode
+#   3 verify    verify capsule at the pinned OID; the verdict is its exit status
+#   4 advance   precondition → transfer → ONE compare-and-swap, or refuse
+#
+# ── three repositories, and only one of them is canonical ────────────────────
+#
+# Stage 4 is the FIRST AND ONLY touch of the canonical repository (F-3).
+# Stages 1–3 run entirely against a per-run quarantine that is `rm -rf`'d
+# afterwards, so a refused row leaves the canonical object database unchanged
+# IN SIZE — which is the observable DQ-3 wants and `assert_outcome` asserts.
+#
+#   canonical/    per-run disposable clone of the fixture (D-P03-1). The
+#                 fixture itself is a TEMPLATE: stage 4 advances a ref, and
+#                 `assert_outcome` needs a subject it may mutate, which the
+#                 pristine base fixture PHASE-05 also reads is not.
+#   quarantine/   per-run clone of canonical (D-P03-2), `fetch.fsckObjects`.
+#                 Cloned rather than `init`'d empty because it must satisfy two
+#                 things at once: hold S's objects for the conform legs, AND
+#                 give `slice conformance -p` a `.doctrine/` registry to read.
+#                 Its worktree sits at B — the control-plane-pinned base, which
+#                 is NOT the candidate, so I4's "no candidate tree materialised
+#                 trusted-side" holds. Every leg below is plumbing over B..S.
+#   capsule/      the worker's rw root. Never read for a verdict.
+set -euo pipefail
+
+RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/common.sh
+. "${RIG_DIR}/lib/common.sh"
+
+SANDBOX="${RIG_DIR}/capsule/sandbox.sh"
+HARVEST_FETCH="${RIG_DIR}/control/harvest-fetch.sh"
+HARVEST_BUNDLE="${RIG_DIR}/control/harvest-bundle.sh"
+
+PIPELINE_VERIFY_TIMEOUT="${PIPELINE_VERIFY_TIMEOUT:-300}"
+PIPELINE_DOORBELL_DEADLINE="${PIPELINE_DOORBELL_DEADLINE:-120}"
+PIPELINE_DOORBELL_INTERVAL="${PIPELINE_DOORBELL_INTERVAL:-1}"
+
+# ── the CLOSED refusal-token vocabulary (design § 5.1) ───────────────────────
+#
+# A token observed outside this set is a RIG DEFECT, not a result — which is
+# why `stage_emit` refuses to print one rather than trusting the caller. The
+# set is closed but NOT fully exercised, and the difference is recorded rather
+# than papered over: `cas-lost` is legal and owned by NO row (producing it
+# means racing the accepted ref between stage 4's precondition read and its
+# CAS, which probes the rig's own scheduling rather than a hostile capsule).
+# Reachable-but-unexercised is a weaker and more accurate claim than "the rig
+# cannot produce it" — an unexercised path stated as impossible is how a gap
+# stops being looked at.
+RIG_TOKENS_HARVEST='fsck-failed oid-mismatch resource-cap bundle-invalid bundle-absent bundle-unsafe-path'
+RIG_TOKENS_CONFORM='ancestry-not-descendant ancestry-merge-commit undeclared-path forbidden-path gitlink gitmodules'
+RIG_TOKENS_VERIFY='suite-failed verify-timeout sandbox-failed'
+RIG_TOKENS_ADVANCE='stale-base cas-lost'
+
+token_legal() {
+  local stage=$1 token=$2 set_
+  case "${stage}" in
+    harvest) set_="${RIG_TOKENS_HARVEST}" ;;
+    conform) set_="${RIG_TOKENS_CONFORM}" ;;
+    verify) set_="${RIG_TOKENS_VERIFY}" ;;
+    advance) set_="${RIG_TOKENS_ADVANCE}" ;;
+    *) return 1 ;;
+  esac
+  case " ${set_} " in
+    *" ${token} "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Every stage emits `stage=<name> verdict=pass|refuse token=<t>` (EX-9), and
+# the runner records the FIRST refusing stage. Emission is ASSERTED downstream,
+# never inferred from an exit code (VA-2): the pass/partial distinction in the
+# matrix requires knowing WHICH stage refused, and an exit code cannot say.
+stage_emit() {
+  local stage=$1 verdict=$2 token=${3:-}
+  if [ "${verdict}" = refuse ] && ! token_legal "${stage}" "${token}"; then
+    rig_warn "RIG DEFECT: ${stage}/${token} is outside the closed vocabulary"
+    exit "${RIG_EXIT_DEFECT}"
+  fi
+  printf 'stage=%s verdict=%s token=%s\n' "${stage}" "${verdict}" "${token}"
+}
+
+# ── canonical snapshots — what `assert_outcome` compares ────────────────────
+
+canonical_refs() {
+  git -C "$1" for-each-ref --format='%(objectname) %(refname)' | sort
+}
+
+# Loose PLUS packed. The object COUNT is what makes I1 falsifiable rather than
+# decorative: it is precisely the thing a quarantine *namespace inside
+# canonical* would have broken, on every refused row.
+canonical_objects() {
+  git -C "$1" count-objects -v |
+    awk '/^count:/ { c = $2 } /^in-pack:/ { p = $2 } END { print c + p }'
+}
+
+# ── setup / teardown ─────────────────────────────────────────────────────────
+
+# pipeline_setup <label> <fixture-repo> <declaration> [slice-id] [stub-path]
+#   → run dir
+pipeline_setup() {
+  local label=$1 fixture=$2 declaration=$3 slice=${4:-001} stub=${5:-src/capsule-stub.ts}
+  local run="${RIG_ROOT}/runs/${label}"
+
+  guard_not_real_repo "${run}"
+  rm -rf -- "${run}"
+  mkdir -p -- "${run}/capsule"
+
+  # `--no-hardlinks` throughout, and not as an optimisation knob: a local clone
+  # hardlinks object files by default, so a hostile capsule corrupting a shared
+  # object would corrupt the thing it was cloned from. It is the difference
+  # between a copy and an alias.
+  git clone --no-hardlinks --quiet -- "${fixture}" "${run}/canonical"
+
+  # The accepted ref is READ FROM THE FIXTURE, never hardcoded. The light
+  # fixture's trunk is `mainline` precisely so that anything assuming `main`
+  # breaks loudly (D5) — a pipeline that hardcoded it would pass here for a
+  # reason that says nothing about portability.
+  local accepted base
+  accepted=$(git -C "${run}/canonical" symbolic-ref HEAD)
+  base=$(git -C "${run}/canonical" rev-parse --verify "${accepted}")
+
+  git clone --no-hardlinks --quiet -- "${run}/canonical" "${run}/quarantine"
+  git -C "${run}/quarantine" config fetch.fsckObjects true
+
+  # The declaration, pinned control-plane-side as a SIBLING of canonical. This
+  # is "read from B" in F-5's sense — the content the control plane itself
+  # pinned, never anything the capsule can reach. PHASE-05's F2 variant
+  # manufactures the in-repo exposure; when it does, this read becomes
+  # `git show <B>:<path>` and must NEVER become `<S>:<path>`.
+  cp -- "${declaration}" "${run}/interpretation-surface.txt"
+
+  # The work contract (design § 5.2). Plain key=value — rig scaffolding, not a
+  # doctrine entity; it is read by shell and by nothing else.
+  {
+    printf 'base=%s\n' "${base}"
+    printf 'slice=%s\n' "${slice}"
+    printf 'label=%s\n' "${label}"
+    printf 'mode=%s\n' fresh
+    printf 'accepted=%s\n' "${accepted}"
+    # Recorded in the contract because it is a JOIN with the slice's selectors,
+    # not a worker detail: the happy path needs it DECLARED, and a run whose
+    # stub path drifted out of scope would refuse at conform leg 2 for a reason
+    # about the rig rather than about the model.
+    printf 'stub=%s\n' "${stub}"
+    printf 'verify=%s\n' "$(declaration_field "${run}/interpretation-surface.txt" verify)"
+  } >"${run}/contract"
+
+  # The pre-run canonical snapshot. Taken HERE, before anything runs, because
+  # `assert_outcome` compares against the state the run inherited.
+  canonical_refs "${run}/canonical" >"${run}/canonical-refs.before"
+  canonical_objects "${run}/canonical" >"${run}/canonical-objects.before"
+
+  printf '%s\n' "${run}"
+}
+
+pipeline_teardown() {
+  local run=$1
+  guard_not_real_repo "${run}"
+  rm -rf -- "${run}"
+}
+
+# The declaration is default-deny and read by field (DEC-099). `verify:` is the
+# one place project execution is wanted, and it runs inside the verify capsule.
+declaration_field() {
+  local file=$1 field=$2
+  sed -n "s/^${field}:[[:space:]]*//p" "${file}" | head -1
+}
+
+contract_field() {
+  sed -n "s/^$2=//p" "$1/contract" | head -1
+}
+
+# ── the capsule phase (NOT a stage) ─────────────────────────────────────────
+#
+# Provision and run the worker. Separate from `pipeline_run` on purpose: the
+# P-C3 harness mutates between the two (`Hnn.mutate` → `Hnn.planted?` → the
+# pipeline), and folding them together would leave no seam to plant into.
+pipeline_capsule() {
+  local run=$1
+  local capsule="${run}/capsule" base stub status=0
+  base=$(contract_field "${run}" base)
+  stub=$(contract_field "${run}" stub)
+
+  "${SANDBOX}" --capsule "${capsule}" --source "${run}/canonical" \
+    -- /rig/provision.sh "${base}" >/dev/null 2>&1 ||
+    rig_die "provisioning failed for ${capsule}"
+
+  # The worker's status is DATA, not an error here. A worker that hit the disk
+  # cap must flow into a stage-1 refusal carrying `harvest/resource-cap` — dying
+  # on it would lose the very outcome the bound exists to produce.
+  "${SANDBOX}" --capsule "${capsule}" -- /rig/worker-stub.sh "${stub}" >/dev/null 2>&1 || status=$?
+  printf '%s\n' "${status}" >"${run}/worker-status"
+
+  # The doorbell is a HINT TO LOOK, never a statement of what to look at. Loss
+  # degrades to polling with a wall-clock deadline, so a lost ring costs
+  # latency and not correctness.
+  rig_wait_doorbell "${capsule}" "${PIPELINE_DOORBELL_DEADLINE}" \
+    "${PIPELINE_DOORBELL_INTERVAL}" >/dev/null || true
+}
+
+# ── the four stages ─────────────────────────────────────────────────────────
+
+# pipeline_run <run> <fetch|bundle>
+#
+# Emits one `stage=…` line per stage on stdout and stops at the FIRST refusal.
+# Returns 0 if all four passed, 1 on any refusal.
+pipeline_run() {
+  local run=$1 mechanism=$2
+  local canonical="${run}/canonical" quarantine="${run}/quarantine"
+  local capsule="${run}/capsule"
+  local base slice accepted verify_cmd oid token status
+
+  base=$(contract_field "${run}" base)
+  slice=$(contract_field "${run}" slice)
+  accepted=$(contract_field "${run}" accepted)
+  verify_cmd=$(contract_field "${run}" verify)
+
+  # ── stage 1: harvest ──────────────────────────────────────────────────────
+  local harvester
+  case "${mechanism}" in
+    fetch) harvester="${HARVEST_FETCH}" ;;
+    bundle) harvester="${HARVEST_BUNDLE}" ;;
+    *) rig_die "unknown harvest mechanism: ${mechanism} (fetch|bundle)" ;;
+  esac
+
+  # ONE SIGNATURE for both mechanisms (EX-1), so this call does not branch.
+  # The worker capsule's own bound, folded in trusted-side (I5, D-P02-4).
+  # PHASE-02 emits distinguishable STATUSES and no tokens deliberately; this is
+  # the SINGLE place they become tokens. Re-deriving the mapping anywhere else
+  # would read as a pipeline bug rather than as the mapping drift it is.
+  # Checked BEFORE harvest: a capsule that blew the disk cap has nothing worth
+  # ingesting, and streaming it first would be the cap arriving too late.
+  if [ "$(cat "${run}/worker-status" 2>/dev/null || echo 0)" = "${RIG_EXIT_DISK}" ]; then
+    stage_emit harvest refuse resource-cap
+    return 1
+  fi
+
+  status=0
+  oid=$("${harvester}" "${capsule}" "${quarantine}" 2>"${run}/harvest.err") || status=$?
+  if [ "${status}" -ne 0 ]; then
+    if [ "${status}" -eq "${RIG_EXIT_DEFECT}" ]; then
+      # The harvester is a separate PROCESS, so its defect status propagates
+      # here honestly. Re-raised as a return, never an `exit`: `pipeline_run`
+      # must stay usable from a caller that redirects it (F-P01-1).
+      rig_warn 'RIG DEFECT raised by the harvester — see above'
+      return "${RIG_EXIT_DEFECT}"
+    fi
+    token=$(sed -n 's/^token=//p' "${run}/harvest.err" | head -1)
+    stage_emit harvest refuse "${token}"
+    return 1
+  fi
+
+  # THE DELETED SECOND HOP (F-3), reachable ONLY as a deliberate defect for
+  # VA-3. Fetching into canonical here is what probe-specs described and what
+  # this design removes: it puts hostile objects in the canonical database
+  # BEFORE the refusal meant to stop them. Wired as an opt-in so the
+  # object-count clause can be shown to RED against a real wrong admission
+  # rather than a hand-waved one.
+  if [ "${RIG_DEFECT_CANONICAL_HOP:-0}" = 1 ]; then
+    rig_warn 'DEFECT MODE: performing the deleted second hop into canonical (VA-3)'
+    git -C "${canonical}" fetch --no-tags --quiet -- "${quarantine}" \
+      "+${RIG_QUARANTINE_REF}:refs/canonical-quarantine/result" 2>/dev/null || true
+  fi
+
+  stage_emit harvest pass
+  printf '%s\n' "${oid}" >"${run}/pinned-oid"
+
+  # ── stage 2: conform ──────────────────────────────────────────────────────
+  #
+  # Four legs, all against QUARANTINE objects. No worktree, no index, no
+  # staging: every leg below is plumbing over the range B..S.
+  token=$(conform_stage "${quarantine}" "${base}" "${oid}" "${slice}") || {
+    stage_emit conform refuse "${token}"
+    return 1
+  }
+  stage_emit conform pass
+
+  # ── stage 3: verify ───────────────────────────────────────────────────────
+  token=$(verify_stage "${run}" "${quarantine}" "${oid}" "${verify_cmd}") || {
+    stage_emit verify refuse "${token}"
+    return 1
+  }
+  stage_emit verify pass
+
+  # ── stage 4: advance ──────────────────────────────────────────────────────
+  token=$(advance_stage "${canonical}" "${quarantine}" "${accepted}" "${base}" "${oid}") || {
+    stage_emit advance refuse "${token}"
+    return 1
+  }
+  stage_emit advance pass
+  return 0
+}
+
+# conform_stage <quarantine> <B> <S> <slice>
+# Prints the refusal token and returns 1, or returns 0 silently.
+conform_stage() {
+  local q=$1 base=$2 oid=$3 slice=$4
+
+  # LEG 1 — ancestry. I3: this precedes everything that normalises the result.
+  # A merge commit S with parents (B, X) satisfies a naive single-commit
+  # predicate, so only an ancestry check that rejects merges kills H3.
+  git -C "${q}" merge-base --is-ancestor "${base}" "${oid}" 2>/dev/null || {
+    printf 'ancestry-not-descendant'
+    return 1
+  }
+  if [ -n "$(git -C "${q}" rev-list --min-parents=2 "${base}..${oid}" 2>/dev/null)" ]; then
+    printf 'ancestry-merge-commit'
+    return 1
+  fi
+
+  # LEG 2 — declared scope, via THE EXISTING VERB over an arbitrary rev-range.
+  # It folds the range as `actual` against the slice's design-target selectors,
+  # exits nonzero on any undeclared path, and its range fold is already
+  # belt-hardened. Reaching for shell here would re-derive a hardened thing.
+  local doctrine
+  doctrine=$(rig_doctrine_bin)
+  "${doctrine}" slice conformance "${slice}" -p "${q}" \
+    --against "${base}..${oid}" --strict >/dev/null 2>&1 || {
+    printf 'undeclared-path'
+    return 1
+  }
+
+  # LEG 3 — forbidden paths, and it is LOAD-BEARING, not a belt on leg 2.
+  # PHASE-01 T7 settled this: `--strict` has NO `.doctrine/`/`.claude/`
+  # predicate at all, so a pipeline running only leg 2 passes a `.doctrine/`
+  # touch whenever a selector happens to declare that path — and this slice's
+  # own selectors are exactly that shape. DO NOT FOLD THIS INTO LEG 2.
+  #
+  # THE BELT'S OWN INVOCATION FORM (F-4), copied and not re-derived:
+  #   core.quotePath=false  a non-ASCII governance path emits verbatim rather
+  #                         than C-quoted AND double-quoted, which defeats a
+  #                         prefix test
+  #   --no-renames          a `.doctrine/` SOURCE leg cannot hide behind a
+  #                         same-content destination
+  #   -z                    NUL-delimited is the only byte-safe form to parse
+  #                         in shell; a path may contain a newline
+  # All three exist in the Rust belt because all three evasions are real. A
+  # shell leg that drops them scores H5 as "no kill" and reads in the results
+  # table as a defect of the capsule MODEL — R4 in its most damaging direction.
+  local path
+  while IFS= read -r -d '' path; do
+    case "${path}" in
+      .doctrine/* | .claude/*)
+        printf 'forbidden-path'
+        return 1
+        ;;
+    esac
+  done < <(git -C "${q}" -c core.quotePath=false diff --name-only --no-renames \
+    -z "${base}..${oid}")
+
+  # LEG 4 — tree mode (F-2). The existing rejection cannot be borrowed:
+  # `reject_submodules` scans `git ls-files --stage`, which is INDEX-scoped and
+  # unreachable from an object-only pipeline. Without this leg a hostile
+  # capsule adds a gitlink at a DECLARED path and every other leg passes it.
+  local mode name
+  while read -r mode _ _ name; do
+    case "${mode}" in
+      160000)
+        printf 'gitlink'
+        return 1
+        ;;
+    esac
+    case "${name}" in
+      .gitmodules | */.gitmodules)
+        printf 'gitmodules'
+        return 1
+        ;;
+    esac
+  done < <(git -C "${q}" ls-tree -r "${oid}")
+  # Symlinks (120000) stay LEGAL (SL-012): their class-4 hazard is trusted-side
+  # path-following, which I4 already dissolves by never materialising a tree.
+
+  return 0
+}
+
+# verify_stage <run> <quarantine> <S> <verify-cmd>
+verify_stage() {
+  local run=$1 q=$2 oid=$3 cmd=$4
+  local vcap="${run}/verify-capsule" status=0
+
+  rm -rf -- "${vcap}"
+  mkdir -p -- "${vcap}"
+
+  # The clone happens INSIDE the sandbox, so no candidate tree is materialised
+  # trusted-side (I4). Source is the QUARANTINE — the objects have been fsck'd
+  # and the canonical repo is still untouched at this point.
+  "${SANDBOX}" --capsule "${vcap}" --kind verify --source "${q}" \
+    -- /rig/provision.sh "${oid}" >/dev/null 2>&1 || {
+    printf 'sandbox-failed'
+    return 1
+  }
+
+  # The verdict is the SANDBOX PROCESS'S EXIT STATUS as the parent observes it,
+  # never a file the capsule wrote (I4). `verify.sh` execs the command so the
+  # status is the command's own and cannot be mistranslated. The command itself
+  # was read from B, trusted-side — this capsule never reads a declaration
+  # (F-5): fail-closed on absence is no defence against substitution.
+  # shellcheck disable=SC2086
+  "${SANDBOX}" --capsule "${vcap}" --kind verify \
+    --timeout "${PIPELINE_VERIFY_TIMEOUT}" \
+    -- /rig/verify.sh -- ${cmd} >/dev/null 2>&1 || status=$?
+
+  # The status → token mapping (I5, D-P02-4). PHASE-02 emits distinguishable
+  # STATUSES and no tokens; this is the single place they become tokens.
+  case "${status}" in
+    0) return 0 ;;
+    "${RIG_EXIT_TIMEOUT}") printf 'verify-timeout' ;;
+    "${RIG_EXIT_SANDBOX}") printf 'sandbox-failed' ;;
+    *) printf 'suite-failed' ;;
+  esac
+  return 1
+}
+
+# advance_stage <canonical> <quarantine> <accepted-ref> <B> <S>
+#
+# THE INTERNAL ORDERING IS LOAD-BEARING (F-14). Git cannot advance a ref to
+# objects it does not hold, so the transfer must precede the CAS — which means
+# a CAS-stage refusal leaves objects in canonical, and an object-count
+# assertion taken over ANY advance refusal would red on exactly the rows that
+# refuse there (H10/H16), for a reason belonging to git's object model rather
+# than to the model under test. So the precondition is read FIRST.
+advance_stage() {
+  local canonical=$1 q=$2 accepted=$3 base=$4 oid=$5
+  local current
+
+  # 1. PRECONDITION — is the accepted ref still at B? If not, refuse HAVING
+  #    TRANSFERRED NOTHING. This is the ordinary staleness path, the one
+  #    H10/H16 exercise, and it writes zero objects — which is why it keeps
+  #    the FULL `assert_outcome` clause while `cas-lost` does not.
+  current=$(git -C "${canonical}" rev-parse --verify "${accepted}" 2>/dev/null) || current=""
+  if [ "${current}" != "${base}" ]; then
+    printf 'stale-base'
+    return 1
+  fi
+
+  # 2. TRANSFER — the pinned OID into canonical. No refspec destination, so
+  #    this writes FETCH_HEAD and creates NO ref: the passed arm of
+  #    `assert_outcome` says exactly ONE canonical ref changed, and a transfer
+  #    that minted a bookkeeping ref would break it for a reason that is not
+  #    about the model.
+  #
+  #    A transfer that fails outright has NO token in the closed vocabulary,
+  #    and mislabelling it `stale-base` would forge the very distinction
+  #    `assert_outcome` keys off. It emits a deliberately-illegal token instead,
+  #    which `stage_emit` refuses as a RIG DEFECT — the one place that check
+  #    can fire from, since an `exit` inside this command substitution would
+  #    end only the subshell (F-P01-1).
+  git -C "${canonical}" fetch --no-tags --quiet -- "${q}" "${RIG_QUARANTINE_REF}" 2>/dev/null || {
+    printf 'transfer-failed'
+    return 1
+  }
+
+  # 3. CAS — one ref move, expecting old value B. The three-argument
+  #    `update-ref` IS the compare-and-swap. Losing it is a GENUINE RACE (the
+  #    ref moved between step 1 and step 3), which leaves the step-2 objects
+  #    unreferenced and collectable — not landed state, so CON-004 is intact.
+  git -C "${canonical}" update-ref -m 'capsule advance' \
+    "${accepted}" "${oid}" "${base}" 2>/dev/null || {
+    printf 'cas-lost'
+    return 1
+  }
+
+  return 0
+}
+
+# ── the outcome assertion (I1, EX-10) ───────────────────────────────────────
+
+# pipeline_first_refusal <stage-lines-file>  → "stage/token", or empty on pass
+pipeline_first_refusal() {
+  awk '$2 == "verdict=refuse" {
+         sub(/^stage=/, "", $1); sub(/^token=/, "", $3);
+         print $1 "/" $3; exit }' "$1"
+}
+
+# assert_outcome <run> <stage/token or empty>
+#
+# OUTCOME-CONDITIONAL, and it KEYS OFF THE TOKEN, NEVER THE STAGE (EX-10). An
+# earlier draft said "byte-identical on every row regardless of outcome", which
+# is wrong — a passing row must advance the ref. Keying off the stage would be
+# wrong differently: both advance tokens share a stage, so `cas-lost`'s
+# refs-only clause would silently absorb `stale-base`'s full clause, weakening
+# the assertion on H10/H16 — the rows where it does the most work.
+assert_outcome() {
+  local run=$1 refusal=${2:-}
+  local canonical="${run}/canonical" token="${refusal#*/}"
+  local refs_now objects_now refs_before objects_before changed
+
+  refs_now=$(canonical_refs "${canonical}")
+  objects_now=$(canonical_objects "${canonical}")
+  refs_before=$(cat "${run}/canonical-refs.before")
+  objects_before=$(cat "${run}/canonical-objects.before")
+  changed=$(comm -3 <(printf '%s\n' "${refs_before}") <(printf '%s\n' "${refs_now}") | wc -l)
+
+  case "${token}" in
+    '')
+      # PASSED ⇒ exactly one canonical ref changed (the accepted ref, to the
+      # pinned OID) and nothing else. `comm -3` reports the old and new lines
+      # of one moved ref, hence 2.
+      rig_assert_eq 'assert_outcome[pass]: exactly one canonical ref changed' 2 "${changed}"
+      rig_assert_eq 'assert_outcome[pass]: the accepted ref is at the pinned OID' \
+        "$(cat "${run}/pinned-oid")" \
+        "$(git -C "${canonical}" rev-parse --verify "$(contract_field "${run}" accepted)")"
+      ;;
+    cas-lost)
+      # A GENUINE RACE. The step-2 objects are EXPECTED, unreferenced and
+      # collectable, so their count is RECORDED, NOT ASSERTED (F-14) — a
+      # scope correction, not a weakening. Unreferenced objects are not landed
+      # state: nothing points at them and no future read can reach them.
+      rig_assert_eq 'assert_outcome[cas-lost]: canonical refs unchanged' 0 "${changed}"
+      printf '  note  assert_outcome[cas-lost]: %s orphan object(s) recorded, not asserted\n' \
+        "$((objects_now - objects_before))"
+      ;;
+    *)
+      # REFUSED at harvest, conform, verify, or advance/STALE-BASE ⇒ canonical
+      # is byte-identical to its pre-run state: same refs AND THE SAME OBJECT
+      # COUNT. The object-count clause is what makes this falsifiable rather
+      # than decorative — it is precisely the thing a quarantine namespace
+      # inside canonical would have broken, on every refused row.
+      rig_assert_eq "assert_outcome[${token}]: canonical refs unchanged" 0 "${changed}"
+      rig_assert_eq "assert_outcome[${token}]: canonical OBJECT COUNT unchanged" \
+        "${objects_before}" "${objects_now}"
+      ;;
+  esac
+}
+
+# ── executed directly ───────────────────────────────────────────────────────
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  rig_enter
+  label=${1:?usage: pipeline.sh <label> <fixture> <declaration> <fetch|bundle>}
+  fixture=${2:?usage: pipeline.sh <label> <fixture> <declaration> <fetch|bundle>}
+  declaration=${3:?usage: pipeline.sh <label> <fixture> <declaration> <fetch|bundle>}
+  mechanism=${4:-fetch}
+
+  RUN=$(pipeline_setup "${label}" "${fixture}" "${declaration}")
+  pipeline_capsule "${RUN}"
+  # NOT `pipeline_run … | tee`: a pipe would run it in a SUBSHELL, so a RIG
+  # DEFECT return could not reach this shell and the run would score as an
+  # ordinary refusal. Same family as F-P01-1 — in shell the invocation form
+  # silently changes the semantics of a refusal.
+  pipeline_run "${RUN}" "${mechanism}" >"${RUN}/stages" || rc=$?
+  cat "${RUN}/stages"
+  if [ "${rc:-0}" -eq "${RIG_EXIT_DEFECT}" ]; then
+    rig_warn "pipeline (${label}/${mechanism}): RIG DEFECT — not a result"
+    exit "${RIG_EXIT_DEFECT}"
+  fi
+  assert_outcome "${RUN}" "$(pipeline_first_refusal "${RUN}/stages")"
+  rig_assert_done "pipeline (${label}/${mechanism})"
+fi

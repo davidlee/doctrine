@@ -186,6 +186,12 @@ mounts=(
   # nothing joins them — the waiter would keep passing against a bell the probe
   # planted while the worker rang a differently-named one (STD-001).
   --setenv RIG_DOORBELL "${RIG_DOORBELL}"
+  # The result ref and the bundle path cross for the same reason and are read
+  # fail-closed on the far side. The second one is also RT-4/F-6 stated
+  # positively: the capsule never NAMES the harvest path, because a capsule
+  # that chose its own bundle location would choose a symlink.
+  --setenv RIG_RESULT_REF "${RIG_RESULT_REF}"
+  --setenv RIG_BUNDLE "${RIG_BUNDLE}"
   --setenv TERM dumb
 )
 

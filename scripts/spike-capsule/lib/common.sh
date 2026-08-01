@@ -23,6 +23,8 @@ RIG_EXIT_DISK=4     # the disk cap bit (PHASE-03 maps it to `harvest/resource-ca
 # shellcheck disable=SC2034
 RIG_EXIT_SANDBOX=5  # the sandbox itself failed to start — NOT a verdict on the capsule
 RIG_EXIT_TIMEOUT=124 # `timeout`'s own code, propagated verbatim rather than renamed
+# shellcheck disable=SC2034
+RIG_EXIT_DEFECT=6   # a token outside the closed vocabulary — a RIG defect, NOT a result
 
 rig_warn() { printf 'rig: %s\n' "$*" >&2; }
 rig_die() { rig_warn "$*"; exit "${RIG_EXIT_USAGE}"; }
@@ -110,6 +112,48 @@ rig_enter() {
 # both sides of the doorbell refer to it and a drifting literal would make a
 # lost ring indistinguishable from a mistyped one.
 RIG_DOORBELL=result-ready
+
+# ── the other two names that cross the boundary ──────────────────────────────
+#
+# Same discipline as the doorbell, for the same reason (F-P02-6): the ringer,
+# the waiter and the probe each carrying their own literal is a join nothing
+# checks. All three names are chosen HERE by the control plane and passed in
+# over `--setenv`, and the capsule reads them FAIL-CLOSED.
+#
+# It is also the RT-4/F-6 requirement stated positively: **the capsule never
+# names the harvest path.** A capsule that chose its own bundle location would
+# choose a symlink.
+# shellcheck disable=SC2034
+RIG_RESULT_REF=refs/heads/capsule-result
+# shellcheck disable=SC2034
+RIG_BUNDLE=result.bundle
+
+# Where the harvested result lands INSIDE the quarantine. Under `refs/heads/`
+# deliberately: the verify capsule clones out of the quarantine, and `git clone`
+# fetches `refs/heads/*` — a result parked under a private namespace would be
+# invisible to the clone and stage 3 would verify the base instead of the
+# result, silently. Quarantine is disposable, so a branch there costs nothing.
+# shellcheck disable=SC2034
+RIG_QUARANTINE_REF=refs/heads/quarantine-result
+
+# ── the doctrine binary the rig calls (conform leg 2) ────────────────────────
+#
+# The documented ladder, not a bare `doctrine`: the corpus verbs must come from
+# a build that carries this tree's rules. `$DOCTRINE_BIN` first (the dispatch
+# forward), then this repo's dev build, then PATH.
+rig_doctrine_bin() {
+  local repo
+  if [ -n "${DOCTRINE_BIN:-}" ] && [ -x "${DOCTRINE_BIN}" ]; then
+    printf '%s' "${DOCTRINE_BIN}"
+    return 0
+  fi
+  repo=$(rig_repo_root) || { printf 'doctrine'; return 0; }
+  if [ -x "${repo}/target/debug/doctrine" ]; then
+    printf '%s' "${repo}/target/debug/doctrine"
+    return 0
+  fi
+  printf 'doctrine'
+}
 
 # rig_wait_doorbell <capsule> <deadline-secs> <interval-secs>
 #
