@@ -309,6 +309,98 @@ distinction `assert_outcome` keys off.
   and reusing it would be a mechanism lie in the one column the rig exists to
   compare. `harvest-fetch.sh` raises a **RIG DEFECT** instead of scoring it.
 
+### PHASE-04 step 0 — decisions (durable)
+
+- **D-P04-1 — step 0 ran BEFORE the phase sheet was expanded and before the
+  phase flipped `in_progress`.** Deliberate inversion of the handover's stated
+  order, which carried two instructions that cannot both be honoured:
+  "`/phase-plan` first" and "do step 0 in a context that has not read the
+  reading list". `/phase-plan` mandates reading design § 5.4 and `notes.md`, so
+  honouring the first destroys the second — silently, and in the direction that
+  manufactures a false green, since an empty residue reads as ASM-007 surviving.
+  Paid the visible cost (a lifecycle-order blemish, recorded here) over the
+  invisible one. Captured as RFC-011 friction: no skill currently says that a
+  phase whose criteria constrain what its *planner* may read cannot be
+  phase-planned before the criterion is discharged.
+- **D-P04-2 — ASM-007 is `invalidated`, not `obsolete`** (operator ruling,
+  2026-08-02). `obsolete` reads as "no longer applies" and would lose the fact
+  that the claim was posed, tested, and failed. The *reframe* lives in the
+  record's prose plus the replacement record, not in the status.
+- **D-P04-3 — the replacement is ONE assumption, not two.** ASM-008 carries the
+  universal / language-bound responsibility split. The candidate second claim
+  ("the declaration format is adequate for the classes it can name") is **not**
+  recorded as an assumption: the rig already tests it, so it belongs as a
+  criterion, not as a carried belief.
+- **D-P04-4 — CPT-001 is NOT amended.** The taxonomy stays active and correct;
+  only the exhaustiveness claim about it died. Adding a sixth class and
+  re-asserting exhaustiveness would re-run the same error one class later, so
+  the residue is tracked as QUE-203 rather than plugged. Operator is on record
+  as doubtful QUE-203 resolves usefully — tracked, not scheduled.
+
+### PHASE-04 step 0 — findings (durable)
+
+- **F-P04-1 — ASM-007's residue is NON-EMPTY; the assumption is falsified.**
+  96 npm/TypeScript triggers over 11 surfaces (`step0-enumeration.md`), 84 clean
+  fits, 6 fits with named strain, 2 out of scope, **4 residue**. R2 (terminal
+  escape sequences — the interpreter is the display) and R4 (non-inert parsing /
+  prototype pollution) are individually sufficient and were unanticipated
+  anywhere in the corpus.
+- **F-P04-2 — R1 was over-reported, and the correction matters.** Prompt
+  injection into the control-plane agent was first reported as a surprising
+  omission. It is not: **CON-005 and design § 1.1 already name it**, as a known
+  unbounded threat, with an operator ruling and a structural mitigation
+  (refusals carry trusted-side-computed tokens; artifact content is never
+  relayed verbatim). It contradicts the exhaustiveness claim — the taxonomy
+  cannot *classify* it — while corroborating what the design already knew. Same
+  correction applies to R3's LLM-carrier half; R3's shell/template-injection
+  half is genuinely unanticipated.
+- **F-P04-3 — the failure is the claim's SHAPE, not its truth value** (operator,
+  2026-08-02). "These classes are exhaustive" is a universal negative over an
+  open-ended adversarial space: unsettleable by search, permanently low
+  confidence, and its practical effect was to make an *empty* residue look like
+  progress when an empty residue would mostly have measured the searcher. The
+  durable diagnostic, now recorded in ASM-007's body: *if this assumption were
+  false, what would I do differently?* Exhaustiveness answered "record a new
+  class" — bookkeeping, not a decision.
+- **F-P04-4 — the falsification protocol itself worked and is reusable.** The
+  two-commit discipline (enumerate with the taxonomy unread, commit; classify,
+  commit) makes independence *checkable* rather than asserted — the diff between
+  `beb4b665` and `61ea9f08` is append-only, 190 insertions, 0 deletions. RV-340
+  F-8 sharpened this protocol and earned its keep.
+- **F-P04-5 — the clean fits are real portability evidence, not filler.** Three
+  land unforced from opposite ecosystems: `binding.gyp` ≡ `build.rs`,
+  `packageManager` ≡ `rust-toolchain.toml`, `.mise.toml` ≡ `.envrc`. That is
+  DEC-101/DEC-102's claim (a known class has a TypeScript instance) corroborated
+  independently of the residue.
+- **F-P04-6 — an agent `git reset --hard` in the shared tree discarded
+  uncommitted work mid-phase.** ASM-007's both-tier edits were lost and had to
+  be re-applied; ASM-008/QUE-203 survived only because untracked files are not
+  touched by a hard reset. Nothing was ultimately lost, but the working tree is
+  not a safe place to hold authored state between steps. **Commit each coherent
+  unit immediately** — AGENTS.md's "never discard uncommitted work" is a rule
+  other agents can break on your behalf.
+
+### PHASE-04 step 0 — evidence (what was OBSERVED, not merely asserted)
+
+| criterion | observation |
+|---|---|
+| EX-1 / EX-3 / EX-9 | enumeration authored with CPT-001 unread, committed `beb4b665`; classification appended `61ea9f08`. **Append-only diff, 0 deletions** — independence is checkable, not claimed |
+| EX-2 / VA-1 | `doctrine knowledge show ASM-007` renders `invalidated` in **both tiers** — structured `invalidated_by`/`invalidated_on`/`contradicts` and the prose body. Never the `.md` alone |
+| EX-2 | recorded **invalidated**, never *discharged*; replacement claim carried forward as ASM-008 rather than left vacant |
+
+### PHASE-04 — FOR RECONCILIATION (not edited in-phase, per operator ruling)
+
+- **design.md § 9 closure bullet is now false.** It reads *"ASM-007 is recorded
+  **strengthened, not discharged**, whatever step 0 returns"* — anticipating only
+  the strengthening branch. Step 0 returned the third outcome: falsified. The
+  design is locked and this is `/reconcile`'s edit to make, not this phase's
+  (operator ruling, 2026-08-02). Replacement should reference ASM-008 as the
+  claim the post-spike REV may actually lean on, and must not restate an
+  exhaustiveness claim.
+- Knock-on to check while there: § 9's *Closure* paragraph gates on "every
+  measurement row filled or recorded after-side-only" plus the ASM-007 line;
+  only the ASM-007 line is affected.
+
 ### PHASE-03 boundary — ONE foreign interior commit
 
 Range `acc4b2b34..e14c22cc`. The start is an RFC-026 observation commit,
@@ -419,8 +511,17 @@ mid-phase would convert a legible structural finding into a silent pass.
 - QUE-201 — declaration home; now ergonomics-only, gains a probe-evidence input
 - QUE-202 — how the capsule model *admits* the second result; refusal proven,
   admission not designed
-- ASM-007 — exhaustiveness carried, confidence low; falsified only by § 5.4
-  step 0's independent enumeration, never by fixture rows
+- ~~ASM-007~~ — **FALSIFIED and `invalidated` in PHASE-04 step 0**, exactly as
+  its own validation plan specified. Not discharged: replaced by **ASM-008**
+  (universal / language-bound responsibility split), which is the claim the
+  design actually load-bears on. Do **not** repair ASM-007 by adding a sixth
+  class — see F-P04-3
+- **ASM-008** — the responsibility split, `held`, confidence medium. Falsified by
+  a trigger that is language-bound but not client-declarable, or universal but
+  not doctrine-shippable — **not** by discovering a new class
+- **QUE-203** — can the taxonomy name interpreters *downstream* of the toolchain
+  (LLM, terminal, human reviewer), whose trigger paths are not enumerable?
+  Operator doubtful it resolves usefully; tracked, not scheduled
 - CON-004 — landed state append-only · CON-005 — threat-model fence
 - DEC-099/101/102/103/104 — settled, carried
 - OQ-1 — evidence-log storage tier; v0 ruling in slice § Risks
