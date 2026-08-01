@@ -236,7 +236,7 @@ response = "Upheld. CPT-001 numbers them 1, 2, 3, 3g, 4, 5 — five numbered cla
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: I1's object-count clause holds on every refusal. Observed: stage 4 must fetch before it can CAS, so a stale-base refusal leaves objects in canonical - reddening assert_outcome on H10/H16, the two rows F-9 just made capsule-model evidence"
 detail = """

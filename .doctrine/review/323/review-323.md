@@ -230,4 +230,66 @@ unreferenced objects are not landed state.
 *Raised as a new charge, not a re-raise: the ledger is append-only and the
 thirteen were honestly served. Thirteen verified; one stands.*
 
+## Round 3 — F-14 verified; the ledger is closed
+
+F-14 disposed `fix-now` and integrated at `7fd55d0f`. Both parts of the penance
+served, and checked in the artifact:
+
+- **Stage 4's ordering is now load-bearing** (§ 5.1): read the accepted ref
+  first; if it has left the contracted base `B`, refuse `advance/stale-base`
+  **having transferred nothing**. That is the path H10/H16 actually exercise, so
+  those rows keep the full unchanged-canonical assertion rather than buying an
+  exemption — which is the outcome the charge was for.
+- **I1 gains a third, scoped clause**: only `advance/cas-lost` — the genuine race
+  between the precondition read and the CAS — asserts refs-only, with the
+  orphaned objects named expected, unreferenced and collectable, and their count
+  **recorded rather than asserted zero**. CON-004 is untouched: nothing points at
+  those objects and no future read reaches them.
+
+**One addition beyond the sentence, and it earns its place.** `advance` now
+carries two tokens rather than one. Since `assert_outcome` keys off the *token*,
+a single token would have let the refs-only clause silently absorb the ordinary
+staleness path and *weaken* the assertion on exactly the rows it exists to
+protect. The split buys strictness. Contested nothing; upheld.
+
+**The self-correction is the part worth recording.** The first draft of this
+repair claimed the rig "cannot deterministically produce `cas-lost`". The accused
+caught it before it reached me and weakened it to **reachable but unexercised** —
+a legal token owned by no row, recorded as an asymmetry rather than an
+impossibility, since an injected delay would produce it. *An unexercised path
+stated as impossible is how a gap stops being looked at.* That correction was
+made unprompted, against the author's own interest, and § 10.4 now states both
+guards because this design has twice repaired a finding by overshooting the axis
+it named. This is the disposition of an artifact that has stopped defending
+itself.
+
+**Governing records, not only arguing ones.** Prompted by this round rather than
+charged: F-5's ruling had landed in `design.md` and *not* in DEC-099 — the record
+that actually governs the declaration — whose structured tier was moreover empty,
+so even the prose would have been half-invisible to anything querying the corpus.
+Verified via `knowledge show` (both tiers, per the guardrail): DEC-099 carries
+Amendment 2 and a populated `[facet]` whose consequences carry both amendments;
+QUE-201 records that safety is no longer a discriminator among its three homes
+and that it gains the probe-evidence input it lacked; ASM-007's `claim` and
+`validation_plan` carry F-13's cardinality and F-8's falsification correction
+structurally. A ruling that lives only in the artifact that argued it is a ruling
+that dies with the slice.
+
+### Verdict
+
+**Fourteen charges, fourteen terminal, none withdrawn and none contested.** Four
+blockers dead, nine majors served, one minor and one nit dispatched. No escape
+was taken: fourteen `fix-now`, no `follow-up` bought with size, no `tolerated`
+normalised, no blocker downgraded to dodge the gate. Two dispositions improved on
+the sentence (F-9's sharper split, F-5's manufactured exposure) and one repair
+generated a further charge that was raised, served, and closed.
+
+What leaves this inquisition standing is named, not buried: **QUE-202** owns the
+capsule model's conflict *resolution* path; **ASM-007** is to be recorded
+strengthened, never discharged; **`cas-lost`** is legal and unexercised;
+**R2**'s `--strict`-versus-belt edge remains for the rig skeleton to probe. Each
+has a record. None is a sentence in a rejected alternative.
+
+The design is fit to be planned. The gate is open.
+
 > **HERESIS URITOR; DOCTRINA MANET**
