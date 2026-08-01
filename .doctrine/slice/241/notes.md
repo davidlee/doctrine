@@ -171,6 +171,30 @@ Raw results: `$SPIKE_CAPSULE_ROOT/probes/smoke/results.tsv`. Re-runnable:
 `rig smoke`, `control/probe-capsule.sh [posture|bounds|doorbell]`,
 `control/audit-i4a.sh <capsule> [--positive-control]`.
 
+### PHASE-02 boundary — clean range, two NEW undeclared families
+
+`code_start_oid = b3ad3eed3`, `code_end_oid = 8f403cd68`, **3 commits, none
+foreign** — unlike PHASE-01. The interior-foreign-commit problem did not recur;
+`b3ad3eed3` (SL-233) landed *before* the range start and is correctly excluded.
+
+At audit, `slice conformance 241` reports `undeclared (7)`. Four are PHASE-01's
+already-dispositioned structural set (`fixtures.md`, `notes.md`, `flake.nix`,
+and the slice's own authored deliverables). **Two families are new to this
+phase** and want a disposition of their own:
+
+| path | disposition | why |
+|---|---|---|
+| `.doctrine/memory/items/mem_019fbd3c…` (+ its slug symlink) | **aligned** | F-P02-2's memory. `/record-memory` is a mandated step of `/execute`, so the corpus write is a deliverable of the phase, not drift |
+| `.doctrine/observations/records/2b/019fbd3b….toml` | **aligned** | RFC-011 instrumentation is mandated by project governance for every skill invocation; records are authored and committed by design |
+
+**Selectors were again deliberately NOT widened.** Design § 9.1's code-impact
+table is the selector source and it does not name `.doctrine/memory/**` or
+`.doctrine/observations/**` — which is correct, because those are process
+outputs of *any* phase rather than this slice's subject matter. Adding a
+selector to silence them would convert a legible structural finding into a
+silent pass, and would do it for every future slice that records a memory.
+Worth raising at audit as a **corpus-wide** question, not a per-slice fix.
+
 ### PHASE-01 boundary — read before believing any conformance finding
 
 `code_start_oid = 25540cfe1`, `code_end_oid = 29c7acf35`, 8 commits, of which
