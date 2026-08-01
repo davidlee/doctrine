@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 202
+slug = "capsule-model-conflict-admission-path"
+title = "Capsule-model conflict admission path"
+record_kind = "question"
+status = "open"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = "Under the RFC-025 capsule model, how is the second of two results from one base admitted? Stage-4 CAS proves it is refused safely; the resolution path (3-way, Conflicted, supersede guidance) lives in candidate verbs welded to coordination staging."
+why_matters = "Largest gap SL-241 surfaces. Without an owning record it exists only inside D8's rejected-alternative prose: invisible to survey, blocking no REV, lost at slice close. Also bounds the spike's claim — the go/no-go must not read 16/16."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the conflict/staleness resolution gap the capsule model leaves open; RFC-025 census DELETE rows inherit it"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "surfaced by SL-241's design (D8, F5) and RV-323 F-9; outlives the slice"
+target = "SL-241"

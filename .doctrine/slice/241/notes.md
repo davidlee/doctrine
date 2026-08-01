@@ -19,5 +19,5 @@ fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
 - **RFC-023 (executable plan gates / adversarial TDD)** — substantial revisions
   to plan gates are expected. Operator ruling 2026-08-01: adopt current plan
   machinery as-is for this slice; expect heavy revision to follow. Nothing in
-  the five-stage capsule pipeline (CON-004, DEC-104) depends on plan-gate
+  the four-stage capsule pipeline (CON-004, DEC-104) depends on plan-gate
   mechanics, so the revisions should land orthogonally to this rig.

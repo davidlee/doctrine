@@ -14,7 +14,7 @@ ref   = "SL-241"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: fourteen rows demonstrably run on the four-stage pipeline. Observed: the claim is asserted, not derived - at least five rows name machinery this design deletes or never specifies"
 detail = """
@@ -29,10 +29,12 @@ EXPECTED: § 5.1 claims "the other fourteen run the four-stage pipeline", so eac
 This is the design's central sufficiency claim and it does not survive a row-by-row walk. The consequence is not a rig bug: it is that P-C3 produces a results table in which several rows read "no kill = fail" or "pass" for reasons that are properties of the matrix bookkeeping rather than of the capsule model, and § 9 Closure gates on that table.
 
 PENANCE: re-derive the expected-kill column for all sixteen rows against the target model and land it in the design (or in matrix.tsv with the design pointing at it), before any row runs. Each row must name a stage that exists in this design, or be explicitly recorded as dissolved-by-construction with the reason - which is itself evidence, and good evidence. A dissolved row is a finding worth having; a silently mis-scored row is not."""
+disposition = "fix-now"
+response = "Upheld, and it was the right charge to lead with. Verified each of the five rows against probe-specs.md's own expected-kill column rather than the design's summary: H8's 'existing born-frame submodule rejection' is src/git.rs:2432, index-scoped; H13's subject (result.toml) is deleted by I4; H14's poll/no-authority legs have no mechanism; H15 names a journal § 5.1 states does not exist; H7 has fsck and nothing else. Penance served in full: new design § 5.6 re-derives all sixteen rows against the four-stage model with a status column. Outcome — two rows (H7, H8) were unenforceable and now have legs; one (H13) was homeless and now names M-B's bundle; one (H14) was two-thirds unmechanised; four (H6, H9, H12, H15) are recorded dissolved-by-construction with reasons; two (H10, H16) split into a capsule-model safety leg and an incumbent regression leg. matrix.tsv's expected-stage/expected-token columns now reference the closed vocabulary in § 5.1, so no row can be scored in a vocabulary the pipeline does not emit. One precision note: H14's doorbell is not wholly unspecified — probe-specs P-C1 step 5 sketches it ('touch a result-ready file / exit'). That does not soften the penance; the design still had to state the poll fallback and the no-authority property, and § 5.4 now does."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: CPT-001 class 4 (gitlinks) refused as doctrine-owned universal policy. Observed: no leg of the conform stage inspects file mode, and the existing rejection is index-scoped and unreachable"
 detail = """
@@ -43,10 +45,12 @@ A hostile capsule adds a gitlink at src/vendor with a .gitmodules entry. Ancestr
 The existing rejection cannot be borrowed: src/git.rs:2432 reads "git ls-files --stage", an index of a checked-out repo. The pipeline is object-only by design (I4, § 5.1). So this is not a matrix-bookkeeping defect like the rest of F-1 - it is a real hole in the class-4 enforcement DEC-099 says doctrine owns, and the spike would have shipped evidence claiming universal-class enforcement it does not have.
 
 PENANCE: add a mode-aware leg to stage 2 - "git ls-tree -r <pinned-oid>" (or diff-tree over B..S) refusing any 160000 entry, and refusing .gitmodules as a forbidden path. Cheap, object-only, no worktree. Then H8 has a real boundary and CPT-001 class 4 is enforced rather than asserted. Symlinks (120000) are in-tree-legal per SL-012 and stay legal; the class-4 hazard for those is trusted-side path-following, which I4 already dissolves."""
+disposition = "fix-now"
+response = "Upheld; a real hole, not matrix bookkeeping, and the code citation checks out. src/git.rs:2432 reject_submodules scans 'git ls-files --stage' — index-scoped, in the born-frame hashing path, unreachable from an object-only pipeline. Walked the attack: gitlink at a declared path under src/**, ancestry passes (ordinary descendant commit), slice conformance folds --name-status and sees an ordinary A, the prefix leg sees neither .doctrine/ nor .claude/. It admits. Fixed: § 5.2 conform gains a fourth leg — 'git ls-tree -r <pinned-oid>' refusing any 160000 entry (token 'gitlink') and refusing .gitmodules as a forbidden path (token 'gitmodules'). Object-only, no worktree, no index. Symlinks (120000) stay legal per SL-012, as you noted. H8 now has a boundary in § 5.6 and § 9 requires the guard be observed refusing on a planted gitlink before its result counts."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: one mutation, testable via I1. Observed: harvest's second hop writes a ref and its objects into the canonical repo, so I1 fails on both refused and passing rows"
 detail = """
@@ -57,10 +61,12 @@ If that reading is right, then on a REFUSED row the trusted side is not byte-ide
 If instead the quarantine namespace is meant to live in the throwaway quarantine repo, then § 5.1's diagram ("quarantine dir (disposable, fsck on)" drawn inside TRUSTED SIDE) and § 5.2's "canonical quarantine namespace" contradict each other, and the resolution is unstated. Either way the design's most-quoted invariant is undecided at the point where it must be mechanised.
 
 PENANCE: state the harvest destination explicitly and pick the one that keeps I1 true - the pinned OID lives in a disposable per-run quarantine REPOSITORY, never a namespace inside the canonical repo, and stage 4 is the first and only write that touches canonical. Then say what stage 4 does with objects that live in the quarantine repo (a single fetch-into-canonical at advance time, after every gate has passed, is the shape that preserves "one mutation"). Add the H7 assertion that a refused row leaves the canonical odb unchanged in size, which is the observable DQ-3 wants and is currently unobtainable."""
+disposition = "fix-now"
+response = "Upheld. Your first reading is the correct one and the design was genuinely undecided at the point of mechanisation: § 5.2 inherited 'quarantine -> canonical quarantine namespace' verbatim from probe-specs while § 5.1 drew the quarantine dir inside TRUSTED SIDE. A ref in canonical drags its objects into canonical's odb, so on a refused row the trusted side is not byte-identical and H7's 2 GiB blob lands before the refusal meant to stop it; on a passing row two refs move and assert_outcome reds the happy path. Ruled as you sentenced: the pinned OID lives in a per-run quarantine REPOSITORY, separate and rm -rf'd after every row; the second hop is deleted; stage 4 fetches into canonical and then performs the single CAS, so canonical is touched exactly once and only after every gate has passed. 'One mutation' now means one canonical REF mutation — the object write that immediately precedes it is gated behind every refusal and is not observable state; § 5.1 says so explicitly rather than leaving the reader to infer it. I1's refused-row clause gains the object-count assertion you asked for, which is what makes it falsifiable rather than decorative: it is precisely the thing a namespace-inside-canonical would have broken."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: the forbidden-path leg carries the belt's hardening. Observed: it is hand-rolled shell without quotePath=false or --no-renames, so H5 is evadable by non-ASCII name and by rename"
 detail = """
@@ -73,10 +79,12 @@ Two concrete evasions of H5, the row whose observable is "canonical tree byte-id
 H5 then scores "no kill = fail", which reads in the results table as a defect of the capsule model. It is a defect of the rig - R4 ("the rig lies") in its most damaging direction, because a false FAIL on a hostile row is the finding least likely to be re-examined.
 
 PENANCE: the shell leg must pass "-c core.quotePath=false" and "--no-renames" (and "-z" if it parses in shell at all - src/git.rs:1257 exists precisely because NUL-delimited is the byte-safe form). Better: state that the forbidden-path leg is the same invocation the belt uses, and cite src/mcp_server/dispatch.rs:487 as the reference form the way § 5.2 already cites the conformance verb. Add a positive control per § 9's own discipline - a row that plants a non-ASCII .doctrine/ path and a rename-out-of-.doctrine/ path and asserts the leg fires on both, since a prefix check that has never been observed refusing is not known to work (§ 9's I6 argument, applied here)."""
+disposition = "fix-now"
+response = "Upheld, and both citations verified in source. src/slice.rs:2890-2906 actual_from_range carries '-c core.quotePath=false' and '--no-renames' with a comment naming why; src/mcp_server/dispatch.rs:487-497 carries the same pair with the comment 'quotePath off so a non-ASCII governance path is verbatim; --no-renames so a .doctrine/ source leg cannot hide behind a same-content destination'. The scope leg rode that belt and the forbidden-path leg beside it did not — exactly the parallel-implementation the standing rule forbids, and the hardening was dropped in the one leg where doctrine owns the policy. Fixed: § 5.2 conform leg 3 now states the invocation form 'git -c core.quotePath=false diff --name-only --no-renames -z B..S', cites src/mcp_server/dispatch.rs:487 as the reference form (as leg 2 already cites the conformance verb), and names src/git.rs:1257 for why -z. Positive controls added to § 9: a planted non-ASCII .doctrine/ path and a rename out of .doctrine/, each of which must be observed refusing. Your framing of the consequence is the part worth keeping in the record — a false FAIL on a hostile row is R4 in its most damaging direction, because it is the finding least likely to be re-examined."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: the trust-bearing declaration is read from content the capsule cannot influence. Observed: the read side is unspecified and two of QUE-201's three shipped homes are worker-writable"
 detail = """
@@ -89,10 +97,12 @@ Fail-closed on absence does not defend against SUBSTITUTION. A worker that edits
 The rig as designed cannot surface this, because it varies the fixture but never the declaration's provenance. So the spike will produce evidence about DEC-099 that is silently conditional on a placement question it does not test, and QUE-201 will be settled post-spike without probe evidence.
 
 PENANCE: state the invariant now - the declaration is read from the CONTRACTED BASE B, never from the harvested result S, whatever its shipped home turns out to be. That makes all three QUE-201 candidates safe and costs one sentence. Then add the row that proves it: a capsule that rewrites its own declaration (narrowed interpret:, verify: replaced with a no-op) must produce identical trusted-side behaviour to a capsule that did not. That row also gives QUE-201 an evidence input instead of an argument."""
+disposition = "fix-now"
+response = "Upheld. Fail-closed on absence is not a defence against substitution, and the design never said which side the declaration is read FROM. Invariant now stated in § 5.2: the declaration is read from the contracted base B, never from the harvested result S, and never from a capsule-writable location — which makes all three of QUE-201's shipped-form candidates safe at the cost of one sentence, as you said. One precision, recorded rather than absorbed: in the rig as drawn the attack is not live, because fixtures/heavy/interpretation-surface.txt sits outside the clone (your own finding notes this). That makes the probe row harder than 'a capsule rewrites its own declaration' — the rig must MANUFACTURE the exposure with a fixture variant carrying a declaration copy inside the repository, simulating QUE-201 candidates 1 and 2, and then prove the trusted side ignores it. § 5.2 specifies it that way. Your second point stands unqualified and is the sharper half: rewriting 'verify:' escalates the worker's own contract so the verify capsule's attested run attests nothing, which is inside CON-005's narrow claim, not outside it. QUE-201 § Open Questions now records that it gains a probe-evidence input it previously lacked."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: RT-4 ingestion hygiene for surviving capsule-authored artifacts. Observed: M-B's bundle file inherits every RT-4 obligation and the design states none, understating M-B in the QUE-200 comparison"
 detail = """
@@ -103,10 +113,12 @@ That file is written by the capsule, at a path the control plane must resolve, a
 This matters beyond hygiene: M-A vs M-B is QUE-200, the whole point of the rig. The two mechanisms are supposed to be compared on "lines of trust-bearing code at the boundary" (probe-specs § Mechanism verdict inputs). M-B carries a trusted-side file-ingestion surface that M-A does not, and if the design does not name it, the comparison silently understates M-B's cost and QUE-200 settles on an unfair column. Note also that H13, the row that would have tested this, is currently homeless (F-1).
 
 PENANCE: give M-B an ingestion-hygiene paragraph in § 5.2 - bundle path is control-plane-chosen inside the capsule root, opened O_NOFOLLOW-class with symlinks refused, size-capped before verify, absent/truncated is a stage-1 refusal with its own token. Re-home H13 onto it. Add the M-B trusted-side surface to QUE-200's verdict inputs explicitly, so the mechanism comparison scores it."""
+disposition = "fix-now"
+response = "Upheld. The design earned most of RT-4 by deletion and then left the one surviving artifact unguarded. M-B's bundle file is capsule-written, at a path the control plane must resolve, parsed trusted-side by git's bundle reader — every RT-4 obligation applies and none were stated. § 5.2 now gives M-B an ingestion-hygiene block: control-plane-chosen path inside the capsule root (the capsule never names it), resolved with symlinks refused (O_NOFOLLOW-class; token bundle-unsafe-path), size-capped before 'git bundle verify' reads it (resource-cap), and absent/truncated/still-being-written as a stage-1 refusal with its own tokens rather than a silent wait-and-retry. H13 is re-homed onto it in § 5.6 — and the row is recorded 'n/a, dissolved' on M-A, since M-A has no trusted-side-read artifact at all. That asymmetry is now named as a QUE-200 verdict input in its own right, which is the part of this finding that mattered most: without it the mechanism comparison scores M-B's trusted-side file-ingestion surface at zero and QUE-200 settles on an unfair column."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: altitude computed from results (D6). Observed: the computation cannot distinguish held-on-light from never-attempted-on-light, so a vacuous cell is promoted to model-level"
 detail = """
@@ -117,10 +129,12 @@ D5 identifies this exact hazard for the fixture as a whole - a convention-free f
 § 9 already carries the correct instinct in a neighbouring place: the two audits get positive controls, because "a negative grep without a positive control proves only that grep ran". The matrix rows get no such control, and they are where the portability claim is actually made.
 
 PENANCE: every (row, fixture) cell needs one of two things before its result counts - a per-instantiation positive control asserting the payload was really planted and would have fired (the mutate step verifies its own mutation landed), or an explicit N/A recorded in matrix.tsv with a reason. N/A cells are EXCLUDED from the altitude computation rather than counted as holds, and a row that is N/A on light is at most "unproven beyond Rust", never model-level. That keeps D6's promise - altitude measured, not asserted - and turns a laundering path into a legible gap."""
+disposition = "fix-now"
+response = "Upheld, and this is the one I would have been most likely to ship. D5 caught vacuity at the fixture level and the same hazard recurs per row with nothing catching it — H12-light having no .envrc and no flake.nix to plant is the concrete case, and a cell passing because there was nothing to plant computes as 'holds under both' and stamps the row model-level, the strongest claim in the table. Fixed at both ends: § 5.4's matrix harness gains an Hnn.planted? step between mutate and pipeline — every mutate verifies its own payload landed and would have fired — and a cell with no instantiation is recorded n/a WITH A REASON. D6 is amended to make the computation three-valued: holds under both => model-level; one only => client-local; n/a on light => unproven-beyond-rust, with n/a cells excluded from the computation rather than counted as holds. § 9 lists the control alongside the audit controls, since your point is exactly that § 9 already knew the principle and applied it where the claim was weaker."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: the TypeScript fixture falsifies ASM-007. Observed: every rig mechanism is confirmatory, so exhaustiveness leaves the spike exactly as unproven as it entered while both records claim discharge"
 detail = """
@@ -129,10 +143,12 @@ EXPECTED: § 5.5 states "ASM-007 - the five interpretation-trigger classes are e
 The fixture therefore tests PORTABILITY of the taxonomy (does a known class have a TypeScript instance?), which is D5/D6's job and is well served. It does not test EXHAUSTIVENESS. ASM-007 would be carried out of the spike exactly as unproven as it went in, while § 5.5 and ASM-007 both record that the spike discharged it. ASM-007's own cost argument is what makes this bite: "a class discovered during the spike amends a knowledge record; a class discovered after the post-spike REV amends shipped enforcement."
 
 PENANCE: add the search step, which is cheap and is the only thing that discharges the assumption. Before instantiating rows on the light fixture, enumerate that ecosystem's interpretation triggers independently of the taxonomy - npm lifecycle scripts (pre/post install, prepare), .npmrc, .nvmrc, node_modules/.bin on PATH, husky, tsconfig extends, config-as-JS, package.json "type"/exports resolution, workspace protocol links - and classify each against CPT-001. Residue is the falsifier; empty residue over an independently-derived list is real (if modest) evidence FOR exhaustiveness. Record the enumeration as the EVD, and either way ASM-007 gets updated on evidence instead of on completion. If the search is judged out of scope, then § 5.5 and ASM-007 must both stop naming the fixture as the falsification vehicle."""
+disposition = "fix-now"
+response = "Upheld. The distinction is right and I had conflated it: instantiating rows tests the taxonomy's PORTABILITY (does a known class have a TypeScript instance), which is D5/D6's job and well served; it cannot test EXHAUSTIVENESS, because every row and every audit token is already classified and a trigger no class describes is invisible to both. Every mechanism in the rig was confirmatory. Fixed by adding the search, which is cheap: § 5.4 gains step 0 — enumerate the npm/TypeScript ecosystem's interpretation triggers WITHOUT consulting CPT-001 (lifecycle scripts, .npmrc, .nvmrc, node_modules/.bin on PATH, husky, tsconfig extends, config-as-JS, package.json type/exports resolution, workspace-protocol links), classify each against the taxonomy, and treat the residue as the falsifier. It runs before any light-fixture row is instantiated. ASM-007's body is corrected too: it named the fixture as its falsification vehicle and now names the enumeration, keeps the fixture as the portability control, and records that empty residue over two ecosystems STRENGTHENS and never discharges — your standing-risk note, promoted into the record itself and into § 9 Closure so the go/no-go cannot claim otherwise."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: Closure counts evidence about the capsule model. Observed: H10/H16 measure the incumbent and count as coverage, and no record owns the capsule model's conflict/staleness admission path"
 detail = """
@@ -145,10 +161,12 @@ D8 is the right call and the rejected alternative (minting a synthetic Verified 
 2. D8 says decoupling the candidate verbs "is REV work" and stops. No record owns it. QUE-200 is the ingestion-mechanism question (M-A vs M-B) and does not cover it; QUE-201 is the declaration home. So the single largest open question the spike surfaces - HOW DOES THE CAPSULE MODEL ADMIT THE SECOND OF TWO RESULTS FROM ONE BASE, given that the verbs implementing those semantics read a coordination branch it does not have - exists only as a sentence inside a rejected-alternative discussion. It will not appear in any survey, will not block the REV, and will not be visible to whoever picks up the programme after this slice closes.
 
 PENANCE: (a) mint the question (doctrine knowledge new question, linked to SL-241 and RFC-025, and needs-edged from whatever REV inherits the census) capturing the conflict/staleness admission path under the capsule model, with F5 and D8 as its evidence. (b) Amend § 9 Closure to record H10/H16 as scaffolded incumbent-layer regression checks that do NOT count toward capsule-model coverage, and say so in the go/no-go scope sentence. The honest table reads 14/16 on the model plus 2 regression rows, and that is a better artifact than 16/16."""
+disposition = "fix-now"
+response = "Upheld on both legs, and the remediation goes further than the sentence in one place — flagging that rather than quietly banking it. (a) QUE-202 is minted: 'Capsule-model conflict admission path', linked references/concerns to RFC-025 and SL-241, with F5 and D8 as its evidence and the three candidate shapes named unevaluated. (b) § 9 Closure now records the sub-probe legs as scaffolded incumbent-layer regression checks counting toward nothing, in the same scoping sentence as the Linux/bwrap and macOS caveats. Where it diverges: walking H10/H16 against the four-stage model for F-1 showed they carry TWO separable claims, and the capsule model does answer one of them. Both rows put the accepted ref past the contracted base B, so stage 4's CAS refuses (advance/stale-base) — nothing auto-resolves, nothing lands. That is genuine capsule-model SAFETY evidence and it runs on the pipeline. What needs the candidate layer is RESOLUTION: the 3-way, the Conflicted classification, supersede guidance. So both rows now run on both harnesses (matrix.tsv's harness column takes pipeline | conflict | both) and the legs are scored separately. The carve-out is therefore narrower and sharper than you sentenced, not wider: the incumbent legs still count toward nothing, but what is actually missing from the table is not two rows — it is a capability, and QUE-202 owns it. Your standing-risk note that this residual outlives the slice is preserved verbatim in the record and in § 9."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: a fillable before/after measurement table (Closure gates on it). Observed: no source for the before column, one metric names the deleted candidate-create stage, and the headline token number is n=1"
 detail = """
@@ -161,10 +179,12 @@ EXPECTED: § 9 Closure requires "the measurement table is filled", and probe-spe
 3. n=1 on the headline. "Tokens per accepted phase" is the RFC-011-lens number the whole programme cares about. DEC-103 makes the rig stub-by-default with one opted-in agent run (P-C1b), so the token measurement is a single sample of a single phase, non-deterministic by nature. That may well be the right cost tradeoff - but the design should say the number is a point estimate, not a comparison, so the go/no-go does not lean on it as though it were a measurement.
 
 PENANCE: for each row of the measurement table, state where BOTH columns come from - some are countable by static inspection of the two models rather than by running anything (trust-bearing lifecycle states, mutable refs written, security-significant hooks, role-detection rules), and those are the honest ones; the runtime ones (wall-clock, disk, tokens, human interventions) need their incumbent source named or need to be dropped from Closure. Retire or re-endpoint the candidate-create metric. Mark tokens n=1 and say what it can and cannot support."""
+disposition = "fix-now"
+response = "Upheld on all three legs. Closure gated on filling a table the rig as specified could not fill. § 9's measurement prose is replaced by a table with a named source for BOTH columns, per your penance. Static-inspection rows (trust-bearing lifecycle states, mutable refs written, security-significant hooks, role-detection rules) are the honest ones and are countable on both sides without running anything. The candidate-create metric is retired outright — it has no endpoint on the after side, exactly as A6 had no measurable subject — and re-endpointed as 'git operations between doorbell and accepted-ref advance', which both models can be counted against. Wall-clock, disk and tokens have no instrumented incumbent run in scope, so they are recorded after-side-only, as absolutes rather than deltas, with that stated in the table rather than implied. Tokens carry 'n = 1' and an explicit statement of what a single non-deterministic sample can and cannot support: 'a phase reaches green in a capsule at roughly this cost', never a comparison. Closure's wording changes with them — every measurement row is either filled or explicitly recorded as after-side-only with its reason. Your observation that A6's sweep caught one metric of this kind and missed its sibling is the part I have kept in the write-up."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: I4's verdict comes from a runner the capsule cannot rewrite. Observed: the runner's mount posture is unstated, and one ordinary reading lets a hostile worker overwrite verify.sh and undo RT-1"
 detail = """
@@ -175,10 +195,12 @@ EXPECTED: I4 is the design's answer to RT-1, the programme's one blocker: "the v
 Second, unbounded: nothing anywhere sets a timeout, disk quota, or rlimits on either capsule kind. A worker or a verify run that hangs blocks the pipeline with no refusal token, and H7's "bounded time/disk" has no mechanism (see F-1). Exit-status semantics are otherwise sound and fail-closed - a signal yields 128+n, a bwrap start failure is nonzero, both refuse - so a timeout is the one missing leg.
 
 PENANCE: state the mount posture as an invariant, not an implementation detail - control-plane-authored runner scripts enter the sandbox as READ-ONLY binds from outside the capsule's writable root, and no script the capsule can write is ever the process whose exit status is the verdict. One sentence in § 5.2 next to I4. Add a wall-clock timeout and a disk cap to the sandbox profile with their own refusal tokens, which also gives H7 its boundary and P-C2 a row worth having."""
+disposition = "fix-now"
+response = "Upheld. The mount posture was unstated and your second reading is the ordinary shell-rig reflex — cp the scripts into the capsule dir, which the P-C2 profile's 'rw bind = capsule dir only' would happily permit — and it silently undoes RT-1, the programme's only blocker. Now I4a, stated as an invariant beside I4: control-plane-authored runner scripts enter the sandbox as READ-ONLY BINDS from outside the capsule's writable root, and no script the capsule can write is ever the process whose exit status is the verdict. § 9.1's tree comment is corrected too — it read 'runs inside the sandbox only', which was true of execution and silently permissive about provenance. Proof row added per your verification note: a capsule overwrites its in-capsule verify.sh and rings; the verdict must be unaffected. Second leg upheld as well — the profile gains a wall-clock timeout and a disk cap on both capsule kinds with their own refusal tokens (verify-timeout, resource-cap), which is also what finally gives H7 the 'bounded time/disk' boundary it has been missing since probe-specs (see F-1), and a P-C2 row worth having. Your note that exit-status semantics are otherwise fail-closed — 128+n on signal, nonzero on bwrap start failure — is right and is why the timeout was the only missing leg."
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected: the artifact agrees with itself on its central mechanism. Observed: four stages in four places, five in three others, with matrix.tsv's expected-stage column keyed to the difference"
 detail = """
@@ -191,10 +213,12 @@ Five: § 9.1's directory tree annotates control/pipeline.sh as "the five stages"
 A reviewer cannot tell whether provisioning is a stage, whether the fifth is something the internal pass removed and the tree comment did not follow, or whether the four-row table is incomplete. Since § 5.1 also says "The runner records the FIRST REFUSING STAGE" and § 9 requires "stage emission is asserted, not inferred from exit codes", the stage set is not decorative - it is the vocabulary the results table is written in, and matrix.tsv has an expected-stage column keyed to it.
 
 PENANCE: pick the number, fix § 9.1's tree comment and § 10.2, and enumerate the stage tokens explicitly (the literal strings emitted by "stage=<name> verdict=pass|refuse") so matrix.tsv's expected-stage column has a closed vocabulary to reference. If provisioning is in fact a fifth stage that can refuse, it needs a row in the § 5.1 table like the others."""
+disposition = "fix-now"
+response = "Upheld. Four in four places, five in three, including the design's own commit subject. Ruled FOUR: § 5.1's table is the authoritative enumeration, and provisioning is capsule-side and cannot refuse a RESULT, so it is not a stage. § 9.1's pipeline.sh comment, § 10.2, and notes.md § Forward compatibility are all corrected, and § 5.1 says explicitly that the earlier 'five' was stale rather than leaving a reader to wonder which enumeration was incomplete. Your point that the stage set is not decorative is what made this worth more than a find-and-replace: § 5.1 now also enumerates the closed refusal-token vocabulary (harvest: fsck-failed | oid-mismatch | resource-cap | bundle-invalid | bundle-absent | bundle-unsafe-path; conform: ancestry-not-descendant | ancestry-merge-commit | undeclared-path | forbidden-path | gitlink | gitmodules; verify: suite-failed | verify-timeout | sandbox-failed; advance: stale-base), with matrix.tsv carrying expected-stage AND expected-token columns that reference it and nothing else. An observed token outside the set is a rig defect, not a result."
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Expected: an unambiguous cardinality for a taxonomy clients declare against. Observed: five trigger classes enumerated as six named items, in design D3, design 5.5, and ASM-007"
 detail = """
@@ -207,6 +231,8 @@ The source is not wrong: CPT-001 numbers them 1, 2, 3, 3g, 4, 5, with 3g (git-le
 Trivial to fix and worth fixing precisely because DEC-099 makes clients declare against this taxonomy and ASM-007 makes its exhaustiveness a falsifiable claim - "is there a sixth?" should not be answerable "yes, it is in the list" for the wrong reason.
 
 PENANCE: restate the flat lists as "five classes (one with a git-level sub-class)" or enumerate with CPT-001's numbering inline, in design.md D3, design.md § 5.5, and the ASM-007 body."""
+disposition = "fix-now"
+response = "Upheld. CPT-001 numbers them 1, 2, 3, 3g, 4, 5 — five numbered classes over six rows, with 3g a sub-class of 3 — and the flattened prose restatement lost the nesting while keeping the count, which is why § 5.2's 'classes 3g/4' and 'class-2/3' had nothing to parse against. Restated with the nesting intact in all three places you named: design D3, design § 5.5's ASM-007 paragraph, and ASM-007's own body. Worth fixing for exactly the reason you gave — DEC-099 makes clients declare against this taxonomy and ASM-007 makes its exhaustiveness falsifiable, so 'is there a sixth?' must not be answerable 'yes, it is in the list' for the wrong reason."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

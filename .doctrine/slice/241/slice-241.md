@@ -47,9 +47,15 @@ contains migrates into dispatch machinery.
   inseparable from the staging the capsule model removes (F5). Disposition: the
   rig reports the coupling rather than minting a synthetic `Verified` row —
   forging that row would hand-roll exactly what DQ-1 protects. The matrix splits
-  instead (D8): H10/H16 run a scaffolded sub-probe against the real candidate
-  layer; the other fourteen rows run the four-stage pipeline. No `/consult` was
-  needed; the operator ruled on the split directly.
+  instead (D8): every row runs the four-stage pipeline, and H10/H16 *additionally*
+  run a scaffolded sub-probe against the real candidate layer — their pipeline leg
+  proves the capsule model refuses a stale second result (stage-4 CAS), their
+  sub-probe leg is an incumbent regression check that counts toward nothing
+  (RV-323 F-9; design § 5.6). No `/consult` was needed; the operator ruled on the
+  split directly.
+- **R7 (new, RV-323 F-9) — conflict/staleness *resolution* is out of evidence.**
+  The spike proves refusal, not admission. QUE-202 owns the gap and outlives this
+  slice; the go/no-go must say so rather than reading 16/16.
 - **R2:** the conform stage's reliance on `slice conformance --against …
   --strict`. Its `--strict` semantics may differ from the import belt's in some
   edge case; the rig skeleton probes this first. A genuine gap is a `/consult`,
