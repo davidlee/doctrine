@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbce4-c503-7f92-94c3-c0c33da7b977"
+recorded_at = "2026-08-01T10:35:37.091282985Z"
+kind = "friction"
+summary = "/feedback: review show --json nests findings at review.finding, not findings — two wasted probes"
+detail = "'doctrine review show RV-325 --json' returns {body, kind, review}, and the findings array is at review.finding (singular, the TOML array-of-tables name leaking through) rather than a top-level 'findings'. Two failed python probes before the shape was discovered by printing keys at each level. Minor per occurrence, but it is paid by every agent that scripts against a ledger, and the singular key reads as a single object rather than a list. Same class as the plan.toml column-alignment gotcha the RV brief has to warn readers about."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
