@@ -61,7 +61,7 @@ PIPELINE_DOORBELL_INTERVAL="${PIPELINE_DOORBELL_INTERVAL:-1}"
 # stops being looked at.
 RIG_TOKENS_HARVEST='fsck-failed oid-mismatch resource-cap bundle-invalid bundle-absent bundle-unsafe-path'
 RIG_TOKENS_CONFORM='ancestry-not-descendant ancestry-merge-commit undeclared-path forbidden-path gitlink gitmodules'
-RIG_TOKENS_VERIFY='suite-failed verify-timeout sandbox-failed'
+RIG_TOKENS_VERIFY='suite-failed verify-timeout sandbox-failed resource-cap'
 RIG_TOKENS_ADVANCE='stale-base cas-lost'
 
 token_legal() {
@@ -439,10 +439,22 @@ verify_stage() {
 
   # The status → token mapping (I5, D-P02-4). PHASE-02 emits distinguishable
   # STATUSES and no tokens; this is the single place they become tokens.
+  #
+  # `*)` MEANS ONE THING: the verify command's own nonzero exit. Every status
+  # the SANDBOX injects is named above it, and that is not decoration — an
+  # unnamed injected status falls through and reports "the project's tests
+  # failed" about a run whose tests never finished. Four independent causes
+  # stacked behind this one token and it took three measurement rounds to see
+  # past the first (F-P05-15).
   case "${status}" in
     0) return 0 ;;
     "${RIG_EXIT_TIMEOUT}") printf 'verify-timeout' ;;
     "${RIG_EXIT_SANDBOX}") printf 'sandbox-failed' ;;
+    # The VERIFY capsule's disk bound, folded trusted-side exactly as the WORKER
+    # capsule's already is (`harvest_stage`, :256). Same bound, same authority,
+    # both kinds — which is what EX-2 claims, and the claim was half-true until
+    # this arm existed.
+    "${RIG_EXIT_DISK}") printf 'resource-cap' ;;
     *) printf 'suite-failed' ;;
   esac
   return 1

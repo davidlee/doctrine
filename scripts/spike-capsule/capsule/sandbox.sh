@@ -170,6 +170,19 @@ mounts=(
   # as `execvp: No such file or directory`, naming the SCRIPT while the file
   # that is actually missing is the interpreter (F-P02-2).
   --ro-bind /usr/bin/env /usr/bin/env
+  # The same class one level down, found by RUNNING the project's own suite
+  # rather than the rig's (F-P05-17). `install_coord_hook` and friends write
+  # `#!/bin/sh` git hooks; without this bind git cannot exec them and three
+  # tests go RED for a reason that is the SANDBOX'S, not the capsule's.
+  #
+  # The single FILE, never `/bin`. On NixOS the two are the same thing — `/bin`
+  # holds `sh` and nothing else — so the difference is invisible here and only
+  # appears on a host where `/bin` is a few hundred binaries. Binding the
+  # directory is a posture that silently widens off-NixOS; binding the
+  # interpreter is portable by construction. This list is the register of
+  # shebang dependencies found so far, and it is expected to grow one entry at
+  # a time, each with the run that found it.
+  --ro-bind /bin/sh /bin/sh
   --bind "${capsule}" "${SANDBOX_CAPSULE}"
   --ro-bind "${runners}" "${SANDBOX_RIG}"
   --chdir "${SANDBOX_CAPSULE}"

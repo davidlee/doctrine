@@ -235,7 +235,7 @@ the **first refusing stage**. `matrix.tsv`'s `expected-stage` and
 |---|---|
 | `harvest` | `fsck-failed` · `oid-mismatch` · `resource-cap` · `bundle-invalid` · `bundle-absent` · `bundle-unsafe-path` |
 | `conform` | `ancestry-not-descendant` · `ancestry-merge-commit` · `undeclared-path` · `forbidden-path` · `gitlink` · `gitmodules` |
-| `verify` | `suite-failed` · `verify-timeout` · `sandbox-failed` |
+| `verify` | `suite-failed` · `verify-timeout` · `sandbox-failed` · `resource-cap` |
 | `advance` | `stale-base` (precondition; nothing transferred) · `cas-lost` (race; objects orphaned) |
 
 A row whose observed token is outside this set is a rig defect, not a result.
@@ -246,6 +246,23 @@ papered over. The two `advance` tokens are distinguished because
 unchanged-canonical assertion, `cas-lost` the refs-only one (I1, F-14).
 Collapsing them would weaken the assertion on H10/H16, the rows where it does
 the most work; that, not the race itself, is what earns the second token.
+
+**`verify/resource-cap` is the disk bound on the OTHER capsule kind** (OQ-a,
+resolved). `harvest/resource-cap` already folds the WORKER capsule's overrun
+trusted-side; the verify capsule's had no arm and fell through to
+`suite-failed`, reporting *the project's tests failed* about a run whose tests
+never finished. Both kinds carry the same bound with the same authority, which
+is what EX-2 asserts — the assertion was half-true while only one of them could
+say so. Correspondingly, **`suite-failed` means exactly one thing: the verify
+command's own nonzero exit.** Every status the sandbox injects is named
+alongside it, never under it.
+
+One residue is recorded rather than closed: the rig's reserved statuses
+(`2 3 4 5 6`) share a channel with the verify command's own exit code, so a
+suite exiting `4` is indistinguishable from the disk bound. Not live in
+practice — `cargo` exits `101` and `node` exits `1` — and separating them means
+an out-of-band status channel, which is a larger change than this vocabulary.
+Named here so it stays looked at (F-P05-15).
 
 Absent by construction, relative to the current model: coordination-branch
 staging, `prepare-review` projection, journal rows, the fork-binding gate, and
