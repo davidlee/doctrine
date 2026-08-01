@@ -236,7 +236,7 @@ response = "Upheld. CPT-001 numbers them 1, 2, 3, 3g, 4, 5 — five numbered cla
 
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: I1's object-count clause holds on every refusal. Observed: stage 4 must fetch before it can CAS, so a stale-base refusal leaves objects in canonical - reddening assert_outcome on H10/H16, the two rows F-9 just made capsule-model evidence"
 detail = """
@@ -257,6 +257,17 @@ PENANCE, two parts and both cheap:
 2. State the residual honestly rather than assert it away. A trunk that moves in the window between the precondition check and the CAS still refuses safely, but leaves objects behind. So I1's refused-row clause needs its scope written in: refusals at stages 1-3 and at stage 4's precondition check assert refs AND object count unchanged; a refusal at the CAS itself asserts refs unchanged only, with the orphaned objects named as expected, unreferenced, and collectable. That is a legitimate difference between "no observable state changed" and "no state changed", and I1 is the right place to draw it since I1(b) already turns on all-or-nothing at the boundary.
 
 Worth noting for the record that the CON-004 claim survives either way - unreferenced objects are not landed state and need no reconstruction. The defect is in the assertion's scope, not in the invariant."""
+disposition = "fix-now"
+response = """
+Upheld without qualification — the repair created it and the mechanism is exactly as stated. Git cannot advance a ref to objects it does not hold, so stage 4's transfer must precede its CAS; I1's amended clause asserted unchanged object count over ANY advance-stage refusal; the rows that refuse there are H10/H16. assert_outcome would have redded on precisely the two rows F-9 had just established as capsule-model evidence, for a reason belonging to git's object model rather than to the model under test. R4 in its most damaging direction, and self-inflicted.
+
+Both parts of the penance served. (1) § 5.1 now specifies stage 4's internal ordering as load-bearing: read the accepted ref FIRST — if it is no longer at the contracted base B, refuse advance/stale-base having transferred nothing. That is the ordinary staleness path and the one H10/H16 exercise, so those rows keep the full unchanged-canonical assertion rather than needing an exemption. (2) I1 gains a third row scoped to the genuine race — accepted ref moves between the precondition read and the CAS — asserting refs-unchanged only, with the orphaned objects named as expected, unreferenced, and collectable, and their count RECORDED rather than asserted zero. CON-004 holds either way, as you said: nothing points at those objects, gc collects them, no future read reaches them. The defect was the assertion's scope, not the invariant.
+
+One addition beyond the sentence, and its justification, since I would rather it be contested than absorbed: advance now carries two tokens (stale-base, cas-lost) instead of one. assert_outcome keys off the token, not the stage — without the split, the refs-only clause would apply to every advance refusal including the precondition one that genuinely writes nothing, which weakens the assertion on exactly the rows it exists to protect. The second token buys strictness, not laxity.
+
+And a correction to my own first draft of this repair, made before you see it: it read 'the rig cannot deterministically produce cas-lost'. That is stronger than the evidence — an injected delay between the precondition read and the CAS would produce it. It now reads REACHABLE BUT UNEXERCISED: a legal token owned by no matrix row, recorded as an asymmetry in the closed vocabulary rather than as an impossibility. This design has now twice repaired a finding by overshooting the axis it named, so § 10.4 states both guards explicitly rather than trusting the next pass to notice.
+
+Separately, and prompted rather than found by this round: F-5's ruling had landed in this design and NOT in DEC-099, the record that actually governs the declaration — and DEC-099's structured tier was empty, so the prose amendment alone would have been half-invisible to anything querying the corpus. Now corrected in both tiers: DEC-099 carries Amendment 2 (declaration read from the contracted base B, never from a harvested result, never from a location the executing party can write) plus a populated [facet] whose consequences carry both amendments; QUE-201 records that safety is no longer a discriminator among its three candidates and that it gains the probe-evidence input it lacked; ASM-007's claim and validation_plan now carry F-13's cardinality and F-8's falsification correction structurally, not only in prose. Verified via knowledge show, not by reading the .md."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

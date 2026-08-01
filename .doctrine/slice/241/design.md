@@ -185,7 +185,7 @@ refuse a *result*, so it is not a stage.
 | 1 | `harvest` | M-A fetch / M-B bundle → **quarantine repo**, fsck, resource caps, **pin OID** | capsule → quarantine | plumbing |
 | 2 | `conform` | ancestry + declared scope + forbidden paths + tree mode | quarantine objects | `slice conformance` (**existing verb**) + plumbing |
 | 3 | `verify` | verify capsule at the pinned OID; verdict is the sandbox's exit status | quarantine → verify capsule | rig |
-| 4 | `advance` | fetch the pinned OID into canonical, then **one** CAS ref move — or refuse | quarantine → canonical | plumbing |
+| 4 | `advance` | **check the CAS precondition**, then fetch the pinned OID into canonical, then **one** CAS ref move — or refuse | quarantine → canonical | plumbing |
 
 **Stage 4 is the first and only touch of the canonical repository** (F-3). Stages
 1–3 run entirely against a per-run quarantine repo that is `rm -rf`'d after every
@@ -193,6 +193,37 @@ row, so a refused row leaves the canonical object database unchanged in size —
 which is the observable DQ-3 wants and I1 asserts. "One mutation" means one
 *canonical ref* mutation; the object write that precedes it in stage 4 is
 gated behind every refusal and is not observable state.
+
+**Stage 4's internal ordering is load-bearing** (F-14). Git cannot advance a ref
+to objects it does not hold, so the transfer must precede the CAS — which means a
+CAS-stage refusal leaves those objects in canonical, and an object-count
+assertion taken over *any* advance-stage refusal would red on exactly the rows
+that refuse there (H10/H16), for a reason belonging to git's object model rather
+than to the model under test. So stage 4 reads the accepted ref **before**
+transferring anything:
+
+1. **Precondition** — is the accepted ref still at the contracted base `B`? If
+   not, refuse `advance/stale-base` **having transferred nothing**. This is the
+   ordinary staleness path and the one H10/H16 exercise; it writes zero objects.
+2. **Transfer** — fetch the pinned OID from quarantine into canonical.
+3. **CAS** — advance the accepted ref, expecting old value `B`. Losing this is a
+   genuine race (the ref moved between step 1 and step 3) and refuses
+   `advance/cas-lost`, leaving **unreferenced** objects in canonical.
+
+The residual is real but narrow, and it is not a CON-004 violation: unreferenced
+objects are not landed state — nothing points at them, `git gc` collects them,
+and no future read can reach them. I1 is scoped accordingly rather than
+weakened globally.
+
+**No matrix row expects `cas-lost`, and it is not unreachable either.** The
+scripted rows move the accepted ref *before* harvest, so they land on the
+precondition and emit `stale-base`. Producing `cas-lost` means racing the ref
+between step 1 and step 3 — achievable with an injected delay, but a probe of
+the rig's own scheduling rather than of a hostile capsule, which is not what
+P-C3 is for. So it is recorded as **reachable but unexercised**: a legal token
+with no owning row. That is a weaker and more accurate claim than "the rig
+cannot produce it", and the distinction is the point — an unexercised path
+stated as impossible is how a gap stops being looked at.
 
 #### Stage and refusal-token vocabulary (closed)
 
@@ -205,9 +236,16 @@ the **first refusing stage**. `matrix.tsv`'s `expected-stage` and
 | `harvest` | `fsck-failed` · `oid-mismatch` · `resource-cap` · `bundle-invalid` · `bundle-absent` · `bundle-unsafe-path` |
 | `conform` | `ancestry-not-descendant` · `ancestry-merge-commit` · `undeclared-path` · `forbidden-path` · `gitlink` · `gitmodules` |
 | `verify` | `suite-failed` · `verify-timeout` · `sandbox-failed` |
-| `advance` | `stale-base` |
+| `advance` | `stale-base` (precondition; nothing transferred) · `cas-lost` (race; objects orphaned) |
 
 A row whose observed token is outside this set is a rig defect, not a result.
+The set is closed but not fully exercised: **`cas-lost` is legal and owned by no
+row** (§ 5.1 stage-4 ordering), and that asymmetry is recorded rather than
+papered over. The two `advance` tokens are distinguished because
+`assert_outcome` keys off them — `stale-base` carries the full
+unchanged-canonical assertion, `cas-lost` the refs-only one (I1, F-14).
+Collapsing them would weaken the assertion on H10/H16, the rows where it does
+the most work; that, not the race itself, is what earns the second token.
 
 Absent by construction, relative to the current model: coordination-branch
 staging, `prepare-review` projection, journal rows, the fork-binding gate, and
@@ -533,12 +571,21 @@ outcome", which is wrong, since a passing row must advance the ref:
 
 | outcome | asserted |
 |---|---|
-| refused at any stage | the **canonical repository** is byte-identical to its pre-run state — same refs, and **the same object count** (F-3, and the observable H7 needs); the per-run quarantine repo is disposable and outside the assertion |
+| refused at `harvest`, `conform`, `verify`, or `advance/stale-base` | the **canonical repository** is byte-identical to its pre-run state — same refs, and **the same object count** (F-3, and the observable H7 needs); the per-run quarantine repo is disposable and outside the assertion |
+| refused at `advance/cas-lost` | canonical **refs** unchanged. Objects transferred in step 2 of stage 4 are **expected**, unreferenced, and collectable; the rig records their count rather than asserting it is zero (F-14) |
 | passed | **exactly one** canonical ref changed (the accepted ref, to the pinned OID) and nothing else |
 
 The object-count clause is what makes the assertion falsifiable rather than
 decorative: it is precisely the thing a quarantine *namespace inside canonical*
 would have broken, on every refused row.
+
+The `cas-lost` carve-out is a **scope correction, not a weakening** (F-14). It
+applies only to the race in which the accepted ref moves between stage 4's
+precondition read and its CAS — not to the ordinary staleness path, which
+refuses before transferring anything and keeps the full assertion. Every row the
+rig can deterministically produce, including H10/H16, sits on the strict clause.
+CON-004 is untouched either way: unreferenced objects are not landed state, and
+recording the orphan count keeps the residual observable rather than invisible.
 
 **I2 — idempotency is content-addressed.** RT-6 requires idempotent harvest and
 keys it on the journal. With no journal there is nothing to key on except the
@@ -632,13 +679,13 @@ not. `matrix.tsv` carries this column; the design is its source.
 | H7 | oversized blob, pathological deep tree | fsck/limits at ingestion | `harvest` / `resource-cap` — **new mechanism** (disk cap + wall-clock timeout, F-11); the quarantine repo bounds the blast radius and I1's object-count clause is the observable (F-3) | had **no mechanism** before |
 | H8 | gitlink/submodule insertion | admission policy (existing born-frame submodule rejection) | `conform` / `gitlink`, `gitmodules` — **new mode-aware leg** (F-2). The inherited kill was **unreachable**: `reject_submodules` (`src/git.rs:2432`) is index-scoped | was a **real hole** |
 | H9 | in-tree symlink out of tree; `.gitattributes` filter names | inert at ingest; verify-capsule checkout confined | **two-part**: inert at ingest is dissolved by construction (no tree materialised trusted-side, I4); the containment claim scores at `verify` | re-derived |
-| H10 | conflicting pair from one base | `candidate create` Conflicted / supersede | **both**: `advance` / `stale-base` on the pipeline (safety — capsule-model evidence); supersede guidance on the sub-probe (incumbent regression) | split (§ 5.1) |
+| H10 | conflicting pair from one base | `candidate create` Conflicted / supersede | **both**: `advance` / `stale-base` on the pipeline — the *precondition* leg, so nothing is transferred and the strict `assert_outcome` clause applies (F-14); supersede guidance on the sub-probe (incumbent regression) | split (§ 5.1) |
 | H11 | hostile `build.rs`/test writing outside workspace | verify capsule containment | `verify` — the sandbox profile | unchanged |
 | H12 | `.envrc`/`flake.nix` modified vs base | never evaluated trusted-side (DQ-4) | **dissolved by construction** — an audit row, not a pipeline row: `audit-dq4` proves no trusted-side eval step exists. Needs its per-instantiation positive control or an explicit `n/a` on light (F-7) | re-derived |
 | H13 | symlinked `result.toml` / traversal path field / oversized artifact (RT-4) | artifact ingestion hygiene | **re-homed onto M-B's bundle file** (F-6): `harvest` / `bundle-unsafe-path`, `bundle-absent`, `bundle-invalid`, `resource-cap`. On **M-A the row is `n/a` — dissolved**, there being no trusted-side-read artifact at all. That asymmetry is itself a QUE-200 verdict input | had **no subject** before |
 | H14 | duplicate / lost / spoofed doorbell | idempotent harvest; poll fallback; no authority | `harvest` — all three legs now have a mechanism: content-addressed idempotency (I2), polling with a deadline, and a doorbell that carries no authority (§ 5.4) | two of three legs had **no mechanism** |
 | H15 | capsule killed mid-phase; parent crash mid-harvest | journal replay | **dissolved and replaced** — there is no journal. The re-derived boundary is stronger: *stages 1–3 are idempotent and touch nothing canonical, and stage 4 is a single atomic CAS.* A crash before stage 4 leaves the canonical repo byte-identical and re-runs from the same pinned OID; a crash after it has landed. Killed at each stage in turn | re-derived |
-| H16 | trunk moved before admission | existing integrate CAS | **both**: `advance` / `stale-base` on the pipeline (capsule-model evidence); the incumbent's supersede guidance on the sub-probe (regression) | split (§ 5.1) |
+| H16 | trunk moved before admission | existing integrate CAS | **both**: `advance` / `stale-base` on the pipeline — precondition leg, strict clause (F-14); the incumbent's supersede guidance on the sub-probe (regression) | split (§ 5.1) |
 
 **What this changes.** Two rows (H7, H8) were unenforceable and are now enforced
 by new legs. One (H13) was homeless and now names the one artifact that survives.
@@ -810,7 +857,9 @@ The evidence is the deliverable, but the rig itself must not lie:
   inferred from exit codes.
 - **`assert_outcome` on every row** — outcome-conditional per I1: refused ⇒
   canonical refs *and object count* unchanged; passed ⇒ exactly one canonical ref
-  changed. Today only H5 asserts byte-identity; here it is universal.
+  changed. Today only H5 asserts byte-identity; here it is universal. Keyed off
+  the refusal *token*, not the stage, so `advance/cas-lost`'s refs-only clause
+  cannot silently absorb `advance/stale-base` (F-14).
 - **Per-cell positive controls** (F-7) — `Hnn.planted?` before every pipeline
   run; `n/a` is a legal recorded outcome, a silent pass is not. Same discipline
   as the audits, applied where the portability claim is actually made.
@@ -966,7 +1015,8 @@ hardening, `import_plan`'s `quotePath`/`--no-renames` comment — and all held.
 | F-10 | major | no source for the measurement table's before column; one metric named a deleted stage; tokens n=1 | § 9 measurement table |
 | F-11 | major | the runner's mount posture was unstated — a `cp` undoes RT-1; nothing bounded time or disk | I4a; § 5.4 resource bounds |
 | F-12 | minor | four stages in four places, five in three others | § 5.1, with a closed token vocabulary |
-| F-13 | nit | "five classes" over six named items, in three places | D3, § 5.5, ASM-007's body |
+| F-13 | nit | "five classes" over six named items, in three places | D3, § 5.5, ASM-007 (both tiers) |
+| F-14 | major | the F-3 repair's own edge — stage 4 must transfer before it can CAS, so I1's object-count clause redded on H10/H16 | § 5.1 stage-4 ordering, I1's `cas-lost` clause; see § 10.4 |
 
 Two precision notes recorded against the ledger rather than silently absorbed:
 H14's doorbell *is* sketched in `probe-specs.md` P-C1 step 5 (F-1 called it
@@ -974,6 +1024,42 @@ wholly unspecified), and F-5's substitution attack is not live in the rig as
 drawn, since the heavy fixture's declaration sits outside the clone — which is
 why the remediation adds a fixture variant that manufactures the exposure rather
 than merely asserting the invariant. Neither changes the penance.
+
+### 10.4 RV-323 round 2 — F-14, arising from the remediation
+
+The F-3 repair created its own edge and the raiser caught it. Git cannot advance
+a ref to objects it does not hold, so stage 4's transfer must precede its CAS —
+which means I1's amended object-count clause, asserted over *any* advance-stage
+refusal, would have redded on H10/H16: the two rows F-9 had just established as
+capsule-model evidence, for a reason belonging to git's object model rather than
+to the model under test. R4 again, in its most damaging direction.
+
+Disposed `fix-now`: stage 4 reads the accepted ref **before** transferring
+anything (§ 5.1), so the ordinary staleness path writes zero objects and keeps
+the strict assertion; only a genuine race between the precondition read and the
+CAS orphans objects, and I1 scopes *that* case to refs-only with the orphan count
+recorded rather than asserted. CON-004 is untouched — unreferenced objects are
+not landed state.
+
+**Two guards against repairing in the other direction**, since this design has
+now twice fixed a finding by overshooting it. First, the second refusal token
+(`cas-lost`) earns its place mechanically — `assert_outcome` keys off the token,
+so without it the refs-only clause would silently absorb the ordinary staleness
+path and *weaken* the assertion on the very rows it protects. Second, the draft
+of this repair claimed the rig "cannot deterministically produce `cas-lost`";
+that is stronger than the evidence, since an injected delay would produce it. It
+now reads **reachable but unexercised** — a legal token owned by no row, recorded
+as an asymmetry rather than as an impossibility. An unexercised path stated as
+impossible is how a gap stops being looked at.
+
+**Governing records, not only arguing ones.** F-5's ruling had landed in this
+design and not in DEC-099, the record that governs the declaration — and DEC-099's
+structured tier was empty, so even the prose amendment was half-invisible to
+anything that queries. Corrected in both tiers: DEC-099 gains Amendment 2 and a
+populated `[facet]` carrying both amendments as consequences; QUE-201 records
+that safety is no longer a discriminator between its candidates and that it gains
+a probe-evidence input; ASM-007's `claim` and `validation_plan` now carry F-13's
+cardinality and F-8's correction structurally, not just in prose.
 
 The re-derivation also **improved on the sentencing** in one place: F-9 asked for
 H10/H16 to be carved *out* of coverage, and walking them against the four-stage

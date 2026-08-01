@@ -11,8 +11,8 @@ updated = "2026-08-01"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
+question    = "In shipped doctrine, where does a client project's interpretation-surface declaration live — a doctrine.toml block, a dedicated default-deny manifest, or a field on the work contract?"
+why_matters = "Ergonomics only, since DEC-099 Amendment 2 (RV-323 F-5) rules the declaration is read from the contracted base B. Before that ruling two of the three candidates lived inside the tree a capsule clones, so the choice of home would have silently decided a security property."
 answer      = ""
 answered_by = ""
 answered_on = ""

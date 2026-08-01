@@ -11,10 +11,10 @@ updated = "2026-08-01"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-claim           = ""
-confidence      = ""            # low | medium | high
-basis           = ""            # observation | prior-art | design-inference | external-source | operator-judgement
-validation_plan = ""
+claim           = "CPT-001's trigger classes are exhaustive: every way untrusted content acquires agency on the trusted side falls into one of five numbered classes, one of which (3 toolchain auto-load) has a git-level sub-class 3g. Six rows, five classes."
+confidence      = "low"
+basis           = "design-inference"
+validation_plan = "An independently-derived enumeration of a second ecosystem's interpretation triggers, classified against the taxonomy; the residue is the falsifier (SL-241 design 5.4 step 0). NOT the light fixture's hostile rows — instantiating a row exercises an already-classified class and cannot find an unclassified one (RV-323 F-8). Empty residue over two ecosystems STRENGTHENS; it never discharges."
 validated_by    = ""
 validated_on    = ""
 invalidated_by  = ""

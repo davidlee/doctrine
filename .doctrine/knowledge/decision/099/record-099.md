@@ -51,6 +51,28 @@ honestly, or a reader will assume a `interpret:` entry is load-bearing for
 safety when it is load-bearing only for test coverage. The ownership decision
 above is unchanged; only the enforcement claim narrows.
 
+## Amendment 2 (SL-241 external inquisition, RV-323 finding F-5)
+
+**Fail-closed on absence does not defend against substitution**, and the
+original wording made absence do all the work. The declaration is a
+trust-bearing input, so its *read side* is part of this decision and was
+missing:
+
+> The interpretation-surface declaration is read from the **contracted base
+> `B`** — content the control plane itself pinned — never from a harvested
+> result `S`, and never from any location the executing party can write.
+
+Without it, a worker that edits the declaration in its own clone can narrow
+`exec:` so the DQ-4 audit passes vacuously, or replace `verify:` so the attested
+run in the verify capsule attests nothing — escalating its own contract. That is
+what the executing *process* can do, not merely what it can say, so it sits
+inside the threat model this decision is subject to (CON-005), not outside it.
+
+This amendment is stated **here**, in the record that governs the declaration,
+and not only in the slice design that discovered it: the ruling binds every
+future consumer of DEC-099, including the shipped form chosen by
+[[interpretation-surface-declaration-home]].
+
 ## Status of the shipped form
 
 Where the declaration lives — a `doctrine.toml` block, a dedicated manifest, or
@@ -58,6 +80,11 @@ a field on the work contract — is **not decided here**; see
 [[interpretation-surface-declaration-home]]. SL-241 implements it as a
 rig-local per-fixture file. The shipped form is post-spike REV work, fenced out
 by the slice's non-goals.
+
+Amendment 2 makes that question *safe to defer*. Two of its three candidates
+live inside the repository a capsule clones, so without the read-from-`B`
+invariant the choice of home would silently decide a security property; with it,
+all three are sound and the choice turns on ergonomics as intended.
 
 ## Related
 

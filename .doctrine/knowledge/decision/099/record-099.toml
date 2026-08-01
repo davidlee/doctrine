@@ -11,13 +11,19 @@ updated = "2026-08-01"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = ""
-choice       = ""
-alternatives = []
-rationale    = ""
-consequences = []
+context      = "The trusted control plane must refuse to interpret capsule-authored content (CPT-001). Doctrine cannot know a client's language-bound triggers; the client cannot be trusted to own the git-level ones."
+choice       = "Doctrine owns the CPT-001 taxonomy and enforces the universal classes (3g git-level auto-load, 4 path-shaped data, 5 resource shape). The client declares its instances of the language-bound classes (1 explicit execution, 2 build-system evaluation, 3 toolchain auto-load). Absence of a declaration is refused, never defaulted."
+alternatives = [
+  "Ship a doctrine-authored default trigger list — rejected: coupled to whichever project authored it, and passes SILENTLY for a project whose triggers it does not know (POL-002's invisible-until-the-second-client failure).",
+]
+rationale    = "POL-002: what the product enforces must rest on contracts doctrine owns. Classes 3g/4/5 are git-level and language-independent; classes 1-3 are not knowable from doctrine's side. Strict-and-owned beats lenient-and-coupled."
+consequences = [
+  "Amendment 1 (SL-241 internal pass, A5): the declaration ENFORCES class 1 only. Classes 2 and 3 are prevented STRUCTURALLY — the trusted side never materialises a harvested tree. So `interpret:` drives probe instantiation, not enforcement. Structure beats declaration; but the split must be stated or a reader assumes an `interpret:` entry is load-bearing for safety.",
+  "Amendment 2 (SL-241 external inquisition, RV-323 F-5): the declaration is read from the CONTRACTED BASE B, never from a harvested result S, and never from any location the executing party can write. Fail-closed on absence is no defence against SUBSTITUTION — a worker rewriting its own declaration can narrow `exec:` so the DQ-4 audit passes vacuously, or blank `verify:` so the verify capsule attests nothing.",
+  "Amendment 2 makes QUE-201 safe to defer: two of its three shipped-form candidates live inside the repository a capsule clones, so without the read-from-B invariant the choice of home would silently decide a security property.",
+]
 decided_by   = ""
-decided_on   = ""
+decided_on   = "2026-08-01"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
