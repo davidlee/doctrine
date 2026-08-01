@@ -52,6 +52,11 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/rows.sh
 . "${RIG_DIR}/lib/rows.sh"
+# The rows' own `H<n>_{mutate,planted,assert}`. Sourced LAST: the instantiations
+# ride `contract_field`, `RIG_RESULT_REF` and `rig_assert` from the three above.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/instantiations.sh
+. "${RIG_DIR}/lib/instantiations.sh"
 
 # P-C3 records the spec's eleven columns: the derived verdict is spliced in at
 # `outcome` (10), and the field the recorder refuses to finish without is
