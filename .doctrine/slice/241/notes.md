@@ -147,6 +147,17 @@ fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · bd4de
   **OK** from inside the nested bwrap with the agent home bound **read-only**.
   So the jail's `~/.claude` credential arrangement survives confinement without
   a writable home — R-1 did not bite. Scoped to Linux/bwrap.
+- **F-P02-6 — the doorbell's name was three bare literals, and nothing joined
+  them.** `common.sh` held the constant, `worker-stub.sh` its own copy (it runs
+  inside the sandbox and cannot source the library — structural, not careless),
+  and `probe-capsule.sh` a third. The probe planted its own bell and observed
+  the waiter finding it, so **it would have stayed green while the worker rang a
+  differently-named file**: both halves observed, the join between them merely
+  inferred. Fixed by passing the name in as `--setenv RIG_DOORBELL`, read
+  FAIL-CLOSED by the ringer (`:?`, never a default — a default silently restores
+  the drift), plus a live assertion that runs the real worker and waits on the
+  real bell. **Verified falsifiable**: drifting the ringer's name reds it.
+  Fourth member of the F-P02-1/2 family and a STD-001 violation besides.
 - **F-P02-5 — the shellcheck gate needs a UTF-8 locale.** `shellcheck -x -S
   style` aborts with `commitBuffer: invalid argument (cannot encode character
   '\8212')` on any file containing an em-dash, which is every rig file. It is
@@ -163,7 +174,7 @@ fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · bd4de
 | EX-2 | `--print-mounts` compares **equal** across `--kind worker` and `--kind verify` |
 | EX-4 / VA-2 | `audit-i4a.sh --positive-control`: planted `cp` → audit **REFUSES**; removed → audit **PASSES** |
 | EX-3 / VA-4 | hung run killed at 3s (status 124) · 64 MiB write refused against an 8 MiB cap (status 4) · **both observed on both kinds** · each with a positive control |
-| EX-5 | no ring → wait ends at its deadline (never hangs) · a ring naming another capsule is accepted as a bare signal · duplicate ring is a no-op · identity echoed is the **argument**, not the file |
+| EX-5 | no ring → wait ends at its deadline (never hangs) · a ring naming another capsule is accepted as a bare signal · duplicate ring is a no-op · identity echoed is the **argument**, not the file · **live join**: the waiter hears the bell the real worker rang, with a negative control before it and a drift check proving it falsifiable |
 | EX-7 / VA-1 | two assertions, recorded separately in `probes/smoke/results.tsv`: `npm ping` pass, `claude -p` pass |
 | EX-8 | full cycle on the light fixture: provision (ro-bind toolchain, no `nix`/`direnv`) → worker commit + ring → `npm test` green in the verify capsule |
 
