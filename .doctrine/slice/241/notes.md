@@ -7,7 +7,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
-T1 and T2 done, T3's refactor done, T3's harness open** · head `3ad74d83`
+T1, T2 and T3 done; T4a (the first live cell) open** · head `1408f1ae`
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -57,8 +57,8 @@ cannot excise them. Every range's detail is in its own § PHASE-NN boundary —
 - RFC-011 friction recorded (`2da32870`); `doctrine validate` clean; `rig
   selftest` green post-change
 
-**PHASE-05 in flight (T1, T2, T3-refactor; `3123e96c..3ad74d83`).** Detail —
-decisions D-P05-1..3, findings F-P05-1..7, the cell plan and the STOP
+**PHASE-05 in flight (T1, T2, T3; `3123e96c..1408f1ae`).** Detail —
+decisions D-P05-1..4, findings F-P05-1..9, the cell plan and the STOP
 conditions — is in the **runtime sheet**,
 `.doctrine/state/slice/241/phases/phase-05.md`, which is the working document.
 Lifted here so the ids survive the sheet:
@@ -76,6 +76,21 @@ Lifted here so the ids survive the sheet:
   own check.
 - `lib/rows.sh` — the row recorder lifted out of `probe-c2.sh` (`3ad74d83`);
   `rig c2` output **byte-identical** after the lift.
+- `control/probe-c3.sh` — the matrix harness (`1408f1ae`), § 5.4's loop, reading
+  the spec through `lib/matrix.sh` (which gained `matrix_read`, the single
+  split). Carries S2's `partial`/`fail` distinction, EX-5's computed altitude
+  (`n/a` excluded, a one-fixture hold printed as a divergence finding), and
+  D-P05-2's alternations as **one leg per alternative** — one authored line, N
+  scored entries. **D-P05-4**: an unwritten row is a usage refusal naming the
+  task that provides it, never a recorded `n/a`, because `n/a` costs the row its
+  altitude; `SPIKE_C3_LEGS=pipeline` is the sayable narrowing for T4e-before-T5
+  and rides the results preamble.
+- **F-P05-8** — the scorer is falsifiable: 21 self-check assertions, and six
+  mutations each observed reddening its own check. **The LOOP is not yet
+  exercised end to end** — no cell has run, and the fixture joins
+  (`fixture_slice`/`fixture_stub`; heavy → slice 241 at
+  `scripts/spike-capsule/capsule-stub.txt`) are asserted nowhere. T4a's first
+  cell is the integration proof.
 - memory: `mem.pattern.shell.ifs-tab-read-collapses-empty-fields` (**F-P05-7**)
   — a TSV read with `IFS=$'\t'` silently merges empty columns.
 
