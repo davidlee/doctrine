@@ -19,8 +19,11 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/common.sh
 . "${RIG_DIR}/lib/common.sh"
-
-SANDBOX="${RIG_DIR}/capsule/sandbox.sh"
+# `in_sandbox`, `sandbox_status`, `absent_inside`, `reset_capsule`,
+# `probe_credential_helper` and `SANDBOX` — shared with PHASE-04's probe-c2.sh.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/sandbox-probe.sh
+. "${RIG_DIR}/lib/sandbox-probe.sh"
 
 section=${1:-all}
 case "${section}" in
@@ -35,37 +38,9 @@ esac
 # I6 — FIRST, as a STATEMENT. Never inside `$( … )` (F-P01-1).
 rig_enter
 
-[ -x "${SANDBOX}" ] || rig_die "missing runner: ${SANDBOX} (PHASE-02 T2 provides it)"
-
 capsule="${RIG_ROOT}/capsules/probe-p02"
-guard_not_real_repo "${capsule}"
-
-# The disk bound is CUMULATIVE over the capsule tree, so residue from one case
-# is a real input to the next: the first run of the bounds section reddened its
-# own positive control because the oversized case's file was still there. The
-# reset is the fix; the cumulative behaviour is correct and stays.
-reset_capsule() {
-  rm -rf -- "${capsule}"
-  mkdir -p -- "${capsule}"
-}
+sandbox_probe_bind "${capsule}"
 reset_capsule
-
-# Run a command inside the sandbox, capturing its status without tripping -e.
-# The capsule's stdout is UNTRUSTED TEXT (I5) — read here only to assert on an
-# observable the probe itself asked for, never parsed for a verdict.
-in_sandbox() {
-  local status=0
-  "${SANDBOX}" --capsule "${capsule}" "$@" || status=$?
-  return "${status}"
-}
-
-# The status itself, when an assertion needs to tell one nonzero from another —
-# a script's own refusal (1) from an exec that never happened (RIG_EXIT_SANDBOX).
-sandbox_status() {
-  local status=0
-  in_sandbox "$@" >/dev/null 2>&1 || status=$?
-  printf '%s' "${status}"
-}
 
 # ── posture: EX-1 (rw / ro / ABSENT), EX-2 (one profile), EX-4 (I4a) ─────────
 
@@ -120,67 +95,6 @@ probe_posture() {
   verify=$("${SANDBOX}" --capsule "${capsule}" --kind verify --print-mounts)
   rig_assert_eq 'EX-2: worker and verify kinds share ONE mount posture' \
     "${worker}" "${verify}"
-}
-
-# An ABSENT-not-ro assertion is only worth its green if its subject is VISIBLE
-# TO THE PROBE. `test ! -e` against a path the probe cannot see either passes
-# for the wrong reason and says nothing about the CAPSULE profile — F-P02-1's
-# shape, and it was live on two legs of this section until F-P03-2. So: prove
-# the subject reachable OUTSIDE the capsule, then assert it does not resolve
-# INSIDE. A subject that is not reachable outside is recorded `n/a` WITH ITS
-# REASON — a legal outcome; a silent green is not.
-#
-# ENVIRONMENT-CONDITIONAL, and deliberately so (PHASE-01 EX-9's discipline).
-# `~/.ssh` exists on the host but is hidden by the OUTER bubblewrap jail, so
-# in-jail this leg is `n/a` — the jail is doing the hiding, not the capsule,
-# and the leg would pass with no capsule sandbox at all. On a HOST run the
-# subject is visible and the same leg becomes load-bearing without an edit.
-# That self-adaptation is the point: the gate is reachability from where the
-# probe stands, never a hardcoded verdict about the path.
-absent_inside() {
-  local desc=$1 path=$2
-  if [ ! -e "${path}" ]; then
-    printf '  n/a   %s — subject not visible from here; the capsule is not what hides it\n' "${desc}"
-    return 0
-  fi
-  rig_assert "${desc}" in_sandbox -- test '!' -e "${path}"
-}
-
-# The credential-helper leg needs two positive controls of its own, for two
-# distinct vacuity routes (F-P03-2):
-#
-#   1. `git` might not be on the sandbox's allowlist at all, in which case the
-#      substitution comes back empty and `[ -z … ]` is true for the wrong
-#      reason. RESOLVES is not RUNS (F-P02-2), and neither is ABSENT.
-#   2. NO helper is configured on this host, so `[ -z … ]` is true UNCONFINED.
-#      Without a control the leg cannot tell "the profile hides the helper"
-#      from "there was never a helper" — it is the DQ-3 trap wearing a
-#      credential costume.
-#
-# Control 2 runs on the host against a config THIS PROBE OWNS; the operator's
-# real ~/.gitconfig is never written. It exercises the global cascade, which is
-# the route ~/.gitconfig itself takes.
-probe_credential_helper() {
-  rig_assert 'positive control: git EXECUTES inside the sandbox' \
-    in_sandbox -- git --version
-
-  local fake="${RIG_ROOT}/probes/p02-gitconfig"
-  mkdir -p -- "$(dirname -- "${fake}")"
-  rm -f -- "${fake}"
-  git config --file "${fake}" credential.helper 'store --file=/dev/null'
-  # The substitution runs under the probe's own GIT_CONFIG_GLOBAL, so it is
-  # deliberately not expanded here either.
-  # shellcheck disable=SC2016
-  rig_assert 'positive control: the check DETECTS a helper when one is present' \
-    env GIT_CONFIG_GLOBAL="${fake}" \
-    sh -c '[ -n "$(git config --get credential.helper)" ]'
-
-  # And none crosses. ~/.gitconfig is not bound, and `--clearenv` drops
-  # GIT_CONFIG_GLOBAL — neither route reaches inside. The substitution must run
-  # INSIDE, so it is deliberately not expanded here.
-  # shellcheck disable=SC2016
-  rig_assert 'ABSENT: no git credential helper on the effective cascade' \
-    in_sandbox -- sh -c '[ -z "$(git config --get credential.helper || true)" ]'
 }
 
 # A write that must FAIL — and fail for the RIGHT REASON. The subject has to
