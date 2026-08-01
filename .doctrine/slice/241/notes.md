@@ -6,11 +6,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · **PHASE-03 complete** (3/6), slice `started`
+fresh-as-of: 2026-08-01 · **PHASE-04 `in_progress`, step 0 COMPLETE** (3/6
+completed), slice `started`
 (PHASE-01 code tip 29c7acf3; PHASE-02 code range b3ad3eed3..d041f6b39, 4 commits,
 **none foreign** — recorded via `record-delta` after a post-flip fix, see
-§ PHASE-02 boundary; PHASE-03 range acc4b2b34..HEAD, **one foreign interior
-commit**, see § PHASE-03 boundary)
+§ PHASE-02 boundary; PHASE-03 range acc4b2b34..e14c22cc, **one foreign interior
+commit**, see § PHASE-03 boundary; PHASE-04 range b548f65d4..090148ef,
+**15 commits of which 8 are FOREIGN** — the most contended range in the slice,
+see § PHASE-04 boundary)
 
 ### Produced
 
@@ -40,6 +43,19 @@ commit**, see § PHASE-03 boundary)
 - `.gitignore` — raw-log entry (EX-7, OQ-1 v0)
 - `flake.nix` — shellcheck added to the jail (D-P01-4)
 - VT-1, VT-2 PASS; `doctrine validate` clean
+
+**PHASE-04 step 0 (complete; EX-1/2/3/9 + VA-1 discharged):**
+
+- `.doctrine/slice/241/step0-enumeration.md` — the falsifier. 96 npm/TypeScript
+  triggers over 11 surfaces (`beb4b665`, CPT-001 unread) + classification
+  (`61ea9f08`, append-only). **The whole point is the two-commit gap.**
+- ASM-007 → **`invalidated`**, both tiers (`e6dd2e29`)
+- minted: **ASM-008** (responsibility split, the replacement claim) · **QUE-203**
+  (downstream-interpreter classification, tracked-not-scheduled) — `9e2a7b5e`
+- fixture declaration amended to **NO CHANGE with its reason** (`090148ef`)
+- CPT-001 deliberately **NOT** amended — see D-P04-4
+- RFC-011 friction recorded (`2da32870`); `doctrine validate` clean; `rig
+  selftest` green post-change
 
 ### PHASE-01 decisions (durable)
 
@@ -400,6 +416,31 @@ distinction `assert_outcome` keys off.
 - Knock-on to check while there: § 9's *Closure* paragraph gates on "every
   measurement row filled or recorded after-side-only" plus the ASM-007 line;
   only the ASM-007 line is affected.
+
+### PHASE-04 boundary — EIGHT foreign commits, and a hostile shared tree
+
+Range `b548f65d4..090148ef` (step 0 portion). **15 commits, 7 mine, 8 foreign** —
+SL-233 ×3, SL-242 ×3, IMP-315, plus two unscoped (`chore: skills`, `doctrine`).
+The most contended range in the slice; `record-delta` at phase close, do not
+assume `start..end` is all ours.
+
+Beyond commit interleaving, the tree was **actively destructive** this phase
+(F-P04-6). Two separate incidents, both from other agents, both mid-step:
+
+1. `git reset --hard` discarded uncommitted ASM-007 edits;
+2. `git stash` / `git stash pop` wrote **conflict markers into ASM-007's `.md`**.
+
+Both recovered with nothing lost, but the operating rule changed as a result:
+**commit each coherent unit the moment it is coherent.** AGENTS.md's "do not
+stash / never discard uncommitted work" is a rule *other* agents can break on
+your behalf, and the working tree is not safe storage between two steps of your
+own task.
+
+Left alone deliberately, for their owners to resolve: `stash@{0}` (8 entries in
+`git stash list`), the conflicted `.doctrine/slice/242/slice-242.md`, and staged
+`Cargo.toml` / `Cargo.lock` / `plugins/**` / `.claude-plugin/**` sitting in the
+shared index. **A pathless `git commit` by anyone sweeps those up** — every
+commit in this phase was path-limited.
 
 ### PHASE-03 boundary — ONE foreign interior commit
 
