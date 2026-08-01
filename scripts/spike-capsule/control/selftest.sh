@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # control/selftest.sh — THE RIG'S OWN RED/GREEN (EX-11, VT-4, VA-1/2/3).
 #
-#   usage: selftest.sh [happy|attribution|falsifiable]
+#   usage: selftest.sh [happy|attribution|bundle|falsifiable]
 #   env:   SPIKE_CAPSULE_ROOT   capsule / fixture root (default: ~/capsules)
 #
 # `rig selftest` dispatches here the moment this file exists (D-P01-3), and
@@ -22,6 +22,7 @@
 #   happy         all four stages pass, both mechanisms — VA-1
 #   attribution   WHICH stage refused is ASSERTED from the emitted line, never
 #                 inferred from an exit code — VA-2
+#   bundle        EX-3's four M-B hygiene legs each OBSERVED refusing
 #   falsifiable   `assert_outcome`'s object-count clause is shown to RED on a
 #                 real wrong admission — VA-3
 set -euo pipefail
@@ -33,7 +34,7 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 
 section=${1:-all}
 case "${section}" in
-  happy | attribution | falsifiable | all) ;;
+  happy | attribution | bundle | falsifiable | all) ;;
   -h | --help)
     sed -n '2,30p' "${BASH_SOURCE[0]}"
     exit 0
@@ -204,6 +205,77 @@ selftest_attribution() {
   pipeline_teardown "${run}"
 }
 
+# ── bundle hygiene: EX-3's four legs OBSERVED refusing (RT-4/F-6) ──────────
+#
+# The bundle is the ONE capsule-authored artifact this design does not delete,
+# so it carries a trusted-side file-ingestion boundary M-A does not have — a
+# QUE-200 verdict input in its own right. Four legs are specified; a leg that
+# has never been seen to refuse is not known to work, and these are absence-
+# shaped, which is the class that passes when its subject was never reachable.
+
+# bundle_case <label> <expected-token> <mutator> — mutator receives the path.
+bundle_case() {
+  local label=$1 expect=$2 mutator=$3 run
+  pipeline_setup "${label}" "${FIXTURE}" "${DECLARATION}" 001 src/capsule-stub.ts
+  run="${PIPELINE_RUN}"
+  pipeline_capsule "${run}"
+  "${mutator}" "${run}/capsule/${RIG_BUNDLE}"
+  pipeline_run "${run}" bundle >"${run}/stages" || true
+  rig_assert_eq "${label}: harvest/${expect}" \
+    "harvest/${expect}" "$(pipeline_first_refusal "${run}/stages")"
+  assert_outcome "${run}" "harvest/${expect}"
+  record bundle hygiene pass "${expect}"
+  pipeline_teardown "${run}"
+}
+
+# A symlink at the bundle path is RT-4's first attack verbatim. The target is
+# deliberately NONEXISTENT: that is the case which proves the leg ORDER, since
+# an `-e` test would report it as merely absent and score the attack as an
+# ordinary missing file.
+bundle_symlink() {
+  rm -f -- "$1"
+  ln -s /nonexistent/target "$1"
+}
+bundle_remove() { rm -f -- "$1"; }
+bundle_truncate() { printf 'PACK' >"$1"; }
+bundle_leave() { :; }
+
+selftest_bundle() {
+  printf '\nbundle hygiene — EX-3, all four legs OBSERVED refusing (RT-4/F-6)\n'
+
+  # POSITIVE CONTROL FIRST. Four "it refused" assertions pass vacuously if the
+  # bundle path is wrong and every run refuses; an untouched bundle must be
+  # ingested for any of the refusals below to mean anything.
+  local run
+  pipeline_setup selftest-bundle-ok "${FIXTURE}" "${DECLARATION}" 001 src/capsule-stub.ts
+  run="${PIPELINE_RUN}"
+  pipeline_capsule "${run}"
+  bundle_leave "${run}/capsule/${RIG_BUNDLE}"
+  pipeline_run "${run}" bundle >"${run}/stages" || true
+  rig_assert 'positive control: an UNTOUCHED bundle is ingested' \
+    grep -qx 'stage=harvest verdict=pass token=' "${run}/stages"
+  pipeline_teardown "${run}"
+
+  bundle_case selftest-bundle-symlink bundle-unsafe-path bundle_symlink
+  bundle_case selftest-bundle-absent bundle-absent bundle_remove
+  bundle_case selftest-bundle-invalid bundle-invalid bundle_truncate
+
+  # The size cap is a THRESHOLD, not a mutation — capped below the real
+  # bundle's size so the leg bites on an honest artifact. It must refuse
+  # BEFORE `git bundle verify` reads a byte: a cap applied after the read is
+  # not a cap, and the whole point is that a hostile 2 GiB file is never
+  # streamed at all.
+  pipeline_setup selftest-bundle-cap "${FIXTURE}" "${DECLARATION}" 001 src/capsule-stub.ts
+  run="${PIPELINE_RUN}"
+  pipeline_capsule "${run}"
+  RIG_BUNDLE_CAP=64 pipeline_run "${run}" bundle >"${run}/stages" || true
+  rig_assert_eq 'size cap: an oversized bundle is harvest/resource-cap' \
+    'harvest/resource-cap' "$(pipeline_first_refusal "${run}/stages")"
+  assert_outcome "${run}" 'harvest/resource-cap'
+  record bundle hygiene pass resource-cap
+  pipeline_teardown "${run}"
+}
+
 # ── falsifiable: the object-count clause REDS on a wrong admission (VA-3) ───
 
 # Returns 0 when `assert_outcome` FAILED. The counter is reset inside a
@@ -283,10 +355,12 @@ printf 'selftest: %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${section}" >>"${R
 case "${section}" in
   happy) selftest_happy ;;
   attribution) selftest_attribution ;;
+  bundle) selftest_bundle ;;
   falsifiable) selftest_falsifiable ;;
   all)
     selftest_happy
     selftest_attribution
+    selftest_bundle
     selftest_falsifiable
     ;;
 esac
