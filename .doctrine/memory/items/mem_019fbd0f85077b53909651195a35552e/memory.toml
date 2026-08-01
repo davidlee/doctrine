@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbd0f85077b53909651195a35552e"
+memory_key = "mem.pattern.design.classify-at-authoring-not-from-behaviour"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Classification is a property of the text, not of a run — gate it at authoring"
+summary = "A taxonomy question cannot be derived from run behaviour; require the artefact to state the property at authoring time and leave the run to collect adherence"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["design", "falsifiability", "review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9a4aa591c41646aa13ec079eedebf0a0c98664c0"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5752583cf598d0957ef19507a5a97d25e694801a384bc332eeaaa0bc9810c96c"
+base_commit = "ed80a2f7a78425df9de023fb8cbb8a7b5614ab1f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
