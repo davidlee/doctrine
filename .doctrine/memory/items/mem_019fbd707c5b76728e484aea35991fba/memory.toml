@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbd707c5b76728e484aea35991fba"
+memory_key = "mem.pattern.shell.declared-command-word-split-loses-quoting"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A config-supplied command that is word-split hands its quotes to the program as literal characters"
+summary = "Expanding a command string unquoted splits on IFS with no quote processing, so quotes survive as literal bytes and the program silently does the wrong thing"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["shell", "footgun", "config", "verification", "false-negative"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "37a2163a0878ed4da1c940a1638c34523d8f9517"
+ref_name = "refs/heads/edge"
+checkout_state_id = "00b2edd2926441049b008cdb38fee882658c4f8cdf652aa12c46d709ac183c0a"
+base_commit = "22fe607dcb6b488dcbb97dcba048fa9b106f7f7e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

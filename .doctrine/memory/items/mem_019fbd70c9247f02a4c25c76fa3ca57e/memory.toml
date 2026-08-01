@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbd70c9247f02a4c25c76fa3ca57e"
+memory_key = "mem.pattern.harness.absence-assertion-needs-subject-reachable-from-the-vantage"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "An absence assertion is evidence only if its subject is reachable from where the prober stands"
+summary = '"X does not resolve inside the sandbox" proves nothing unless X resolves outside it; nested confinement makes the outer layer, not the one under test, do the hiding'
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["verification", "sandbox", "confinement", "false-negative", "positive-control"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "37a2163a0878ed4da1c940a1638c34523d8f9517"
+ref_name = "refs/heads/edge"
+checkout_state_id = "26ec03ea7be6779a7b6e3ad4a532b9a75ad66a4ce66b681dc857301205597b4c"
+base_commit = "22fe607dcb6b488dcbb97dcba048fa9b106f7f7e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
