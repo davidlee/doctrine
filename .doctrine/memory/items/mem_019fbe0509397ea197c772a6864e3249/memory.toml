@@ -1,0 +1,46 @@
+memory_uid = "mem_019fbe0509397ea197c772a6864e3249"
+memory_key = "mem.pattern.tests.mutate-the-data-not-just-delete-it"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Missing-file RED is a weak negative control for a data-driven test"
+summary = "A data-driven test that goes RED because its fixture is absent has proven only that it reads the file; mutate the data to prove the assertions discriminate."
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = ["tests/"]
+globs = []
+commands = []
+tags = ["testing", "tdd", "negative-control"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "8e962656b988dda5febdcd0293fffaa85c2bf385"
+tree = "e3562d0c54d34283fb658944edb04255a987bfed"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "8e962656b988dda5febdcd0293fffaa85c2bf385"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
