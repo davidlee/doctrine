@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd61-5716-7060-b711-ffa213db0cfa"
+recorded_at = "2026-08-01T12:51:40.950462412Z"
+kind = "friction"
+summary = "/handover packet asserted a green suite that was red — successor pays the debugging detour"
+detail = """
+SL-233 PHASE-08. The handover packet and its commit message both stated 'one RED test, and nothing else; everything else green'. In fact tests/e2e_design_review.rs was failing 7/74 at that same commit. The prior session had correctly identified that its runbook wiring changed behaviour for two suites and repaired both at their subject — but evidently verified with targeted test runs rather than one full-suite run, so a third affected suite went unnoticed and was asserted green.
+
+Cost to the successor: on first full-suite run after the (unrelated) blocker fix, 7 failures appeared in a suite the packet vouched for. Attribution is not free — the honest move was to prove pre-existence rather than assume it, which meant saving both changed files aside, reverting them to the prior commit's content, rebuilding, re-running, and restoring. That is a full build/test cycle plus the reasoning to design the check, spent entirely on establishing a fact the packet had asserted wrongly.
+
+Generalises: a handover's test-state claim is load-bearing for the successor's attribution of every subsequent failure, and it is the one claim cheapest to produce correctly (one full-suite run) and most expensive to consume when wrong. A packet that says 'green except X' should be produced by a run that could have observed a non-X failure. Worth a handover-skill beat: the green claim must come from --no-fail-fast over the whole suite, not from the targeted runs used during the work."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
