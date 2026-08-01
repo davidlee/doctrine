@@ -1,0 +1,46 @@
+memory_uid = "mem_019fbcd565f47543b62dff663fe677db"
+memory_key = "mem.pattern.doctrine.amend-knowledge-both-tiers"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Amending a knowledge record means BOTH tiers — the [facet] is usually empty"
+summary = "A ruling amended in a knowledge record's .md alone is half-invisible: the [facet] tier is what queries read, and seeded records leave it empty."
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = [".doctrine/knowledge/**"]
+globs = []
+commands = []
+tags = ["knowledge", "storage-rule", "two-tier"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "09c98b33dd11725231481fb9acce39fc4f8c93ff"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8ef7a39921428a4a1e7763ae70bba024927263b0e5d8d1a9e4c6da4274bb8cec"
+base_commit = "7fd55d0f19dfe6c22e456d4205b23c422fa93040"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-323"
+
