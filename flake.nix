@@ -73,6 +73,7 @@
 
           doctrine
 
+          shellcheck
           codex
           claude
           # pi-dev
