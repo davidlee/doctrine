@@ -59,6 +59,81 @@ fresh-as-of: 2026-08-01 · plan locked, PHASE-01 sheet expanded · 2626072e
   drift advisory reports an absent artifact, deliberately not restamped
   (rationale in plan.md § Notes)
 
+## R2 — SETTLED (PHASE-01 T7, EX-6, VA-2, VA-3)
+
+Probed 2026-08-01 by `scripts/spike-capsule/control/probe-r2.sh`, re-runnable,
+against a disposable clone of the light fixture. Nine rows, every expectation
+declared before the run and asserted; results at
+`$SPIKE_CAPSULE_ROOT/probes/r2/results.tsv`.
+
+**R2 was two questions, not one.** `worktree import` has two scope postures —
+with `--slice N` it runs the selector predicate, without it only the R-5 belt —
+and `slice conformance --against … --strict` covers the selector predicate only.
+
+### R2a — selector agreement: YES
+
+`--strict` reaches the belt's scope-leg verdict on every edge probed. This is
+not merely predicted from shared code: the belt's scope leg
+(`src/worktree/import.rs:159`) and conformance both call
+`crate::conformance::undeclared_paths`, so what could genuinely diverge is the
+**path extraction** in front of it, and the two gathers differ — the belt uses
+`diff --name-only` (`src/mcp_server/dispatch.rs:487`), conformance uses
+`diff --name-status` folded by `actual_from_range` (`src/slice.rs:2894`). The
+edges that would expose a difference do not:
+
+| edge | delta | `--strict` | reading |
+|---|---|---|---|
+| 1 | `docs/notes.md` | refuse | ordinary undeclared path |
+| 2 | `src/tax.ts` | clean | matches a `design-target` selector |
+| 3 | `src/naïve.ts` | clean | **non-ASCII extracted verbatim** — the `core.quotePath=false` hardening holds through the `--name-status` fold |
+| 4 | `src/money.ts` → `docs/money.ts` | refuse | **both legs visible** — `--no-renames` holds; the destination is the undeclared path and the source did not vanish |
+| 7 | `A..A` | clean | empty range is clean, not an error |
+| 8b | `src/audit.ts` | clean | edge 8's positive control |
+
+### R2b — separation: `--strict` does NOT cover the prefix legs
+
+**This is the load-bearing result.** `--strict` has no `.doctrine/`/`.claude/`
+predicate at all; the belt runs those legs *before* the scope leg and
+independently of it (`classify_import`, `import.rs:146-152`, and its own test
+`classify_import_doctrine_path_is_doctrine_touch_even_when_undeclared`).
+
+| edge | delta | `--strict` | belt prefix legs |
+|---|---|---|---|
+| 5 | `.doctrine/probe/payload.md` → `src/payload.md`, **both declared** | **clean** | `doctrine-touch` |
+| 6 | `.doctrine/probe/kept.md` modified, **declared** | **clean** (reported *conformant*) | `doctrine-touch` |
+
+**⇒ design § 5.2's conform LEG 3 (forbidden paths) is LOAD-BEARING. PHASE-03
+must not skip it, and must not fold it into leg 2.** A pipeline that ran only
+`--strict` would pass a `.doctrine/` touch whenever a selector happened to
+declare that path — and this slice's own selectors (`.doctrine/rfc/025/**`,
+`.doctrine/knowledge/**`) are exactly that shape.
+
+**Edges 5 and 6 had to be run against a slice that DECLARES the `.doctrine/`
+path.** Against the fixture's base slice (`src/**` only) a `.doctrine/` path is
+undeclared, so `--strict` refuses it — for the wrong reason — and R2b scores
+backwards as "`--strict` covers the prefix legs". The probe builds SL-002 with
+`.doctrine/probe/**` declared for this reason alone. This correction was found
+in the pre-execution re-check, not during the probe; the sheet's original edge
+list would have walked into it.
+
+### Edge 8 — the empty-selector asymmetry
+
+`--strict` against a slice with **no** selectors refuses (everything is
+undeclared); `classify_import` with empty selectors is a documented no-op
+(`import.rs:668`). Divergent but **benign**: empty selectors is precisely the
+belt's no-`--slice` posture, where the scope check is meant to be absent.
+
+Note the help text's "refuses a clean diff when the registry is unavailable or
+incomplete (fail-closed)" describes the *other* arm — `run_conformance`'s
+`--against` path documents that it bypasses both the registry read and the
+completeness ladder.
+
+### No `/consult`, no `src/` change
+
+STOP-1 covers a genuine `--strict`-vs-belt divergence. R2a **agrees**, and
+R2b's separation is the *predicted* answer that makes leg 3 load-bearing — a
+result, not a defect. Nothing in `src/` was touched.
+
 ## Forward compatibility
 
 - **RFC-023 (executable plan gates / adversarial TDD)** — substantial revisions
