@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbe301bb871b0a299a8fc22c56c54"
+memory_key = "mem.pattern.sandbox.git-ident-unset-dns-stall"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Unset git identity in a net-shared sandbox costs seconds per git op"
+summary = "A git repo with no committer ident inside --unshare-all --share-net stalls multi-second on hostname resolution; pin identity at clone time with -c"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = ["git clone", "git commit"]
+tags = ["git", "sandbox", "bwrap", "performance", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "a2ffaedd37632154bc49d122631682e7e6838023"
+tree = "775e8297803e9f308ad7425b80baa2bc7819dbeb"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "a2ffaedd37632154bc49d122631682e7e6838023"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

@@ -6,14 +6,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · **PHASE-04 `in_progress`, step 0 COMPLETE** (3/6
-completed), slice `started`
-(PHASE-01 code tip 29c7acf3; PHASE-02 code range b3ad3eed3..d041f6b39, 4 commits,
-**none foreign** — recorded via `record-delta` after a post-flip fix, see
-§ PHASE-02 boundary; PHASE-03 range acc4b2b34..e14c22cc, **one foreign interior
-commit**, see § PHASE-03 boundary; PHASE-04 range b548f65d4..090148ef,
-**15 commits of which 8 are FOREIGN** — the most contended range in the slice,
-see § PHASE-04 boundary)
+fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight at T0** ·
+head `8e962656`
+(code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
+foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
+b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
+090148ef..5f42727b, **2 foreign, both INTERIOR** so `record-delta --commit`
+cannot excise them. Every range's detail is in its own § PHASE-NN boundary —
+**do not read `start..end` as all ours**.)
 
 ### Produced
 
@@ -56,6 +56,32 @@ see § PHASE-04 boundary)
 - CPT-001 deliberately **NOT** amended — see D-P04-4
 - RFC-011 friction recorded (`2da32870`); `doctrine validate` clean; `rig
   selftest` green post-change
+
+**PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
+`090148ef..5f42727b`):**
+
+- `control/probe-c1a.sh` (`rig c1a`) — the cost baseline, absolutes only,
+  banner-stamped with rig state because `probes/c1a/results.tsv` is append-only
+  **across the F-P04-7 fix boundary**; earlier rows must not be quoted
+- `control/probe-c2.sh` (`rig c2`) — the confinement matrix, 7 rows, each with
+  a named observable in a COLUMN and a positive control; outcome DERIVED from
+  the assertions the row made
+- `control/audit-dq4.sh` · `control/audit-nohooks.sh` — both with re-runnable
+  `--positive-control`, both directions demonstrated
+- `lib/sandbox-probe.sh` — the in-sandbox observation helpers EXTRACTED, not
+  copied (D-P04-6); `declaration_field` moved `pipeline.sh` → `lib/common.sh`
+- `capsule/provision.sh` pins the capsule git identity **on the clone** (F-P04-7)
+- `ba9f4a8a3` — an operator ruling found UNCOMMITTED in the shared tree and
+  preserved; SL-241 authored state, not PHASE-04 code (see § PHASE-04 boundary)
+
+**PHASE-05 (in flight):**
+
+- runtime sheet expanded — T0..T9, three STOP conditions live (S1 verify-disk
+  token, S2 failed-row-is-a-consult, S3 the inherited DQ-4 condition)
+- **T0 baseline green** — `rig selftest` all assertions hold in 6.6 s (incl.
+  VA-3's falsifiable object-count leg re-observed); `audit-dq4` and
+  `audit-nohooks` clean with the DQ-4 exemption asserted not-stale. So a
+  "refused" is now distinguishable from "rig broken" and hostile rows may run
 
 **Cross-phase amendment (2026-08-02, operator ruling) — OQ-1 v0 relocated:**
 
@@ -679,6 +705,8 @@ mid-phase would convert a legible structural finding into a silent pass.
 - mem.pattern.doctrine.amend-knowledge-both-tiers
 - mem.pattern.doctrine.repair-overshoots-the-named-axis
 - mem.pattern.doctrine.path-policy-shell-hardening (raiser-side, 3afa085e)
+- mem.pattern.sandbox.git-ident-unset-dns-stall — F-P04-7 made reusable
+- mem.pattern.evidence.witness-the-exact-set-not-the-emptiness — F-P04-8 ditto
 - CPT-001 — five numbered classes, one with a git-level sub-class
 - **environment**: `nix` and `direnv` are ABSENT in the jail (`/nix/store`,
   `bwrap`, `node`, `npm`, `claude` present); `$HOME` writable, `~/capsules/`
@@ -695,7 +723,12 @@ mid-phase would convert a legible structural finding into a silent pass.
 ### Open
 
 - **OQ-a / OQ-b / OQ-c** — three closed-vocabulary gaps found in PHASE-03,
-  recorded and NOT filled (§ PHASE-03 open questions)
+  recorded and NOT filled (§ PHASE-03 open questions). OQ-a narrowed by
+  F-P04-10 to one `case` arm in `verify_stage`; still live for PHASE-05
+- **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
+  F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
+  trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see
+  that the fixture's provenance changed
 - QUE-200 — ingestion mechanism M-A vs M-B; the rig's whole point. **First
   evidence input banked**: M-B's trusted-side file-ingestion boundary is four
   observed refusal legs that M-A does not carry at all — the asymmetry is a
