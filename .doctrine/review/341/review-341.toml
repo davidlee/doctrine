@@ -12,5 +12,76 @@ responder = "orchestrator"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-233"
 
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Authoring gate applied in the sketch table but never carried into the shipped exploring.toml"
+detail = """
+RV-325 F-16 settled the classification test as an authoring gate: EVERY 2a STEP STATES ITS OWN COMPLETION CONDITION, in its text, at authoring time, and the condition must be truthful -- satisfying it DISCHARGES the obligation rather than starting it. F-17 then applied that gate over all nine 2a obligations and recorded the result in thin-adapter.md section "The gate, applied", concluding that all nine state a condition and all nine survive as 2a.
+
+The three runbooks PHASE-08 authored under that ruling carry their condition inline in the shipped step text. The pre-existing install/design-prompts/exploring.toml does not. Measured: exploring 5 steps / 0 "Complete when"; inquiring 2/2; drafting 1/1; reviewing 3/3. Four of the exploring five state an ACT rather than a completion condition -- explore.scope is "Read the slice scope, the specs and ADRs it descends from, and prior art"; explore.canon is "Run /canon ..."; explore.memory is "Run /retrieve-memory ..."; explore.triage is "Record the design surface triage in the slice notes". Only explore.research, the one step carrying a verifier, reads as a condition.
+
+Their conditions exist only in the sketch. thin-adapter.md:1160 gives explore.scope as "the slice governing specs and ADRs can be named, and prior art is located or its absence established" -- materially richer than the shipped text, and truthful in the F-16 sense, which "Read X" is not. thin-adapter.md is an internal design artefact; exploring.toml is what ships and what the agent reads.
+
+The consequence is not cosmetic. F-16 rule 3 makes adherence collection mechanical by asking whether the agent discharged at a turn where its STATED condition was not satisfied. For four of the nine, the stated condition is not in the artefact the agent was ever shown, so PHASE-09 collects adherence against a condition never delivered to its subject -- DEC-103 (instruction is delivered at the point of effect) failing on precisely the obligations the F-17 ruling went eleven rounds to protect from demotion.
+
+Repro:
+  cd /workspace/doctrine/.dispatch/SL-233
+  grep -c "Complete when" install/design-prompts/exploring.toml install/design-prompts/inquiring.toml install/design-prompts/drafting.toml install/design-prompts/reviewing.toml
+  cat install/design-prompts/exploring.toml
+Positive control -- the conditions do exist, in the sketch, so the search was not looking in an empty place:
+  grep -n -A22 "The gate, applied" .doctrine/slice/233/sketches/thin-adapter.md | grep -E "explore.(scope|canon|memory|triage)"
+  -> lines 1160-1164 each carry a stated condition.
+
+Caveat on method: a verbatim search for "Complete when" is a textual test for a semantic property and is evidence, not proof. The finding rests on reading all five step texts, which state acts. The disposition may well be that the gate binds the design set rather than the shipped asset -- that is the owner call, and criteria are the owner."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "minor"
+title = "PayloadTerm prose and digest constructors bypass the single validating admission path"
+detail = '''
+The projection-bounds sketch settles admission as structural: "Admission is enforced by construction, not per call site. Every run-local id is built through ONE validating constructor; there is no other way to make one." DesignId honours it -- DesignId::parse is the only route.
+
+PayloadTerm does not, symmetrically. token() and label() route through PayloadTerm::admit(), which enforces the DESIGN_* admission bounds and returns IdTooLong / ValueTooLong. digest() and prose() construct the struct directly and never reach admit().
+
+Today this is inert: ValueKind::Digest and ValueKind::Prose both return None from admission_bound(), so admit() would enforce nothing on them, and the provenance rule deliberately leaves a stored reason unbounded. The defect is structural rather than live. If a bound were later added to either kind, the deserialization route (TryFrom<PayloadTermWire>) goes through admit() and would enforce it, while the in-code construction path would silently bypass it -- an asymmetry between the wire and the constructor that is exactly the per-call-site enforcement class the one-constructor rule exists to close.
+
+Adjacent to ISS-290, which is the same class one level over: ChangeEvent declares (Outcome, ValueKind::Token) at change_log.rs:217 while run.rs:1442 builds it with PayloadTerm::label, and nothing checks construction against the declared shape. ISS-290 is the live instance; this is the seam that lets it happen. A repair that gives PayloadTerm a single admitting constructor would close both.
+
+Repro:
+  cd /workspace/doctrine/.dispatch/SL-233
+  grep -n "fn token\|fn label\|fn digest\|fn prose" src/design_run/change_log.rs
+  grep -A5 "fn prose\|fn digest" src/design_run/change_log.rs
+Positive control -- token() and label() DO reach admit(), so the grep is discriminating rather than blind:
+  grep -A3 "fn token\|fn label" src/design_run/change_log.rs | grep admit
+
+Raised from a cheap-tier candidate (S1 kindA-p02 C-2) and re-verified against source by the orchestrator before raising.'''
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "nit"
+title = "Sketch states a single-byte elision marker; the code ships a three-byte ellipsis"
+detail = """
+projection-bounds.md:133, in the settled "budgeted rendering" section, states: "Truncating an ENVELOPE_*-capped scalar cuts on a UTF-8 character boundary and appends a single-byte-marked elision; the cap includes the marker."
+
+The code uses U+2026 HORIZONTAL ELLIPSIS, which is three bytes in UTF-8: render/mod.rs:159 is const ELISION_MARKER: &str = "...". (the literal is the single ellipsis glyph).
+
+No invariant breaks. The cap arithmetic correctly subtracts the marker length rather than assuming 1 -- render/mod.rs:305 is clip(text, cap.saturating_sub(ELISION_MARKER.len())) -- so the rendered total still satisfies the bound, and the code is arguably the better choice since the ellipsis glyph is the standard one.
+
+This is a documentation-versus-code divergence on a stated property of a settled design, raised because Kind A asks whether the landed code honours what the review settled, and a stated byte property is the kind of thing later arithmetic could lean on. The likely disposition is a one-line sketch correction rather than a code change. Recorded so the divergence is adjudicated rather than discovered again.
+
+Repro:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n "133p" .doctrine/slice/233/sketches/projection-bounds.md
+  grep -n "ELISION_MARKER" src/design_run/render/mod.rs
+  printf "…" | wc -c    -> 3
+Positive control -- the marker length is genuinely consulted rather than hard-coded as 1:
+  sed -n "305p" src/design_run/render/mod.rs
+
+Raised from a cheap-tier candidate (S1 kindA-p02 C-1) and re-verified against source by the orchestrator before raising."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
