@@ -47,6 +47,30 @@ Faults 3 and 4 are worse than noise: they pad the list with items that need no
 action, which trains the operator to skim the list that also silently omits the
 load-bearing ones.
 
+5. **Slash-compressed id lists are invisible to any whole-token scan** — the
+   report's, and the hand-rolled `git grep -w` that replaces it. Corpus prose
+   writes runs of ids as `DEC-099/101/102/103/104` (and `DEC-083/086`,
+   `DEC-069/070/071`), where only the first element is a `DEC-NNN` token; the
+   rest are bare numbers. Found in `.doctrine/slice/241/design.md:943` and
+   `notes.md:788` **after** a `-w` sweep had reported the tree clean. Nine such
+   lists exist across the two trees. Any citation tooling — scan, rewrite, or
+   link-resolver — must match `DEC-[0-9]{3}(/[0-9]{2,3})+`, not just the token.
+
+## The larger trap this exposes, which is not reseat's fault
+
+Under a live coordination branch, **a citation's tree does not tell you which
+decision it means.** `edge` carries SL-233 items (`IMP-370`, `ISS-283`,
+`ISS-289`, two memories, an observation) that cite SL-233's `DEC-099`–`DEC-104`,
+interleaved with SL-241 items citing the *spike-capsule* records at the same
+ids. A per-tree bulk rewrite is therefore **wrong by construction**: on the
+`DEC-100`–`DEC-104` move, 25 of 70 occurrences on `edge` had to be reverted
+because they named ours, not theirs.
+
+The only safe worklist is per-occurrence and read in context. Grep gives the
+candidates; classification is a judgement call per hit. Anything that automates
+the rewrite must refuse to run while a coordination branch is live, or it will
+silently repoint half the corpus at the wrong record.
+
 ## What the operator must do instead
 
 Build the worklist from `git grep -l -w '<REF>'` over tracked files, rewrite,

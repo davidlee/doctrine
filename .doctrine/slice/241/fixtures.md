@@ -1,7 +1,7 @@
 # Fixture build sheet — SL-241
 
 The BUILD SHEET, not design. Design § 5.3 settled the design questions via
-DEC-101 and D5; this file says what to type. Concrete literals throughout — if a
+DEC-107 and D5; this file says what to type. Concrete literals throughout — if a
 row here does not tell you the path, the command, or the byte to change, it is
 not doing its job.
 

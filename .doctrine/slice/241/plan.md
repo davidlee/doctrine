@@ -194,7 +194,7 @@ authors `fixtures.md` as a build sheet naming each with its delta and its
 consuming criterion. It is a build sheet rather than a dependent slice
 deliberately: the fixtures are disposable scaffolding deleted at spike end, a
 slice would imply a lifecycle for something with no durable existence, and
-design § 5.3 already settled the design questions (DEC-101, D5). What was
+design § 5.3 already settled the design questions (DEC-107, D5). What was
 missing was concrete literals, not a decision.
 
 PHASE-01 builds only the two *base* fixtures (EX-11). The in-repo-declaration

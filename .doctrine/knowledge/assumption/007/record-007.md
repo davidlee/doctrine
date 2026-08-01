@@ -30,7 +30,7 @@ falsifier. The protocol held up and is worth reusing.
 - Full artifact: `.doctrine/slice/241/step0-enumeration.md`.
 
 Result: 84 clean fits, 6 fits with named strain, 2 out of scope, and **4 residue
-items**. The clean-fit bulk is real portability evidence for DEC-101/DEC-102 —
+items**. The clean-fit bulk is real portability evidence for DEC-107/DEC-108 —
 `binding.gyp` ≡ `build.rs`, `packageManager` ≡ `rust-toolchain.toml`, `.mise.toml`
 ≡ `.envrc` all land without stretching a class.
 

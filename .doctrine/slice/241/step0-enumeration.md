@@ -237,7 +237,7 @@ very repository's orchestrating agent reads a worker's hand-back.
 ## Clean fits — the confirmatory bulk
 
 The taxonomy is in good health across the ordinary surface, and several fits are
-*better* than expected — genuine portability evidence for DEC-101/DEC-102 rather
+*better* than expected — genuine portability evidence for DEC-107/DEC-108 rather
 than mere non-contradiction:
 
 - **class 2** — A1, A2, A3, A6, A13, A14, B4, B6, B7, C5, C7, C8, C9, D1, D6,

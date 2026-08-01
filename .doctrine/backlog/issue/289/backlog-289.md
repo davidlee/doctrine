@@ -20,6 +20,12 @@ refs returns exactly one commit —
 — which is the commit that *authored the criterion*, not one that wrote a test.
 So the name has only ever existed as a mandate in `plan.toml`.
 
+> The quoted subject is verbatim and deliberately not rewritten. **`DEC-099`
+> there means SL-233's authored-watermark decision, which was reseated to
+> `DEC-105` on 2026-08-02** to resolve an `ISS-279` id collision — `DEC-099`
+> now names an unrelated decision (*interpretation-surface ownership*). Follow
+> the SHA, not the id.
+
 Verified with a positive control, because the primary evidence is a negative
 grep: `tests/e2e_design_state.rs` is present (83 KB) and carries 61 `fn`
 definitions, so the pattern form matches in that file when a match exists.

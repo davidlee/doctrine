@@ -4,18 +4,18 @@
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
 
-Found while adjudicating SL-233 RV-324 F-2, which needed DEC-099 to supersede
+Found while adjudicating SL-233 RV-324 F-2, which needed DEC-105 to supersede
 accepted DEC-092.
 
 ## Observed
 
 ```
-$ doctrine supersede DEC-099 DEC-092
-DEC-099 supersedes DEC-092
+$ doctrine supersede DEC-105 DEC-092
+DEC-105 supersedes DEC-092
 ```
 
 That correctly wrote both relation edges — `supersedes = ["DEC-092"]` on the
-successor, `superseded_by = ["DEC-099"]` on the predecessor. It did **not** move
+successor, `superseded_by = ["DEC-105"]` on the predecessor. It did **not** move
 DEC-092's `status`, which stayed `accepted`.
 
 ```
@@ -73,4 +73,4 @@ into a loud one regardless of how the state was reached.
   memory has to warn about; resolving it lets step 4 of that memory be deleted.
 - Captured live as a friction observation
   (`.doctrine/observations/records/c3/019fb180-0281-7ed0-8fba-1405d8ec11c3.toml`).
-- Worked example in the corpus: DEC-092 / DEC-099, SL-233.
+- Worked example in the corpus: DEC-092 / DEC-105, SL-233.

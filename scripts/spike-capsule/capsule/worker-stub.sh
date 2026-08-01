@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# capsule/worker-stub.sh — the scripted worker (DEC-103 default).
+# capsule/worker-stub.sh — the scripted worker (DEC-109 default).
 #
 #   usage: worker-stub.sh [<message>]           (runs INSIDE the sandbox)
 #

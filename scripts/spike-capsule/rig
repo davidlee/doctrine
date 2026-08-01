@@ -11,7 +11,7 @@
 #       resolved capsule root, before any provisioning. A guard that runs late
 #       is not a guard (design § 5.5).
 #
-#   DEC-103  `--stub` is the default and `--agent` is explicit opt-in. Only
+#   DEC-109  `--stub` is the default and `--agent` is explicit opt-in. Only
 #       P-C1 needs an LLM; everything in P-C2 and P-C3 is scripted by DQ-2
 #       mandate, so reaching an agent must be a thing you asked for.
 set -euo pipefail
@@ -35,7 +35,7 @@ probes
 
 worker mode
   --stub    scripted worker (default)
-  --agent   real agent — explicit opt-in (DEC-103)
+  --agent   real agent — explicit opt-in (DEC-109)
 
 environment
   SPIKE_CAPSULE_ROOT  capsule / fixture root (default: ~/capsules)

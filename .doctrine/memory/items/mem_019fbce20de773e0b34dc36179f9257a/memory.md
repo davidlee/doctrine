@@ -10,8 +10,8 @@ asserting the withdrawn claim as live:
 
 | round | what was missed | why |
 |---|---|---|
-| 5 | DEC-107's body, PHASE-16 `EX-7`/`EX-14` | the ruling landed only in the artefacts that argue it |
-| 6 | DEC-107's **TOML tier** — `knowledge show` emitted the live assignment beside its own withdrawal | the repair amended the prose tier only ([[mem.pattern.doctrine.amend-knowledge-both-tiers]]) |
+| 5 | DEC-101's body, PHASE-16 `EX-7`/`EX-14` | the ruling landed only in the artefacts that argue it |
+| 6 | DEC-101's **TOML tier** — `knowledge show` emitted the live assignment beside its own withdrawal | the repair amended the prose tier only ([[mem.pattern.doctrine.amend-knowledge-both-tiers]]) |
 | 7 | `src/design_run/runbook.rs`, `plan.md` | the sweep's **scope** was `plan.toml` + `sketches/` + the knowledge dirs; `src/` was never in it |
 
 The round-6 sweep's *pattern* was fine — `runbook.rs:455` would have matched it.
@@ -28,7 +28,7 @@ sections below the withdrawal block in the same sketch.
    argues it is the easiest to remember and the least load-bearing.
 2. **Both tiers, in both directions.** [[mem.pattern.doctrine.amend-knowledge-both-tiers]]
    covers the common case (amendment lands in the `.md`, `[facet]` stays stale).
-   The mirror case bites too: DEC-110 carried its entire reopening condition in
+   The mirror case bites too: DEC-104 carried its entire reopening condition in
    the **TOML tier only**, so an author reading the `.md` sees nothing to amend
    and concludes the record is clean. Check with `doctrine <kind> show <ID>`
    grepped for the withdrawn phrase — that is the only view that spans both.

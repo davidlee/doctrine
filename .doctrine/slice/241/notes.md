@@ -466,7 +466,7 @@ distinction `assert_outcome` keys off.
 - **F-P04-5 — the clean fits are real portability evidence, not filler.** Three
   land unforced from opposite ecosystems: `binding.gyp` ≡ `build.rs`,
   `packageManager` ≡ `rust-toolchain.toml`, `.mise.toml` ≡ `.envrc`. That is
-  DEC-101/DEC-102's claim (a known class has a TypeScript instance) corroborated
+  DEC-107/DEC-108's claim (a known class has a TypeScript instance) corroborated
   independently of the residue.
 - **F-P04-6 — an agent `git reset --hard` in the shared tree discarded
   uncommitted work mid-phase.** ASM-007's both-tier edits were lost and had to
@@ -785,7 +785,7 @@ mid-phase would convert a legible structural finding into a silent pass.
   (LLM, terminal, human reviewer), whose trigger paths are not enumerable?
   Operator doubtful it resolves usefully; tracked, not scheduled
 - CON-004 — landed state append-only · CON-005 — threat-model fence
-- DEC-099/101/102/103/104 — settled, carried
+- DEC-099/107/108/109/110 — settled, carried
 - OQ-1 — evidence-log storage tier; v0 ruling in slice § Risks
 - ~~R2~~ — **SETTLED in PHASE-01 T7**, see § R2 below. R2a agrees; R2b separates,
   so conform leg 3 is load-bearing. No divergence, no `/consult`, no `src/` change
@@ -873,5 +873,5 @@ result, not a defect. Nothing in `src/` was touched.
 - **RFC-023 (executable plan gates / adversarial TDD)** — substantial revisions
   to plan gates are expected. Operator ruling 2026-08-01: adopt current plan
   machinery as-is for this slice; expect heavy revision to follow. Nothing in
-  the four-stage capsule pipeline (CON-004, DEC-104) depends on plan-gate
+  the four-stage capsule pipeline (CON-004, DEC-110) depends on plan-gate
   mechanics, so the revisions should land orthogonally to this rig.

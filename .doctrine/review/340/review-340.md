@@ -21,7 +21,7 @@ integrated and is not relitigated.
 - **POL-002 § Scope.** The rig is client-local by construction; `cargo`, `nix`,
   `just`, the edge/main split are all permitted. Only the *evidence* carries an
   altitude obligation. "The rig is doctrine-specific" is not a charge.
-- **RT-1 / RT-2 / RT-3 verdicts are settled.** DEC-104's narrowing of RT-2 is
+- **RT-1 / RT-2 / RT-3 verdicts are settled.** DEC-110's narrowing of RT-2 is
   fair game; the underlying verdicts are not.
 - **RFC-023** will revise plan gates; current machinery adopted as-is.
 
@@ -41,7 +41,7 @@ integrated and is not relitigated.
 4. **"One mutation" as a testable invariant (CON-004 / I1).** Whether the
    trusted side truly takes one write, or whether harvest writes too.
 5. **Evidence integrity.** Whether the altitude column (D6), the portability
-   control (D5/DEC-101), ASM-007's falsification, and the measurement table
+   control (D5/DEC-107), ASM-007's falsification, and the measurement table
    can be filled honestly by the rig as specified — or whether any of them can
    be satisfied vacuously.
 6. **Trust placement of the interpretation-surface declaration (DEC-099).**

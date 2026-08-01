@@ -44,7 +44,7 @@ spec asserting the old rule. See [[mem.fact.revision.spec-prose-modify-target]] 
 at `revision apply`.
 
 Worked example: SL-233 RV-324 F-2 contradicted accepted DEC-092. The route that
-actually landed was DEC-099 superseding DEC-092 (the knowledge half) **plus**
+actually landed was DEC-105 superseding DEC-092 (the knowledge half) **plus**
 REV-044 `modify SPEC-029` (the governance half, because SPEC-029's watermark
 responsibility carried the same wording). Both were needed; neither alone told the
 truth.

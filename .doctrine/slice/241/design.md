@@ -442,7 +442,7 @@ post-spike on argument alone.
 
 ### 5.3 Data, State & Ownership
 
-**Fixtures.** Two (DEC-101), with a per-row column recording which produced each
+**Fixtures.** Two (DEC-107), with a per-row column recording which produced each
 cell.
 
 *Heavy* — `git clone --no-hardlinks` of this repo; remotes stripped, no
@@ -483,7 +483,7 @@ contract and it is what "the logs are the exhibit" already accepted.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Order and gating** (DEC-103, amending `probe-specs.md` § Order and gating):
+**Order and gating** (DEC-109, amending `probe-specs.md` § Order and gating):
 
 0. **Independent trigger enumeration** (F-8) — before any light-fixture row is
    instantiated, enumerate the *TypeScript/npm ecosystem's* interpretation
@@ -740,7 +740,7 @@ capability: conflict/staleness **resolution**, now owned by QUE-202.
 ## 7. Decisions, Rationale & Alternatives
 
 **D1 — RT-2's reuse mandate binds conflict semantics, not transport
-(DEC-104).** Operator ruling. *Reuse, mandatory:* `candidate create`'s 3-way and
+(DEC-110).** Operator ruling. *Reuse, mandatory:* `candidate create`'s 3-way and
 `Conflicted` refusal, `admit`'s OID pin, integrate's CAS. RT-2's worked example
 — result #1 lands, result #2 goes stale — is genuinely subtle and already
 modelled exactly; re-deriving it is the disqualifying redo. *Reuse as pure
@@ -752,7 +752,7 @@ is satisfied. This was the first draft of this design and it is a local
 maximum — it measures the old choreography and guarantees we never discover the
 gate is the wrong shape.
 
-**D2 — the provenance gate is a finding, not scaffolding (DEC-104).** The
+**D2 — the provenance gate is a finding, not scaffolding (DEC-110).** The
 capsule model does not lack provenance; it carries a *different* proof — pinned
 OID + verify-capsule attestation + ancestry from a contracted base — where the
 journal row proves only that a staging ritual completed. Re-grounding REQ-316 on
@@ -781,7 +781,7 @@ A shipped default list is coupled to whichever project authored it and passes
 *silently* for a project whose triggers it does not know — POL-002's
 invisible-until-the-second-client failure exactly.
 
-**D5 — two fixtures, and the second is a portability control (DEC-101).** A
+**D5 — two fixtures, and the second is a portability control (DEC-107).** A
 *convention-free* fixture would only prove no dependency on this repo's habits,
 and can pass **vacuously** (no build system ⇒ verify trivially skips ⇒ green
 means nothing). A *differently-conventioned* fixture proves correct
@@ -790,7 +790,7 @@ host-convention dependency — the cheapest POL-002 audit available. Cost is the
 secondary benefit: 16 rows × 2 mechanisms = 32 cells, of which only H11/H12 need
 a real build.
 
-**D6 — abstract rows, per-fixture instantiation (DEC-102).** H11 is "hostile
+**D6 — abstract rows, per-fixture instantiation (DEC-108).** H11 is "hostile
 build-time code writes outside the workspace" — `build.rs` on heavy,
 `postinstall` on light. Same row, same expected boundary, two instantiations.
 This makes **altitude a measurement instead of an assertion**: holds under both
@@ -805,7 +805,7 @@ indistinguishable without a per-cell positive control (§ 5.4). So the rule is:
 `unproven-beyond-rust`** — and `n/a` cells are excluded from the computation
 rather than counted as holds.
 
-**D7 — stub-first worker (DEC-103).** More than one full run will be needed, and
+**D7 — stub-first worker (DEC-109).** More than one full run will be needed, and
 most of what the rig settles does not need a slow, expensive, non-deterministic
 agent.
 
@@ -906,7 +906,7 @@ runtime rows either name an incumbent source or are recorded as after-side-only.
 | git operations between **doorbell and accepted-ref advance** | static enumeration | static enumeration + P-C1a |
 | ~~git ops between worker-done and candidate-create~~ | **retired** — there is no `candidate create` on the after side (D8), so the metric has no endpoint. Re-endpointed by the row above | — |
 | wall-clock and disk per accepted phase | **not measured** — no instrumented incumbent run is in scope | P-C1a; recorded as an absolute, not a delta |
-| tokens per accepted phase | **not measured** | P-C1b, **n = 1** — a point estimate of one phase by a non-deterministic agent (DEC-103). It can support "a phase reaches green in a capsule at roughly this cost"; it cannot support a comparison |
+| tokens per accepted phase | **not measured** | P-C1b, **n = 1** — a point estimate of one phase by a non-deterministic agent (DEC-109). It can support "a phase reaches green in a capsule at roughly this cost"; it cannot support a comparison |
 | distinct failure states requiring operator action (target 0) | qualitative — the affordance census (§ 2) | observed during the runs |
 
 That last row replaces an earlier "recovery affordances reachable (target 0)",
@@ -940,7 +940,7 @@ Writing the scope in is what stops the REV over-claiming.
 |---|---|
 | `scripts/spike-capsule/**` | new — the entire rig |
 | `.doctrine/rfc/025/evidence/**` | new — committed probe summaries + measurement table |
-| `.doctrine/knowledge/**` | EVD records (CPT-001, DEC-099/101/102/103/104, ASM-007, QUE-201, CON-004/005 already landed) |
+| `.doctrine/knowledge/**` | EVD records (CPT-001, DEC-099/107/108/109/110, ASM-007, QUE-201, CON-004/005 already landed) |
 | `.doctrine/slice/241/**` | design, plan, notes |
 | `.doctrine/state/rfc-025/raw/` | raw run logs — runtime tier, gitignored by `.doctrine/state/`, no new `.gitignore` entry (§ 5.3 amendment) |
 

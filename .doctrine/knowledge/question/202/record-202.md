@@ -17,7 +17,7 @@ What is not designed is what happens **next**. The incumbent answers with
 pin, and supersede-on-moved-trunk guidance. Those are exactly the verbs
 SL-241 § 2.1 F5 shows are welded to coordination staging: `candidate_create`
 reads `journal.toml` out of `refs/heads/dispatch/<N>`, a branch the capsule model
-does not have. So "reuse the conflict semantics" (DEC-104 / RT-2) and "no
+does not have. So "reuse the conflict semantics" (DEC-110 / RT-2) and "no
 coordination branch" cannot both hold as stated.
 
 ## Why it matters
@@ -60,5 +60,5 @@ the design work belongs to the post-spike REV that inherits
 - RV-340 F-9 — the finding that minted this.
 - [[safe-capsule-ingestion-mechanism]] (QUE-200) — the ingestion-mechanism
   question; does *not* cover this.
-- DEC-104 — reuse binds conflict semantics, not transport.
+- DEC-110 — reuse binds conflict semantics, not transport.
 - RFC-025 `red-team.md` RT-2; `mechanism-census.md`.

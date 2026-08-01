@@ -59,12 +59,12 @@ designed. This is duplication *within the shell only*.
 
 ## It IS a standalone decision — the entanglement is void
 
-**Struck 2026-07-30.** This section argued that DEC-099's borrow of
+**Struck 2026-07-30.** This section argued that DEC-105's borrow of
 `src/review.rs::with_turn`'s lock-and-CAS shape pointed at the same extraction as
 F-5's shared-primitive instinct — shared write-guard machinery owning both the
 locking and the fingerprinting — so the two should be settled together.
 
-**DEC-100 supersedes DEC-099 and voids that premise.** There is no lock, no
+**DEC-100 supersedes DEC-105 and voids that premise.** There is no lock, no
 compare-and-swap, and no `LockGuard` extraction: PHASE-15 `EX-13`/`EX-14`/`EX-15`
 are discharged by recorded infeasibility under `EX-5`, and `src/review.rs` is
 untouched. So there is nothing left to sequence this against, and F-5 is a

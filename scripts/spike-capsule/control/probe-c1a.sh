@@ -34,7 +34,7 @@
 #   build       measured — `npm run build` in the worker capsule, at B
 #   test        measured — `npm test` in the worker capsule, at B (probe-specs
 #               step 3's cold baseline: green before the phase runs)
-#   phase       measured — the stub worker (DEC-103); probe-specs step 4
+#   phase       measured — the stub worker (DEC-109); probe-specs step 4
 #   harvest     measured — doorbell → accepted-ref advance, the whole four-stage
 #               pipeline. This is § 9's "git operations between doorbell and
 #               accepted-ref advance" row, so it is timed as ONE span; the
@@ -203,7 +203,7 @@ printf '%s\n' "${worker_status}" >"${RUN}/worker-status"
 rig_wait_doorbell "${CAPSULE}" "${PIPELINE_DOORBELL_DEADLINE}" \
   "${PIPELINE_DOORBELL_INTERVAL}" >/dev/null || true
 record phase measured "$(step_elapsed)" s \
-  'the stub worker (DEC-103): commit, result ref, bundle, doorbell'
+  'the stub worker (DEC-109): commit, result ref, bundle, doorbell'
 peak_worker "${CAPSULE}"
 
 # ── 5. harvest → accepted-ref advance ────────────────────────────────────────
