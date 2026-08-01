@@ -160,3 +160,38 @@ and would break the spawn outright (`CHR-051`).
 
     before   reason=agent_end        150s of 150s backstop
     after    reason=agent_complete     6s of 900s backstop
+
+On the real S2 workload, against the ~500 MB logs where the old window failed:
+
+    kindB-p04   reason=agent_complete   259s of 3600s backstop
+    kindB-p16   reason=agent_complete   395s of 3600s backstop
+
+Both would have reported `timeout` at 3600 s under the old poll.
+
+### Correction: this issue's stated consequence was wrong for two of the five
+
+While S2 ran, the **previous session's** S1 raisers finally reported — about 45
+minutes after they had written their findings. Their terminal lines:
+
+    [review] kindA-p02 terminated reason=pi_exit
+    [review] kindA-p06 terminated reason=pi_exit
+
+**`pi_exit`, not `timeout`.** For those two the poll never mattered: pi self-
+exited, the `kill -0` arm broke the loop early, and the reap ran on time. Nothing
+was holding an API session. What hung for 45 minutes was the *caller* — the
+orphaned `sleep $BACKSTOP` holding the pipe.
+
+So this issue's Consequence section — "`REASON` never becomes `agent_end`, so the
+loop runs to `BACKSTOP`… each raiser holds a live `pi` process and an open API
+session for the full backstop" — is **not** what happened to at least two of the
+five raisers it cites. Defect 2 was the load-bearing one there, and defect 1 was
+invisible behind it. Both were real; the attribution was not.
+
+Causal proof rather than inference: the third S1 orphan (`sleep 3300`, `ppid=1`,
+still alive 45 minutes on) was killed by hand, and its long-hung caller returned
+**instantly**.
+
+The lesson generalises past this script: a symptom of "everything takes exactly
+the backstop" had two independent sufficient causes, and measuring one of them
+carefully is not evidence about the other. The elapsed-vs-backstop line now
+distinguishes them at a glance — `reason=` names which arm fired.
