@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight at T0** ·
-head `8e962656`
+fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
+T1 and T2 done, T3's refactor done, T3's harness open** · head `3ad74d83`
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -56,6 +56,28 @@ cannot excise them. Every range's detail is in its own § PHASE-NN boundary —
 - CPT-001 deliberately **NOT** amended — see D-P04-4
 - RFC-011 friction recorded (`2da32870`); `doctrine validate` clean; `rig
   selftest` green post-change
+
+**PHASE-05 in flight (T1, T2, T3-refactor; `3123e96c..3ad74d83`).** Detail —
+decisions D-P05-1..3, findings F-P05-1..7, the cell plan and the STOP
+conditions — is in the **runtime sheet**,
+`.doctrine/state/slice/241/phases/phase-05.md`, which is the working document.
+Lifted here so the ids survive the sheet:
+
+- `control/fixture-light.sh --variant <base|inrepo|plan>` — F2 and F3 built
+  (`7c134057`); `fixtures.md` F2/F3 amended NOT BUILT → BUILT. **F-P05-5** is
+  the one T5 must ride: F3's phase completion is RUNTIME state and gitignored,
+  so it does not survive a clone.
+- `probes/c3/matrix.tsv` — the authored matrix, 16 rows × 2 fixtures × 2
+  mechanisms = 64 cells, 4 `n/a` up front (`49fbce82`). Encoding in **D-P05-2**
+  (sixteen ids; a `|` alternation carries a multi-part boundary, so
+  `dissolution` stays distinct from empty). PHASE-05 VT-1 FAIL → UNATTRIBUTABLE.
+- `lib/matrix.sh` + `control/audit-matrix.sh` — the spec's own gate, run before
+  provisioning (**D-P05-3**); 8 positive controls each observed reddening its
+  own check.
+- `lib/rows.sh` — the row recorder lifted out of `probe-c2.sh` (`3ad74d83`);
+  `rig c2` output **byte-identical** after the lift.
+- memory: `mem.pattern.shell.ifs-tab-read-collapses-empty-fields` (**F-P05-7**)
+  — a TSV read with `IFS=$'\t'` silently merges empty columns.
 
 **PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
 `090148ef..5f42727b`):**
