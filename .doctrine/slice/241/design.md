@@ -721,7 +721,7 @@ not. `matrix.tsv` carries this column; the design is its source.
 | # | hostile input | inherited expected kill | re-derived boundary | status |
 |---|---|---|---|---|
 | H1 | wrong base (rebased elsewhere) | ancestry check | `conform` / `ancestry-not-descendant` | unchanged |
-| H2 | rewritten history past the doorbell OID | OID pin (RT-5) | `harvest` / `oid-mismatch` — the pin is read once (RT-5) | unchanged |
+| H2 | rewritten history past the doorbell OID | OID pin (RT-5) | **`dissolved`** — the harvester pins the OID *itself*, so there is no window to rewrite past (D-P05-8) | **re-derived** |
 | H3 | merge commit in result | ancestry (no-merge rule) | `conform` / `ancestry-merge-commit` (I3) | unchanged |
 | H4 | undeclared path change | selector conformance | `conform` / `undeclared-path` | unchanged |
 | H5 | `.doctrine/` / `.claude/` touch | forbidden-path admission | `conform` / `forbidden-path`, **belt-hardened invocation** (F-4) | strengthened; needs the non-ASCII and rename-out positive controls |
@@ -737,9 +737,29 @@ not. `matrix.tsv` carries this column; the design is its source.
 | H15 | capsule killed mid-phase; parent crash mid-harvest | journal replay | **dissolved and replaced** — there is no journal. The re-derived boundary is stronger: *stages 1–3 are idempotent and touch nothing canonical, and stage 4 is a single atomic CAS.* A crash before stage 4 leaves the canonical repo byte-identical and re-runs from the same pinned OID; a crash after it has landed. Killed at each stage in turn | re-derived |
 | H16 | trunk moved before admission | existing integrate CAS | **both**: `advance` / `stale-base` on the pipeline — precondition leg, strict clause (F-14); the incumbent's supersede guidance on the sub-probe (regression) | split (§ 5.1) |
 
+**H2 is dissolved by the same construction that makes RT-5's pin meaningful**
+(D-P05-8, found by instantiating it — F-P05-13). The row asks for the capsule
+ref to be force-moved *after* the doorbell rings and expects
+`harvest/oid-mismatch`. But the harvester **pins the ref itself**, then fetches,
+then compares: its guard covers exactly the window between its own `rev-parse`
+and its own `fetch`, inside one process. Anything moving the ref before that is
+upstream of *both* reads, so pin and fetch agree and no mismatch is producible —
+and git offers no seam that moves a ref *during* a fetch (`upload-pack` runs no
+ref-moving hook; loose and packed refs resolve identically for `rev-parse` and
+for the advertisement). A background racer would be nondeterministic, which is
+not a probe.
+
+The interesting part is *why*, and it is a re-derivation rather than a rig gap:
+because the pin is taken inside the harvester, a rewrite past the doorbell is
+not an attack at all. The OID pinned is whatever the capsule last published, and
+conform, verify and advance all name that same OID consistently — the capsule
+gained nothing. H2 would only reach `oid-mismatch` if the pin were taken at
+DOORBELL time and handed to the harvester, and the doorbell carries no authority
+and is never read (I5), so it cannot be the pin's source.
+
 **What this changes.** Two rows (H7, H8) were unenforceable and are now enforced
 by new legs. One (H13) was homeless and now names the one artifact that survives.
-One (H14) was two-thirds unmechanised. Four (H6, H9, H12, H15) are
+One (H14) was two-thirds unmechanised. **Five** (H2, H6, H9, H12, H15) are
 **dissolved by construction** — and that is the design's best result, not a gap:
 each dissolution is a hazard the model removes rather than guards. Two (H10, H16)
 split into a capsule-model safety leg and an incumbent regression leg.

@@ -139,6 +139,18 @@ doctrine_bin="${DOCTRINE_BIN:-$(rig_repo_root)/target/debug/doctrine}"
 "${doctrine_bin}" slice new "Ledger rounding" --path "${repo}" >/dev/null
 "${doctrine_bin}" slice selector add 1 'src/**' \
   --intent design-target --path "${repo}" >/dev/null
+# H5 needs conform leg 3 (`forbidden-path`) to be REACHABLE on this fixture, and
+# with `src/**` alone it is not: a `.doctrine/` plant is refused by leg 2 as
+# `undeclared-path` first, making H5/light a restatement of H4/light (F-P05-14,
+# D-P05-9). Leg 3 is load-bearing precisely where a selector declares a path it
+# then forbids, so the fixture has to be able to express that condition.
+#
+# `design-target` and not `scope-relevant`: only design-target clears
+# conformance `--strict`, so a scope-relevant selector would still report
+# undeclared and leave leg 2 refusing first — the same dead end, reached by a
+# subtler route (mem: only design-target selectors clear conformance --strict).
+"${doctrine_bin}" slice selector add 1 '.doctrine/**' \
+  --intent design-target --path "${repo}" >/dev/null
 
 git -C "${repo}" add -A
 commit "doctrine install, scratch slice SL-001, design-target selectors"
@@ -216,8 +228,11 @@ for script in build lint format test clean; do
 done
 
 rig_assert "doctrine is installed (.doctrine/ present)" test -d "${repo}/.doctrine"
-rig_assert_eq "the scratch slice declares src/** as design-target" \
-  "src/** design-target" \
+# Both selectors, and the SECOND is not decoration: `.doctrine/**` is what makes
+# conform leg 3 reachable on this fixture at all (D-P05-9). Asserted so a future
+# rebuild cannot quietly drop it and leave H5 restating H4.
+rig_assert_eq "the scratch slice declares src/** and .doctrine/** as design-target" \
+  "$(printf 'src/** design-target\n.doctrine/** design-target')" \
   "$("${doctrine_bin}" slice selector list 1 --path "${repo}" --color never |
     tr -s ' ' | sed 's/ *-$//;s/ *$//')"
 rig_assert "working tree is clean after provisioning" \
