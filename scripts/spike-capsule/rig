@@ -42,27 +42,6 @@ environment
 EOF
 }
 
-# ── entry guard ──────────────────────────────────────────────────────────────
-
-# The first action of every sub-command. Resolves the capsule root, THEN guards
-# it — resolution before comparison, or the guard compares an unresolved string.
-#
-# Publishes RIG_ROOT rather than printing it, and that is load-bearing. A guard
-# that refuses by `exit` must run in the ENTRY SHELL: inside `$( … )` the exit
-# ends only the subshell, and `set -e` does not propagate a failed substitution
-# in argument position — so `rig_dispatch … "$(rig_enter)"` printed the refusal
-# and then dispatched anyway, with an empty root. Observed during T1.
-rig_enter() {
-  # Tripwire for the above. The probe subshells `guard_not_real_repo` on
-  # purpose; `rig_enter` is the entry wrapper and must never be subshelled.
-  if [ "${BASHPID}" != "$$" ]; then
-    rig_warn "I6: rig_enter called from a subshell — a refusal could not propagate"
-    exit "${RIG_EXIT_GUARD}"
-  fi
-  RIG_ROOT=$(rig_capsule_root)
-  guard_not_real_repo "${RIG_ROOT}"
-}
-
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 # Hand off to a control script, or name the phase that provides it. Probes are

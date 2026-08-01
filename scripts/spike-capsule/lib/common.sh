@@ -72,3 +72,60 @@ guard_not_real_repo() {
     exit "${RIG_EXIT_GUARD}"
   fi
 }
+
+# The first action of EVERY entry point — `rig` and every control script alike.
+# Resolves the capsule root, THEN guards it: resolution before comparison, or
+# the guard compares an unresolved string.
+#
+# Publishes RIG_ROOT rather than printing it, and that is load-bearing. A guard
+# that refuses by `exit` must run in the ENTRY SHELL: inside `$( … )` the exit
+# ends only the subshell, and `set -e` does not propagate a failed substitution
+# in argument position — so `dispatch … "$(rig_enter)"` printed the refusal and
+# then dispatched anyway, with an empty root. Observed during T1 (F-P01-1).
+rig_enter() {
+  # Tripwire for exactly that. The guard probe subshells `guard_not_real_repo`
+  # on purpose; `rig_enter` is the entry wrapper and must never be subshelled.
+  if [ "${BASHPID}" != "$$" ]; then
+    rig_warn "I6: rig_enter called from a subshell — a refusal could not propagate"
+    exit "${RIG_EXIT_GUARD}"
+  fi
+  RIG_ROOT=$(rig_capsule_root)
+  guard_not_real_repo "${RIG_ROOT}"
+}
+
+# ── assertions ───────────────────────────────────────────────────────────────
+#
+# Failures ACCUMULATE rather than exiting at the first, so one run reports every
+# broken invariant instead of one per rebuild. `rig_assert_done` is the gate.
+
+RIG_ASSERT_FAILURES=0
+
+rig_assert() {
+  local desc=$1
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf '  ok    %s\n' "${desc}"
+  else
+    printf '  FAIL  %s\n' "${desc}" >&2
+    RIG_ASSERT_FAILURES=$((RIG_ASSERT_FAILURES + 1))
+  fi
+}
+
+rig_assert_eq() {
+  local desc=$1 want=$2 got=$3
+  if [ "${want}" = "${got}" ]; then
+    printf '  ok    %s\n' "${desc}"
+  else
+    printf '  FAIL  %s — want %s, got %s\n' "${desc}" "${want}" "${got}" >&2
+    RIG_ASSERT_FAILURES=$((RIG_ASSERT_FAILURES + 1))
+  fi
+}
+
+rig_assert_done() {
+  local what=$1
+  if [ "${RIG_ASSERT_FAILURES}" -ne 0 ]; then
+    rig_warn "${what}: ${RIG_ASSERT_FAILURES} assertion(s) failed"
+    exit 1
+  fi
+  printf '%s: all assertions hold\n' "${what}"
+}
