@@ -86,19 +86,15 @@ probe_posture() {
   # claim a later profile edit can silently break.
   local repo
   repo=$(rig_repo_root) || rig_die 'cannot resolve this repository root'
-  rig_assert "ABSENT: the canonical repo (${repo}) does not resolve" \
-    in_sandbox -- test '!' -e "${repo}"
-  rig_assert 'ABSENT: the capsule root (other capsules) does not resolve' \
-    in_sandbox -- test '!' -e "${RIG_ROOT}"
-  rig_assert 'ABSENT: ~/.ssh does not resolve' \
-    in_sandbox -- test '!' -e "${HOME}/.ssh"
-  rig_assert 'ABSENT: ~/.gitconfig does not resolve' \
-    in_sandbox -- test '!' -e "${HOME}/.gitconfig"
-  # The substitution must run INSIDE the sandbox, so it is deliberately not
-  # expanded here.
-  # shellcheck disable=SC2016
-  rig_assert 'ABSENT: no git credential helper on the effective cascade' \
-    in_sandbox -- sh -c '[ -z "$(git config --get credential.helper || true)" ]'
+  absent_inside "ABSENT: the canonical repo (${repo}) does not resolve" "${repo}"
+  absent_inside 'ABSENT: the capsule root (other capsules) does not resolve' "${RIG_ROOT}"
+  # The GENERAL claim — nothing under the host home crosses except the two
+  # allowlisted credential paths, which arrive at /agent. The home ROOT is the
+  # subject that carries it, and unlike ~/.ssh it certainly exists.
+  absent_inside 'ABSENT: the host home root does not resolve' "${HOME}"
+  absent_inside 'ABSENT: ~/.ssh does not resolve' "${HOME}/.ssh"
+  absent_inside 'ABSENT: ~/.gitconfig does not resolve' "${HOME}/.gitconfig"
+  probe_credential_helper
 
   # EX-4 / I4a. The runners are reachable, read-only, and NOT under the
   # writable root — the third clause is the one a `cp` at provisioning breaks.
@@ -124,6 +120,59 @@ probe_posture() {
   verify=$("${SANDBOX}" --capsule "${capsule}" --kind verify --print-mounts)
   rig_assert_eq 'EX-2: worker and verify kinds share ONE mount posture' \
     "${worker}" "${verify}"
+}
+
+# An ABSENT-not-ro assertion is only worth its green if its subject EXISTS ON
+# THE HOST. `test ! -e` against a path that was never there passes for the
+# wrong reason and says nothing about the profile — F-P02-1's shape, and it was
+# live on two legs of this section until F-P03-2 (`~/.ssh` does not exist on
+# this host at all). So: prove the subject reachable OUTSIDE, then assert it
+# does not resolve INSIDE. A subject that cannot be made to exist is recorded
+# `n/a` WITH ITS REASON — a legal outcome; a silent green is not.
+absent_inside() {
+  local desc=$1 path=$2
+  if [ ! -e "${path}" ]; then
+    printf '  n/a   %s — subject absent on the host, nothing to hide\n' "${desc}"
+    return 0
+  fi
+  rig_assert "${desc}" in_sandbox -- test '!' -e "${path}"
+}
+
+# The credential-helper leg needs two positive controls of its own, for two
+# distinct vacuity routes (F-P03-2):
+#
+#   1. `git` might not be on the sandbox's allowlist at all, in which case the
+#      substitution comes back empty and `[ -z … ]` is true for the wrong
+#      reason. RESOLVES is not RUNS (F-P02-2), and neither is ABSENT.
+#   2. NO helper is configured on this host, so `[ -z … ]` is true UNCONFINED.
+#      Without a control the leg cannot tell "the profile hides the helper"
+#      from "there was never a helper" — it is the DQ-3 trap wearing a
+#      credential costume.
+#
+# Control 2 runs on the host against a config THIS PROBE OWNS; the operator's
+# real ~/.gitconfig is never written. It exercises the global cascade, which is
+# the route ~/.gitconfig itself takes.
+probe_credential_helper() {
+  rig_assert 'positive control: git EXECUTES inside the sandbox' \
+    in_sandbox -- git --version
+
+  local fake="${RIG_ROOT}/probes/p02-gitconfig"
+  mkdir -p -- "$(dirname -- "${fake}")"
+  rm -f -- "${fake}"
+  git config --file "${fake}" credential.helper 'store --file=/dev/null'
+  # The substitution runs under the probe's own GIT_CONFIG_GLOBAL, so it is
+  # deliberately not expanded here either.
+  # shellcheck disable=SC2016
+  rig_assert 'positive control: the check DETECTS a helper when one is present' \
+    env GIT_CONFIG_GLOBAL="${fake}" \
+    sh -c '[ -n "$(git config --get credential.helper)" ]'
+
+  # And none crosses. ~/.gitconfig is not bound, and `--clearenv` drops
+  # GIT_CONFIG_GLOBAL — neither route reaches inside. The substitution must run
+  # INSIDE, so it is deliberately not expanded here.
+  # shellcheck disable=SC2016
+  rig_assert 'ABSENT: no git credential helper on the effective cascade' \
+    in_sandbox -- sh -c '[ -z "$(git config --get credential.helper || true)" ]'
 }
 
 # A write that must FAIL — and fail for the RIGHT REASON. The subject has to
