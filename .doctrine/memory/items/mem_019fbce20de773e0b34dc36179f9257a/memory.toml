@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbce20de773e0b34dc36179f9257a"
+memory_key = "mem.pattern.review.claim-withdrawal-sweep-repo-wide"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Claim-withdrawal sweeps are repo-wide or nothing"
+summary = "A withdrawn claim survives in the records that GOVERN a ruling and in shipped source; sweep repo-wide, after the repair, across both entity tiers"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "sweep", "knowledge-records", "two-tier", "amendment"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a7dc7f84aad39f4a3d65631f65bdcaed783fab0e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8e3186abf2fc959843b3adc0d28b52db201ff05176d80bff0bb0d38e3814f7be"
+base_commit = "80f4bf32444cfac09cb1e36398b85f0be89de60a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
