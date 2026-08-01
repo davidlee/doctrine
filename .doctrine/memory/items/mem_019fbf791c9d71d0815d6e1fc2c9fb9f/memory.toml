@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbf791c9d71d0815d6e1fc2c9fb9f"
+memory_key = "mem.fact.doctrine.strict-conformance-design-target-only"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Only design-target selectors satisfy slice conformance --strict"
+summary = "scope-relevant selectors do not clear --strict; a path matched only by a scope-relevant selector still reports undeclared"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice conformance"]
+tags = ["conformance", "selectors", "strict"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "caccdb970372a61b898ffa76b6537babf0141c54"
+ref_name = "refs/heads/edge"
+checkout_state_id = "07c51f8740a0501d64204f76331d744ef676a73dd34919bb68a1c8620396dcd7"
+base_commit = "ac9b534cad595b7b16ef493471c4618eb809c9f1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
