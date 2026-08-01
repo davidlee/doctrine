@@ -75,6 +75,102 @@ fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · bd4de
   holds; no POL-002 finding. First non-Rust exercise of the independence claim
   in the corpus. One non-fatal advisory: reservation reach degraded to local.
 
+### PHASE-02 decisions (durable)
+
+- **D-P02-1 — the confinement floor is an ALLOWLIST, not `--ro-bind / /`.** The
+  seed (`pi-spawn-confined.sh`, ADR-008 D-B3) opens with `--ro-bind / /`:
+  everything readable, only writes denied. That is a *writability* floor and
+  EX-1 needs a *visibility* one — the canonical repo, other capsules, and git
+  credentials must be **ABSENT, not ro**. Absent is achieved by not binding,
+  which only an allowlist can express. Copying the seed's floor would read as
+  "confined" while silently failing EX-1 and leaving VA-3 unassertable. What
+  transfers from the seed is the nesting mechanics and the fail-closed
+  empty-argv guard.
+- **D-P02-2 — the runners mount at `/rig`, outside the writable root.** I4a
+  becomes structural rather than asserted: no writable path lies on the
+  runner's mount path at all. Inner paths are fixed (`/capsule`, `/rig`,
+  `/agent`, `/source`) rather than the seed's `--bind "$D" "$D"`, which would
+  reproduce the host path and read every sibling capsule's parent into
+  existence as a mountpoint chain.
+- **D-P02-3 — the doorbell waiter is `rig_wait_doorbell` in `lib/common.sh`**,
+  not a control script. PHASE-03's pipeline is its only other consumer and the
+  design names no file for it. Same class of placement choice as
+  `control/selftest.sh` (plan.md § *One placement decision beyond the design's
+  tree*).
+- **D-P02-4 — the bounds are enforced TRUSTED-SIDE**: `timeout` outside the
+  bwrap exec, `ulimit -f` set before it and inherited through the namespace,
+  `du` after it. Nothing the capsule can unset. They emit distinguishable
+  STATUSES (`RIG_EXIT_DISK`, `RIG_EXIT_TIMEOUT`, `RIG_EXIT_SANDBOX`) and **no
+  tokens** — `verify-timeout` / `harvest/resource-cap` are trusted-side-computed
+  in PHASE-03's pipeline (I5, plan.md § Notes item 2).
+- **D-P02-5 — one profile, parameterised.** Capsule kind selects command,
+  bounds, and network; never a profile. `sandbox.sh --print-mounts` emits the
+  mount posture ALONE, which is what makes EX-2's uniform-confinement claim
+  checkable rather than asserted — the two kinds' output compares equal.
+- **D-P02-6 — `control/probe-capsule.sh` is PHASE-02's observation harness**
+  (posture / bounds / doorbell). PHASE-04's dispatched `probe-c2.sh` builds on
+  it; this is the capsule side's own red/green. `probe-r2.sh` is the precedent
+  for a committed re-runnable probe over a session transcript (D-P01-5).
+- **D-P02-7 — the disk cap is cumulative over the capsule tree.** `ulimit -f`
+  is per-file and a capsule writing many small files walks past it, so the
+  `du` leg is the one that catches that. Kept deliberately: the first bounds
+  run reddened its own positive control on residue from the previous case,
+  which is the bound working, not a defect.
+
+### PHASE-02 findings (durable)
+
+- **F-P02-1 — a must-fail assertion passes vacuously when its subject is
+  absent.** `/rig` read-onlyness was asserted by appending to `/rig/verify.sh`
+  and scored **green while that file did not yet exist** — the append failed
+  for the wrong reason. Fixed by requiring the subject to resolve first. Same
+  shape as F-P01-3, and precisely the DQ-3 trap VA-3 names: an absence-shaped
+  assertion needs its subject proven present before its refusal means anything.
+- **F-P02-2 — RESOLVES is not RUNS.** All three runners were readable inside
+  the sandbox and **none could execute**: `#!/usr/bin/env bash` needs
+  `/usr/bin/env` in the allowlist, and the kernel resolves the shebang before
+  PATH exists. `execvp` reports the missing *interpreter* as `No such file or
+  directory` naming the *script*, so the error points at the file that is
+  present. The readability assertions were all green throughout. The profile
+  now binds `/usr/bin/env`, the probe asserts a runner actually executes, and
+  `sandbox.sh` maps exit 127 to `RIG_EXIT_SANDBOX` so "the runner refused" and
+  "the runner never ran" cannot read identically in a matrix cell.
+  → memory `mem.pattern.shell.shebang-interpreter-is-a-mount-dependency`
+- **F-P02-3 — `rig_assert '…' ! cmd` cannot express a refusal.** `!` is a shell
+  keyword, so under `"$@"` it arrives as the *command name*; the assertion reds
+  on the invocation and never scores its subject. The I4a positive control was
+  correct throughout and looked broken. Added `rig_assert_fails` to the
+  library — every positive control in PHASE-04/05 wants it. Third member of the
+  F-P01-1 family: in shell, the *invocation form* silently changes the
+  semantics of a guard or an assertion.
+- **F-P02-4 — A2 holds on both legs; R3's credential-proxy branch is not
+  taken.** `npm ping` reaches the registry and `claude -p 'print OK'` answers
+  **OK** from inside the nested bwrap with the agent home bound **read-only**.
+  So the jail's `~/.claude` credential arrangement survives confinement without
+  a writable home — R-1 did not bite. Scoped to Linux/bwrap.
+- **F-P02-5 — the shellcheck gate needs a UTF-8 locale.** `shellcheck -x -S
+  style` aborts with `commitBuffer: invalid argument (cannot encode character
+  '\8212')` on any file containing an em-dash, which is every rig file. It is
+  an output-encoding abort, not a finding — no line, no rule id — so it reads
+  as a lint failure and invites hunting a defect that is not there. The gate is
+  `LC_ALL=C.UTF-8 shellcheck -x -S style`. Observation recorded (RFC-011).
+
+### PHASE-02 evidence (what was OBSERVED, not merely coded)
+
+| criterion | observation |
+|---|---|
+| EX-6 / A1 | nested bwrap exits 0 in-jail under an **allowlist** floor; `id` reports a real uid mapping |
+| EX-1 / VA-3 | canonical repo, capsule root, `~/.ssh`, `~/.gitconfig`, credential helper all **do not resolve** inside; `/nix/store` **does** (positive control) |
+| EX-2 | `--print-mounts` compares **equal** across `--kind worker` and `--kind verify` |
+| EX-4 / VA-2 | `audit-i4a.sh --positive-control`: planted `cp` → audit **REFUSES**; removed → audit **PASSES** |
+| EX-3 / VA-4 | hung run killed at 3s (status 124) · 64 MiB write refused against an 8 MiB cap (status 4) · **both observed on both kinds** · each with a positive control |
+| EX-5 | no ring → wait ends at its deadline (never hangs) · a ring naming another capsule is accepted as a bare signal · duplicate ring is a no-op · identity echoed is the **argument**, not the file |
+| EX-7 / VA-1 | two assertions, recorded separately in `probes/smoke/results.tsv`: `npm ping` pass, `claude -p` pass |
+| EX-8 | full cycle on the light fixture: provision (ro-bind toolchain, no `nix`/`direnv`) → worker commit + ring → `npm test` green in the verify capsule |
+
+Raw results: `$SPIKE_CAPSULE_ROOT/probes/smoke/results.tsv`. Re-runnable:
+`rig smoke`, `control/probe-capsule.sh [posture|bounds|doorbell]`,
+`control/audit-i4a.sh <capsule> [--positive-control]`.
+
 ### PHASE-01 boundary — read before believing any conformance finding
 
 `code_start_oid = 25540cfe1`, `code_end_oid = 29c7acf35`, 8 commits, of which

@@ -176,6 +176,19 @@ probe_bounds() {
   rig_assert 'disk: positive control — a small write inside the cap succeeds' \
     in_sandbox --disk-cap "${cap}" -- \
     sh -c 'dd if=/dev/zero of=/capsule/thin bs=1K count=64 2>/dev/null'
+
+  # EX-3 says BOTH capsule kinds, so both are observed. The kinds share one
+  # code path, which is a reason to expect this to hold — not evidence that it
+  # does. Inferring the verify kind from the worker kind is the same move as
+  # scoring a matrix cell that never ran.
+  reset_capsule
+  rig_assert_eq 'verify kind: a hung run is KILLED at the same bound' \
+    "${RIG_EXIT_TIMEOUT}" "$(sandbox_status --kind verify --timeout 3 -- sleep 600)"
+  reset_capsule
+  rig_assert_eq 'verify kind: an oversized write is REFUSED at the same cap' \
+    "${RIG_EXIT_DISK}" \
+    "$(sandbox_status --kind verify --disk-cap "${cap}" -- \
+      sh -c 'dd if=/dev/zero of=/capsule/fat bs=1M count=64 2>/dev/null')"
 }
 
 # ── doorbell: EX-5, four properties ─────────────────────────────────────────

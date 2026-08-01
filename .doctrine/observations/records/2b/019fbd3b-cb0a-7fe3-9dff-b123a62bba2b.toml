@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd3b-cb0a-7fe3-9dff-b123a62bba2b"
+recorded_at = "2026-08-01T12:10:40.266175229Z"
+kind = "friction"
+summary = "/execute SL-241 PHASE-02 — shellcheck gate fails on em-dashes unless LC_ALL is UTF-8"
+detail = '''The rig's documented gate is `shellcheck -x -S style` (D-P01-4). In the jail's default locale shellcheck aborts with `commitBuffer: invalid argument (cannot encode character '\8212')` on any file containing an em-dash — which is every rig file, since the house comment style uses them. The failure is an encoding abort on OUTPUT, not a finding, so it reads as a lint failure with no line number and no rule id, and the natural response is to hunt for a shell defect that does not exist. `LC_ALL=C.UTF-8 shellcheck …` is clean. Cost: one confused debugging round on the first lint of the phase. PHASE-01 recorded the rig as 'clean at -x -S style' without the locale, so the next phase inherits the same trap.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
