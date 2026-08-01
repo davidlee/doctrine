@@ -69,6 +69,50 @@ differently (minor / nit). Independent convergence on a finding is a real
 confidence signal a funnel could compute for free. Divergent *severity* on a
 converged finding is also signal — it marks the ones a human should grade.
 
+#### 4a. A second cheap pass is a real tier — but read its output backwards
+
+Amended 2026-08-02 during the SL-233 campaign, from the owner's ruling: a second
+cheap pass is a *legitimate* alternative to escalating, not merely a fallback.
+Nothing about an expensive model's output is guaranteed either. But the two are
+not interchangeable, and the difference is what you can conclude:
+
+**Two passes from the same model are correlated samples. They buy you variance,
+not bias.**
+
+- Where the model is merely *sloppy* on a given file — skims it, misses a branch,
+  talks itself out of something — a second pass has a genuine chance of not
+  repeating the error. This is the class redundancy catches, and it is not a
+  small class.
+- Where the model *systematically* misreads a construct, every pass agrees. You
+  now hold N corroborating reports of the same wrong thing, which is worse than
+  one report, because it feels checked.
+
+So the inference is asymmetric, and §4's framing above understates it:
+**disagreement is strong signal; agreement is weak evidence.** A second pass is
+therefore not a confirmation device. It is a **triage instrument** — its job is
+to say *where the expensive attention should go*, which is precisely the job a
+top tier is too expensive to do across a whole range. Run it to find the seams,
+then spend the top tier only there.
+
+The SL-233 S1 session supplies a case squarely in the catchable class. The
+PHASE-08 raiser marked `RV-325` F-17 HONOURED while **its own positive control**
+showed `exploring.toml` carrying zero completion conditions; the excuse it
+constructed ("authored before the gate") did not survive reading the ruling. That
+row, overturned by hand, became `RV-341` F-1 — the campaign's only major finding
+to that point. A model contradicting evidence it had itself produced is a
+variance failure, not a bias failure, and is exactly what a second independent
+pass has a fair chance of catching.
+
+Two operational consequences:
+
+- **Ask each pass to report what it checked and found *clean*, with the command
+  that shows it clean** — not just its candidates. Divergence is only computable
+  over the surface both passes actually covered, and the F-17 case lived in a
+  clean verdict, not in a candidate.
+- **Do not average the passes.** Take the union of their claims and the
+  *disagreements* as the work list. A finding only one pass raised is not thereby
+  weaker; it may simply be the pass that read the file properly.
+
 ### 5. What a funnel must supply that hand-running did not
 
 - **A staging tier.** Raisers wrote findings files to a scratch directory; the
