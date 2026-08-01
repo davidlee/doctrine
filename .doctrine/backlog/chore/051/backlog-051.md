@@ -78,6 +78,40 @@ Fix is a decision, not just an edit — either correct the frontmatter to match 
 docs, or correct the docs (and `CLAUDE.md` / `AGENTS.md`) to match the frontmatter.
 Pick deliberately; the names imply the former.
 
+### Re-verified 2026-08-02 — still live, and the fix is smaller than it looks
+
+Confirmed unchanged, and two facts narrow the work:
+
+**(a) The inversion is PROJECT-LOCAL, and a correct mapping already exists next
+to it.** Both scripts resolve `$PROJECT_ROOT/.pi/agents/*.md` — *not*
+`~/.pi/agents/`. The home profiles carry the mapping the docs describe:
+
+| profile | `~/.pi/agents/` | `/workspace/doctrine/.pi/agents/` |
+|---|---|---|
+| `scout.md` | `deepseek-v4-flash` ✅ | `deepseek-v4-pro` ❌ |
+| `researcher.md` | `deepseek-v4-pro` ✅ | `deepseek-v4-flash` ❌ |
+| `researcher.md` `name:` | `researcher` ✅ | `scout` ❌ |
+
+So the decision this item asks for is already made everywhere except the two
+project copies, and "correct the frontmatter to match the docs" is the option
+the rest of the system has taken. Fix is two `model:` lines. Do not chase the
+home profiles or the docs.
+
+**(b) It is not just `name:` that was copy-pasted.** The project
+`researcher.md`'s entire frontmatter is `scout.md`'s — `name`, `description`
+(*"Evidence-based repo analyst — reads code and structure to inform design
+decisions"*), `tools`, and `defaultProgress` — with only `model` differing, and
+differing *wrongly*. A researcher advertising `tools: read, write, grep, find,
+ls, bash` has **no `web_search` / `fetch_content`**, which the home profile
+does. So `pi-research` is not merely running the wrong model: it cannot do
+the web research the script's own usage examples (*"What's new in Rust 2025?"*,
+*"Compare Bun vs Node 2025"*) promise. That is a bigger defect than the model
+mapping and nothing else records it.
+
+**A negative check on the home profiles is a false negative for this item** —
+they read correct, and that is not the file the scripts load. Positive control:
+`head -7 /workspace/doctrine/.pi/agents/researcher.md`.
+
 ## Scope note
 
 `scripts/pi-review.sh` already carries fixes 1 and 2 and needs no change. It does
