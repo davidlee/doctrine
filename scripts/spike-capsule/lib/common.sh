@@ -10,8 +10,19 @@
 
 # Exit codes are distinguishable on purpose: an I6 refusal must not read as a
 # usage error in a matrix cell's recorded outcome.
+#
+# The bound codes are the same discipline one layer down. They are STATUSES,
+# not refusal tokens: `verify-timeout` and `harvest/resource-cap` are computed
+# TRUSTED-SIDE by PHASE-03's pipeline (I5), and nothing here authors them.
 RIG_EXIT_USAGE=2
 RIG_EXIT_GUARD=3
+# Consumed by sourcing entry points, not by this library — a library that used
+# every constant it published would not be a library.
+# shellcheck disable=SC2034
+RIG_EXIT_DISK=4     # the disk cap bit (PHASE-03 maps it to `harvest/resource-cap`)
+# shellcheck disable=SC2034
+RIG_EXIT_SANDBOX=5  # the sandbox itself failed to start — NOT a verdict on the capsule
+RIG_EXIT_TIMEOUT=124 # `timeout`'s own code, propagated verbatim rather than renamed
 
 rig_warn() { printf 'rig: %s\n' "$*" >&2; }
 rig_die() { rig_warn "$*"; exit "${RIG_EXIT_USAGE}"; }
@@ -91,6 +102,49 @@ rig_enter() {
   fi
   RIG_ROOT=$(rig_capsule_root)
   guard_not_real_repo "${RIG_ROOT}"
+}
+
+# ── the doorbell (§ 5.4, EX-5) ───────────────────────────────────────────────
+
+# The file the worker touches inside the capsule's rw root. Named once, because
+# both sides of the doorbell refer to it and a drifting literal would make a
+# lost ring indistinguishable from a mistyped one.
+RIG_DOORBELL=result-ready
+
+# rig_wait_doorbell <capsule> <deadline-secs> <interval-secs>
+#
+# Blocks until <capsule> rings, printing the capsule it was ASKED about.
+# Returns RIG_EXIT_TIMEOUT at the deadline.
+#
+# The doorbell carries NO AUTHORITY, and each clause below is one of § 5.4's
+# four properties made mechanical rather than commented:
+#
+#   content is never read      — only `[ -e ]`. A ring naming another capsule
+#                                cannot name anything, because nothing parses it (I5).
+#   identity from the caller   — the capsule echoed back is the ARGUMENT, which
+#                                the control plane chose; never a value from the file.
+#   loss degrades to polling   — an interval and a WALL-CLOCK DEADLINE, so a lost
+#                                ring costs latency, not correctness. It never hangs.
+#   duplication is a no-op     — existence is idempotent; a second ring is the same
+#                                observation, and the pipeline is content-addressed (I2).
+#
+# It is a lib function rather than a control script because PHASE-03's pipeline
+# is its only other consumer; the design names no file for it.
+rig_wait_doorbell() {
+  local capsule=${1:?rig_wait_doorbell: capsule required}
+  local deadline=${2:?rig_wait_doorbell: deadline required}
+  local interval=${3:?rig_wait_doorbell: interval required}
+  local bell="${capsule}/${RIG_DOORBELL}" end
+  end=$(($(date +%s) + deadline))
+  while [ "$(date +%s)" -lt "${end}" ]; do
+    if [ -e "${bell}" ]; then
+      printf '%s\n' "${capsule}"
+      return 0
+    fi
+    sleep "${interval}"
+  done
+  rig_warn "doorbell: no ring from ${capsule} within ${deadline}s — polling deadline reached"
+  return "${RIG_EXIT_TIMEOUT}"
 }
 
 # ── assertions ───────────────────────────────────────────────────────────────
