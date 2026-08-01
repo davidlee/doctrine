@@ -180,6 +180,12 @@ mounts=(
   --setenv HOME "${SANDBOX_HOME}"
   --setenv SSL_CERT_FILE "${ca_bundle}"
   --setenv NODE_EXTRA_CA_CERTS "${ca_bundle}"
+  # The doorbell's name crosses the boundary as ENV, because the ringer runs
+  # inside the sandbox and cannot source the library that defines it. Without
+  # this the ringer, the waiter, and the probe each carry their own literal and
+  # nothing joins them — the waiter would keep passing against a bell the probe
+  # planted while the worker rang a differently-named one (STD-001).
+  --setenv RIG_DOORBELL "${RIG_DOORBELL}"
   --setenv TERM dumb
 )
 

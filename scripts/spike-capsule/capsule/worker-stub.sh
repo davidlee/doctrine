@@ -16,12 +16,18 @@ set -euo pipefail
 INNER_CAPSULE=/capsule
 CLONE="${INNER_CAPSULE}/repo"
 RESULT_REF=refs/heads/capsule-result
-DOORBELL="${INNER_CAPSULE}/result-ready"
 
 die() {
   printf 'worker-stub: %s\n' "$*" >&2
   exit 1
 }
+
+# The doorbell's name comes from the CONTROL PLANE, over the sandbox env — this
+# script runs inside the sandbox and cannot source the library that defines it.
+# FAIL CLOSED rather than defaulting: a worker that rings a bell nobody listens
+# for is indistinguishable from a worker that never finished, and a default here
+# would silently restore exactly the drift this env hop exists to remove.
+DOORBELL="${INNER_CAPSULE}/${RIG_DOORBELL:?worker-stub: RIG_DOORBELL not set — the control plane names the doorbell}"
 
 message=${1:-'[add] capsule stub worker touch'}
 

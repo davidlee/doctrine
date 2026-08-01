@@ -196,8 +196,11 @@ probe_bounds() {
 probe_doorbell() {
   printf '\ndoorbell — EX-5, four properties\n'
 
-  local bell="${capsule}/result-ready"
-  rm -f -- "${bell}"
+  # The CONSTANT, never a fourth literal. A probe carrying its own copy of the
+  # name cannot catch the ringer drifting away from the waiter — it would just
+  # keep observing the bell it planted itself.
+  local bell="${capsule}/${RIG_DOORBELL}"
+  reset_capsule
 
   # Loss degrades to polling with a deadline: no ring, and the wait RETURNS
   # (refusing) rather than hanging. Latency, not correctness.
@@ -221,6 +224,29 @@ probe_doorbell() {
   # The waiter reports the capsule IT WAS ASKED ABOUT, never one the file names.
   rig_assert_eq 'identity comes from the control plane, not the file' \
     "${capsule}" "$(rig_wait_doorbell "${capsule}" 5 1)"
+
+  # ── the JOIN ───────────────────────────────────────────────────────────────
+  #
+  # Everything above plants its own bell, so it proves the waiter works against
+  # a bell the PROBE rang. That the waiter hears the bell the WORKER rings is a
+  # different claim, and until this assertion existed it was inferred from the
+  # two halves being green — the same adjacent-observable move as F-P02-1/2.
+  # Both sides now take the name from RIG_DOORBELL, and this is what would red
+  # if either drifted.
+  local light="${RIG_ROOT}/fixtures/light/repo"
+  rig_assert 'precondition: the light fixture is built (F1)' test -d "${light}"
+  if [ -d "${light}" ]; then
+    local base
+    base=$(git -C "${light}" rev-parse HEAD)
+    reset_capsule
+    rig_assert 'live: no bell before the worker runs (negative control)' \
+      test '!' -e "${capsule}/${RIG_DOORBELL}"
+    "${SANDBOX}" --capsule "${capsule}" --source "${light}" -- \
+      /rig/provision.sh "${base}" >/dev/null 2>&1
+    "${SANDBOX}" --capsule "${capsule}" -- /rig/worker-stub.sh >/dev/null 2>&1
+    rig_assert 'live: the waiter hears the bell the WORKER rang' \
+      rig_wait_doorbell "${capsule}" 10 1
+  fi
 }
 
 case "${section}" in
