@@ -69,6 +69,21 @@ matrix_in_set() {
   return 1
 }
 
+# matrix_read <line>
+#
+# THE split of a data line into its eleven columns, assigned into the CALLER's
+# `row fixture mechanism harness vclass inst stage token planted outcome
+# altitude` (bash's dynamic scoping, so the caller declares them `local`).
+#
+# One function rather than one per reader, and that is the whole point: the
+# `\x1f` translation above is a correctness fix, not a formatting choice, and a
+# second reader spelling the split for itself would silently re-acquire the
+# collapse (F-P05-7). The validator and the P-C3 harness both come through here.
+matrix_read() {
+  IFS="${MATRIX_FS}" read -r row fixture mechanism harness vclass inst \
+    stage token planted outcome altitude <<<"${1//$'\t'/${MATRIX_FS}}"
+}
+
 # matrix_validate [file]
 #
 # One assertion per INVARIANT, each naming its own offending cells — not one
@@ -92,8 +107,7 @@ matrix_validate() {
   local at c s t
 
   while IFS= read -r line; do
-    IFS="${MATRIX_FS}" read -r row fixture mechanism harness vclass inst \
-      stage token planted outcome altitude <<<"${line//$'\t'/${MATRIX_FS}}"
+    matrix_read "${line}"
     at="${row}/${fixture}/${mechanism}"
 
     matrix_in_set "${fixture}" "${MATRIX_FIXTURES}" &&
