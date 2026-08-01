@@ -416,7 +416,7 @@ no staging.
 # fixtures/heavy/interpretation-surface.txt
 exec:      cargo nix direnv just rustc
 interpret: build.rs flake.nix .envrc rust-toolchain.toml **/build.rs
-verify:    cargo test
+verify:    just web-build && cargo test
 ```
 
 - `exec:` drives the DQ-4 audit — grep `control/**`; these tokens must be absent.
@@ -424,6 +424,23 @@ verify:    cargo test
   payload is planted per fixture.
 - `verify:` is the one place project execution is wanted, and it runs inside the
   verify capsule.
+
+**Why the heavy declaration BUILDS before it tests** (D-P05-7). `web/map/dist/`
+is a RustEmbed `#[folder]` root *and* gitignored build output, so a clone cannot
+compile this repo at all — `#[derive(RustEmbed)]` fails on the missing folder
+and every `Assets::get` call site cascades. The capsule provisions by git-object
+transfer and the fixture by `git clone`; both carry tracked content only, by
+construction, so neither can deliver it. This repo already knows the class —
+`.worktreeinclude` names exactly this path, because `worktree fork` hit the same
+wall first. The declaration is the dual of that file for *interpretation
+hazard*; there is no dual for *provisioning need*, and this is what its absence
+costs.
+
+Building on site rather than provisioning the artefact in is the stronger of the
+two fixes: the capsule regenerates from **its own tracked source**, so B stays
+self-consistent and no "built at edge, tested at B" staleness question arises.
+It also lands where DQ-4 requires — inside the capsule, via the declaration,
+never trusted-side in `control/**`.
 
 Note the asymmetry: **class-2/3 enforcement is structural, not
 pattern-matched.** The trusted side never materialises a harvested tree — it

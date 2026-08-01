@@ -45,6 +45,13 @@ HARVEST_FETCH="${RIG_DIR}/control/harvest-fetch.sh"
 HARVEST_BUNDLE="${RIG_DIR}/control/harvest-bundle.sh"
 
 PIPELINE_VERIFY_TIMEOUT="${PIPELINE_VERIFY_TIMEOUT:-300}"
+# The VERIFY capsule's disk bound, deliberately NOT `SPIKE_SANDBOX_DISK_CAP`.
+# That default also bounds the WORKER capsule, where it is doing real work —
+# the heavy worker sits at 195M against 256 MiB (F-P05-10) and H7 plants against
+# exactly that headroom. Widening one must not widen the other, so the verify
+# side gets its own name and is passed explicitly (STD-001). Both are per-fixture
+# (D-P05-7): light's build fits the default, a Rust workspace's does not.
+PIPELINE_VERIFY_DISK_CAP="${PIPELINE_VERIFY_DISK_CAP:-$((256 * 1024 * 1024))}"
 PIPELINE_DOORBELL_DEADLINE="${PIPELINE_DOORBELL_DEADLINE:-120}"
 PIPELINE_DOORBELL_INTERVAL="${PIPELINE_DOORBELL_INTERVAL:-1}"
 
@@ -414,6 +421,7 @@ verify_stage() {
   # trusted-side (I4). Source is the QUARANTINE — the objects have been fsck'd
   # and the canonical repo is still untouched at this point.
   "${SANDBOX}" --capsule "${vcap}" --kind verify --source "${q}" \
+    --disk-cap "${PIPELINE_VERIFY_DISK_CAP}" \
     -- /rig/provision.sh "${oid}" >/dev/null 2>&1 || {
     printf 'sandbox-failed'
     return 1
@@ -435,6 +443,7 @@ verify_stage() {
   # and I4 is untouched.
   "${SANDBOX}" --capsule "${vcap}" --kind verify \
     --timeout "${PIPELINE_VERIFY_TIMEOUT}" \
+    --disk-cap "${PIPELINE_VERIFY_DISK_CAP}" \
     -- /rig/verify.sh -- sh -c "${cmd}" >/dev/null 2>&1 || status=$?
 
   # The status → token mapping (I5, D-P02-4). PHASE-02 emits distinguishable

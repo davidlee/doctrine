@@ -19,4 +19,4 @@
 
 exec:      cargo nix direnv just rustc
 interpret: build.rs flake.nix .envrc rust-toolchain.toml **/build.rs
-verify:    cargo test
+verify:    just web-build && cargo test

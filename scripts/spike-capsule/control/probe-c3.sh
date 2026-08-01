@@ -100,6 +100,30 @@ fixture_stub() {
   esac
 }
 
+# The VERIFY capsule's two bounds, per fixture (D-P05-7). Both defaults were
+# sized by the LIGHT fixture, and a Rust workspace overruns both — measured at
+# 352s and 4.4G, against 300s and 256 MiB. An unnamed overrun does not read as
+# "the bound was wrong": the disk leg lands on `verify/resource-cap` and the
+# clock leg on `verify/verify-timeout`, and the SECOND of those is a LEGAL
+# token, so `assert_outcome` would accept an honest run as a refusal without
+# ever announcing itself (F-P05-15). Sized with headroom over the measurement,
+# not to it — a cold registry fetch is not a fixed cost.
+fixture_verify_timeout() {
+  case "$1" in
+    light) printf '300' ;;
+    heavy) printf '900' ;;
+    *) rig_die "no verify timeout for fixture: $1" ;;
+  esac
+}
+
+fixture_verify_disk_cap() {
+  case "$1" in
+    light) printf '%s' $((256 * 1024 * 1024)) ;;
+    heavy) printf '%s' $((8 * 1024 * 1024 * 1024)) ;;
+    *) rig_die "no verify disk cap for fixture: $1" ;;
+  esac
+}
+
 # ── scoring: expected boundary vs observed boundary (S2) ────────────────────
 
 # The four stages in pipeline order. `dissolution` is deliberately NOT here: it
@@ -531,6 +555,12 @@ cell_run() {
     "$(fixture_repo "${fixture}")" "$(fixture_declaration "${fixture}")" \
     "$(fixture_slice "${fixture}")" "$(fixture_stub "${fixture}")"
   run="${PIPELINE_RUN}"
+
+  # The verify bounds travel per fixture, set for this cell only. Scoped here
+  # rather than exported once at the head of the run so that a cell reading them
+  # cannot inherit the previous cell's fixture (D-P05-7).
+  PIPELINE_VERIFY_TIMEOUT="$(fixture_verify_timeout "${fixture}")"
+  PIPELINE_VERIFY_DISK_CAP="$(fixture_verify_disk_cap "${fixture}")"
 
   # The capsule phase and the pipeline are separate calls so the harness can
   # plant BETWEEN them (A-2, pipeline.sh:196-200). That seam is the whole
