@@ -208,3 +208,193 @@ after CPT-001 is read (EX-1, EX-2). The gap between the two commits is the
 evidence that this pass was independent (VA-1).
 
 <!-- CLASSIFICATION APPENDED BELOW THIS LINE IN A LATER COMMIT -->
+
+# Classification against CPT-001 — appended after reading the taxonomy
+
+Everything above this heading is unchanged from commit `beb4b665`, where CPT-001
+was unread. Verify with `git diff beb4b665 -- <this file>`: the diff is
+append-only. That is EX-3 / VA-1's evidence.
+
+CPT-001's classes, as read: **1** explicit execution · **2** build-system
+evaluation (a "declarative" file that is actually a program) · **3** toolchain
+auto-load (interpreted by *entering or reading* the tree — nobody decided to run
+anything) · **3g** git-level auto-load · **4** path-shaped data (redirects an
+otherwise-safe read/write elsewhere) · **5** resource shape.
+
+## Headline
+
+**THE RESIDUE IS NOT EMPTY.** Four triggers are not described by any of the five
+classes, and they are not exotic — one of them is the mechanism by which this
+very repository's orchestrating agent reads a worker's hand-back.
+
+| verdict | count |
+|---|---|
+| classified cleanly | 84 |
+| classified **with named strain** (the class fits, but a class-shaped defence does not catch it) | 6 |
+| **RESIDUE — no class describes it** | 4 |
+| out of scope (not interpretation) | 2 |
+
+## Clean fits — the confirmatory bulk
+
+The taxonomy is in good health across the ordinary surface, and several fits are
+*better* than expected — genuine portability evidence for DEC-101/DEC-102 rather
+than mere non-contradiction:
+
+- **class 2** — A1, A2, A3, A6, A13, A14, B4, B6, B7, C5, C7, C8, C9, D1, D6,
+  E1, E2, E3, E4, E5, E7, E8, E9, E10, E12, E13, H2, H3, H5, I1, I3, I4, K2, K4
+- **class 3** — A4, A9, A10, A11, B1, B2, B3, B8, B9, C1, C2, C4, D2, D3, E6,
+  E11, F1, F2, F3, F4, F5, F6, F8, F9, H1, H4, H7
+- **class 3g** — G2, G3, G4, G5
+- **class 4** — A5, A7, A8, B5, C3, C10, D4, D5, G1, G6, G8, I5, K3
+- **class 5** — J1, J2, J3, J4, J5
+- **class 1** — C6, D7
+
+Three fits worth naming because they are *unforced* — the Rust instance and the
+TypeScript instance land in the same cell without the class being stretched:
+
+- **`binding.gyp` ≡ `build.rs`** (class 2). A declarative-looking file that is a
+  build program, invoked at install.
+- **`packageManager` / Corepack ≡ `rust-toolchain.toml`** (class 3). The tree
+  chooses which *tool binary* runs, and nobody decided to run anything.
+- **`.mise.toml` / `.tool-versions` ≡ `.envrc` + `rust-toolchain.toml`**
+  (class 3), including mise's `[tasks]` and `_.source` arbitrary-shell-on-entry.
+
+## Strain — the class fits, the class-shaped defence does not
+
+Recorded rather than rounded into the nearest bucket (per EX-1's intent). None of
+these is residue; each is a place where acting on the class label alone would
+leave the hole open.
+
+| id | classified | the strain |
+|---|---|---|
+| A5 | 4 | `exports` **conditions** redirect *conditionally*. Class 4's instances (symlinks, `..`, gitlinks, absolute paths) are static: resolve once and you know the target. Here the audited path and the executed path differ by *who is asking* — an auditor with one condition set reads different bytes than the runtime. |
+| A14, E10 | 2 | `patch-package` / `pnpm patch` rewrite dependency source **at install, after any audit of that dependency**. The class is right; the *time* is the hole. Audited bytes ≠ built bytes. |
+| G7 | 4 | `.git` shadowing via case-folding (`.GIT`), unicode normalisation, NTFS 8.3 (`git~1`), alternate data streams. Class 4's defence is path resolution/containment; that defence **passes** here, because the path does not redirect — it *collides* with a protected target under the platform's normalisation rules. |
+| D7 | 1 | A `.d.ts` is never executed but is trusted for typechecking decisions, so it steers what compiles and what a generator emits. Filed under class 1 (you ran `tsc`) because filing it higher would swallow every compiler input — but "agency without execution" is the shape that recurs as residue item R4 below. |
+| A9, E11 | 3 | Glob auto-enrolment: a new directory matching `workspaces`, or a new file matching the test-runner's pattern, joins the executed set with **no manifest or config edit**. Class 3 under a class-1 invocation; the declarable artifact names a *pattern*, so its expansion is tree-determined. |
+| H6 | 1/2 → 3 | Repo content writing to `$HOME` dotfiles is not one trigger but a **chain**: a class-1/2 payload plants, and a *later, unrelated* trusted process class-3 loads it. The taxonomy classifies triggers, not chains, and this chain is how a payload crosses the trusted boundary when no single trigger does. |
+
+## Out of scope — flagged, not counted as residue
+
+- **A12** (`files` / `.npmignore`) and the credential-reading leg of **B1**
+  (`_authToken`, `_auth`). These are **exfiltration**, not interpretation.
+  CPT-001's subject is "operations that cause untrusted content to be
+  interpreted on the trusted side"; content *leaving* is a different axis. Named
+  here so a later reader does not mistake their absence for an oversight — but
+  worth noting that the capsule model's threat story does cover them elsewhere
+  (P-C2's env-probe and git-creds rows).
+
+## RESIDUE — four triggers no class describes
+
+### R1 — prompt injection into an LLM that reads arbitrary tree content (from F7)
+
+**Split precisely, because half of this is not residue.** A fixed-name agent
+instruction file — `CLAUDE.md`, `AGENTS.md`, `.cursorrules`,
+`.github/copilot-instructions.md` — **is class 3**: auto-loaded on entering the
+tree by the agent harness, exactly as `.envrc` is by direnv. That half fits.
+
+The residue is the **unbounded-carrier** case. The interpreter is a language
+model, its grammar is natural language, and it reads *whatever it is pointed at*
+— a source comment, a test fixture, a README, a commit message in a harvested
+diff. So:
+
+- the trigger path is **not enumerable**, and CPT-001's declaration format
+  (`interpret:` naming specific paths) cannot express it;
+- the agency conferred is **not bounded by a grammar** — it is bounded only by
+  the agent's tool permissions;
+- no static audit can decide whether a given payload will fire, because the
+  interpreter is non-deterministic.
+
+Classes 1–3 all assume a deterministic interpreter with a defined grammar, which
+is what makes a declared trigger-path list a sufficient defence. This case
+violates that assumption while matching class 3's prose description.
+
+**Live for RFC-025, not hypothetical.** The capsule model's harvest is
+mechanical (fetch/bundle, OID-computed deltas), which is exactly right. But the
+*orchestrator* is an LLM, and in this repo it reads worker hand-backs. That is
+RT-1's shape one level up: RT-1 says do not run the candidate's `build.rs` on
+the trusted side; R1 says do not let the trusted-side *agent* read the
+candidate's prose without the same suspicion.
+
+### R2 — consumer-side interpretation: terminal escape sequences (from H8)
+
+Untrusted content reaches a trusted-side **rendering** channel that has its own
+execution grammar. `git log`, `cat`, or a test runner's stdout passes through the
+operator's terminal emulator, which honours control sequences: OSC 52 writes the
+clipboard, some emulators honour sequences that inject input, and ANSI can make a
+diff *display* differently from what it is — attacking human review directly.
+
+- not class 1 — a trusted binary was run over untrusted content; the interpreter
+  is neither the binary nor the content, it is the **display**;
+- not 2/3 — nothing was auto-loaded or evaluated as a program;
+- not 4 — nothing is path-shaped;
+- not 5 — semantics, not size.
+
+R1 and R2 share a root and are the strongest argument for a **sixth class**:
+*the interpreter sits downstream of the toolchain — a terminal, an agent, a human
+reviewer — and is not named by any project's build configuration.* Like 3g/4/5 it
+would be **universal**, which matters for POL-002: it could ship as a
+doctrine-authored default, unlike classes 1–3.
+
+### R3 — untrusted *metadata* interpolated into a trusted-side command (from I2)
+
+Ref names, tag names, branch names, commit messages, author fields, PR titles.
+The classic instance is `${{ github.event.pull_request.title }}` substituted into
+a workflow `run:` block, but the general shape is any untrusted string
+interpolated into a trusted-side shell command or template.
+
+CPT-001's five classes are all about **tree content**. Metadata rides the same
+push and is not tree content. Class 4 admits ref names only in their *path*
+aspect (R3's shadow is G8, a ref name that traverses); their *command* aspect has
+no class. Plausibly resolved by widening class 4 from "path-shaped data" to
+"untrusted data interpolated into a trusted-side operation" — recorded as residue
+rather than pre-resolved, since widening a class is ASM-007's business.
+
+**Live for RFC-025**: the harvest path reads ref names and commit messages out of
+a hostile capsule's bundle. Any control-plane string interpolation of those is
+this hole.
+
+### R4 — non-inert parsing: prototype pollution (from K1)
+
+A JSON file containing `__proto__`, parsed by an ordinary parser, mutates the
+language runtime's shared object graph — so that **later, unrelated trusted
+code** behaves differently. Nothing is executed anywhere.
+
+- not class 2 — JSON is not a program and `JSON.parse` is not a build system;
+- not class 3 — the read was deliberate;
+- not 4, not 5.
+
+Distinct from its neighbour **K2** (`!!js/function` in YAML), which *is* class 2:
+there the loader genuinely evaluates. R4's sharpness is that the parse is
+supposed to be inert and is not. Narrowest of the four, and the one most likely
+to be argued into class 2 by a generous reader — recorded because rounding it
+there is precisely the back-fitting EX-9 exists to prevent.
+
+## What this does to ASM-007
+
+ASM-007 claims: *every way untrusted content acquires agency on the trusted side
+falls into one of five numbered classes.* On the strong reading, **R1–R4
+falsify it.** R2 alone is sufficient.
+
+Two things must be said about the evidence's weight, in both directions:
+
+- **Weak search, asymmetric result.** One agent, one pass, 96 triggers, with a
+  declared leak of the five class labels — modest as a *search*. But falsifying
+  an exhaustiveness claim is asymmetric: one unclassifiable trigger falsifies it
+  regardless of how weak the search was. The weakness bounds what an *empty*
+  residue could have shown; it does not bound this.
+- **The leak cut against the finding, not for it.** Knowing the five labels
+  creates pull toward classifying *into* them. The residue survived that pull.
+
+Per EX-2 and ASM-007's own prose, the record is amended **falsified**, never
+discharged. `held` is no longer the right status.
+
+## What this does NOT settle — deliberately left open
+
+Whether the answer is a **sixth class** (consumer-side interpretation, absorbing
+R1+R2), a **widened class 4** (absorbing R3), a **class-2 sub-class** (absorbing
+R4), or some other shape, is a taxonomy decision above this phase's authority.
+Step 0's job was to search and report the residue. Amending CPT-001 itself, and
+deciding what the post-spike REV may claim, is escalated — see the phase sheet's
+STOP condition S2.
+
