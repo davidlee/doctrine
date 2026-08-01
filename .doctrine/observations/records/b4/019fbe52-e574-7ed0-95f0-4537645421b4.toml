@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbe52-e574-7ed0-95f0-4537645421b4"
+recorded_at = "2026-08-01T17:15:31.572319829Z"
+kind = "friction"
+summary = "/route: AGENTS.md's path-limited commit form 'git commit <paths> -F -' fails as written — '--' ends option parsing, so -F - is read as a pathspec"
+detail = "AGENTS.md (git section) prescribes: git commit <paths> -F - (or -- <paths>). Taken literally as 'git commit -- $PATHS -F -' git errors: pathspec '-F' did not match any file(s). The working form is 'git commit -F - -- <paths>' — the message flag must precede the -- separator. One wasted commit round-trip; harmless here because the add had already staged, but on a tree shared with other agents a retry loop around a pathless fallback is exactly the footgun the rule exists to prevent. The guidance should show the working order."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbe52-c8c5-74b3-8487-818bcd45386a"
+recorded_at = "2026-08-01T17:15:24.2292846Z"
+kind = "friction"
+summary = "/route→reseat: doctrine reseat's dangler report reads as the rewrite worklist but omits the structured tier, costing a full manual re-derivation"
+detail = "Resolving the DEC-099 collision. reseat printed 26 inbound citations and bailed. Following that list would have left the supersession chain broken: it scans .doctrine/**/*.md only, so record-092.toml's superseded_by and record-100.toml's supersedes — the two edges that bind DEC-092 -> DEC-105 -> DEC-100 — were absent, as were review-324.toml (7), plan.toml (4) and src/commands/design.rs (1). It also double-counted every hit through the slug alias symlinks and listed ten gitignored runtime phase-sheet lines, because is_disposable_prose tests for adjacent .doctrine/state path components and the 'phases' symlink yields no such component. Cost: the whole worklist had to be rebuilt with git grep -l -w and each hit re-read to confirm it was a real citation rather than symlink noise. The padding is the expensive half — it trains you to skim the list that is also silently incomplete. Raised as ISS-292."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
