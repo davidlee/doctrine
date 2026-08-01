@@ -59,6 +59,18 @@ mkdir -p "$SESSION_DIR"
 # The prompt rides the rpc stream as a JSON string. The fifo stays open (the
 # trailing sleep holds the write end) because pi self-exits on stdin EOF; we
 # reap it ourselves on the typed completion event instead.
+#
+# `set -m` (job control) is enabled HERE, before the first background job, not
+# just before the pi spawn: it puts each `&` job in its OWN process group so the
+# reaps below can signal a whole group. It is load-bearing for BOTH jobs.
+# For $KEEP: `kill -9 $KEEP` fells only the subshell and ORPHANS its `sleep
+# $BACKSTOP` child, which inherits this script's stderr and so holds the pipe
+# open for any caller that pipes or `wait`s on us — the script exits promptly and
+# the CALLER hangs to the backstop anyway (ISS-293; the residual of IMP-024 §6's
+# "orphans block a wait"). Observed: sleeps at ppid=1, 29 minutes after their
+# raiser finished. `setsid` would also work but is ABSENT from this jail — do not
+# "simplify" to it, and do not go back to a bare kill (CHR-051).
+set -m
 PI_FIFO=$(mktemp -u) && mkfifo "$PI_FIFO"
 MSG=$(jq -Rs . <"$PF")
 {
@@ -85,15 +97,13 @@ echo "[review] $LABEL: ro=$REVIEW_ROOT rw=$OUT_DIR thinking=${PI_THINKING:-low}"
 # --no-context-files matters for cost, not just hygiene: without it pi slurps
 # the tree's AGENTS.md + CLAUDE.md, which `@`-import the ~28KB boot snapshot
 # into every single reviewer. The bucket prompt carries what the reviewer needs.
-# `set -m` (job control) puts the next background job in its OWN process group,
-# pgid == $PI, so the reap below can signal the WHOLE group. Without it,
-# `kill -9 $PI` fells only `timeout`; the real pi is a grandchild
+# `set -m` (enabled above, at the first background job) puts this job in its OWN
+# process group, pgid == $PI, so the reap below can signal the WHOLE group.
+# Without it, `kill -9 $PI` fells only `timeout`; the real pi is a grandchild
 # (timeout -> bwrap -> pi wrapper -> pi) and survives as an orphan holding its
 # API session open and blocking any caller that `wait`s on this script. Observed:
 # two such orphans still live 16 minutes after writing output and reporting
-# agent_end. `setsid` would also work but is ABSENT from this jail — do not
-# "simplify" to it, and do not go back to a bare kill.
-set -m
+# agent_end.
 timeout "$BACKSTOP" "${PREFIX[@]}" \
   pi --mode rpc --thinking "${PI_THINKING:-low}" \
   --session-dir "$SESSION_DIR" \
@@ -102,16 +112,27 @@ timeout "$BACKSTOP" "${PREFIX[@]}" \
   <"$PI_FIFO" >"$OUT" 2>&1 &
 PI=$!
 
-END=$(($(date +%s) + BACKSTOP))
+START=$(date +%s)
+END=$((START + BACKSTOP))
 REASON=timeout
 # Poll the TAIL, not the whole file. pi's rpc stream re-serializes accumulated
 # conversation state on every event, so $OUT grows super-linearly — 50-150MB for
 # an ordinary turn is normal, not a runaway. `grep -q` over the whole file every
 # 2s therefore costs more I/O than the model costs tokens, and it degrades as the
-# turn goes on. `agent_end` is always at the end by construction.
+# turn goes on.
+#
+# The terminal event is `agent_settled`, NOT `agent_end` (ISS-293). `agent_end`
+# carries the accumulated state with it, so it is pushed arbitrarily far back
+# from EOF as the turn grows: measured 684,768 bytes from EOF on one census turn,
+# 5.2x outside the old 128KiB window. The poll therefore NEVER fired on a real
+# review, every raiser ran to BACKSTOP holding a live pi and an open API session,
+# and nothing warned — the findings file lands on time, so it looks clean.
+# `agent_settled` is a bare `{"type":"agent_settled"}` 17 bytes from EOF and is
+# robust to any window; matching either keeps this working if the order changes
+# again. 4MiB at a 2s cadence is still four orders of magnitude below the file.
 while [ "$(date +%s)" -lt "$END" ]; do
-  if tail -c 131072 "$OUT" 2>/dev/null | grep -qE '"agent_end"'; then
-    REASON=agent_end
+  if tail -c 4194304 "$OUT" 2>/dev/null | grep -qE '"(agent_settled|agent_end)"'; then
+    REASON=agent_complete
     break
   fi
   if ! kill -0 "$PI" 2>/dev/null; then
@@ -120,10 +141,12 @@ while [ "$(date +%s)" -lt "$END" ]; do
   fi
   sleep 2
 done
-# Negative pid = signal the whole process group (see the `setsid` note above).
-# Fall back to the bare pid if the group is already gone.
+# Negative pid = signal the whole process group (see the `set -m` note above).
+# Fall back to the bare pid if the group is already gone. $KEEP is group-killed
+# for the same reason $PI is: its `sleep $BACKSTOP` child is the orphan that
+# outlives a bare kill and holds our stderr open.
 kill -9 -"$PI" 2>/dev/null || kill -9 "$PI" 2>/dev/null
-kill -9 "$KEEP" 2>/dev/null
+kill -9 -"$KEEP" 2>/dev/null || kill -9 "$KEEP" 2>/dev/null
 rm -f "$PI_FIFO"
 
 # Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
@@ -132,7 +155,14 @@ if ps -eo pid,args 2>/dev/null | grep -q "[-]-session-dir $SESSION_DIR"; then
   echo "[review] $LABEL WARNING: pi survived the reap for $SESSION_DIR" >&2
 fi
 
-echo "[review] $LABEL terminated reason=$REASON"
+# Elapsed-vs-backstop is the ONLY signal that distinguishes a clean early finish
+# from a silent full-backstop burn — the findings file lands either way, so
+# without this line the operator has to catch it in `ps` (ISS-293).
+ELAPSED=$(($(date +%s) - START))
+echo "[review] $LABEL terminated reason=$REASON after ${ELAPSED}s of ${BACKSTOP}s backstop"
+if [ "$REASON" = timeout ]; then
+  echo "[review] $LABEL WARNING: burned the full backstop — completion never detected" >&2
+fi
 if [ -s "$OUT_DIR/$LABEL.md" ]; then
   echo "[review] $LABEL findings: $OUT_DIR/$LABEL.md ($(wc -l <"$OUT_DIR/$LABEL.md") lines)"
 else
