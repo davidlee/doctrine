@@ -109,7 +109,13 @@ canonical_objects() {
 # ── setup / teardown ─────────────────────────────────────────────────────────
 
 # pipeline_setup <label> <fixture-repo> <declaration> [slice-id] [stub-path]
-#   → run dir
+#
+# PUBLISHES `PIPELINE_RUN` rather than printing it, and that is load-bearing —
+# the same reason `rig_enter` publishes RIG_ROOT (F-P01-1). This function calls
+# `guard_not_real_repo`, which refuses by `exit`; if the caller had to wrap it
+# in `$( … )` to read the run dir, that exit would end only the substitution's
+# subshell and setup would carry on against a root the guard had just refused.
+# A guard whose refusal cannot reach the entry point is not a guard.
 pipeline_setup() {
   local label=$1 fixture=$2 declaration=$3 slice=${4:-001} stub=${5:-src/capsule-stub.ts}
   local run="${RIG_ROOT}/runs/${label}"
@@ -158,12 +164,23 @@ pipeline_setup() {
     printf 'verify=%s\n' "$(declaration_field "${run}/interpretation-surface.txt" verify)"
   } >"${run}/contract"
 
-  # The pre-run canonical snapshot. Taken HERE, before anything runs, because
-  # `assert_outcome` compares against the state the run inherited.
+  pipeline_snapshot "${run}"
+
+  PIPELINE_RUN="${run}"
+}
+
+# The pre-run canonical snapshot — what `assert_outcome` compares against.
+#
+# Re-callable on purpose. A scenario that deliberately moves the trunk before
+# the pipeline runs (the `advance/stale-base` case) is establishing SCENARIO
+# STATE, not producing a pipeline effect; re-snapshotting after it is what
+# keeps the assertion answering "did the PIPELINE change canonical" rather
+# than "did anything at all". Without this the stale-base case would red on
+# its own setup and look like the assertion working.
+pipeline_snapshot() {
+  local run=$1
   canonical_refs "${run}/canonical" >"${run}/canonical-refs.before"
   canonical_objects "${run}/canonical" >"${run}/canonical-objects.before"
-
-  printf '%s\n' "${run}"
 }
 
 pipeline_teardown() {
@@ -271,8 +288,14 @@ pipeline_run() {
   # rather than a hand-waved one.
   if [ "${RIG_DEFECT_CANONICAL_HOP:-0}" = 1 ]; then
     rig_warn 'DEFECT MODE: performing the deleted second hop into canonical (VA-3)'
+    # NO destination refspec, so this writes FETCH_HEAD and creates no ref. That
+    # is deliberate and it is what makes the demonstration sharp: canonical's
+    # REFS are untouched, so the refs clause still passes and ONLY the object
+    # count moves. The object-count clause is therefore shown catching something
+    # no other clause can see — which is exactly the claim EX-10 makes for it,
+    # and exactly what a hostile 2 GiB blob would do on its way to a refusal.
     git -C "${canonical}" fetch --no-tags --quiet -- "${quarantine}" \
-      "+${RIG_QUARANTINE_REF}:refs/canonical-quarantine/result" 2>/dev/null || true
+      "${RIG_QUARANTINE_REF}" 2>/dev/null || true
   fi
 
   stage_emit harvest pass
@@ -408,10 +431,18 @@ verify_stage() {
   # status is the command's own and cannot be mistranslated. The command itself
   # was read from B, trusted-side — this capsule never reads a declaration
   # (F-5): fail-closed on absence is no defence against substitution.
-  # shellcheck disable=SC2086
+  #
+  # `sh -c` rather than an unquoted expansion, and this is a CORRECTNESS fix,
+  # not a style one (F-P03-3). Word-splitting a declaration's `verify:` line
+  # hands the command its quotes as LITERAL CHARACTERS: `node -e "process.exit(1)"`
+  # split naively reaches node as the three words `node`, `-e`,
+  # `"process.exit(1)"`, which node evaluates as a harmless string expression
+  # and exits 0. A verify command that should have refused SILENTLY ATTESTS.
+  # `sh` still execs a single command, so the status remains the command's own
+  # and I4 is untouched.
   "${SANDBOX}" --capsule "${vcap}" --kind verify \
     --timeout "${PIPELINE_VERIFY_TIMEOUT}" \
-    -- /rig/verify.sh -- ${cmd} >/dev/null 2>&1 || status=$?
+    -- /rig/verify.sh -- sh -c "${cmd}" >/dev/null 2>&1 || status=$?
 
   # The status → token mapping (I5, D-P02-4). PHASE-02 emits distinguishable
   # STATUSES and no tokens; this is the single place they become tokens.
@@ -545,7 +576,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   declaration=${3:?usage: pipeline.sh <label> <fixture> <declaration> <fetch|bundle>}
   mechanism=${4:-fetch}
 
-  RUN=$(pipeline_setup "${label}" "${fixture}" "${declaration}")
+  pipeline_setup "${label}" "${fixture}" "${declaration}"
+  RUN="${PIPELINE_RUN}"
   pipeline_capsule "${RUN}"
   # NOT `pipeline_run … | tee`: a pipe would run it in a SUBSHELL, so a RIG
   # DEFECT return could not reach this shell and the run would score as an
