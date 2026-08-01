@@ -42,6 +42,9 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/sandbox-probe.sh
 . "${RIG_DIR}/lib/sandbox-probe.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/rows.sh
+. "${RIG_DIR}/lib/rows.sh"
 
 ALL_ROWS='write-floor canonical git-creds api-cred env escape-git resource'
 
@@ -84,34 +87,17 @@ SENTINEL='capsule-escape-sentinel'
 # ── recording ───────────────────────────────────────────────────────────────
 
 REPORT_COLUMNS=$'row\tobservable\toutcome\tdetail'
-ROWS_RECORDED=()
 
-# Outcome is DERIVED from the assertions the row actually made, never passed in.
-# A row that recorded `pass` while its own assertions reddened is the failure
-# mode a results table is least able to show.
-ROW_FAILURES_AT_START=0
-row_begin() {
-  ROW_FAILURES_AT_START=${RIG_ASSERT_FAILURES}
-  printf '\n%s\n' "$1"
-}
-row_outcome() {
-  if [ "${RIG_ASSERT_FAILURES}" -eq "${ROW_FAILURES_AT_START}" ]; then
-    printf 'pass'
-  else
-    printf 'FAIL'
-  fi
-}
-
-# record_row <row> <observable> <detail>  — outcome derived, never supplied.
-record_row() {
-  ROWS_RECORDED+=("$1"$'\t'"$2"$'\t'"$(row_outcome)"$'\t'"$3")
-}
-
-# record_row_na <row> <observable> <reason>  — `n/a` is a legal recorded
-# outcome; a silent pass is not (probe-specs § Order and gating).
-record_row_na() {
-  ROWS_RECORDED+=("$1"$'\t'"$2"$'\t'"n/a"$'\t'"$3")
-}
+# `row_begin` / `row_outcome` / `record_row{,_na}` now live in lib/rows.sh, so
+# P-C3 records rows the same way rather than growing a second recorder that
+# drifts (PHASE-05 T3). The lift was behaviour-preserving; the shape and the
+# reasoning behind it are documented there.
+#
+# This matrix's columns are `row observable outcome detail`, which is the
+# recorder's default: the derived outcome is spliced in third, and the observable
+# it refuses to finish without is second.
+ROWS_OUTCOME_FIELD=3
+ROWS_OBSERVABLE_FIELD=2
 
 # ── shared row plumbing ─────────────────────────────────────────────────────
 
@@ -445,19 +431,10 @@ done
 # so it is checked against the file rather than believed. A row whose observable
 # column is empty is exactly the silent pass probe-specs forbids.
 printf '\n'
-for entry in "${ROWS_RECORDED[@]}"; do
-  rig_assert "VA-3: row '$(printf '%s' "${entry}" | cut -f1)' names its observable" \
-    test -n "$(printf '%s' "${entry}" | cut -f2)"
-done
-rig_assert_eq 'VA-3: every requested row produced a recorded outcome' \
-  "${#rows[@]}" "${#ROWS_RECORDED[@]}"
+rows_assert_complete 'VA-3' "${#rows[@]}"
 
-mkdir -p -- "$(dirname -- "${REPORT}")"
-[ -s "${REPORT}" ] || printf '%s\n' "${REPORT_COLUMNS}" >"${REPORT}"
-{
-  printf 'p-c2: %s\tin-jail\trows=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${rows[*]}"
-  printf '%s\n' "${ROWS_RECORDED[@]}"
-} >>"${REPORT}"
+rows_write "${REPORT}" "${REPORT_COLUMNS}" \
+  "$(printf 'p-c2: %s\tin-jail\trows=%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${rows[*]}")"
 
 printf '\nresults: %s\n' "${REPORT}"
 printf '%s\n' "${ROWS_RECORDED[@]}" | cut -f1,3 | sed 's/^/  /'
