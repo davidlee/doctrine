@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "scripts/spike-capsule/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/rfc/025/**"
@@ -21,6 +21,10 @@ intent = "scope-relevant"
 [[selector]]
 selector = ".doctrine/knowledge/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/rfc/025/evidence/**"
+intent = "design-target"
 
 [[relation]]
 label = "related"
