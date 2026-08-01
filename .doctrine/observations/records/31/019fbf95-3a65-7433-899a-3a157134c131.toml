@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbf95-3a65-7433-899a-3a157134c131"
+recorded_at = "2026-08-01T23:07:35.909592024Z"
+kind = "friction"
+summary = "audit/code-review: ISS-293's reproduce steps were dead — the artifact it measured had been reaped"
+detail = "ISS-293 documented a defect with exact byte offsets into .doctrine/state/slice/233/campaign/s0/sheets-census.log and a copy-pasteable reproduce block. By the next session that 770 MB log had been cleaned up, so the issue's own positive control could not be re-run and the premise could only be taken on trust. Re-establishing it cost a fresh 150s probe run against the unmodified script. That probe was worth it — it re-confirmed the offsets AND surfaced a second defect the issue had missed (an orphaned fifo-keeper sleep holding the caller's stderr) — but the cost was avoidable. Lesson: when an issue's evidence is a byte offset into a large disposable runtime artifact, the artifact will not survive; either quote enough of the stream inline to be self-verifying, or record the reproduce as a probe the reader can re-run from scratch rather than a measurement of a file that is about to be deleted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
