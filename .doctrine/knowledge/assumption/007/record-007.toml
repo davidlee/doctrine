@@ -5,7 +5,7 @@ id = 7
 slug = "interpretation-classes-exhaustive"
 title = "Interpretation classes exhaustive"
 record_kind = "assumption"
-status = "held"
+status = "invalidated"
 created = "2026-08-01"
 updated = "2026-08-01"
 tags = []
@@ -17,13 +17,21 @@ basis           = "design-inference"
 validation_plan = "An independently-derived enumeration of a second ecosystem's interpretation triggers, classified against the taxonomy; the residue is the falsifier (SL-241 design 5.4 step 0). NOT the light fixture's hostile rows — instantiating a row exercises an already-classified class and cannot find an unclassified one (RV-340 F-8). Empty residue over two ecosystems STRENGTHENS; it never discharges."
 validated_by    = ""
 validated_on    = ""
-invalidated_by  = ""
-invalidated_on  = ""
+invalidated_by  = "SL-241 PHASE-04 step 0 — the independent enumeration in .doctrine/slice/241/step0-enumeration.md. 96 npm/TypeScript triggers enumerated at commit beb4b665 with CPT-001 unread, classified at 61ea9f08 (append-only diff, 0 deletions). Residue R1-R4: prompt injection into an LLM reading arbitrary tree content; terminal escape sequences; untrusted metadata interpolated into a trusted-side command; non-inert parsing (prototype pollution). R2 and R4 alone are sufficient."
+invalidated_on  = "2026-08-01"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
-contradicts = []
-notes       = []
+contradicts = [
+  "SL-241 step0-enumeration.md R2 — terminal escape sequences: the interpreter is the display, downstream of the toolchain. Not classifiable as 1-5.",
+  "SL-241 step0-enumeration.md R4 — prototype pollution: parsing supposed to be inert is not; no execution anywhere, yet trusted code behaviour changes.",
+  "SL-241 step0-enumeration.md R3 — untrusted metadata (ref names, commit messages, PR titles) interpolated into a trusted-side shell/template. All five classes model tree content only.",
+]
+notes       = [
+  "R1 (prompt injection into the control-plane agent) is NOT a discovery — CON-005 and design 1.1 already name it as a known unbounded threat with an operator ruling and a structural mitigation. It contradicts the exhaustiveness claim (the taxonomy cannot classify it) but corroborates rather than surprises.",
+  "The claim's SHAPE, not just its truth value, is what failed — see the record body. Retiring it is the point; adding a sixth class and re-asserting exhaustiveness would re-run the same error.",
+  "Replacement claim carried forward as ASM-008 (universal / language-bound split).",
+]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
