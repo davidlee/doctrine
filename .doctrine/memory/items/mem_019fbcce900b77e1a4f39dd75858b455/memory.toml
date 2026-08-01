@@ -1,0 +1,46 @@
+memory_uid = "mem_019fbcce900b77e1a4f39dd75858b455"
+memory_key = "mem.pattern.doctrine.path-policy-shell-hardening"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Path-policy checks in shell need the belt's three hardenings"
+summary = "A shell path-policy check over git diff --name-only is evadable by non-ASCII name and by rename; the Rust belt hardens with -c core.quotePath=false, --no-renames, -z"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = ["src/mcp_server/dispatch.rs", "src/slice.rs"]
+globs = []
+commands = ["git diff --name-only"]
+tags = ["git", "security", "footgun", "admission", "shell"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "50843e785720adf85d8f6302040e14ea0bded7d4"
+tree = "91493d25e7686b28edd2a8dd109a88a80687e619"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "50843e785720adf85d8f6302040e14ea0bded7d4"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-323"
+
