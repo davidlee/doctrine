@@ -177,6 +177,21 @@ probe_bounds() {
     in_sandbox --disk-cap "${cap}" -- \
     sh -c 'dd if=/dev/zero of=/capsule/thin bs=1K count=64 2>/dev/null'
 
+  # The disk cap has TWO legs and both must REPORT, not merely bite. `du` is
+  # cumulative and trusted-side; `ulimit -f` is per-file and fires as SIGXFSZ,
+  # which reaches the parent as a raw status. The case above does not separate
+  # them — it passes because `du` reports 8392704 against a cap of 8388608, one
+  # 4096-byte block of accounting slop, so the 64 MiB overshoot is doing no
+  # work (a 64 KiB overshoot is byte-identical). A SPARSE oversize separates
+  # them: `ulimit -f` fires, the tree stays at 4096B, and `du` has nothing to
+  # say. Observed reporting SUCCESS before this leg existed — the bound bit and
+  # the sandbox called it a pass (F-P03-1).
+  reset_capsule
+  rig_assert_eq 'disk: a SPARSE oversize — the per-file leg REPORTS, not just du' \
+    "${RIG_EXIT_DISK}" \
+    "$(sandbox_status --disk-cap "${cap}" -- \
+      sh -c 'dd if=/dev/zero of=/capsule/sparse bs=1 count=1 seek=16777215 2>/dev/null')"
+
   # EX-3 says BOTH capsule kinds, so both are observed. The kinds share one
   # code path, which is a reason to expect this to hold — not evidence that it
   # does. Inferring the verify kind from the worker kind is the same move as

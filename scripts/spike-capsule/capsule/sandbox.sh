@@ -248,6 +248,18 @@ status=0
 # runner never ran" reading identically in a matrix cell.
 [ "${status}" -eq 127 ] && status="${RIG_EXIT_SANDBOX}"
 
+# SIGXFSZ (128+25) is the PER-FILE bound firing, and it needs classifying for
+# the same reason 127 does: without it a capsule that hit the disk cap reports
+# a status nothing maps to. Worse than 127's case — a sparse oversize leaves
+# the tree far UNDER the cap, so the `du` leg below has nothing to say and
+# `sandbox.sh` exited 0. The bound bit and the sandbox called it a pass.
+#
+# Sound because THIS SCRIPT sets `ulimit -f` to the cap a few lines above, so
+# SIGXFSZ inside the namespace has exactly one cause. Folding it into
+# RIG_EXIT_DISK is what lets PHASE-03 map both legs to one token
+# (`harvest/resource-cap`) rather than minting a second (F-P03-1, D-P03-3).
+[ "${status}" -eq 153 ] && status="${RIG_EXIT_DISK}"
+
 # The whole-tree disk cap. `ulimit -f` is a PER-FILE limit and a capsule that
 # writes many small files walks past it; this is the leg that catches that.
 used=$(du -s -B1 -- "${capsule}" | cut -f1)
