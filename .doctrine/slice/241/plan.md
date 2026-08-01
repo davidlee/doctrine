@@ -129,6 +129,64 @@ REV would then over-claim from.
 
 ## Notes
 
+### What the plan's critical pass changed
+
+The first draft of this plan was stressed against the design and the actual
+environment before the phase sheets were cut. Five things moved:
+
+1. **`nix` and `direnv` are absent in the jail.** `/nix/store`, `bwrap`,
+   `node`, `npm` and `claude` are present; the two provisioning binaries
+   probe-specs § P-C1 step 2 names are not. So provisioning is a read-only bind
+   of the store plus PATH — which is what the P-C2 profile already specifies —
+   and P-C1a's "nix env ready" step is recorded `n/a` with its reason rather
+   than quietly dropped from the step list (PHASE-02 EX-8, PHASE-04 EX-4). The
+   same `n/a`-with-a-reason discipline the matrix uses, applied to a
+   measurement step.
+2. **The verify-stage tokens were in the wrong place.** The draft asserted
+   `verify-timeout` / `sandbox-failed` inside `capsule/verify.sh`, which
+   contradicts I5 — refusals report *trusted-side-computed* tokens, and I4 puts
+   the verdict in the parent's reading of an exit status. The tokens moved to
+   PHASE-03's pipeline mandate; PHASE-02 now proves the *bound fires*
+   (PHASE-02 VA-4), which is the part that belongs to the capsule side.
+3. **The conflict sub-probe needs a fixture the design's fixture rules do not
+   describe.** Design § 5.3's "no plan and no phases" is scoped to the
+   pipeline, and is true because prepare-review's phase-completion gate is out
+   of it. The sub-probe runs prepare-review explicitly, so it meets that gate.
+   PHASE-05 EX-15 provisions a variant carrying a plan and phases up front,
+   because discovering it mid-phase costs a rebuild.
+4. **`doctrine install` into a non-Rust project is unproven.** The light
+   fixture is the first thing in this repo to test POL-002's independence claim
+   outside Rust. PHASE-01 EX-8 makes proving it a criterion; a failure there is
+   a POL-002 finding, and it is much cheaper in PHASE-01 than in PHASE-04.
+5. **Two VT keyword sets named functions that do not exist yet.** A mandate
+   keyed on an invented helper name (`positive_control`) reds for a naming
+   choice rather than a missing mechanism. The audit mandates now key on
+   design-given or externally-forced strings — `SubagentStart`,
+   `WorktreeCreate`, `worker_mode`, `interpretation-surface` — and the
+   positive-control *behaviour* is verified by the VA rows, where it belongs.
+
+### On the VT mandates' brittleness
+
+The mandates bind to the layout in design § 9.1. If execution refactors — say
+conform moves out of `pipeline.sh` into its own file — the mandate moves with
+the code; that is a mandate edit, not a criterion failure. What must not happen
+is the reverse: keeping the file and weakening the keywords until the gate
+passes. The keywords chosen are the ones that encode findings the review rounds
+paid for (`core.quotePath=false`, `--no-renames`, `160000`, `cas-lost`), so a
+keyword that stops matching is worth reading as a signal before it is worth
+editing.
+
+### The research advisory is about an artifact that does not exist
+
+`doctrine slice research SL-241` reports a drifted baseline. The baseline
+stamps `slice-241.md` only; there is no `research.md` — the pre-design research
+round was never run for this slice, and the design was authored directly
+against the RFC-025 groundwork. The advisory is therefore not reporting a stale
+research artifact but the absence of one, and it is deliberately **not**
+restamped: silencing the nag would assert a currency that nothing backs. The
+selectors were drafted from design § 9.1's code-impact table instead, which is
+the authoritative statement of what this slice touches.
+
 ### One placement decision beyond the design's tree
 
 Design § 9.1 sketches the rig's layout but does not enumerate a file for the
