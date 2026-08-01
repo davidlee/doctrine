@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbf82-948d-76b1-8ccb-c76ddd31d748"
+recorded_at = "2026-08-01T22:47:13.805257911Z"
+kind = "friction"
+summary = "code-review campaign: asserted a tool behaviour from a coincidence, and wrote it into two authored files before testing it"
+detail = "Minting RV-341/RV-342 from a shell whose cwd happened to be the primary tree, I saw them land in the primary tree and concluded that `review new` run from a coordination tree routes its write outward to the primary root via DEC-094 — and wrote that into review-campaign.md §5 and notes.md ### Learned as a durable fact, framed as 'tool-enforced, not merely a convention'. It was inferred from a single observation with no control: I never ran the verb from coord. The truth is the opposite of load-bearing — resolve_review_root (src/review.rs:2014) refuses only a worktree FORK and otherwise returns the LOCAL root, and ISS-275/DEC-094 made the test the role precisely so a coordination tree COULD host its own reviews. Caught only because `review raise RV-341` from coord then failed with 'review 341 not found at .dispatch/SL-233/.doctrine/review/341/'. The cost was two authored files needing a correction commit, and the near-cost was a later session trusting the venue rule to enforce itself and silently minting a colliding RV in coord — the exact ISS-279 failure the rule exists to prevent, made likelier by the note claiming it could not happen. The generalisable lesson is that the corpus already carries 'a negative grep needs a positive control' as a high-severity footgun, but the same discipline was not applied to a claim about TOOL BEHAVIOUR: an observed outcome that is consistent with a hypothesis is not evidence for it unless the alternative was excluded, and here the alternative (my own cwd) was one `pwd` away. Claims about what a verb does belong in the same evidentiary class as greps."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
