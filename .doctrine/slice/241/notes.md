@@ -6,8 +6,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · bd4dee1b
-(phase code tip 29c7acf3; bd4dee1b adds the harvest + observation commits)
+fresh-as-of: 2026-08-01 · **PHASE-02 complete** (2/6), slice `started` · 64406e34
+(PHASE-01 code tip 29c7acf3; PHASE-02 range b3ad3eed3..64406e34, 6 commits,
+**none foreign** — recorded via `record-delta` after a post-flip fix, see
+§ PHASE-02 boundary)
 
 ### Produced
 
@@ -184,9 +186,16 @@ Raw results: `$SPIKE_CAPSULE_ROOT/probes/smoke/results.tsv`. Re-runnable:
 
 ### PHASE-02 boundary — clean range, two NEW undeclared families
 
-`code_start_oid = b3ad3eed3`, `code_end_oid = 8f403cd68`, **3 commits, none
+`code_start_oid = b3ad3eed3`, `code_end_oid = 64406e34`, **6 commits, none
 foreign** — unlike PHASE-01. The interior-foreign-commit problem did not recur;
 `b3ad3eed3` (SL-233) landed *before* the range start and is correctly excluded.
+
+The flip closed the boundary at `8f403cd68`; the F-P02-6 fix and its harvest
+landed after it, so the range was corrected with
+`slice record-delta 241 PHASE-02 --start b3ad3eed3 --end 64406e34` (the
+multi-commit escape hatch, not `--commit`). VT-1 re-verified PASS afterwards.
+A foreign edit to `.doctrine/rfc/026/rfc-026.md` was live in the working tree
+throughout and was **never staged** — every commit was path-limited.
 
 At audit, `slice conformance 241` reports `undeclared (7)`. Four are PHASE-01's
 already-dispositioned structural set (`fixtures.md`, `notes.md`, `flake.nix`,
