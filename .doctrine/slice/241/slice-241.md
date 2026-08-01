@@ -40,17 +40,25 @@ contains migrates into dispatch machinery.
 
 ## Risks / Assumptions / Open questions
 
-- **R1 (highest):** DQ-1 requires admission through `candidate create`/
-  `admit`, but the provenance gate (REQ-316) refuses sources that are not
-  `Verified` stage-1 journal rows — the candidate layer presumes dispatch
-  ledger state. The rig must either drive enough real dispatch machinery to
-  mint journal rows for the scratch slice, or this friction is itself a
-  finding (the capsule pipeline's binding point into the candidate layer).
-  Expected first `/consult`.
+- **R1 — RESOLVED during design; it became findings, not a blocker.** Traced to
+  F1–F5 in `design.md` § 2.1. The gate (REQ-316) does not validate the *result*,
+  it validates that a staging ritual completed (F4); and the candidate verbs
+  read their journal out of the coordination branch, so they are structurally
+  inseparable from the staging the capsule model removes (F5). Disposition: the
+  rig reports the coupling rather than minting a synthetic `Verified` row —
+  forging that row would hand-roll exactly what DQ-1 protects. The matrix splits
+  instead (D8): H10/H16 run a scaffolded sub-probe against the real candidate
+  layer; the other fourteen rows run the four-stage pipeline. No `/consult` was
+  needed; the operator ruled on the split directly.
+- **R2:** the conform stage's reliance on `slice conformance --against …
+  --strict`. Its `--strict` semantics may differ from the import belt's in some
+  edge case; the rig skeleton probes this first. A genuine gap is a `/consult`,
+  not an improvised `src/` change.
 - **A1:** nested bwrap works inside the jail (ADR-008 D-B3 precedent;
   `pi-spawn-confined.sh` is the seed).
 - **A2:** headless `claude -p` runs with the jail's `~/.claude` credential
-  arrangement inside the capsule sandbox.
+  arrangement inside the capsule sandbox. Tested early as a standalone smoke,
+  split into network-reachability and authentication assertions.
 - **A3:** worker token cost is external to the orchestrating session
   (separate process), so probe *execution* is context-cheap for the driver;
   log volume is the context cost to manage.
@@ -65,6 +73,11 @@ pass/partial/fail for both M-A and M-B (or a consulted deviation), EVD
 records exist and are linked to QUE-200, the measurement table is filled,
 and a go/no-go summary lands in `.doctrine/rfc/025/`. A failed row is a
 finding, never a silent rig edit (probe-specs § Order and gating).
+
+The go/no-go is **scoped**, not absolute: go on Linux/bwrap, for a client of
+this build shape, with model-level rows proven portable and env-conditional
+rows outstanding for macOS. Writing the scope in is what stops the downstream
+REV over-claiming (design.md § 9).
 
 ## Summary
 

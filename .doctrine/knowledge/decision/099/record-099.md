@@ -29,6 +29,28 @@ one says what may enter a capsule, the other what may never be interpreted
 outside one. Riding that existing seam rather than inventing a second manifest
 idiom.
 
+## Amendment (SL-241 internal adversarial pass, finding A5)
+
+The original wording implied the declaration *enforces* all three language-bound
+classes. It does not, and the distinction matters:
+
+| class | how it is actually prevented |
+|---|---|
+| 1 explicit execution | **enforced by the declaration** — the `exec:` token list drives the DQ-4 audit over trusted-side scripts |
+| 2 build-system evaluation | **prevented structurally** — the trusted side never materialises a harvested tree; it handles objects only |
+| 3 toolchain auto-load | **prevented structurally** — same reason |
+
+So the declaration's class-2/3 half (`interpret:`) drives **probe
+instantiation** — where to plant a hostile payload per ecosystem — not
+enforcement. There is nothing for a glob to guard on a side that never checks
+out the tree.
+
+This is a *better* outcome than the original framing: structure beats
+declaration, because it cannot be misconfigured. But the split must be stated
+honestly, or a reader will assume a `interpret:` entry is load-bearing for
+safety when it is load-bearing only for test coverage. The ownership decision
+above is unchanged; only the enforcement claim narrows.
+
 ## Status of the shipped form
 
 Where the declaration lives — a `doctrine.toml` block, a dedicated manifest, or
