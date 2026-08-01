@@ -1,11 +1,11 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 100
-slug = "capsule-admission-derived-commit"
-title = "Capsule admission via derived single commit"
+id = 104
+slug = "capsule-admission-conflict-semantics"
+title = "Capsule admission reuses conflict semantics only"
 record_kind = "decision"
-status = "superseded"
+status = "accepted"
 created = "2026-08-01"
 updated = "2026-08-01"
 tags = []
@@ -25,8 +25,8 @@ contradicts = []
 notes       = []
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
-supersedes    = []   # record ids this one replaces (set by doctrine supersede)
-superseded_by = ["DEC-104"]   # set on superseded predecessor (verb-written, ADR-004 §5)
+supersedes    = ["DEC-100"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
 
 [[relation]]
 label = "references"
