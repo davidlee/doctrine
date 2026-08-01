@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbc75-4261-7653-8418-c5bdb77a894a"
+recorded_at = "2026-08-01T08:33:49.153775498Z"
+kind = "friction"
+summary = "/feedback: shell backtick expansion silently mangled a review dispose response, and the turn-based ledger made it unrecoverable"
+detail = """
+Driving `doctrine review dispose --response "<prose>"` from a double-quoted bash string. The prose contained code-quoted spans (`slice selector list`, `slice conformance`, `attested`) — normal for a review response. The shell evaluated each as command substitution and spliced in empty strings. `dispose` returned success and printed `Disposed F-9 on RV-325 (answered)`; only stderr carried `command not found`, which a `| tail` hid.
+
+Cost: the finding is now `answered`, `dispose` refuses out-of-turn rewrites, there is no amend verb (`unlock` only clears a stale lock file), so the damage is permanent short of asking the external reviewer to contest the finding — a whole extra review round. Recovery was to disclose the mangling inside the NEXT finding's response, which costs tokens and leaves a ledger that needs a caveat to read correctly.
+
+Two token-efficiency angles. (1) The receipt is not evidence: a success line plus a discarded stderr let a corrupted write look clean, so verification requires a separate `review show --json` read-back of every response — pure overhead on every dispose. (2) This is the second staleness trap on this same ledger in three rounds; the first was F-2's response being frozen before its remedy settled. The common cause is that a long, expensive, carefully-authored free-text field is write-once and unamendable, so any defect in it — mine or the protocol's — is paid for twice.
+
+Worth considering upstream: `review dispose` accepting `--response-file` / `-F -` the way `git commit` does would remove the shell from the path entirely and cost nothing."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
