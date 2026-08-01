@@ -1,6 +1,7 @@
 <!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/review-ledger.md`; the installed copy at `.doctrine/review-ledger.md`
-     is inert. Names verbs and states the invariant protocol — it never reproduces
+     `install/review-ledger.md`. Published, not projected (ADR-019): there is no
+     copy on disk in an installed project — read it with `doctrine library show
+     reference/review-ledger.md`. Names verbs and states the invariant protocol — it never reproduces
      `doctrine review --help`; ask the CLI for exact flags. -->
 
 # The review ledger

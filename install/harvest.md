@@ -1,6 +1,7 @@
 <!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/harvest.md`; the installed copy at `.doctrine/harvest.md` is inert.
-     Owns the end-of-work harvest procedure once; consuming skills cite it and
+     `install/harvest.md`. Published, not projected (ADR-019): there is no copy on
+     disk in an installed project — read it with `doctrine library show
+     reference/harvest.md`. Owns the end-of-work harvest procedure once; consuming skills cite it and
      carry only their own freshness check inline. -->
 
 # Harvest

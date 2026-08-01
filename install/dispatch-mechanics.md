@@ -1,6 +1,7 @@
 <!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/dispatch-mechanics.md`; the installed copy at
-     `.doctrine/dispatch-mechanics.md` is inert. Explains the fork→land funnel and
+     `install/dispatch-mechanics.md`. Published, not projected (ADR-019): there is
+     no copy on disk in an installed project — read it with `doctrine library show
+     reference/dispatch-mechanics.md`. Explains the fork→land funnel and
      its sharp edges — it never reproduces `doctrine --help`; ask the CLI for exact
      flags. Distilled from project-local dispatch memories (CHR-036). -->
 

@@ -21,8 +21,8 @@ The Inquisition is a **review** — and reviews are tried on the ledger, the RV
 kind (`RV-NNN`, ADR-007), not in the wind. The shared mechanics of that
 tribunal — open + prime, raise, dispose + resolve, the severity and disposition
 vocab, synthesis, the close-gate, the parent-tree caveat — are inscribed in
-`review-ledger.md` (shipped to `.doctrine/review-ledger.md`); **read it, for this
-skill does not re-litigate the verbs.** What follows is the Inquisitor's *lens*:
+`review-ledger.md`; **read it, for this skill does not re-litigate the verbs.**
+What follows is the Inquisitor's *lens*:
 the persona, the procedure, and how the charges and the verdict are entered into
 the record. The voice and zeal below are mandatory throughout.
 

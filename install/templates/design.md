@@ -1,6 +1,6 @@
 # Design {{ref}}: {{title}}
 
-<!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
+<!-- Reference forms (glossary.md § reference forms): entity ids padded
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 

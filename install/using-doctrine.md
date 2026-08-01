@@ -1,6 +1,7 @@
 <!-- Shipped reference (ADR-005 PULL tier). Edit the source in
-     `install/using-doctrine.md`; the installed copy at `.doctrine/using-doctrine.md`
-     is inert. Names verbs and states discipline — it never reproduces
+     `install/using-doctrine.md`. Published, not projected (ADR-019): there is no
+     copy on disk in an installed project — read it with `doctrine library show
+     reference/using-doctrine.md`. Names verbs and states discipline — it never reproduces
      `doctrine --help`; ask the CLI for exact flags. -->
 
 # Using doctrine

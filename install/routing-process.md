@@ -62,6 +62,10 @@ are immutable — edits append, never renumber.
 (`FR-`/`NF-`). Doc-local enumerations — bare (`OQ-1`, `D1`, `R1`, `Q1`, `C1`).
 Criteria modes — `VT` by test / `VA` by agent / `VH` by human.
 
-**Reference docs (read on demand).** `glossary.md` — kinds, ids, full reference
-forms, verification taxonomy. `using-doctrine.md` — which verb for which intent,
-reading via `show`, storage tiers, and hand-editing / edit-preserving rules.
+**Reference docs (read on demand).** Cited bare as `<name>.md` throughout the
+skills and templates; they are **published, not projected** — there is no copy
+on disk to read or glob for (ADR-019). Read one with `doctrine library show
+reference/<name>.md`; `doctrine library tree` lists them. `glossary.md` — kinds,
+ids, full reference forms, verification taxonomy. `using-doctrine.md` — which
+verb for which intent, reading via `show`, storage tiers, and hand-editing /
+edit-preserving rules.
