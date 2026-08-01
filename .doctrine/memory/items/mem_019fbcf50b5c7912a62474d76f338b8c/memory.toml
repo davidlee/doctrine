@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbcf50b5c7912a62474d76f338b8c"
+memory_key = "mem.pattern.review.write-the-entailment-not-a-new-rule"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Reject a contest the text defeats; write the unstated entailment"
+summary = "When a contest is defeated by existing text, reject it and write the load-bearing entailment that made the misreading available — do not change the rule"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "adversarial-review", "ledger"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ba3b758d043ac65721e5684ea0bc4f8c65951d74"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2d6f266c77e743eb49c728b260d869c8750cb30ee06d414f31e4bd8133ea6d4c"
+base_commit = "2f521a25b5aed88f9d5b77f128a05c838b22a4da"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
