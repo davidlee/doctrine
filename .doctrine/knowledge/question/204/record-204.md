@@ -44,9 +44,27 @@ need** — what must be carried. That absence is the question.
    `registry.npmjs.org` in 0.17s. A cell that can fail for reasons outside the
    capsule model breaks the standard F-P05-10 set — *"a heavy refusal can be
    believed"*.
-4. **Allowlisted network egress.** Acceptable in principle (operator, 2026-08-02)
-   — the objection is not to egress but to *unbounded* egress. Costs per-project
-   allowlist setup, which is real recurring toil.
+4. **Allowlisted network egress.** Acceptable in principle (operator,
+   2026-08-02) — the objection is not to egress but to *unbounded* egress. But
+   the cost is **building the mechanism, not configuring one**. On this host
+   network is granted by *namespace omission*: the jail's `network` combinator
+   simply deletes `--unshare-net`, so the sandbox sits in the host network
+   namespace with the same routing table and firewall position as the operator.
+   There is no egress policy, no seccomp, and `jail.nix` has **no combinator**
+   for a middle option. Realising this means either `--unshare-net` plus a
+   slirp4netns/pasta userspace stack or a veth net namespace with an nftables
+   allowlist — or, for *domain-level* allowlisting that the namespace approach
+   cannot express at all, `--unshare-net` plus `HTTPS_PROXY` pointed at a
+   host-side filtering proxy with its MITM CA bound into `/etc/ssl`.
+
+   **DNS is not the obstacle, and was measured so.** The capsule's `/etc` holds
+   only `resolv.conf` — no `nsswitch.conf`, no `hosts`, no `ssl` — yet lookups
+   inside resolve in **~0.5ms** against the host's 36–129ms, because the
+   systemd-resolved stub at `127.0.0.53` is reachable over shared loopback and
+   answers from cache, and curl's CA bundle comes from the store. A plausible
+   "the capsule's resolver is crippled" explanation for slow installs is
+   therefore **refuted**; the cost is bun fetching and extracting a few hundred
+   packages with no warm cache.
 
 ## The direction this is expected to grow toward
 
