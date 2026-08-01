@@ -1,0 +1,50 @@
+memory_uid = "mem_019fbfab363176c3b6857885ce0166f7"
+memory_key = "mem.pattern.review.second-cheap-pass-is-triage-not-confirmation"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Repeating the cheap review tier buys variance, not bias"
+summary = "A second pass from the same model is a correlated sample: disagreement is strong signal, agreement is weak evidence. Use it to route expensive attention, never to confirm."
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "tiering", "verification", "adversarial"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b627f84e232c03dc311f7f64cef81286b37705ac"
+ref_name = "refs/heads/edge"
+checkout_state_id = "75dbd8e8d1c2cf9acdf6a4d4a18782d4033ddb820e9f95536d81fd33608a4858"
+base_commit = "5963a1d540875e5ea4c432e21961dc4964562692"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
+[[source]]
+kind = "review"
+ref = "RV-342"
+
