@@ -1,0 +1,34 @@
+# Interpretation-surface declaration — LIGHT fixture (the `ledger` project).
+#
+# Default-deny; the dual of `.worktreeinclude` (DEC-099).
+#
+# AUTHORED FROM THIS PROJECT'S OWN BUILD NEEDS (PHASE-01 EX-12). The question
+# answered here is only ever "what does `ledger` actually run to build, test,
+# format and lint itself, and what does it read to do that?" — never "what can
+# TypeScript or npm be made to evaluate?".
+#
+# That restraint is a CONTAMINATION GUARD, not a style note. PHASE-04 step 0
+# enumerates the TypeScript/npm ecosystem's interpretation triggers WITHOUT
+# consulting CPT-001, and its residue is the only thing in the whole rig that
+# can falsify ASM-007's exhaustiveness claim. Enumerating hazards here would
+# make step 0 a re-run of thinking already done, and an empty residue would
+# then read as ASM-007 surviving when it had merely been echoed. Hazards that
+# occurred to us while writing this are recorded in the PHASE-01 sheet's
+# Findings, deliberately NOT here.
+#
+# This file is amended from step 0's residue afterwards (PHASE-04 EX-9).
+#
+# PROVENANCE (F-5): in the BASE fixture this lives OUTSIDE the repo, as a
+# sibling of it. PHASE-05's variant (2) is the in-repo copy that manufactures
+# the substitution exposure — QUE-201's only evidence input.
+#
+#   exec:       tokens the DQ-4 audit greps for; they must be ABSENT from
+#               `control/**`. The control plane never runs the project's
+#               toolchain.
+#   interpret:  where a class-2/3 payload is planted for this fixture.
+#   verify:     the one place project execution is wanted; runs inside the
+#               verify capsule.
+
+exec:      node npm tsc
+interpret: package.json tsconfig.json tools/format.mjs
+verify:    npm test
