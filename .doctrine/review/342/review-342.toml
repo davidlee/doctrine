@@ -12,5 +12,88 @@ responder = "orchestrator"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-233"
 
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "major"
+title = "Nothing verifies that payload term declarations agree with their construction sites; the test that appears to is tautological"
+detail = """
+ChangeEvent::payload_terms() declares a (PayloadKey, ValueKind) pair per term, and PayloadTerm constructors at the call sites in run.rs build the actual terms. Nothing checks the two agree. The bound each term is admitted against, and the worst case the byte budget is proven for, both follow from the declared ValueKind.
+
+The one test that looks like it closes this does not. tests/e2e_design_state.rs:1057 rendered_payload_fits_its_cap_for_every_event_kind iterates ChangeEvent::ALL and, for each declared (key, kind), constructs a saturated term OF THAT DECLARED KIND. It derives construction from the declaration, so a call site that builds a different kind is invisible to it. The test is tautological with respect to the property it appears to guard.
+
+This is not theoretical. At the PHASE-16 commit 63b348de6 the runbook step id was declared (PayloadKey::Step, ValueKind::Token) in change_log.rs while run.rs:1441 built it with PayloadTerm::label, whose bound DESIGN_STAGE_LABEL_BYTES is 16 rather than the Token bound of 32. RUNBOOK_STEP_ID_BYTES was 64 at the same commit, so a step id of 17 to 64 bytes passed validate_step_id and was then refused at admission -- refused at execution rather than at validation, which is what EX-3 exists to forbid. Three numbers disagreed (64, 32, 16) and the phase shipped green.
+
+Nothing in the suite caught it. It was found and repaired two phases later by a human review pass, at 3516a8b33 fix(SL-233): PHASE-08 F-P08.2 -- a step id is an identity, not a label, which is outside the PHASE-16 range. So the gap has a demonstrated escape, not merely a hypothetical one.
+
+The instance that remains at head is benign only by luck of an inequality nobody chose deliberately. StepDischarged still declares (PayloadKey::Outcome, ValueKind::Token) at change_log.rs:217 while run.rs:1442 builds it with PayloadTerm::label. The budget proof therefore saturates Outcome at 32 bytes where reality maxes at 16, so it OVERSTATES the worst case and the bound still holds. Had the mismatch pointed the other way, as the Step one did, the proof would be unsound and silent.
+
+Adjacent to ISS-290, which is this exact live instance held unrepaired pending an owner ruling, and to RV-341 F-2, which names the constructor seam that permits the class. Neither is this finding: ISS-290 is the instance, RV-341 F-2 is the seam, and this is the absence of any verification that would detect either.
+
+Repro, the tautology:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n 1057,1070p tests/e2e_design_state.rs
+
+Repro, the historical escape and its repair:
+  git show 63b348de6:src/design_run/runbook.rs | grep -n RUNBOOK_STEP_ID_BYTES
+  git show 63b348de6:src/design_run/run.rs | grep -n PayloadKey::Step
+  git log --oneline -1 -S"RUNBOOK_STEP_ID_BYTES: usize = 64" -- src/design_run/runbook.rs
+
+Positive control, that the two bounds genuinely differ and the search finds them:
+  rg -n "DESIGN_ID_BYTES|DESIGN_STAGE_LABEL_BYTES" src/design_run/bounds.rs
+  -> 32 and 16 respectively
+
+Surfaced by the S2 cheap tier across two independent passes: pass B on PHASE-16 found the historical instance and correctly noted it was already repaired; the structural claim and the tautology were established by hand during adjudication."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "minor"
+title = "EX-16 runbook clause is the machines first non-cumulative condition and nothing pins its non-blocking half"
+detail = """
+gate::advance evaluates the runbook clearance clause on THIS edge only, deliberately outside cumulative_conditions. The code says so at src/design_run/gate.rs:304-312: it deliberately does NOT join cumulative_conditions, because a prose edit to an explore step must not block a boundary two stages later, and it names itself the first non-cumulative condition in the machine (EX-16).
+
+That is a real departure from how every other condition in the machine works, and it is load-bearing: it is the difference between a stale step warning and a stale step blocking an unrelated later transition.
+
+The rendering half is covered -- the envelope surfaces stale, and tests/e2e_design_runbook.rs exercises stale in ten places. The EVALUATION half is pinned by nothing. No test advances a run past Exploring, edits an explore step definition to make its prior discharge stale, and then asserts that the Drafting to Reviewing boundary is NOT blocked. The guarantee survives only as the structure of the if boundary_runbook(from, to).is_some() block plus a comment.
+
+The failure mode this leaves open is a refactor that folds the runbook clause into cumulative_conditions for uniformity. Nothing would go red, and the machine would silently start blocking later boundaries on stale earlier rituals. The comment explains why that is wrong; no test enforces it.
+
+Repro, the structural guarantee and its comment:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n 300,332p src/design_run/gate.rs
+
+Repro, the absence of any test on the evaluation half:
+  rg -n cumulative_conditions tests/
+  -> no hits
+
+Positive control, that the search reaches the right places and stale IS otherwise exercised:
+  rg -n cumulative_conditions src/design_run/gate.rs   -> hits at 214, 305, 325
+  rg -c stale tests/e2e_design_runbook.rs              -> 10
+
+Raised from an S2 cheap-tier candidate (pass A on PHASE-16, C-5) and verified against source during adjudication."""
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "nit"
+title = "Discharge::verified records a hardcoded exit 0 rather than the observed exit code"
+detail = """
+src/design_run/run.rs:1419 calls Discharge::verified(facts.key, &declared.step, digest, revision, 0, checked.output.clone()) -- a literal 0 for the exit code. The constructor at src/design_run/runbook.rs:737 takes exit: i32 explicitly and stores Some(exit) on the record.
+
+The guard immediately above, at run.rs:1411, returns Refusal::VerifierFailed unless checked.exit == Some(0), so the literal is correct today and no behaviour is wrong. The objection is that the record then carries a CONCLUSION rather than the OBSERVATION: the discharge record is the auditable trace of what the verifier actually did, and it is being written from what the code decided rather than from what was measured. The explicit exit parameter is wasted, and a future relaxation of the guard -- for instance accepting a set of success codes -- would silently record 0 for a non-zero exit that was deemed acceptable.
+
+checked.exit is already in hand at the call site, so the honest form costs nothing.
+
+Repro:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n 1411,1427p src/design_run/run.rs
+
+Positive control, that the constructor really does take an exit code rather than deriving one:
+  rg -n "fn verified" -A 10 src/design_run/runbook.rs
+  -> exit: i32 parameter, stored as exit: Some(exit)
+
+Raised from an S2 cheap-tier candidate (pass A on PHASE-16, C-3) and verified against source during adjudication."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
