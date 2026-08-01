@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd99-5c7f-7e60-892a-383419d60ce8"
+recorded_at = "2026-08-01T13:52:52.35136026Z"
+kind = "friction"
+summary = "/execute: a task ledger marked DONE hid an undelivered census row; only the measurement table caught it"
+detail = """
+SL-233 PHASE-08. The handover packet's ledger marked T1 (author the design-prompts assets) 'DONE, green'. It was not complete: the sketch's (a.3) disposition census assigns incumbent SKILL.md:194 to the sealed stage hymn, and T1's hand-derived checklist had no hymn row, so install/hymns/ carried zero changes while eight other install/ files moved. A successor reads 'DONE, green' and does not re-derive the checklist against the census.
+
+What caught it was T7's VA-4/VA-7 disposition table, and only because that criterion is TOTAL over the census — eleven of twelve rows verified delivered, one did not. Nothing else in the phase would have found it: the suite was green, boot --check clean, check gate exit 0, and the missing content is prose in a shipped asset that no test asserts.
+
+Cost: ~6 extra tool calls to establish the gap was real (diff with a positive control, grep across install/hymns/, git log on the asset) plus the fix and a re-run of the whole re-embed/boot delivery tail, all of which would have been free inside T1.
+
+Generalisable: when a phase derives a task checklist BY HAND from a census artefact, the checklist is a lossy copy and its 'done' is not evidence about the census. Either generate the checklist from the census, or state explicitly that the totality check is deferred to the criterion that owns it. Same class as the earlier F-P08.3 friction in this slice, where a packet's test-state claim was false and every later failure was attributed against it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
