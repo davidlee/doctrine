@@ -122,17 +122,25 @@ probe_posture() {
     "${worker}" "${verify}"
 }
 
-# An ABSENT-not-ro assertion is only worth its green if its subject EXISTS ON
-# THE HOST. `test ! -e` against a path that was never there passes for the
-# wrong reason and says nothing about the profile — F-P02-1's shape, and it was
-# live on two legs of this section until F-P03-2 (`~/.ssh` does not exist on
-# this host at all). So: prove the subject reachable OUTSIDE, then assert it
-# does not resolve INSIDE. A subject that cannot be made to exist is recorded
-# `n/a` WITH ITS REASON — a legal outcome; a silent green is not.
+# An ABSENT-not-ro assertion is only worth its green if its subject is VISIBLE
+# TO THE PROBE. `test ! -e` against a path the probe cannot see either passes
+# for the wrong reason and says nothing about the CAPSULE profile — F-P02-1's
+# shape, and it was live on two legs of this section until F-P03-2. So: prove
+# the subject reachable OUTSIDE the capsule, then assert it does not resolve
+# INSIDE. A subject that is not reachable outside is recorded `n/a` WITH ITS
+# REASON — a legal outcome; a silent green is not.
+#
+# ENVIRONMENT-CONDITIONAL, and deliberately so (PHASE-01 EX-9's discipline).
+# `~/.ssh` exists on the host but is hidden by the OUTER bubblewrap jail, so
+# in-jail this leg is `n/a` — the jail is doing the hiding, not the capsule,
+# and the leg would pass with no capsule sandbox at all. On a HOST run the
+# subject is visible and the same leg becomes load-bearing without an edit.
+# That self-adaptation is the point: the gate is reachability from where the
+# probe stands, never a hardcoded verdict about the path.
 absent_inside() {
   local desc=$1 path=$2
   if [ ! -e "${path}" ]; then
-    printf '  n/a   %s — subject absent on the host, nothing to hide\n' "${desc}"
+    printf '  n/a   %s — subject not visible from here; the capsule is not what hides it\n' "${desc}"
     return 0
   fi
   rig_assert "${desc}" in_sandbox -- test '!' -e "${path}"
