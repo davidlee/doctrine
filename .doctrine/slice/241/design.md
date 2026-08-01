@@ -994,7 +994,7 @@ substantially revise plan machinery. Operator ruling — adopt current machinery
 as-is; the four-stage pipeline does not depend on plan-gate mechanics, so those
 revisions should land orthogonally (`notes.md` § Forward compatibility).
 
-### 10.3 External inquisition, RV-323 (2026-08-01)
+### 10.3 External inquisition, RV-340 (2026-08-01)
 
 Thirteen findings, four blockers; all thirteen disposed `fix-now` and integrated
 here. Every code citation in the ledger was re-checked against `src/` before
@@ -1025,7 +1025,7 @@ drawn, since the heavy fixture's declaration sits outside the clone — which is
 why the remediation adds a fixture variant that manufactures the exposure rather
 than merely asserting the invariant. Neither changes the penance.
 
-### 10.4 RV-323 round 2 — F-14, arising from the remediation
+### 10.4 RV-340 round 2 — F-14, arising from the remediation
 
 The F-3 repair created its own edge and the raiser caught it. Git cannot advance
 a ref to objects it does not hold, so stage 4's transfer must precede its CAS —

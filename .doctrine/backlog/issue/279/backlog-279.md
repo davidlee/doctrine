@@ -121,10 +121,39 @@ That is precisely the silent-misdirection failure this issue argues is worse tha
 a gapped id, so the placebo reproduces the disease. Add it to the "Shape of a fix"
 list as a non-option.
 
+## The RV-323 instance was rehomed by hand, 2026-08-01
+
+The `edge`-side entity this section calls `RV-323` — *"Inquisition — SL-241
+capsule spike rig design"* — is now **`RV-340`**. Rehomed pre-merge, to keep the
+collision out of `dispatch/233`'s integration. Three things the repair taught,
+all of which sharpen this issue rather than close it:
+
+1. **The target id is a judgement, not `next free`.** `reseat`'s trunk-aware
+   default (and any hand-count off `main`) cannot see a live coordination
+   branch, so it would have picked `320` — straight back into the collided band.
+   `326` is worse still: it is the next id *both* trees would mint. The only
+   safe pick is a **band above the other tree's plausible ceiling**, which means
+   estimating how many more ids the in-flight slice will mint. That estimate is
+   the thing a fix should remove.
+2. **The clean-up is not mechanical.** 40 inbound `RV-323` citations on `edge`
+   split between the two reviews; each had to be classified by *which* review it
+   meant before any rewrite. A repo-wide sed would have silently corrupted the
+   SL-233 half. This cost scales with how long the collision lives, not with the
+   entity — it is the real argument for allocation-time prevention.
+3. **`reseat`'s dangler report would have under-reported anyway** — `scan_danglers`
+   (`src/integrity.rs`) globs `.doctrine/**/*.md` only, so the relation edges in
+   `.toml` (six memories carrying `[[source]] ref = "RV-323"`, `plan.toml`'s EN-1)
+   are invisible to it. Noted on ISS-277.
+
+The hole this leaves at `323`–`339` on `edge` is cosmetic; the *live* hazard is
+unchanged — `edge`'s next free review id is now `320`, back inside
+`dispatch/233`'s band, so allocation there still needs the `DOCTRINE_TRUNK_REF`
+override plus a manual bump past `325` until the coordination branch lands.
+
 ## Links
 
 - Realised in SL-233 PHASE-04 handover; account in `.doctrine/slice/233/notes.md`.
-- Pattern memory: `mem.pattern.dispatch.bundle-trunk-backlog-id-collision`
+- Pattern memory: `mem.pattern.dispatch.stale-bundle-id-collision-reseat-trunk-side`
   (extended with the review case and the `reseat` failure).
 - `DOCTRINE_TRUNK_REF` verification and the placeholder-stub rejection: observation
   `019fb11d-d0ba-7cd3-9a29-d21d878a41e5`; applied at **RV-324**.

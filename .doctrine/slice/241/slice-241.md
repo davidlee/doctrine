@@ -51,9 +51,9 @@ contains migrates into dispatch machinery.
   run a scaffolded sub-probe against the real candidate layer — their pipeline leg
   proves the capsule model refuses a stale second result (stage-4 CAS), their
   sub-probe leg is an incumbent regression check that counts toward nothing
-  (RV-323 F-9; design § 5.6). No `/consult` was needed; the operator ruled on the
+  (RV-340 F-9; design § 5.6). No `/consult` was needed; the operator ruled on the
   split directly.
-- **R7 (new, RV-323 F-9) — conflict/staleness *resolution* is out of evidence.**
+- **R7 (new, RV-340 F-9) — conflict/staleness *resolution* is out of evidence.**
   The spike proves refusal, not admission. QUE-202 owns the gap and outlives this
   slice; the go/no-go must say so rather than reading 16/16.
 - **R2:** the conform stage's reliance on `slice conformance --against …

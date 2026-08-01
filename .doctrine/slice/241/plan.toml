@@ -36,7 +36,7 @@ BEFORE any pipeline code load-bears on it. R2 is probed first by design (§ 8);
 a genuine gap is a `/consult`, never an improvised `src/` change.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "design.md locked; RV-323 terminal (14 findings, await=none). Nothing under scripts/spike-capsule/ exists." },
+  { id = "EN-1", text = "design.md locked; RV-340 terminal (14 findings, await=none). Nothing under scripts/spike-capsule/ exists." },
   { id = "EN-2", text = "./target/debug/doctrine builds; `slice conformance --against A..B --strict` and `-p <root>` are present on the binary the rig will call." },
 ]
 exit_criteria = [

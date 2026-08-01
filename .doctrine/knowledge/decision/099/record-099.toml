@@ -19,7 +19,7 @@ alternatives = [
 rationale    = "POL-002: what the product enforces must rest on contracts doctrine owns. Classes 3g/4/5 are git-level and language-independent; classes 1-3 are not knowable from doctrine's side. Strict-and-owned beats lenient-and-coupled."
 consequences = [
   "Amendment 1 (SL-241 internal pass, A5): the declaration ENFORCES class 1 only. Classes 2 and 3 are prevented STRUCTURALLY — the trusted side never materialises a harvested tree. So `interpret:` drives probe instantiation, not enforcement. Structure beats declaration; but the split must be stated or a reader assumes an `interpret:` entry is load-bearing for safety.",
-  "Amendment 2 (SL-241 external inquisition, RV-323 F-5): the declaration is read from the CONTRACTED BASE B, never from a harvested result S, and never from any location the executing party can write. Fail-closed on absence is no defence against SUBSTITUTION — a worker rewriting its own declaration can narrow `exec:` so the DQ-4 audit passes vacuously, or blank `verify:` so the verify capsule attests nothing.",
+  "Amendment 2 (SL-241 external inquisition, RV-340 F-5): the declaration is read from the CONTRACTED BASE B, never from a harvested result S, and never from any location the executing party can write. Fail-closed on absence is no defence against SUBSTITUTION — a worker rewriting its own declaration can narrow `exec:` so the DQ-4 audit passes vacuously, or blank `verify:` so the verify capsule attests nothing.",
   "Amendment 2 makes QUE-201 safe to defer: two of its three shipped-form candidates live inside the repository a capsule clones, so without the read-from-B invariant the choice of home would silently decide a security property.",
 ]
 decided_by   = ""

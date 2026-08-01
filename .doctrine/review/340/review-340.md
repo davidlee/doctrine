@@ -1,4 +1,4 @@
-# Review RV-323 — design of SL-241
+# Review RV-340 — design of SL-241
 
 Adversarial-review ledger (ADR-007). Structured findings live in the sister
 ledger toml; this prose companion carries the reviewer's framing.

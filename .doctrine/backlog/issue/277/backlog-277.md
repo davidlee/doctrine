@@ -60,3 +60,18 @@ that happened to share the id — here, a memory
 (`mem_019fa97aa54671f2b572e83ae2923dc4`, sourced `RV-320` + `SL-233`) and three
 observation records all referred to the *other* RV-320 and had to be left alone.
 A naive global replace would have corrupted them silently.
+
+## Adjacent defect: the dangler report is `.md`-only
+
+Separable from the parse failure, and it would bite even once the strict-read fix
+lands. `scan_danglers` (`src/integrity.rs`) globs `.doctrine/**/*.md`, so the
+inbound citations it reports are prose only. **Relation edges live in `.toml`**
+and are never scanned: rehoming `RV-323` → `RV-340` (2026-08-01, second instance
+of this issue) had to sweep six memories carrying `[[source]] kind = "review"` /
+`ref = "RV-323"` and one `plan.toml` entry by hand, none of which `reseat` would
+have named. Since the report is the *only* thing standing between the operator
+and a silent dangling reference, an `.md`-only sweep understates the work in a
+way that reads as completeness.
+
+Cheap fix: glob both extensions in `scan_danglers`, or drive the sweep off the
+relation graph for the `.toml` half and keep `line_cites` for prose.

@@ -3,7 +3,7 @@ constant: a finding names an axis ("this asserts too much", "this evidence
 supports more than one consequence"), and the repair travels along that axis
 past the correct point, landing in a new defect facing the other way.
 
-The clean case (RV-323 F-13, another thread): a finding said the evidence
+The clean case (RV-340 F-13, another thread): a finding said the evidence
 supported more than one consequence; the fix added a consequence supported by
 none.
 

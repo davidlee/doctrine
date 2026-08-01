@@ -4,7 +4,7 @@
 exhaustive — every way untrusted content acquires agency on the trusted side
 falls into one of them.
 
-**Cardinality, stated unambiguously** (RV-323 F-13): **five numbered classes,
+**Cardinality, stated unambiguously** (RV-340 F-13): **five numbered classes,
 one of which has a git-level sub-class** — 1 explicit execution · 2 build-system
 evaluation · 3 toolchain auto-load, **3g** git-level auto-load · 4 path-shaped
 data · 5 resource shape. Six rows, five classes. Earlier drafts of this record
@@ -25,7 +25,7 @@ audit only refuses what the taxonomy can name.
 
 **An independently-derived enumeration of a second ecosystem's interpretation
 triggers, classified against the taxonomy, leaving a residue.** Corrected from an
-earlier reading of this record (RV-323 F-8), which named SL-241's TypeScript
+earlier reading of this record (RV-340 F-8), which named SL-241's TypeScript
 light fixture ([[two-spike-fixtures]]) as the falsification vehicle. It is not,
 and cannot be: *instantiating* a hostile trigger exercises an
 **already-classified** class, and the DQ-4 audit greps only for tokens the
@@ -61,4 +61,4 @@ amends shipped enforcement.
 - [[two-spike-fixtures]] — the portability control (not the falsification
   vehicle; see above).
 - SL-241 design § 5.4 step 0 — the enumeration that can falsify this.
-- RV-323 F-8, F-13.
+- RV-340 F-8, F-13.

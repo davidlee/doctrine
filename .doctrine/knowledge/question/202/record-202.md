@@ -26,7 +26,7 @@ This is the largest gap the SL-241 spike surfaces, and it is a *capability* gap
 rather than a matrix row. Without a record owning it, it exists only as a
 sentence inside D8's rejected-alternative discussion: invisible to any survey,
 blocking no REV, and lost to whoever inherits the census after SL-241 closes
-(RV-323 F-9).
+(RV-340 F-9).
 
 It also bounds the spike's own claim. SL-241's go/no-go must read *sixteen rows
 with a capsule-model boundary or a recorded dissolution, plus two incumbent
@@ -57,7 +57,7 @@ the design work belongs to the post-spike REV that inherits
 
 - SL-241 — the spike; design § 5.1 (the split), § 5.6 (the re-derivation),
   § 9 Closure (the scoping sentence).
-- RV-323 F-9 — the finding that minted this.
+- RV-340 F-9 — the finding that minted this.
 - [[safe-capsule-ingestion-mechanism]] (QUE-200) — the ingestion-mechanism
   question; does *not* cover this.
 - DEC-104 — reuse binds conflict semantics, not transport.

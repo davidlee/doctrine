@@ -50,6 +50,6 @@ A prefix check that has never been *observed refusing* is not known to work:
 plant a non-ASCII forbidden path and a rename-out-of-forbidden-prefix as
 positive controls. See [[mem.pattern.harness.grep-negative-needs-positive-control]].
 
-Surfaced by RV-323 F-4 (SL-241 capsule spike rig design), where the scope leg
+Surfaced by RV-340 F-4 (SL-241 capsule spike rig design), where the scope leg
 correctly rode the existing verb and the forbidden-path leg beside it was
 hand-rolled shell without any of the three.

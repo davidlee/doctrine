@@ -16,7 +16,7 @@ commit**, see § PHASE-03 boundary)
 
 - design.md written, internally reviewed, externally inquisited — no code yet
   (commits 9d0c852f, 3966256a, eedc26b8, 7fd55d0f)
-- RV-323 — 14 findings, all disposed `fix-now`; **all 14 terminal, review done**
+- RV-340 — 14 findings, all disposed `fix-now`; **all 14 terminal, review done**
 - minted: QUE-202 — capsule-model conflict admission path
 - amended both tiers: DEC-099 (Amendment 2 + facet), QUE-201, ASM-007
 - IDE-009 — third lint canary appended (wholly-empty `[facet]`)

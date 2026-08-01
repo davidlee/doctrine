@@ -21,7 +21,7 @@ declaration sits.
    agent-authored value on a security boundary.
 
 **Safety is no longer a discriminator between them** (DEC-099 Amendment 2,
-RV-323 F-5). Candidates 1 and 2 both live inside the repository a capsule
+RV-340 F-5). Candidates 1 and 2 both live inside the repository a capsule
 clones, which would have made this an unwitting security choice: a worker could
 rewrite its own declaration to narrow `exec:` or blank `verify:`. DEC-099 now
 rules that the declaration is read from the contracted base `B`, never from a

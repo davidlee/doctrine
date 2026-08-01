@@ -29,7 +29,7 @@ authored tier, reports:
 without mutating anything — a read-only drift/typo canary the tolerant read
 cannot raise.
 
-## Third canary — the wholly-empty facet (SL-241 / RV-323, 2026-08-01)
+## Third canary — the wholly-empty facet (SL-241 / RV-340, 2026-08-01)
 
 Neither C4 nor C6 catches the commonest real defect: a record whose `[facet]` is
 **entirely unfilled** while its `.md` reads complete. `knowledge new` seeds every

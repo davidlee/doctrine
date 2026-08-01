@@ -5,9 +5,9 @@ recorded_at = "2026-08-01T09:48:52.448600476Z"
 kind = "friction"
 summary = "/inquisition: review show omits finding bodies; only --json carries them"
 detail = """
-Driving RV-323 under /inquisition. After raising 13 findings I wanted to verify the details had persisted intact (the known backtick-mangling footgun, mem.pattern.doctrine.review-response-shell-backtick-mangling, makes that verification necessary rather than paranoid).
+Driving RV-340 under /inquisition. After raising 13 findings I wanted to verify the details had persisted intact (the known backtick-mangling footgun, mem.pattern.doctrine.review-response-shell-backtick-mangling, makes that verification necessary rather than paranoid).
 
-"doctrine review show RV-323" renders derived status, the reviews edge, and the full brief body — but of the findings only the count line "findings: 13 (raiser inquisitor . responder responder)". No titles, no severities, no details. So the one verb the guardrails tell you to use ("read entities via doctrine <kind> show, not raw files") shows you everything about a review EXCEPT the thing a review is for.
+"doctrine review show RV-340" renders derived status, the reviews edge, and the full brief body — but of the findings only the count line "findings: 13 (raiser inquisitor . responder responder)". No titles, no severities, no details. So the one verb the guardrails tell you to use ("read entities via doctrine <kind> show, not raw files") shows you everything about a review EXCEPT the thing a review is for.
 
 Cost: two wasted greps against show output that could not contain the answer, then a fallback to grepping .doctrine/review/323/review-323.toml directly — i.e. the raw-tier read the guardrail exists to prevent. Only afterwards did --json turn out to carry the finding bodies.
 

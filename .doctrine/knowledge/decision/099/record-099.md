@@ -51,7 +51,7 @@ honestly, or a reader will assume a `interpret:` entry is load-bearing for
 safety when it is load-bearing only for test coverage. The ownership decision
 above is unchanged; only the enforcement claim narrows.
 
-## Amendment 2 (SL-241 external inquisition, RV-323 finding F-5)
+## Amendment 2 (SL-241 external inquisition, RV-340 finding F-5)
 
 **Fail-closed on absence does not defend against substitution**, and the
 original wording made absence do all the work. The declaration is a

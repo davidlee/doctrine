@@ -72,3 +72,28 @@ git ls-tree --name-only HEAD .doctrine/<kind>/ | grep -oE '[0-9]{3}$' | sort -n 
 
 There is no `--id` override, so allocating from the tree whose counter is already
 ahead is the only lever. Prevention gap filed as **ISS-279**.
+
+## Extension 2 (SL-241 / RV-323 → RV-340, 2026-08-01): pick a *band*, and sweep the toml yourself
+
+Third instance, second on the review kind — the procedure above held, with two
+additions that cost real time:
+
+**1. The target id is not `next free`.** `reseat --to` defaults to the
+trunk-aware next id, and trunk cannot see a *live coordination branch*, so the
+default lands back inside the collided band. The next id above the local max is
+worse still: it is precisely what the **other** tree will mint next. Pick a
+**band above the other tree's plausible ceiling** — count its ids, add what its
+remaining phases will mint, then leave margin (here: coord ceiling 325, four
+phases left, chose 340). The gap on your side is cosmetic; ids are identity, not
+sequence.
+
+**2. `reseat`'s dangler report is `.md`-only.** `scan_danglers` globs
+`.doctrine/**/*.md`, so **relation edges in `.toml` are never reported** — a
+memory's `[[source]] ref = "RV-NNN"`, a `plan.toml` entry. Sweep both extensions
+by hand and do not read a clean report as completeness (ISS-277, adjacent
+defect).
+
+And the disambiguation cost scales with how long the collision lives: 40 inbound
+citations, split roughly evenly between the two entities, each classified from
+*content* — finding counts, raiser labels, dates — before any rewrite. That, not
+the entity move, is the argument for allocation-time prevention (ISS-279).

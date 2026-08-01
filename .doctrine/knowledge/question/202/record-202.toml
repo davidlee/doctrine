@@ -35,5 +35,5 @@ target = "RFC-025"
 [[relation]]
 label = "references"
 role = "concerns"
-descriptor = "surfaced by SL-241's design (D8, F5) and RV-323 F-9; outlives the slice"
+descriptor = "surfaced by SL-241's design (D8, F5) and RV-340 F-9; outlives the slice"
 target = "SL-241"

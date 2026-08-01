@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd89-d588-77b3-b9b3-afb63b38da0e"
+recorded_at = "2026-08-01T13:35:54.760421722Z"
+kind = "friction"
+summary = "manual review rehome (no skill): reseat refuses every review, so an id collision is repaired by hand and the citation sweep is the real cost"
+detail = """
+Rehomed the SL-241 inquisition ledger RV-323 to RV-340 on edge, pre-merge, because dispatch/233 authored a different RV-323 (marker-grammar sketch, target SL-233). Second instance of ISS-277: doctrine reseat RV-323 --to 340 hard-fails on both the PATH and dev binaries with "missing field status" - the strict meta reader requires a field a review deliberately never stores (ADR-007 D-C8). So the whole repair is hand-work: git mv the dir, rename both tiers, edit id in the toml and the H1 in the md, replace the alias symlink, move the gitignored state/review/NNN.
+
+Three costs the issue records do not yet name, now added to ISS-279 and ISS-277. (1) Target-id selection is a judgement, not next-free: reseat trunk-aware default and any hand-count off main cannot see a live coordination branch, so it would have picked 320, back inside the collided band; 326 is worse, being the next id BOTH trees would mint. The only safe pick is a band above the other tree plausible ceiling, which requires estimating how many more ids the in-flight slice will mint - here 340 over a ceiling of 325 with four phases left. (2) The citation sweep does not mechanise: 40 inbound RV-323 hits on edge split roughly evenly between the two reviews, and each needed classifying by which review it meant before any rewrite. Disambiguation was only possible from content - finding counts (14 vs 6), raiser labels (inquisitor vs codex), dates (2026-08-01 vs 2026-07-29). A repo-wide sed would have silently corrupted the SL-233 half. (3) Even a fixed reseat would under-report: scan_danglers globs .doctrine/**/*.md only, so the six memories carrying a review source relation and plan.toml EN-1 were invisible to it - and the report is the only thing between the operator and a silent dangling reference.
+
+Also: observation records have supersede and retract but no edit verb, so the two prior records that document this collision (019fb11d, 019fbd4c) were left intact rather than annotated with the resolution - correct for immutable evidence, but it means a resolution has nowhere to land except a new record like this one."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

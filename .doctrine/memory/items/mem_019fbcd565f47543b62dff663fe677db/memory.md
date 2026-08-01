@@ -11,7 +11,7 @@ even when the governing record is amended, the amendment goes into the `.md`
 only. Half-invisible: `grep` finds it, `knowledge show` shows it, but nothing
 structured does.
 
-Observed on DEC-099 during RV-323 (SL-241): the record's entire `[facet]`
+Observed on DEC-099 during RV-340 (SL-241): the record's entire `[facet]`
 (`context` / `choice` / `alternatives` / `rationale` / `consequences` /
 `decided_on`) was empty while its `.md` carried a full decision plus an
 amendment. ASM-007 and QUE-201 were the same. An assumption's
