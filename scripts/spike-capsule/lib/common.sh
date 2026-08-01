@@ -165,6 +165,25 @@ rig_assert() {
   fi
 }
 
+# The inverse: assert the command REFUSES. Every positive control needs this —
+# "the audit fails when a payload is planted" is the half of the pair that
+# makes the other half mean anything.
+#
+# It exists because the obvious spelling does not work: `rig_assert '…' ! audit`
+# passes `!` as the COMMAND NAME (it is a shell keyword, not a program), so the
+# assertion reds on the invocation and never scores the refusal at all. Observed
+# on this phase's own I4a positive control — the audit was correct throughout.
+rig_assert_fails() {
+  local desc=$1
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf '  FAIL  %s — expected refusal, got success\n' "${desc}" >&2
+    RIG_ASSERT_FAILURES=$((RIG_ASSERT_FAILURES + 1))
+  else
+    printf '  ok    %s\n' "${desc}"
+  fi
+}
+
 rig_assert_eq() {
   local desc=$1 want=$2 got=$3
   if [ "${want}" = "${got}" ]; then

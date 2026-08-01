@@ -105,7 +105,7 @@ probe_posture() {
   rig_assert 'I4a: /rig/verify.sh resolves (ro-bound in)' \
     in_sandbox -- test -r /rig/verify.sh
   rig_assert 'I4a: /rig is READ-ONLY — the capsule cannot rewrite its runner' \
-    not_writable /rig/verify.sh
+    runner_present_and_read_only /rig/verify.sh
   rig_assert 'I4a: no runner resolves under the writable root' \
     in_sandbox -- sh -c '! ls /capsule/verify.sh /capsule/sandbox.sh /capsule/provision.sh 2>/dev/null | grep -q .'
 
@@ -131,7 +131,7 @@ probe_posture() {
 # this leg a deleted runner scores the same green as a read-only one. Observed
 # passing vacuously when `/rig/verify.sh` did not yet exist (F-P02-1) — the
 # same shape as F-P01-3, and precisely the DQ-3 trap VA-3 names.
-not_writable() {
+runner_present_and_read_only() {
   in_sandbox -- test -e "$1" || return 1
   ! in_sandbox -- sh -c "printf x >> '$1'"
 }
