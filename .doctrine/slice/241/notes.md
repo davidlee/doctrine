@@ -554,6 +554,27 @@ SL-233 ×3, SL-242 ×3, IMP-315, plus two unscoped (`chore: skills`, `doctrine`)
 The most contended range in the slice; `record-delta` at phase close, do not
 assume `start..end` is all ours.
 
+**Steps 1–4 portion: `090148ef..5f42727b`, 10 commits, 8 mine, 2 foreign** —
+`9d4f18959 chore: v0.34.4` and `a3c5ec0f2 obs(SL-233)`. Both are INTERIOR, not
+trailing, so `record-delta --commit <tip>` cannot excise them: the phase's own
+code tip *is* the range tip (`5f42727b`). Recorded here instead, which is what
+the earlier boundary sections do. `doctrine slice phase --status completed`
+emitted its 12+-commit warning on exactly this.
+
+One of the eight is not phase work in the ordinary sense: **`ba9f4a8a3` was
+found UNCOMMITTED in the shared tree at the start of this session** — a
+coherent, self-documenting operator ruling (OQ-1's raw logs to the runtime
+tier, dated 2026-08-02) touching design.md, plan.toml, slice-241.md/.toml,
+notes.md and `.gitignore`. Committed rather than left exposed, given this
+range's two recorded destructive incidents (F-P04-6). It is SL-241 authored
+state, not PHASE-04 code, and `/reconcile` should treat it as such.
+
+**Whole-slice conformance is heavily commingled** — `doctrine slice conformance
+241` reports 65 undeclared paths, most of them other agents' (backlog IMP-378,
+ISS-290, ISS-291, `.claude-plugin/`, `plugins/`). Step 0's own ASM-008 and
+QUE-203 also read undeclared. Do not read that count as this slice's footprint;
+it is an audit-time reconciliation input, not a finding.
+
 Beyond commit interleaving, the tree was **actively destructive** this phase
 (F-P04-6). Two separate incidents, both from other agents, both mid-step:
 
