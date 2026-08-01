@@ -1,0 +1,46 @@
+memory_uid = "mem_019fbe5b51aa7891a11258e014800f3d"
+memory_key = "mem.pattern.harness.absent-instrumentation-refuses"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Absent instrumentation must refuse, not record a legal skip value"
+summary = "A harness that records an unimplemented case as a legal 'n/a' / 'skipped' value produces a complete-looking table whose numbers are about its own build order"
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["harness", "evidence", "testing", "falsifiability"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "355d4e724d6e62fdf7c10ba48246b23e363b682f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ef103c83072bfe997eefb4869c013ad6fc7b071df825631c01ff83aa7d5659f8"
+base_commit = "9b87bea3b1e89464da474fa869a51bcbf5631c76"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-241"
+
