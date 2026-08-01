@@ -24,8 +24,9 @@ contains migrates into dispatch machinery.
 - Execution of P-C1 (cost baseline), P-C2 (confinement matrix), P-C3
   (hostile matrix, both mechanisms) against a scratch clone of this repo.
 - Evidence: EVD records linked to QUE-200 (`supports`/`disputes`), the
-  measurement table from probe-specs § Measurements, and probe logs kept
-  under `.doctrine/rfc/025/evidence/`.
+  measurement table from probe-specs § Measurements, all committed under
+  `.doctrine/rfc/025/evidence/`; the raw run logs they summarise stay in the
+  runtime tier at `.doctrine/state/rfc-025/raw/`.
 
 ## Non-Goals
 
@@ -69,8 +70,8 @@ contains migrates into dispatch machinery.
   (separate process), so probe *execution* is context-cheap for the driver;
   log volume is the context cost to manage.
 - **OQ-1:** where probe evidence logs live long-term (RT-9 archive-tier
-  question, small-scale instance). v0: committed text summaries + gitignored
-  raw logs.
+  question, small-scale instance). v0: committed text summaries + raw logs in
+  the runtime state tier (design § 5.3, as amended).
 
 ## Verification / closure intent
 

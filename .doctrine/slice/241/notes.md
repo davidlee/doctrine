@@ -57,6 +57,23 @@ see § PHASE-04 boundary)
 - RFC-011 friction recorded (`2da32870`); `doctrine validate` clean; `rig
   selftest` green post-change
 
+**Cross-phase amendment (2026-08-02, operator ruling) — OQ-1 v0 relocated:**
+
+- Raw run logs move from the bespoke gitignored dir inside the authored tree
+  (`.doctrine/rfc/025/evidence/raw/`) to the runtime tier at
+  `.doctrine/state/rfc-025/raw/`. The `.gitignore` entry is reverted and the
+  `.gitignore` design-target selector dropped from scope — this supersedes the
+  two `.gitignore` bullets above (§ Produced, § PHASE-01).
+- Trigger: the entry reddened `every_runtime_gitignore_glob_is_classified`
+  (`src/worktree/mod.rs`), the parity test requiring every runtime-tier
+  `.doctrine/` glob to be classified in `WITHHELD` / `DERIVED_RUNTIME`.
+- Why not classify it: a one-off spike path in the *shipped* engine's hazard
+  authority is POL-002 facet 2 — permanent library surface bought for transient
+  project-local state. The state tier already carries the semantics wanted
+  (gitignored, fork-withheld as `Tier::State`, disposable), so the fix is
+  out-of-band and the test stays strict.
+- Landed in: design § 5.3 + § 6 OQ-1 + § 9.1, `slice-241.md`, plan EX-7/EX-14.
+
 ### PHASE-01 decisions (durable)
 
 - **D-P01-2** — `guard_not_real_repo` refuses **containment**, not just EX-2's

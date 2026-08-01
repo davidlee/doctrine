@@ -56,12 +56,6 @@ handover.md
 # leave behind are ignored (SL-231; fsutil::PUBLICATION_TEMP_PREFIX).
 .doctrine/observations/**/.tmp.*
 
-# SL-241 capsule spike, OQ-1 v0 ruling. The probe SUMMARIES and the generated
-# measurement table under .doctrine/rfc/025/evidence/ are authored and
-# committed; the raw run logs they summarise are the exhibit, not the
-# evidence, and stay out of the corpus (design.md 5.3).
-.doctrine/rfc/025/evidence/raw/
-
 web/map/dist/
 web/map/node_modules/
 

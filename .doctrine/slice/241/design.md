@@ -461,9 +461,25 @@ that requirement came solely from `prepare-review`'s phase-completion gate,
 which is out of the pipeline.
 
 **Evidence storage (OQ-1).** Committed text summaries and the generated
-measurement table under `.doctrine/rfc/025/evidence/`; raw logs gitignored. The
-summaries are the evidence; the logs are the exhibit. RT-9's archive-tier
-question at small scale.
+measurement table under `.doctrine/rfc/025/evidence/`; raw logs under
+`.doctrine/state/rfc-025/raw/`. The summaries are the evidence; the logs are
+the exhibit. RT-9's archive-tier question at small scale.
+
+*Amended (operator ruling, 2026-08-02).* The v0 ruling put the raw logs in a
+bespoke gitignored dir *inside* the authored tree
+(`.doctrine/rfc/025/evidence/raw/`) and bought that with a `.gitignore` entry.
+That entry broke `every_runtime_gitignore_glob_is_classified` — the parity test
+that requires every runtime-tier `.doctrine/` glob to be classified in
+`WITHHELD` or `DERIVED_RUNTIME` (`src/worktree/allowlist.rs`). Classifying it
+there was the wrong fix: it would buy permanent surface in the *shipped* engine
+for one client's disposable spike, which POL-002 facet 2 forbids. The runtime
+state tier already **is** the tier for disposable local exhibits — gitignored at
+`.gitignore:39`, withheld from forks as `Tier::State`, and `rm -rf`-able by
+definition. So the logs move there and the `.gitignore` entry goes away
+entirely; no shipped-library change, and the parity test stays strict. The
+ruling's substance is unchanged: summaries in the corpus, exhibits out of it.
+Cost of the move: a state wipe takes the logs with it. That is the tier's
+contract and it is what "the logs are the exhibit" already accepted.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -702,8 +718,8 @@ capability: conflict/staleness **resolution**, now owned by QUE-202.
 ## 6. Open Questions & Unknowns
 
 - **OQ-1** — long-term home for probe evidence logs (RT-9 archive tier at small
-  scale). v0 ruling in § 5.3; revisit if raw logs exceed the gitignored dir's
-  usefulness.
+  scale). v0 ruling in § 5.3, amended there to the runtime state tier; revisit
+  if the logs outgrow a disposable, wipe-on-clean home.
 - **QUE-200** — ingestion mechanism (M-A vs M-B). The rig's whole point; settles
   only on probe evidence.
 - **QUE-201** — where the interpretation-surface declaration lives in shipped
@@ -926,7 +942,7 @@ Writing the scope in is what stops the REV over-claiming.
 | `.doctrine/rfc/025/evidence/**` | new — committed probe summaries + measurement table |
 | `.doctrine/knowledge/**` | EVD records (CPT-001, DEC-099/101/102/103/104, ASM-007, QUE-201, CON-004/005 already landed) |
 | `.doctrine/slice/241/**` | design, plan, notes |
-| `.gitignore` | one entry for the raw-log dir |
+| `.doctrine/state/rfc-025/raw/` | raw run logs — runtime tier, gitignored by `.doctrine/state/`, no new `.gitignore` entry (§ 5.3 amendment) |
 
 No `src/` changes (see R2).
 

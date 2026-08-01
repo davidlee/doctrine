@@ -26,10 +26,6 @@ intent = "scope-relevant"
 selector = ".doctrine/rfc/025/evidence/**"
 intent = "design-target"
 
-[[selector]]
-selector = ".gitignore"
-intent = "design-target"
-
 [[relation]]
 label = "related"
 target = "RFC-025"
