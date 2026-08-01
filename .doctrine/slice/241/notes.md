@@ -6,10 +6,11 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · **PHASE-02 complete** (2/6), slice `started` · 37ef4048
+fresh-as-of: 2026-08-01 · **PHASE-03 complete** (3/6), slice `started`
 (PHASE-01 code tip 29c7acf3; PHASE-02 code range b3ad3eed3..d041f6b39, 4 commits,
 **none foreign** — recorded via `record-delta` after a post-flip fix, see
-§ PHASE-02 boundary)
+§ PHASE-02 boundary; PHASE-03 range acc4b2b34..HEAD, **one foreign interior
+commit**, see § PHASE-03 boundary)
 
 ### Produced
 
@@ -184,6 +185,145 @@ Raw results: `$SPIKE_CAPSULE_ROOT/probes/smoke/results.tsv`. Re-runnable:
 `rig smoke`, `control/probe-capsule.sh [posture|bounds|doorbell]`,
 `control/audit-i4a.sh <capsule> [--positive-control]`.
 
+**PHASE-03 (complete, acc4b2b34 → code tip, 6 own commits):**
+
+- `control/pipeline.sh` — the four stages, the closed vocabulary, `stage_emit`,
+  `assert_outcome`, the per-run repo trio. Sourceable and executable.
+- `control/harvest-fetch.sh` (M-A) / `control/harvest-bundle.sh` (M-B) — one
+  signature, so the matrix loops without branching
+- `control/selftest.sh` — VT-4: happy · attribution · bundle · falsifiable
+- `capsule/sandbox.sh` — SIGXFSZ classified (F-P03-1); two more names crossed
+- `capsule/worker-stub.sh` — bundle emission pre-doorbell; stub path passed in
+- `control/probe-capsule.sh` — the vacuous ABSENT legs repaired (F-P03-2)
+- VT-1..VT-4 PASS; `doctrine validate` clean; shellcheck clean on every rig file
+
+### PHASE-03 decisions (durable)
+
+- **D-P03-1 — the pipeline's canonical is a PER-RUN DISPOSABLE CLONE of the
+  fixture.** Design § 5.1 names canonical / quarantine / capsule as three
+  zones; `fixtures.md` § *Not fixtures* makes only the quarantine per-run. But
+  stage 4 advances an accepted ref and `assert_outcome` asserts canonical is
+  byte-identical across a refused run — neither is expressible against the
+  pristine base fixture that PHASE-05 also reads. So canonical is instantiated
+  per run from F1 and the fixture stays a TEMPLATE. Same class of placement
+  choice as D-P02-3.
+- **D-P03-2 — the quarantine is CLONED FROM CANONICAL, not `init`'d empty.** It
+  must satisfy two things at once: hold S's objects for the conform legs, and
+  give `slice conformance -p` a `.doctrine/` registry to read. A clone at B
+  does both while remaining a real, separate, per-run, disposable repository —
+  all EX-2 requires. Its worktree sits at B, which is NOT the candidate, so
+  I4's "no candidate tree materialised trusted-side" holds; every leg is
+  plumbing over `B..S`. `--no-hardlinks` so a corrupt object cannot reach
+  canonical through shared object files.
+- **D-P03-3 — SIGXFSZ is classified as the disk bound.** `sandbox.sh` sets
+  `ulimit -f` itself, so status 153 inside the namespace has exactly one cause.
+  Folding it into `RIG_EXIT_DISK` is what lets both disk legs map to the single
+  token `harvest/resource-cap` rather than mint a second.
+- **D-P03-4 — the accepted ref is READ from the fixture (`symbolic-ref HEAD`),
+  never hardcoded.** F1's trunk is `mainline` precisely so anything assuming
+  `main` breaks loudly (D5); a pipeline that hardcoded it would pass for a
+  reason that says nothing about portability.
+- **D-P03-5 — the stub's write path is a CONTROL-PLANE parameter, carried in
+  the contract.** Where the worker writes is a join with the slice's
+  `design-target` selectors: the happy path needs it declared, the hostile rows
+  need it undeclared and forbidden. Burying it in the worker would make every
+  happy run refuse at conform leg 2 for a reason about the rig's scaffolding
+  rather than about the model.
+
+### PHASE-03 findings (durable)
+
+- **F-P03-1 — the disk cap had two enforcement legs and only one REPORTED.**
+  `du` is cumulative and trusted-side; `ulimit -f` is per-file and fires as
+  SIGXFSZ, which reached the parent as a raw status `sandbox.sh` never
+  classified. PHASE-02's own case did not separate them: it passes because `du`
+  reports 8392704 B against a cap of 8388608 B — **one 4096-byte block of
+  accounting slop** — so the 64 MiB overshoot its comment relies on is doing no
+  work at all (a 64 KiB overshoot is byte-identical). A **sparse** oversize
+  separates them: `ulimit -f` fires, the tree stays at 4096 B, `du` has nothing
+  to say, and **`sandbox.sh` exited 0** — the bound bit and the sandbox called
+  it a pass. Fixed by D-P03-3; the separating leg is now in `probe-capsule.sh`.
+  The units themselves were correct, and would have red loudly if wrong.
+- **F-P03-2 — two of five ABSENT legs were vacuous, and one carried a second
+  vacuity route.** `~/.ssh` and the credential-helper leg both passed
+  **unconfined**: `~/.ssh` is hidden by the OUTER jail (it exists on the host —
+  operator correction), and no `credential.helper` is configured here at all.
+  The helper leg also passes if `git` is not on the sandbox allowlist, since
+  the substitution simply comes back empty. Repaired with `absent_inside`,
+  which proves the subject reachable OUTSIDE before asserting it does not
+  resolve INSIDE, and records `n/a` **with its reason** where it is not. The
+  gate is *reachability from where the probe stands*, which makes the leg
+  environment-conditional by construction: in-jail `~/.ssh` is `n/a`; on a HOST
+  run the same leg becomes load-bearing with no edit (PHASE-01 EX-9's
+  discipline applied to an assertion rather than a measurement). `~/.ssh` is
+  replaced as the load-bearing subject by the host home ROOT, which carries the
+  general claim and certainly exists.
+- **F-P03-3 — a `verify:` command was WORD-SPLIT, and a stage that should have
+  refused SILENTLY ATTESTED.** `node -e "process.exit(1)"` split naively
+  reaches node as three words — `node`, `-e`, `"process.exit(1)"` — with the
+  quotes as LITERAL CHARACTERS. Node evaluates that as a harmless string
+  expression and exits 0, so the verify capsule attested a run that should have
+  failed. Found only because an attribution scenario built to red came back
+  green. Fixed with `sh -c`, which still execs a single command so I4 is
+  untouched. **The design's own examples (`npm test`, `cargo test`) have no
+  quoting, which is exactly why this would have survived to PHASE-06** and
+  first bitten on a real client declaration.
+- **F-P03-4 — an F-P01-1 in this phase's own code, caught before it ran.**
+  `pipeline_setup` calls `guard_not_real_repo` (which refuses by `exit`) while
+  returning the run dir on stdout — forcing every caller into `$( … )`, where
+  that exit ends only the subshell. Fixed by PUBLISHING `PIPELINE_RUN` rather
+  than printing it, the same remedy PHASE-01 applied to `rig_enter`/`RIG_ROOT`.
+  Fifth member of the family, and the first found by *rereading for the shape*
+  rather than by observing a failure.
+
+### PHASE-03 evidence (what was OBSERVED, not merely coded)
+
+| criterion | observation |
+|---|---|
+| EX-11 / VA-1 | happy path GREEN on F1 under **both** mechanisms — four stages pass, `npm test` really runs in the verify capsule, one canonical ref advances by CAS. Recorded in `probes/selftest/results.tsv` |
+| VA-2 | **four** scenarios across **three** stages: `conform/undeclared-path` · `verify/suite-failed` · `verify/verify-timeout` · `advance/stale-base`. The refusing stage is read from the emitted `stage=` line, never from an exit code — every refusal exits 1 |
+| EX-8 / F-14 | `advance/stale-base` refuses at the precondition with the **strict** `assert_outcome` clause holding — object count untouched, so nothing was transferred |
+| VA-3 | the DELETED SECOND HOP restored on purpose: canonical **refs unchanged** (the refs clause is blind), object count **grew**, and `assert_outcome` **REDS**. Negative control green first. A wrong admission, not a payload red |
+| EX-3 | all four M-B hygiene legs observed refusing — `bundle-unsafe-path` (symlink to a *nonexistent* target, which is what proves the leg ORDER), `bundle-absent`, `bundle-invalid`, `resource-cap` — behind a positive control that an untouched bundle IS ingested |
+| EX-9 / I5 | `verify/verify-timeout` observed end to end: PHASE-02's status 124 acquiring its PHASE-03 token. The capsule never authors it |
+| EX-4 / D-P03-2 | conform leg 2 runs `slice conformance -p <quarantine> --against B..S --strict` and refuses a real undeclared path |
+
+Re-runnable: `rig selftest` (auto-dispatches per D-P01-3), or
+`control/selftest.sh [happy|attribution|bundle|falsifiable]`.
+
+### PHASE-03 open questions — vocabulary gaps, RECORDED not filled
+
+Surfaced by pinning the status→token mapping. None blocks the happy path;
+each wants an operator ruling or a PHASE-05 `/consult` before a row needs it.
+**No token was minted** — the set is closed, and inventing one would forge the
+distinction `assert_outcome` keys off.
+
+- **OQ-a — a VERIFY capsule that overruns the DISK cap has no token.** EX-3
+  reads bound→token (`timeout`→`verify-timeout`, `disk`→`resource-cap`), but
+  § 5.1's prefixes read stage→token, and the refusing stage there is `verify`.
+  `verify/resource-cap` is not in the set.
+- **OQ-b — a WORKER capsule that overruns the WALL CLOCK has no token.** The
+  doorbell wait ends at its deadline and harvest finds no result ref; `harvest`
+  has no timeout token. Likely PHASE-05 H15's business ("killed at each stage
+  in turn").
+- **OQ-c — M-A has no token for an ABSENT RESULT.** `bundle-absent` is M-B's,
+  and reusing it would be a mechanism lie in the one column the rig exists to
+  compare. `harvest-fetch.sh` raises a **RIG DEFECT** instead of scoring it.
+
+### PHASE-03 boundary — ONE foreign interior commit
+
+`code_start_oid = acc4b2b34` (an RFC-026 observation commit, correctly
+EXCLUDED — the range is `start..end`). Six own commits, and **one foreign
+interior**: `28f0d4c08 chore(SL-233): ISS-290 …`, touching
+`.doctrine/backlog/issue/290/**` only. Interior, so `record-delta` cannot
+excise it — neither `--commit` nor `--start/--end` excises a middle commit.
+Left as recorded and flagged here, exactly as PHASE-01's `ad65512dc` was.
+
+Expect it at audit as `undeclared` under `.doctrine/backlog/**`, disposition
+**boundary pollution** — not this slice's work, and not a selector question.
+The two families PHASE-02 raised (`.doctrine/memory/**`,
+`.doctrine/observations/**`) remain live as a **corpus-wide** question for
+audit; selectors were again deliberately NOT widened.
+
 ### PHASE-02 boundary — clean range, two NEW undeclared families
 
 `code_start_oid = b3ad3eed3`, `code_end_oid = d041f6b39`, **4 commits, none
@@ -256,7 +396,12 @@ mid-phase would convert a legible structural finding into a silent pass.
 
 ### Open
 
-- QUE-200 — ingestion mechanism M-A vs M-B; the rig's whole point
+- **OQ-a / OQ-b / OQ-c** — three closed-vocabulary gaps found in PHASE-03,
+  recorded and NOT filled (§ PHASE-03 open questions)
+- QUE-200 — ingestion mechanism M-A vs M-B; the rig's whole point. **First
+  evidence input banked**: M-B's trusted-side file-ingestion boundary is four
+  observed refusal legs that M-A does not carry at all — the asymmetry is a
+  cost, and it is now measured rather than argued
 - QUE-201 — declaration home; now ergonomics-only, gains a probe-evidence input
 - QUE-202 — how the capsule model *admits* the second result; refusal proven,
   admission not designed
