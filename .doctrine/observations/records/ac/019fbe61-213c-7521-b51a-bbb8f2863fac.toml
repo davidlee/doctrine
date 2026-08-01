@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbe61-213c-7521-b51a-bbb8f2863fac"
+recorded_at = "2026-08-01T17:31:04.380093998Z"
+kind = "friction"
+summary = "/route→reseat: a per-tree bulk citation rewrite is wrong by construction while a coordination branch is live — 25 of 70 occurrences had to be reverted"
+detail = "Executing the DEC-100..104 renumber on edge. I built the worklist with git grep -w (correct) and then rewrote every hit (wrong). edge carries SL-233's OWN items — IMP-370, ISS-283/284/285/287/289, RFC-026, two memories, an observation — which cite SL-233's DEC-099..104, interleaved with SL-241 items citing the spike-capsule records at the SAME ids. The tree a citation lives in does not tell you which decision it means. Caught only because a swept-up memory read 'DEC-107's body, PHASE-16 EX-7/EX-14' — PHASE-16 is SL-233's, so the ref was ours and had just been repointed at 'Two spike fixtures'. Cost: full re-derivation, per-hit classification of all 71 occurrences, and an 11-file revert. The handover packet DID warn that this slice raised items into the primary tree; I excluded the one such file I already knew about and failed to generalise it. Second defect found in the same pass: slash-compressed id runs (DEC-099/101/102/103/104) are invisible to any whole-token scan, and two live instances survived a -w sweep that reported clean. Both added to ISS-292."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
