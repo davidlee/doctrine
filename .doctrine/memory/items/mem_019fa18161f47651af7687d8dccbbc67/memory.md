@@ -57,3 +57,41 @@ Corollary: control characters enter authored files easily and invisibly. While
 writing prose *about* NUL bytes, a literal NUL was emitted three times where the
 text `backslash-u-0000` was intended. `doctrine validate` passed clean with a NUL
 inside a tracked design document — nothing in the toolchain flags it.
+
+## A second cause, which a positive control does NOT catch
+
+`grep` is **line-oriented**. A multi-word phrase that **wraps across a line
+break** in the source matches nothing, even though the content is present and
+the file is plain text.
+
+Hit while proving a rust-embed re-embed had carried a one-line edit into
+`install/hymns/stage/design.md` (SL-233 PHASE-08). The rendered output contained
+the sentence, wrapped:
+
+```
+- That authority is over **procedural state**. The **design document is canon
+  for design intent** — being authoritative about the process does not make the
+```
+
+`grep -n 'canon for design intent'` returned **nothing**. The natural reading —
+"the re-embed silently failed", a documented footgun in this repo — was wrong.
+
+**The positive control did not help.** A control on some *other* string that
+happens to sit on one line passes, and licenses exactly the false conclusion:
+the control proves the file is readable and the walker works, not that the
+*shape* of the sought pattern is greppable.
+
+## The rule, extended
+
+For a **multi-word phrase in wrapped prose**, prefer a single unwrapped token,
+or read the region:
+
+```bash
+command grep -n 'canon' "$F"                   # one word cannot wrap
+command grep -n -A2 -B2 '<anchor>' "$F"        # read the region, judge by eye
+```
+
+Choose the anchor for *unwrappability*, not for how well it describes what you
+are looking for. Reflowed markdown, `--help` output, and rendered prompt bands
+are all wrap-prone by construction, so this is the common case in this repo, not
+an edge one.

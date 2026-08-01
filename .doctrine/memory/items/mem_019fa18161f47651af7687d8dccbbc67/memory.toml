@@ -7,7 +7,7 @@ status = "active"
 title = "A negative grep result is untrustworthy without a positive control"
 summary = "`grep` in this harness is a ugrep wrapper with `-I`, which silently skips binary files — so a file containing one stray control byte matches nothing, and even `grep -c` prints nothing rather than 0."
 created = "2026-07-27"
-updated = "2026-07-27"
+updated = "2026-08-01"
 
 [scope]
 paths = []
