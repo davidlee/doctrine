@@ -4,7 +4,7 @@ title = "Retire the projected reference-doc model"
 status = "proposed"
 created = "2026-08-01"
 updated = "2026-08-01"
-tags = ["area:docs", "area:governance", "area:install", "area:memory", "area:migration"]
+tags = ["area:docs", "area:governance", "area:install", "area:memory"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
@@ -24,6 +24,10 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".doctrine/*.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".gitignore"
 intent = "scope-relevant"
 
 [[relation]]
