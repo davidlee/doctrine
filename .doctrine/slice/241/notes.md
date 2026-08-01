@@ -421,6 +421,119 @@ distinction `assert_outcome` keys off.
 | EX-2 / VA-1 | `doctrine knowledge show ASM-007` renders `invalidated` in **both tiers** — structured `invalidated_by`/`invalidated_on`/`contradicts` and the prose body. Never the `.md` alone |
 | EX-2 | recorded **invalidated**, never *discharged*; replacement claim carried forward as ASM-008 rather than left vacant |
 
+### PHASE-04 steps 1–4 — decisions (durable)
+
+- **D-P04-5 — P-C1a keeps `provision` in the step list as a COMPOSITE of
+  `clone`, with no number of its own.** probe-specs § P-C1 names six steps and
+  this rig does not provide all six separably: step 2 is `.envrc` + `direnv
+  allow`, neither binary exists in this jail, and the provisioning that remains
+  (detach at B, capsule identity, remote strip) is the same runner invocation as
+  the clone. The three options were to drop the step (a shorter list that looks
+  complete), to repeat the clone's number under both names (a column a reader
+  sums wrongly), or to carry it with its reason and no number. Took the third —
+  it is the `n/a` matrix-cell discipline applied to a second kind of
+  unmeasurability, and both rows are ASSERTED present rather than trusted.
+- **D-P04-6 — the in-sandbox observation helpers were EXTRACTED, not copied**
+  (`lib/sandbox-probe.sh`). `absent_inside` encodes a rule that was wrong in its
+  first two writings (F-P02-1, then F-P03-2); a second copy would have carried
+  its own version of that rule, and the two would have disagreed silently.
+- **D-P04-7 — `audit-dq4` reports SITES under a stated predicate, not string
+  hits.** See F-P04-9. Comments, quoted-only occurrences and sandbox-routed
+  lines are not execution; everything else must be exempted WITH A REASON or the
+  audit refuses. The blind spot (a trusted-side `sh -c '…'`) is closed by
+  treating an unrouted `sh -c`/`eval` as a site, and is stated in the file.
+- **D-P04-8 — `audit-dq4`'s scope is the trusted side: `control/`, `lib/`, and
+  the `rig` entry point.** `capsule/` is excluded because those runners execute
+  INSIDE a capsule by mount posture (I4a) — running the toolchain is their job.
+  `fixtures/` is excluded because `package.json` naming `node --test` is the
+  fixture being a TypeScript project, not the control plane running one. Note
+  `lib/` is IN scope and EX-7's wording (`control/**`) is narrower than the
+  trusted side actually is.
+- **D-P04-9 — both audits' positive controls plant into a COPY of the rig under
+  the capsule root, never into this repository.** A rig that wrote payloads into
+  its own source tree, in a repo several agents share, would be a worse hazard
+  than the one it audits. `audit-i4a`'s precedent (plant into a capsule) applied
+  to an audit whose subject is the rig itself, via `--root`.
+
+### PHASE-04 steps 1–4 — findings (durable)
+
+- **F-P04-7 — the headline P-C1a number was a resolver timeout, not capsule
+  cost.** First run: `clone` 7.74s, `harvest` 7.69s, on a 24-file fixture. Cause:
+  `provision.sh` pinned the capsule identity AFTER the clone, so the clone's own
+  reflog writes had no committer ident and git GUESSED one — which means
+  resolving the hostname, and under `--unshare-all --share-net` that is a DNS
+  query for an unshared UTS name that blocks until the resolver gives up.
+  Measured in isolation: **3905ms ident unset, 40ms ident set, 35ms unset with
+  `--no-net`**. Every capsule paid it twice (worker and verify). Fixed at the
+  clone (`git clone -c user.name/-c user.email`, effective before the fetch and
+  persisting into the new repo's config, asserted); re-measured **clone 0.047s,
+  harvest 0.348s** — the accepted-phase round trip ~16s → ~1s. Two durable
+  points: a capsule with network but no identity has a multi-second per-git-op
+  tax that looks exactly like "capsules are slow"; and results files that are
+  appended across a rig fix must be banner-stamped with rig state, which
+  `probe-c1a` now is.
+- **F-P04-8 — "no mount resolves under this repository" is FALSE, and the wrong
+  assertion nearly shipped as an EX-8 witness.** The profile ro-binds the
+  control-plane runners at `/rig`, and they live under
+  `scripts/spike-capsule/capsule/`. That is I4a working as designed. The witness
+  is now the EXACT SET (one repo-derived mount, carrying no `.git`), which states
+  the admitted exception instead of hiding it behind an emptiness claim that
+  reddened. Generalises: an EX-8-style "unrepresentable" witness written as
+  *nothing crosses* is the shape most likely to be both wrong and green-looking.
+- **F-P04-9 — DQ-4's literal form is unimplementable, and the exemption it
+  forces is the real finding.** "The exec tokens must be ABSENT from
+  `control/**`" (light declaration, EX-7) forbids the WORD: `pipeline.sh` must
+  quote `node -e "process.exit(1)"` in a comment to explain why `verify:` runs
+  through `sh -c`. Under a predicate that means *invocation*, exactly one site
+  survives: **`fixture-light.sh` runs `npm` trusted-side at fixture build time**
+  (3 sites). That is outside DQ-4's stated subject — capsule content and
+  harvested trees — because the tree is assembled from this repo's own authored
+  sources and no capsule has touched it. **The exemption is CONDITIONAL and
+  PHASE-05 inherits the condition**: a payload-bearing fixture variant (H11
+  `postinstall`) that reuses that build loop would execute the planted payload
+  trusted-side and break DQ-4 for real. The audit prints the exemption and its
+  site count every clean run and reds if it goes stale.
+- **F-P04-10 — the OQ-a residue, located precisely (by inspection, not
+  observed).** `verify_stage`'s status→token map has no arm for `RIG_EXIT_DISK`,
+  so a verify capsule that overruns the disk cap is reported as
+  `verify/suite-failed` — a wrong attribution, not a missing token. **No token
+  was minted** (STOP condition S1 honoured): P-C2's resource row records
+  STATUSES on the worker kind, as PHASE-02 does. This sharpens OQ-a from "there
+  is no legal token" to "the mis-attribution is at `pipeline.sh` `verify_stage`,
+  and it is one `case` arm".
+- **F-P04-11 — `verify-vt` reports UNATTRIBUTABLE, not PASS, while the phase is
+  `in_progress`.** Both PHASE-04 VTs read *"keyword present but <file> not
+  modified by this slice"* with the files committed. Attribution reads the
+  phase's conformance boundary, and `code_end_oid` is captured by the flip to
+  `completed`. Expected to resolve at the flip; a future phase should not read
+  UNATTRIBUTABLE mid-phase as a real failure.
+- **F-P04-12 — `/tmp` inside the capsule is a tmpfs, so the write-floor row must
+  not assert that the write failed.** It succeeds inside and is simply invisible
+  outside. The observable is the HOST path holding no sentinel. Asserting on the
+  write status would have scored that row wrong in both directions — the DQ-3
+  trap in a place it is easy to miss, because the other two targets in the same
+  row do fail the write.
+
+### PHASE-04 steps 1–4 — evidence (what was OBSERVED, not merely coded)
+
+| criterion | observation |
+|---|---|
+| EX-4 / VA-2 | `rig c1a` green. Absolutes only; header asserted to carry no before/incumbent/delta column. `nix env ready` present as `n/a` **with its reason**, and `provision` present as a composite **with its reason** — both asserted, not trusted |
+| EX-5 / VA-3 | `rig c2` — all seven rows pass, each with a named observable in a COLUMN, each with a positive control. Row outcome is DERIVED from the assertions the row made, never supplied. Two legs recorded `n/a` with reasons (`~/.ssh`, hidden by the outer jail; `DOCTRINE_BIN` unset out here) |
+| EX-6 | resource row recorded in its own right: status 124 for a 600s sleep under a 3s bound, `RIG_EXIT_DISK` for 64MiB under an 8MiB cap, both positive controls green |
+| EX-7 | **both positive controls DEMONSTRATED**, not coded: each audit observed clean → refusing on a plant → clean again, on a copy of the rig. `audit-dq4` refused a planted `(cd … && npm test)` over a harvested tree; `audit-nohooks` refused a planted `worker_mode` branch |
+| EX-8 | B1–B6 each carry a token leg **and** a positive structural witness. B2's witness reddened on first writing and was corrected (F-P04-8) — the census table is the observation, not the prose |
+| VT-1 / VT-2 | keywords present; **UNATTRIBUTABLE while the phase is `in_progress`** (F-P04-11) |
+| behaviour preservation | `rig selftest`, `probe-capsule`, `audit-i4a` re-run green after the `provision.sh` and `pipeline.sh` changes; rig-wide `shellcheck -x -S style` clean |
+
+**R2 discharged, and it must not be read the other way.** PHASE-04's VT-1 and
+VT-2 grep the audit scripts for keywords: they prove PRESENCE, never BEHAVIOUR.
+This slice has three times found that evidence shape to be decoration
+(F-P02-\*, F-P03-\*). **PHASE-05/06 must not read VT green as "the audits
+work."** What carries that claim is EX-7's demonstrated positive controls, which
+are VA-3's business and are re-runnable as `control/audit-dq4.sh
+--positive-control` and `control/audit-nohooks.sh --positive-control`.
+
 ### PHASE-04 — FOR RECONCILIATION (not edited in-phase, per operator ruling)
 
 - **design.md § 9 closure bullet is now false.** It reads *"ASM-007 is recorded
