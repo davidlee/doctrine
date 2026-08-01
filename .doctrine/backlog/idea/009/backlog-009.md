@@ -29,6 +29,23 @@ authored tier, reports:
 without mutating anything — a read-only drift/typo canary the tolerant read
 cannot raise.
 
+## Third canary — the wholly-empty facet (SL-241 / RV-323, 2026-08-01)
+
+Neither C4 nor C6 catches the commonest real defect: a record whose `[facet]` is
+**entirely unfilled** while its `.md` reads complete. `knowledge new` seeds every
+facet field present-and-empty, so prose-only authoring is the path of least
+resistance and leaves nothing for a query to find.
+
+Observed on DEC-099: full decision prose plus two amendments in the `.md`, and
+`context` / `choice` / `alternatives` / `rationale` / `consequences` / `decided_on`
+all `""`. ASM-007 and QUE-201 the same — ASM-007's `validation_plan`, the field
+naming what would falsify it, blank on a record whose entire purpose is
+falsifiability.
+
+A lint leg: flag any non-draft record whose kind-required facet fields are all
+empty. Cheap, and it catches the half-invisible amendment before the ruling is
+needed. See `mem.pattern.doctrine.amend-knowledge-both-tiers`.
+
 ## Also fold in (C3 structural)
 
 The `knowledge list` reveal rule (`list_rows`) reproduces `listing::retain`'s

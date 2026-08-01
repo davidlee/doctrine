@@ -1,0 +1,46 @@
+memory_uid = "mem_019fbcdbd2dc70d1b4aec3209955ffe1"
+memory_key = "mem.pattern.doctrine.repair-overshoots-the-named-axis"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A repair that overcorrects along the axis the finding named lands off it in the other direction"
+summary = "Findings name an axis; repairs slide too far along it and introduce a new defect facing the opposite way. Check the repair against the finding's evidence, not its direction."
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "feedback", "conduct"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3b3847dca687b06da13697c392045613d84b5f4d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "373b975ca24838469af43470b0d18e180b71fc6e12bf8cd5359f4e6e4b71b7bc"
+base_commit = "e0ab11d85ea4d78dac697dbfc4e8f62828868791"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-323"
+
