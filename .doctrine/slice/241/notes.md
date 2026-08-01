@@ -6,7 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · 29c7acf3
+fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · bd4dee1b
+(phase code tip 29c7acf3; bd4dee1b adds the harvest + observation commits)
 
 ### Produced
 
