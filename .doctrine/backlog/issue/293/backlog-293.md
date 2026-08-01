@@ -106,3 +106,57 @@ instead of requiring `ps`.
 - `IMP-024` §6 — the adjacent orphaned-raiser symptom from `RV-324`.
 - `CHR-051` — the pi spawn-surface defect register; this belongs beside it.
 - Live instances: `RV-341` (SL-233 Kind A) and the S0 census pair.
+
+## Resolved — 2026-08-02, `4441a476`
+
+Fixed before the campaign's S2 fan-out, as this issue recommended.
+
+### The premise was re-confirmed, not taken on trust
+
+The 770 MB `.log` files this issue measured had been reaped, so the original
+offsets were no longer reproducible. A fresh trivial rpc turn was run against
+the **unmodified** script as a positive control and re-measured:
+
+| | offset |
+|---|---|
+| log size | 141,739 |
+| last `"agent_end"` | 139,757 |
+| last `"agent_settled"` | 141,722 |
+
+`agent_settled` is the terminal event and lands **17 bytes from EOF**, exactly as
+this issue predicted. It is a bare `{"type":"agent_settled"}`. The distance from
+`agent_end` to EOF is just the size of the `agent_end` record itself, which
+carries the accumulated state — which is why it scales with the turn and reached
+684,768 bytes on a census.
+
+### A second defect, same symptom, found by that control
+
+The probe run reported `reason=agent_end` (a small turn *does* fit the 128 KiB
+window) and still consumed its entire 150 s backstop. Cause: `kill -9 "$KEEP"`
+fells the fifo-keeper subshell but **orphans its `sleep $BACKSTOP` child**, which
+inherited the script's stderr. The script exits promptly; any caller that pipes
+or `wait`s on it hangs to the backstop regardless. Confirmed against `ps` — three
+`sleep` processes at `ppid=1`, 29 minutes after their raiser had finished.
+
+This is the true residual of `IMP-024` §6 ("orphans block a `wait` on the
+spawner, so completion reports arrive late"). The poll fix alone would not have
+closed it: with both defects live, fixing only the poll leaves the caller
+blocking for the full backstop anyway, and the operator sees the same symptom.
+
+### What changed in `scripts/pi-review.sh`
+
+1. Poll matches `"(agent_settled|agent_end)"` over a 4 MiB tail. Matching either
+   keeps it working if pi's event order changes again.
+2. `set -m` moved ahead of the **first** background job, so `$KEEP` is its own
+   process-group leader, and the reap group-kills it (`kill -9 -"$KEEP"`) exactly
+   as it already did `$PI`.
+3. The elapsed-vs-backstop line this issue asked for, plus an explicit WARNING on
+   `reason=timeout`.
+
+The reap stays `set -m` + `kill -9 -$PID`. `setsid` remains absent from this jail
+and would break the spawn outright (`CHR-051`).
+
+### Measured, before and after
+
+    before   reason=agent_end        150s of 150s backstop
+    after    reason=agent_complete     6s of 900s backstop
