@@ -1,0 +1,16 @@
+id    = 341
+slug  = "sl-233-kind-a-landed-code-vs-reviewed-design-phase-020608"
+title = "SL-233 Kind A — landed code vs reviewed design (PHASE-02/06/08)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "implementation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "campaign"
+responder = "orchestrator"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-233"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
