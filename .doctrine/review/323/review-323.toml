@@ -14,7 +14,7 @@ ref   = "SL-241"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: fourteen rows demonstrably run on the four-stage pipeline. Observed: the claim is asserted, not derived - at least five rows name machinery this design deletes or never specifies"
 detail = """
@@ -34,7 +34,7 @@ response = "Upheld, and it was the right charge to lead with. Verified each of t
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: CPT-001 class 4 (gitlinks) refused as doctrine-owned universal policy. Observed: no leg of the conform stage inspects file mode, and the existing rejection is index-scoped and unreachable"
 detail = """
@@ -50,7 +50,7 @@ response = "Upheld; a real hole, not matrix bookkeeping, and the code citation c
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: one mutation, testable via I1. Observed: harvest's second hop writes a ref and its objects into the canonical repo, so I1 fails on both refused and passing rows"
 detail = """
@@ -66,7 +66,7 @@ response = "Upheld. Your first reading is the correct one and the design was gen
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: the forbidden-path leg carries the belt's hardening. Observed: it is hand-rolled shell without quotePath=false or --no-renames, so H5 is evadable by non-ASCII name and by rename"
 detail = """
@@ -84,7 +84,7 @@ response = "Upheld, and both citations verified in source. src/slice.rs:2890-290
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: the trust-bearing declaration is read from content the capsule cannot influence. Observed: the read side is unspecified and two of QUE-201's three shipped homes are worker-writable"
 detail = """
@@ -102,7 +102,7 @@ response = "Upheld. Fail-closed on absence is not a defence against substitution
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: RT-4 ingestion hygiene for surviving capsule-authored artifacts. Observed: M-B's bundle file inherits every RT-4 obligation and the design states none, understating M-B in the QUE-200 comparison"
 detail = """
@@ -118,7 +118,7 @@ response = "Upheld. The design earned most of RT-4 by deletion and then left the
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: altitude computed from results (D6). Observed: the computation cannot distinguish held-on-light from never-attempted-on-light, so a vacuous cell is promoted to model-level"
 detail = """
@@ -134,7 +134,7 @@ response = "Upheld, and this is the one I would have been most likely to ship. D
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: the TypeScript fixture falsifies ASM-007. Observed: every rig mechanism is confirmatory, so exhaustiveness leaves the spike exactly as unproven as it entered while both records claim discharge"
 detail = """
@@ -148,7 +148,7 @@ response = "Upheld. The distinction is right and I had conflated it: instantiati
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: Closure counts evidence about the capsule model. Observed: H10/H16 measure the incumbent and count as coverage, and no record owns the capsule model's conflict/staleness admission path"
 detail = """
@@ -166,7 +166,7 @@ response = "Upheld on both legs, and the remediation goes further than the sente
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: a fillable before/after measurement table (Closure gates on it). Observed: no source for the before column, one metric names the deleted candidate-create stage, and the headline token number is n=1"
 detail = """
@@ -184,7 +184,7 @@ response = "Upheld on all three legs. Closure gated on filling a table the rig a
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: I4's verdict comes from a runner the capsule cannot rewrite. Observed: the runner's mount posture is unstated, and one ordinary reading lets a hostile worker overwrite verify.sh and undo RT-1"
 detail = """
@@ -200,7 +200,7 @@ response = "Upheld. The mount posture was unstated and your second reading is th
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: the artifact agrees with itself on its central mechanism. Observed: four stages in four places, five in three others, with matrix.tsv's expected-stage column keyed to the difference"
 detail = """
@@ -218,7 +218,7 @@ response = "Upheld. Four in four places, five in three, including the design's o
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: an unambiguous cardinality for a taxonomy clients declare against. Observed: five trigger classes enumerated as six named items, in design D3, design 5.5, and ASM-007"
 detail = """
@@ -233,6 +233,30 @@ Trivial to fix and worth fixing precisely because DEC-099 makes clients declare 
 PENANCE: restate the flat lists as "five classes (one with a git-level sub-class)" or enumerate with CPT-001's numbering inline, in design.md D3, design.md § 5.5, and the ASM-007 body."""
 disposition = "fix-now"
 response = "Upheld. CPT-001 numbers them 1, 2, 3, 3g, 4, 5 — five numbered classes over six rows, with 3g a sub-class of 3 — and the flattened prose restatement lost the nesting while keeping the count, which is why § 5.2's 'classes 3g/4' and 'class-2/3' had nothing to parse against. Restated with the nesting intact in all three places you named: design D3, design § 5.5's ASM-007 paragraph, and ASM-007's own body. Worth fixing for exactly the reason you gave — DEC-099 makes clients declare against this taxonomy and ASM-007 makes its exhaustiveness falsifiable, so 'is there a sixth?' must not be answerable 'yes, it is in the list' for the wrong reason."
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "major"
+title = "Expected: I1's object-count clause holds on every refusal. Observed: stage 4 must fetch before it can CAS, so a stale-base refusal leaves objects in canonical - reddening assert_outcome on H10/H16, the two rows F-9 just made capsule-model evidence"
+detail = """
+NEW, arising from the F-3 remediation - not a re-raise. The fix is right; its edge is unstated, and it lands on exactly the two rows F-9 promoted to capsule-model evidence.
+
+EXPECTED: I1's refused-row clause, as amended, holds on every refusal - "refused at any stage | the canonical repository is byte-identical to its pre-run state - same refs, and the same object count (F-3, and the observable H7 needs)". § 9 runs assert_outcome on every row. OBSERVED: it cannot hold for a refusal at stage 4, and stage 4 now has a refusal token.
+
+§ 5.1 stage 4 reads "fetch the pinned OID into canonical, then one CAS ref move - or refuse". That ordering is forced by git: a ref cannot be advanced to an OID whose objects are not in the repository. So the object write necessarily precedes the CAS, and any refusal AT the CAS leaves those objects in canonical. Object count changes; refs do not.
+
+The rows that refuse there are H10 and H16 - "advance / stale-base on the pipeline (safety - capsule-model evidence)" per § 5.6 and § 5.1. So assert_outcome reds on the two rows the F-9 remediation just established as the capsule model's genuine conflict-safety evidence, and it reds for a reason that is a property of git's object model rather than of the model under test. That is R4 again, in the same damaging direction: a false FAIL on a row that is actually correct behaviour.
+
+Note this is not a defect of the F-3 ruling. Quarantine-as-separate-repo is right, and stage 4 as sole canonical touch is right. What is missing is one sentence about the boundary INSIDE stage 4.
+
+PENANCE, two parts and both cheap:
+
+1. Order stage 4 as CAS-precondition-check, then fetch, then CAS. Reading the accepted ref and comparing it to the contracted base B before transferring any object makes the ordinary stale-base refusal - which is what H10 and H16 actually exercise, a trunk that moved well before admission - refuse with no canonical write at all. The clause then holds for them.
+
+2. State the residual honestly rather than assert it away. A trunk that moves in the window between the precondition check and the CAS still refuses safely, but leaves objects behind. So I1's refused-row clause needs its scope written in: refusals at stages 1-3 and at stage 4's precondition check assert refs AND object count unchanged; a refusal at the CAS itself asserts refs unchanged only, with the orphaned objects named as expected, unreferenced, and collectable. That is a legitimate difference between "no observable state changed" and "no state changed", and I1 is the right place to draw it since I1(b) already turns on all-or-nothing at the boundary.
+
+Worth noting for the record that the CON-004 claim survives either way - unreferenced objects are not landed state and need no reconstruction. The defect is in the assertion's scope, not in the invariant."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

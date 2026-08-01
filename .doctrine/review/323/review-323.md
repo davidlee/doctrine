@@ -174,4 +174,60 @@ Each penance carries its own proof, per the design's own standard:
 *The findings await disposition by the accused. Thirteen charges stand upon the
 record; four bar the gate.*
 
+## Round 2 — verification of the penance (2026-08-01)
+
+All thirteen disposed **fix-now** and integrated at `eedc26b8`. Every remediation
+was checked **against the artifact**, not against its response — the accused's
+word is not evidence, and a penance claimed is not a penance served.
+
+**All thirteen verified.** The four blockers are genuinely dead: § 5.6 re-derives
+all sixteen rows with a status column and finds the five I named (H7, H8, H13,
+H14, H15) plus four more dissolved by construction; the conform stage gains a
+mode-aware fourth leg (`ls-tree -r`, refuse `160000` / `.gitmodules`); quarantine
+becomes a separate disposable *repository* with the canonical hop deleted and
+stage 4 as sole canonical touch; the forbidden-path leg takes the belt's own
+invocation form and cites `src/mcp_server/dispatch.rs:487` as reference. The
+closed refusal-token vocabulary (§ 5.1) is more than I asked for and is the right
+answer — a results table can now only be written in a vocabulary the pipeline
+actually emits.
+
+**Two dispositions diverged from the sentence, and both are better than it.**
+
+- **F-9.** I sentenced a carve-out of H10/H16 from coverage. The accused walked
+  them against the four-stage model and found *two separable claims*: stage 4's
+  CAS refuses a moved accepted ref (`advance/stale-base`) with nothing
+  auto-resolved — that is genuine capsule-model **safety** evidence and it runs
+  on the pipeline — while only **resolution** (3-way, `Conflicted`, supersede)
+  needs the incumbent. Both rows now run on both harnesses, scored separately.
+  The carve-out is narrower and sharper than I ordered, and what is missing is
+  correctly reframed: not two rows but a *capability*, owned by **QUE-202**.
+  Checked the mechanism independently — the CAS compares against the contracted
+  base `B`, the accepted ref has moved, it refuses. The claim holds.
+- **F-5.** The accused notes the attack is not live in the rig as drawn, since
+  the declaration sits outside the clone — so the rig must *manufacture* the
+  exposure with a fixture variant carrying an in-repository declaration. Correct,
+  and a sharper probe than "a capsule rewrites its own declaration".
+
+**No disposition took an escape.** Thirteen `fix-now`, no `follow-up` bought with
+size, no `tolerated` normalised, no blocker downgraded. The one thing routed to a
+record (QUE-202) is a genuine capability gap outside this slice's scope, which is
+what I sentenced.
+
+### One new charge — F-14, arising from the remediation
+
+The F-3 fix is right and introduces an edge it does not state. Stage 4 must fetch
+before it can CAS — git cannot advance a ref to objects it does not have — so a
+refusal *at the CAS* leaves objects in canonical. I1's amended refused-row clause
+asserts unchanged object count on refusals at **any** stage, and the rows that
+refuse there are H10/H16: `assert_outcome` would red on the very two rows F-9 just
+established as capsule-model evidence, for a reason belonging to git's object
+model rather than to the model under test. R4 once more, in its most damaging
+direction. Penance: check the CAS precondition *before* transferring objects, and
+scope I1's clause so a CAS-stage refusal asserts refs-unchanged only, with
+orphaned objects named as expected and collectable. CON-004 survives either way —
+unreferenced objects are not landed state.
+
+*Raised as a new charge, not a re-raise: the ledger is append-only and the
+thirteen were honestly served. Thirteen verified; one stands.*
+
 > **HERESIS URITOR; DOCTRINA MANET**
