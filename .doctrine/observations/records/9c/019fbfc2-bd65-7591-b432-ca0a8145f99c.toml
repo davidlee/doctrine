@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfc2-bd65-7591-b432-ca0a8145f99c"
+recorded_at = "2026-08-01T23:57:18.565258355Z"
+kind = "friction"
+summary = "code-review campaign S3: a doc citing the wrong path for boundaries.toml propagated into two sessions as does-not-exist"
+detail = "review-campaign.md section 1 cited the per-phase boundary file at .doctrine/state/slice/233/boundaries.toml. It actually lives at .doctrine/dispatch/233/boundaries.toml. S2 checked the cited path, found nothing, concluded the file did not exist, and derived its commit ranges from the git log by hand; the S2 handover then stated does not exist as a standing fact, which S3 inherited. S3 found the real file only incidentally, by running git diff --numstat over a candidate range and seeing boundaries.toml appear in the changed-file list. Cost: S2 paid a manual derivation it did not need, S2's PHASE-04 range ended up a superset of the recorded one, and S3 paid a second derivation plus the reconciliation of three ranges against a table. A wrong path in a doc is indistinguishable from an absent file, and the failure is silent in the direction that looks like a finished check."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

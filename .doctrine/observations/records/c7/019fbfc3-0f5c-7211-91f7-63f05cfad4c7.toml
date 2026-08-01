@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfc3-0f5c-7211-91f7-63f05cfad4c7"
+recorded_at = "2026-08-01T23:57:39.548353698Z"
+kind = "friction"
+summary = "code-review campaign S3: a backlog issue's prescribed fix carried a defect that would have made the bug permanent"
+detail = """ISS-294 was filed mid-S2 with a written fix for pi-review.sh's reap belt (add wait for our own children, add a bounded settle loop for the grandchildren). Both ps-pipe-grep lines in the prescribed snippet were written as grep -q -- "--session-dir SESSION_DIR", dropping the [-] self-match guard the original belt carried. ps and grep start concurrently, so ps captures grep's own argv, which contains that literal string: the pattern matches itself. Measured against a session dir that does not exist, the unguarded form returns 1 hit and the guarded form returns 0. Applying the fix as written would have converted an intermittent false-positive warning into one firing on every single run, and made the settle loop spin its full five iterations always. Caught only because applying a fix to a grep is itself an absence claim and got a positive control. A fix drafted at the moment of discovery, when the author cannot run it, inherits the confidence of the diagnosis without its evidence."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

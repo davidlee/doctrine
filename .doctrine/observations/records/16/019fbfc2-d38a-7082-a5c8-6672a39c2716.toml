@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfc2-d38a-7082-a5c8-6672a39c2716"
+recorded_at = "2026-08-01T23:57:24.234672153Z"
+kind = "friction"
+summary = "code-review campaign S3: doctrine backlog show returned a hollow entity body from the wrong worktree, with no signal"
+detail = "The S3 handover instructed reading IMP-024 sections 4a and 4b before spawning. Running doctrine backlog show IMP-024 from the coordination worktree (.dispatch/SL-233) returned the entity header, metadata and relationships followed by an empty template-comment body — a well-formed successful response. The sections exist; they were authored in the primary tree and the dispatch branch predates them. Nothing in the output distinguished this-entity-has-no-prose from this-tree-has-an-older-copy, and the guardrail that a .md body may be empty by design actively argues for accepting it. Detected only because the handover asserted specific section numbers that a genuinely empty body could not have. Cost: a wasted show, a paths lookup, and a wc across both trees. Any cross-tree read of an authored entity has this hazard whenever the branch is behind."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
