@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbe46e3aa7d229330794ca898f856"
+memory_key = "mem.pattern.shell.ifs-tab-read-collapses-empty-fields"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "IFS=tab read collapses empty TSV fields"
+summary = '''Reading a TSV with `IFS=$'\t' read` silently merges empty columns — tab is IFS whitespace; translate to a non-whitespace separator first.'''
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = []
+globs = ["**/*.sh", "**/*.tsv"]
+commands = []
+tags = ["shell", "tsv", "parsing", "footgun", "sl-241"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "49fbce8267bb2fbaa61510ef9a79eb8eb6c0a5e4"
+tree = "f455822fde19b019dfe8920e8bb752a02ba4ffa6"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "49fbce8267bb2fbaa61510ef9a79eb8eb6c0a5e4"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
