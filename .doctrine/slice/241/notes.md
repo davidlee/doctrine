@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-01 · plan locked, PHASE-01 sheet expanded · 2626072e
+fresh-as-of: 2026-08-01 · **PHASE-01 complete** (1/6), slice `started` · 29c7acf3
 
 ### Produced
 
@@ -23,6 +23,75 @@ fresh-as-of: 2026-08-01 · plan locked, PHASE-01 sheet expanded · 2626072e
 - `.gitignore` added as a design-target selector (design § 9.1)
 - PHASE-01 runtime sheet expanded — 9 tasks, gitignored, not a durable artifact
 - gate: no `src/` change this unit; `doctrine validate` clean at each commit
+
+**PHASE-01 (complete, 29d842dc → 29c7acf3, 8 commits):**
+
+- `scripts/spike-capsule/{rig,lib/common.sh}` — entry point + shared library;
+  `guard_not_real_repo` (I6), `rig_enter`, `rig_capsule_root`, assertion helpers
+- `control/fixture-{heavy,light}.sh` — both BASE fixtures, provisioned and
+  asserting (EX-11: variants F2/F3 deliberately not built)
+- `fixtures/{heavy,light}/**` — authored fixture sources and both declarations
+- `control/probe-r2.sh` — the R2 probe, re-runnable, 9 asserted edges
+- `.doctrine/slice/241/fixtures.md` — the build sheet, F1–F5 (EX-10)
+- `.gitignore` — raw-log entry (EX-7, OQ-1 v0)
+- `flake.nix` — shellcheck added to the jail (D-P01-4)
+- VT-1, VT-2 PASS; `doctrine validate` clean
+
+### PHASE-01 decisions (durable)
+
+- **D-P01-2** — `guard_not_real_repo` refuses **containment**, not just EX-2's
+  equality. Equality alone leaves `<repo>/scripts/spike-capsule/fixtures` open,
+  which is the exact failure I6 names.
+- **D-P01-3** — `rig selftest` degrades to the I6 guard probe until PHASE-03's
+  `control/selftest.sh` exists; the arm dispatches to it the moment it does.
+- **D-P01-4** — shellcheck 0.11.0 added to the jail before any rig shell was
+  written. The slice is six phases of shell and `bash -n` catches syntax only.
+  Gate: `shellcheck -x -S style`. shfmt declined (cosmetic; no convention).
+- **D-P01-5** — the R2 probe is a committed re-runnable script, not a session
+  transcript. The sheet asked for edges 3–6 "in a form PHASE-05 can reuse", and
+  a script is that form.
+
+### PHASE-01 findings (durable)
+
+- **F-P01-1 — a guard whose refusal cannot reach the entry point is not a
+  guard.** `guard_not_real_repo` refuses by `exit`. Called as
+  `rig_dispatch … "$(rig_enter)"` the exit ended only the substitution's
+  subshell: refusal printed, substitution empty, **rig dispatched anyway**.
+  `set -euo pipefail` does not catch it — a failed command substitution
+  propagates in *assignment* position, never in *argument* position. The unit
+  probe was green throughout, because it subshells the guard deliberately; only
+  the entry-point observation caught it. Fixed by publishing `RIG_ROOT` and a
+  `BASHPID == $$` tripwire. → memory `mem.pattern.shell.guard-exit-swallowed-by-command-substitution`
+- **F-P01-2 — five interpretation hazards noticed while authoring the light
+  declaration**, recorded in the phase sheet and deliberately kept OUT of
+  `fixtures/light/interpretation-surface.txt`. **PHASE-04 step 0 must not read
+  that list before it enumerates** — step 0's independence is the whole of
+  ASM-007's falsification value.
+- **F-P01-3 — "declares the script" is not "the script works".** Five npm-script
+  assertions read out of `package.json` passed while `build` and `lint` were
+  both broken. Replaced with five that RUN each script.
+- **F-P01-4 — `doctrine install` runs clean on a non-Rust project.** A-install
+  holds; no POL-002 finding. First non-Rust exercise of the independence claim
+  in the corpus. One non-fatal advisory: reservation reach degraded to local.
+
+### PHASE-01 boundary — read before believing any conformance finding
+
+`code_start_oid = 25540cfe1`, `code_end_oid = 29c7acf35`, 8 commits, of which
+**one is foreign**: `ad65512dc build: pin CLAUDE_CODE_SHELL to bash for jailed
+agents` (touches `flake.nix` only). It is **interior** to the range, so
+`record-delta` cannot exclude it — neither `--commit` nor `--start/--end`
+excises a middle commit. Left as recorded, flagged here instead.
+
+At audit, `slice conformance 241` reports `undeclared (3)`:
+
+| path | disposition | why |
+|---|---|---|
+| `.doctrine/slice/241/fixtures.md` | **aligned** | the slice's own authored deliverable — structural (`mem.fact.conformance.rev-only-slice-undeclared`) |
+| `.doctrine/slice/241/notes.md` | **aligned** | same |
+| `flake.nix` | **split** | the shellcheck line is a coupled deliverable of this phase (D-P01-4) → `aligned`; the `CLAUDE_CODE_SHELL` hunk is foreign → boundary pollution |
+
+Selectors were deliberately NOT widened to silence any of these — adding one
+mid-phase would convert a legible structural finding into a silent pass.
 
 ### Learned
 
@@ -53,8 +122,8 @@ fresh-as-of: 2026-08-01 · plan locked, PHASE-01 sheet expanded · 2626072e
 - CON-004 — landed state append-only · CON-005 — threat-model fence
 - DEC-099/101/102/103/104 — settled, carried
 - OQ-1 — evidence-log storage tier; v0 ruling in slice § Risks
-- R2 — open, and PHASE-01 T7 is what settles it. A genuine divergence is a
-  `/consult`, never a `src/` change (slice non-goal)
+- ~~R2~~ — **SETTLED in PHASE-01 T7**, see § R2 below. R2a agrees; R2b separates,
+  so conform leg 3 is load-bearing. No divergence, no `/consult`, no `src/` change
 - no `research.md` exists — the pre-design research round was never run; the
   drift advisory reports an absent artifact, deliberately not restamped
   (rationale in plan.md § Notes)

@@ -1,0 +1,42 @@
+memory_uid = "mem_019fbd2453997de3aaa53d2239134d18"
+memory_key = "mem.pattern.shell.guard-exit-swallowed-by-command-substitution"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A guard that refuses by exit is swallowed by command substitution"
+summary = "A shell safety guard that refuses by `exit` does nothing when called inside `$( … )` — set -e does not propagate a failed substitution in argument position, so the caller proceeds with an empty string."
+created = "2026-08-01"
+updated = "2026-08-01"
+
+[scope]
+paths = ["scripts/spike-capsule/rig", "scripts/spike-capsule/lib/common.sh"]
+globs = []
+commands = ["bash", "shellcheck"]
+tags = ["shell", "safety", "footgun", "set-e", "subshell", "guard"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3b2676c685b674ae17ae3adfc998f1e1ad7eae9e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8b8d3d454e47cfbac314ea02a3a232d85669ac74973f3b8e60db1b33024312dd"
+base_commit = "29c7acf3516599f082376144d0effdf18c2e8631"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
