@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbce4-a509-73d0-8253-b7905ddbfee7"
+recorded_at = "2026-08-01T10:35:28.905446026Z"
+kind = "friction"
+summary = "/feedback: an RV raiser's contest note is invisible to review show — it lives only in runtime baton.toml"
+detail = "Responding to RV-325 round 7. 'doctrine review status' reports await=responder and 'review show --json' carries every finding's detail and response, but NEITHER surfaces the raiser's contest note — the text saying WHY a finding was contested and which surfaces it cites. That text is written by 'review contest --note' into .doctrine/state/review/NNN/baton.toml's handoff array (runtime, gitignored), described in --help as 'ephemeral handoff chatter for the baton log'. For a contested finding it is not chatter: it is the entire round's ask. A responder arriving cold sees a contested finding whose stored response is the PREVIOUS round's, with no indication that the contest said anything, and no path to it. Cost here was bounded only because the handover packet had transcribed it; without that, I would have had to re-derive the contest's citations from scratch or guess. Four tool calls spent hunting for it (grepping the ledger toml, the review md, then the state dir). Suggestion: 'review show' should render the latest handoff entry per contested finding, or 'review status' should print the pending note."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

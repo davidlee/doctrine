@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbce2-3d7f-7581-ad29-bb3e49e506b4"
+recorded_at = "2026-08-01T10:32:51.327187026Z"
+kind = "friction"
+summary = "route/plan: handover prescribed 'slice status SL-241 --status design'; CLI takes STATE positionally"
+detail = "The SL-241 handover packet's 'Next actions' block gave the flip as 'doctrine slice status SL-241 --status design'. The real shape is 'doctrine slice status <ID> [STATE]' — a positional. One wasted round-trip on a clap error. Handovers that inline command shapes can encode a guess; the CLI is the source of truth, so a handover citing a verb should either be copied from a run or omit the flags."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
