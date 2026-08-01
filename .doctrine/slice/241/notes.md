@@ -311,18 +311,32 @@ distinction `assert_outcome` keys off.
 
 ### PHASE-03 boundary — ONE foreign interior commit
 
-`code_start_oid = acc4b2b34` (an RFC-026 observation commit, correctly
-EXCLUDED — the range is `start..end`). Six own commits, and **one foreign
-interior**: `28f0d4c08 chore(SL-233): ISS-290 …`, touching
+Range `acc4b2b34..e14c22cc`. The start is an RFC-026 observation commit,
+correctly EXCLUDED — the range is `start..end`. Eight own commits, and **one
+foreign interior**: `28f0d4c08 chore(SL-233): ISS-290 …`, touching
 `.doctrine/backlog/issue/290/**` only. Interior, so `record-delta` cannot
 excise it — neither `--commit` nor `--start/--end` excises a middle commit.
 Left as recorded and flagged here, exactly as PHASE-01's `ad65512dc` was.
 
-Expect it at audit as `undeclared` under `.doctrine/backlog/**`, disposition
-**boundary pollution** — not this slice's work, and not a selector question.
-The two families PHASE-02 raised (`.doctrine/memory/**`,
-`.doctrine/observations/**`) remain live as a **corpus-wide** question for
-audit; selectors were again deliberately NOT widened.
+**The range was deliberately NOT narrowed to the code tip.** PHASE-02 used
+`record-delta` to *correct* a range that closed before a post-flip fix; this
+flip came after everything, so no correction is due. Narrowing `--end` to
+`2204ce267` would have dropped the notes and memory commits out of range and
+cut `undeclared` from 16 paths to 3 — which is precisely the harm this slice
+has twice refused from the other direction. Silencing a legible structural
+finding by moving the boundary is the same act as silencing it by widening a
+selector; only the lever differs.
+
+`slice conformance 241` reports `undeclared (16)`:
+
+| family | disposition | why |
+|---|---|---|
+| `.doctrine/backlog/issue/290/**` (3) | **boundary pollution** | the foreign interior SL-233 commit — not this slice's work, and not a selector question |
+| `.doctrine/memory/items/**` (9) | **aligned** | three memories recorded across PHASE-02/03; `/record-memory` is a mandated step of `/execute`, so the corpus write is a deliverable |
+| PHASE-01/02's structural set (4) | **aligned** | the slice's own authored deliverables |
+
+Selectors were again deliberately NOT widened. The memory family stays a
+**corpus-wide** question for audit, as PHASE-02 raised it.
 
 ### PHASE-02 boundary — clean range, two NEW undeclared families
 
