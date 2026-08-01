@@ -1,0 +1,71 @@
+id = 242
+slug = "retire-projected-reference-docs"
+title = "Retire the projected reference-doc model"
+status = "proposed"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = ["area:docs", "area:governance", "area:install", "area:memory", "area:migration"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = [{ to = "SL-227", rank = 0 }]                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "memory/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/*.md"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-019"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-005"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-315"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "prescribes the opposite remedy for the same nine orphans"
+target = "CHR-043"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "general client-side currency sweep; this slice builds its enabling primitive"
+target = "IDE-030"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "proposed decision out of date with SL-227; settled or superseded here"
+target = "DEC-010"
+
+[[relation]]
+label = "related"
+target = "SL-144"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
