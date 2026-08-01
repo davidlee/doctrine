@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd4c-5cd4-7c62-b588-e31f1952d12c"
+recorded_at = "2026-08-01T12:28:46.164586202Z"
+kind = "friction"
+summary = "research (RFC-026): no census surface over review findings, and 'doctrine findings' is a different concept entirely"
+detail = "Populating RFC-026 needed base rates over the review corpus — findings per ledger by facet, severity mix, disposition mix, multi-round convergence. There is no CLI surface for any of it. 'doctrine findings' looked like the verb and is unrelated (interestingness over the priority graph), costing one probe; 'review show' does not print findings at all (already recorded seven times across four slices); 'review status' gives counts for one ledger only. Cost: four hand-written python passes over 312 raw review-NNN.toml files, plus a correctness trap I only avoided by accident — RV-323 names TWO different reviews (coord tree: 'Marker grammar sketch (PHASE-06 EN-2)', SL-233, 6 findings; main tree: 'Inquisition — SL-241 capsule spike rig design', SL-241, 14 findings), so any corpus analysis must dedupe on (id, title) rather than id. A naive census silently drops one of them. ISS-279 covers the id-collision cause; the missing census surface is the separable half."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
