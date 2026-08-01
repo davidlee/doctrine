@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbf6e-6ca7-7d41-ba58-fd3f70f43967"
+recorded_at = "2026-08-01T22:25:12.871100466Z"
+kind = "friction"
+summary = "audit/review-campaign: IMP-024's method body exists only on edge; the coord tree carries a 353-byte stub"
+detail = "SL-233's review-campaign.md cites IMP-024 §1/§2/§3/§5 as the authority for the whole two-tier funnel method, and the campaign is executed from the coordination tree .dispatch/SL-233. But IMP-024's 'Operational notes — RV-324' body (5,508 bytes, nine sections) was authored on edge after the dispatch fork, so the coord tree's backlog-024.md is a 353-byte scaffold stub. `doctrine backlog show IMP-024` from coord returns the header and nothing else — not an error, just a silently empty body, which is exactly the failure mode the 'never judge an entity from one tier' guardrail warns about. Cost a detour to notice the body was missing rather than absent-by-design, then a cross-tree read. Every subsequent campaign session (S1-S4) will hit the same thing. Generalises: any authored entity the coord tree cites but edge owns reads as a legitimate empty body from the coord side."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

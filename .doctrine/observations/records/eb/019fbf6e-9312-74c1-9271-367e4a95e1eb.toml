@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbf6e-9312-74c1-9271-367e4a95e1eb"
+recorded_at = "2026-08-01T22:25:22.706643675Z"
+kind = "friction"
+summary = "audit: a landed reseat that was not landed — 791a53923 left ten staged deletions uncommitted in the shared primary index"
+detail = "The prior session's DEC-100..104 -> DEC-106..110 reseat committed the new records and swapped the slug symlinks, but the ten old record-10N.{md,toml} deletions were left staged and never committed. So edge's HEAD still tracked five records that no longer existed on disk: a fresh worktree off edge would have resurrected DEC-100..104 alongside 106..110, reintroducing the exact ISS-279 collision the reseat had just repaired. The handover reported the reseat as complete ('all six DEC collisions cleared') and named the commits, because from the working tree it looks done — the records are gone. Only `git status --porcelain` in the primary tree shows it, and AGENTS.md's advice to run that first is aimed at avoiding OTHER agents' staged files, not at finding your own predecessor's. Two compounding factors: doctrine requires DOCTRINE_ALLOW_DELETE=1 on a commit carrying staged deletions, which is an easy place to stall and move on; and the deletions sat in the index shared by every agent in that tree, so any pathless commit would have swept them into an unrelated change. Verified content-identical before completing it (each old record differed from its reseated counterpart only in id text) and committed as e1a74a08."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
