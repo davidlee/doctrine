@@ -26,6 +26,12 @@ $SPIKE_CAPSULE_ROOT/            default ~/capsules — a rig PARAMETER (EX-8),
     light/
       repo/                     F1 — the ledger project
       interpretation-surface.txt
+    light-inrepo/               F2 (PHASE-05 T1) — F1 plus a committed
+      repo/                       in-repo copy of the declaration
+      interpretation-surface.txt
+    light-plan/                 F3 (PHASE-05 T1) — F1 plus a plan whose
+      repo/                       PHASE-01 is driven to `completed`
+      interpretation-surface.txt
   probes/
     r2/repo/                    R2 probe apparatus (PHASE-01 T7), disposable
 ```
@@ -84,13 +90,24 @@ type-checks the tests and nothing needs to — Node runs them directly.
 
 ---
 
-## F2 — light + IN-REPO declaration copy · NOT BUILT (PHASE-05 EX-11)
+## F2 — light + IN-REPO declaration copy · BUILT (PHASE-05 T1)
 
 | | |
 |---|---|
 | **base** | F1 |
-| **delta** | `cp $SPIKE_CAPSULE_ROOT/fixtures/light/interpretation-surface.txt $ROOT/fixtures/light-inrepo/repo/interpretation-surface.txt` — **inside** the repo, committed |
+| **delta** | the declaration installed **inside** the repo and committed — a fifth commit, `[add] in-repo interpretation-surface copy — the F-5 exposure, made live` |
+| **build** | `control/fixture-light.sh --variant inrepo [--force]` |
+| **lands at** | `$SPIKE_CAPSULE_ROOT/fixtures/light-inrepo/repo` |
 | **consumed by** | PHASE-05 EX-11, VA-3 · guard probe (e) · **QUE-201's only evidence input** |
+
+**As built (PHASE-05 T1).** One provisioner, three variants — `--variant`
+selects the delta, and a second script would have forked the whole
+red→green→install sequence to change what happens after it. Both copies are
+installed from the **same** authored source (`fixtures/light/`), so
+"byte-identical at provision" is a property of the build rather than of a second
+edit. Provision asserts three things the probe load-bears on: the copy is inside
+the repo, it is **tracked** (a capsule clones the repo, so an untracked copy is
+an exposure no capsule can see), and the two copies are byte-identical.
 
 In the rig as drawn the F-5 substitution attack is **not live**: the declaration
 sits outside the repo, so a capsule cannot rewrite it. This variant
@@ -109,12 +126,14 @@ Without this variant QUE-201 settles post-spike on argument alone.
 
 ---
 
-## F3 — light + plan + phases · NOT BUILT (PHASE-05 EX-15)
+## F3 — light + plan + phases · BUILT (PHASE-05 T1)
 
 | | |
 |---|---|
 | **base** | F1 |
 | **delta** | SL-001 gains `plan.toml` with at least one phase, that phase driven to `completed` |
+| **build** | `control/fixture-light.sh --variant plan [--force]` |
+| **lands at** | `$SPIKE_CAPSULE_ROOT/fixtures/light-plan/repo` |
 | **consumed by** | PHASE-05 EX-15, EX-6, VA-4 — the H10/H16 conflict sub-probe |
 
 Design § 5.3's "a fixture needs no plan and no phases" is scoped to **the
@@ -127,6 +146,24 @@ full rebuild.
 
 Scored separately and **counts toward nothing** (EX-6) — the sub-probe leg is an
 incumbent-layer regression check, not capsule-model evidence.
+
+**As built (PHASE-05 T1), and the one thing T5 must ride.** The scaffolded
+PHASE-01 is left as `doctrine slice plan` authors it — empty `name`/`objective`,
+`validate` clean — because the criterion is a phase that exists and completes,
+not a phase that says something. What matters is where the completion LIVES:
+`.doctrine/state/slice/001/phases/phase-01.toml` is **runtime state and
+gitignored**, so `phases: 1/1` is a property of *this directory*, not of the
+repository. A sub-probe that cloned the fixture first would find no completed
+phase and could read `prepare-review`'s refusal as a finding about the candidate
+layer, which would be a fact about the fixture. Provisioning asserts both halves
+— the plan is tracked, the tracking is **not** — so the constraint is stated by
+the build rather than discovered by the probe. Build sequence:
+
+```
+slice plan 1 → slice phases 1 → slice status 1 started
+             → slice phase 1 PHASE-01 --status in_progress → --status completed
+5  [add] plan for SL-001 with PHASE-01 driven to completed
+```
 
 ---
 
