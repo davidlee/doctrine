@@ -1,0 +1,28 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 1
+slug = "interpretation-surface"
+title = "Interpretation surface"
+record_kind = "concept"
+status = "active"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = []
+
+[facet]                         # currently empty; seeded for scaffold-order invariant
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "RFC-025 capsule spike rig design"
+target = "SL-241"
