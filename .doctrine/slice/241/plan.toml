@@ -1,0 +1,248 @@
+# Implementation plan for SL-241 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-241"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ── Build phases (01–03) ────────────────────────────────────────────────────
+# Exit criteria are "the mechanism exists and is correct".
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Rig foundation, fixtures, and the R2 probe"
+objective = """
+Stand up the rig entry point and shared shell library, prove the I6 real-repo
+guard fires, build both fixtures, and settle R2 — whether `slice conformance
+--against B..S --strict` matches the import belt's undeclared-path semantics —
+BEFORE any pipeline code load-bears on it. R2 is probed first by design (§ 8);
+a genuine gap is a `/consult`, never an improvised `src/` change.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; RV-323 terminal (14 findings, await=none). Nothing under scripts/spike-capsule/ exists." },
+  { id = "EN-2", text = "./target/debug/doctrine builds; `slice conformance --against A..B --strict` and `-p <root>` are present on the binary the rig will call." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`scripts/spike-capsule/rig` dispatches `c1a|smoke|c2|c3|c1b` plus the self-test entry, defaults to `--stub`, and makes `--agent` explicit opt-in (DEC-103)." },
+  { id = "EX-2", text = "I6: `guard_not_real_repo` runs at every entry point BEFORE any provisioning, and refuses when the resolved canonical root equals this repo's root. A guard that runs late is not a guard." },
+  { id = "EX-3", text = "Heavy fixture: `git clone --no-hardlinks` of this repo, remotes stripped, no `credential.helper` asserted absent, full history present (merge-base works), at exactly B." },
+  { id = "EX-4", text = "Light fixture (DEC-101, D5): a TypeScript project deliberately unlike this repo — trunk `mainline`, `[add] …` commit style, package.json build/clean/test/lint/format, one red→green test. Doctrine-installed with one scratch slice carrying design-target selectors over `src/**`." },
+  { id = "EX-5", text = "Both fixtures carry an interpretation-surface declaration (`exec:` / `interpret:` / `verify:`). Neither fixture needs a plan or phases — that requirement came solely from prepare-review's phase-completion gate, which is out of the pipeline." },
+  { id = "EX-6", text = "R2 answered in writing in notes.md: for each edge probed, whether `conformance --against --strict` agrees with the belt. Any genuine divergence is raised via `/consult` and NOT patched in `src/`." },
+  { id = "EX-7", text = "`.gitignore` carries the raw-log dir entry (OQ-1 v0: committed summaries, gitignored raw logs)." },
+]
+verification = [
+  { id = "VT-1", expects = "the I6 guard and the fixture-root resolution live in the shared library, so every entry point can call them", test_file = "scripts/spike-capsule/lib/common.sh", keywords = ["guard_not_real_repo"], waived = false },
+  { id = "VT-2", expects = "the rig entry point dispatches the probe sub-commands and defaults to the stub worker", test_file = "scripts/spike-capsule/rig", keywords = ["c1a", "c2", "c3", "c1b", "--stub", "--agent"], waived = false },
+  { id = "VA-1", expects = "the I6 guard is OBSERVED refusing: a run whose resolved canonical root is this repo halts before provisioning. A safety check never seen to fire is not known to work (§ 9)." },
+  { id = "VA-2", expects = "both fixtures provision from clean; `doctrine slice conformance <fixture-slice> -p <fixture-root> --against A..B --strict` executes against each and its exit status is legible" },
+  { id = "VA-3", expects = "R2's probe results are recorded in notes.md with the edges probed named; if a divergence was found, a /consult exists and no src/ change was made" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Capsule and sandbox"
+objective = """
+Build the capsule side — the single bwrap profile both capsule kinds share, the
+provisioner, the stub worker, the verify runner, and the doorbell — with the
+I4a read-only bind posture and the resource bounds wired in from the start.
+Confirm A1 and A2 on day one, because a credential failure here means the
+capsule model needs a credential-proxy design and that is worth learning
+before anything is built on top of it (R3).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: both fixtures provision and the I6 guard is observed firing." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`capsule/sandbox.sh` implements the P-C2 v0 profile: rw bind = capsule dir ONLY; ro binds = nix store, toolchain, the agent home carrying the API credential; ABSENT (not ro) = canonical repo, other capsules, git credentials (`~/.gitconfig` creds, `~/.ssh`, credential helpers)." },
+  { id = "EX-2", text = "One profile serves BOTH capsule kinds (worker and verify) — P-C2's uniform-confinement claim and RT-1's verify capsule satisfied by one mechanism, not two." },
+  { id = "EX-3", text = "Resource bounds (F-11): a wall-clock timeout and a disk cap on both capsule kinds, each with its own refusal token — `verify/verify-timeout` and `harvest/resource-cap`. Without them H7's 'bounded time/disk' has no mechanism and a hung run blocks the pipeline with no refusal at all." },
+  { id = "EX-4", text = "I4a: `sandbox.sh`, `provision.sh` and `verify.sh` enter the sandbox as READ-ONLY BINDS from outside the capsule's writable root. No script the capsule can write is ever the process whose exit status is the verdict. The `cp`-into-the-capsule reflex is what undoes RT-1, and the profile's rw-bind would happily permit it." },
+  { id = "EX-5", text = "Doorbell (§ 5.4): a `result-ready` file whose CONTENT IS NEVER READ; identity comes from the control plane; loss degrades to polling on an interval with a wall-clock deadline; duplication is a no-op by content-addressing (I2)." },
+  { id = "EX-6", text = "A1 confirmed: nested bwrap works inside the jail (ADR-008 D-B3; `pi-spawn-confined.sh` is the seed)." },
+  { id = "EX-7", text = "A2 smoke passes as TWO assertions, not one (A8): an unauthenticated network-reachability check, then an authenticated `claude -p 'print OK'`. Credential availability and network egress are distinct failure modes and one test conflates them." },
+]
+verification = [
+  { id = "VT-1", expects = "the sandbox profile is a real bwrap invocation carrying the ro-bind posture and the wall-clock bound — not a simulated denial (DQ-2)", test_file = "scripts/spike-capsule/capsule/sandbox.sh", keywords = ["bwrap", "--ro-bind", "--bind", "timeout"], waived = false },
+  { id = "VT-2", expects = "the verify runner emits the verify-stage refusal tokens the pipeline keys off", test_file = "scripts/spike-capsule/capsule/verify.sh", keywords = ["verify-timeout", "sandbox-failed"], waived = false },
+  { id = "VA-1", expects = "A2's two assertions are run separately and both outcomes recorded; a single conflated pass is not acceptable evidence" },
+  { id = "VA-2", expects = "I4a audited WITH A POSITIVE CONTROL: the audit that proves no control-plane runner is copied into the capsule's writable root is shown to FAIL when a `cp` is deliberately planted. A negative grep without a positive control proves only that grep ran." },
+  { id = "VA-3", expects = "the absent-not-ro claim is asserted on an observable (path does not resolve inside the sandbox), never on absence of error output (DQ-3)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The four-stage pipeline and the rig's own red/green"
+objective = """
+Implement the closed four-stage pipeline against a per-run quarantine
+repository, with the closed refusal-token vocabulary and the outcome-conditional
+`assert_outcome`, then prove the rig does not lie. Until the happy-path
+self-test lands green, every 'refused' is indistinguishable from 'rig broken'
+(R4) — so no hostile row may claim a kill before it does.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: a stub worker runs confined and rings the doorbell." },
+  { id = "EN-2", text = "R2 settled in PHASE-01 — the conform stage's scope leg has a known-good invocation." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Stage 1 harvest: M-A two-hop fetch and M-B bundle behind ONE signature (`harvest_fetch|harvest_bundle <capsule> <quarantine>` → pinned OID on stdout), so the matrix loops without branching. Both read the result ref exactly once and pin the OID (RT-5)." },
+  { id = "EX-2", text = "The quarantine is a REAL, SEPARATE, per-run, disposable repository with `fetch.fsckObjects=true` and `git fsck` — never a namespace inside canonical. The deleted second hop is the F-3 defect: a ref in canonical drags its objects there and would put a hostile 2 GiB blob in the canonical object db before the refusal meant to stop it." },
+  { id = "EX-3", text = "M-B bundle hygiene (RT-4/F-6), all four legs: path is control-plane-chosen at a fixed location and never named by the capsule; resolved with symlinks refused → `bundle-unsafe-path`; size-capped BEFORE `git bundle verify` reads it → `resource-cap`; absent/truncated/still-being-written → `bundle-absent`/`bundle-invalid`, with no silent wait-and-retry." },
+  { id = "EX-4", text = "Stage 2 conform, four legs against quarantine objects with no worktree/index/staging: (1) ancestry — `merge-base --is-ancestor B S` plus `rev-list --min-parents=2 B..S` proving empty; (2) declared scope — `doctrine slice conformance <id> --against B..<oid> --strict`; (3) forbidden paths; (4) tree mode." },
+  { id = "EX-5", text = "The forbidden-path leg uses THE BELT'S OWN INVOCATION FORM, not a naive prefix test (F-4): `git -c core.quotePath=false diff --name-only --no-renames -z B..S`. All three hardenings exist in the Rust belt because all three evasions are real; a shell leg that drops them scores H5 as 'no kill' and reads as a defect of the capsule MODEL — R4 in its most damaging direction." },
+  { id = "EX-6", text = "The tree-mode leg (F-2) refuses any `160000` entry (`gitlink`) and refuses `.gitmodules`. The existing rejection cannot be borrowed: `reject_submodules` (src/git.rs:2432) scans `git ls-files --stage`, index-scoped and unreachable from an object-only pipeline. Symlinks (120000) stay LEGAL (SL-012)." },
+  { id = "EX-7", text = "Provenance invariant (F-5): the interpretation-surface declaration is read from the contracted base B — never from the harvested result S, and never from any capsule-writable location. Fail-closed on absence is no defence against substitution." },
+  { id = "EX-8", text = "Stage 4 advance orders precondition → transfer → CAS (F-14): read the accepted ref FIRST; if it is not at B, refuse `advance/stale-base` HAVING TRANSFERRED NOTHING; only then fetch the pinned OID; only then CAS expecting old value B, refusing `advance/cas-lost` on a genuine race. Getting this backwards reds `assert_outcome` on H10/H16." },
+  { id = "EX-9", text = "Every stage emits `stage=<name> verdict=pass|refuse token=<t>`; the runner records the FIRST refusing stage. The token vocabulary is closed (§ 5.1) and an observed token outside the set is a RIG DEFECT, not a result. `cas-lost` is legal, owned by no row, and recorded as reachable-but-unexercised — not as impossible." },
+  { id = "EX-10", text = "`assert_outcome` is outcome-conditional (I1) and keys off the TOKEN, not the stage, so `cas-lost`'s refs-only clause cannot silently absorb `stale-base`'s full clause: refused at harvest/conform/verify/`stale-base` ⇒ canonical byte-identical INCLUDING OBJECT COUNT; refused at `cas-lost` ⇒ refs unchanged, orphan count recorded not asserted; passed ⇒ exactly one canonical ref changed." },
+  { id = "EX-11", text = "Happy-path self-test lands green on the light fixture — the rig's own red/green — and is a precondition of any hostile row (§ 9)." },
+]
+verification = [
+  { id = "VT-1", expects = "the four stages, the closed token vocabulary, the belt-hardened forbidden-path form, and the mode-aware tree leg are all present in the pipeline", test_file = "scripts/spike-capsule/control/pipeline.sh", keywords = ["harvest", "conform", "verify", "advance", "stale-base", "cas-lost", "ancestry-merge-commit", "undeclared-path", "forbidden-path", "gitlink", "core.quotePath=false", "--no-renames", "160000", "--strict"], waived = false },
+  { id = "VT-2", expects = "M-A fetches into a separate quarantine repo with fsck on ingest", test_file = "scripts/spike-capsule/control/harvest-fetch.sh", keywords = ["fetch.fsckObjects", "fsck"], waived = false },
+  { id = "VT-3", expects = "M-B verifies the bundle, refuses a symlinked path, and size-caps before reading", test_file = "scripts/spike-capsule/control/harvest-bundle.sh", keywords = ["bundle verify", "bundle-unsafe-path", "bundle-absent", "bundle-invalid", "resource-cap"], waived = false },
+  { id = "VT-4", expects = "the happy-path self-test exercises the guard and the outcome assertion end to end and can be re-run on demand", test_file = "scripts/spike-capsule/control/selftest.sh", keywords = ["guard_not_real_repo", "assert_outcome"], waived = false },
+  { id = "VA-1", expects = "the self-test is OBSERVED green on the light fixture before any hostile row is run; the run is recorded" },
+  { id = "VA-2", expects = "kill-boundary attribution tested directly (§ 9): stage emission is ASSERTED, not inferred from exit codes, because the pass/partial distinction requires knowing which stage refused" },
+  { id = "VA-3", expects = "assert_outcome's object-count clause is demonstrated falsifiable — a deliberately-canonical-writing harvest is shown to RED it. It is precisely the thing a quarantine namespace inside canonical would have broken." },
+]
+specs        = []
+requirements = []
+
+# ── Evidence phases (04–06) ─────────────────────────────────────────────────
+# Exit criteria are "every row has a recorded outcome". A failed row is a
+# FINDING and a /consult — never a quiet rig edit (probe-specs § Order and
+# gating). `n/a` is a legal recorded outcome; a silent pass is not.
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Independent enumeration, P-C1a, P-C2, and the audits"
+objective = """
+Run the gating probes in the design's order (§ 5.4). Step 0 comes first and is
+the reason this phase leads: it is the ONLY mechanism in the whole rig that can
+falsify an exhaustiveness claim. Every other mechanism — the sixteen rows, the
+DQ-4 audit — is confirmatory, since rows instantiate already-classified triggers
+and the audit greps for tokens the declaration already names. A trigger no class
+describes is invisible to both. Cheap now, expensive once it is shipped
+enforcement.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: the happy-path self-test is green, so a refusal is distinguishable from a broken rig." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Step 0 (F-8): the TypeScript/npm ecosystem's interpretation triggers are enumerated WITHOUT CONSULTING CPT-001 first, then classified against it — npm lifecycle scripts (preinstall/postinstall/prepare), .npmrc, .nvmrc, node_modules/.bin on PATH, husky, tsconfig `extends`, config-as-JS (jest/vite/webpack), package.json `type` and `exports` resolution, workspace-protocol links, and whatever else the independent pass turns up. THE RESIDUE IS ASM-007'S FALSIFIER." },
+  { id = "EX-2", text = "Step 0's residue is recorded and ASM-007 is amended IN BOTH TIERS (structured + prose) — recorded STRENGTHENED or falsified, never discharged. An empty residue over two ecosystems is modest evidence, and the record must say so." },
+  { id = "EX-3", text = "Step 0 runs BEFORE any light-fixture row is instantiated (§ 5.4 ordering), so the classification cannot be back-fitted to the rows." },
+  { id = "EX-4", text = "P-C1a with the stub worker: clone, provision, nix, build, test and harvest wall-clock banked, plus peak disk per capsule. Deterministic; banks every measurement except tokens." },
+  { id = "EX-5", text = "P-C2's scripted rows run as `bash -c` INSIDE the sandbox (DQ-2 — a probe 'contained' by a worker politely declining is void): write floor, canonical invisibility, git creds, API cred presence, env probe, escape-via-.git. Each asserts on an observable (DQ-3) — a sentinel that must not exist, a path that must not resolve — never on absence of error output." },
+  { id = "EX-6", text = "The resource-bound row (wall-clock timeout + disk cap, F-11) is recorded as a P-C2 row in its own right." },
+  { id = "EX-7", text = "`audit-dq4` (grep `control/**` for the declaration's `exec:` tokens — they must be absent) and `audit-nohooks` (no SubagentStart/WorktreeCreate hooks, no marker, no `worker_mode` logic) each carry a POSITIVE CONTROL that fails if its grep returns empty." },
+  { id = "EX-8", text = "The census DELETE rows B1–B6 are witnessed UNREPRESENTABLE, not merely unused." },
+]
+verification = [
+  { id = "VT-1", expects = "the DQ-4 audit greps the trusted side for execution tokens and carries a positive control", test_file = "scripts/spike-capsule/control/audit-dq4.sh", keywords = ["control/", "positive_control"], waived = false },
+  { id = "VT-2", expects = "the no-hooks audit names the exact machinery the census marks DELETE, and carries a positive control", test_file = "scripts/spike-capsule/control/audit-nohooks.sh", keywords = ["SubagentStart", "WorktreeCreate", "worker_mode", "positive_control"], waived = false },
+  { id = "VA-1", expects = "step 0's independent enumeration is evidenced as independent (the enumeration is recorded BEFORE the classification against CPT-001), the residue is stated, and `doctrine knowledge show ASM-007` renders the amendment in BOTH tiers — never the .md alone" },
+  { id = "VA-2", expects = "P-C1a's measurements are banked as absolutes, not deltas; no incumbent wall-clock/disk column is invented (§ 9 names it not-measured)" },
+  { id = "VA-3", expects = "every P-C2 row is recorded with its observable named; both audits' positive controls are demonstrated to fail when their target token is removed" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "The hostile matrix (P-C3), the guard probes, and EVD"
+objective = """
+Run the sixteen rows against both mechanisms, scored against § 5.6's
+re-derivation — NOT probe-specs' inherited expected-kill column, which was
+authored against a pipeline tail this design removes. Five rows there name
+machinery this design deletes or never specifies; scoring them against the
+inherited column would produce results that are properties of the matrix
+bookkeeping rather than of the capsule model, and § 9's closure gates on that
+table. This phase wants its own context.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: both audits green with demonstrated positive controls, P-C2 recorded, step 0's residue banked." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`probes/c3/matrix.tsv` carries the § 5.4 columns — `row | fixture | mechanism | harness | vector-class | instantiation | expected-stage | expected-token | planted | outcome | altitude*` — with `expected-stage`/`expected-token` drawn from the CLOSED vocabulary and the re-derived boundary from § 5.6. § 5.6 IS THE SOURCE OF TRUTH, not probe-specs (no RFC-025 prose edits — slice non-goal)." },
+  { id = "EX-2", text = "Each row has `Hnn.{mutate,planted,assert}`. The harness loop runs `guard_not_real_repo` first (I6, before anything), then mutate → planted? → harness → record first refusing stage+token → Hnn.assert → assert_outcome → emit result row." },
+  { id = "EX-3", text = "`Hnn.planted?` is the PER-CELL positive control (F-7): every mutate step verifies its own payload landed and WOULD HAVE FIRED before the pipeline runs. Held-on-light and never-attempted-on-light are otherwise indistinguishable, and a cell passing because there was nothing to plant would compute as 'holds under both' and stamp the row `model-level` — the strongest claim in the table — on a probe that never ran." },
+  { id = "EX-4", text = "A cell with no instantiation is recorded `n/a` WITH A REASON. `n/a` is EXCLUDED from the altitude computation, never counted as a hold; a row `n/a` on light is at most `unproven-beyond-rust`, never `model-level`. A silent pass is not a legal outcome." },
+  { id = "EX-5", text = "Altitude is COMPUTED from results, never authored: holds under both ⇒ `model-level`; one only ⇒ `client-local` (and the divergence is a finding); `n/a` on light ⇒ `unproven-beyond-rust`." },
+  { id = "EX-6", text = "H10 and H16 run on BOTH harnesses. The pipeline leg refuses `advance/stale-base` at the precondition — nothing transferred, strict `assert_outcome` clause — and IS capsule-model evidence. The sub-probe leg (dispatch setup → prepare-review → candidate create → admit → integrate, staging and all) is an incumbent regression check and COUNTS TOWARD NOTHING. The two legs are scored separately." },
+  { id = "EX-7", text = "The four dissolved-by-construction rows (H6, H9, H12, H15) are scored as recorded dissolutions with their structural observable — not silently skipped and not forced into a stage kill. A dissolution is a hazard the model REMOVES; it is the design's best result, not a gap." },
+  { id = "EX-8", text = "H13 is `n/a` on M-A (no trusted-side-read artifact exists at all) and re-homed onto M-B's bundle file. That asymmetry is itself a QUE-200 verdict input and must be recorded as one, not normalised away." },
+  { id = "EX-9", text = "H15 is killed at EACH stage in turn, not at one interruption point." },
+  { id = "EX-10", text = "The five guard probes are each OBSERVED REFUSING at least once, because a guard never seen to fire is not known to work: (a) a gitlink and a `.gitmodules` (F-2); (b) a non-ASCII `.doctrine/` path (F-4); (c) a rename out of `.doctrine/` (F-4); (d) a capsule that overwrites its own `verify.sh` — the verdict must be UNAFFECTED (F-11/I4a); (e) a capsule that rewrites its own interpretation-surface declaration — trusted-side behaviour must be BYTE-IDENTICAL (F-5)." },
+  { id = "EX-11", text = "Guard probe (e) runs against a FIXTURE VARIANT carrying a declaration copy INSIDE the repository (simulating QUE-201 candidates 1 and 2). In the rig as drawn the attack is not live — the heavy fixture's declaration sits outside the clone — so the rig must MANUFACTURE the exposure to prove the invariant. This row is QUE-201's only evidence input; without it QUE-201 settles post-spike on argument alone." },
+  { id = "EX-12", text = "A failed row is raised as a FINDING and a `/consult` — never a quiet rig edit. A kill at a later boundary than expected is a partial fail (defence held, layer missing); no kill is a fail." },
+  { id = "EX-13", text = "EVD records exist and are linked to QUE-200 with `supports`/`disputes`, including the per-mechanism verdict inputs (H6/H7 behaviour, trust-bearing lines at the boundary, forensic completeness, operational friction, and M-B's trusted-side file-ingestion boundary which M-A does not carry). A further EVD is linked to QUE-201 from guard probe (e)." },
+  { id = "EX-14", text = "Committed text summaries land under `.doctrine/rfc/025/evidence/`; raw logs stay gitignored (OQ-1 v0). `results.tsv` is the only thing the driving session reads (R5)." },
+]
+verification = [
+  { id = "VT-1", expects = "the matrix carries the re-derived columns including the harness split and the per-cell positive control, and its expected-token values come from the closed vocabulary", test_file = "scripts/spike-capsule/probes/c3/matrix.tsv", keywords = ["harness", "expected-stage", "expected-token", "planted", "altitude", "pipeline", "conflict", "both", "n/a"], waived = false },
+  { id = "VA-1", expects = "all 16 rows × 2 mechanisms have a recorded pass/partial/fail/`n/a`; every `n/a` carries a reason; no cell is silently absent. The altitude column is verified to be generated, not hand-authored." },
+  { id = "VA-2", expects = "each of the five guard probes is observed refusing at least once and the observation is recorded — (a) gitlink+.gitmodules, (b) non-ASCII .doctrine/ path, (c) rename out of .doctrine/, (d) verify.sh overwrite leaves the verdict unaffected, (e) declaration rewrite leaves trusted-side behaviour byte-identical" },
+  { id = "VA-3", expects = "the declaration-substitution fixture variant exists and carries an in-repo declaration; the run against it is byte-identical trusted-side to the run that did not, and the comparison is evidenced" },
+  { id = "VA-4", expects = "H10/H16's two legs are recorded as separate scored entries, with the sub-probe leg explicitly marked as counting toward nothing" },
+  { id = "VA-5", expects = "`doctrine knowledge show QUE-200` and `QUE-201` render the linked EVD records in BOTH tiers" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "P-C1b and the scoped go/no-go"
+objective = """
+Run the one probe that needs a real agent, fill the measurement table with a
+named source per column, and land a go/no-go whose SCOPE IS LOAD-BEARING.
+Writing the scope in is what stops the downstream REV over-claiming: the verdict
+must not read '16/16', ASM-007 must be recorded strengthened rather than
+discharged, and conflict/staleness RESOLUTION must be named as out of evidence.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete: every P-C3 cell recorded, guard probes observed, EVD linked to QUE-200." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "P-C1b runs with `--agent` (explicit opt-in): a real agent executes a real red→green phase in a capsule, the worker commits freely, and the suite reaches green in-capsule. Answers 'does a phase actually reach green in a capsule'." },
+  { id = "EX-2", text = "Tokens per accepted phase recorded as n = 1 — a point estimate of one phase by a non-deterministic agent (DEC-103). It can support 'a phase reaches green in a capsule at roughly this cost'; it CANNOT support a comparison, and the record says so." },
+  { id = "EX-3", text = "P-C1's pass condition asserted: the worker never reads or writes the canonical repo path — the canonical path is not mounted in the sandbox AT ALL." },
+  { id = "EX-4", text = "Every measurement row (§ 9) is either filled or EXPLICITLY recorded as after-side-only with its reason. Each row names BOTH sources or says 'not measured' (F-10): wall-clock/disk and tokens have no incumbent source and must not acquire an invented one." },
+  { id = "EX-5", text = "A SCOPED go/no-go lands in `.doctrine/rfc/025/`: go on Linux/bwrap, for a client of this build shape; model-level rows proven portable, env-conditional rows outstanding for macOS." },
+  { id = "EX-6", text = "The verdict reads 'sixteen rows with a capsule-model boundary or a recorded dissolution, plus two regression legs' — NEVER '16/16' unqualified. H10/H16's sub-probe legs are named as scaffolded incumbent-layer regression checks counting toward nothing (F-9)." },
+  { id = "EX-7", text = "Conflict/staleness RESOLUTION is named out of evidence, not proven — QUE-202. Stage 4's CAS proves the model refuses safely; admission is not designed. This is the largest gap the spike surfaces and it outlives the slice." },
+  { id = "EX-8", text = "ASM-007 is recorded STRENGTHENED, NOT DISCHARGED, whatever step 0 returned." },
+  { id = "EX-9", text = "QUE-200 settles (`knowledge status`) if and only if the EVD suffices; if it does not, that is recorded rather than forced." },
+  { id = "EX-10", text = "Follow-ups are lodged, not left in prose: the RFC-025 cleanup pass (spike evidence + census B1 note + RT-3/RT-9 rulings) and REV scoping for census DELETE rows if go." },
+]
+verification = [
+  { id = "VT-1", expects = "the go/no-go artifact mechanically carries its own anti-overclaim language — this is the one place a grep can prevent the failure mode § 9 is most worried about", test_file = ".doctrine/rfc/025/go-no-go.md", keywords = ["QUE-202", "strengthened", "regression legs", "Linux/bwrap", "macOS"], waived = false },
+  { id = "VA-1", expects = "the measurement table has no row that is silently blank: each is filled, or marked after-side-only with a reason, or marked not-measured with its source named as absent" },
+  { id = "VA-2", expects = "the go/no-go contains no unqualified '16/16' or equivalent count claim; the sub-probe legs are excluded from every coverage number" },
+  { id = "VA-3", expects = "`doctrine knowledge show ASM-007 / QUE-200 / QUE-201 / QUE-202` each render a state consistent with the go/no-go in BOTH tiers" },
+  { id = "VH-1", expects = "the operator accepts the go/no-go verdict AND its stated scope — the scope is the deliverable's substance, and accepting the verdict without it is what the REV would then over-claim from" },
+]
+specs        = []
+requirements = []
