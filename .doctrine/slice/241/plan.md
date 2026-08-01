@@ -187,6 +187,39 @@ restamped: silencing the nag would assert a currency that nothing backs. The
 selectors were drafted from design § 9.1's code-impact table instead, which is
 the authoritative statement of what this slice touches.
 
+### Fixture sequencing, and the contamination guard
+
+The fixture set the plan implies is five things, not one, so PHASE-01 EX-10
+authors `fixtures.md` as a build sheet naming each with its delta and its
+consuming criterion. It is a build sheet rather than a dependent slice
+deliberately: the fixtures are disposable scaffolding deleted at spike end, a
+slice would imply a lifecycle for something with no durable existence, and
+design § 5.3 already settled the design questions (DEC-101, D5). What was
+missing was concrete literals, not a decision.
+
+PHASE-01 builds only the two *base* fixtures (EX-11). The in-repo-declaration
+variant and the plan+phases variant are instantiated by PHASE-05, the phase
+that consumes them — building them three phases early means maintaining
+artifacts nothing yet exercises. They cannot be forgotten, because PHASE-05
+EX-11 and EX-15 gate on them independently of the sheet.
+
+The sequencing that actually needs care is the light fixture's declaration.
+Authoring an `interpret:` list means reasoning about what TypeScript
+auto-loads, evaluates, and execs — which *is* a trigger enumeration. If that
+reasoning happens in PHASE-01 and then step 0 runs in PHASE-04, step 0 is not
+an independent pass; it is a re-run of thinking already done, and it returns an
+empty residue by construction. An empty residue is precisely what would be read
+as ASM-007 surviving. So the guard is two-sided: PHASE-01 EX-12 authors the
+declaration from the fixture's own build needs only (what does this project
+exec to build and test), and PHASE-04 EX-9 runs step 0 in a context that did
+not author it. The declaration is amended from the residue afterwards, never
+before.
+
+Design § 5.4 already protects step 0 from CPT-001. This adds the other side,
+which the design did not need to state because the design does not schedule the
+work — the plan does, and the plan is where the two activities land in an order
+that can contaminate.
+
 ### One placement decision beyond the design's tree
 
 Design § 9.1 sketches the rig's layout but does not enumerate a file for the
