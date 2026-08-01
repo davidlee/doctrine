@@ -189,13 +189,6 @@ pipeline_teardown() {
   rm -rf -- "${run}"
 }
 
-# The declaration is default-deny and read by field (DEC-099). `verify:` is the
-# one place project execution is wanted, and it runs inside the verify capsule.
-declaration_field() {
-  local file=$1 field=$2
-  sed -n "s/^${field}:[[:space:]]*//p" "${file}" | head -1
-}
-
 contract_field() {
   sed -n "s/^$2=//p" "$1/contract" | head -1
 }

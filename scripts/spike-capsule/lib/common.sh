@@ -106,6 +106,22 @@ rig_enter() {
   guard_not_real_repo "${RIG_ROOT}"
 }
 
+# ── the interpretation-surface declaration ───────────────────────────────────
+
+# The declaration is default-deny and read BY FIELD (DEC-099). `verify:` is the
+# one place project execution is wanted, and it runs inside the verify capsule;
+# `exec:` names the tokens the DQ-4 audit holds the trusted side to.
+#
+# Here rather than in the pipeline because it has two consumers with nothing
+# else in common: the pipeline reads `verify:`, and `control/audit-dq4.sh` reads
+# `exec:`. An audit that re-derived the parser could disagree with the pipeline
+# about what the declaration says, which is the one disagreement neither would
+# report.
+declaration_field() {
+  local file=$1 field=$2
+  sed -n "s/^${field}:[[:space:]]*//p" "${file}" | head -1
+}
+
 # ── the doorbell (§ 5.4, EX-5) ───────────────────────────────────────────────
 
 # The file the worker touches inside the capsule's rw root. Named once, because
