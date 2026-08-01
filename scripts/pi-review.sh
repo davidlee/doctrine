@@ -147,11 +147,23 @@ done
 # outlives a bare kill and holds our stderr open.
 kill -9 -"$PI" 2>/dev/null || kill -9 "$PI" 2>/dev/null
 kill -9 -"$KEEP" 2>/dev/null || kill -9 "$KEEP" 2>/dev/null
+# `kill -9` only QUEUES the signal. Without this `wait`, $PI and $KEEP — this
+# shell's own children — linger as zombies that `ps` still lists, and the belt
+# below reports a survivor that is already dead (ISS-294).
+wait "$PI" "$KEEP" 2>/dev/null
 rm -f "$PI_FIFO"
+
+# Settle: the grandchildren (timeout -> bwrap -> wrapper -> pi) are NOT this
+# shell's children and cannot be waited on, so give the group kill a bounded
+# window to land before believing `ps`.
+for _ in 1 2 3 4 5; do
+  ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR" || break
+  sleep 0.2
+done
 
 # Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
 # an API session open and silently blocks any caller that `wait`s on this script.
-if ps -eo pid,args 2>/dev/null | grep -q "[-]-session-dir $SESSION_DIR"; then
+if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR"; then
   echo "[review] $LABEL WARNING: pi survived the reap for $SESSION_DIR" >&2
 fi
 

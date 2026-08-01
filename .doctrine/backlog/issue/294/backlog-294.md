@@ -82,6 +82,38 @@ Bash reads a script incrementally rather than slurping it, so editing a running
 script can corrupt the running instance. Deferred deliberately rather than
 risking two live raisers.
 
+## Applied 2026-08-02 — with one correction to the fix above
+
+Landed at the top of SL-233 campaign S3, with no raiser in flight.
+
+**The prescribed fix as written above is wrong in one place, and it matters.**
+Both `ps | grep` lines in it drop the `[-]` self-match guard the original belt
+carried, writing `grep -q -- "--session-dir $SESSION_DIR"`. `ps` and `grep` are
+started concurrently by the shell, so `ps` captures `grep`'s own argv — which
+contains that literal string. The pattern matches itself.
+
+Measured, against a session dir that does not exist:
+
+```
+$ S=/fake/session/dir-selfmatch-probe
+$ ps -eo pid,args | grep -c -- "--session-dir $S"      # prescribed form
+1
+$ ps -eo pid,args | grep -c -- "[-]-session-dir $S"    # guarded form
+0
+$ printf 'x --session-dir %s y\n' "$S" | grep -c -- "[-]-session-dir $S"   # control
+1
+```
+
+So applying the fix literally would have converted an *intermittent* false
+positive into a **permanent** one — the belt would warn on every run, and the
+settle loop would spin its full five iterations every time, always finding its
+own grep. The guarded form is kept in both places. The control on the third line
+is there because the first two are absence claims about a grep.
+
+The `wait` half is applied as prescribed. Checked safe: the script runs under
+`set -u` only, **not** `set -e`, so `wait` returning 137 for a SIGKILLed child
+does not abort before the `terminated reason=` line prints.
+
 ## Links
 
 - `scripts/pi-review.sh` — the reap and its belt.
