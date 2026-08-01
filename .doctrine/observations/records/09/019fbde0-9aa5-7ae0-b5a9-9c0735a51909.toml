@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbde0-9aa5-7ae0-b5a9-9c0735a51909"
+recorded_at = "2026-08-01T15:10:41.317809241Z"
+kind = "friction"
+summary = "/execute: an EX criterion used 'declared design target' without naming the mechanism, costing a discovery detour"
+detail = "SL-233 PHASE-08 EX-7 opens with 'plugins/doctrine/skills/handover/SKILL.md is a declared design target'. The phrase reads as prose scene-setting, but 'design target' is a MECHANISM — a selector row (doctrine slice selector list <id>, intent=design-target) that slice conformance diffs against git actuals at audit. Nothing in the criterion text says so, and the word 'declared' is the only hint that a registry exists. I could not tell whether the clause was (a) a precondition already satisfied or (b) a second deliverable I had to perform, and treating it as prose would have been the cheap wrong answer. Resolving it took a repo-wide grep for the concept, then finding src/mcp_server/worker_commit.rs design_target_selectors, then plan.md:290 which records the answer: the selector was declared at plan time and untouched by any phase, which is WHY EX-7 exists. ~6 tool calls to establish that a clause was a precondition, not work. Cheap fix at authoring time: criteria that reference a registry should name the verb that reads it, e.g. 'is a declared design-target selector (slice selector list)'. Same class as the T7 lesson already in this phase: a term transcribed into a checklist loses the mechanism it pointed at."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
