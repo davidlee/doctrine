@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbd25-10ad-7660-bda2-e05d02ce8436"
+recorded_at = "2026-08-01T11:45:50.765975382Z"
+kind = "friction"
+summary = "/execute: verify-vt reads UNATTRIBUTABLE until the phase is flipped completed"
+detail = """
+SL-241 PHASE-01. Ran 'slice verify-vt SL-241' with all work committed and both mandated files present and matching their keywords. Both VTs reported '≈ UNATTRIBUTABLE — keyword present but <file> not modified by this slice'. The cause is that the boundary registry has no row for the phase until 'slice phase --status completed' stamps code_end_oid, so attribution has nothing to read. After the flip, both flipped straight to PASS with no other change.
+
+Cost: one wasted verify-vt round trip plus a re-read of the phase criteria to check whether a real mandate had failed. The diagnostic names the file rather than the missing boundary row, so the natural first reading is 'my file is wrong', not 'the phase is not closed yet'. A hint on the UNATTRIBUTABLE line — e.g. 'no boundary recorded for PHASE-01; attribution is available after the phase is flipped completed' — would make the ordering self-evident and cost nothing.
+
+Related but separate: 'doctrine slice selector SL-241' errors with 'unrecognized subcommand' because the verb needs 'list'. Cheap to recover from, but the error names the id as the unrecognised subcommand rather than saying a subcommand is required."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
