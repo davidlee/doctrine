@@ -6,33 +6,46 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design (no run started) · 946d7803
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 9 · 586b092f
 
 ### Produced
 
 - SL-243 scope (this slice) — design commitments settled pre-slice, see `slice-243.md`
 - CHR-052 — SPEC-002's nine `[[source]]` anchors + its `## Source anchors` prose
 - IMP-381 — spec-coverage census; map at `.doctrine/state/imp-381-coverage-map-criterion-lineage.md`
+- **DEC-111** — the verb reads the corpus in-process, not through doctrine's own
+  JSON contract; disposes `inq-4` and carries the test obligation that comes with it
+- **Pre-design research round** — `research/research.md` + `research/raw/` (five
+  threads). **Runtime tier, gitignored, disposable.** Its durable residue is
+  DEC-111 and the `## Design surface triage` section below; do not treat the
+  artefact itself as surviving.
+- **`## Design surface triage`** (below, committed) — the round's findings in
+  summary, so the disposable artefact is not the only copy
 
 ### Learned
 
-- mem.pattern.spec.read-anchors-via-json-not-grep — the read seam this slice
+- mem.pattern.spec.read-anchors-via-json-not-grep — the read path this slice
   rides, and the two ways a raw TOML grep inflates the count
-- Baseline figures, via that seam: 48 specs · 81 anchors · 0 non-resolving ·
+- mem.pattern.lint.new-workspace-member-cargo-metadata — the new-crate lint
+  checklist O3 inherits if `just lint` is widened
+- mem.fact.doctrine.agents-skill-mirror-is-published-source — O5 edits the master
+  under `plugins/`; `.agents/` is published-sourced derived state
+- Baseline figures, via that read path: 48 specs · 81 anchors · 0 non-resolving ·
   29,310 non-test `src/` loc (27%) dark · largest dark `src/review.rs` @ 2,824
+- CHR-051 §3 re-verified live: `pi-scout` resolves `deepseek-v4-pro` and
+  `pi-research` resolves `deepseek-v4-flash` — inverted from `CLAUDE.md`. Check
+  before routing any refresh research thread.
 
 ### Open
 
-No DEC / QUE / ASM minted — the open items are design questions held in
-`slice-243.md`, not knowledge records (one fact, one artefact):
+Held on design run **dr-019fc13a** — read them with `doctrine design resume 243`
+rather than from a copy here. What the run cannot represent, and so lives here:
 
-1. Where the engine spec sits — new component under SPEC-006/PRD-012 vs amending
-   SPEC-017, which owns the anchor field model.
-2. New PRD-012 requirements for the report (intent present via REQ-085/REQ-088;
-   no requirement covers the report itself).
-3. Which spec owns the identifier-form convention, where IMP-316 leg 2 overlaps
-   this slice's `qualified_name` corroboration. Requirement membership is not
-   exclusive, so this is a preference for clean boundaries, not a blocker.
+- `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
+  pass**, not parked indefinitely. A lifecycle move carries no reason field, so
+  this note is the only record of where they route. See `## Routing` below.
+- `inq-5`…`inq-9` are open engineering questions; the triage section states each
+  with the evidence that bears on it.
 
 ## Design surface triage
 <!-- explore.triage, design run dr-019fc13a rev 5. Evidence: research/research.md -->
