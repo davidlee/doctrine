@@ -24,6 +24,15 @@
 # `assert_outcome`), not `quarantine` (the trusted side's own workspace). A row
 # that reached into either would be testing the rig's bookkeeping.
 #
+# H10 AND H16 ARE THE CARVE-OUT, and the rule is SCOPED by them rather than
+# broken. Their hazard IS a canonical-side event — the accepted ref moving away
+# from the contracted base — so there is no instantiation of them that does not
+# write canonical (§ 5.6). What the rule protects is preserved: they re-snapshot
+# through `pipeline_snapshot`, which `pipeline.sh:248-256` is re-callable for
+# precisely this case, so `assert_outcome` goes on answering *did the PIPELINE
+# change canonical* rather than *did anything at all*. `quarantine` remains
+# untouched by every row. See T4e's block header.
+#
 # ── scoring is not here ─────────────────────────────────────────────────────
 #
 # `_assert` observes what the refusal TOKEN cannot say — that the payload was
@@ -145,6 +154,20 @@ c3_range() {
     tr '\0' '\n'
 }
 
+# c3_lines_have <lines> <path> — is <path> one of the newline-separated <lines>?
+#
+# The ONE spelling of "in the range". Three callers assert over it and a fourth
+# asserts its negation (H16), and they had drifted into two spellings of the
+# same grep already. `-x` and `-F` both carry weight: the path is matched WHOLE
+# and LITERALLY, or a plant at `src/a` would be satisfied by `src/ab` and a
+# range full of regex metacharacters would match things nobody planted.
+#
+# A herestring rather than a pipe, and that is not style: `grep -q` exits at the
+# first match and closes the read end, so a `printf |` producer can take EPIPE
+# and — under the entry points' `set -o pipefail` — fail the whole pipeline on
+# the SUCCESS path.
+c3_lines_have() { command grep -qxF -- "$2" <<<"$1"; }
+
 # c3_planted_paths <run> <path…>
 #
 # The positive control most rows want: every named path is in the range the
@@ -156,7 +179,7 @@ c3_planted_paths() {
   shift
   changed=$(c3_range "$(c3_capsule_repo "${run}")" "$(c3_base "${run}")" "$(c3_result "${run}")")
   for p in "$@"; do
-    printf '%s\n' "${changed}" | command grep -qxF -- "${p}" || return 1
+    c3_lines_have "${changed}" "${p}" || return 1
   done
   printf '%s' "$*"
 }
@@ -182,8 +205,30 @@ c3_assert_ingested() {
   changed=$(c3_range "${run}/quarantine" "$(c3_base "${run}")" "$(cat "${run}/pinned-oid")")
   for p in "$@"; do
     rig_assert "${at}: '${p}' is in the range the trusted side folded" \
-      command grep -qxF -- "${p}" <<<"${changed}"
+      c3_lines_have "${changed}" "${p}"
   done
+}
+
+# c3_assert_range <at> <run> <absent-path> <present-path…> — the range the
+# trusted side folded, asserted in BOTH directions over one computation.
+#
+# H16 is the caller that needs the negative, and a negative on its own is the
+# absence-shaped result this phase keeps meeting: `'docs/…' is not in the range`
+# passes just as well when the range was never computed, or came back empty
+# because the transport dropped everything. So the two directions are taken
+# together against ONE `changed`, and the positive paths are the control that
+# says the negative was evaluated against something real — H13's M6 lesson, at
+# the range instead of at the bundle.
+c3_assert_range() {
+  local at=$1 run=$2 absent=$3 changed p
+  shift 3
+  changed=$(c3_range "${run}/quarantine" "$(c3_base "${run}")" "$(cat "${run}/pinned-oid")")
+  for p in "$@"; do
+    rig_assert "${at}: '${p}' is in the range the trusted side folded" \
+      c3_lines_have "${changed}" "${p}"
+  done
+  rig_assert_fails "${at}: '${absent}' is NOT in that same range — and the clauses above say the range was real" \
+    c3_lines_have "${changed}" "${absent}"
 }
 
 # ── T4a — the result-tree rows ──────────────────────────────────────────────
@@ -1987,4 +2032,284 @@ H11_assert() {
     test -n "$(rig_field "${record}" canary)"
   arrivals=$(command grep -cF -- "${C3_H11_CANARY_MARK}" "$(c3_h11_canary_log "${run}")" 2>/dev/null || true)
   rig_warn "${at}: F-P05-32 NOT SCORED — payload attempt '$(rig_field "${record}" canary)', arrivals at the canary: ${arrivals}"
+}
+
+# ── T4e — the staleness rows: H10 and H16 ───────────────────────────────────
+#
+# THE ONLY TWO ROWS THAT WRITE CANONICAL — see "what these files may and may
+# not touch" at the head of this file for why that is a scoping of the rule
+# rather than a breach of it.
+#
+# Neither row plants a payload. Their hazard is the accepted ref having MOVED
+# since the contract pinned B, which stage 4 meets at its PRECONDITION and
+# refuses `advance/stale-base` having transferred nothing — so both keep the
+# STRICT `assert_outcome` clause (F-14, design § 5.5 I1). `advance_stage`'s own
+# comment (`pipeline.sh:560-566`) names these two rows as the reason its
+# internal ordering reads the precondition before the transfer.
+#
+# `selftest.sh:251-272` is the reference scenario and these rows ride its
+# shape: provision the capsule, move the accepted ref, RE-SNAPSHOT, run. The
+# mutate seam sits exactly where that scenario's move sits — between
+# `pipeline_capsule` and `pipeline_run` — so neither row needs a harness change
+# (D-P05-5).
+#
+# ── the two rows score IDENTICALLY, and that is the RESULT ──────────────────
+#
+# Both refuse `advance/stale-base`. Their whole difference is WHO moved the
+# ref: H10's mover is a peer capsule result contracted from the SAME base B,
+# conflicting with this one on the same path; H16's is an ordinary trunk
+# advance touching a path this result never names, which a three-way merge
+# would take without a murmur. Stage 4 compares two OIDs and never reads a
+# tree, so it cannot tell them apart — the genuinely conflicting pair and the
+# trivially mergeable one get the same token and the same refusal.
+#
+# That indistinguishability IS § 5.1's split made observable: the capsule model
+# HAS the safety claim and does NOT have the resolution one, and F-9/QUE-202
+# own the gap. Neither row can be SCORED for it, the token being the same on
+# both, so each carries it in `_planted` and `_assert` — which is precisely
+# what those exist for (what the refusal token cannot say).
+
+# What a canonical-side mover writes, so a reader of a refused run can tell the
+# trunk's content from the capsule's at a glance — `C3_PAYLOAD_MARK`'s opposite
+# number, and named for the same reason (STD-001).
+C3_STALE_MARK='p-c3 canonical mover'
+
+# H16's mover path. It must be DISJOINT from everything the capsule's result
+# names, and it is spelled here rather than at its use site so the disjointness
+# is checkable against one string. Deliberately not `C3_UNDECLARED_PATH`: that
+# one is H4's subject inside the capsule, and a reader meeting it on canonical
+# would reasonably expect a conform interaction that this row does not have.
+#
+# H10 needs no constant. Its conflicting pair meets on the FIXTURE'S OWN STUB
+# PATH, the one path both halves are guaranteed to touch — the worker stub
+# appends to it (`capsule/worker-stub.sh:52`) and the contract records it
+# because it is a join with the slice's selectors (`pipeline.sh:203-207`). So
+# the capsule's half of the pair needs no plant at all; the row supplies only
+# the peer, and reads the path from the contract rather than re-deriving it.
+C3_H16_TRUNK_PATH='docs/h16-trunk-moved.md'
+
+# c3_path_blob <repo> <rev> <path> — the blob OID at <path> in <rev>, or EMPTY
+# if the path is not there.
+#
+# Empty is a legitimate answer rather than an error: a fixture's stub path need
+# not exist at B, and a caller comparing two of these wants "absent" to compare
+# equal to "absent" instead of dying inside a command substitution.
+c3_path_blob() {
+  git -C "$1" rev-parse --verify --quiet "$2:$3" 2>/dev/null || true
+}
+
+# c3_accepted_oid <run> — what canonical's accepted ref holds RIGHT NOW.
+#
+# Read through the contract's `accepted` field rather than through HEAD: the
+# two agree by construction, but the contract is what stage 4 itself keys off
+# (`pipeline.sh:309`), and a row asking a different question than the stage it
+# is measuring would eventually answer one.
+c3_accepted_oid() {
+  git -C "$1/canonical" rev-parse --verify "$(contract_field "$1" accepted)"
+}
+
+# c3_move_accepted <run> <message> <path> — advance canonical's accepted ref by
+# one commit touching <path>, then RE-SNAPSHOT.
+#
+# Committed on canonical's WORKTREE, which is the accepted ref by construction:
+# `pipeline_setup` reads `accepted` off `symbolic-ref HEAD` (`pipeline.sh:180`).
+# A row spelling a branch name here would pass on heavy and break on light,
+# whose trunk is `mainline` precisely so that anything assuming `main` breaks
+# loudly (D5).
+#
+# THE RE-SNAPSHOT IS LOAD-BEARING, not tidiness. `assert_outcome` compares
+# canonical against `canonical-refs.before` / `canonical-objects.before`, and
+# this move is SCENARIO STATE rather than a pipeline effect — without
+# re-snapshotting, the cell reds on its own setup and looks exactly like the
+# assertion working (`pipeline.sh:248-256`).
+#
+# The identity is passed EXPLICITLY. Canonical is a clone, and `git clone` does
+# not copy the source's local config, so the fixture's own `user.email`
+# (`fixture-light.sh:88`) does not travel. Git's implicit `user@host` fallback
+# happens to resolve in this jail — which means a row leaning on it would fail
+# somewhere else rather than here, and the failure would arrive as a mutate
+# that silently planted nothing.
+c3_move_accepted() {
+  local run=$1 message=$2 path=$3
+  local canonical="${run}/canonical"
+
+  mkdir -p -- "$(dirname -- "${canonical}/${path}")"
+  printf '%s: %s\n' "${C3_STALE_MARK}" "${message}" >>"${canonical}/${path}"
+  git -C "${canonical}" add -- "${path}" ||
+    rig_die "c3_move_accepted: could not stage ${path} in ${canonical}"
+  git -C "${canonical}" \
+    -c user.name='p-c3 canonical mover' \
+    -c user.email='mover@spike-capsule.invalid' \
+    commit --quiet -m "${message}"
+
+  pipeline_snapshot "${run}"
+}
+
+# c3_stale_planted <run> <at> — the half of the positive control both staleness
+# rows share: the accepted ref moved, and it moved to a CHILD OF B.
+#
+# The parentage clause is not bookkeeping. § 5.6 names H10 as a pair "from one
+# base" and H16 as the trunk advancing "before admission"; a mover whose parent
+# were something else would still produce `stale-base`, so the cell would score
+# green while instantiating neither row. PRINTS the mover's OID.
+c3_stale_planted() {
+  local run=$1 base moved parent
+  base=$(c3_base "${run}")
+  moved=$(c3_accepted_oid "${run}")
+  [ "${moved}" != "${base}" ] || return 1
+  parent=$(git -C "${run}/canonical" rev-parse --verify "${moved}^" 2>/dev/null || true)
+  [ "${parent}" = "${base}" ] || return 1
+  printf '%s' "${moved}"
+}
+
+# c3_stale_assert_reached_four <at> <run> — all three upstream stages passed by
+# NAME, which is this pair's non-vacuity clause.
+#
+# A staleness row's every remaining observable is an absence — canonical
+# unchanged, nothing merged — and every one of those holds just as well against
+# a run that refused at stage 1 and never approached the precondition. Naming
+# the three is the same move `selftest_happy` makes (`selftest.sh:177-184`):
+# asserting only the final status would score a run that skipped a stage
+# entirely as green.
+c3_stale_assert_reached_four() {
+  local at=$1 run=$2 stage
+  for stage in harvest conform verify; do
+    c3_assert_stage_passed "${at}" "${run}" "${stage}"
+  done
+}
+
+# H10 — a CONFLICTING PAIR from one base. A peer capsule contracted from the
+# same B has already landed, and it touched the same path this result touches.
+#
+# THE PEER LANDING IS SIMULATED, and the simulation is exact where this row
+# reads it. A real peer lands by stage 4's own CAS advancing the accepted ref
+# from B to its result; committing on canonical's accepted ref reaches the
+# identical end state — the ref at a child of B carrying that peer's content —
+# and that end state is the entire input to the precondition this row
+# exercises. Running a second full pipeline inside the mutate seam would put an
+# UNSCORED pipeline run inside a scored cell, double the heavy fixture's cost
+# at ~6 min a stage-3 run, and prove the happy path, which `selftest_happy`
+# already owns.
+H10_mutate() {
+  local run=$1
+  c3_move_accepted "${run}" \
+    'H10: a peer result from the same base B, landed on the accepted ref' \
+    "$(contract_field "${run}" stub)"
+}
+
+H10_planted() {
+  local run=$1 base stub peer moved_paths
+  base=$(c3_base "${run}")
+  stub=$(contract_field "${run}" stub)
+
+  peer=$(c3_stale_planted "${run}") || return 1
+
+  # The peer touches the stub …
+  moved_paths=$(c3_range "${run}/canonical" "${base}" "${peer}")
+  printf '%s\n' "${moved_paths}" | command grep -qxF -- "${stub}" || return 1
+  # … and so does this capsule's PUBLISHED result, which is what makes the two
+  # a conflicting pair rather than two commits that happen to share a base.
+  # Read off the published result, never the worktree (`c3_planted_paths`).
+  c3_planted_paths "${run}" "${stub}" >/dev/null || return 1
+
+  printf 'peer %s landed on the accepted ref from the same base %s, conflicting with this result on %s' \
+    "$(git -C "${run}/canonical" rev-parse --short "${peer}")" \
+    "$(git -C "${run}/canonical" rev-parse --short "${base}")" "${stub}"
+}
+
+H10_assert() {
+  local run=$1 at="H10/$2/$3/$4" stub base peer
+  stub=$(contract_field "${run}" stub)
+  base=$(c3_base "${run}")
+  peer=$(c3_accepted_oid "${run}")
+
+  c3_stale_assert_reached_four "${at}" "${run}"
+
+  # The trusted side HAD the conflict in front of it when it refused. The token
+  # cannot say this: `stale-base` comes out of a comparison of two OIDs that
+  # never reads a tree, so a transport which dropped the result entirely would
+  # refuse identically.
+  c3_assert_ingested "${at}" "${run}" "${stub}"
+
+  # ── THE RESOLUTION GAP, made observable (§ 5.1, F-9/QUE-202) ─────────────
+  #
+  # `assert_outcome` says canonical did not CHANGE. It does not say whose
+  # content survived, and "nothing was auto-resolved" is a claim about exactly
+  # that. Three clauses, none of which the token or the outcome assertion
+  # reaches: no merge was constructed, the peer's change is what stands, and
+  # this capsule's version of the contested path did not land.
+  rig_assert_eq "${at}: no merge was constructed — the accepted ref is still a child of B" \
+    "${base}" "$(git -C "${run}/canonical" rev-parse --verify "${peer}^" 2>/dev/null || true)"
+  rig_assert "${at}: the PEER's change to ${stub} is what stands" \
+    test "$(c3_path_blob "${run}/canonical" "${peer}" "${stub}")" \
+    != "$(c3_path_blob "${run}/canonical" "${base}" "${stub}")"
+  rig_assert "${at}: … and THIS capsule's ${stub} did not land, merged or otherwise" \
+    test "$(c3_path_blob "${run}/canonical" "${peer}" "${stub}")" \
+    != "$(c3_path_blob "$(c3_capsule_repo "${run}")" "$(c3_result "${run}")" "${stub}")"
+}
+
+# H16 — the trunk moved before admission. The mover is nobody's capsule and it
+# touches a path this result never names, so the pair is trivially mergeable.
+H16_mutate() {
+  local run=$1
+  c3_move_accepted "${run}" \
+    'H16: the trunk advanced after the contract pinned B' \
+    "${C3_H16_TRUNK_PATH}"
+}
+
+H16_planted() {
+  local run=$1 base stub moved moved_paths result_paths
+  base=$(c3_base "${run}")
+  stub=$(contract_field "${run}" stub)
+
+  moved=$(c3_stale_planted "${run}") || return 1
+
+  # The mover's range is EXACTLY its own one path …
+  moved_paths=$(c3_range "${run}/canonical" "${base}" "${moved}")
+  [ "${moved_paths}" = "${C3_H16_TRUNK_PATH}" ] || return 1
+
+  # … and this result really changed something (a result that changed nothing
+  # would be disjoint from the mover vacuously) …
+  c3_planted_paths "${run}" "${stub}" >/dev/null || return 1
+
+  # … and the two are DISJOINT. This is the row's whole distinction from H10
+  # and it has to be MEASURED: a mover that collided with the stub would be H10
+  # wearing H16's name, and it would score identically — which is exactly why
+  # neither row can lean on the token to tell them apart.
+  result_paths=$(c3_range "$(c3_capsule_repo "${run}")" "${base}" "$(c3_result "${run}")")
+  if printf '%s\n' "${result_paths}" | command grep -qxF -- "${C3_H16_TRUNK_PATH}"; then
+    return 1
+  fi
+
+  printf 'the trunk advanced to %s on %s, disjoint from this result (%s) — a three-way merge would take the pair' \
+    "$(git -C "${run}/canonical" rev-parse --short "${moved}")" \
+    "${C3_H16_TRUNK_PATH}" "${stub}"
+}
+
+H16_assert() {
+  local run=$1 at="H16/$2/$3/$4" stub base moved
+  stub=$(contract_field "${run}" stub)
+  base=$(c3_base "${run}")
+  moved=$(c3_accepted_oid "${run}")
+
+  c3_stale_assert_reached_four "${at}" "${run}"
+
+  # ── THE ASYMMETRY THE TOKEN HIDES ────────────────────────────────────────
+  #
+  # This pair is trivially mergeable and it refuses with the SAME
+  # `advance/stale-base` H10 earns for a genuine conflict. Two clauses say so
+  # mechanically. The DISJOINTNESS SURVIVED TRANSPORT: what the trusted side
+  # actually folded carries this result's stub and not the trunk's path, so the
+  # merge that stage 4 declined would have been a trivial one, and the fact is
+  # measured on the quarantine rather than assumed from the rig's own setup.
+  # And this result's contested-by-nobody stub never landed on canonical anyway.
+  #
+  # Stage 4 therefore pays nothing in precision for its safety and is given
+  # nothing either: the recovery that WOULD tell these two cases apart belongs
+  # to the candidate layer, which the T5 sub-probe measures and which counts
+  # toward nothing (F-9, QUE-202).
+  c3_assert_range "${at}" "${run}" "${C3_H16_TRUNK_PATH}" "${stub}"
+  rig_assert_eq "${at}: canonical's ${stub} is untouched — this result never landed" \
+    "$(c3_path_blob "${run}/canonical" "${base}" "${stub}")" \
+    "$(c3_path_blob "${run}/canonical" "${moved}" "${stub}")"
 }

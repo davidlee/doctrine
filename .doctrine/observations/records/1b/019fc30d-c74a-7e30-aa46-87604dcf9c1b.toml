@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc30d-c74a-7e30-aa46-87604dcf9c1b"
+recorded_at = "2026-08-02T15:18:07.946767356Z"
+kind = "friction"
+summary = "/execute: pgrep -a on a jail bwrap dumps multi-KB of env per match"
+detail = "Checking whether a background heavy-fixture run was still alive, I ran 'pgrep -a bwrap'. In this jail every bwrap invocation carries the full --setenv PATH (60+ nix store paths) plus the whole mount ladder, so three matches cost several thousand tokens for one bit of information (is it running). 'pgrep bwrap' or 'pgrep -c' answers the same question for nothing. Also noted in passing: /usr/bin/time is ABSENT in the jail — a timing wrapper on a background loop failed rc=127 four times before I switched to bash SECONDS."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
