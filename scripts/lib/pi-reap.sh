@@ -27,6 +27,21 @@
 
 # shellcheck shell=bash
 
+# Is any live process still holding this spawn's --session-dir?
+#
+# `pgrep -f` reads /proc/<pid>/cmdline directly, so it needs neither a pipeline
+# nor the `[-]-` self-exclusion trick the old `ps -eo args | grep` form used.
+# procps arrived in the jail with flake.nix deb2cf44; before that this had to be
+# `ps | grep` and carried an SC2009 suppression.
+#
+# Note the hazard both forms share: the pattern is matched against every process's
+# full command line, so a CALLER whose own argv happens to contain this text would
+# match itself. The spawn scripts derive the session dir internally rather than
+# taking it as an argument, so none of them can.
+session_dir_held() {
+  pgrep -f -- "--session-dir $1" >/dev/null 2>&1
+}
+
 pi_await_and_reap() {
   local out=$1 pi=$2 keep=$3 session_dir=$4 backstop=$5 tag=$6
   local start end reason elapsed
@@ -100,19 +115,13 @@ pi_await_and_reap() {
   # window to land before believing `ps`.
   local _
   for _ in 1 2 3 4 5; do
-    # pgrep landed in flake.nix (deb2cf44) but is not in an already-running
-    # jail; switch this to `pgrep -f` only once it can be exercised, since a
-    # silently-broken belt check reads exactly like a clean reap.
-    # shellcheck disable=SC2009
-    ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $session_dir" || break
+    session_dir_held "$session_dir" || break
     sleep 0.2
   done
 
   # Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
   # an API session open and silently blocks any caller that `wait`s on the script.
-  # pgrep: see the note above.
-  # shellcheck disable=SC2009
-  if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $session_dir"; then
+  if session_dir_held "$session_dir"; then
     echo "$tag WARNING: pi survived the reap for $session_dir" >&2
   fi
 

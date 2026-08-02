@@ -71,6 +71,8 @@ check "no survivors from the fixture" "${survivors:-none}" "none"
 zomb=$(ps -eo stat,pgid --no-headers 2>/dev/null |
   awk -v a="$KEEP" -v b="$PI" '($2==a||$2==b) && $1 ~ /^Z/ {n++} END{print n+0}')
 check "no zombies left by the queued SIGKILL" "$zomb" "0"
+if grep -q "survived the reap" "$ERRLOG"; then bad "no spurious survivor warning"
+else ok "no spurious survivor warning"; fi
 rm -f "$out" "$fifo"
 
 echo "2. detects agent_settled far from EOF (the ISS-293 regression)"
@@ -114,6 +116,27 @@ for badpid in 0 1 "" abc; do
 done
 # Positive control: this shell must still be alive after all that.
 kill -0 $$ 2>/dev/null && ok "caller survived the invalid-pid cases"
+
+echo "5. belt check fires when something still holds the session dir"
+# The belt is the one leg whose failure is completely silent: if the detection
+# stops working, a surviving pi holding an API session is simply never reported
+# and the spawn looks clean. So it gets a decoy that deliberately outlives the
+# reap. `; :` defeats sh's exec-through optimisation so the process keeps its own
+# argv — the closest stand-in for real pi, which genuinely receives these args.
+sess="reaptest-belt-$$"
+spawn_fixture "$sess"
+sh -c 'sleep 30; :' pi --session-dir "$sess" &
+DECOY=$!
+sleep 0.3
+run_reap "$out" "$PI" "$KEEP" "$sess" 2 "[test]"
+if grep -q "WARNING: pi survived the reap for $sess" "$ERRLOG"; then
+  ok "warned about the surviving holder"
+else
+  bad "warned about the surviving holder (stderr: $(cat "$ERRLOG"))"
+fi
+kill -9 "$DECOY" 2>/dev/null
+wait "$DECOY" 2>/dev/null
+rm -f "$out" "$fifo"
 
 echo
 echo "pi-reap: $PASS passed, $FAIL failed"
