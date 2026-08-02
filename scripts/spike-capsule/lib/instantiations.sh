@@ -1021,7 +1021,7 @@ H15_planted() {
 }
 
 H15_assert() {
-  local run=$1 at="H15/$2/$3" during resume base accepted
+  local run=$1 at="H15/$2/$3" during resume base accepted probe
 
   # 1. EVERY PRE-STAGE-4 CRASH LEFT CANONICAL BYTE-IDENTICAL — refs and the
   #    object count both. The pairing is `assert_outcome`'s and it is the one a
@@ -1053,9 +1053,25 @@ H15_assert() {
   #    through a second pipeline: what is being observed is the CAS, and a full
   #    run would spend another six heavy minutes re-deriving a verify pass that
   #    is not part of the claim.
+  #
+  #    AGAINST A THROWAWAY COPY OF CANONICAL, and that is a correctness fix
+  #    rather than fastidiousness. `advance_stage` MUTATES — precondition,
+  #    transfer, CAS. Pointed at the real canonical it is only harmless while
+  #    the resume actually landed; when the resume REFUSES, the precondition
+  #    still holds, so the assertion itself transfers the objects and moves the
+  #    ref — landing the result it was supposed to be observing, and destroying
+  #    the state `assert_outcome` reads immediately afterwards. Observed doing
+  #    exactly that on H15/heavy/bundle (F-P05-28), where it turned one honest
+  #    refusal into seven reds and briefly looked like a canonical-safety
+  #    failure. An assertion must not write to its own subject; this file's
+  #    header already says rows touch the capsule clone and nothing else, and
+  #    `_assert` is not exempt from it.
   base=$(c3_base "${run}")
   accepted=$(contract_field "${run}" accepted)
+  probe="${run}/h15-advance-probe"
+  rm -rf -- "${probe}"
+  git clone --no-hardlinks --quiet -- "${run}/canonical" "${probe}"
   rig_assert_eq "${at}: a repeat advance refuses stale-base — the CAS applied once" \
     stale-base \
-    "$(advance_stage "${run}/canonical" "${run}/quarantine" "${accepted}" "${base}" "${resume}" || true)"
+    "$(advance_stage "${probe}" "${run}/quarantine" "${accepted}" "${base}" "${resume}" || true)"
 }
