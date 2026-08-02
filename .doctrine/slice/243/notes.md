@@ -50,7 +50,10 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 19 · a6d7
 - mem.pattern.spec.read-anchors-via-json-not-grep — the read path this slice
   rides, and the two ways a raw TOML grep inflates the count
 - mem.pattern.lint.new-workspace-member-cargo-metadata — the new-crate lint
-  checklist O3 inherits if `just lint` is widened
+  checklist O3 now inherits (DEC-116 takes it rather than exempting the crate)
+- A workspace member is clippy-linted iff it is *built*: `cordage` is linted at
+  the root because the root depends on it. Verified against `cargo clippy -v`,
+  recorded in DEC-116; a candidate memory if it outlives this slice
 - mem.fact.doctrine.agents-skill-mirror-is-published-source — O5 edits the master
   under `plugins/`; `.agents/` is published-sourced derived state
 - Baseline figures, via that read path: 48 specs · 81 anchors · 0 non-resolving ·
