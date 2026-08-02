@@ -206,6 +206,26 @@ governance applicability, verified-vs-inferred discipline — on repo tools
 deliberately NOT carried over from the home profile: these runners return on
 stdout, and an `output:` key would divert the brief to a file.
 
+### Root cause of the drift, and the residual — `.pi/` is gitignored
+
+`.gitignore:6` ignores `/.pi`, so `.pi/agents/{scout,researcher}.md` are
+**untracked local state**. This is why the mapping could invert against the docs
+with nothing to catch it, and it leaves two live consequences:
+
+1. **The fix above is per-machine.** It is applied in this working tree and
+   cannot be committed. A fresh clone gets neither the corrected models nor the
+   researcher persona.
+2. **`pi-scout` / `pi-research` are broken by default on a fresh clone.** Both
+   hard-exit with `ERROR: agent file not found: $PROJECT_ROOT/.pi/agents/*.md`
+   — and these are the runners `CLAUDE.md` tells agents to prefer over harness
+   subagents.
+
+The two scripts are tracked and load-bear on these profiles, so the profiles
+are not really local config. Un-ignoring `.pi/agents/` (keeping the rest of
+`.pi/` ignored — it holds session and auth state) is the change that makes this
+item stay fixed. Flagged for a decision rather than taken: editing `.gitignore`
+to start tracking a directory is a repo-policy call, not a chore fix.
+
 **A negative check on the home profiles is a false negative for this item** —
 they read correct, and that is not the file the scripts load. Positive control:
 `head -7 /workspace/doctrine/.pi/agents/researcher.md`.

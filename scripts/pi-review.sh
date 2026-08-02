@@ -157,12 +157,16 @@ rm -f "$PI_FIFO"
 # shell's children and cannot be waited on, so give the group kill a bounded
 # window to land before believing `ps`.
 for _ in 1 2 3 4 5; do
+  # pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+  # shellcheck disable=SC2009
   ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR" || break
   sleep 0.2
 done
 
 # Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
 # an API session open and silently blocks any caller that `wait`s on this script.
+# pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+# shellcheck disable=SC2009
 if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR"; then
   echo "[review] $LABEL WARNING: pi survived the reap for $SESSION_DIR" >&2
 fi

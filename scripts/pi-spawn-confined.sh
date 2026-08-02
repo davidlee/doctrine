@@ -60,6 +60,17 @@ else
 fi
 
 OUT=$(mktemp)
+# `set -m` (job control) is enabled HERE, before the FIRST background job, not
+# just before the pi spawn: it puts each `&` job in its OWN process group so the
+# reaps below can signal a whole group. It is load-bearing for BOTH jobs.
+# For $KEEP: `kill -9 $KEEP` fells only the subshell and ORPHANS its `sleep
+# $BACKSTOP` child, which inherits this script's stderr and so holds the pipe
+# open for any caller that pipes or `wait`s on us — the script exits promptly and
+# the CALLER hangs to the backstop anyway (ISS-293). Observed: sleeps at ppid=1,
+# 29 minutes after their raiser finished. `setsid` would also work but is ABSENT
+# from this jail — do not "simplify" to it, and do not go back to a bare kill
+# (CHR-051 §2).
+set -m
 PI_FIFO=$(mktemp -u) && mkfifo "$PI_FIFO"
 MSG=$(jq -Rs . <"$PF")
 {
@@ -123,12 +134,27 @@ timeout "$BACKSTOP" "${PREFIX[@]}" \
   <"$PI_FIFO" >"$OUT" 2>&1 &
 PI=$!
 
-# Poll for the typed completion event; kill pi when the worker's turn ends.
-END=$(($(date +%s) + BACKSTOP))
+# Poll the TAIL, not the whole file. pi's rpc stream re-serializes accumulated
+# conversation state on every event, so $OUT grows super-linearly — 50-150MB for
+# an ordinary turn is normal, not a runaway. `grep -q` over the whole file every
+# 2s therefore costs more I/O than the model costs tokens, and it degrades as the
+# turn goes on.
+#
+# The terminal event is `agent_settled`, NOT `agent_end` (ISS-293). `agent_end`
+# carries the accumulated state with it, so it is pushed arbitrarily far back
+# from EOF as the turn grows: measured 684,768 bytes from EOF on one census turn.
+# A 128KiB window is 5.2x too small and the poll NEVER fires on a real turn —
+# every spawn runs to BACKSTOP holding a live pi and an open API session, and
+# nothing warns, because the worker's commit lands on time so it looks clean.
+# `agent_settled` is a bare `{"type":"agent_settled"}` 17 bytes from EOF and is
+# robust to any window; matching either keeps this working if the order changes
+# again. 4MiB at a 2s cadence is still four orders of magnitude below the file.
+START=$(date +%s)
+END=$((START + BACKSTOP))
 REASON=timeout
 while [ "$(date +%s)" -lt "$END" ]; do
-  if grep -qE '"(type|event)":"agent_end"|"agent_end"' "$OUT" 2>/dev/null; then
-    REASON=agent_end
+  if tail -c 4194304 "$OUT" 2>/dev/null | grep -qE '"(agent_settled|agent_end)"'; then
+    REASON=agent_complete
     break
   fi
   if ! kill -0 "$PI" 2>/dev/null; then
@@ -137,10 +163,50 @@ while [ "$(date +%s)" -lt "$END" ]; do
   fi
   sleep 2
 done
-kill -9 "$PI" 2>/dev/null
-kill -9 "$KEEP" 2>/dev/null
+# Negative pid = signal the whole process group (see the `set -m` note above).
+# The chain is timeout -> bwrap -> pi wrapper -> pi, so the shell's $! is the
+# TIMEOUT; a bare `kill -9 $PI` fells only that and leaves the real pi alive as
+# an orphan holding its API session — and a background `wait` on this script does
+# not return until that orphan dies, so completion arrives minutes late and the
+# job looks like it is still running. Observed: two orphans alive 16 minutes
+# after both had written output. `bwrap --die-with-parent` did not cover it.
+# Fall back to the bare pid if the group is already gone. $KEEP is group-killed
+# for the same reason $PI is: its `sleep $BACKSTOP` child is the orphan that
+# outlives a bare kill and holds our stderr open.
+kill -9 -"$PI" 2>/dev/null || kill -9 "$PI" 2>/dev/null
+kill -9 -"$KEEP" 2>/dev/null || kill -9 "$KEEP" 2>/dev/null
+# `kill -9` only QUEUES the signal. Without this `wait`, $PI and $KEEP — this
+# shell's own children — linger as zombies that `ps` still lists, and the belt
+# below reports a survivor that is already dead (ISS-294).
+wait "$PI" "$KEEP" 2>/dev/null
 rm -f "$PI_FIFO"
-echo "[spawn] terminated reason=$REASON"
+
+# Settle: the grandchildren (timeout -> bwrap -> wrapper -> pi) are NOT this
+# shell's children and cannot be waited on, so give the group kill a bounded
+# window to land before believing `ps`.
+for _ in 1 2 3 4 5; do
+  # pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+  # shellcheck disable=SC2009
+  ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $D/.pi-session" || break
+  sleep 0.2
+done
+
+# Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
+# an API session open and silently blocks any caller that `wait`s on this script.
+# pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+# shellcheck disable=SC2009
+if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $D/.pi-session"; then
+  echo "[spawn] WARNING: pi survived the reap for $D/.pi-session" >&2
+fi
+
+# Elapsed-vs-backstop is the ONLY signal that distinguishes a clean early finish
+# from a silent full-backstop burn — the worker's commit lands either way, so
+# without this line the operator has to catch it in `ps` (ISS-293).
+ELAPSED=$(($(date +%s) - START))
+echo "[spawn] terminated reason=$REASON after ${ELAPSED}s of ${BACKSTOP}s backstop"
+if [ "$REASON" = timeout ]; then
+  echo "[spawn] WARNING: burned the full backstop — completion never detected" >&2
+fi
 echo "----- worker tail -----"
 tail -40 "$OUT"
 echo "----- worker commit -----"
