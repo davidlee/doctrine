@@ -77,12 +77,16 @@ rm -f "$PI_FIFO"
 # Grandchildren are not our children and cannot be waited on — give the group
 # kill a bounded window to land before believing `ps`.
 for _ in 1 2 3 4 5; do
-  # pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+  # pgrep landed in flake.nix (deb2cf44) but is not in an already-running
+  # jail; switch this to `pgrep -f` only once it can be exercised, since a
+  # silently-broken belt check reads exactly like a clean reap.
   # shellcheck disable=SC2009
   ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $D/.pi-session" || break
   sleep 0.2
 done
-# pgrep is ABSENT from this jail, like setsid — SC2009 is unactionable here.
+# pgrep landed in flake.nix (deb2cf44) but is not in an already-running
+# jail; switch this to `pgrep -f` only once it can be exercised, since a
+# silently-broken belt check reads exactly like a clean reap.
 # shellcheck disable=SC2009
 if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $D/.pi-session"; then
   echo "[respawn] WARNING: pi survived the reap for $D/.pi-session" >&2
