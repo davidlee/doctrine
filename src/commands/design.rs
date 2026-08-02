@@ -599,6 +599,13 @@ enum CheckpointStep {
     SnapshotPersist,
 }
 
+/// **Debug builds only**, like the fault seam it exists for. The step tokens
+/// are read by exactly one caller — `design_fault_hook`, matching
+/// `DOCTRINE_DESIGN_FAULT` — which is itself `#[cfg(debug_assertions)]`. In a
+/// release build there is no fault hook to name a step to, so an ungated `impl`
+/// is dead code and `-D unused` fails the nix build with no compile error in
+/// the dev loop to warn of it.
+#[cfg(debug_assertions)]
 impl CheckpointStep {
     /// The token each step is named by, at the fault seam and in prose (STD-001).
     const fn as_str(self) -> &'static str {
