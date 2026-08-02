@@ -216,12 +216,130 @@ which is unscorable unless the leaving state was captured first.
 
 Snapshot: `scratchpad/pre-break/design.toml`.
 
+**Correction — the cursor row is wrong as an engine-visible fact, and the way it
+is wrong is instructive.** The snapshot was taken by `cp` of raw TOML, which
+retains `[map.cursor] at = "inq-4", authority = "user-pinned"` — the last
+*declared* traversal. The engine at that same revision 9 renders
+`cursor unset STALE`: disposing `inq-4` cleared it. So the two tiers disagree,
+and the moderator captured the one that is not authoritative.
+
+This is the project's own *read via `show`, not raw files* rule biting the
+measurement instrument. The consequence is bounded but real: the exact-resume
+comparison would have been scored against a field the engine already considered
+unset, and a post-break cursor authority of `agent-proposed` would have read as
+a **lost user pin** when it is nothing of the kind — the pin was consumed with
+the node it pointed at. **No finding against the subject on that axis.**
+Recorded because the near-miss is the point: a snapshot taken one tier below the
+one the rubric reasons about manufactures a false positive.
+
 **Two incidental positives worth keeping.** Both cursor and posture carry
 `user-pinned` authority, so SL-233 §2's *"permit immediate user pin, defer,
 prune, breadth, and depth direction during the run"* is demonstrably exercised —
 the traversal-direction capability works and was used. And the map is doing real
 work: three nodes deferred and one resolved is a decomposition being managed, not
 a list being appended to. Neither reaches the user (ISS-299); both are real.
+
+## 5b. `recover`, as actually scored — W2's resume leg
+
+### Binding first — the post-break subject is a different session
+
+`/clear` opened a **new transcript**. The post-break subject is
+`4d243274-bafa-44d7-a928-136e93b22bf9`, not the `cc61c799…` §4 names: it opens
+10:09:40Z with the `/clear` marker, carries 9 `design resume` hits, and closes
+10:12:22Z — bracketing the rev-10 write at 10:11:58Z. `cc61c799…` ends 08:16:19Z
+and contains **0 compaction markers**, which independently confirms W1's
+`continuous` and W2's `deliberate`: no harness boundary occurred: the only break
+is the moderator's.
+
+§4's warning applied to §4 itself. Scoring `recover` off the pre-break transcript
+would have found no resume at all.
+
+### The continuation was not bare — a second disclosed deviation, and it is steering
+
+§5 specifies *"`/clear` in the subject window, then a bare instruction to carry
+on."* What was delivered at 10:10:25Z is a five-point handover:
+
+| the continuation supplied | the band it speaks to |
+|---|---|
+| `doctrine design resume 243 --run dr-019fc13a-…` — verbatim, with the run uid | band 1, *re-establish the run at all* |
+| *"Do not replay the conversation, and do not read a copy of the run state"* | band 3, *no work redone* |
+| *"Cursor is unset. It pointed at inq-4… Pick from inq-5…inq-9 and record the traversal move"* | band 3, *resume at the exact stage and posture* |
+| `inq-1`–`inq-3` deferred to `/spec-coverage-assessment`, `notes.md` § Routing is the record | map state |
+| `research/` is runtime tier, gitignored, disposable | evidence tier |
+
+§7's remedy for steering is *record it and score the lower band*. That remedy
+assumes a nudge. This is not a nudge: it supplies the command, the run identity,
+the traversal fact, and the candidate set. The subject's compliance measures the
+handover, not `resume`.
+
+### Bands
+
+| band | verdict |
+|---|---|
+| re-established the run | **met, but not earned** — the command was handed over verbatim |
+| rendered the envelope | **met, and collectible** — `resume` emitted the `inquiry` fragment (2nd ever emission, again on `resume`); the subject additionally called `show` unprompted |
+| exact stage and posture, nothing redone or skipped | **uncollected** — see below |
+
+**The top band is uncollected on two independent grounds, and the second one
+would hold even against a perfectly unsteered subject.**
+
+First, the steer above supplied the traversal decision the band is defined over.
+
+Second — and this is the structural finding — **`resume` does not render posture
+or cursor at all.** Compare the two surfaces, 87 seconds apart in the same
+session:
+
+| field | `design resume` (10:10:31Z) | `design show` (10:10:54Z) |
+|---|---|---|
+| revision, stage | yes | yes |
+| accepted decisions, open questions | yes | yes (as `records` / `frontier`) |
+| craft fragment | **yes** — `inquiry@98fffa6b…` | **no** |
+| **posture** | **absent** | `breadth (user-pinned)` |
+| **cursor** | **absent** | `unset STALE` |
+| frontier ranking, totals, blockers, change log | absent | yes |
+
+`recover`'s top band requires resuming *"at the exact stage and posture it left"*.
+Posture is not on the resume surface. A resuming agent is told the stage and is
+not told the posture, so it cannot resume *at* one except by inertia — the value
+persists in run state whether or not the agent ever learns it. **The band is
+unscorable on the resume path by construction**, and closing it needs a read-path
+call that nothing on the resume output prompts. That is ISS-299's shape arriving
+on the `recover` path rather than the delivery path.
+
+Posture did survive — `breadth`, `user-pinned`, byte-identical across the break —
+but survival is a property of run state, not of the subject.
+
+### Collectible regardless of the steer
+
+- **`show` is not an emission path.** The §6a discriminator, closed above.
+- **The frontier renders, fully.** All five open nodes with kinship,
+  `needs_in_degree` and provenance. ISS-299's body already says the render is
+  correct and the gap is obligation — this confirms it from the other side. §6a's
+  *"never been rendered with content"* was true only because every prior `show`
+  predated the declaration; it is now false, and the issue is unaffected.
+- **The `declare` hint omits the one traversal key a resuming agent needs.** The
+  hint carries `{"pin":…,"posture":…,"authority":…}` — three of four traversal
+  keys, **not `cursor`**. The subject read `src/design_run/submission.rs` at
+  10:10:59–10:11:14Z to recover `TraversalDeclaration`'s shape before declaring.
+  Second occurrence of the edge-1 pattern *(the subject leaves the delivered
+  surface for source to learn a payload contract)*, and this time **pre-emptively,
+  without a refusal to prompt it**. One incident was an incident; two is the
+  interaction.
+- **No design work was redone.** `DEC-111` not relitigated, the research round not
+  re-run, no runbook step re-discharged. The re-reading (slice, notes, research,
+  SPEC-013) served `inq-5`, which is new work. Cost to first mutation: 93 s,
+  ~12 tool calls.
+
+### The stage watch item now has a mechanism
+
+Still `exploring` at revision 10, runbook cleared since revision 6. The resume
+output says `next_obligation none recorded` while naming stage `exploring`. So a
+fresh agent is told, in one surface, *you are in exploring* and *nothing is
+outstanding* — which reads as a licence to continue interviewing there, and is
+exactly what happened. Nothing on the resume path proposes the stage advance, and
+`Locked` is reachable only through it. Promoted from *watching* to **the
+mechanism is identified**; still not filed, pending whether the run advances on
+its own.
 
 ## 6. Sibling contrast — mandatory for every S4 candidate
 
@@ -290,6 +408,16 @@ observation routes to neither until they separate. The discriminator is **the
 subject's next unprompted `doctrine design show`**: with an empty receipt set, an
 emission path must re-emit. **The moderator does not induce it** — inducing the
 discriminating call is steering, and steering is itself the observation.
+
+> **RESOLVED at 10:10:54Z — `show` is not an emission path.** The subject made an
+> unprompted `doctrine design show 243` in the post-break session (§5b). Full
+> output, `truncated false`, 1,833 B: run line, watermark, floors, posture/cursor,
+> totals, frontier, blockers, sections, records, change log, `declare` hint.
+> **No fragment header, no craft prose.** `[fragments] fragment = []` throughout
+> the run, so suppression was never available to explain it. With an empty receipt
+> set an emission path must re-emit; this one did not. The two live readings
+> separate cleanly and the observation routes: emission is a `resume`/`start`
+> property, not a read-path one. The moderator did not induce the call.
 
 ### Ancillary — the runbook step list is not on the envelope
 
