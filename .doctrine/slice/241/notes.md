@@ -7,7 +7,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
-T1, T2 and T3 done; T4a (the first live cell) open** · head `1408f1ae`
+T0–T3 done, T4a DONE (five rows live, all model-level); T4b next** · head
+`d8e59952`
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -93,6 +94,26 @@ Lifted here so the ids survive the sheet:
   cell is the integration proof.
 - memory: `mem.pattern.shell.ifs-tab-read-collapses-empty-fields` (**F-P05-7**)
   — a TSV read with `IFS=$'\t'` silently merges empty columns.
+- `lib/instantiations.sh` — the row instantiations (D-P05-5). **T4a COMPLETE**
+  (`ac9b534c` H1/H3/H4, `4b6ee92b` H2/H5): five result-tree rows, twenty cells,
+  every one `pass`, every row **model-level** (**F-P05-24**). H2 is a
+  *dissolution* performed rather than asserted (**D-P05-8**) and is the first row
+  that must clear all four stages — so the first to pay heavy's ~6-min verify,
+  which re-shapes T4b's cost (H9/H15 pay it too). H5's form set is per fixture
+  (**D-P05-10**). Six mutants, six reds, no survivors.
+- **D-P05-6..10** and **F-P05-10..25** are in the runtime sheet in full. Four
+  are operator rulings from one `/consult` (D-P05-6 named sandbox statuses +
+  `verify/resource-cap`; D-P05-7 heavy builds assets on site; D-P05-8 H2
+  dissolved; D-P05-9 F1 gains `.doctrine/**`), plus **D-P05-10** — guards (b)
+  and (c) become isolated T6 probes because leg 3 returns on the first matching
+  path, so a combined range cannot observe either (**F-P05-22**).
+- **F-P05-19** — the heavy column reaches `advance`: all four stages pass on both
+  mechanisms, 376s / 409s, 4.4G. Unblocks H9/H10/H11/H15/H16.
+- **F-P05-20** — EX-1's floor is FILESYSTEM-ONLY; both capsule kinds get the host
+  network namespace and `:223` binds an API credential. Recorded, not fixed —
+  exfiltration is a different axis from the ingestion safety P-C3 tests.
+- **F-P05-25** — `c3_commit` tolerated a failed `git add`, surfacing as a
+  `fatal:` inside a *green* log; now `rig_die`s. H4 shares it and stayed green.
 
 **PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
 `090148ef..5f42727b`):**
@@ -756,12 +777,37 @@ mid-phase would convert a legible structural finding into a silent pass.
   from CPT-001; authoring the light fixture's `interpret:` list is itself a
   trigger enumeration, so PHASE-01 EX-12 + PHASE-04 EX-9 protect the other side.
   Not in the design because the design does not schedule the work.
+- **an absence-shaped result is not a verdict** — three instances in one session,
+  all in throwaway harnesses rather than in the rig: a run piped to `tail`
+  reporting `tail`'s exit status (a timeout kill read as a pass); a hand-rolled
+  leg-3 emulation whose erroring command emitted nothing, read as "guard
+  evaded"; a mutant driver scoring SURVIVED where zero cells had run. Every
+  absence-shaped verdict needs a control proving the measurement ran. Committed
+  as friction observations (`d8e59952`); generalises
+  `mem_019fa18161f47651af7687d8dccbbc67`. **Candidate memory.**
+- **a falsifiability sibling isolates the rig's CODE but not its RESULTS** —
+  `SPIKE_CAPSULE_ROOT` still defaults to `~/capsules` in the copy, so mutant
+  cells append rows indistinguishable from real ones. Point it at a scratch root
+  **outside the sibling repo** (inside, I6 correctly refuses) with `fixtures`
+  symlinked in.
 
 ### Open
 
-- **OQ-a / OQ-b / OQ-c** — three closed-vocabulary gaps found in PHASE-03,
-  recorded and NOT filled (§ PHASE-03 open questions). OQ-a narrowed by
-  F-P04-10 to one `case` arm in `verify_stage`; still live for PHASE-05
+- **QUE-204** — how a capsule obtains build inputs git cannot carry. The one open
+  decision PHASE-05 carries and **not a rig edit**: heavy's web assets built on
+  site per cell (current, measured poor — every stage-3 cell fetches from
+  `registry.npmjs.org`, so an outage lands as `verify/suite-failed` with nothing
+  to distinguish it from a real verdict) vs at fixture-build time from B's own
+  source. D-P05-7's *reason* survives either way; only its timing is open.
+  Operator: egress acceptable **if allowlisted**, but that is per-project toil —
+  and the shared-capsule-at-a-known-HEAD direction is the real target. Shares a
+  lever with F-P05-20 option 4; settle together if either is settled.
+- **~~OQ-a~~ RESOLVED** (`c4a26004`, D-P05-6) — every sandbox-injected status is
+  now named above `*)`, and `verify/resource-cap` joined the closed set.
+  **OQ-b / OQ-c still live** (§ PHASE-03 open questions): worker wall-clock
+  overrun is H15's business; M-A has no absent-result token
+- **DEC records are OWED at close for D-P05-6..10** — the sheet's convention is
+  "lift to notes.md at close", so they were deliberately not minted mid-phase
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
   trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see
