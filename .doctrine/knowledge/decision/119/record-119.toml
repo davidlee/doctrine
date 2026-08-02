@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 119
+slug = "rev-045-uses-a-prd-umbrella-modification"
+title = "REV-045 uses a PRD umbrella modification"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-02"
+updated = "2026-08-02"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Revision cannot introduce PRD requirements"
+target = "IMP-297"
+
+[[relation]]
+label = "shapes"
+target = "IMP-382"

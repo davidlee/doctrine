@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 446
+slug = "keep-phase-plans-unambiguous-for-human-and-agent-readers"
+title = "Keep phase plans unambiguous for human and agent readers"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "The same authored plan yields an unambiguous phase order, criterion identity and mode, governing set, and canonical linkage for human and agent readers without reconstructing meaning from Git or conversation history."
+tags = []
+acceptance_criteria = [
+  "Human and agent readers reach the same phase order, criterion classifications, and governing set from the authoritative plan read.",
+  "Cross-phase references identify their owning phase and cannot resolve to multiple criteria.",
+  "A reader can determine current meaning and relevant history without consulting chat transcripts, commit ordering, or undocumented conventions.",
+]

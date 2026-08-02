@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 442
+slug = "evolve-changed-criteria-through-explicit-lineage"
+title = "Evolve changed criteria through explicit lineage"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "When criterion meaning changes, an authorized plan revision preserves predecessor history and records successor disposition sufficient to derive the governing criteria across replacement, withdrawal, split, merge, and cross-phase relocation, while unchanged criteria require no evolution record."
+tags = []
+acceptance_criteria = [
+  "An unchanged criterion remains governing without an evolution record or a restated shadow copy.",
+  "Replacement and withdrawal preserve the predecessor and identify its disposition without leaving obsolete meaning active.",
+  "One-to-many split, many-to-one merge, and cross-phase relocation can name every predecessor and successor without reusing an identifier.",
+  "The governing criterion set is deterministically derived from valid evolution history rather than manually duplicated as a second authored list.",
+]

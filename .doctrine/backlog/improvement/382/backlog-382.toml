@@ -5,8 +5,8 @@ id = 382
 slug = "govern-the-phase-plan-content-model"
 title = "Govern the phase-plan content model"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "started"
+resolution = ""
 created = "2026-08-02"
 updated = "2026-08-02"
 tags = ["area:governance", "area:slice", "area:spec", "planning"]
@@ -44,3 +44,11 @@ target = "SPEC-014"
 [[relation]]
 label = "related"
 target = "SPEC-002"
+
+[[relation]]
+label = "related"
+target = "REV-045"
+
+[[relation]]
+label = "related"
+target = "DEC-119"

@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 441
+slug = "preserve-phase-and-criterion-identity-and-order"
+title = "Preserve phase and criterion identity and order"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Once authored, phase and criterion identifiers remain immutable and are never reused or renumbered; additions preserve existing identity and declared order."
+tags = []
+acceptance_criteria = [
+  "Editing or extending a plan never changes or reuses an existing phase or criterion identifier.",
+  "New phases and criteria append new identities without renumbering existing records or changing their established relative order.",
+  "A criterion reference outside its owning phase is phase-qualified or otherwise unambiguous.",
+]

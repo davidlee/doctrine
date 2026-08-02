@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 447
+slug = "keep-plan-facts-single-owned-across-authored-and-observed-tiers"
+title = "Keep plan facts single-owned across authored and observed tiers"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "A plan records each governing semantic fact once and references canonical intent, verification, and coverage owners; observed execution evidence cannot silently mutate authored plan truth."
+tags = []
+acceptance_criteria = [
+  "A plan cites canonical requirement and specification identities instead of restating their normative content as independent plan truth.",
+  "Executable procedure identity, observed results, and requirement coverage remain in their canonical owners and are referenced or projected without creating a parallel command or evidence contract.",
+  "Observed progress, test output, coverage, and discovered drift cannot directly rewrite the authored plan or widen selector authority.",
+]

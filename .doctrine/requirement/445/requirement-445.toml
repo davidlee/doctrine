@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 445
+slug = "migrate-existing-plans-without-changing-active-meaning"
+title = "Migrate existing plans without changing active meaning"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Existing valid plans remain readable and retain their active meaning as the content model evolves; migrations are explicit and deterministic and impose no lineage ceremony on unchanged criteria."
+tags = []
+acceptance_criteria = [
+  "A valid plan authored before criterion evolution support remains readable with its existing criteria governing in their declared order.",
+  "An unchanged existing criterion requires no generated lineage record, replacement identity, or manual re-authoring.",
+  "A required migration produces the same authored result from the same input and can be reviewed before it governs execution.",
+  "A failed migration leaves the prior authored plan intact and reports the blocking incompatibility.",
+]

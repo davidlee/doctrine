@@ -55,5 +55,21 @@ specified.
 
 ## Next action
 
-Enter `/spec-product`; do not begin with `/spec-tech`, because the product owner
-must be settled before the component spec can descend from it.
+Enter `/spec-tech` to create the component specification "Phase plan surface",
+descending from PRD-001 and parented by SPEC-004. It must own the plan content
+schema and mechanisms, settle PRD-001's OQ-2 through OQ-4, preserve the ownership
+joints above, and anchor the implementation surfaces named in the intended
+outcome.
+
+## Product-spec result
+
+REV-045 amended PRD-001 rather than creating a sibling PRD. PRD-001 now owns the
+durable phase-plan product contract through REQ-439 to REQ-447: ordered plan
+content, EN/EX and VT/VA/VH semantics, immutable identities and order, opt-in
+criterion evolution, validation, governing-versus-historical rendering,
+compatibility and migration, unambiguous agent/human reads, and single ownership
+across authored and observed tiers.
+
+DEC-119 records the local Revision workaround: `revision change introduce`
+rejects PRD members under the known IMP-297 gap, so REV-045's primary
+`modify PRD-001` row umbrellas the requirements created by `spec req add`.

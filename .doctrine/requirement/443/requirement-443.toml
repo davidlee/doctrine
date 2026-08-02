@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 443
+slug = "validate-phase-plans-before-execution"
+title = "Validate phase plans before execution"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Before a phase plan governs execution, Doctrine detects malformed or ambiguous content, including invalid identities or modes, dangling or cyclic lineage, invalid evolution cardinality, and indeterminate active ordering."
+tags = []
+acceptance_criteria = [
+  "A malformed plan cannot cross the readiness boundary and govern execution.",
+  "Validation rejects duplicate or invalid identities, unsupported criterion modes, ambiguous references, missing predecessors or successors, cycles, malformed split or merge cardinality, and an indeterminate governing order.",
+  "Every refusal identifies the offending plan subject and reason so the responsible actor can correct it.",
+  "Validation never silently repairs authored plan truth.",
+]

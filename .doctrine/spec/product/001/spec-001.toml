@@ -11,7 +11,8 @@ tags = []
 responsibilities = [
   "Name a unit of intentional change before code moves — what changes, why, what it touches, and what done looks like.",
   "Hold the declarative change contract (the what/whether) distinct from the design (the how) and from runtime progress.",
+  "Carry an accepted slice's durable, ordered phase plan as the authoritative statement of current execution intent, distinct from runtime progress and observed evidence.",
   "Carry a slice through its lifecycle from proposed intent to reconciled, closed change.",
   "Anchor sibling artefacts (design, plan, phases, audit) to one durable change identity without restructuring.",
-  "Provide a forward seam for spec/requirement linkage and coverage gates that attaches later without reshaping the artefact.",
+  "Carry canonical spec and requirement linkage so coverage and verification can attach without duplicating their truth into the slice or plan.",
 ]

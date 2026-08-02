@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 439
+slug = "author-a-durable-ordered-phase-plan"
+title = "Author a durable ordered phase plan"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "An accepted slice can carry a durable, ordered phase plan whose phases state stable identities, objectives, entry and exit conditions, verification obligations, and canonical governance links while runtime progress remains separate."
+tags = []
+acceptance_criteria = [
+  "The plan belongs to one durable slice identity and presents its phases in one unambiguous authored order.",
+  "Every phase states a stable phase identity and objective plus its entry, exit, and verification criteria and any applicable canonical spec or requirement links.",
+  "Runtime phase status and execution progress are absent from the authored plan and can be discarded without changing its contract.",
+]

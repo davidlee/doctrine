@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 440
+slug = "distinguish-entry-exit-and-verification-criterion-modes"
+title = "Distinguish entry, exit, and verification criterion modes"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "A phase plan distinguishes EN entry and EX exit conditions from verification by VT automated test, VA agent check, or VH human acceptance so every criterion names the kind of evidence or judgement that can satisfy it."
+tags = []
+acceptance_criteria = [
+  "EN entry criteria and EX exit criteria are distinct authored condition classes and cannot be presented as verification evidence.",
+  "Every verification criterion selects exactly one of VT automated test, VA agent check, or VH human acceptance as its confirmation mode.",
+  "A criterion with a missing, contradictory, or unsupported class or verification mode is reported as invalid rather than silently treated as governing.",
+]
