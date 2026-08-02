@@ -60,3 +60,40 @@ suites are the proof and must stay green unchanged.
 Raised from SL-233 PHASE-08 `F-P08.4`. Related: IMP-375 (the design-prompt store
 is not project-overridable, which is what makes the PHASE-08 bound tightening
 safe today and would stop being true if that changed).
+
+## Appended from the SL-233 audit campaign (2026-08-02)
+
+Two findings were disposed **deferred to this issue** rather than minting
+parallel items, because one repair closes all three.
+
+`RV-342` F-1 (major) — *nothing verifies that declarations agree with their
+construction sites; the test that appears to is tautological*. Substantively
+already recorded above (the `rendered_payload_fits_its_cap_for_every_event_kind`
+reader saturates from the declared kinds rather than comparing them to anything
+real). It adds one fact worth keeping: the gap has a **demonstrated escape, not
+a hypothetical one** — at PHASE-16 commit `63b348de6` three numbers disagreed
+(64 / 32 / 16), a step id of 17–64 bytes passed `validate_step_id` and was then
+refused at admission, and **the phase shipped green**. Refused at execution
+rather than at validation is what `EX-3` exists to forbid. It was caught two
+phases later by a human pass, outside the PHASE-16 range.
+
+`RV-341` F-2 (minor) — **the constructor seam that permits the class**, and this
+is the genuinely new detail. The projection-bounds sketch settles admission as
+structural: *"Every run-local id is built through ONE validating constructor;
+there is no other way to make one."* `DesignId` honours it. `PayloadTerm` does
+not, asymmetrically: `token()` and `label()` route through `PayloadTerm::admit()`
+and enforce the `DESIGN_*` bounds, while **`digest()` and `prose()` construct the
+struct directly and never reach `admit()`**.
+
+Inert today — `ValueKind::Digest` and `ValueKind::Prose` both return `None` from
+`admission_bound()`, and the provenance rule deliberately leaves a stored reason
+unbounded. The defect is structural: if a bound were later added to either kind,
+the deserialisation route (`TryFrom<PayloadTermWire>`) goes through `admit()` and
+would enforce it while the in-code construction path silently bypassed it — the
+exact wire-vs-constructor asymmetry the one-constructor rule exists to close, and
+the same asymmetry the paragraph above flags in the other direction.
+
+So the fix sketched above — taking the kind *from* the event declaration rather
+than from the call site's choice — should also give `PayloadTerm` a **single
+admitting constructor**, so that `digest()` and `prose()` cannot diverge from
+`token()` and `label()` the moment a bound appears.
