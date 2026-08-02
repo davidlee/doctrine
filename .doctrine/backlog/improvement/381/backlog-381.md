@@ -71,3 +71,23 @@ Produce the normal cited coverage assessment with:
 5. remaining questions that must enter product/spec design rather than being
    guessed during assessment;
 6. the next governing skill (`/spec-product` or `/spec-tech`) if ready.
+
+## Result
+
+Assessed 2026-08-02. Coverage map (runtime tier, regenerate via
+`/spec-coverage-assessment` if lost):
+`.doctrine/state/imp-381-coverage-map-criterion-lineage.md`.
+
+Headline: criterion lineage has **no host spec to amend**. `src/plan.rs` and
+`src/vtgate.rs` are anchor-dark corpus-wide; SPEC-014 describes `plan.toml` only
+as a sibling scaffold; PRD-001 carries no plan requirement; PRD-015 delegates
+"slice/phase planning and execution semantics" to PRD-001, which does not hold
+them. Criterion identity and immutability are normative only in `glossary.md` /
+`using-doctrine.md` / the boot snapshot — reference prose, not a spec.
+
+Recommendation: amend PRD-001 (feature altitude), then one new component tech
+spec "Phase plan surface" (`descends_from = PRD-001`, `parent = SPEC-004`)
+owning the plan content model and the lineage contract, with the VT gate as a
+section projecting into SPEC-002's executable seam rather than a separate spec.
+Next skill: `/spec-product` first — the amend-vs-sibling-PRD question is a
+product-altitude call that must settle before the tech spec has a parent.
