@@ -153,6 +153,57 @@ refuted, two survived as `F-2` / `F-3`, and the major finding was synthesised
 rather than reported. Cost: four cheap runs, ~26 minutes wall-clock, fully
 parallel. Cheap enough that not doing it is the expensive choice.
 
+#### 4c. Corrected at S3: the "worthless agreement" was a mis-attribution
+
+Amended 2026-08-02 after SL-233 S3. §4b's headline example needs one fact added,
+and it sharpens the lesson rather than weakening it.
+
+The `serde_json::to_string(declaration).unwrap_or_default()` line that both
+PHASE-04 passes converged on **was a real defect**. It is simply not PHASE-04's:
+it is added by **PHASE-05**, and both S3 PHASE-05 passes raised it independently
+and in range. It is now `RV-342` F-6.
+
+So the correct reading of that convergence is not *two passes agreed on a
+non-finding*. It is:
+
+- **the scope check was right and load-bearing** — pass B was correct that the
+  line is not in the PHASE-04 range, and discarding it there was correct;
+- **but "out of my range" is not "not a defect"**, and S2 treated it as though
+  it were. A candidate ruled out of scope should be *reassigned*, not dropped.
+  Nothing in the S2 rig had anywhere to put it.
+- **agreement was still weak evidence** — both passes agreed on the wrong
+  *phase*, which is exactly the systematic-misread class §4a describes. They
+  shared the error; only the scope test caught it.
+
+Two operational consequences, both cheap:
+
+- **Keep a cross-session out-of-scope spool.** When a pass raises something real
+  but out of range, park it against the phase whose range does contain it. S3
+  recovered this one only because the same line resurfaced under a different
+  phase; had PHASE-05 been reviewed before PHASE-04, it would have been lost.
+- **Phase-scoped ranges plus a mandatory scope gate are what located it.** The
+  S3 template requires every candidate to ship the
+  `git diff <range> -- <file>` proving its line is in range. That is what turned
+  a discarded S2 candidate into a raised S3 finding.
+
+#### 4d. Proving a test pins nothing: mutate, then control the mutation
+
+S3 confirmed `RV-342` F-5 — an assertion satisfied by a substring of an
+unrelated line — by **deleting the behaviour the test names and watching the
+test still pass**. That is the only evidence that settles a "this guard cannot
+fail" claim; argument from reading is not enough, and this campaign has twice
+had confident readings turn out wrong.
+
+The half that is easy to skip: **a passing mutant proves nothing until you show
+the harness can fail.** A build that silently did not rebuild, a filter that
+matched no tests, a binary the e2e spawns from a stale path — all present as a
+green run. So follow the mutation with a *deliberately fatal* second mutation
+and confirm it goes red. Both mutations together cost one extra compile and
+convert an argument into a measurement.
+
+This is the same discipline as the positive-control rule for negative greps,
+applied to a negative claim about a test.
+
 ### 5. What a funnel must supply that hand-running did not
 
 - **A staging tier.** Raisers wrote findings files to a scratch directory; the
