@@ -41,7 +41,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/design/SKILL.md",
-      "computedHash": "108ef9cdf9671f1384135d073af066d39ffc6efd9e21c352192cde77546131c5"
+      "computedHash": "849e3527cbb508c66c4279558a8219407318ee490a41a754805eb213dffe1611"
     },
     "dispatch": {
       "source": "davidlee/doctrine",
@@ -89,7 +89,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/handover/SKILL.md",
-      "computedHash": "ae324c0d70332357f16c7dff01a59e8a98801c5e7bab9f9cd6c234f30b109b18"
+      "computedHash": "1a0104978d5684eed0ee4798e6b85c16cddef90e0d8d27315c95f5a3039615bd"
     },
     "harvest": {
       "source": "davidlee/doctrine",
