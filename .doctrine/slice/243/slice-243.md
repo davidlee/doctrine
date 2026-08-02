@@ -55,8 +55,10 @@ engine knows the contract, never the host's conventions.
 ## Scope & Objectives
 
 **O1 — `doctrine spec anchors`, a report-only read verb.** Joins corpus anchors
-against adapter-supplied units; emits a neutral JSON core plus markdown and d2
-renderings. No gate, no ratchet, no write path.
+against adapter-supplied units; emits a neutral JSON core plus a markdown
+rendering. No gate, no ratchet, no write path. (Originally "markdown and d2
+renderings" — narrowed by DEC-115; a diagram rendering is IMP-385, and DOT
+rather than d2 when it is taken.)
 
 **O2 — the adapter contract.** A project-declared command per anchor `language`,
 in `.doctrine/doctrine.toml`, mirroring `[verification]`. Absent ⇒ an owned
@@ -166,6 +168,10 @@ in Context.
   (`neighbourhood(focus, depth)`, `drop_isolated`). A rendering mode over the
   same core, never the default render — the whole-corpus graph does not fit on a
   page. Carried as a design input, deferred as work.
+- **Diagram rendering (IMP-385)** — DOT, naturally the same work as the altitude
+  view above, since that view is what makes a diagram page-sized. IDE-046 is the
+  reason DOT is the interesting target: rendering to an image and writing it
+  inline via the terminal graphics protocol.
 - Publishing the Rust adapter as a reference implementation for other Rust
   projects.
 - A gate or ratchet over dark loc, once the report has a baseline anyone trusts.

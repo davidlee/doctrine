@@ -8,8 +8,8 @@
 
 `doctrine spec anchors` (SL-243) emits its `--json` as a plain serialisation of
 the report struct, with no `json_envelope` wrapper, and does **not** flatten
-`CommonListArgs`. Format selection rides a dedicated enum over
-`json | markdown | dot`, mirroring `GraphFormat`. Its filters are its own —
+`CommonListArgs`. Format selection rides a dedicated enum, mirroring
+`GraphFormat`. Its filters are its own —
 depth, language, focus — and none of the entity-list flags (`--status`, `--tag`,
 `--all`, `--columns`) appear on it.
 
@@ -65,7 +65,16 @@ missed by the research round's governance thread and surfaced by the canon
 pass — the binding authority on this question arrived late, which is why the
 alternatives are recorded here rather than assumed.
 
+## Amended by DEC-115
+
+This record originally named the format enum's variants as
+`json | markdown | dot`, which prejudged the `inq-9` fork. DEC-115 settles that
+fork: the enum ships `json | markdown`, and gains a diagram variant with
+IMP-385. Nothing else here changes — the shape of the JSON was never at issue in
+that question.
+
 ## Related
 
 - [[DEC-111]] — the sibling read-path decision from the same run; that one is
   about how the corpus is read, this one about how the result is emitted.
+- [[DEC-115]] — narrows the format enum this record described.
