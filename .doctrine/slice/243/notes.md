@@ -41,7 +41,20 @@ recorded: 2026-08-02 · stage:design/exploring
 Everything below is sourced from `.doctrine/slice/243/research/research.md`,
 which carries the citations and the ✓ verification marks. Ids only here.
 
-### The three carried questions, now answered by evidence
+### Routing: the governance-placement cluster is deferred
+
+`inq-1`, `inq-2` and `inq-3` are **deferred on the run** (rev 8), not dropped.
+They are one question in three parts — where governance for this capability
+lives — and `/spec-coverage-assessment` is the skill built for exactly that
+judgement (what is already governed, what is dark, where a new spec's boundary
+falls by product altitude and C4 level). Running it inside this design session
+would cost more context than it is worth, so it happens as its own pass before
+the run can lock.
+
+The research round's recommendations below are that pass's **input**, not its
+conclusion — offered so the skill starts from evidence rather than cold.
+
+### The three carried questions, and what the evidence recommends
 
 1. **Spec home** → new component spec, parent SPEC-006, descends from PRD-012,
    C4 component, sibling of SPEC-017. The rejected alternative (amend SPEC-017)
