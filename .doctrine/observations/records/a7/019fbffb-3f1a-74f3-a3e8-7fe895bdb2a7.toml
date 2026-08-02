@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbffb-3f1a-74f3-a3e8-7fe895bdb2a7"
+recorded_at = "2026-08-02T00:59:01.78687084Z"
+kind = "friction"
+summary = "execute/T4b: the 'is this planted path declared on this fixture?' trap recurred a third time"
+detail = "F-P05-14 (H5/light), F-P05-18+21 (H5 forms, heavy) and now H12 (heavy .envrc/flake.nix) are the same defect class: the matrix authors an instantiation by the hazard's natural path, and conform leg 2 refuses it because that path is outside the fixture slice's design-target selectors. Each recurrence costs a measurement round plus a /consult. The check is one command — `doctrine slice conformance <slice> -p <clone> --against B..S --strict` — but nothing in the rig runs it at authoring time, so it is rediscovered per row rather than asserted once. A matrix-time audit that resolved each row's planted paths against each fixture's selectors would have caught all three at T2."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

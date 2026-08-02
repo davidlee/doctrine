@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbffb-2c67-78f2-8092-6f709699aa17"
+recorded_at = "2026-08-02T00:58:56.999485737Z"
+kind = "friction"
+summary = "execute/T4b: no fixture selector on `rig c3`, so iterating one row costs the heavy column"
+detail = "P-C3 rows are selectable (`rig c3 H6`) but fixtures are not. A row's first shakeout therefore pays both heavy cells (~6 min each, F-P05-19) even when the thing being debugged is fixture-independent shell. T4a and T4b both worked around it by hand-writing a throwaway driver that sources pipeline.sh directly and runs one cell — the same workaround twice, which is the signal. A `SPIKE_C3_FIXTURES=light` selector, alongside the existing SPIKE_C3_LEGS, would have removed both."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

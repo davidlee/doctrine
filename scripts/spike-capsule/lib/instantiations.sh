@@ -438,3 +438,505 @@ H5_assert() {
   # path at most, and a transport that dropped a form would refuse identically.
   c3_assert_ingested "${at}" "${run}" "${C3_H5_PATHS[@]}"
 }
+
+# ── T4b — the dissolutions ──────────────────────────────────────────────────
+#
+# A dissolution is a hazard the model REMOVES rather than guards, and § 5.6
+# calls it the design's best result rather than a gap. `cell_score` reads ANY
+# refusal as falsifying one (R-D), so every row here must clear all four stages
+# — which makes this the first group to pay heavy's verify: ~6 min a heavy cell
+# against ~2s for T4a's, and most of it is `bun install` fetching at ~0% CPU
+# (F-P05-19). That is a network-bound fetch, not a hang.
+#
+# H2 is the shape they copy: PERFORM the hostile thing and show the pipeline
+# unbothered, which beats asserting that it could not be done.
+
+# c3_execution_log <run> — the HOST file a planted payload appends to if it ever
+# executes, and the row reads WHERE it ran, not merely whether.
+#
+# Under the run directory, never `/tmp`: the sandbox mounts a tmpfs over `/tmp`
+# inside a capsule, so a sentinel written there is invisible from outside and
+# its absence would attest to a containment that was never tested (F-P04-12).
+#
+# A log rather than a flag because the dissolution needs both halves. H6's
+# positive control is the CAPSULE firing its own hook — without it, a payload
+# with a bad shebang or a lost `+x` bit would leave the trusted side silent for
+# a reason that has nothing to do with the model (F-7, one level in).
+c3_execution_log() { printf '%s' "$1/executed-in"; }
+
+# A predicate rather than an inline `test … -o …`: the log legitimately does not
+# exist when nothing ran anywhere, and that is a PASS, not a missing file.
+c3_no_execution_in() {
+  local log=$1 where=$2
+  [ -e "${log}" ] || return 0
+  ! command grep -qF -- "${where}" "${log}"
+}
+
+# c3_assert_never_ran_in <at> <run> <dir…> — no planted payload executed in any
+# of these directories. Read off the log's recorded `pwd`, so a payload that ran
+# somewhere unexpected is still visible rather than silently matching nothing.
+c3_assert_never_ran_in() {
+  local at=$1 run=$2 log d
+  log=$(c3_execution_log "${run}")
+  shift 2
+  for d in "$@"; do
+    rig_assert "${at}: nothing the capsule planted executed in ${d##*/}" \
+      c3_no_execution_in "${log}" "${d}"
+  done
+}
+
+# `-e` is false for a DANGLING symlink, and every escape this group plants is
+# dangling by design — so absence has to be asserted with `-L` beside it or a
+# materialised symlink would read as "never written".
+c3_path_absent() { [ ! -e "$1" ] && [ ! -L "$1" ]; }
+
+# c3_range_matches <repo> <B> <S> <pattern> — does any CHANGED path match?
+c3_range_matches() {
+  c3_range "$1" "$2" "$3" | command grep -q -- "$4"
+}
+
+# H6 — A HOSTILE `.git/config` AND EXECUTABLE HOOKS in the capsule's own clone.
+#
+# Dissolved by construction: config and hooks are REPO-LOCAL and are never git
+# objects, so neither the fetch nor the bundle carries them. The trusted side
+# receives a commit and nothing else, and there is no ingestion step at which a
+# capsule-authored script could become the thing that runs.
+#
+# The row performs the whole hostile setup rather than asserting the absence:
+# the hooks are real, executable, and OBSERVED FIRING inside the capsule.
+
+# Hook names chosen for what would fire TRUSTED-SIDE if the config travelled.
+# `reference-transaction` is the sharpest — git runs it on every ref update,
+# including the quarantine's own fetch, so a transferred hooksPath would execute
+# during stage 1 itself.
+C3_H6_HOOKS='reference-transaction post-checkout post-merge pre-push update post-update pre-receive post-receive'
+
+# c3_h6_write_hooks <run> <dir> — a live payload under every hook name.
+c3_h6_write_hooks() {
+  local run=$1 dir=$2 hook
+  mkdir -p -- "${dir}"
+  for hook in ${C3_H6_HOOKS}; do
+    # `$(pwd -P)` is escaped so the HOOK evaluates it at run time; everything
+    # else is expanded now. The recorded directory is what tells the row apart
+    # from its own positive control.
+    cat >"${dir}/${hook}" <<EOF
+#!/bin/sh
+# H6's planted payload (${C3_PAYLOAD_MARK}).
+printf 'h6/${hook} ran in %s\n' "\$(pwd -P)" >>"$(c3_execution_log "${run}")"
+exit 0
+EOF
+    chmod +x -- "${dir}/${hook}"
+  done
+}
+
+H6_mutate() {
+  local run=$1 repo hooks
+  repo=$(c3_capsule_repo "${run}")
+  hooks="${repo}/.git/c3-h6-hooks"
+
+  # BOTH locations, because there are two transfer stories and only one of them
+  # involves the config: git's default `.git/hooks`, and a `core.hooksPath` the
+  # capsule chose for itself.
+  c3_h6_write_hooks "${run}" "${repo}/.git/hooks"
+  c3_h6_write_hooks "${run}" "${hooks}"
+
+  # ABSOLUTE, and that is what makes the observable non-vacuous. A repo-relative
+  # `core.hooksPath` copied into the quarantine would find no hooks THERE, so
+  # the trusted side would stay silent whether or not the config had travelled.
+  # Pointed at the capsule's own directory, a transferred config would really
+  # execute the capsule's scripts — which is the thing shown not to happen.
+  git -C "${repo}" config core.hooksPath "${hooks}"
+  # A config-borne execution trigger that is not a hook at all: `upload-pack`
+  # runs this INSTEAD of `pack-objects` when serving a fetch, i.e. as a child of
+  # the trusted side's own `git fetch` on M-A. Git defends it by honouring the
+  # key only from protected (system/global) configuration; the row OBSERVES that
+  # defence rather than trusting the documentation for it.
+  git -C "${repo}" config uploadpack.packObjectsHook "${hooks}/pre-receive"
+  git -C "${repo}" config core.fsmonitor "${hooks}/post-checkout"
+
+  # THE POSITIVE CONTROL, and it belongs here rather than in `_planted`: a no-op
+  # ref write fires the capsule's OWN `reference-transaction`, so the row knows
+  # the payload is live before it claims nothing ran elsewhere.
+  git -C "${repo}" update-ref refs/heads/c3-h6-control "$(c3_result "${run}")"
+
+  # NO `c3_publish`, deliberately. H6 changes no objects, so the worker's ref
+  # and the bundle it wrote are both already correct — and a republish now would
+  # fire the hooks a second time, adding capsule-side noise to the one file this
+  # row reads.
+}
+
+H6_planted() {
+  local run=$1 repo log
+  repo=$(c3_capsule_repo "${run}")
+  log=$(c3_execution_log "${run}")
+
+  [ -x "${repo}/.git/c3-h6-hooks/reference-transaction" ] || return 1
+  [ "$(git -C "${repo}" config --get core.hooksPath)" = "${repo}/.git/c3-h6-hooks" ] || return 1
+  # The payload is LIVE: git found it, executed it, and it wrote where it said
+  # it would. Without this the row's whole claim would rest on a script nothing
+  # had ever run.
+  command grep -q "h6/reference-transaction ran in ${repo}" "${log}" 2>/dev/null || return 1
+  printf 'core.hooksPath set and %s hooks live — reference-transaction OBSERVED firing in the capsule' \
+    "$(printf '%s' "${C3_H6_HOOKS}" | wc -w)"
+}
+
+H6_assert() {
+  local run=$1 at="H6/$2/$3"
+  local q="${run}/quarantine" c="${run}/canonical"
+
+  # THE DISSOLUTION, as the two structural facts that constitute it.
+  #
+  # 1. The config did not travel. Asserted on both trusted-side repositories,
+  #    because the mechanisms differ in which one the capsule ever touches.
+  rig_assert_fails "${at}: the quarantine has no core.hooksPath" \
+    git -C "${q}" config --get core.hooksPath
+  rig_assert_fails "${at}: the quarantine has no uploadpack.packObjectsHook" \
+    git -C "${q}" config --get uploadpack.packObjectsHook
+  rig_assert_fails "${at}: canonical has no core.hooksPath" \
+    git -C "${c}" config --get core.hooksPath
+
+  # 2. The hook FILES did not travel either — neither as config's target nor as
+  #    objects. `ls-tree` is the object half: a hook that had been committed
+  #    would be a path in the result and this would catch it.
+  rig_assert "${at}: no hostile hook directory in the quarantine" \
+    test ! -e "${q}/.git/c3-h6-hooks"
+  rig_assert "${at}: no hostile hook directory in canonical" \
+    test ! -e "${c}/.git/c3-h6-hooks"
+  #    Read off the RANGE rather than the whole tree: `git grep` over a clone of
+  #    this repository would match whatever the fixture's B happens to carry,
+  #    which is a fact about the pin and not about the row.
+  rig_assert_fails "${at}: hooks are not objects — no hook path is in the range B..S" \
+    c3_range_matches "${q}" "$(c3_base "${run}")" "$(cat "${run}/pinned-oid")" 'c3-h6-hooks'
+
+  # And therefore nothing executed on the trusted side. The positive control in
+  # `_planted` is what makes this a result rather than a tautology.
+  c3_assert_never_ran_in "${at}" "${run}" "${q}" "${c}"
+
+  # The capsule gained nothing: all four stages name the same result and pass.
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_stage_passed "${at}" "${run}" conform
+  c3_assert_stage_passed "${at}" "${run}" verify
+  c3_assert_stage_passed "${at}" "${run}" advance
+}
+
+# H9 — AN IN-TREE SYMLINK POINTING OUT OF THE TREE, and a `.gitattributes`
+# naming a filter driver. Scored as TWO (D-P05-2, § 5.6 "scored as two"):
+#
+#   dissolution   inert at ingest — no candidate tree is materialised trusted
+#                 side (I4), so there is no path for anything to follow and no
+#                 checkout for a smudge filter to run in
+#   verify        containment — the verify capsule DOES check the tree out, and
+#                 the claim is that it is confined when it does
+#
+# Both legs run the same pipeline; what differs is what each OBSERVES, which is
+# the point of one leg per alternative rather than one leg satisfying both.
+#
+# PLANTED UNDER A DESIGN-TARGET DIRECTORY, per fixture. A root `.gitattributes`
+# is undeclared under both fixtures' selectors and would refuse `undeclared-path`
+# at conform leg 2 — the F-P05-18 trap, and it would score as a defect of the
+# model. Git honours a per-directory `.gitattributes` over that directory's
+# files, so the hazard is unchanged by the move. Measured on both fixtures,
+# dotfile included (2026-08-02).
+C3_H9_FILTER=h9-hostile
+
+c3_h9_dir() {
+  case "$1" in
+    light) printf 'src' ;;
+    heavy) printf 'scripts/spike-capsule' ;;
+    *) rig_die "H9: no design-target plant directory for fixture: $1" ;;
+  esac
+}
+
+# c3_h9_paths <fixture> — PUBLISHES `C3_H9_PATHS`, for the same reason
+# `c3_h5_paths` does: an array cannot survive a `$( … )`, and the three hooks
+# must agree about the form set without a `case` in each.
+c3_h9_paths() {
+  local dir
+  dir=$(c3_h9_dir "$1")
+  C3_H9_PATHS=(
+    "${dir}/.gitattributes"
+    "${dir}/h9-payload.txt"
+    "${dir}/h9-escape-abs"
+    "${dir}/h9-escape-rel"
+  )
+}
+
+# The host path the ABSOLUTE symlink names — outside every capsule's writable
+# root, and outside the sandbox's view entirely. Its continued absence is the
+# containment observable.
+c3_h9_escape_target() { printf '%s' "$1/h9-escaped"; }
+
+H9_mutate() {
+  local run=$1 fixture=$2 repo dir
+  repo=$(c3_capsule_repo "${run}")
+  dir=$(c3_h9_dir "${fixture}")
+
+  # A filter driver named in the attributes and DEFINED in the capsule's own
+  # repo config — the complete hazard, and the half that cannot travel is the
+  # same half H6 is about.
+  printf 'h9-payload.txt filter=%s diff=%s\n' "${C3_H9_FILTER}" "${C3_H9_FILTER}" \
+    >"${repo}/${dir}/.gitattributes"
+  git -C "${repo}" config "filter.${C3_H9_FILTER}.smudge" \
+    "sh -c 'printf \"h9/smudge ran in %s\\n\" \"\$(pwd -P)\" >>\"$(c3_execution_log "${run}")\"; cat'"
+  c3_plant_file "${run}" "${dir}/h9-payload.txt"
+
+  # Two escapes, because they fail differently. The absolute one names a host
+  # path the sandbox has no view of at all; the relative one normalises above
+  # the checkout root, so it is the traversal a `..`-stripping check would miss.
+  ln -sfn -- "$(c3_h9_escape_target "${run}")" "${repo}/${dir}/h9-escape-abs"
+  ln -sfn -- '../../../../../../../../../../h9-escaped-rel' "${repo}/${dir}/h9-escape-rel"
+
+  c3_h9_paths "${fixture}"
+  c3_commit "${run}" 'H9: an out-of-tree symlink and a filter-driver attribute' \
+    "${C3_H9_PATHS[@]}"
+  c3_publish "${run}"
+}
+
+H9_planted() {
+  local run=$1 repo dir
+  repo=$(c3_capsule_repo "${run}")
+  dir=$(c3_h9_dir "$2")
+  # The symlink must be a SYMLINK in the tree, not a regular file git happened
+  # to record: mode 120000 is what conform leg 4 leaves legal (SL-012), and a
+  # dereferenced copy would make the row a different one entirely.
+  git -C "${repo}" ls-tree "$(c3_result "${run}")" -- "${dir}/h9-escape-abs" |
+    command grep -q '^120000 ' || return 1
+  c3_h9_paths "$2"
+  c3_planted_paths "${run}" "${C3_H9_PATHS[@]}"
+}
+
+H9_assert() {
+  local run=$1 fixture=$2 at="H9/$2/$3/$4" alt=$4 dir
+  local q="${run}/quarantine"
+  dir=$(c3_h9_dir "${fixture}")
+  c3_h9_paths "${fixture}"
+
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  # The objects came across. Stated first because every claim below is about
+  # what did NOT happen, and each of them would hold vacuously against a
+  # transport that had dropped the payload.
+  c3_assert_ingested "${at}" "${run}" "${C3_H9_PATHS[@]}"
+
+  case "${alt}" in
+    dissolution)
+      # I4, as the pairing that makes it non-vacuous: the payload is IN the
+      # range the trusted side folded, and yet no candidate tree exists for
+      # anything to follow. The quarantine's worktree sits at B by construction
+      # (`pipeline.sh:28-34`); this observes it rather than citing it.
+      rig_assert "${at}: I4 — no candidate tree trusted-side; the symlink was never written" \
+        c3_path_absent "${q}/${dir}/h9-escape-abs"
+      rig_assert "${at}: I4 — the filtered payload was never checked out either" \
+        c3_path_absent "${q}/${dir}/h9-payload.txt"
+      # Symlinks stay LEGAL (SL-012) and leg 4 matches `.gitmodules` by name, so
+      # neither form is a conform refusal. Asserted because a leg that grew a
+      # mode or name test would make this row score as H8.
+      c3_assert_stage_passed "${at}" "${run}" conform
+      ;;
+    verify)
+      # Containment: the verify capsule is the ONE place the tree is
+      # materialised, and it ran to a verdict with both escapes present.
+      c3_assert_stage_passed "${at}" "${run}" verify
+      rig_assert "${at}: the absolute escape target is untouched on the host" \
+        c3_path_absent "$(c3_h9_escape_target "${run}")"
+      rig_assert "${at}: the relative escape normalises above the root and reached nothing" \
+        c3_path_absent /h9-escaped-rel
+      ;;
+    *) rig_die "H9: unknown alternative: ${alt}" ;;
+  esac
+
+  # Neither the smudge filter nor anything else ran outside the capsule. The
+  # driver is NAMED by an object and DEFINED by config, and only the first half
+  # travels — which is H6's dissolution arriving as H9's.
+  c3_assert_never_ran_in "${at}" "${run}" "${q}" "${run}/canonical"
+}
+
+# H15 — THE PIPELINE IS KILLED MID-RUN, AT EACH STAGE IN TURN (EX-9).
+#
+# Dissolved AND REPLACED (§ 5.6): there is no journal to replay, and the
+# re-derived boundary is stronger than one would be — stages 1–3 touch nothing
+# canonical and are idempotent, and stage 4 is a single atomic CAS. So a crash
+# before stage 4 leaves canonical byte-identical and the re-run resumes from the
+# SAME pinned OID; a crash after it has landed.
+#
+# The row plants no objects. Its hostile input is the interruption itself, so
+# the worker's result and bundle are exactly what a crashed run would leave —
+# and `c3_publish` is deliberately not called for the same reason H6 does not
+# call it.
+#
+# ── the kill vehicle, and why pipeline.sh needs no seam for it ───────────────
+#
+# The pipeline already emits one `stage=…` line per stage (EX-9), and bash's
+# `printf` builtin flushes per call — measured on a FIFO, 2026-08-02, the line
+# arriving 5s before the writer's next one. So a watcher on the far side sees
+# each stage AS IT COMPLETES and kills at a chosen boundary. The interruption is
+# therefore DETERMINISTIC and synchronised on the subject's own emission; a
+# timed kill would be a race, and D-P05-8 already refused a racer on the grounds
+# that a nondeterministic probe is not a probe.
+#
+# SIGKILL to the PROCESS GROUP rather than the leader, which is why the attempt
+# is launched under `set -m`: the verify stage's sandbox is a child, and killing
+# only the leader would orphan a bwrap still growing a 4.4G capsule. That is a
+# stronger kill than a bare parent crash — which would orphan them instead — and
+# it is chosen so the rig leaks nothing. What CANONICAL holds afterwards, which
+# is the whole claim, is the same either way.
+#
+# ── stage 4 has no kill of its own, and that is the RESULT, not a gap ────────
+#
+# There is no interruptible interior to crash inside. A kill during `advance` is
+# either before the `update-ref` — in which case canonical is untouched and the
+# attempt is indistinguishable from the during-verify one — or after it, in
+# which case the run COMPLETED. Racing for the microseconds between them would
+# reintroduce exactly the nondeterminism this vehicle exists to avoid, and would
+# make the cell's own scored run refuse `stale-base` whenever the race was lost.
+# The indivisibility IS § 5.6's claim, so the row observes its CONSEQUENCE
+# instead (clause 4 of `_assert`): after the resume lands, a repeat advance
+# refuses `stale-base` having transferred nothing — the CAS applied exactly once.
+
+# Each entry is the stage whose PASS line triggers the kill; `start` kills
+# inside stage 1, on the artefact the harvester's own invocation creates.
+C3_H15_KILL_TRIGGERS='start harvest conform'
+
+c3_h15_dies_during() {
+  case "$1" in
+    start) printf 'harvest' ;;
+    harvest) printf 'conform' ;;
+    conform) printf 'verify' ;;
+    *) rig_die "H15: unknown kill trigger: $1" ;;
+  esac
+}
+
+# c3_h15_kill_attempt <run> <mechanism> <trigger> <log>
+#
+# Returns 0 if the attempt was KILLED, 1 if it ran to completion instead. The
+# distinction is not bookkeeping: an attempt that completed is not an
+# interruption at all, and a row that accepted one would report crash-safety it
+# had never tested — the absence-shaped result this phase keeps meeting.
+c3_h15_kill_attempt() {
+  local run=$1 mechanism=$2 trigger=$3 log=$4
+  local fifo="${run}/h15-fifo" pid line killed=1 had_monitor=0 waited=0
+
+  rm -f -- "${fifo}"
+  mkfifo -- "${fifo}"
+  : >"${log}"
+
+  # Job control, so the attempt gets its OWN process group. Without it a
+  # background job shares this shell's group and killing the group would kill
+  # the rig itself. The pgid is fixed at fork, so restoring the flag afterwards
+  # is safe.
+  case "$-" in *m*) had_monitor=1 ;; esac
+  set -m
+  pipeline_run "${run}" "${mechanism}" >"${fifo}" 2>/dev/null &
+  pid=$!
+  [ "${had_monitor}" -eq 1 ] || set +m
+
+  if [ "${trigger}" = start ]; then
+    rm -f -- "${run}/harvest.err"
+    # The writer blocks on the FIFO until a reader opens, so opening it is what
+    # releases the run. Then poll for the file stage 1's own redirect creates as
+    # it invokes the harvester — that lands the kill INSIDE the fetch rather
+    # than before the pipeline has begun, which would prove nothing.
+    exec 9<"${fifo}"
+    while [ ! -e "${run}/harvest.err" ] && [ "${waited}" -lt 500 ]; do
+      sleep 0.01
+      waited=$((waited + 1))
+    done
+    kill -KILL -- -"${pid}" 2>/dev/null && killed=0
+    exec 9<&-
+  else
+    while IFS= read -r line; do
+      printf '%s\n' "${line}" >>"${log}"
+      case "${line}" in
+        "stage=${trigger} verdict=pass"*)
+          kill -KILL -- -"${pid}" 2>/dev/null && killed=0
+          break
+          ;;
+      esac
+    done <"${fifo}"
+  fi
+
+  wait "${pid}" 2>/dev/null || true
+  rm -f -- "${fifo}"
+  return "${killed}"
+}
+
+H15_mutate() {
+  local run=$1 mechanism=$3 trigger during
+
+  : >"${run}/h15-attempts"
+  for trigger in ${C3_H15_KILL_TRIGGERS}; do
+    during=$(c3_h15_dies_during "${trigger}")
+    if c3_h15_kill_attempt "${run}" "${mechanism}" "${trigger}" "${run}/h15-stages.${during}"; then
+      printf '%s=killed\n' "${during}" >>"${run}/h15-attempts"
+    else
+      printf '%s=COMPLETED\n' "${during}" >>"${run}/h15-attempts"
+    fi
+
+    # Canonical as it stood the instant the attempt died. Captured per attempt
+    # rather than asserted here — `_assert` owns the assertions, and a snapshot
+    # taken at the end could not tell a crash that left canonical alone from one
+    # that was tidied up by the run that followed it.
+    canonical_refs "${run}/canonical" >"${run}/h15-refs.${during}"
+    canonical_objects "${run}/canonical" >"${run}/h15-objects.${during}"
+    # The OID stage 1 pinned, when the attempt got that far. Absent for the
+    # harvest kill by construction, which is itself the evidence it died early.
+    cp -- "${run}/pinned-oid" "${run}/h15-pinned.${during}" 2>/dev/null || true
+  done
+}
+
+H15_planted() {
+  local run=$1
+  # Three attempts, all of them actually killed.
+  [ "$(wc -l <"${run}/h15-attempts")" -eq 3 ] || return 1
+  ! command grep -q '=COMPLETED' "${run}/h15-attempts" || return 1
+
+  # And killed at three DISTINCT points, read off how far each got. Without this
+  # a vehicle that killed everything at t=0 would satisfy the count while
+  # interrupting only one stage — the control that makes "each stage in turn"
+  # an observation rather than a label.
+  [ ! -s "${run}/h15-stages.harvest" ] || return 1
+  command grep -qx 'stage=harvest verdict=pass token=' "${run}/h15-stages.conform" || return 1
+  command grep -qx 'stage=conform verdict=pass token=' "${run}/h15-stages.verify" || return 1
+
+  printf 'killed mid-run at three distinct points: %s' \
+    "$(tr '\n' ' ' <"${run}/h15-attempts")"
+}
+
+H15_assert() {
+  local run=$1 at="H15/$2/$3" during resume base accepted
+
+  # 1. EVERY PRE-STAGE-4 CRASH LEFT CANONICAL BYTE-IDENTICAL — refs and the
+  #    object count both. The pairing is `assert_outcome`'s and it is the one a
+  #    quarantine namespace inside canonical would have broken (I1).
+  for during in harvest conform verify; do
+    rig_assert_eq "${at}: killed during ${during} — canonical refs unchanged" \
+      "$(cat "${run}/canonical-refs.before")" "$(cat "${run}/h15-refs.${during}")"
+    rig_assert_eq "${at}: killed during ${during} — canonical OBJECT COUNT unchanged" \
+      "$(cat "${run}/canonical-objects.before")" "$(cat "${run}/h15-objects.${during}")"
+  done
+
+  # 2. THE RESUME RE-PINNED THE SAME OID. Stages 1–3 are idempotent, so a resume
+  #    is a repeat rather than a fresh negotiation; had the pin moved, every
+  #    stage downstream would have gated one commit and landed another (RT-5).
+  resume=$(cat "${run}/pinned-oid")
+  for during in conform verify; do
+    rig_assert_eq "${at}: the resume re-pinned the OID the ${during} attempt held" \
+      "$(cat "${run}/h15-pinned.${during}")" "${resume}"
+  done
+
+  # 3. And the resume COMPLETED: the crashes cost latency, not the result.
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_stage_passed "${at}" "${run}" conform
+  c3_assert_stage_passed "${at}" "${run}" verify
+  c3_assert_stage_passed "${at}" "${run}" advance
+
+  # 4. STAGE 4 APPLIED EXACTLY ONCE — the atomicity claim, observed where a
+  #    fourth kill cannot go. `advance_stage` is called directly rather than
+  #    through a second pipeline: what is being observed is the CAS, and a full
+  #    run would spend another six heavy minutes re-deriving a verify pass that
+  #    is not part of the claim.
+  base=$(c3_base "${run}")
+  accepted=$(contract_field "${run}" accepted)
+  rig_assert_eq "${at}: a repeat advance refuses stale-base — the CAS applied once" \
+    stale-base \
+    "$(advance_stage "${run}/canonical" "${run}/quarantine" "${accepted}" "${base}" "${resume}" || true)"
+}
