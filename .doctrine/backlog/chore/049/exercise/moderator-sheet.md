@@ -140,9 +140,11 @@ binding silently attributes one run's evidence to another.
 
 | id | edge | `context_state` |
 |---|---|---|
-| W1 | 1 — `Exploring → Inquiring` | `continuous` — 0 compaction markers in the subject transcript through 07:0xZ. **The edge was never crossed**; see W2 |
-| W2 | *(no edge — the run never left `exploring`)* | **`deliberate`, forced by context exhaustion at ~220k.** Moderator-induced break and resume after the second interview question, at revision 9 |
-| W3 | 3 — `Drafting → Reviewing` | |
+| W1 | 1 — `Exploring → Inquiring` | `continuous` — 0 compaction markers in the subject transcript through 07:0xZ. ~~The edge was never crossed~~ — **corrected: it was, at ~revision 23**, long after this row was written. See W2b |
+| W2 | *(mid-stage, no edge — the run was still in `exploring`)* | **`deliberate`, forced by context exhaustion at ~220k.** Moderator-induced break and resume after the second interview question, at revision 9 |
+| W2b | 1 — `Exploring → Inquiring`, crossed ~rev 23 | `continuous` — no boundary between W2's resume and the crossing. Receipts `sl243-r23-accept-advance`, `…-r24-discharge-knowledge`, `…-r25-discharge-scope` |
+| W2c | 2 — `Inquiring → Drafting`, crossed rev 28 | `continuous`. Change log: `28 1 stage_moved from=inquiring to=drafting` |
+| W3 | 3 — `Drafting → Reviewing` | *(pending — and see § 5d: an unsteered break is expected first)* |
 | W4 | 4 — `Reviewing → Locked` | |
 
 Add rows if the run crosses more windows than stages — a boundary mid-stage
@@ -398,6 +400,58 @@ the design is richest, because the only structural view is over *open* nodes and
 there is no hierarchy to hold the resolved ones in place. The `records` list
 carries the five decisions with their originating node, which is the closest
 thing to a decomposition the output has, and it is a flat list too.
+
+## 5d. Pre-break-2 — captured 11:57:16Z, and the better recover test
+
+The session is being parked at ~270k with **no handover**; it will resume
+entirely from run state. That is a second `recover` opportunity and a **stronger
+one than § 5a's**, for one reason: § 5b's top band was uncollectable because the
+continuation prompt supplied the command, the run identity and the traversal
+decision. This break has no continuation prompt at all. If the fresh agent
+re-establishes the run, it does so unaided.
+
+**Captured rendered, not copied** — the § 5a snapshot was `cp`'d raw TOML and
+disagreed with the engine (see the correction there). This capture takes all
+three renderings plus the file, in
+`scratchpad/pre-break-2/{show-prompt.txt,show-json.json,show-status.txt,design.toml}`.
+
+| field | value at capture |
+|---|---|
+| revision / stage | **28 / `drafting`** |
+| posture | `breadth`, `user-pinned` |
+| cursor | **`unset STALE`** — still, now 19 revisions on from `inq-4`'s disposal |
+| nodes | 9 — **0 open, 9 resolved**, 0 deferred, 0 pruned, 0 blocked |
+| sections | **3**, all three `review=outstanding` |
+| records | 8 DECs (DEC-111…DEC-118) over 9 nodes |
+| watermark / materialised | `absent` / `false` |
+| edges | still **0 parent, 0 needs** |
+
+### What moved, and what it does to earlier entries
+
+**The stage watch item is resolved — the run advanced on its own.** § 5b promoted
+it from *watching* to *mechanism identified* and declined to file, pending
+whether the run advanced unaided. It did: edge 1 at ~rev 23, edge 2 at rev 28.
+IMP-390 still stands on its own evidence (`next_obligation` empty at revisions 9
+and 17, 33 source reads), but the stronger claim — *nothing moves the machine
+toward Drafting* — is **withdrawn**. It moved.
+
+**The deferred cluster was resolved, not routed.** `inq-1`–`inq-3` were deferred
+to a `/spec-coverage-assessment` pass at rev 8; by rev 28 all three are
+`resolved`, two of them minting DEC-117 and DEC-118. ISS-300's *example* is
+therefore spent — but the finding is not: the deferral carried no reason for the
+19 revisions it stood, and nothing in the map recorded that the routing was
+later abandoned rather than honoured.
+
+**Eight records over nine nodes** means one node resolved through a note-bearing
+disposition (`unresolved` / `non-durable`) rather than a record. That is DEC-062
+working exactly as designed, and it is the first observed use of the forms whose
+whole purpose is to make "we discussed it and produced nothing" representable.
+
+**The gate conditions the agent grepped for are now satisfied.** The three
+sections carry `blocking-inquiries-dispositioned`, `user-accepts-sufficiency`,
+`governing-context-recorded`, `initial-concerns-recorded` — the exact clearance
+names it read out of `gate.rs` at 11:45Z (E8.7). It reverse-engineered the
+admission rules from source and then met them.
 
 ## 6. Sibling contrast — mandatory for every S4 candidate
 
