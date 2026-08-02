@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 17 · 0fc65af3
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 19 · a6d7181c
 
 ### Produced
 
@@ -36,6 +36,8 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 17 · 0fc6
   focus-scoped altitude view. **IDE-046** — rendering to an image and emitting it
   inline via the terminal graphics protocol; cross-cutting, not anchor-specific.
   Both spawned by DEC-115
+- **DEC-116** — `lint-all: cargo clippy --workspace` joins `gate`, mirroring
+  `test`/`test-all`; the adapter crate is linted, not exempted; disposes `inq-7`
 - **Pre-design research round** — `research/research.md` + `research/raw/` (five
   threads). **Runtime tier, gitignored, disposable.** Its durable residue is
   DEC-111 and the `## Design surface triage` section below; do not treat the
@@ -65,14 +67,16 @@ rather than from a copy here. What the run cannot represent, and so lives here:
 - `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
   pass**, not parked indefinitely. A lifecycle move carries no reason field, so
   this note is the only record of where they route. See `## Routing` below.
-- `inq-7` is the last open engineering question; the triage section states it
-  with the evidence that bears on it (Q-d). `inq-5` is disposed by DEC-112
-  (triage entry Q-b), `inq-8` by DEC-113 (Q-e), `inq-6` by DEC-114 (Q-c),
-  `inq-9` by DEC-115 (Q-f).
+- **Every engineering question is settled.** The triage section's Q-a…Q-f map to
+  DEC-111 (Q-a, `inq-4`), DEC-112 (Q-b, `inq-5`), DEC-114 (Q-c, `inq-6`),
+  DEC-116 (Q-d, `inq-7`), DEC-113 (Q-e, `inq-8`), DEC-115 (Q-f, `inq-9`). What
+  remains open on the run is the deferred governance-placement cluster above.
 - Obligations the plan must carry, from those dispositions: the black-box golden
   SPEC-013 `REQ-204` bills the verb (DEC-112), the provenance block as part of
-  the report struct rather than a wrapper (DEC-113), and `coverage_verify`'s
-  suites staying green **unchanged** across the runner extraction (DEC-114).
+  the report struct rather than a wrapper (DEC-113), `coverage_verify`'s suites
+  staying green **unchanged** across the runner extraction (DEC-114), and the
+  adapter manifest's `cargo_common_metadata` fields plus a first pedantic pass
+  during the phase that writes it (DEC-116).
 - Open inside a settled decision: the extracted runner's name. DEC-114 records
   the recommendation and the reasoning; it is not fixed.
 
