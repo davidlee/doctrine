@@ -8,10 +8,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
-T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 and H7 remain). Ten of
-sixteen rows carry scored results: H1–H6 H9 H12 H13 H15** · last SL-241 commit
-`5c5ed437` (tree head moves under us — other agents commit to `edge` mid-session;
-verify a hash before citing it)
+T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
+5/5; **H7 alone remains**). Eleven of sixteen rows carry scored results: H1–H6
+H9 H12 H13 H14 H15** · last SL-241 commit `6a9b7336` (tree head moves under us —
+other agents commit to `edge` mid-session; verify a hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -149,6 +149,29 @@ Lifted here so the ids survive the sheet:
   exfiltration is a different axis from the ingestion safety P-C3 tests.
 - **F-P05-25** — `c3_commit` tolerated a failed `git add`, surfacing as a
   `fatal:` inside a *green* log; now `rig_die`s. H4 shares it and stayed green.
+- **T4c — H13 and H14 DONE; H7 alone remains** (`5c5ed437`, `e3e4f87d`,
+  `6a9b7336`).
+  - **H13** — the hostile bundle at the harvest path, and the ONLY row whose
+    subject is a capsule-authored file. M-A is `n/a` **structurally** (it reads
+    no such artifact), which is a QUE-200 verdict input in its own right (F-6).
+    Four bundle-hygiene legs shared with `selftest_bundle` through
+    `lib/common.sh` (`35431bc6`, selftest unchanged at 57); the size cap stayed
+    out as a THRESHOLD, not a mutation. First row to refuse at **stage 1**, so
+    `_assert` observes the ingestion boundary itself. Scored 110/0, both
+    fixtures `model-level`; falsified 4/4, and **M6 is the one it exists to
+    survive** — a zero-byte bundle satisfies an absence-shaped leg, so every leg
+    pairs its observable with the honest bundle that stood there first.
+  - **H14** — the doorbell duplicated, lost and forged. **Three legs in ONE
+    cell**, which is the matrix as authored (one `harvest` stage, no token, so
+    one alternative): the doorbell sits UPSTREAM of stage 1, so each leg
+    observes at that seam through `rig_wait_doorbell` and the single run that
+    follows is the JOIN — the bell is left **forged** for it and the trusted
+    side still pins the capsule's own OID. Duplication is observed where it
+    costs something, at a second harvest into a **fresh** quarantine, never the
+    run's own (F-P05-28's rule). `pipeline_quarantine` / `pipeline_harvester`
+    extracted rather than hand-rolled (`e3e4f87d`; selftest assertion list
+    byte-identical). Scored 88/0, all four cells `model-level`; falsified 5/5
+    with one control, and **M14 changed the row** — see F-P05-30.
 
 **PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
 `090148ef..5f42727b`):**
@@ -837,6 +860,26 @@ mid-phase would convert a legible structural finding into a silent pass.
   each mutant asserts the clauses it did NOT target still hold. Without it a
   mutant that breaks everything proves nothing about the clause it was written
   for. Both rounds carry one per mutant.
+- **an observable of a REPEAT must count the repeat** (F-P05-30) — H14's
+  duplicate-ring leg observed that the waiter answered the same twice and the
+  published ref had not moved. Both hold when there is NO second ring: sameness
+  is exactly what a single occurrence also produces, so the mutant that no-op'd
+  the duplication survived until `rings` / `rings-distinct` were added. When the
+  hostile input is *that something happened again*, the positive control has to
+  be the occurrence count. Same family as the absence-shaped observable, one
+  step over. **Candidate memory.**
+- **an isolation control must assert the state the mutation actually LEAVES** —
+  M12's first control claimed the honest ring was intact at the bell; in fact
+  the leg that ran before it had destroyed the bell and the no-op'd forgery
+  never rewrote it. A no-op composed with the legs preceding it does not restore
+  the un-mutated state. A control that reds is about the control until shown
+  otherwise.
+- **shakeout → falsify → THEN score** (F-P05-31) — the falsifiability round
+  CHANGES the row, and `probe-c3.sh` sources `lib/instantiations.sh` once at
+  process start, so a scored run launched before the round is void by
+  F-P05-29's mechanism with the co-agent replaced by oneself. Cheap consolation:
+  `rows_write` writes the whole file at the end, so a killed run leaves
+  `results.tsv` untouched.
 - **a falsifiability sibling isolates the rig's CODE but not its RESULTS** —
   `SPIKE_CAPSULE_ROOT` still defaults to `~/capsules` in the copy, so mutant
   cells append rows indistinguishable from real ones. Point it at a scratch root
@@ -861,12 +904,14 @@ mid-phase would convert a legible structural finding into a silent pass.
 - **ISS-296** — any local clone of this repo inherits the stale commit-graph
   landmine (F-P05-28). Carried OUT of the slice; `git gc` on the primary was
   assessed and deliberately rejected.
-- **T4c is part-done and its plan framing was WRONG** — "all three rows need a
-  hostile worker vehicle" holds for **H7 only**. H13 (done) and H14 attack
-  control-plane surfaces trusted-side. `capsule/worker-hostile.sh` (§ 9.1) still
-  does not exist and is H7's precondition; H7 also carries the phase's only
-  resource-exhaustion risk (own disk cap; heavy worker capsule at 195M/256 MiB,
-  F-P05-10). Correction recorded in the runtime sheet's T4c entry.
+- **T4c's plan framing was WRONG, and H7 is what is left of it** — "all three
+  rows need a hostile worker vehicle" holds for **H7 only**; H13 and H14 are
+  both done, both attacking control-plane surfaces trusted-side.
+  `capsule/worker-hostile.sh` (§ 9.1) still does not exist and is H7's
+  precondition; H7 also carries the phase's only resource-exhaustion risk (own
+  disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). **It wants an
+  operator decision before it starts.** Correction recorded in the runtime
+  sheet's T4c entry.
 - **DEC records are OWED at close for D-P05-6..13** — the sheet's convention is
   "lift to notes.md at close", so they were deliberately not minted mid-phase
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
