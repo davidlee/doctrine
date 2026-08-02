@@ -1,0 +1,50 @@
+memory_uid = "mem_019fbfeea90b7e708008e5e25ab43bb1"
+memory_key = "mem.pattern.doctrine.reseat-renumbers-does-not-retarget"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "An id reseat renumbers references without retargeting them — a pre-stale citation survives looking swept"
+summary = "A reseat rewrites the id token in every reference; a reference that was already pointing at the wrong record keeps pointing there under a new number, and the clean sweep is what disguises it."
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["reseat", "knowledge", "audit", "stale-reference"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6fa12fbfb3d675b65e378067eee5eb52b3bdfc49"
+ref_name = "refs/heads/edge"
+checkout_state_id = "279e94baa270dba1fa967a856afc2e905f0d59d262427746e31d727a403fb82a"
+base_commit = "bb17aa8f5a850faddd3f6522cc2dee78b928b22f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-342 F-7"
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
