@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 19 · a6d7181c
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 21 · 600bcafa
 
 ### Produced
 
@@ -38,6 +38,14 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 19 · a6d7
   Both spawned by DEC-115
 - **DEC-116** — `lint-all: cargo clippy --workspace` joins `gate`, mirroring
   `test`/`test-all`; the adapter crate is linted, not exempted; disposes `inq-7`
+- **DEC-117** — one new component spec, `descends_from` PRD-012, **`parent`
+  deliberately unset** with the absence authored as an open question; disposes
+  `inq-1`. **ISS-301** — the general form: parent edges elsewhere that may be
+  inferred rather than determined (SPEC-027 the known candidate). Spawned by it
+- **`/spec-coverage-assessment` pass** — coverage map at
+  `.doctrine/state/sl-243-spec-coverage-map-anchor-map.md`. **Runtime tier,
+  gitignored, disposable.** Durable residue is DEC-117, ISS-301, and the routing
+  record below; do not treat the artefact itself as surviving
 - **Pre-design research round** — `research/research.md` + `research/raw/` (five
   threads). **Runtime tier, gitignored, disposable.** Its durable residue is
   DEC-111 and the `## Design surface triage` section below; do not treat the
@@ -67,9 +75,22 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 19 · a6d7
 Held on design run **dr-019fc13a** — read them with `doctrine design resume 243`
 rather than from a copy here. What the run cannot represent, and so lives here:
 
-- `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
-  pass**, not parked indefinitely. A lifecycle move carries no reason field, so
-  this note is the only record of where they route. See `## Routing` below.
+- The `/spec-coverage-assessment` pass **has run**. `inq-1` is disposed by
+  DEC-117; `inq-3` is disposed non-durable (SPEC-017 `REQ-232` already owns the
+  identifier-form convention, `IMP-316` enforces it — nothing new to author).
+  `inq-2` is the one node still open.
+- **Plan obligation from the census, owned by no node.** SPEC-017 `REQ-236`
+  states anchor liveness "is not checked, so a stale anchor ships silently".
+  This slice's report probes path existence. Report-only preserves the
+  requirement's *intent* — nothing fails because of a stale anchor — but not its
+  wording, which asserts a fact that stops being true. Recommended route is a
+  **REV** rewording it to the surviving intent (ADR-013 routes governance
+  dependency through a Revision, and this slice does not own REQ-236). A future
+  *gating* slice owes a second REV regardless.
+- **Also dark, out of scope, flagged for IMP-384:** `src/dtoml.rs` (203 loc) is
+  anchored by no spec. Each `doctrine.toml` table is governed by its consuming
+  spec (`[verification]` → SPEC-002 REQ-254–257, `[dispatch]` → SPEC-021), but
+  the shared reader is not — so IMP-384 has no spec to author against.
 - **Every engineering question is settled.** The triage section's Q-a…Q-f map to
   DEC-111 (Q-a, `inq-4`), DEC-112 (Q-b, `inq-5`), DEC-114 (Q-c, `inq-6`),
   DEC-116 (Q-d, `inq-7`), DEC-113 (Q-e, `inq-8`), DEC-115 (Q-f, `inq-9`). What
