@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 421
+slug = "delegate-a-bounded-inquiry-obligation-and-accept-an-attributed-proposal-back"
+title = "Delegate a bounded inquiry obligation and accept an attributed proposal back"
+status = "pending"
+kind = "functional"
+
+description = "A single bounded obligation may be assigned to another session or agent, and its result returns as an attributed proposal that the coordinating run adjudicates."
+tags = []
+acceptance_criteria = [
+  "A delegated obligation is bounded and singular, and its result carries attribution.",
+  "The delegate cannot advance the run's stage or commit map changes directly.",
+  "The protocol is expressible without binding to a particular transport or harness.",
+]

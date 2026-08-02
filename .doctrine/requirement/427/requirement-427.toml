@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 427
+slug = "require-a-content-bound-user-attestation-before-accepted-status"
+title = "Require a content-bound user attestation before accepted status"
+status = "pending"
+kind = "quality"
+
+description = "Accepted standing requires an attestation bound to the exact content accepted; an agent-authored payload cannot confer it on itself."
+tags = []
+acceptance_criteria = [
+  "A created record without an attestation retains its kind's default status.",
+  "An attestation is bound to specific content, so a later content change does not silently inherit it.",
+  "No agent-authored field can set accepted status.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 419
+slug = "require-one-explicit-semantic-disposition-per-resolved-inquiry"
+title = "Require one explicit semantic disposition per resolved inquiry"
+status = "pending"
+kind = "functional"
+
+description = "An inquiry cannot resolve without stating what became of its result: a new record, an adopted existing record, an explicitly retained unresolved outcome, or an exchange marked intentionally non-durable."
+tags = []
+acceptance_criteria = [
+  "All four dispositions are expressible.",
+  "Resolving an inquiry without a disposition is refused.",
+  "No disposition is manufactured automatically for an ordinary conversational turn.",
+]

@@ -21,6 +21,7 @@ mod coverage_store;
 mod coverage_verify;
 mod coverage_view;
 mod dep_seq;
+mod design_run;
 mod dispatch;
 mod dispatch_config;
 mod doctor_checks;

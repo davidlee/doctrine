@@ -58,7 +58,10 @@ entries = [
 ]
 
 [hymns]
-seal = ["preamble/core"]
+# `stage/design` seals the invariant stage fragment of the managed design
+# workflow (SL-233, PRD-019, SPEC-023): the framework body is authoritative and
+# any user-provenance twin at that slot is dropped before matching.
+seal = ["preamble/core","stage/design"]
 expose = ["harness/claude","harness/cursor","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/orchestrator","role/worker"]
 
 [root_markers]

@@ -1,9 +1,9 @@
 id = 233
 slug = "cli-managed-design-runs-and-inquiry-maps"
 title = "CLI-managed design runs and inquiry maps"
-status = "ready"
+status = "reconcile"
 created = "2026-07-27"
-updated = "2026-07-27"
+updated = "2026-08-02"
 tags = []
 
 [relationships]
@@ -217,6 +217,311 @@ note = "SL-233 stall sweep: projected routing copy (tracked, names slice design)
 selector = "Cargo.toml"
 intent = "design-target"
 note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = ".doctrine/spec/product/019/**"
+intent = "design-target"
+note = "SL-233 PHASE-01 governance descent: the two exact new spec entity paths (design.md:476-477), appended BEFORE any body edit (EX-5). The bare-prefix pair covers the CLI-minted slug symlink without keying on the mobile slug (STD-002)."
+
+[[selector]]
+selector = ".doctrine/spec/tech/029/**"
+intent = "design-target"
+note = "SL-233 PHASE-01 governance descent: the two exact new spec entity paths (design.md:476-477), appended BEFORE any body edit (EX-5). The bare-prefix pair covers the CLI-minted slug symlink without keying on the mobile slug (STD-002)."
+
+[[selector]]
+selector = ".doctrine/spec/product/019*"
+intent = "design-target"
+note = "SL-233 PHASE-01 governance descent: the two exact new spec entity paths (design.md:476-477), appended BEFORE any body edit (EX-5). The bare-prefix pair covers the CLI-minted slug symlink without keying on the mobile slug (STD-002)."
+
+[[selector]]
+selector = ".doctrine/spec/tech/029*"
+intent = "design-target"
+note = "SL-233 PHASE-01 governance descent: the two exact new spec entity paths (design.md:476-477), appended BEFORE any body edit (EX-5). The bare-prefix pair covers the CLI-minted slug symlink without keying on the mobile slug (STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/414/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/414*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/415/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/415*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/416/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/416*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/417/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/417*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/418/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/418*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/419/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/419*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/420/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/420*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/421/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/421*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/422/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/422*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/423/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/423*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/424/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/424*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/425/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/425*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/426/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/426*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/427/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/427*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/428/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/428*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/429/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/429*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/430/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/430*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/431/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/431*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/432/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/432*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/433/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/433*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/434/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/434*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/435/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/435*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/436/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/436*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/437/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/437*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/438/**"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/requirement/438*"
+intent = "design-target"
+note = "SL-233 PHASE-01: the REQ entities of PRD-019 and SPEC-029. spec req add writes peer requirement entities OUTSIDE the spec directory, so the exact paths are declared here — the same narrow bootstrap design.md:476-482 chose for the spec entities, applied to a tree plan.md's stall sweep missed. Two rows per requirement: NNN/** for contents, NNN* for the dir entry and the CLI-minted slug symlink (slug-free, STD-002)."
+
+[[selector]]
+selector = ".doctrine/review/320/**"
+intent = "design-target"
+note = "SL-233 PHASE-02 EN-2 design gate: the RV ledger raised against sketches/projection-bounds.md"
+
+[[selector]]
+selector = ".doctrine/review/320*"
+intent = "design-target"
+note = "SL-233 PHASE-02 EN-2 design gate: the RV ledger raised against sketches/projection-bounds.md"
+
+[[selector]]
+selector = "src/kinds/dirs.rs"
+intent = "design-target"
+note = "PHASE-04 EX-11(d)/RV-321 F-4: `.doctrine/slice` must come from crate::kinds::SLICE_DIR, not a copied literal. Reaching it from a black-box fixture required the entity-tree roots extracted to a dependency-free src/kinds/dirs.rs, because kinds::resolve pulls crate::fsutil and kinds/mod.rs therefore cannot be #[path]-included into a test. Crate-level visibility is preserved exactly: mod dirs is private, the pub(crate) use re-exports the same seven roots that were pub(crate) before, the other seventeen stay leaf-private. Verified against the base tree."
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "design-target"
+note = "PHASE-04 EX-11(d)/RV-321 F-4: `.doctrine/slice` must come from crate::kinds::SLICE_DIR, not a copied literal. Reaching it from a black-box fixture required the entity-tree roots extracted to a dependency-free src/kinds/dirs.rs, because kinds::resolve pulls crate::fsutil and kinds/mod.rs therefore cannot be #[path]-included into a test. Crate-level visibility is preserved exactly: mod dirs is private, the pub(crate) use re-exports the same seven roots that were pub(crate) before, the other seventeen stay leaf-private. Verified against the base tree."
+
+[[selector]]
+selector = "tests/design_fixture/**"
+intent = "design-target"
+note = "SL-233 PHASE-07: the shared design-run bootstrap lifted out of e2e_design_projection.rs so e2e_claude_install.rs can drive a live run; opt-in sibling module, deliberately not tests/common/** (mem.pattern.tests.shared-helper-placement)"
+
+[[selector]]
+selector = "src/commands/verify.rs"
+intent = "design-target"
+note = "SL-233 reconcile (conformance.md 3b): PHASE-16 added the doctrine verify command family and the runbook clearance fixture. The command tier is hand-enumerated and the test tier is the tests/e2e_design_ glob plus three exact names, so neither path matched a design-target selector while both were inside scope-relevant src/commands and tests. Declaration gap, not a code defect."
+
+[[selector]]
+selector = "tests/runbook_fixture/**"
+intent = "design-target"
+note = "SL-233 reconcile (conformance.md 3b): PHASE-16 added the doctrine verify command family and the runbook clearance fixture. The command tier is hand-enumerated and the test tier is the tests/e2e_design_ glob plus three exact names, so neither path matched a design-target selector while both were inside scope-relevant src/commands and tests. Declaration gap, not a code defect."
 
 [[relation]]
 label = "governed_by"

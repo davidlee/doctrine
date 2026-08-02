@@ -1,0 +1,37 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 29
+slug = "design-run-engine"
+title = "Design run engine"
+status = "active"
+kind = "tech"
+category = "workflow"
+c4_level = "container"
+descends_from = "PRD-019"
+parent = "SPEC-003"
+tags = ["design-run", "workflow", "snapshot", "revision-cas", "idempotency", "reserve-then-journal", "watermark", "prompt-pack", "envelope", "pure-layer"]
+responsibilities = [
+  "Own the pure run model — a closed stage vocabulary, a const-fn forward-boundary gate table, inquiry-map types carrying node provenance, cursor and traversal posture as orthogonal state, direct-regression semantics, and the serialization contract — computing over values and injected derived facts with no clock, randomness, repository, or filesystem access.",
+  "Persist one active run per slice as a schema-versioned runtime snapshot with parse-time rejection of unknown versions, a monotonic revision compare-and-swapped on every mutation, submission idempotency over a bounded replay window, and bounded receipt eviction that can never remove the latest receipt or one an outstanding delegation references.",
+  "Own the authored-design watermark — the fingerprint of the design document the run last agreed with — checked at entry by run-advancing verbs and re-checked immediately before every write it guards, where a divergence abandons the write without advancing the run while journalled effects remain and stay recoverable. The strength of that guard is tiered by what is being written: a runtime-snapshot write carries delayed detection, because the file hashed is not the file replaced; the authored-document write `materialise` performs adds a post-write read-back, re-baselining the watermark only to bytes read back from the document and never to the bytes it rendered, because a re-baseline that certified an overwritten hand-edit would make the divergence permanently undetectable. That read-back is not a lock and not a conditional write, and it neither preserves nor detects an edit landing between the final check and the atomic rename: such a write is destroyed by the rename, the read-back then matches, and the run advances. That lost-update window is a reachable and irreversible residual, consciously tolerated for v0.0.1 and disclosed rather than designed away (DEC-100). What the guard does warrant is narrower and unconditional: Doctrine never certifies prose it did not write, and on a read-back mismatch nothing advances — no revision, no watermark, no change-log row — so the ordinary entry check sees the divergence at the next verb.",
+  "Own the reserve-then-journal creation protocol: journal the checkpoint intent, claim a canonical id through the existing reservation backend, journal the id, materialise the record, apply status and relations, then complete the snapshot — with every post-journal recovery resuming the exact reserved id and no failure path deleting authored knowledge to repair a runtime error.",
+  "Own the reserved-materialisation seam — a caller-visible midpoint in the entity engine's fresh-creation path between the id claim and the byte write — introduced additively so every existing caller stays behaviour-unchanged.",
+  "Own the design prompt pack: a closed, design-specific fragment store addressed by stable identity with content binding, composing the delivered turn prompt from one invariant stage fragment, at most one coarse obligation fragment, and the dynamic envelope, riding the existing cascade rather than a parallel composition mechanism.",
+  "Derive every read from one canonical turn envelope, projected by the command shell as prompt, machine-readable, or human status — one type with three renderings, never three models — and bounded on the ordinary path by named limits held in a single module.",
+  "Front the capability through one command family — start, show, apply, resume — carrying the sparse mutation contract in which an omitted key persists, an explicit null clears a nullable scalar, an empty collection clears a collection, a stable-identity object partially updates its subject, and one unordered batch refuses duplicate subjects.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/design_run/mod.rs"
+module = "doctrine::design_run"
+
+[[source]]
+language = "rust"
+identifier = "src/commands/design.rs"
+module = "doctrine::commands::design"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"

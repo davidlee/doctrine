@@ -1,0 +1,29 @@
+# The runbook guarding the edge out of `drafting` (SL-233 PHASE-08, DEC-101).
+#
+# THE AUTHORING RULE, the step-id-is-API contract and the digest-staleness rule
+# are stated once, in `exploring.toml`, and govern this file unchanged.
+#
+# ONE STEP, AND THAT IS THE RESULT (DEC-104, RV-325 F-2). This edge was once
+# proposed with nineteen: the fifteen content items a design section must cover,
+# plus four standing guardrails. `mode = "sequence"` admits one discharge per
+# turn, so nineteen obligations here would be nineteen serial mutation turns
+# before the run could advance — protocol ceremony exceeding its value, against
+# this slice's own named risk.
+#
+# The bound is a DESTINATION rule, not a counting rule. A set of heuristics to
+# apply while doing the work is not a checklist to tick off: it is framing for
+# the activity, and an exit gate delivers it when the damage is done. All
+# eighteen are lenses and live in the sibling `drafting.md` fragment, delivered
+# every drafting turn. What survives is the one obligation that completes AT
+# this boundary and must, before advancing.
+#
+# The text does not overclaim. "Now commits to" is true at each firing and
+# asserts nothing about finality — the same obligation fires again on edge 4,
+# where the review may have moved the target.
+
+mode = "sequence"
+
+[[step]]
+id       = "draft.selectors"
+text     = "Record the design-target selectors the code-impact section now commits to, via `doctrine slice selector add <id> <path>... --intent design-target`. Complete when the recorded selector set matches that section's current commitments."
+required = true

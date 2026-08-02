@@ -139,6 +139,28 @@ pub(crate) fn phases_dir(project_root: &Path, slice_id: u32) -> PathBuf {
         .join("phases")
 }
 
+/// Canonical state path for a slice's design-run snapshot, computed from the id.
+///
+/// The single source for that path (STD-001, SL-233 EX-8): [`STATE_SLICE_DIR`]
+/// stays private to this module and every caller derives from this helper, so a
+/// second `.doctrine/state/slice` literal cannot appear beside it and drift.
+pub(crate) fn design_snapshot_path(project_root: &Path, slice_id: u32) -> PathBuf {
+    project_root
+        .join(STATE_SLICE_DIR)
+        .join(format!("{slice_id:03}"))
+        .join("design.toml")
+}
+
+/// Canonical state path for a slice's design-run checkpoint journal.
+///
+/// Derived from [`design_snapshot_path`] rather than re-joining the root, so the
+/// two files provably share a directory: the journal is ordered *before* the
+/// snapshot under DEC-083/DEC-086, and a journal that landed in a different tree
+/// than the snapshot it precedes would not be recoverable.
+pub(crate) fn design_journal_path(project_root: &Path, slice_id: u32) -> PathBuf {
+    design_snapshot_path(project_root, slice_id).with_file_name("design-journal.toml")
+}
+
 /// Validate a phase id and derive its filename stem. Enforces the canonical
 /// `PHASE-<digits>` form (→ `phase-NN`), which both makes the derivation total
 /// and rejects filesystem-unsafe input — empty, separators, `..`, leading dot

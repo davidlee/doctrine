@@ -27,6 +27,47 @@ Before emitting anything, confirm the capture pass is current:
 Phase status accurate and work committed (or its uncommitted state noted)
 remain adjacent truth checks.
 
+## Design work short-circuits
+
+A slice design under a managed run already holds its own continuation. Before
+reaching for the dial, ask whether one is live:
+
+```
+doctrine design show <SLICE> --format status
+```
+
+**A run prints** — short-circuit. Do not compose a packet or a continuation
+prompt; either would restate what the run already carries.
+
+1. The harvest above is what makes the durable records current. Then land
+   anything you settled this session that the run does not yet hold — status
+   reports the outstanding obligation and the changes since the declared
+   baseline, so check both against what is in your hands, not your memory.
+2. Emit the resume command as the continuation:
+
+   ```
+   doctrine design resume <SLICE>
+   ```
+
+   It keys on the slice, not on a run id, so it stays true across runs. Add
+   `--run <uid>` to have a mismatch refused rather than silently resumed
+   against a different run.
+3. Add residual prose **only** for context you can name that neither the run
+   nor the durable records can represent. Stage, cursor, open questions,
+   decisions and section review state are in the run; a copy of them starts
+   ageing the moment you write it.
+
+**No run — the command errors, and the error says which of two cases you are
+in.** Nothing was ever started: there is nothing to short-circuit onto, so
+continue with the dial. Or `design.md` is present and the snapshot is gone, and
+the error names `doctrine design start <SLICE> --from-design`. **Do not run it
+to manufacture something to hand over.** It builds a new run from the authored
+prose — no attestation, receipt or gate clearance carries across — so handing
+over its reference would promise more than it holds. Report the loss and hand
+over with the dial.
+
+This is for managed design runs. Nothing else has a run to short-circuit onto.
+
 ## The dial
 
 One skill, two weights:

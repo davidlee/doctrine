@@ -2333,12 +2333,27 @@ mod tests_hymns {
 
     #[test]
     fn embedded_seal_set_from_live_manifest() {
-        // The live [hymns] seal = ["preamble/core"].
+        // The live [hymns] seal = ["preamble/core","stage/design"] — SL-233
+        // PHASE-07 sealed the design stage's invariant hymn.
+        //
+        // Asserted by MEMBERSHIP, not by a bare count: the count is not the
+        // property under test, and pinning it makes every future seal a false
+        // red in a test that is about these two slots.
         let sealed = embedded_seal_set().unwrap();
-        assert_eq!(sealed.0.len(), 1);
-        let slot = sealed.0.first().unwrap();
-        assert_eq!(slot.band, crate::hymns::Band::Preamble);
-        assert_eq!(slot.label, "core");
+        let sealed_slot = |band: crate::hymns::Band, label: &str| {
+            sealed
+                .0
+                .iter()
+                .any(|slot| slot.band == band && slot.label == label)
+        };
+        assert!(
+            sealed_slot(crate::hymns::Band::Preamble, "core"),
+            "preamble/core stays sealed: {sealed:?}"
+        );
+        assert!(
+            sealed_slot(crate::hymns::Band::Stage, "design"),
+            "stage/design is sealed: {sealed:?}"
+        );
     }
 
     #[test]

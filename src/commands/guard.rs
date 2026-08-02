@@ -386,6 +386,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // no path to a project mutation exists by construction (SL-227 NF-002).
         | Command::Library { .. }
         | Command::Doctor { .. }
+        // The verify family's whole contract is exit code + explanation; a check
+        // that repaired what it inspects would satisfy itself (SL-233 PHASE-16).
+        | Command::Verify { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }
         | Command::Next { .. }
@@ -462,6 +465,17 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::commands::observation::ObservationCommand::Show(_)
             | crate::commands::observation::ObservationCommand::List(_)
             | crate::commands::observation::ObservationCommand::Search(_) => Read,
+        },
+        // SL-233: `start`/`apply` write runtime state and `materialise` writes
+        // the authored design document, so all three are Writes; `show` and
+        // `resume` are projections and mutate neither tier (design §5.3 rule 1
+        // names exactly this split).
+        Command::Design { command } => match command {
+            crate::commands::design::DesignCommand::Start(_) => Write("design start"),
+            crate::commands::design::DesignCommand::Apply(_) => Write("design apply"),
+            crate::commands::design::DesignCommand::Materialise(_) => Write("design materialise"),
+            crate::commands::design::DesignCommand::Show(_)
+            | crate::commands::design::DesignCommand::Resume(_) => Read,
         },
     }
 }

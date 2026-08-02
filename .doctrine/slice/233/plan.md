@@ -8,14 +8,22 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Twelve phases, serial. Execution order is the `plan.toml` array order:
+Sixteen phases, serial. Execution order is the `plan.toml` array order:
 
-    01 → 02 → 03 → 04 → 05 → 06 → 11 → 12 → 10 → 07 → 08 → 09
+    01 → 02 → 03 → 04 → 05 → 06 → 13 → 14 → 11 → 12 → 10 → 07 → 16 → 08 → 09
 
 Phase ids are immutable and append-only, so the three phases added by the
-2026-07-28 revision carry `PHASE-10`…`PHASE-12` while sitting mid-sequence.
+2026-07-28 revision carry `PHASE-10`…`PHASE-12` while sitting mid-sequence, the
+2026-07-29 split added `PHASE-13`/`PHASE-14`, and the 2026-07-31 design
+conversation added `PHASE-16` between `PHASE-07` and `PHASE-08`.
 `src/plan.rs` reads the ordered phase array and never sorts by id, so the array
-is the authority; the ids are names, not positions.
+is the authority; the ids are names, not positions. Appending a phase and then
+*placing* it is therefore the supported move — a renumber is not.
+
+`PHASE-15` is the one phase whose array position does not state its execution
+position: it was appended at the tail and executed thirteenth. It is
+`completed`, so it is left where it is rather than churned; every phase that
+remains sits in execution order.
 
 The serialism is forced rather than chosen: phases 02–07 nearly all route
 through `src/design_run/` or `src/commands/design.rs`, so there is no honest
@@ -113,6 +121,11 @@ and they get the same instrument the locked design got.
   that markers are "unobtrusive" plus a list of refusals. Refusals are only as
   good as the grammar they refuse against; syntax, escaping, collision
   behaviour, and survival of a Markdown formatter are all open.
+  **Discharged, and now inherited by three phases.** RV-323 reached terminal at
+  round 30 with 6 of 6 findings verified against rev 5 of the sketch. The
+  2026-07-29 split (below) left the gate stated at PHASE-06 `EN-2` and inherited
+  verbatim by PHASE-13 `EN-2` and PHASE-14 `EN-3`. Splitting a gated phase does
+  **not** re-arm its gate: one sketch, one adversarial ledger, three consumers.
 - **PHASE-08 — the thin adapter** (`sketches/thin-adapter.md`). RV-315 F-17
   established that *no specification owns a skill body*: PRD-003 disclaims what
   a skill says, and SPEC-010 treats it as opaque payload. Rewriting an
@@ -125,6 +138,129 @@ three surfaces are *inside* the implementation — a child slice for the marker
 grammar could not compile without PHASE-02 and PHASE-03, and its closure
 evidence would be a fragment. That is ceremony without isolation. A sketch plus
 an RV buys the same scrutiny without the lifecycle overhead.
+
+### PHASE-16 — why a sixteenth phase, and why it runs before PHASE-08
+
+Added 2026-07-31, out of the design conversation the owner ordered in place of
+PHASE-08's six-question `EN-2` procedure. Design: `sketches/runbook-runner.md`;
+decisions: DEC-101 (the runner) and DEC-102 (the customization line).
+
+The conversation was driven by two D2 models of the design workflow as the skill
+prose describes it against the instruction-emitting surface as built. They do not
+match, and the pattern is sharper than the mismatch count: **Doctrine took the
+state and the invariants; it did not take the checklists or the craft.** Applying
+the owner's test — instruction should arrive as "do this now", and an invariant is
+by definition not a trigger — no part of the built surface is in the "do this now"
+register at all. PHASE-16 adds it: an ordered-obligation primitive whose steps are
+TOML asset data and whose optional verifiers are arbitrary executables.
+
+The mechanical form of the gap is sharper than the register argument. The
+`Exploring → Inquiring` edge already exists and already carries a guard —
+`GoverningContextRecorded` and `InitialConcernsRecorded` — but **both are
+caller-claimed**, specified in nine words at `design.md:268`, named in no shipped
+guidance whatsoever, and bound to an arbitrary draft section's fingerprint. The
+edge exists, the guard exists, and the guard is two booleans an agent declares.
+The runbook is the first real guard that edge has ever had.
+
+**It runs before PHASE-08 because PHASE-08 cannot honestly happen first.**
+PHASE-08 `EX-1` claims the workflow machine's deterministic mechanism now lives in
+Doctrine. Without a primitive to move the checklists *into*, that rewrite can only
+drop them — losing them silently — or keep them, staying fat and failing `VA-4`'s
+anti-theatre size comparison against the incumbent's 214 lines. The runner is what
+lets PHASE-08's rewrite be true rather than merely shorter.
+
+**The split between them is deliberate.** PHASE-16 ships the mechanism plus ONE
+runbook — `exploring`, the sharpest instance: the state with the most explicit
+ordered checklist and no fragment of its own (`Fragment::for_stage` maps
+`Exploring | Inquiring → Fragment::Inquiry`, and `inquiry.md` is entirely about
+nodes). PHASE-08 does the remaining prose work as part of the body rewrite it was
+already scoped as. Prose is cheaper than mechanism, and splitting them this way
+balances the two phases rather than loading one.
+
+> **Amended 2026-08-01** (owner ruling; RV-325 round 7, F-11 second contest).
+> This paragraph continued: *"PHASE-08 converts the remaining two prose
+> checklists … **and lands `set` mode with them** — deferred out of PHASE-16 at
+> the second review, because a mode with no shipped user and no reachable
+> end-to-end test is speculative generality, and PHASE-08 will have two real
+> coverage-set instances to design it against."* **Every clause of that has
+> lapsed.** D14 reclassified both named checklists as stage framing, so PHASE-08
+> converts neither; F-5's settlement then produced five order-independent steps
+> under `sequence`, so the *real instances* precondition is met by different
+> instances; and *no shipped user* is **withdrawn as false wherever it appears**.
+> `set` is deferred to **IMP-373, not to PHASE-08** — what defers it is its
+> **render**, a cursorless runbook under `EX-14`'s token bound, unsketched and
+> outside PHASE-08 `EN-2`'s scope. DEC-101 carries the governing amendment in
+> both tiers; PHASE-16 `EX-7`/`EX-14` are annotated with their discharged
+> obligations preserved. The no-shipped-user argument was true **of PHASE-16**
+> and is not a warrant for deferring past it.
+
+This phase takes no new adversarial gate. `EN-2` is the sketch plus the two
+accepted decisions — the owner replaced the sketch-as-driver procedure on
+2026-07-30 ("design conversation first, paperwork back-solved"), and this phase is
+that conversation's product rather than another artefact to attack. PHASE-08's own
+`EN-2` gate over `sketches/thin-adapter.md` is untouched and still owed.
+
+It did take one **external adversarial prose review** — deliberately not an RV
+ledger, because the owner declined a fifteen-round disposition cycle for what is a
+cheap pre-implementation catch. It paid: nine of ten findings stood on independent
+verification, two of them changing the design rather than its wording. The
+criteria above were therefore amended once, **before the phase started and before
+any evidence was recorded against it**; ids are unchanged and `EX-16`/`EX-17` are
+appended rather than renumbered. The alternative — appending criteria that
+contradict the ones they correct — would have produced a self-contradictory set,
+which is worse than an amendment made in the same session that authored it. The
+two out-of-scope residuals are IMP-372 and ISS-284.
+
+**It then took a second one, and that is a pattern worth naming.** A fresh codex
+session reviewed revision 2, because revision 2 had rewritten precisely the parts
+revision 1 got wrong and those repairs had been checked by nobody. Three
+structural findings stood on verification: the runbook had **no selector**
+(`Fragment` is a closed enum with no exploring variant), the `Condition`
+vocabulary **cannot express** the gate it had been given (payload-free,
+existential, and its refusal has no room for a step id), and the
+verifier-results-as-payload path **does not exist** — the obvious form of it is
+refused by an existing engine invariant. So the criteria were amended a second
+time, again pre-start and pre-evidence, with `EX-18`/`EX-19` appended.
+
+Two amendments in two passes is disclosed rather than absorbed. Each review found
+the previous round's repairs resting on false claims about the code, which is
+evidence about the *method* rather than about any one author: a design conversation
+cannot hold enough of this surface in view at once to be right by inspection. The
+owner's ruling (2026-07-31) is therefore to stop seeking a third pre-implementation
+pass, ship the mechanism, and correct it from operation — spending the remaining
+design attention only on the handful of decisions that harden into contract at the
+moment of shipping. Sketch §0 records that sort; §12 carries both disposition
+tables.
+
+### PHASE-08 — `VA-4` amended, `VH-1` appended (2026-08-01)
+
+Same pattern as PHASE-16's two rounds, same conditions, disclosed the same way:
+**before the phase started and before any evidence was recorded against it**, ids
+unchanged, the withdrawal recorded in the criterion that lost it rather than left
+to be inferred.
+
+`VA-4` asked an agent to compare the rewritten `SKILL.md` against the incumbent
+baseline and judge whether the body *substantially shrank*. Pre-design target-state
+work (`sketches/target-machine.d2`) showed the criterion was **defeatable by
+construction**: under DEC-101 the checklists move into runbook TOML, a different
+file, so shrinkage is satisfiable by relocation alone and a byte count cannot
+distinguish relocation from mechanism. That is the same defect class `VA-5` exists
+to catch on `EX-9` — a check that reads like evidence and is not — sitting inside
+the criterion written to prevent it.
+
+The split follows the `VT-2` precedent set in this same plan: substance relocated,
+id retained rather than renumbered, coverage unchanged in total. `VA-4` keeps the
+**measurement** and is strengthened into a disposition table that must account for
+every part of the incumbent body and state runbook bytes separately, which is what
+closes the loophole. `VH-1` takes the **judgement**, because `substantially` is a
+judgement term, an agent grading its own rewrite against it is marking its own
+homework, and the only reader who can tell craft from ceremony is the one who has
+to live with the skill.
+
+`VH-1` is bounded rather than open: it names the scope decisions that make residue
+legitimate — `set` mode deferred (IMP-373), the Locked exit retained in the adapter,
+selector recording left where the incumbent prose puts it. Residue those decisions
+account for is fine; residue they do not is prose that was merely not moved.
 
 ### Why the evaluation kit stayed in
 
@@ -185,7 +321,7 @@ Assigned in the second pass:
 - **Direct reasoned regression** (DEC-067) had no criterion. Now PHASE-02 EX-6,
   where it belongs: §9.1 lists it as pure-engine behaviour.
 
-### The two phases that were doing three jobs
+### The phases that were doing too many jobs
 
 PHASE-04 and PHASE-06 each ended the first revision carrying an undesigned
 surface behind a design gate *plus* a bolted-on orphan objective. Both are now
@@ -202,6 +338,60 @@ phases most likely to be abandoned mid-flight.
   Doctrine never wrote. Its old `EX-7` is retained as a superseded marker rather
   than renumbered, per the immutability rule.
 
+#### PHASE-06 again, on 2026-07-29 — the same argument, one round later
+
+Removing conservative import was not enough. What was left still carried **ten
+separable deliverables and eighteen named tests** behind one design gate, in a
+single phase intended for a single dispatch worker holding a single commit. The
+2026-07-28 note above gives the test — *an undesigned surface plus a bolted-on
+objective* — and applying it honestly to the residue splits it again, by
+**dependency**, not by test file:
+
+- **PHASE-06** keeps the **wire contract**: the `record`/`adopt_record` collapse
+  (`EX-12`), the derived title at the declare arm (`EX-13(b)`), and
+  `deny_unknown_fields` (`EX-14`). It touches neither markers nor materialise,
+  and it goes **first** because `EX-14` is the precondition that makes both wire
+  removals falsifiable at all — without it serde accepts and discards a removed
+  key, and every removal test passes for the wrong reason. This is also where all
+  three wrong-acceptance ordering constraints (`VA-NC2`, `VA-NC3`) now live
+  together, which is what they were always describing: one ordered sequence
+  through one file.
+- **PHASE-13** takes the **write side**: the marker grammar, byte-exact framing
+  (`EX-13(a)`), the `DESIGN_ID_BYTES` refusal, `seq` and document-order emit
+  (`EX-11(a)(b)`), and the generated round-trip property. It stops deliberately
+  short of parsing a document a *human* edited — which lets its round trip be
+  proved against bytes Doctrine itself wrote before the same grammar is asked to
+  survive a hand edit.
+- **PHASE-14** takes the **read side**: DEC-092 rule 2, the five §5.5 refusals,
+  re-adopt renumbering (`EX-11(c)`), `DerivedInput` carrying prose (`EX-13(c)`),
+  and the deprecated shim.
+
+Two placements are worth stating because they read like deferral and are not.
+**`EX-13(b)`'s adoption arm goes to PHASE-14**, not PHASE-06: the hand-edited
+document that arm guards against cannot *reach* adoption until PHASE-14 opens
+that door, so the guard travels with the door. And **`EX-13` itself stays whole
+in PHASE-06** as the argument of record — five revisions of RV-323 reasoning
+that no reader should meet in three pieces. Its successors cite it by id rather
+than copying it, and its text now carries a partition notice naming where each
+of (a), (b) and (c) is discharged.
+
+One obligation changed **shape**, not home, and it is the only one: PHASE-06
+`EX-8` said `tests/e2e_design_materialise.rs` contains *exactly* five named
+tests. PHASE-13 `EX-8` creates that file and states a **floor** of two, because
+an *exactly* there would forbid PHASE-14 from completing a file it is required
+to complete; PHASE-14 `EX-8` then restores the *exactly* over the finished file
+at **eight** — the original five, plus `EX-9`'s round trip, plus `EX-11`'s two.
+No name was dropped, renamed, or invented.
+
+`RV-323`'s round-7 carriage-return obligation, which had no home in the plan at
+all and lived only in `notes.md`, lands as PHASE-13 `EX-4`.
+
+Cost of the split: three phase ids where there was one, `VT-1`/`VT-2`/`VT-3`
+waived-with-reason in PHASE-06 against live mandates at their new homes, and
+`VT-5` narrowed to the one pattern that is still declare-arm evidence. Benefit:
+no phase now asks one worker for more than eight named tests, and every
+negative control sits in the phase that can actually observe its red.
+
 ## Notes
 
 **PHASE-02 is coordinator work.** ADR-001's tier map at
@@ -215,9 +405,10 @@ and PHASE-09 as undispatchable.
 
 **The incumbent `slice design` lives in `src/slice.rs`.** `SliceCommand::Design`
 at `src/slice.rs:174`, dispatched at `:449`, `run_design` at `:734` — not in
-`src/commands/`. Design §5.5's implementation-home list omits it. PHASE-06's
-shim work edits it, so it is now a declared design-target selector; without that
-the phase would exit into a conformance failure.
+`src/commands/`. Design §5.5's implementation-home list omits it. The shim work
+edits it — **PHASE-14's** since the 2026-07-29 split — so it is now a declared
+design-target selector; without that the phase would exit into a conformance
+failure.
 
 **The stall sweep.** A phase stalls if it must edit a path with no design-target
 selector: the work lands, then `slice conformance` refuses it at close, and the
@@ -333,9 +524,18 @@ Four devices carry the real weight. Every code phase uses all four:
    before it was made green, with the failing output recorded in the phase
    sheet. This is the only device that catches a test which passes because it
    asserts nothing, and several phases constrain what the red must be: for the
-   PHASE-12 lock refusals it must be a wrong *admission*, for the PHASE-06
-   refusals a wrong *acceptance*, for the PHASE-03 rule-3 tests a behavioural
-   failure rather than a compile error. A test never seen red is not evidence.
+   PHASE-12 lock refusals it must be a wrong *admission*, for the PHASE-06 wire
+   removals and the PHASE-14 §5.5 refusals a wrong *acceptance*, for the
+   PHASE-13 round trip a byte *inequality* against the incumbent framing, and
+   for the PHASE-03 rule-3 tests a behavioural failure rather than a compile
+   error. A test never seen red is not evidence.
+
+   **On the dispatch arm, a worker cannot discharge this alone.** A worker fork
+   carries its own gitignored `.doctrine/state`, so red output written into a
+   fork's phase sheet dies with the fork — it looks like success and loses the
+   evidence. The worker hands the transcripts back; the *orchestrator* writes
+   them into the coord phase sheet. PHASE-13 and PHASE-14 `VA-NC` say so in the
+   criterion rather than leaving it to be rediscovered.
 4. **An escape sweep per phase (`VA-ES`).** No `#[ignore]`, `todo!()`,
    `unimplemented!()` or `assert!(true)` under the phase's paths, and a test
    census that never shrinks — the four cheapest ways to turn a red suite green.

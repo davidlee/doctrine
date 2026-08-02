@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 438
+slug = "never-delete-or-roll-back-authored-knowledge-to-repair-a-runtime-failure"
+title = "Never delete or roll back authored knowledge to repair a runtime failure"
+status = "pending"
+kind = "quality"
+
+description = "A runtime failure is repaired by advancing or refusing, never by removing authored records that were already materialised."
+tags = []
+acceptance_criteria = [
+  "No failure path deletes or reverts a materialised authored record.",
+  "Recovery reconciles forward against existing authored state.",
+  "A partially completed checkpoint is resumable rather than discarded.",
+]

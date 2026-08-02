@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 423
+slug = "align-sections-with-the-human-before-the-integrated-adversarial-pass"
+title = "Align sections with the human before the integrated adversarial pass"
+status = "pending"
+kind = "functional"
+
+description = "The review stage preserves section-level human alignment followed by one integrated adversarial pass, and a lock requires acceptance bound to the accepted content."
+tags = []
+acceptance_criteria = [
+  "Section-level alignment precedes the integrated adversarial pass.",
+  "A lock is refused while any component of the gate is unsatisfied, and the refusal names which component.",
+  "Alternative review choreography remains an extension seam rather than a v1 behaviour.",
+]
