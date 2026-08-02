@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Nothing verifies that payload term declarations agree with their construction sites; the test that appears to is tautological"
 detail = """
@@ -49,7 +49,7 @@ response = "UPHELD, deferred to ISS-290 rather than to a new item, because one r
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "EX-16 runbook clause is the machines first non-cumulative condition and nothing pins its non-blocking half"
 detail = """
@@ -79,7 +79,7 @@ response = "UPHELD, deferred to IMP-379. The asymmetry is real and load-bearing:
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Discharge::verified records a hardcoded exit 0 rather than the observed exit code"
 detail = """
@@ -103,7 +103,7 @@ response = "FIXED at 4f2816efa. The guard above the call now BINDS the code it c
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "PHASE-05 checkpoint has a deterministically unrecoverable crash window, and the EX-8 fault seam cannot reach it"
 detail = '''
@@ -135,7 +135,7 @@ response = "UPHELD, and the owner ruling is REPAIR rather than tolerate, deferre
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "A PHASE-07 receipt assertion is satisfied by a substring of an unrelated line, so it pins nothing; proven by mutation"
 detail = """
@@ -163,7 +163,7 @@ response = "FIXED at 4f2816efa, and the repair carries its own positive control.
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "The acceptance attestation digest is computed over an empty string when the declaration fails to serialise"
 detail = """
@@ -187,7 +187,7 @@ response = "FIXED at 4f2816efa. The closure now returns Result and propagates th
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PHASE-15 ships a comment citing a decision the same phase superseded, and the DEC reseat renumbered the reference without retargeting it"
 detail = """
@@ -217,7 +217,7 @@ response = "FIXED at 4f2816efa. The comment now cites DEC-100, the record descri
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "A PHASE-15 doc comment names entry_text, a function the same phase renamed out of existence"
 detail = """

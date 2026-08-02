@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Authoring gate applied in the sketch table but never carried into the shipped exploring.toml"
 detail = """
@@ -40,7 +40,7 @@ response = "NOT UPHELD as a Kind A conformance failure. The finding argues the R
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "PayloadTerm prose and digest constructors bypass the single validating admission path"
 detail = '''
@@ -65,7 +65,7 @@ response = "UPHELD, deferred to ISS-290, where it is now appended. This is the S
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Sketch states a single-byte elision marker; the code ships a three-byte ellipsis"
 detail = """
