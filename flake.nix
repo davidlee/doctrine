@@ -76,6 +76,8 @@
           doctrine
 
           shellcheck
+          procps # pgrep
+
           codex
           claude
           # pi-dev
