@@ -52,6 +52,29 @@ PIPELINE_VERIFY_TIMEOUT="${PIPELINE_VERIFY_TIMEOUT:-300}"
 # side gets its own name and is passed explicitly (STD-001). Both are per-fixture
 # (D-P05-7): light's build fits the default, a Rust workspace's does not.
 PIPELINE_VERIFY_DISK_CAP="${PIPELINE_VERIFY_DISK_CAP:-$((256 * 1024 * 1024))}"
+
+# The WORKER capsule's VEHICLE and DISK BOUND — the two things a row whose
+# hazard is produced INSIDE the capsule has to be able to state (F-P05-37).
+#
+# Every other row plants trusted-side between `pipeline_capsule` and
+# `pipeline_run`, which is why those are two calls. A row tripping the sandbox's
+# own disk cap cannot use that seam: `sandbox.sh` evaluates the bound before
+# control ever returns here. So the terms travel as PARAMETERS, set per cell by
+# the harness from a row lookup (D-P05-19) — declaratively, never as a hook.
+#
+# BOTH ARE EMPTY-MEANS-DEFAULT, and the default is resolved AT THE CALL SITE,
+# never here. That is not a style choice: the harness assigns these per cell, so
+# a `:-` resolved once at source time would be overwritten by the first cell and
+# the fifteen already-scored rows would run with an EMPTY vehicle. A default has
+# to stay inert in its consumer to survive a caller that sets the variable.
+#
+# The cap's empty likewise means "pass no `--disk-cap` at all", so `sandbox.sh`
+# goes on owning that number — a literal here would be a second copy of it
+# (STD-001), which is H13's `unset RIG_BUNDLE_CAP` reason one bound over.
+PIPELINE_WORKER_VEHICLE_DEFAULT='/rig/worker-stub.sh'
+PIPELINE_WORKER_VEHICLE="${PIPELINE_WORKER_VEHICLE:-}"
+PIPELINE_WORKER_DISK_CAP="${PIPELINE_WORKER_DISK_CAP:-}"
+
 PIPELINE_DOORBELL_DEADLINE="${PIPELINE_DOORBELL_DEADLINE:-120}"
 PIPELINE_DOORBELL_INTERVAL="${PIPELINE_DOORBELL_INTERVAL:-1}"
 
@@ -282,7 +305,17 @@ pipeline_capsule() {
   # The worker's status is DATA, not an error here. A worker that hit the disk
   # cap must flow into a stage-1 refusal carrying `harvest/resource-cap` — dying
   # on it would lose the very outcome the bound exists to produce.
-  "${SANDBOX}" --capsule "${capsule}" -- /rig/worker-stub.sh "${stub}" >/dev/null 2>&1 || status=$?
+  #
+  # The bound is passed only when a row asked for one, so an unset cap is a
+  # sandbox-defaulted run byte-for-byte and not a run capped at a number this
+  # file restated. Bash 5 expands an empty array under `set -u` cleanly.
+  local worker_bound=()
+  [ -n "${PIPELINE_WORKER_DISK_CAP}" ] &&
+    worker_bound=(--disk-cap "${PIPELINE_WORKER_DISK_CAP}")
+
+  "${SANDBOX}" --capsule "${capsule}" "${worker_bound[@]}" \
+    -- "${PIPELINE_WORKER_VEHICLE:-${PIPELINE_WORKER_VEHICLE_DEFAULT}}" \
+    "${stub}" >/dev/null 2>&1 || status=$?
   printf '%s\n' "${status}" >"${run}/worker-status"
 
   # The doorbell is a HINT TO LOOK, never a statement of what to look at. Loss

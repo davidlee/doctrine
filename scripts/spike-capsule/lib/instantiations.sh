@@ -84,6 +84,47 @@ C3_H5_NONASCII='.doctrine/rfc/025/evidence/h5-naïve.md'
 C3_H5_RENAME_SRC='.doctrine/project-orientation.md'
 C3_H5_RENAME_DST='src/h5-renamed.md'
 
+# ── the capsule-time terms (F-P05-37, D-P05-19) ─────────────────────────────
+#
+# Fifteen of the sixteen rows plant trusted-side, in the `_mutate` seam below.
+# H7 cannot: its observable is produced by an enforcement point INSIDE the
+# sandbox — `ulimit -f`, then `du -s` at `sandbox.sh:283-288` — which is
+# evaluated before control returns to the harness. A blob planted at `_mutate`
+# time arrives after every check has already passed.
+#
+# So the two things such a row needs settled BEFORE `pipeline_capsule` runs are
+# stated here, declaratively, and `cell_run` reads them per cell. Empty means
+# `pipeline.sh`'s own default, so these are inert for every other row — which is
+# what keeps the fifteen scored rows byte-identical across this change.
+
+c3_row_worker_vehicle() {
+  case "$1" in
+    H7) printf '/rig/worker-hostile.sh' ;;
+    *) printf '' ;;
+  esac
+}
+
+# H7's cap, ROW-LOCAL and MODEST (D-P05-18). It is raised off the 256 MiB
+# sandbox default for ONE reason: the heavy worker capsule already sits at 195M
+# (F-P05-10), so at the default an overrun cannot be attributed to the hostile
+# blob rather than to the capsule's honest work. 512 MiB puts the honest
+# footprint at ~38% of the bound.
+#
+# ATTRIBUTION IS EARNED BY THE CONTROL, NOT BY THIS MARGIN — `H7_planted` pairs
+# the blob with the capsule's own footprint measured WITHOUT it, which is H13's
+# M6 lesson at the disk cap instead of at the bundle. That is why 512 MiB and
+# not the 20G of D-P05-16: the 20G bounds the row's BLAST RADIUS, not the
+# threshold it crosses, and a threshold set there would have to be crossed with
+# 20G of real bytes on the cumulative leg.
+C3_H7_WORKER_CAP=$((512 * 1024 * 1024))
+
+c3_row_worker_disk_cap() {
+  case "$1" in
+    H7) printf '%s' "${C3_H7_WORKER_CAP}" ;;
+    *) printf '' ;;
+  esac
+}
+
 # ── the shared vehicle ──────────────────────────────────────────────────────
 
 # The capsule's own clone — the one tree these rows mutate.

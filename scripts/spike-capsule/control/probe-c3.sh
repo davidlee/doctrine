@@ -562,6 +562,16 @@ cell_run() {
   PIPELINE_VERIFY_TIMEOUT="$(fixture_verify_timeout "${fixture}")"
   PIPELINE_VERIFY_DISK_CAP="$(fixture_verify_disk_cap "${fixture}")"
 
+  # The WORKER bounds travel per ROW, and they are set HERE for the same reason
+  # the verify bounds are: a row's terms must not ride into the next row's
+  # capsule. A row whose hazard is produced inside the capsule cannot reach it
+  # from the plant seam (F-P05-37), so it states its terms declaratively and the
+  # harness stays free of any row's body (D-P05-19). Both lookups return EMPTY
+  # for every row but the one that asked, and empty means `pipeline.sh`'s own
+  # default — so this is inert for the fifteen rows already scored.
+  PIPELINE_WORKER_VEHICLE="$(c3_row_worker_vehicle "${row}")"
+  PIPELINE_WORKER_DISK_CAP="$(c3_row_worker_disk_cap "${row}")"
+
   # The capsule phase and the pipeline are separate calls so the harness can
   # plant BETWEEN them (A-2, pipeline.sh:196-200). That seam is the whole
   # `Hnn_mutate` mechanism; the rig plays the adversary trusted-side.
