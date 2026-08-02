@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 21 · 600bcafa
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 22 · 0fcd09e8
 
 ### Produced
 
@@ -42,6 +42,10 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 21 · 600b
   deliberately unset** with the absence authored as an open question; disposes
   `inq-1`. **ISS-301** — the general form: parent edges elsewhere that may be
   inferred rather than determined (SPEC-027 the known candidate). Spawned by it
+- **DEC-118** — PRD-012 gains three requirements (the inverse view; the
+  project-declared adapter, kept at product altitude; never present an
+  uninventoried surface as an ungoverned one) plus an `OQ-2` status edit;
+  disposes `inq-2`. Authored via `spec req add`, not a REV (ADR-013)
 - **`/spec-coverage-assessment` pass** — coverage map at
   `.doctrine/state/sl-243-spec-coverage-map-anchor-map.md`. **Runtime tier,
   gitignored, disposable.** Durable residue is DEC-117, ISS-301, and the routing
@@ -75,10 +79,12 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 21 · 600b
 Held on design run **dr-019fc13a** — read them with `doctrine design resume 243`
 rather than from a copy here. What the run cannot represent, and so lives here:
 
-- The `/spec-coverage-assessment` pass **has run**. `inq-1` is disposed by
-  DEC-117; `inq-3` is disposed non-durable (SPEC-017 `REQ-232` already owns the
-  identifier-form convention, `IMP-316` enforces it — nothing new to author).
-  `inq-2` is the one node still open.
+- The `/spec-coverage-assessment` pass **has run** and the cluster is closed:
+  `inq-1` → DEC-117, `inq-2` → DEC-118, `inq-3` → non-durable (SPEC-017
+  `REQ-232` already owns the identifier-form convention, `IMP-316` enforces it —
+  nothing new to author). **The run is 9/9 disposed, 0 open**, exploring's
+  runbook fully discharged. What remains before drafting is the user's
+  acceptance, which the machine requires and will not infer.
 - **Plan obligation from the census, owned by no node.** SPEC-017 `REQ-236`
   states anchor liveness "is not checked, so a stale anchor ships silently".
   This slice's report probes path existence. Report-only preserves the
