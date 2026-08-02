@@ -14,8 +14,10 @@ cases/0 survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and
 D-P05-15), **T4e DONE** (H10/H16 scored **128/0**, 8/8 cells `model-level`, +
 falsified 6/6 — M25 measures F-14 rather than arguing it).
 **ALL SIXTEEN ROWS CARRY SCORED RESULTS: H1–H16. THE MATRIX IS COMPLETE** —
-`T4` is done and the next unit is **T5** (conflict sub-probe, the leg H10/H16
-still owe) · last SL-241 commit — verify before citing (`git log --oneline -1`)
+`T4` is done. **T5 DONE** (the conflict sub-probe — H10/H16's owed leg, scored
+2/2 `counts-toward-nothing` + falsified 4/4; F-P05-40 and ISS-305 out of it).
+**H10/H16 NOW OWN BOTH LEGS.** Next unit is **T6** (the five guard probes)
+· last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
@@ -265,6 +267,37 @@ Lifted here so the ids survive the sheet:
   (gitignored, fork-withheld as `Tier::State`, disposable), so the fix is
   out-of-band and the test stays strict.
 - Landed in: design § 5.3 + § 6 OQ-1 + § 9.1, `slice-241.md`, plan EX-7/EX-14.
+
+- **T5 — THE CONFLICT SUB-PROBE DONE** (`616877a5`, `1b2d60a7`). `lib/conflict.sh`
+  supplies the `conflict_subprobe` body `c3_run_conflict` has been calling since
+  T2; H10/H16 now own BOTH legs, and their pipeline block stays stamped
+  `legs=pipeline`. Scored 2/2, both `pass`, both `counts-toward-nothing`.
+  - **The two rows PARTITION § 5.1's sequence** rather than each driving all of
+    it. H10 refuses at `candidate create` (pair classified Conflicted, parked
+    for `ingest`); H16 gets through create AND admit — **neither reads trunk** —
+    and refuses at the integrate fast-forward CAS, which guides to supersede on
+    the new base. So on this layer staleness is caught by the CAS and by nothing
+    earlier: the incumbent's analogue of the ordering `pipeline.sh:560-566`
+    holds for stage 4.
+  - **F-9 is enforced in the FILE, not in prose.** `altitude` reads
+    `counts-toward-nothing` in the column a reader would sum, and
+    `expected-stage`/`expected-token` carry values deliberately outside
+    `MATRIX_STAGES` / `token_legal`, so a tally folding these into the
+    pipeline's vocabulary fails loudly instead of silently counting an incumbent
+    refusal as coverage.
+  - **F3 is COPIED, never cloned** — `prepare-review`'s phase-completion gate
+    reads gitignored runtime state, so `phases: 1/1` is a property of the
+    fixture DIRECTORY. EX-15 is made observable: the leg asserts the gate
+    CLEARED rather than merely not dying.
+  - Falsified 4/4 before scoring (`drivers/falsify-t5.sh`). **M34/M35 are a
+    deliberate pair** — M34 deletes the hazard, M35 keeps it and moves it in
+    time — so a leg asserting only "it moved and integrate refused" scores M35
+    green. Two named seams (`conflict_peer_half`, `conflict_move_trunk`) exist
+    because a mutant can only wrap what has a name.
+  - **F-P05-40 / ISS-305** out of it: `candidate create` exits ZERO on a
+    conflict — the refusal is LEDGERED, not status-borne — while integrate's
+    staleness refusal is non-zero. The clap help asserts the opposite, and for a
+    `review_surface` the arm it describes is unreachable. A QUE-202 input.
 
 ### PHASE-01 decisions (durable)
 
@@ -1120,6 +1153,19 @@ mid-phase would convert a legible structural finding into a silent pass.
   supply that discrimination itself; the pipeline will not be narrowing the
   problem for it. The sub-probe (T5) measures the incumbent's recovery path and
   **counts toward nothing** (F-9).
+- **QUE-202 gains its SECOND evidence input** (T5, 2026-08-03) — the sub-probe
+  is scored, and what it adds is the shape of the *recovery* path the capsule
+  model would have to replace. Three facts, none of them derivable from the
+  pipeline legs: (1) the incumbent's discrimination is real — a genuine
+  conflicting pair is classified `Conflicted` and parked for hand-resolution,
+  which is precisely the content-blindness the pipeline lacks; (2) **admission
+  never reads trunk**, so `create` and `admit` both accept a moved trunk and the
+  fast-forward CAS at integrate is the sole staleness gate; (3) the two paths
+  **disagree about how a refusal is signalled** — conflict exits ZERO with the
+  verdict in `candidates.toml`, staleness exits non-zero (F-P05-40, ISS-305).
+  An admission design that reuses conflict semantics per DEC-110 inherits (3)
+  unless it is named, and a scripted caller reading exit status alone cannot see
+  a conflict at all.
 - **F-14 is MEASURED, not argued** (T4e falsification M25) — inverting stage 4
   so the transfer precedes the precondition leaves the token (`stale-base`),
   canonical's REFS, and all seven of the row's own clauses intact; **only the
