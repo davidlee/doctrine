@@ -262,9 +262,7 @@ pipeline_teardown() {
   rm -rf -- "${run}"
 }
 
-contract_field() {
-  sed -n "s/^$2=//p" "$1/contract" | head -1
-}
+contract_field() { rig_field "$1/contract" "$2"; }
 
 # ── the capsule phase (NOT a stage) ─────────────────────────────────────────
 #

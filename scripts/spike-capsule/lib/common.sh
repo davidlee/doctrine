@@ -113,6 +113,20 @@ rig_enter() {
   guard_not_real_repo "${RIG_ROOT}"
 }
 
+# ── the rig's evidence-file shape ────────────────────────────────────────────
+
+# rig_field <file> <key> — the first `key=value` line's value, empty if absent.
+#
+# Every file the rig writes for a later reader is one fact per line in this
+# shape: the run contract, H14's three doorbell legs, H11's payload record. The
+# `sed` had been spelled out three times before it was named, which is three
+# places for the quoting to drift and one class of `key2=` prefix collision to
+# be fixed in only some of them.
+#
+# Distinct from `declaration_field` below, which parses `key:  value` — a
+# DECLARED surface authored by a human, not evidence written by a run.
+rig_field() { sed -n "s/^$2=//p" -- "$1" | head -1; }
+
 # ── the interpretation-surface declaration ───────────────────────────────────
 
 # The declaration is default-deny and read BY FIELD (DEC-099). `verify:` is the
