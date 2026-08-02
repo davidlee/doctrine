@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc02b-d111-7d12-b605-31ee6cb68fff"
+recorded_at = "2026-08-02T01:52:04.881846443Z"
+kind = "friction"
+summary = "spike-capsule driver died at 'find | sed | head' under set -e + pipefail — SIGPIPE read as a result"
+detail = "F-P05-28's repro driver (.doctrine/state/slice/241/drivers/repro-h15-bundle.sh, written last session) aborted silently at line 40. head -20 closes the pipe, sed takes SIGPIPE (141), pipefail propagates it, set -e kills the script. It had already done the expensive part (the kill) and exited before printing a single measurement. Compounded because I invoked it as 'bash driver.sh | tee log' — the pipeline reported tee's exit 0, so the abort looked like a clean run, which is exactly the 'redirect, never pipe' trap the SL-241 handover already warns about, met from the other side (the driver's OWN internal pipe, not the invocation's). Cost: one full heavy harvest+kill cycle plus a diagnosis detour before any data existed. The general shape: a truncating pager inside a set -euo pipefail script is a latent abort, and in a probe rig an abort that prints nothing is indistinguishable from an absence-shaped result."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

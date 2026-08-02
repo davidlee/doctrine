@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc030-aafd-79a0-bd01-ea3444a8e7a3"
+recorded_at = "2026-08-02T01:57:22.813682051Z"
+kind = "friction"
+summary = "Sourcing the spike-capsule rig libraries re-enables set -e, silently overriding a driver's own shell options"
+detail = "My F-P05-28 diagnostic driver opened with 'set -uo pipefail' — deliberately WITHOUT -e, because in a probe driver a refusing command IS the datum and must not abort the run. Sourcing control/pipeline.sh + lib/instantiations.sh re-enabled set -e underneath me. The driver then died at its first measured 'git fsck' (which legitimately exits 16) having printed only a section header, with every later measurement — the resume, the decomposition of git's swallowed stderr, the fresh-quarantine control — unrun. It looked exactly like the earlier SIGPIPE abort, so I initially diagnosed it as the same bug. Two costs: a wasted heavy run, and the near-miss that an abort mid-measurement is shaped like an absence-shaped result, which is the failure mode this whole phase keeps meeting. Generalisation for any driver that sources the rig: set your shell options AFTER the sources, not before, or the library silently wins. Recovered value: the abort's exit status (16) was itself the first real evidence the fsck was failing, which is luck, not design."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
