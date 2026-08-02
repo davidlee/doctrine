@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # control/selftest.sh — THE RIG'S OWN RED/GREEN (EX-11, VT-4, VA-1/2/3).
 #
-#   usage: selftest.sh [happy|attribution|bundle|falsifiable]
+#   usage: selftest.sh [apparatus|happy|attribution|bundle|falsifiable]
 #   env:   SPIKE_CAPSULE_ROOT   capsule / fixture root (default: ~/capsules)
 #
 # `rig selftest` dispatches here the moment this file exists (D-P01-3), and
@@ -17,8 +17,11 @@
 # kill before this is green, and the run is RECORDED (VA-1) rather than
 # remembered.
 #
-# Three sections, three different claims:
+# Five sections, five different claims:
 #
+#   apparatus     the rig can INVOKE its own tools, and a tool that cannot be
+#                 invoked is a rig defect rather than a capsule refusal —
+#                 F-P05-29. Capsule-free, and the precondition of the rest
 #   happy         all four stages pass, both mechanisms — VA-1
 #   attribution   WHICH stage refused is ASSERTED from the emitted line, never
 #                 inferred from an exit code — VA-2
@@ -34,7 +37,7 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 
 section=${1:-all}
 case "${section}" in
-  happy | attribution | bundle | falsifiable | all) ;;
+  apparatus | happy | attribution | bundle | falsifiable | all) ;;
   -h | --help)
     sed -n '2,30p' "${BASH_SOURCE[0]}"
     exit 0
@@ -94,6 +97,70 @@ scenario() {
 declaration_with_verify() {
   local dest=$1 cmd=$2
   sed "s|^verify:.*|verify:    ${cmd}|" "${DECLARATION}" >"${dest}"
+}
+
+# ── apparatus: the instruments answer before anything they say is believed ──
+#
+# One rung BELOW A-1. A-1 says the happy path must be green before a hostile row
+# may claim a kill; this says the rig must be shown able to INVOKE ITS OWN TOOLS
+# before the happy path's green means anything at all.
+#
+# F-P05-29 is the case for it, and it cost a 75-minute scored run. A co-agent
+# rebuilt the shared `target/debug/doctrine` against a nix store this jail does
+# not mount, so every invocation exited 127 — and conform leg 2, which mapped any
+# nonzero exit to `undeclared-path` with stderr discarded, reported the rig's own
+# broken toolchain as A REFUSAL BY THE CAPSULE. 32 hostile-row failures, all of
+# them one missing ELF interpreter. This section is capsule-free and runs FIRST.
+
+selftest_apparatus() {
+  printf '\napparatus — the rig can invoke its own tools (A-1'"'"'s own precondition, F-P05-29)\n'
+
+  local bin fake fallback out rc=0
+
+  # 1. THE LIVE CLAIM about this environment, not about the code: whatever the
+  #    ladder just picked must actually run HERE.
+  bin=$(rig_doctrine_bin)
+  rig_assert "the doctrine binary conform leg 2 will call RUNS: ${bin}" \
+    "${bin}" --version
+
+  # 2. `[ -x ]` IS NOT RUNNABILITY, and that gap is the whole finding. A file
+  #    with the executable bit and an absent interpreter is exactly the shape
+  #    the clobbered dev build had.
+  fake="${RESULTS}/unrunnable-doctrine"
+  printf '#!/nonexistent/interpreter\n' >"${fake}"
+  chmod +x -- "${fake}"
+  rig_assert 'the fake carries the executable bit — [ -x ] would have believed it' \
+    test -x "${fake}"
+  rig_assert_fails 'and it cannot be invoked — exit 127, the F-P05-29 shape' \
+    "${fake}" --version
+
+  fallback=$(DOCTRINE_BIN="${fake}" rig_doctrine_bin)
+  rig_assert 'the ladder REFUSES an unrunnable DOCTRINE_BIN rather than returning it' \
+    test "${fallback}" != "${fake}"
+  rig_assert 'and the rung it falls through to RUNS' "${fallback}" --version
+
+  # 3. CONFORM LEG 2 DISTINGUISHES "the verb refused" FROM "the verb could not
+  #    run". Negative control first, or the red below would prove only that the
+  #    call is broken in general: through the real ladder, the same range must
+  #    still yield a real refusal TOKEN.
+  rig_assert_eq 'negative control: leg 2 still reports a real refusal token' \
+    'undeclared-path' \
+    "$(conform_stage "${FIXTURE}" 6bd9833 6caba12 001 || true)"
+
+  # Then with no runnable doctrine anywhere on the ladder. The override is the
+  # honest simulation of that: `rig_doctrine_bin` having exhausted every rung.
+  out=$(
+    # shellcheck disable=SC2329  # invoked indirectly, by conform_stage below
+    rig_doctrine_bin() { printf '%s' "${fake}"; }
+    conform_stage "${FIXTURE}" 6bd9833 6caba12 001
+  ) || rc=$?
+  rig_assert_eq 'a doctrine binary that cannot be INVOKED is a RIG DEFECT, not a refusal' \
+    "${RIG_EXIT_DEFECT}" "${rc}"
+  rig_assert_eq 'and it names no token — the capsule is not blamed for the rig' \
+    '' "${out}"
+
+  rm -f -- "${fake}"
+  record - apparatus pass 'the ladder proves runnability; leg 2 separates a refusal from a failure to invoke'
 }
 
 # ── happy: all four stages, both mechanisms (EX-11, VA-1) ───────────────────
@@ -353,11 +420,13 @@ outcome_holds() {
 printf 'selftest: %s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${section}" >>"${RESULTS}/results.tsv"
 
 case "${section}" in
+  apparatus) selftest_apparatus ;;
   happy) selftest_happy ;;
   attribution) selftest_attribution ;;
   bundle) selftest_bundle ;;
   falsifiable) selftest_falsifiable ;;
   all)
+    selftest_apparatus
     selftest_happy
     selftest_attribution
     selftest_bundle

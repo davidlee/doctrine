@@ -341,10 +341,18 @@ pipeline_run() {
   #
   # Four legs, all against QUARANTINE objects. No worktree, no index, no
   # staging: every leg below is plumbing over the range B..S.
-  token=$(conform_stage "${quarantine}" "${base}" "${oid}" "${slice}") || {
+  # Re-raised as a RETURN, never an `exit`, for the same reason harvest's defect
+  # is: `pipeline_run` must stay usable from a caller that redirects it (F-P01-1).
+  status=0
+  token=$(conform_stage "${quarantine}" "${base}" "${oid}" "${slice}") || status=$?
+  if [ "${status}" -eq "${RIG_EXIT_DEFECT}" ]; then
+    rig_warn 'RIG DEFECT raised by conform — see above'
+    return "${RIG_EXIT_DEFECT}"
+  fi
+  if [ "${status}" -ne 0 ]; then
     stage_emit conform refuse "${token}"
     return 1
-  }
+  fi
   stage_emit conform pass
 
   # ── stage 3: verify ───────────────────────────────────────────────────────
@@ -384,13 +392,32 @@ conform_stage() {
   # It folds the range as `actual` against the slice's design-target selectors,
   # exits nonzero on any undeclared path, and its range fold is already
   # belt-hardened. Reaching for shell here would re-derive a hardened thing.
-  local doctrine
+  #
+  # A REFUSAL AND A FAILURE TO INVOKE ARE DIFFERENT ANSWERS, and collapsing them
+  # is what F-P05-29 cost. `>/dev/null 2>&1 || printf undeclared-path` reported a
+  # doctrine binary that could not START (exit 127, absent ELF interpreter) as a
+  # conform refusal ATTRIBUTED TO THE CAPSULE — 32 hostile-row failures across a
+  # 75-minute scored run, all of them the rig's own toolchain. It is the same
+  # defect F-P05-28 finding 1 named in the harvester: one token standing for two
+  # causes, with the only sentence that says which thrown away by `2>&1`.
+  #
+  # So: 126/127 is a RIG DEFECT and stderr is kept and re-emitted. Note the
+  # defect is RETURNED, not `exit`ed — this function is called inside `$( … )`,
+  # where an exit would end only the substitution's subshell and the caller
+  # would read a bare nonzero with an empty token (F-P01-1, and
+  # mem_019fbd2453997de3aaa53d2239134d18).
+  local doctrine err rc=0
   doctrine=$(rig_doctrine_bin)
-  "${doctrine}" slice conformance "${slice}" -p "${q}" \
-    --against "${base}..${oid}" --strict >/dev/null 2>&1 || {
+  err=$("${doctrine}" slice conformance "${slice}" -p "${q}" \
+    --against "${base}..${oid}" --strict 2>&1 >/dev/null) || rc=$?
+  if [ "${rc}" -eq "${RIG_EXIT_NOEXEC}" ] || [ "${rc}" -eq "${RIG_EXIT_NOTFOUND}" ]; then
+    rig_warn "RIG DEFECT: conform leg 2 cannot invoke '${doctrine}' (exit ${rc}) — ${err}"
+    return "${RIG_EXIT_DEFECT}"
+  fi
+  if [ "${rc}" -ne 0 ]; then
     printf 'undeclared-path'
     return 1
-  }
+  fi
 
   # LEG 3 — forbidden paths, and it is LOAD-BEARING, not a belt on leg 2.
   # PHASE-01 T7 settled this: `--strict` has NO `.doctrine/`/`.claude/`

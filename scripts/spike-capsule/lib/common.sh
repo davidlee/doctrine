@@ -25,6 +25,13 @@ RIG_EXIT_SANDBOX=5  # the sandbox itself failed to start — NOT a verdict on th
 RIG_EXIT_TIMEOUT=124 # `timeout`'s own code, propagated verbatim rather than renamed
 # shellcheck disable=SC2034
 RIG_EXIT_DEFECT=6   # a token outside the closed vocabulary — a RIG defect, NOT a result
+# The shell's own two "I could not run that" codes, named because the rig now
+# keys on them: a tool it cannot INVOKE is a defect of the rig, never a verdict
+# on the capsule (F-P05-29).
+# shellcheck disable=SC2034
+RIG_EXIT_NOEXEC=126  # found, not executable
+# shellcheck disable=SC2034
+RIG_EXIT_NOTFOUND=127 # not found — or its ELF interpreter is not
 
 rig_warn() { printf 'rig: %s\n' "$*" >&2; }
 rig_die() { rig_warn "$*"; exit "${RIG_EXIT_USAGE}"; }
@@ -157,17 +164,31 @@ RIG_QUARANTINE_REF=refs/heads/quarantine-result
 # The documented ladder, not a bare `doctrine`: the corpus verbs must come from
 # a build that carries this tree's rules. `$DOCTRINE_BIN` first (the dispatch
 # forward), then this repo's dev build, then PATH.
+#
+# EVERY RUNG IS PROVEN TO RUN, NOT MERELY TO EXIST — `[ -x ]` was the bug
+# (F-P05-29). The executable bit says nothing about whether the binary can
+# START: a co-agent's build of `target/debug/doctrine` against a nix store this
+# jail does not mount is `-x` and exits 127 on every call. The ladder took that
+# rung and never reached the working one bwrap already provides on PATH
+# (`flake.nix` ro-binds the crane build at `~/.cargo/bin/doctrine`). One exec
+# per rung, once per pipeline run, is the whole cost of not believing it.
+rig_doctrine_runs() {
+  [ -n "${1:-}" ] && "$1" --version >/dev/null 2>&1
+}
+
 rig_doctrine_bin() {
   local repo
-  if [ -n "${DOCTRINE_BIN:-}" ] && [ -x "${DOCTRINE_BIN}" ]; then
+  if rig_doctrine_runs "${DOCTRINE_BIN:-}"; then
     printf '%s' "${DOCTRINE_BIN}"
     return 0
   fi
-  repo=$(rig_repo_root) || { printf 'doctrine'; return 0; }
-  if [ -x "${repo}/target/debug/doctrine" ]; then
+  if repo=$(rig_repo_root) && rig_doctrine_runs "${repo}/target/debug/doctrine"; then
     printf '%s' "${repo}/target/debug/doctrine"
     return 0
   fi
+  # PATH, unprobed and deliberately so: the last rung is what conform leg 2
+  # then RAISES A DEFECT on if it too cannot be invoked. Probing it here would
+  # only move the same refusal to a place with less to say about it.
   printf 'doctrine'
 }
 
