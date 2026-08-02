@@ -140,8 +140,8 @@ binding silently attributes one run's evidence to another.
 
 | id | edge | `context_state` |
 |---|---|---|
-| W1 | 1 — `Exploring → Inquiring` | `continuous` so far — 0 compaction markers in the subject transcript at 06:49Z |
-| W2 | 2 — `Inquiring → Drafting` | |
+| W1 | 1 — `Exploring → Inquiring` | `continuous` — 0 compaction markers in the subject transcript through 07:0xZ. **The edge was never crossed**; see W2 |
+| W2 | *(no edge — the run never left `exploring`)* | **`deliberate`, forced by context exhaustion at ~220k.** Moderator-induced break and resume after the second interview question, at revision 9 |
 | W3 | 3 — `Drafting → Reviewing` | |
 | W4 | 4 — `Reviewing → Locked` | |
 
@@ -170,6 +170,58 @@ enough detail to separate the three bands:
 - did it render the envelope;
 - did it resume at the exact stage and posture it left, with no work redone and
   none skipped.
+
+## 5a. The break as actually taken — a disclosed deviation from §5
+
+§5 specifies **one** induced break, at the `Drafting → Reviewing` edge. That is
+not where it happened.
+
+**What happened.** At revision 9 the subject's context reached ~220k after the
+second interview question, and the moderator induced the break there. The run had
+**never left `exploring`** — the exploring runbook cleared at revision 6, but the
+stage never advanced, so the interview was being conducted in `exploring` rather
+than `inquiring`.
+
+**Classification: `deliberate`, forced.** The break is moderator-induced in
+mechanism, but the *occasion* was context exhaustion, not a chosen edge. Both
+halves are recorded because they are different evidence: a break taken at a clean
+chosen point tests resume under favourable conditions, and a break forced at 220k
+tests it under the conditions that actually arise. Filing this as plain
+`deliberate` would overstate how controlled it was; filing it as `incidental`
+would understate the moderator's hand.
+
+**Consequence, accepted rather than worked around.** This spends the `recover`
+class's scoring opportunity here. The `Drafting → Reviewing` edge will therefore
+have no induced break, and if `recover` is scored it is scored on this one.
+
+**Cost to S4: small, and stated.** Firing item (2) — *no context boundary at that
+edge* — fails for any candidate discharged in the window containing this break.
+The steps in that region are `inquire.knowledge` and `inquire.scope`, neither of
+which is among the gate's state-visible five, so no collectible S4 candidate is
+lost. That is luck, not design, and it is recorded as luck.
+
+### Pre-break state — captured before the break, for the exact-resume comparison
+
+`recover`'s top band requires resuming *"at the exact stage and posture it left"*,
+which is unscorable unless the leaving state was captured first.
+
+| field | value at break |
+|---|---|
+| revision | **9** |
+| stage | **`exploring`** — never advanced |
+| cursor | `inq-4`, authority **`user-pinned`** |
+| posture | `breadth`, authority **`user-pinned`** |
+| nodes | 9 — 5 `open`, 3 `deferred`, 1 `resolved` |
+| fragments | `[]` — still no receipt ever declared |
+
+Snapshot: `scratchpad/pre-break/design.toml`.
+
+**Two incidental positives worth keeping.** Both cursor and posture carry
+`user-pinned` authority, so SL-233 §2's *"permit immediate user pin, defer,
+prune, breadth, and depth direction during the run"* is demonstrably exercised —
+the traversal-direction capability works and was used. And the map is doing real
+work: three nodes deferred and one resolved is a decomposition being managed, not
+a list being appended to. Neither reaches the user (ISS-299); both are real.
 
 ## 6. Sibling contrast — mandatory for every S4 candidate
 
