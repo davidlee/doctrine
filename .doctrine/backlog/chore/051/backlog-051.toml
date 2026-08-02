@@ -5,10 +5,10 @@ id = 51
 slug = "repair-the-pi-spawn-scripts-poll-reap-and-model-mapping"
 title = "Repair the pi spawn scripts' poll, reap and model mapping"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-30"
-updated = "2026-07-30"
+updated = "2026-08-02"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

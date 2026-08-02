@@ -5,10 +5,10 @@ id = 322
 slug = "make-pi-research-runners-tolerate-read-only-session-homes"
 title = "Make Pi research runners tolerate read-only session homes"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-26"
-updated = "2026-07-26"
+updated = "2026-08-02"
 tags = ["area:research", "harness:pi"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 266
-slug = "pi-wrapper-scripts-leave-stdin-open-so-pi-never-self-exits"
-title = "pi wrapper scripts leave stdin open so pi never self-exits"
+id = 304
+slug = "pi-agent-profiles-are-gitignored-so-the-runners-are-broken-on-a-fresh-clone"
+title = "pi agent profiles are gitignored, so the runners are broken on a fresh clone"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-07-27"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-02"
 updated = "2026-08-02"
-tags = ["area:agents", "area:research", "harness:pi"]
+tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
