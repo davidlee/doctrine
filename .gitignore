@@ -3,7 +3,8 @@
 /.envrc
 /.claude
 /.agents
-/.pi
+/.pi/*
+!/.pi/agents
 /.codex
 /.dirge
 /.mcp.json
