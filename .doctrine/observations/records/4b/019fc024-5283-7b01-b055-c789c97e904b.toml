@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc024-5283-7b01-b055-c789c97e904b"
+recorded_at = "2026-08-02T01:43:53.731750256Z"
+kind = "friction"
+summary = "audit: the campaign RV ledgers are split across two trees, so -p is mandatory for some and fatal for others"
+detail = "Disposing RV-341/RV-342 required reading the design ruling in RV-325. The handover's standing rule is to pass -p /workspace/doctrine on every review verb, because RV-341 and RV-342 were minted in the primary tree to dodge the ISS-279 cross-tree id collision. But RV-325 and the other five terminal ledgers live only on dispatch/233. So 'doctrine review show RV-325 -p /workspace/doctrine' fails with a bare file-not-found on review-325.toml, and the correct invocation is the SAME verb with the flag omitted and cwd in the coord tree. Cost one failed call plus a diagnosis round to work out that the rule is per-ledger rather than per-verb, and nothing in the error names the other tree as a candidate. A not-found on an entity that exists in a sibling worktree could say so."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
