@@ -48,19 +48,51 @@ CHR-049 or the evaluation kit, that is contamination:
 Seeing the title in a list is not contamination; opening the item is. The
 distinction is mechanical and readable from the transcript.
 
-## 3. Kickoff — the exact subject prompt
+## 3. Kickoff — a real handover, and one disclosed cut
 
 Start a fresh Claude Code session in `/workspace/doctrine`, on Opus 5, after the
-`0.35.1` plugin reload. Send exactly:
+`0.35.1` plugin reload.
 
-```
-SL-243
-```
+The kickoff is **not** a bare `SL-243`. A prior agent left a genuine handover for
+SL-243, and this repo's convention is that a first-message handover is read and
+followed. Withholding it would stage an artificial session, which defeats the
+point of running against genuine bytes in a genuine harness. It is pasted
+verbatim **except** for the two cuts below.
 
-Nothing else. No mention of design, of the run, or of this exercise. Letting the
-subject route naturally is itself part of what is being observed — including
-whether it reaches `explore.research`'s condition (`doctrine verify
-research-current`) on a slice that has no research round.
+| cut | why |
+|---|---|
+| *"(consider `/research` first — see open item 4)"* | it lands directly on `explore.research`, one of the five state-visible obligations S4 can reach, and directs the subject on the exact question under test |
+| the moderator-facing commentary after the `---` | addressed to the moderator, not the subject |
+
+**This is a modification of the stimulus, disclosed before the run, not a
+modification of a result.** The distinction is the whole of its defence: it is an
+experimental control over an input, recorded pre-run and reproducible. Had it
+been decided afterwards it would be the manoeuvre §4 forbids.
+
+### `explore.research` is desensitised regardless — registered pre-run
+
+**The cut does not decontaminate the obligation, and the sheet says so rather
+than claiming a clean instrument.** Open item 4 — *"whether the pre-design
+`/research` round adds anything over the grounding already cited"* — is authored
+into `.doctrine/slice/243/notes.md:36`, and the handover independently directs
+the subject to read that file. The subject meets the question either way. Fully
+removing the exposure would mean editing another agent's harvest to un-record a
+design question that genuinely exists, and that is refused: it distorts the
+design work in order to flatter the measurement.
+
+**The bias has a direction, and it governs how a null reads.** Priming the
+subject on the research question makes careful handling of that obligation *more*
+likely, not less. So this is a **sensitivity loss, not a false-positive risk** —
+and a non-firing on `explore.research` therefore **cannot** be read as evidence
+that its condition is well-stated. Recorded here because that is precisely the
+inference the write-up would otherwise make for free.
+
+**Effective S4 reach for this exercise: four obligations** — `explore.triage`,
+`review.scope`, `draft.selectors`, `review.passes` — against the instrument's
+nominal **5/9**. The write-up reports both numbers. A rate over a denominator the
+run never covered is what `VA-5` exists to catch.
+
+Routing is not scored, so the handover's `Next: /design` costs nothing.
 
 **Capture the subject's session id** (`/status` in that window) so its transcript
 can be located. Failing that it is the newest file by mtime under
@@ -136,6 +168,9 @@ S4 is collected **only** over the five state-visible obligations:
 `explore.research`, `explore.triage`, `review.scope`, `draft.selectors`,
 `review.passes`. The four it cannot reach — `explore.scope`, `explore.canon`,
 `explore.memory`, `inquire.knowledge` — are named, never subtracted.
+
+**For this exercise `explore.research` is desensitised** by the kickoff (§3), so
+four of the five are collectible. Both numbers are reported.
 
 | # | candidate | edge | step | stated condition unsatisfied? | sibling contrast | firing items 1–4 | verdict |
 |---|---|---|---|---|---|---|---|
