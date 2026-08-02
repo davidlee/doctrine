@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 13 · f6a51758
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 15 · a2e7910d
 
 ### Produced
 
@@ -26,6 +26,9 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 13 · f6a5
   attribute: `[priority]` and `[reservation]` are read out of band and are not
   fields of `DoctrineToml`, so the central struct would reject doctrine's own
   config today. Spawned by DEC-113
+- **DEC-114** — the capture-with-timeout argv runner moves to a leaf taking a
+  `Duration`; `coverage_verify` folds its result, the adapter reads it
+  unflattened; disposes `inq-6`. Carries the behaviour-preservation obligation
 - **Pre-design research round** — `research/research.md` + `research/raw/` (five
   threads). **Runtime tier, gitignored, disposable.** Its durable residue is
   DEC-111 and the `## Design surface triage` section below; do not treat the
@@ -55,12 +58,15 @@ rather than from a copy here. What the run cannot represent, and so lives here:
 - `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
   pass**, not parked indefinitely. A lifecycle move carries no reason field, so
   this note is the only record of where they route. See `## Routing` below.
-- `inq-6`, `inq-7` and `inq-9` are the open engineering questions; the triage
-  section states each with the evidence that bears on it. `inq-5` is disposed by
-  DEC-112 (triage entry Q-b) and `inq-8` by DEC-113 (Q-e).
+- `inq-7` and `inq-9` are the open engineering questions; the triage section
+  states each with the evidence that bears on it. `inq-5` is disposed by DEC-112
+  (triage entry Q-b), `inq-8` by DEC-113 (Q-e), `inq-6` by DEC-114 (Q-c).
 - Obligations the plan must carry, from those dispositions: the black-box golden
-  SPEC-013 `REQ-204` bills the verb (DEC-112), and the provenance block as part
-  of the report struct rather than a wrapper (DEC-113).
+  SPEC-013 `REQ-204` bills the verb (DEC-112), the provenance block as part of
+  the report struct rather than a wrapper (DEC-113), and `coverage_verify`'s
+  suites staying green **unchanged** across the runner extraction (DEC-114).
+- Open inside a settled decision: the extracted runner's name. DEC-114 records
+  the recommendation and the reasoning; it is not fixed.
 
 ## Design surface triage
 <!-- explore.triage, design run dr-019fc13a rev 5. Evidence: research/research.md -->
