@@ -248,6 +248,56 @@ this may be the only route to them rather than a bypass of delivered guidance.
 Recorded as an observation, not scored: the fragment covers inquiry craft, not
 step enumeration, and reading the asset may be entirely correct.
 
+### The engine verified a step the subject only attested — recorded because it corrects a self-report
+
+At 07:00Z the subject submitted `explore.research` with
+`"outcome":"attested"` and reported it discharged as attested. **Run state
+records it as `verified`.** The engine ran the shipped verifier rather than
+taking the caller's word.
+
+This is the `claimed`-band failure mode being resisted at the mechanism, and it
+is the single most useful thing observed so far about DEC-078's caller-declared
+weakness: where a step carries a verifier, the attestation is not load-bearing.
+It also means **a moderator scoring from the subject's own narration would have
+mis-scored this step** — the band came from run state, which is why the rubric
+derives bands from records rather than from what the agent says it did.
+
+### Emission tally at 07:02Z — eleven calls, one emission
+
+| verb | calls | emitted craft prose |
+|---|---|---|
+| `start` | 1 | no |
+| `show` | 3 | **no** |
+| `resume` | 1 | **yes** — `inquiry@98fffa6b…`, 2,808 B |
+| `apply` | 5 | no |
+| `--help` etc. | 1 | no |
+
+Three step discharges (`explore.scope`, `explore.research`, `explore.canon`),
+revision 4, `[fragments] fragment = []` — still **no receipts declared**, so no
+emission is being suppressed.
+
+**The `show`-path discriminator remains open, and has narrowed.** The subject has
+made no `show` call since 06:47:29, so the original question is unresolved — but
+five post-`resume` `apply` calls emitted nothing. Whether an `apply` counts as a
+"turn" for a fragment claiming every-turn delivery is a fair question and this
+sheet does not assume the answer: terse mutation responses are a defensible
+design. What is recorded is the measured fact — across eleven run calls and three
+discharges, craft prose was delivered **once**, on an explicit `resume`.
+
+That the subject stopped using the read path after four calls is itself an
+interaction observation, and it interacts with ISS-298 below.
+
+### `design show --full` widens nothing — filed as ISS-298
+
+`design show 243` and `design show 243 --full` returned byte-identical output
+(sha256 `4a3a9e273d97204e…`), and that output's own text says *"see `design show
+--full`"*. Filed mid-run as **ISS-298** rather than held, so it is not lost.
+
+Disclosed as a mid-run environment change: it adds a row to `backlog list`. The
+row names a `design show` flag and reveals nothing about the measurement, and the
+subject completed its routing before the run began, so the contamination risk is
+judged negligible — stated rather than assumed.
+
 ### Inquiry map
 
 Empty at 06:49Z — `next_seq = 0`, no nodes, cursor unset, posture

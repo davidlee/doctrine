@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc148-3b16-7491-8279-76eec188acf9"
+recorded_at = "2026-08-02T07:02:44.24632141Z"
+kind = "friction"
+summary = "design run onboarding costs four calls before the first useful orientation (/design, CHR-049 subject run)"
+detail = "Observed in the CHR-049 measurement exercise, subject run dr-019fc13a. The subject spent 'doctrine design start 243', 'design show' (bare, 142B refusal), 'design show 243' (819B), 'design show 243 --full' (identical 819B) before reaching anything actionable; --full returned byte-identical output to the plain form. Craft prose arrived only on an explicit 'design resume' (2808B), the fifth call. Moderator's summary: 'took 4 calls to say hello'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
