@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc26c-41ac-7d53-831e-17c6d44be10c"
+recorded_at = "2026-08-02T12:21:42.444815689Z"
+kind = "friction"
+summary = "/preflight: doctrine memory retrieve rejects a positional query"
+detail = """Called `doctrine memory retrieve "design run turn envelope ..."` during /preflight on IMP-390; refused with 'unexpected argument'. The sibling verb `memory search` DOES take a positional, so the family is inconsistent at the shell and the refusal names no alternative — it prints usage but does not say 'did you mean search?' or which option carries the query. One wasted call plus a re-read of --help. Same class as the item under preflight (IMP-390): the refusal names the objection, not the remedy."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
