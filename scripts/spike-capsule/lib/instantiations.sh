@@ -1589,18 +1589,45 @@ H8_assert() {
 # mechanism does claim — containment of the filesystem escape — together with
 # the non-vacuity clauses without which that claim means nothing.
 #
-# ── heavy is not instantiable, and the row says so out loud (F-P05-33) ──────
+# ── THE TWO FIXTURES REFUSE THIS ROW AT DIFFERENT BOUNDARIES (D-P05-15) ────
 #
 # H11's payload must be BOTH admitted by conform AND executed by the fixture's
-# own `verify:` command. On light those two sets intersect: `npm test` is
-# `node --test src/*.test.ts` and `src/**` is SL-001's design target. On heavy
-# they are disjoint — `just web-build && cargo test` executes only undeclared
-# paths, and everything SL-241 declares is shell that the Rust build never
-# reads. `_mutate` therefore REFUSES the heavy fixture rather than planting an
-# inert file, because an unexecuted payload's absent sentinel reads exactly like
-# containment. That is this phase's recurring vacuity trap, caught at the plant.
+# own `verify:` command, and no other row needs both. Where those two sets fall
+# is a property of the fixture, and the two fixtures differ:
+#
+#   light   `npm test` is `node --test src/*.test.ts`, and `src/**` is SL-001's
+#           design target. The sets INTERSECT: the payload is admitted, and the
+#           test runner's own glob executes it. The claim is CONTAINMENT, at
+#           `verify`, and it is the only place in the matrix the sandbox profile
+#           is the thing under test.
+#   heavy   `just web-build && cargo test` evaluates build systems for real —
+#           `cargo` runs a root `build.rs`, which is the class-2 trigger this
+#           row is named for. But the root is not under `scripts/spike-capsule/**`,
+#           so conform REFUSES it at leg 2 and the sandbox is never reached.
+#
+# The earlier reading of this was "heavy is not instantiable" (F-P05-33), and
+# the disposition it proposed was an `n/a`. That understates what was measured.
+# Class-2 triggers live at repo ROOTS (`build.rs`, `package.json`); slice design
+# targets are SUBDIRECTORIES. So conform's default-deny dissolves the hazard
+# unless a slice declares a root build file — a property of the MODEL, holding
+# on both fixtures, and a better result than the row was written expecting.
+# Heavy therefore scores at `conform/undeclared-path`: the trigger is live, and
+# the selector gate is what stops it.
+#
+# What that costs, stated rather than implied: the sandbox-containment claim is
+# exercised on LIGHT ONLY. The row's altitude is earned by two different
+# boundaries, which the results table cannot say — F-P05-35 says it instead.
+#
+# The vacuity trap is still the thing to fear here, and it moved rather than
+# went away: on heavy the payload must be planted where cargo REALLY runs it, or
+# the refusal is of an inert file at an undeclared path and says nothing about a
+# trigger. `c3_h11_reachable` is that question asked mechanically, per fixture.
 
-C3_H11_PAYLOAD=h11-payload.test.ts
+C3_H11_PAYLOAD_LIGHT=h11-payload.test.ts
+# The root build script, and nothing else will do: cargo auto-detects
+# `build.rs` at the package root and runs it before it compiles anything. A
+# `build.rs` planted anywhere else is a file cargo never opens.
+C3_H11_PAYLOAD_HEAVY=build.rs
 C3_H11_RECORD=h11-executed
 C3_H11_CANARY_PORT=45711
 # The listener's own deadline, and it has to EXCEED the verify bound it spans
@@ -1613,10 +1640,19 @@ C3_H11_CANARY_MARK='h11 payload reached the canary'
 C3_H11_CANARY_KNOCK='h11 rig knock'
 C3_H11_CANARY_PID=''
 
-# c3_h11_path <fixture> — where the payload goes. Under the design-target
-# directory like every other row, and — unlike every other row — also required
-# to be a path the `verify:` command runs.
-c3_h11_path() { printf '%s/%s' "$(c3_design_target_dir "$1")" "${C3_H11_PAYLOAD}"; }
+# c3_h11_path <fixture> — where the payload goes, and the ONE row where this is
+# not `c3_design_target_dir` plus a name. Every other row plants somewhere
+# conform will admit; this one plants where the `verify:` command will RUN, and
+# on heavy those are different places. Choosing the executed path over the
+# admitted one is what makes heavy's refusal a measurement instead of a
+# tautology.
+c3_h11_path() {
+  case "$1" in
+    light) printf '%s/%s' "$(c3_design_target_dir "$1")" "${C3_H11_PAYLOAD_LIGHT}" ;;
+    heavy) printf '%s' "${C3_H11_PAYLOAD_HEAVY}" ;;
+    *) rig_die "no H11 payload path for fixture: $1" ;;
+  esac
+}
 
 # c3_h11_reachable <fixture> <path> — DOES THIS FIXTURE'S `verify:` COMMAND
 # EXECUTE THIS PATH? F-P05-33's question, asked mechanically so the next
@@ -1634,6 +1670,11 @@ c3_h11_path() { printf '%s/%s' "$(c3_design_target_dir "$1")" "${C3_H11_PAYLOAD}
 c3_h11_reachable() {
   case "$1" in
     light) case "$2" in src/*.test.ts) return 0 ;; esac ;;
+    # Heavy's is not a glob but a fixed filename at a fixed place, because
+    # that is how cargo finds a build script: package root, `build.rs`, run
+    # before the crate compiles. Reachable and UNDECLARED are both true here,
+    # and the row exists to show they can be.
+    heavy) case "$2" in build.rs) return 0 ;; esac ;;
   esac
   return 1
 }
@@ -1763,24 +1804,108 @@ test('h11 hostile payload', async () => {
 PAYLOAD
 }
 
+# c3_h11_write_payload_rs <file> <escape-target>
+#
+# Heavy's half, and it is a REAL build script rather than a stand-in. Nothing
+# runs it — conform refuses the path two stages upstream — so the temptation is
+# to plant a marker file and call it a build.rs. That would make the refusal a
+# refusal of a text file that happens to be named `build.rs`, and the row's
+# claim is about a LIVE trigger being stopped by the selector gate rather than
+# by luck. What is planted is what cargo would compile and run.
+#
+# It mirrors the light payload act for act — escape, then canary — so the two
+# fixtures differ in ecosystem and in nothing else. `main()` is the whole build
+# script: cargo builds this file and executes the binary before it touches the
+# crate, which is precisely why class 2 is worth a row of its own.
+c3_h11_write_payload_rs() {
+  cat >"$1" <<PAYLOAD
+// ${C3_PAYLOAD_MARK}: planted by the P-C3 rig (SL-241 PHASE-05, H11).
+use std::fs;
+use std::io::Write;
+use std::net::TcpStream;
+
+fn main() {
+    let mut note = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("${C3_H11_RECORD}")
+        .expect("h11: the execution record is the row's non-vacuity clause");
+    let _ = writeln!(note, "cwd={}", std::env::current_dir().unwrap_or_default().display());
+
+    // 1 — the filesystem escape, at a HOST path outside every mount the
+    // profile grants.
+    match fs::write("$2", "h11 escaped\n") {
+        Ok(()) => { let _ = writeln!(note, "escape=WROTE"); }
+        Err(e) => { let _ = writeln!(note, "escape=denied:{:?}", e.kind()); }
+    }
+
+    // 2 — the network canary. The attempt is recorded here; the ARRIVAL is
+    // recorded trusted-side, because a capsule's account of its own egress is
+    // capsule-authored and I4's rule about verdicts applies to observations.
+    match TcpStream::connect(("127.0.0.1", ${C3_H11_CANARY_PORT})) {
+        Ok(mut s) => {
+            let _ = s.write_all(b"${C3_H11_CANARY_MARK}\n");
+            let _ = writeln!(note, "canary=connected");
+        }
+        Err(e) => { let _ = writeln!(note, "canary=refused:{:?}", e.kind()); }
+    }
+
+    // NEVER FAIL THE BUILD. A build script exiting nonzero moves the observed
+    // refusal to \`verify/suite-failed\` — a different row, at the same
+    // boundary, for a reason that has nothing to do with the hazard.
+    println!("cargo:rerun-if-changed=build.rs");
+}
+PAYLOAD
+}
+
 H11_mutate() {
   local run=$1 fixture=$2 repo path
   repo=$(c3_capsule_repo "${run}")
   path=$(c3_h11_path "${fixture}")
 
+  # Still fatal, and for the reason it always was: a payload the `verify:`
+  # command never runs is a plant that cannot fire, and its absent sentinel
+  # reads exactly like containment. What changed is that heavy now HAS such a
+  # path — it is simply one conform will not admit (D-P05-15).
   c3_h11_reachable "${fixture}" "${path}" ||
-    rig_die "H11: ${fixture}'s verify command never executes ${path} — F-P05-33, and an inert plant would score as containment"
+    rig_die "H11: ${fixture}'s verify command never executes ${path} — an inert plant would score as containment"
 
-  c3_h11_canary_start "${run}"
   mkdir -p -- "$(dirname -- "${repo}/${path}")"
-  c3_h11_write_payload "${repo}/${path}" "$(c3_h11_escape_target "${run}")"
-  c3_commit "${run}" 'H11: a hostile test-time payload at a declared path' "${path}"
+  case "${fixture}" in
+    light)
+      # The canary is armed for the fixture that REACHES the sandbox and
+      # nowhere else. On heavy the pipeline refuses two stages upstream, so a
+      # listener would only ever record silence, and silence from a payload that
+      # never ran is the measurement this row refuses to take.
+      c3_h11_canary_start "${run}"
+      c3_h11_write_payload "${repo}/${path}" "$(c3_h11_escape_target "${run}")"
+      ;;
+    heavy) c3_h11_write_payload_rs "${repo}/${path}" "$(c3_h11_escape_target "${run}")" ;;
+  esac
+  c3_commit "${run}" "H11: a hostile ${path} the verify command runs" "${path}"
   c3_publish "${run}"
 }
 
 H11_planted() {
-  local run=$1 fixture=$2 path
+  local run=$1 fixture=$2 path repo
   path=$(c3_h11_path "${fixture}")
+
+  # ── heavy: the trigger is LIVE, and that is the whole positive control ─────
+  #
+  # There is no canary and no sandbox here, so what has to be shown is that the
+  # thing conform refuses is a build script cargo would really have run. Read
+  # off the TREE (a `Cargo.toml` beside it at the package root) rather than off
+  # `c3_h11_reachable`'s case statement, which is the rig agreeing with itself.
+  if [ "${fixture}" = heavy ]; then
+    repo=$(c3_capsule_repo "${run}")
+    c3_h11_reachable "${fixture}" "${path}" || return 1
+    c3_planted_paths "${run}" "${path}" >/dev/null || return 1
+    [ -f "${repo}/Cargo.toml" ] || return 1
+    [ "$(dirname -- "${path}")" = '.' ] || return 1
+    printf 'a hostile %s at the cargo package root, which "%s" runs; undeclared by the fixture slice' \
+      "${path}" "$(contract_field "${run}" verify)"
+    return 0
+  fi
 
   # Reachability FIRST, because it is this row's version of "the payload
   # landed": a file the `verify:` command never runs is a plant that cannot
@@ -1809,6 +1934,22 @@ H11_planted() {
 H11_assert() {
   local run=$1 fixture=$2 at="H11/$2/$3/$4" path record arrivals
   path=$(c3_h11_path "${fixture}")
+
+  # ── heavy: refused at conform, and the row says what that does NOT prove ───
+  if [ "${fixture}" = heavy ]; then
+    c3_assert_stage_passed "${at}" "${run}" harvest
+    c3_assert_ingested "${at}" "${run}" "${path}"
+    # THE CLAUSE THAT KEEPS THIS HONEST. Everything a containment row asserts is
+    # shaped like an absence, and every one of those absences holds here for a
+    # reason that has nothing to do with the sandbox: it was never built. Saying
+    # so mechanically means a later change that DID admit this path — a fixture
+    # slice declaring `build.rs`, say — reds this cell instead of quietly
+    # rescoring it as containment evidence.
+    rig_assert "${at}: the verify capsule was NEVER BUILT — this cell claims no containment" \
+      c3_no_execution_in "${run}/stages" 'stage=verify'
+    return 0
+  fi
+
   # The capsule's writable root is bound at /capsule and provisioned to
   # /capsule/repo, so what the payload wrote relative to its cwd is readable
   # here without the rig ever entering the sandbox.

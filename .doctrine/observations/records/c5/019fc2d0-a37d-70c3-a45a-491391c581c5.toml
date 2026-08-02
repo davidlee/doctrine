@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc2d0-a37d-70c3-a45a-491391c581c5"
+recorded_at = "2026-08-02T14:11:21.085556273Z"
+kind = "friction"
+summary = "/consult: the PHASE-05 runtime sheet exceeds the Read cap and must be paged"
+detail = "SL-241 phase-05.md is 2179 lines / ~55k tokens. A fresh context routed to /consult (handover said 'read it before anything else') hits the tool's 25k cap on the first Read and has to fall back to grep+offset paging to reach the Findings section, which is at line 983 of 2179. The sheet accumulates every task's full narrative for the phase's lifetime, so cost grows monotonically and every later consult/handover pays it. A findings-first ordering, or a per-task split, would make the tail cheap to reach."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

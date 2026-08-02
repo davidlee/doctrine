@@ -980,24 +980,44 @@ mid-phase would convert a legible structural finding into a silent pass.
   disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). **It wants an
   operator decision before it starts.** Correction recorded in the runtime
   sheet's T4c entry.
-- **H11 CANNOT BE SCORED UNTIL TWO OPERATOR CALLS LAND**, both measured, both in
-  the runtime sheet with the probe log `drivers/T4d-h11-probe.log`:
-  - **F-P05-32 — the canary clause.** The verify capsule shares the network
-    namespace by EX-2's construction (`--unshare-all` then `--share-net`;
-    `--kind` never reaches the mount array) and EX-7 wants egress for the worker
-    capsule. Recommendation: re-derive H11's boundary as *filesystem containment
-    at `verify`*, record the network half as dissolved-against-the-profile with
-    the measurement attached, and spawn a backlog item asking whether the verify
-    capsule should get `--no-net` — `cargo test` and `npm test` have no business
-    reaching the network, and EX-2 could be refined to "same MOUNT posture".
-  - **F-P05-33 — the heavy cell.** No path is both admitted by conform and
-    executed by `just web-build && cargo test` under SL-241's selectors, so
-    heavy can be planted or executed, never both. Options: `n/a` with the
-    measured reason (drops H11 to `client-local` via `cell_altitude 1 1 0 0`);
-    or run heavy with an inert plant so the execution-evidence clause reds and
-    the `n/a` is EARNED, at ~2 heavy verify runs; or amend SL-241's selectors —
-    declined, since authored governance edited to make a rig cell live would
-    move every other heavy cell's conform semantics.
+- **~~H11's two operator calls~~ BOTH LANDED 2026-08-02, and H11 is SCORED** —
+  `rig c3 H11` exit 0, 80 assertions, 0 FAIL, all four cells `pass`, row
+  `model-level`. Thirteen of sixteen rows now carry scored results.
+  - **F-P05-32 → D-P05-14 — egress is ALLOWLISTED, not binary.** The framing was
+    `--share-net` vs `--no-net`; the answer is a trusted-side allowlist naming
+    exactly the build hosts, with **content per capsule kind** so the agent
+    hosts are absent (deny-all) when no agent runs. The coupling that creates —
+    the worker kind's list names the model/harness endpoints — is **ADR-011 D3's
+    per-harness capability layering**, not a new axis, and per-kind lists are
+    what stop it becoming that ADR's "uniform altitude lie". EX-2 restates as
+    *same mount posture, same egress MECHANISM, allowlist content per kind*.
+    H11's canary clause stays measured-and-unscored **gated on QUE-204**, not
+    unclaimed indefinitely: the two share one lever and settling them apart is
+    how the earlier recommendation came to contradict QUE-204's own measurement.
+    Feasibility is established, not assumed — `tinyproxy` and `iproute2` are
+    installed, `socat`/`python3` were already there, and all are DQ-4-clean
+    (in neither declaration's `exec:` list). Topology: no route at all, a unix
+    socket bound in, the proxy the sole chokepoint — which forces an EXPLICIT
+    proxy and is fail-closed by construction. **Not built; work not yet placed.**
+  - **F-P05-33 → D-P05-15 — heavy is NOT `n/a`; it scores at `conform`.** The
+    trigger is live on heavy (cargo really runs a root `build.rs`) and
+    undeclared, so conform refuses it at leg 2 — one boundary EARLIER than § 5.6
+    predicted, cheap (no verify capsule), and a result rather than an absence.
+    Generalised in F-P05-35: class-2 triggers live at repo ROOTS, slice design
+    targets are SUBDIRECTORIES, so conform dissolves the build-evaluation hazard
+    unless a slice declares a root build file — true on BOTH fixtures. The light
+    instantiation was stale in the same way (`postinstall` never runs under `npm
+    test`); the row plants a test file, so light is vector-class **1** and heavy
+    **2**, now stated per fixture in `matrix.tsv`.
+  - **What it cost, recorded** (F-P05-36): H11's `model-level` is earned by two
+    DIFFERENT boundaries, so the sandbox-containment claim is exercised on light
+    only. The row asserts that explicitly rather than leaving the table to imply
+    otherwise. A fixture-local slice for heavy declaring `build.rs` would prove
+    containment there — rejected on cost, not principle (light's SL-001 is
+    itself rig-fabricated, so a fixture slice is not the governance edit it
+    looks like). Latent and not amended: `cell_altitude`'s `client-local` is
+    overloaded — it means both "one fixture FAILED" and "the other had nothing
+    to plant", with contradictory labels asserted three lines apart.
 - **DEC records are OWED at close for D-P05-6..13** — the sheet's convention is
   "lift to notes.md at close", so they were deliberately not minted mid-phase
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
