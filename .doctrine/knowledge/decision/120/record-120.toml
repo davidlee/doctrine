@@ -1,0 +1,69 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 120
+slug = "condition-satisfaction-is-derived-attested-or-claimed"
+title = "Condition satisfaction is derived, attested, or claimed"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-02"
+updated = "2026-08-02"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "RFC-022"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "DEC-088"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "DEC-101"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "DEC-102"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "ISS-285"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition-kind taxonomy"
+target = "IMP-361"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
