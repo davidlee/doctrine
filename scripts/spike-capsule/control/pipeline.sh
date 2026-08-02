@@ -113,6 +113,40 @@ canonical_objects() {
     awk '/^count:/ { c = $2 } /^in-pack:/ { p = $2 } END { print c + p }'
 }
 
+# quiesce_clone <repo>
+#
+# A freshly provisioned clone must change ONLY when the pipeline changes it.
+# Two inheritances break that, and both are invisible until something reds
+# (F-P05-28):
+#
+#   1. A local clone copies `objects/` WHOLESALE, so it inherits the source's
+#      COMMIT-GRAPH — a derived cache. The clone keeps a narrower ref set than
+#      the source (the heavy fixture keeps `refs/heads` + `refs/tags` only), so
+#      commits the graph names arrive UNREACHABLE. They survive as `dangling`
+#      and fsck is content — until something prunes them, at which point the
+#      graph names a commit that is gone and `git fsck` exits 16. The harvester
+#      fscks the whole quarantine, so that lands as `harvest/fsck-failed`,
+#      attributed to the capsule. A derived cache carried across a clone
+#      boundary is stale by construction; a probe has no business inheriting it.
+#
+#   2. Git's own AUTO-MAINTENANCE is what does the pruning, triggered by the
+#      harvest fetch inside the run. It also repacks — and `canonical_objects`
+#      counts objects, so background housekeeping can move the very number I1's
+#      falsifiability rests on. A measurement whose subject is being tidied up
+#      underneath it is not a measurement.
+#
+# Both are disabled rather than tolerated. This is rig hygiene, not a claim
+# about the capsule model: nothing here changes what a stage may do.
+quiesce_clone() {
+  local repo=$1
+  rm -rf -- "${repo}/.git/objects/info/commit-graph" \
+    "${repo}/.git/objects/info/commit-graphs"
+  git -C "${repo}" config core.commitGraph false
+  git -C "${repo}" config fetch.writeCommitGraph false
+  git -C "${repo}" config gc.auto 0
+  git -C "${repo}" config maintenance.auto false
+}
+
 # ── setup / teardown ─────────────────────────────────────────────────────────
 
 # pipeline_setup <label> <fixture-repo> <declaration> [slice-id] [stub-path]
@@ -136,6 +170,7 @@ pipeline_setup() {
   # object would corrupt the thing it was cloned from. It is the difference
   # between a copy and an alias.
   git clone --no-hardlinks --quiet -- "${fixture}" "${run}/canonical"
+  quiesce_clone "${run}/canonical"
 
   # The accepted ref is READ FROM THE FIXTURE, never hardcoded. The light
   # fixture's trunk is `mainline` precisely so that anything assuming `main`
@@ -146,6 +181,7 @@ pipeline_setup() {
   base=$(git -C "${run}/canonical" rev-parse --verify "${accepted}")
 
   git clone --no-hardlinks --quiet -- "${run}/canonical" "${run}/quarantine"
+  quiesce_clone "${run}/quarantine"
   git -C "${run}/quarantine" config fetch.fsckObjects true
 
   # The declaration, pinned control-plane-side as a SIBLING of canonical. This
