@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc03f-a729-7e73-a2a4-b8c1a635fba6"
+recorded_at = "2026-08-02T02:13:44.873850263Z"
+kind = "friction"
+summary = "close/dispatch: prepare-review gate reads the PRIMARY tree's phase sheets, which never learn about phases added to the plan mid-drive"
+detail = "SL-233 landing. dispatch sync --prepare-review bails: 'recorded row for PHASE-13/14/15/16, which is not a completed phase'. The message reads as a record-delta problem and sends you to record-delta; it is not one. dispatch.rs step (4) upserts every committed-ledger row into the primary registry at <primary>/.doctrine/state/slice/NNN/boundaries.toml, then step (5) gates with registry_completeness(&primary,&primary,slice) whose completed-set is completed_phase_ids(primary) — the PRIMARY tree's runtime phase sheets. SL-233 planned PHASE-13..16 during the drive, on dispatch/233 (commits 4758da7a6, 001e28a81). Those four phases exist in the coord tree's plan.toml (16) and its phase sheets (16, all completed), but edge's authored plan.toml still has 12 and the primary has only 12 sheets. So recorded=16, completed=12, and the four newest phases report as Extra with zero Missing. The gate assumes the primary knows every phase, which holds only when the plan is fully authored before dispatch begins. Cost: roughly forty minutes and several wrong turns, most of them spent because .doctrine/dispatch/NNN/boundaries.toml exists and looks like the registry while the real one is .doctrine/state/slice/NNN/boundaries.toml — two same-named files, one authored-looking and one runtime, and the error names neither path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
