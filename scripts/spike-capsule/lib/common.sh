@@ -159,6 +159,30 @@ RIG_BUNDLE=result.bundle
 # shellcheck disable=SC2034
 RIG_QUARANTINE_REF=refs/heads/quarantine-result
 
+# ── the bundle-hygiene mutators (EX-3's four legs) ──────────────────────────
+#
+# Shared rather than probe-local: `selftest_bundle` (A-1's bundle section) and
+# P-C3's H13 attack the SAME artifact at the same path, and two copies would be
+# two places for the attack to drift from the boundary it is measuring. Each
+# takes the bundle path and nothing else, so a caller supplies its own scenario.
+#
+# The fourth leg — the size cap — is deliberately NOT here. It is a THRESHOLD
+# (`RIG_BUNDLE_CAP`), not a mutation of the artifact: the leg bites on an honest
+# bundle, which is the whole point of capping below the real size rather than
+# forging an oversized file.
+
+# A symlink at the bundle path is RT-4's first attack verbatim. The target is
+# deliberately NONEXISTENT: that is the case which proves the leg ORDER, since
+# an `-e` test would report it as merely absent and score the attack as an
+# ordinary missing file.
+bundle_symlink() {
+  rm -f -- "$1"
+  ln -s /nonexistent/target "$1"
+}
+bundle_remove() { rm -f -- "$1"; }
+bundle_truncate() { printf 'PACK' >"$1"; }
+bundle_leave() { :; }
+
 # ── the doctrine binary the rig calls (conform leg 2) ────────────────────────
 #
 # The documented ladder, not a bare `doctrine`: the corpus verbs must come from

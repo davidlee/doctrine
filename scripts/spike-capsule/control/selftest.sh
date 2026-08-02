@@ -295,17 +295,8 @@ bundle_case() {
   pipeline_teardown "${run}"
 }
 
-# A symlink at the bundle path is RT-4's first attack verbatim. The target is
-# deliberately NONEXISTENT: that is the case which proves the leg ORDER, since
-# an `-e` test would report it as merely absent and score the attack as an
-# ordinary missing file.
-bundle_symlink() {
-  rm -f -- "$1"
-  ln -s /nonexistent/target "$1"
-}
-bundle_remove() { rm -f -- "$1"; }
-bundle_truncate() { printf 'PACK' >"$1"; }
-bundle_leave() { :; }
+# The four mutators live in `lib/common.sh` — H13 attacks the same artifact at
+# the same path, and one copy is what keeps the two from drifting apart.
 
 selftest_bundle() {
   printf '\nbundle hygiene — EX-3, all four legs OBSERVED refusing (RT-4/F-6)\n'
