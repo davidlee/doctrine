@@ -10,8 +10,10 @@ fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
 T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
 5/5; **H7 alone remains, and it wants an operator decision**), T4d PART-DONE
-(H8 scored 100/0 + falsified 3/3; H11 remains). **Twelve of sixteen rows carry
-scored results: H1–H6 H8 H9 H12 H13 H14 H15** · last SL-241 commit `d1e67fb7`
+(H8 scored 100/0 + falsified 3/3; **H11's light half built and falsified 5/5 but
+UNSCORED** — F-P05-32 and F-P05-33 both owe an operator call). **Twelve of
+sixteen rows carry scored results: H1–H6 H8 H9 H12 H13 H14 H15** ·
+last SL-241 commit `f4c61fa4`
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
@@ -188,6 +190,34 @@ Lifted here so the ids survive the sheet:
   F-P05-14/18/26 trap made reproducible**: planted at an undeclared path the
   cell refuses `conform/undeclared-path` while `planted?` stays LIVE, so the
   positive control cannot see it and only the observed token can.
+
+- **T4d — H11's light half BUILT AND FALSIFIED, NOT SCORED** (`aba9268f`,
+  `f4c61fa4`). The first row whose subject is EXECUTION: the payload has to pass
+  all four conform legs and then be RUN by the fixture's own `verify:` command.
+  Light plants a `src/*.test.ts` that `node --test src/*.test.ts` executes in
+  the verify capsule. **Filesystem escape CONTAINED** — the host path is not in
+  the namespace at all, asserted with the payload's own `escape=denied` beside
+  it so the absence is not an absence of anything tried. **Network canary
+  REACHED, and deliberately unscored** (F-P05-32): `--unshare-all` then
+  `--share-net` is the profile, `--kind` never reaches the mount array, and EX-2
+  says both capsule kinds get the same posture — so "canary unreached" is an
+  inherited expectation no mechanism makes, and asserting it either way would
+  settle a design question from inside a test. **Heavy is refused at the plant**
+  (F-P05-33): its payload would have to be both admitted by conform and executed
+  by `just web-build && cargo test`, and those sets are disjoint under SL-241's
+  selectors. Shakeout 12/0 on both mechanisms; falsified 5/5, no survivors, 2
+  controls — **M22 is the row's reason for existing** (an inert payload leaves
+  the containment clause passing anyway) and **M18 found a real defect**
+  (F-P05-34). `audit-dq4` refused the first canary, which ran `node`
+  trusted-side; the listener is `socat` now — guard kept, dependency dropped.
+  **Not scored**: `rig c3 H11` runs the heavy cells too.
+- **`expect_assert` — a third entry point in the falsifiability round**
+  (`drivers/falsify-lib.sh`, runtime). H11's reds land inside `_assert`, which
+  neither `expect_planted` nor `expect_refusal` reaches. It runs the full leg,
+  then calls `_assert` with its verdicts captured and its failures rolled back
+  out of the round's own count, and **the red count doubles as the isolation
+  control** — "exactly one clause red, and it is this one" says in one line what
+  a separate isolation function says in several.
 
 **PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
 `090148ef..5f42727b`):**
@@ -901,6 +931,28 @@ mid-phase would convert a legible structural finding into a silent pass.
   cells append rows indistinguishable from real ones. Point it at a scratch root
   **outside the sibling repo** (inside, I6 correctly refuses) with `fixtures`
   symlinked in.
+- **a `${x:-DEFAULT}` is only inert if the default is inert IN THE COMMAND BELOW
+  IT** (F-P05-34) — H11's arming check used `kill -0 "${PID:-0}"` to keep
+  `set -u` quiet, and `kill -0 0` addresses the caller's own process group and
+  SUCCEEDS. The guard passed for exactly the state it existed to catch, and the
+  mutant that no-op'd the arming survived its first sweep. Every `:-` wants the
+  question *what does this value mean to the command that consumes it?*
+  **Candidate memory.**
+- **the audit that fires on your own new code is the audit working** — the first
+  H11 canary was six lines of `node`, trusted-side, and `audit-dq4` refused it
+  because `node` is a light `exec:` token. The listener read no project content,
+  which is precisely the argument an exemption would have been built on. Drop
+  the dependency, keep the bright line: `socat` is in neither fixture's list.
+  F-P05-3 predicted this audit would catch a payload-bearing row reaching for
+  the project's toolchain, and it did, first run, against the named row.
+- **a clause a mechanism does not make is not the row's to assert** — H11's
+  matrix observable asks for `canary unreached`; the profile shares the network
+  namespace by EX-2's construction. Asserting `unreached` reds a profile
+  behaving as designed; asserting `reached` enshrines egress as intended. The
+  row MEASURES it, names the finding, and refuses to launder either into a
+  verdict (F-P05-32). Scoring a design question from inside a test is the
+  failure mode; `--no-net` would have greened the row in one line and retired
+  EX-2's uniformity claim silently.
 
 ### Open
 
@@ -928,6 +980,24 @@ mid-phase would convert a legible structural finding into a silent pass.
   disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). **It wants an
   operator decision before it starts.** Correction recorded in the runtime
   sheet's T4c entry.
+- **H11 CANNOT BE SCORED UNTIL TWO OPERATOR CALLS LAND**, both measured, both in
+  the runtime sheet with the probe log `drivers/T4d-h11-probe.log`:
+  - **F-P05-32 — the canary clause.** The verify capsule shares the network
+    namespace by EX-2's construction (`--unshare-all` then `--share-net`;
+    `--kind` never reaches the mount array) and EX-7 wants egress for the worker
+    capsule. Recommendation: re-derive H11's boundary as *filesystem containment
+    at `verify`*, record the network half as dissolved-against-the-profile with
+    the measurement attached, and spawn a backlog item asking whether the verify
+    capsule should get `--no-net` — `cargo test` and `npm test` have no business
+    reaching the network, and EX-2 could be refined to "same MOUNT posture".
+  - **F-P05-33 — the heavy cell.** No path is both admitted by conform and
+    executed by `just web-build && cargo test` under SL-241's selectors, so
+    heavy can be planted or executed, never both. Options: `n/a` with the
+    measured reason (drops H11 to `client-local` via `cell_altitude 1 1 0 0`);
+    or run heavy with an inert plant so the execution-evidence clause reds and
+    the `n/a` is EARNED, at ~2 heavy verify runs; or amend SL-241's selectors —
+    declined, since authored governance edited to make a rig cell live would
+    move every other heavy cell's conform semantics.
 - **DEC records are OWED at close for D-P05-6..13** — the sheet's convention is
   "lift to notes.md at close", so they were deliberately not minted mid-phase
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
