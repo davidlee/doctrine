@@ -33,3 +33,88 @@ No DEC / QUE / ASM minted — the open items are design questions held in
 3. Which spec owns the identifier-form convention, where IMP-316 leg 2 overlaps
    this slice's `qualified_name` corroboration. Requirement membership is not
    exclusive, so this is a preference for clean boundaries, not a blocker.
+
+## Design surface triage
+<!-- explore.triage, design run dr-019fc13a rev 5. Evidence: research/research.md -->
+recorded: 2026-08-02 · stage:design/exploring
+
+Everything below is sourced from `.doctrine/slice/243/research/research.md`,
+which carries the citations and the ✓ verification marks. Ids only here.
+
+### The three carried questions, now answered by evidence
+
+1. **Spec home** → new component spec, parent SPEC-006, descends from PRD-012,
+   C4 component, sibling of SPEC-017. The rejected alternative (amend SPEC-017)
+   and the strongest argument for it are recorded in research.md so design can
+   close it rather than reopen it.
+2. **PRD-012 requirements** → the gap is real and narrow. REQ-085 (anchor shape)
+   and REQ-088 (hand/import convergence) already exist and must not be
+   re-required; nothing across REQ-081..089 requires a *report*.
+3. **Identifier-form convention** → SPEC-017 owns it (it defines the field
+   semantics at REQ-232, and IMP-316 names it as the site). This slice cites it;
+   IMP-316 enforces it.
+
+### New questions the round opened — design must settle these
+
+- **Q-a. In-process read vs the JSON contract.** The scope's phrasing implies
+  `spec list --json` carries anchors; ✓ it does not. The verb should ride
+  `build_registry`/`scan_ids` in-process. Design must record that, and record
+  that the two paths must agree (the 48/81 baseline is the check).
+- **Q-b. Envelope or raw struct for `--json`.** SPEC-013 owns `json_envelope` as
+  the invariant for numbered-entity `list` verbs; `graph` lawfully opts out.
+  This report is closer to `graph`. Must be argued against SPEC-013, not chosen
+  by taste — and with it, whether `spec anchors` flattens `CommonListArgs` (it
+  should not).
+- **Q-c. One argv runner or two.** `coverage_verify::run_argv` has the right
+  capture/timeout behaviour but a VT-shaped return type; `verify::run_suite` has
+  the wrong stdio posture. Extract a shared helper or justify a second — this
+  decides module boundaries, so it is design-level, not plan-level.
+- **Q-d. Lint the adapter crate, or exempt it.** ✓ A member absent from the
+  root's `[dependencies]` is never clippy-linted by `just lint`. Widening to
+  `--workspace` costs the new-crate lint checklist
+  (`cargo_common_metadata` + pedantic doc lints).
+- **Q-e. How the report says "no adapter declared".** ✓ Config parsing is
+  tolerant (no `deny_unknown_fields`), so a mistyped table name is
+  indistinguishable from absence, and "absent ⇒ owned no-op" would then report
+  the whole corpus as uninventoried. The output must distinguish the two.
+- **Q-f. Is d2 wanted at all?** No d2 or mermaid renderer exists for the graph
+  projection; DOT does, and is already deterministic. If d2 is kept, it must not
+  fork `dot_escape` a third time.
+
+### Constraining governance (beyond what the scope already names)
+
+- **SPEC-013 (CLI surface)** — missed by the research thread, surfaced by the
+  canon pass. Owns the verb grammar, the `json_envelope` invariant, the pure
+  `src/listing.rs` leaf, and the conformance-matrix + black-box-golden regime.
+  A new verb owes a golden.
+- **SPEC-010 (Skills distribution)** — O5 edits the master at
+  `plugins/doctrine/skills/spec-coverage-assessment/SKILL.md:67`. `.agents/` is
+  published-sourced derived state and is not the edit site.
+- **ADR-008** — `cargo install` is structurally impossible in-jail, so the
+  project-declared argv (`cargo run -p <adapter>`) is the only route that works
+  here, not merely the convenient one.
+- **SPEC-017 REQ-236** — states anchor liveness is *not* checked. This slice
+  checks it. Resolves only while report-only and non-gating; design must say so
+  explicitly, and a future gating slice owes a REV.
+- **POL-001** — constrains this slice's own new prose (requirement titles, help
+  text, code comments): avoid "load-bearing" and the tired physical metaphors.
+- **ADR-013** — O4 authors requirements directly via `spec req add`; the REV
+  route is for corrective reconciliation, not for this authoring. Design should
+  state this rather than leave it implicit.
+
+### Risks
+
+- **R1 — the baseline may not reproduce.** 48/81/0/29,310 came from a spike, not
+  the shipped path. Disagreement means one is wrong, and finding out which is
+  part of the work, not a surprise.
+- **R2 — the adapter is undistributable by both shipped paths** (nix emits only
+  the `doctrine` binary; `cargo install` installs only the root package). Fine
+  for dogfooding; becomes real if the "publish as reference implementation"
+  follow-up is taken, which ADR-019 makes a separate explicit decision.
+
+### Assumptions carried
+
+- The `language` key vocabulary is the existing `[[source]]` `language` values;
+  no second vocabulary is minted (STD-001).
+- The report stays read-only and non-gating for the whole slice (scope
+  commitment; also what keeps REQ-236 from needing a REV).
