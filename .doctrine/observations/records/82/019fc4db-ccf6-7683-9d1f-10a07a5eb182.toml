@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc4db-ccf6-7683-9d1f-10a07a5eb182"
+recorded_at = "2026-08-02T23:42:47.03007366Z"
+kind = "friction"
+summary = "/execute — memory verify writes into the tree it gates on, so two attestations in a row need a commit between them"
+detail = "SL-241 PHASE-05 T5 close-out. 'doctrine memory verify <key>' refuses on a dirty working tree (a dirty tree cannot be attested). But a successful verify WRITES the attestation into the memory's own memory.toml, which dirties the tree. So verifying two memories in sequence fails on the second, with a message about a dirty tree that names no file — the dirt is the first verify's own success. Worked around by committing between the two. Cost: one confused read of git status to discover the modified file was the memory I had just verified, not a foreign edit. Generalisable: a gate that reads the same surface its subject writes has to exempt its own write, or say which path is dirty."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
