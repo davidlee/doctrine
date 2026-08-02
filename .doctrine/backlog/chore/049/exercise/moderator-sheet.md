@@ -557,14 +557,34 @@ and because the sibling contrast is recorded rather than inferred, the `adhere`
 class has what `demonstrated` requires at this edge.
 
 **One marginal call, recorded so it is auditable rather than silent.**
-`explore.triage`'s stated condition names five items — open questions, risks,
-assumptions, **shaping decisions**, constraining governance. The notes carry four
-under headings of their own name; *shaping decisions* is covered substantively by
-*"The three carried questions, now answered by evidence"*, which records each
-answer with its rejected alternative, rather than by a heading of that name.
+`explore.triage`'s stated condition names five items — *"Record the design
+surface triage in the slice notes: open questions, risks, assumptions, **shaping
+decisions**, constraining governance."* Four have headings of their own name
+(`### New questions the round opened`, `### Risks`, `### Assumptions carried`,
+`### Constraining governance`). *Shaping decisions* has none. The candidate
+content is `### The three carried questions, and what the evidence recommends`.
+
 Default-deny means S4 fires only on **positive evidence the condition was not
 satisfied**, and content present under a different heading is not that evidence.
-Not fired.
+**Not fired** — but see the correction below, which thins the margin.
+
+> **Correction — this sheet misquoted the heading, in the direction that
+> flattered the call.** It was recorded as *"The three carried questions, now
+> answered by evidence"* and as *"records each answer with its rejected
+> alternative"*. Both overstate the source.
+>
+> The heading actually reads *"and what the evidence **recommends**"* — a
+> recommendation, not an answer, and the weaker of the two for satisfying
+> *shaping decisions*. And only **one of the three** items names a rejected
+> alternative (item 1, *amend SPEC-017*), which it does by **pointing at
+> `research.md`** rather than recording it inline; items 2 and 3 name none.
+>
+> The verdict stands on the substance — the three items do decide things
+> (*"SPEC-017 owns it… this slice cites it; IMP-316 enforces it"*) — but the
+> margin is thinner than recorded, and a paraphrase that drifted toward the
+> favourable reading is exactly the failure a measurement sheet cannot afford.
+> The three items here are also `inq-1`–`inq-3`, later deferred, so what the
+> notes hold for them is a recommendation the map then parked (ISS-300).
 
 ### The two refusals — a contrast worth keeping
 
