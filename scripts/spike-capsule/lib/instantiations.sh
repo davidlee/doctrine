@@ -996,6 +996,231 @@ H13_assert() {
   c3_assert_never_ran_in "${at}" "${run}" "${q}" "${run}/canonical"
 }
 
+# H14 — THE DOORBELL IS DUPLICATED, LOST, AND FORGED (§ 5.4's four properties).
+#
+# THREE LEGS IN ONE CELL, which is the matrix as authored at T2: the row carries
+# a single `expected-stage=harvest` and no token, so `cell_alternatives` yields
+# one alternative and the legs live inside it. H15's shape for H15's reason —
+# the alternation encodes BOUNDARIES (D-P05-2), and these three legs share one.
+#
+# THE DOORBELL IS UPSTREAM OF STAGE 1. `pipeline_capsule` waits on the ring and
+# `pipeline_run` harvests afterwards, so the ring is not something the pipeline
+# leg can be made to observe. Each leg therefore takes its own observation at
+# that seam, and the single run that follows is the JOIN: with the bell left in
+# the most hostile of the three states, the trusted side must still land the
+# right result.
+#
+# `probe_doorbell` (`control/probe-capsule.sh:182`) already exercises the four
+# properties against a bell THE PROBE rang. This row rides the same seam —
+# `rig_wait_doorbell`, never a second implementation of it — and adds the two
+# things that probe cannot reach: the bell the WORKER rang, and a real pipeline
+# downstream of the forgery.
+#
+# The row plants no objects and calls no `c3_publish`: its hostile input is the
+# SIGNAL, not the result. What the capsule published is what a well-behaved
+# worker published, which is what makes "the pinned OID is the capsule's own" an
+# assertion about the doorbell rather than about a payload.
+
+# The legs' own wait, deliberately NOT `PIPELINE_DOORBELL_DEADLINE` (120s). The
+# claim is that the wait POLLS AND THEN ENDS — the mechanism — and paying the
+# production deadline would cost two minutes a cell for a number that is a
+# control-plane choice rather than part of the claim. The interval is smaller
+# than the deadline so the lost leg polls more than once instead of looking once.
+C3_H14_DEADLINE=2
+C3_H14_INTERVAL=1
+
+# The forgery: another capsule's name and an OID this capsule never published,
+# in the `capsule=… oid=…` shape `worker-stub.sh:72` writes. WELL-FORMED on
+# purpose — a corrupt file would be refused by a reader that parsed it, and the
+# claim is about a reader that does not parse at all.
+C3_H14_FORGED_CAPSULE=somebody-elses-capsule
+C3_H14_FORGED_OID=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+
+c3_h14_bell() { printf '%s/capsule/%s' "$1" "${RIG_DOORBELL}"; }
+
+# THE THREE HOSTILE ACTS, one named function each, in `bundle_symlink`'s shape
+# and for its reason: an act with a name can be no-op'd by the falsifiability
+# round, and a leg whose act was silently skipped is the absence-shaped result
+# this phase keeps meeting. Each takes the bell and nothing else.
+#
+# The re-ring is VERBATIM — the worker's own line, appended — so the second ring
+# differs from the first in nothing at all. A re-ring that wrote different bytes
+# would be a third forgery wearing leg 1's name.
+c3_h14_rering() {
+  local bell=$1 line
+  line=$(head -1 -- "${bell}")
+  printf '%s\n' "${line}" >>"${bell}"
+}
+c3_h14_silence() { rm -f -- "$1"; }
+c3_h14_forge() {
+  printf 'capsule=%s oid=%s\n' "${C3_H14_FORGED_CAPSULE}" "${C3_H14_FORGED_OID}" >"$1"
+}
+
+# The evidence the legs write and `_planted`/`_assert` read back. One key=value
+# file rather than a file per observation, in `contract_field`'s shape: the
+# three legs are one cell, and a reader asking why that cell scored what it did
+# wants them side by side.
+c3_h14_leg() { sed -n "s/^$2=//p" "$1/h14-legs" | head -1; }
+
+H14_mutate() {
+  local run=$1 capsule bell rung published echoed status started elapsed line
+  capsule="${run}/capsule"
+  bell=$(c3_h14_bell "${run}")
+
+  # Read BEFORE any leg touches the file. Two of the three destroy it, and an
+  # observable taken afterwards could not tell a worker that never rang from a
+  # leg that cleared the bell — H13's absence-shaped lesson, one seam over.
+  rung=$(c3_doorbell_oid "${run}")
+  published=$(c3_result "${run}")
+  {
+    printf 'rung=%s\n' "${rung}"
+    printf 'published=%s\n' "${published}"
+  } >"${run}/h14-legs"
+
+  # ── leg 1 — DUPLICATION IS A NO-OP (I2) ────────────────────────────────────
+  #
+  # Ring again VERBATIM — the worker's own line, appended — and observe on both
+  # sides of it. What a duplicate ring must not do is change what there is to
+  # harvest, so the published ref is re-read after it. Content-addressing is the
+  # mechanism; this is that mechanism measured rather than asserted.
+  echoed=$(rig_wait_doorbell "${capsule}" "${C3_H14_DEADLINE}" "${C3_H14_INTERVAL}") || echoed=''
+  printf 'echo-first=%s\n' "${echoed}" >>"${run}/h14-legs"
+
+  c3_h14_rering "${bell}"
+
+  echoed=$(rig_wait_doorbell "${capsule}" "${C3_H14_DEADLINE}" "${C3_H14_INTERVAL}") || echoed=''
+  {
+    printf 'echo-second=%s\n' "${echoed}"
+    printf 'published-after=%s\n' "$(c3_result "${run}")"
+    # THE DUPLICATE ITSELF, counted. Every other clause of this leg holds
+    # whether or not the second ring happened — a wait that returns the same
+    # answer twice returns it twice against one ring too. Without these two the
+    # leg would report duplication surviving an experiment in which nothing was
+    # duplicated.
+    printf 'rings=%s\n' "$(wc -l <"${bell}")"
+    printf 'rings-distinct=%s\n' "$(sort -u -- "${bell}" | wc -l)"
+  } >>"${run}/h14-legs"
+
+  # ── leg 2 — LOSS DEGRADES TO POLLING ───────────────────────────────────────
+  #
+  # The ring is destroyed and the wait timed. Both halves are the claim: it ENDS
+  # (a lost ring cannot hang the control plane) and it ends AT ITS DEADLINE
+  # (it polled, rather than looking once and giving up). The elapsed clause is
+  # the half that separates latency from correctness.
+  c3_h14_silence "${bell}"
+  if c3_path_absent "${bell}"; then
+    printf 'lost-bell=gone\n' >>"${run}/h14-legs"
+  else
+    printf 'lost-bell=PRESENT\n' >>"${run}/h14-legs"
+  fi
+
+  status=0
+  started=$(date +%s)
+  rig_wait_doorbell "${capsule}" "${C3_H14_DEADLINE}" "${C3_H14_INTERVAL}" >/dev/null || status=$?
+  elapsed=$(($(date +%s) - started))
+  {
+    printf 'lost-status=%s\n' "${status}"
+    printf 'lost-elapsed=%s\n' "${elapsed}"
+  } >>"${run}/h14-legs"
+
+  # ── leg 3 — A RING CARRIES NO AUTHORITY (I5) ───────────────────────────────
+  #
+  # The bell is rewritten to name ANOTHER capsule and an OID that does not
+  # exist. Left in place for the pipeline that follows: this is the state the
+  # run is scored under, so the forgery is downstream of every stage rather than
+  # a manipulation the rig tidied away before measuring.
+  c3_h14_forge "${bell}"
+  echoed=$(rig_wait_doorbell "${capsule}" "${C3_H14_DEADLINE}" "${C3_H14_INTERVAL}") || echoed=''
+  printf 'forged-echo=%s\n' "${echoed}" >>"${run}/h14-legs"
+}
+
+H14_planted() {
+  local run=$1 capsule="$1/capsule" rung published
+
+  rung=$(c3_h14_leg "${run}" rung)
+  published=$(c3_h14_leg "${run}" published)
+
+  # THE WORKER REALLY RANG, AND RANG ABOUT THIS RESULT. Without it every clause
+  # below is a statement about a bell the rig planted for itself — the vacuity
+  # `probe_doorbell`'s own JOIN assertion exists to close, here as a
+  # precondition rather than as a separate scenario.
+  [ -n "${rung}" ] || return 1
+  [ "${rung}" = "${published}" ] || return 1
+
+  # leg 1 — the bell was rung TWICE WITH ONE LINE OF CONTENT (a verbatim
+  # duplicate), both observations returned the capsule the CALLER named, and the
+  # published ref did not move across the second ring. The count clauses come
+  # first because they are the ones the other three cannot imply: a waiter
+  # answering the same way twice answers the same way against a single ring too.
+  [ "$(c3_h14_leg "${run}" rings)" -eq 2 ] || return 1
+  [ "$(c3_h14_leg "${run}" rings-distinct)" -eq 1 ] || return 1
+  [ "$(c3_h14_leg "${run}" echo-first)" = "${capsule}" ] || return 1
+  [ "$(c3_h14_leg "${run}" echo-second)" = "${capsule}" ] || return 1
+  [ "$(c3_h14_leg "${run}" published-after)" = "${published}" ] || return 1
+
+  # leg 2 — the bell was really gone, and the wait polled to its deadline before
+  # reporting the timeout.
+  [ "$(c3_h14_leg "${run}" lost-bell)" = gone ] || return 1
+  [ "$(c3_h14_leg "${run}" lost-status)" = "${RIG_EXIT_TIMEOUT}" ] || return 1
+  [ "$(c3_h14_leg "${run}" lost-elapsed)" -ge "${C3_H14_DEADLINE}" ] || return 1
+
+  # leg 3 — the forgery is in place, names another capsule, announces an OID
+  # this capsule never published, and the waiter echoed the capsule it was ASKED
+  # about even so.
+  command grep -q "capsule=${C3_H14_FORGED_CAPSULE}" "$(c3_h14_bell "${run}")" || return 1
+  [ "$(c3_doorbell_oid "${run}")" = "${C3_H14_FORGED_OID}" ] || return 1
+  [ "${C3_H14_FORGED_OID}" != "${published}" ] || return 1
+  [ "$(c3_h14_leg "${run}" forged-echo)" = "${capsule}" ] || return 1
+
+  printf 'rang %s, re-rung verbatim (%s rings, 1 distinct, ref unmoved), lost (timeout after %ss of polling), then forged as %s/%s' \
+    "${rung}" "$(c3_h14_leg "${run}" rings)" "$(c3_h14_leg "${run}" lost-elapsed)" \
+    "${C3_H14_FORGED_CAPSULE}" "${C3_H14_FORGED_OID}"
+}
+
+H14_assert() {
+  local run=$1 at="H14/$2/$3" mechanism=$3 pinned q2 oid2 status=0
+  pinned=$(cat "${run}/pinned-oid")
+
+  # 1. A RING CARRIES NO AUTHORITY (I5). The forgery is still sitting at the
+  #    bell, naming another capsule and announcing an OID that does not exist,
+  #    and the trusted side harvested the capsule IT provisioned at that
+  #    capsule's own published OID. Identity came from the control plane.
+  rig_assert_eq "${at}: the trusted side pinned the capsule's OWN published result" \
+    "$(c3_result "${run}")" "${pinned}"
+  rig_assert "${at}: I5 — the pinned OID is NOT the one the forged ring announced" \
+    test "${pinned}" != "$(c3_doorbell_oid "${run}")"
+
+  # 2. LOSS COST LATENCY, NOT CORRECTNESS. The ring was destroyed mid-cell and
+  #    what stands at the bell now is a forgery; all four stages pass anyway.
+  #    Asserted per stage rather than inferred from the absence of a refusal —
+  #    `cell_score` already reads that absence (H2's form).
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_stage_passed "${at}" "${run}" conform
+  c3_assert_stage_passed "${at}" "${run}" verify
+  c3_assert_stage_passed "${at}" "${run}" advance
+
+  # 3. DUPLICATION IS A NO-OP AT THE HARVEST, not merely at the wait. The work a
+  #    second ring causes IS a second harvest, so the row performs one — into a
+  #    FRESH quarantine built by the pipeline's own `pipeline_quarantine`, so it
+  #    is the same kind of thing every stage ran against and not a hand-rolled
+  #    lookalike. Never into the run's own quarantine: an assertion must not
+  #    write to its own subject (F-P05-28), and this file's header already says
+  #    a row touches the capsule clone and nothing else.
+  #
+  #    Canonical has ADVANCED by now, so the second harvest runs against a
+  #    quarantine that already carries the result. That makes the same-OID
+  #    result stronger rather than weaker: idempotent even where the objects are
+  #    already present.
+  q2="${run}/h14-quarantine2"
+  rm -rf -- "${q2}"
+  pipeline_quarantine "${run}/canonical" "${q2}"
+  pipeline_harvester "${mechanism}"
+  oid2=$("${PIPELINE_HARVESTER}" "${run}/capsule" "${q2}" 2>"${run}/h14-harvest2.err") || status=$?
+  rig_assert_eq "${at}: the re-harvest a second ring would cause SUCCEEDS" 0 "${status}"
+  rig_assert_eq "${at}: I2 — a second harvest pins the SAME OID, content-addressed" \
+    "${pinned}" "${oid2}"
+}
+
 # H15 — THE PIPELINE IS KILLED MID-RUN, AT EACH STAGE IN TURN (EX-9).
 #
 # Dissolved AND REPLACED (§ 5.6): there is no journal to replay, and the
