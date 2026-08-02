@@ -98,3 +98,15 @@ target = "EVD-005"
 label = "related"
 target = "IMP-381"
 
+[[relation]]
+label = "related"
+target = "SL-241"
+
+[[relation]]
+label = "related"
+target = "RFC-025"
+
+[[relation]]
+label = "related"
+target = "QUE-200"
+
