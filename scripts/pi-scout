@@ -1,80 +1,19 @@
 #!/usr/bin/env bash
 # pi-scout — shell-invocable codebase scout for claude code agents.
 # The quick, cheap tier: uses the project's scout agent profile
-# (deepseek-v4-flash). For a thread needing judgement, use pi-research.
-# Parses .pi/agents/scout.md for model, tools, and system prompt.
+# (.pi/agents/scout.md → deepseek-v4-flash). For a thread needing judgement,
+# use pi-research.
 #
 # Usage:
 #   ./scripts/pi-scout "Where is authentication logic implemented?"
 #   ./scripts/pi-scout --think low "trace all callers of X"
 #   echo "Find the error handling middleware" | ./scripts/pi-scout
 #
-# Env:
-#   PI_BACKSTOP   hard timeout in seconds (default: 900)
-
+# Env: PI_BACKSTOP (hard timeout, default 900s).
+#
+# A shim: everything but the profile and the default thinking level lives in
+# pi-agent, so a fix lands once rather than once per role.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-AGENT_FILE="$PROJECT_ROOT/.pi/agents/scout.md"
-
-if [[ ! -f "$AGENT_FILE" ]]; then
-  echo "ERROR: agent file not found: $AGENT_FILE" >&2
-  exit 1
-fi
-
-# --- extract fields from agent frontmatter ---
-model=$(sed -n '/^model: /{s/^model: //;s/ *$//;p;q}' "$AGENT_FILE")
-tools=$(sed -n '/^tools: /{s/^tools: //;s/ *$//;p;q}' "$AGENT_FILE")
-
-# --- extract system prompt body (after second ---) ---
-sysprompt=$(awk 'BEGIN{c=0} /^---$/{c++; next} c>=2' "$AGENT_FILE")
-
-# --- parse --think flag ---
-thinking="off"  # default for scout
-if [[ "${1:-}" == "--think" ]]; then
-  thinking="$2"
-  shift 2
-fi
-
-# --- collect query ---
-if [[ $# -gt 0 ]]; then
-  query="$*"
-elif [[ ! -t 0 ]]; then
-  query=$(cat)
-else
-  echo "Usage: pi-scout [--think off|minimal|low|medium|high|xhigh|max] <query>" >&2
-  echo "       echo <query> | pi-scout [--think ...]" >&2
-  exit 1
-fi
-
-# pi writes session and settings state at runtime. Left to its default it writes
-# under $HOME/.pi, which is read-only (or absent) for any confined caller — an
-# EROFS there kills the run before it inspects a single file (IMP-322). Point the
-# session at a disposable dir we own and clean up after ourselves. This is why
-# the runner cannot `exec`: an exec'd pi would leave the trap unrun.
-SESSION_DIR=$(mktemp -d)
-trap 'rm -rf "$SESSION_DIR"' EXIT
-
-# stdin MUST be closed. With the query passed as an argument the `[[ ! -t 0 ]]`
-# branch above never fires, so nothing consumes fd 0 and it passes straight into
-# pi — which does not self-exit while stdin is held open. Termination then
-# depends on whatever the caller happened to do with fd 0: observed six threads
-# launched identically, four complete, two zero-byte with no exit status and no
-# error (ISS-266). `timeout` is the backstop for the residual — a wedged run
-# fails loudly and non-zero rather than hanging forever.
-status=0
-timeout "${PI_BACKSTOP:-900}" pi --print \
-  --model "$model" \
-  --system-prompt "$sysprompt" \
-  --tools "$tools" \
-  --thinking "$thinking" \
-  --session-dir "$SESSION_DIR" \
-  --no-skills \
-  --no-context-files \
-  "$query" </dev/null || status=$?
-
-if [[ $status -eq 124 ]]; then
-  echo "ERROR: pi-scout hit the ${PI_BACKSTOP:-900}s backstop — no result" >&2
-fi
-exit "$status"
+export PI_AGENT_AS=pi-scout
+export PI_THINK_DEFAULT="${PI_THINK_DEFAULT:-off}"
+exec "$(cd "$(dirname "$0")" && pwd)/pi-agent" scout "$@"
