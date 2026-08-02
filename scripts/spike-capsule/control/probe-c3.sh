@@ -57,6 +57,12 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/instantiations.sh
 . "${RIG_DIR}/lib/instantiations.sh"
+# The H10/H16 conflict sub-probe (T5). Last, and after the instantiations: it
+# reads `C3_STALE_MARK` and `C3_H16_TRUNK_PATH` from there rather than minting a
+# second name for canonical's mover — one layer down, same actor.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/conflict.sh
+. "${RIG_DIR}/lib/conflict.sh"
 SPIKE_C3_MUTANT="${SPIKE_C3_MUTANT:-}"
 
 # P-C3 records the spec's eleven columns: the derived verdict is spliced in at
