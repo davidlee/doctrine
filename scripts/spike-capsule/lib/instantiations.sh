@@ -1427,3 +1427,124 @@ H15_assert() {
     stale-base \
     "$(advance_stage "${probe}" "${run}/quarantine" "${accepted}" "${base}" "${resume}" || true)"
 }
+
+# ── T4d — the payload rows ──────────────────────────────────────────────────
+
+# H8 — A GITLINK AND A `.gitmodules`, EACH AT A DECLARED PATH (leg 4, F-2).
+#
+# TWO ALTERNATIVES, ONE SCORED LEG EACH, AND THEY ARE PLANTED SEPARATELY rather
+# than together as the matrix's prose reads. Leg 4 returns on the first entry
+# matching either arm, so a tree carrying both refuses once and the other
+# alternative's leg would score another form's refusal as its own — F-P05-22's
+# short-circuit arriving from a second direction. The `instantiation` column
+# describes the attack; the alternation is what splits it into observations.
+#
+# THE ROW EXISTS BECAUSE EVERY OTHER LEG PASSES IT (F-2). `reject_submodules`
+# (`src/git.rs:2432`) scans `git ls-files --stage` and is INDEX-scoped, so it is
+# unreachable from an object-only pipeline: before leg 4 this was a real hole
+# rather than a defended hazard. `_assert` therefore MEASURES that, running
+# leg 2's own verb over the same range and observing it ACCEPT — the kill is
+# leg 4's alone, stated as an observation rather than as a claim about code that
+# is not being run.
+#
+# Both forms sit under the fixture's design-target directory for D-P05-11's
+# reason: leg 2 runs BEFORE leg 4, so a form at an undeclared path refuses
+# `undeclared-path` and the cell scores a defect of the MODEL — F-P05-14,
+# F-P05-18/21 and F-P05-26 are the same trap three times. For `.gitmodules`
+# that means a NESTED one, which leg 4's `*/.gitmodules` arm matches
+# deliberately.
+#
+# WHAT THIS ROW DOES NOT SHOW: that a ROOT `.gitmodules` — the only one git
+# itself reads — is reachable under these fixtures' selectors. It is not, and
+# that is a fact about a selector list rather than about the model. The guard is
+# observed firing on the name, which is what leg 4 is written to do.
+
+C3_H8_GITLINK=h8-gitlink
+C3_H8_GITMODULES=.gitmodules
+
+# c3_h8_path <fixture> <alt> — the declared path this alternative plants at. One
+# definition, because `_mutate`, `_planted` and `_assert` must agree about it.
+c3_h8_path() {
+  local dir
+  dir=$(c3_design_target_dir "$1")
+  case "$2" in
+    gitlink) printf '%s/%s' "${dir}" "${C3_H8_GITLINK}" ;;
+    gitmodules) printf '%s/%s' "${dir}" "${C3_H8_GITMODULES}" ;;
+    *) rig_die "H8: unknown alternative: $2" ;;
+  esac
+}
+
+H8_mutate() {
+  local run=$1 fixture=$2 alt=$4 repo path
+  repo=$(c3_capsule_repo "${run}")
+  path=$(c3_h8_path "${fixture}" "${alt}")
+
+  case "${alt}" in
+    gitlink)
+      # Planted through the INDEX because a gitlink has no worktree form to
+      # `git add`: `update-index --cacheinfo` is the way to author a 160000
+      # entry without checking out a real submodule. It names the CONTRACTED
+      # BASE, so the entry points at a commit that genuinely exists — a dangling
+      # gitlink could be refused for being dangling, which is a different guard.
+      git -C "${repo}" update-index --add \
+        --cacheinfo "160000,$(c3_base "${run}"),${path}" ||
+        rig_die "H8: could not author the gitlink at ${path}"
+      git -C "${repo}" commit --quiet -m 'H8: a gitlink at a declared path'
+      ;;
+    gitmodules)
+      c3_plant_file "${run}" "${path}"
+      c3_commit "${run}" 'H8: a .gitmodules at a declared path' "${path}"
+      ;;
+    *) rig_die "H8: unknown alternative: ${alt}" ;;
+  esac
+  c3_publish "${run}"
+}
+
+H8_planted() {
+  local run=$1 fixture=$2 alt=$4 path mode
+  path=$(c3_h8_path "${fixture}" "${alt}")
+
+  # In the range leg 2 folds — the clause that keeps this row off F-P05-14's
+  # trap, and it is checked before the mode so a path that never landed reds
+  # here rather than through an empty `ls-tree`.
+  c3_planted_paths "${run}" "${path}" >/dev/null || return 1
+
+  mode=$(git -C "$(c3_capsule_repo "${run}")" ls-tree \
+    "$(c3_result "${run}")" -- "${path}" | awk '{print $1}')
+
+  case "${alt}" in
+    gitlink)
+      [ "${mode}" = 160000 ] || return 1
+      printf 'a %s gitlink at the DECLARED path %s, naming %s' \
+        "${mode}" "${path}" "$(c3_base "${run}")"
+      ;;
+    gitmodules)
+      # A REGULAR FILE, asserted: leg 4's two arms are mode and name, and a
+      # `.gitmodules` that arrived as a gitlink would be refused by the other
+      # arm — the row would then report this guard firing while the observation
+      # belonged to its sibling.
+      [ "${mode}" = 100644 ] || return 1
+      printf 'a regular-file %s at the DECLARED path %s' "${C3_H8_GITMODULES}" "${path}"
+      ;;
+    *) rig_die "H8: unknown alternative: ${alt}" ;;
+  esac
+}
+
+H8_assert() {
+  local run=$1 at="H8/$2/$3/$4" fixture=$2 alt=$4 path slice doctrine rc=0
+  path=$(c3_h8_path "${fixture}" "${alt}")
+
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_ingested "${at}" "${run}" "${path}"
+
+  # F-2, MEASURED. Leg 2's own verb accepts this range, so what refused is leg 4
+  # and nothing else. Redirected to a file, never piped — a pipe would report
+  # the reader's exit status, which this phase has met three times.
+  slice=$(contract_field "${run}" slice)
+  doctrine=$(rig_doctrine_bin)
+  "${doctrine}" slice conformance "${slice}" -p "${run}/quarantine" \
+    --against "$(c3_base "${run}")..$(cat "${run}/pinned-oid")" --strict \
+    >"${run}/h8-conformance" 2>&1 || rc=$?
+  rig_assert_eq "${at}: F-2 — leg 2's OWN verb ACCEPTS this range; only leg 4 kills it" \
+    0 "${rc}"
+}
