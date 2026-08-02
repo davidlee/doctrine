@@ -1,0 +1,25 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 5
+slug = "criterion-histories-support-opt-in-lineage-across-modes-not-a-vt-only-repair"
+title = "Criterion histories support opt-in lineage across modes, not a VT-only repair"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-02"
+updated = "2026-08-02"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = ""
+provenance   = ""               # inspection | experiment | reproduction | citation
+confidence   = ""               # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
