@@ -1,7 +1,7 @@
 id = 244
 slug = "gate-conditions-carry-their-own-contract"
 title = "Gate conditions carry their own contract"
-status = "proposed"
+status = "design"
 created = "2026-08-02"
 updated = "2026-08-02"
 tags = ["area:correctness", "area:design", "cluster:design-run"]
