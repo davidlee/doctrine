@@ -43,13 +43,40 @@ termination story) and folding them in would import machinery they do not need.
 They duplicate each other almost entirely, though, and could reasonably collapse
 to one runner taking a profile name.
 
-## Disposition
+## Disposition — resolved 2026-08-03
 
-Left open for a decision on the DRY residual only; the "general pattern" half is
-answered. Reasonable outcomes: re-scope to *"collapse the four rpc scripts onto
-one poll/reap, `PREFIX` untouched"*, or close as answered and let the duplication
-stand — four small scripts with divergent call contracts is not obviously worse
-than one runner with four modes.
+Both arms consolidated; the residual described above is discharged.
+
+**`--print` arm.** `scripts/pi-agent` now holds the whole lifecycle and takes a
+profile name. `pi-scout` and `pi-research` are shims setting only the profile
+and the default thinking level, so the entry points `CLAUDE.md` and
+`.doctrine/governance.md` name are unchanged and no caller moved. A latent hole
+closed on the way: an empty or whitespace-only query was spending a real API
+call on an empty prompt and exiting 0 with no output — `pi-scout < /dev/null`,
+which was the documented workaround while ISS-266 was open.
+
+**`--mode rpc` arm.** The 25 byte-identical poll/reap lines in all four spawn
+scripts moved to `scripts/lib/pi-reap.sh` (`pi_await_and_reap`); 260 lines out,
+37 in. `PREFIX=( … )` was left literally in place, so the `jail.rs` parity
+scraper is unaffected and `bwrap_core_argv_matches_pi_spawn_core_flags` passes.
+
+Hardened on extraction: pids are validated as integers > 1 before any signal
+rather than defaulted, because `kill -9 -0` signals the *caller's* process group
+— shared machinery with a `${pi:-0}` fallback would fell its own orchestrator
+(see [[mem.pattern.shell.default-must-be-inert-in-its-consumer]]).
+
+Tested — `just pi-reap-test` (`scripts/lib/pi-reap-test.sh`), 15 assertions, no
+pi/API/network: whole-tree reap against a grandchild target, `agent_settled`
+detected behind 700KB of padding (the ISS-293 geometry), elapsed-vs-backstop
+reporting and the burn warning, and every invalid-pid case with a positive
+control that the calling shell survives. Not wired into `check`/`gate` — it
+spawns real processes and sleeps.
+
+The helper documents two preconditions it cannot enforce: `set -m` before the
+caller's first background job, and being called from the shell owning the pids.
+The second bites through `$(...)` — command substitution is a subshell, so
+capturing the report breaks the `wait` and leaves the zombies the function
+exists to prevent.
 
 ## Links
 
