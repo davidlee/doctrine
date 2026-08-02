@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbe5d-5cbd-7ea1-b5f5-10bc43cb1267"
+recorded_at = "2026-08-01T17:26:57.469756424Z"
+kind = "friction"
+summary = "/execute (SL-241 PHASE-05 T3): a directory pathspec is not a path limit in a shared tree"
+detail = "Committing a new memory with 'git commit .doctrine/memory/items' swept in another agent's in-flight DEC reseat edit to an unrelated memory body. The AGENTS.md rule (path-limit the commit itself, not just the add) was followed in form but not in effect: the pathspec was the containing directory, so anything already dirty underneath rode along. Cost: a contaminated commit that now needs a phase-boundary note, and the note itself is blocked because notes.md is mid-reseat and would repeat the same trap. The guidance would bite harder if it said FILES, not paths."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

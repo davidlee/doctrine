@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc0bc-b86c-7793-b91a-1cf0e686dffd"
+recorded_at = "2026-08-02T04:30:21.292677481Z"
+kind = "friction"
+summary = "review dispose: unescaped backticks in a --response argument ran a shell command substitution, splicing a full env dump (5 live API keys) into the authored ledger"
+detail = "RV-325 F-7 disposition prose contained the word set inside a backtick pair. The argument reached zsh inside a double-quoted string, so the backticks ran set(1) and its stdout replaced the substitution in place: ~164 lines of environment, including DEEPSEEK/GEMINI/MISTRAL/OPENROUTER/VOYAGE API keys, landed inside review-325.toml. It carried forward through 79 commits across 5 branches and was only caught by GitHub push protection at push time. Two distinct harms: credential exposure, and silent corruption of the disposition prose (the sentence was truncated mid-clause and read as complete). Nothing detected it in between: the file still parsed as valid TOML, so no doctrine validation leg fired. Worth a guard on the authoring path that rejects or escapes shell metacharacters in prose arguments, and a credential-shape check in the authoring gate."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

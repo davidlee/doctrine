@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc0c9-5fb3-75c0-bf5a-dd2c31957fa0"
+recorded_at = "2026-08-02T04:44:10.547126Z"
+kind = "friction"
+summary = "/execute — a co-agent's rebuild of the shared target/debug/doctrine left it unrunnable in this jail, and the rig reported it as a capsule refusal"
+detail = "SL-241 PHASE-05, F-P05-29. The rig's conform leg 2 invokes rig_doctrine_bin, which prefers /workspace/doctrine/target/debug/doctrine because [ -x ] is true. Another agent rebuilt that binary at 13:06 against a glibc store path this bubblewrap jail does not mount, so every invocation exits 127 (missing ELF interpreter). Leg 2 is '... --strict >/dev/null 2>&1 || printf undeclared-path', so a binary that could not START was scored as conform/undeclared-path attributed to the capsule. It cost a 75-minute scored run (32 FAIL), an incorrect finding that blamed the measurement vehicle, and a session boundary. Two compounding causes: (1) an -x test cannot see a missing interpreter, so the working PATH fallback was never reached; (2) discarding stderr collapses 'the verb refused' and 'the verb could not run' into one token. The shared primary tree plus a modified flake.lock is the enabling condition -- one agent's build silently changes another agent's measurement apparatus mid-run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
