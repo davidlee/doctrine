@@ -114,6 +114,13 @@ smoke: web-build
   cargo build
   scripts/smoke.sh ./target/debug/doctrine
 
+# Behavioural test for the shared pi rpc poll/reap (scripts/lib/pi-reap.sh),
+# used by all four `--mode rpc` spawn scripts. Spawns real processes and sleeps
+# a few seconds, so it is not wired into `check`/`gate`; run it when touching
+# the spawn scripts or the helper. No pi, no API, no network.
+pi-reap-test:
+  scripts/lib/pi-reap-test.sh
+
 ## Build
 ##
 

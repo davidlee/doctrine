@@ -43,6 +43,12 @@ command -v pi >/dev/null || { echo "[review] pi not found" >&2; exit 1; }
 [ -f "$PF" ] || { echo "[review] prompt file not found: $PF" >&2; exit 1; }
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+# The rpc poll/reap lives in one place for all four spawn scripts — it was four
+# byte-identical copies, and that is how CHR-051 came to be fixed in two of them.
+# Preconditions it relies on: `set -m` before the first background job (below),
+# and being called from this shell so `wait` can reach our own children.
+# shellcheck source=scripts/lib/pi-reap.sh
+. "$SCRIPT_DIR/lib/pi-reap.sh"
 REVIEW_ROOT="${REVIEW_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)}"
 # bwrap --bind/--chdir require ABSOLUTE paths: under `--ro-bind / /` it cannot
 # mkdir a relative mountpoint against the read-only new root.
@@ -112,77 +118,8 @@ timeout "$BACKSTOP" "${PREFIX[@]}" \
   <"$PI_FIFO" >"$OUT" 2>&1 &
 PI=$!
 
-START=$(date +%s)
-END=$((START + BACKSTOP))
-REASON=timeout
-# Poll the TAIL, not the whole file. pi's rpc stream re-serializes accumulated
-# conversation state on every event, so $OUT grows super-linearly — 50-150MB for
-# an ordinary turn is normal, not a runaway. `grep -q` over the whole file every
-# 2s therefore costs more I/O than the model costs tokens, and it degrades as the
-# turn goes on.
-#
-# The terminal event is `agent_settled`, NOT `agent_end` (ISS-293). `agent_end`
-# carries the accumulated state with it, so it is pushed arbitrarily far back
-# from EOF as the turn grows: measured 684,768 bytes from EOF on one census turn,
-# 5.2x outside the old 128KiB window. The poll therefore NEVER fired on a real
-# review, every raiser ran to BACKSTOP holding a live pi and an open API session,
-# and nothing warned — the findings file lands on time, so it looks clean.
-# `agent_settled` is a bare `{"type":"agent_settled"}` 17 bytes from EOF and is
-# robust to any window; matching either keeps this working if the order changes
-# again. 4MiB at a 2s cadence is still four orders of magnitude below the file.
-while [ "$(date +%s)" -lt "$END" ]; do
-  if tail -c 4194304 "$OUT" 2>/dev/null | grep -qE '"(agent_settled|agent_end)"'; then
-    REASON=agent_complete
-    break
-  fi
-  if ! kill -0 "$PI" 2>/dev/null; then
-    REASON=pi_exit
-    break
-  fi
-  sleep 2
-done
-# Negative pid = signal the whole process group (see the `set -m` note above).
-# Fall back to the bare pid if the group is already gone. $KEEP is group-killed
-# for the same reason $PI is: its `sleep $BACKSTOP` child is the orphan that
-# outlives a bare kill and holds our stderr open.
-kill -9 -"$PI" 2>/dev/null || kill -9 "$PI" 2>/dev/null
-kill -9 -"$KEEP" 2>/dev/null || kill -9 "$KEEP" 2>/dev/null
-# `kill -9` only QUEUES the signal. Without this `wait`, $PI and $KEEP — this
-# shell's own children — linger as zombies that `ps` still lists, and the belt
-# below reports a survivor that is already dead (ISS-294).
-wait "$PI" "$KEEP" 2>/dev/null
+pi_await_and_reap "$OUT" "$PI" "$KEEP" "$SESSION_DIR" "$BACKSTOP" "[review] $LABEL"
 rm -f "$PI_FIFO"
-
-# Settle: the grandchildren (timeout -> bwrap -> wrapper -> pi) are NOT this
-# shell's children and cannot be waited on, so give the group kill a bounded
-# window to land before believing `ps`.
-for _ in 1 2 3 4 5; do
-  # pgrep landed in flake.nix (deb2cf44) but is not in an already-running
-  # jail; switch this to `pgrep -f` only once it can be exercised, since a
-  # silently-broken belt check reads exactly like a clean reap.
-  # shellcheck disable=SC2009
-  ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR" || break
-  sleep 0.2
-done
-
-# Belt: confirm nothing from this spawn outlived the reap. A surviving pi holds
-# an API session open and silently blocks any caller that `wait`s on this script.
-# pgrep landed in flake.nix (deb2cf44) but is not in an already-running
-# jail; switch this to `pgrep -f` only once it can be exercised, since a
-# silently-broken belt check reads exactly like a clean reap.
-# shellcheck disable=SC2009
-if ps -eo pid,args 2>/dev/null | grep -q -- "[-]-session-dir $SESSION_DIR"; then
-  echo "[review] $LABEL WARNING: pi survived the reap for $SESSION_DIR" >&2
-fi
-
-# Elapsed-vs-backstop is the ONLY signal that distinguishes a clean early finish
-# from a silent full-backstop burn — the findings file lands either way, so
-# without this line the operator has to catch it in `ps` (ISS-293).
-ELAPSED=$(($(date +%s) - START))
-echo "[review] $LABEL terminated reason=$REASON after ${ELAPSED}s of ${BACKSTOP}s backstop"
-if [ "$REASON" = timeout ]; then
-  echo "[review] $LABEL WARNING: burned the full backstop — completion never detected" >&2
-fi
 if [ -s "$OUT_DIR/$LABEL.md" ]; then
   echo "[review] $LABEL findings: $OUT_DIR/$LABEL.md ($(wc -l <"$OUT_DIR/$LABEL.md") lines)"
 else
