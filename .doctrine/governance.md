@@ -32,6 +32,21 @@ they did, they didn't memorise every pithy identifier in it. If you're going to
 use shorthand references, introduce each one for the first time with a
 reference to the owning artifact and a concise summary.
 
+## Guiding Principles
+
+Everything has a denominator, in these terms:
+- complexity. 
+- token cost. 
+- human attention. 
+
+Work with disciplined laziness: spend as little as possible (on each axis)
+to obtain a useful outcome. This guides decisions at all levels.
+
+Work in a way that is:
+- simple.
+- token efficient.
+- unsurprising.
+
 ## Research agents
 
 The `/research` pre-design round spawns these — one read-only agent per thread.
