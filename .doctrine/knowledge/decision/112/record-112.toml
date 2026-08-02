@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 112
+slug = "anchor-report-emits-a-raw-json-struct-outside-the-list-spine"
+title = "Anchor report emits a raw JSON struct, outside the list spine"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-02"
+updated = "2026-08-02"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-243"
+
+[[relation]]
+label = "spawns"
+target = "IMP-383"

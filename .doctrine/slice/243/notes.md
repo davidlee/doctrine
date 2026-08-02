@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 9 · 586b092f
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 11 · 0eae25e9
 
 ### Produced
 
@@ -15,6 +15,11 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 9 · 586b0
 - IMP-381 — spec-coverage census; map at `.doctrine/state/imp-381-coverage-map-criterion-lineage.md`
 - **DEC-111** — the verb reads the corpus in-process, not through doctrine's own
   JSON contract; disposes `inq-4` and carries the test obligation that comes with it
+- **DEC-112** — the report's `--json` is a raw struct outside SPEC-013's list
+  spine, no `CommonListArgs` flatten; disposes `inq-5`
+- **IMP-383** — the deferred half of `inq-5`: a self-identifying JSON head for
+  non-list report verbs, retrofitted to `graph`, with the SPEC-013 amendment
+  that would state the convention. Spawned by DEC-112
 - **Pre-design research round** — `research/research.md` + `research/raw/` (five
   threads). **Runtime tier, gitignored, disposable.** Its durable residue is
   DEC-111 and the `## Design surface triage` section below; do not treat the
@@ -44,8 +49,10 @@ rather than from a copy here. What the run cannot represent, and so lives here:
 - `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
   pass**, not parked indefinitely. A lifecycle move carries no reason field, so
   this note is the only record of where they route. See `## Routing` below.
-- `inq-5`…`inq-9` are open engineering questions; the triage section states each
-  with the evidence that bears on it.
+- `inq-6`…`inq-9` are the open engineering questions; the triage section states
+  each with the evidence that bears on it. `inq-5` is disposed by DEC-112 — its
+  triage entry (Q-b) is settled, and Q-b's second half, the golden SPEC-013
+  `REQ-204` bills the verb, is an obligation the plan must carry.
 
 ## Design surface triage
 <!-- explore.triage, design run dr-019fc13a rev 5. Evidence: research/research.md -->
