@@ -1,0 +1,51 @@
+memory_uid = "mem_019fc2be4cdd74e3aeea797a6cfc331d"
+memory_key = "mem.pattern.shell.default-must-be-inert-in-its-consumer"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A ${x:-DEFAULT} must be inert in its consumer"
+summary = "A ${x:-DEFAULT} is only inert if the default is inert in the command that consumes it — kill -0 0 signals your own process group"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = ["**/*.sh", "**/*.bash"]
+commands = []
+tags = ["shell", "footgun", "guards", "sl-241"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e3557f44ad7a50d58ab4d24a18a174c91baa1624"
+ref_name = "refs/heads/edge"
+checkout_state_id = "94ef35f079cb2d851d017ea49353134977b6b4611cfbb9165bcccf2868608542"
+base_commit = "a6e8e951725d6684a48049c8a71c9fc104f42ab8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019fc236d78674e39f2a6e909d7ef0b9"
+
+[[relation]]
+label = "related"
+target = "mem_019fbe46e3aa7d229330794ca898f856"
+
