@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Authoring gate applied in the sketch table but never carried into the shipped exploring.toml"
 detail = """
@@ -35,10 +35,12 @@ Positive control -- the conditions do exist, in the sketch, so the search was no
   -> lines 1160-1164 each carry a stated condition.
 
 Caveat on method: a verbatim search for "Complete when" is a textual test for a semantic property and is evidence, not proof. The finding rests on reading all five step texts, which state acts. The disposition may well be that the gate binds the design set rather than the shipped asset -- that is the owner call, and criteria are the owner."""
+disposition = "not-a-defect"
+response = "NOT UPHELD as a Kind A conformance failure. The finding argues the ROUND-10 gate, which round 11 overturned using these exact four steps. TRAIL. RV-325 F-16 set the gate: every 2a step states a truthful completion condition in its text, AND CHECKABLE IN RUN STATE. RV-325 F-17 tried to APPLY it and found the trailing clause contradicted a round-3 owner ruling that verification strength is an orthogonal axis and not the sorting rule. Its second reductio is literally that the clause condemns four of exploring.toml five shipped steps, naming explore.scope, explore.canon, explore.memory, explore.triage. The round-11 owner ruling SPLIT THE LIMBS: classification asks only for a stated truthful condition, and state-visibility moved to COLLECTION where it grades evidence. The gate was then applied over all nine at thin-adapter.md 1158-1168. All nine state a condition, all nine survive as 2a, five of nine are state-visible. Two texts were changed to buy visibility and the rest were LEFT ALONE DELIBERATELY. WHAT PHASE-08 LANDED. Its entire diff to exploring.toml at 78d00a074 is the one prescribed line, Triage the design surface becoming Record the design surface triage IN THE SLICE NOTES. The one edit the table called for, and only that one. So the shipped asset honours what the review settled, which is the Kind A question. TWO FURTHER CORRECTIONS. The measurement counted an IDIOM, not the property: Complete when belongs to the three runbooks PHASE-08 authored and this file never used it. explore.canon ships Run /canon SO THE ADRS POLICIES AND STANDARDS GOVERNING THIS SURFACE ARE IN VIEW, and that purpose clause is the table row-3 condition almost verbatim. The finding flagged its own method as evidence and not proof, and that caveat was right. The CONSEQUENCE argument also inverts: rows 1, 3 and 4 are marked NOT state-visible, so the PHASE-09 kit does not collect them, it names them and reports the fraction of five of nine. Nothing collected is undelivered, so DEC-103 does not fail here. RESIDUAL, RECORDED AS IMP-380. explore.scope ships Read X against a condition of can be named and prior art is located OR ITS ABSENCE ESTABLISHED. That is materially thinner and Read X is the act-shaped form F-16 rule 1 targets, so it is a genuine improvement to shipped guidance. It is a nit and not a gap because nothing collects that row."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "PayloadTerm prose and digest constructors bypass the single validating admission path"
 detail = '''
@@ -58,10 +60,12 @@ Positive control -- token() and label() DO reach admit(), so the grep is discrim
   grep -A3 "fn token\|fn label" src/design_run/change_log.rs | grep admit
 
 Raised from a cheap-tier candidate (S1 kindA-p02 C-2) and re-verified against source by the orchestrator before raising.'''
+disposition = "deferred"
+response = "UPHELD, deferred to ISS-290, where it is now appended. This is the SEAM and ISS-290 is the instance; RV-342 F-1 is the absence of any verification that would detect either. One repair closes all three, so it takes one item. Verified: token and label route through PayloadTerm::admit and enforce the DESIGN bounds, while digest and prose construct the struct directly and never reach it. Inert today because Digest and Prose both return None from admission_bound, so the defect is structural rather than live, exactly as raised. The reason it is worth recording anyway is the asymmetry it would create the moment a bound appears on either kind: the deserialisation route through TryFrom PayloadTermWire goes through admit and WOULD enforce it, while the in-code construction path would silently bypass it. That is the same wire-versus-constructor asymmetry ISS-290 already flags in the other direction, which is why the one-constructor rule from the projection-bounds sketch should bind both. Recorded in ISS-290 as an explicit addition to its fix sketch: give PayloadTerm a single admitting constructor."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Sketch states a single-byte elision marker; the code ships a three-byte ellipsis"
 detail = """
@@ -82,6 +86,8 @@ Positive control -- the marker length is genuinely consulted rather than hard-co
   sed -n "305p" src/design_run/render/mod.rs
 
 Raised from a cheap-tier candidate (S1 kindA-p02 C-1) and re-verified against source by the orchestrator before raising."""
+disposition = "reconcile-action"
+response = "UPHELD on the facts, routed to /reconcile rather than repaired here. Confirmed: projection-bounds.md:133 states a single-byte-marked elision, and the code ships U+2026 HORIZONTAL ELLIPSIS at three bytes. No invariant breaks, because the cap arithmetic subtracts ELISION_MARKER.len rather than assuming 1, so the rendered total still satisfies the bound, and the glyph is the better choice. The finding own reading is accepted: this is a documentation-versus-code divergence on a stated property of a settled design, and the repair is the one-line sketch correction rather than a code change. NOT APPLIED IN THIS TURN BY DESIGN. projection-bounds.md is a design surface and /reconcile is the sole explicit writer of reconciled truth, which is the same rule under which conformance.md recorded the two missing design-target selectors, src/commands/verify.rs and tests/runbook_fixture, without applying them. Recording it here so the divergence is adjudicated once rather than rediscovered."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

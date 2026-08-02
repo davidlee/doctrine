@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Nothing verifies that payload term declarations agree with their construction sites; the test that appears to is tautological"
 detail = """
@@ -44,10 +44,12 @@ Positive control, that the two bounds genuinely differ and the search finds them
   -> 32 and 16 respectively
 
 Surfaced by the S2 cheap tier across two independent passes: pass B on PHASE-16 found the historical instance and correctly noted it was already repaired; the structural claim and the tautology were established by hand during adjudication."""
+disposition = "deferred"
+response = "UPHELD, deferred to ISS-290 rather than to a new item, because one repair closes this, ISS-290 and RV-341 F-2 together and three parallel items would be three parallel implementations of one fix. ISS-290 already records the tautology in the same terms: the only reader other than key order saturates from the DECLARED kinds rather than comparing them to anything real. What this finding adds, and what is now appended to ISS-290, is that the gap has a DEMONSTRATED ESCAPE and not a hypothetical one: at 63b348de6 three numbers disagreed, 64 and 32 and 16, a step id of 17 to 64 bytes passed validate_step_id and was then refused at admission, which is refusal at execution rather than at validation and is what EX-3 exists to forbid, and the phase shipped green. A human pass caught it two phases later, outside the PHASE-16 range. The remaining Outcome instance is benign only by an inequality nobody chose, so the budget proof OVERSTATES its worst case and holds by luck rather than by construction. The fix direction is agreed and recorded: take the kind FROM the declaration so the mismatch is unrepresentable, rather than adding a check that has to be remembered."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "EX-16 runbook clause is the machines first non-cumulative condition and nothing pins its non-blocking half"
 detail = """
@@ -72,10 +74,12 @@ Positive control, that the search reaches the right places and stale IS otherwis
   rg -c stale tests/e2e_design_runbook.rs              -> 10
 
 Raised from an S2 cheap-tier candidate (pass A on PHASE-16, C-5) and verified against source during adjudication."""
+disposition = "deferred"
+response = "UPHELD, deferred to IMP-379. The asymmetry is real and load-bearing: gate::advance evaluates the runbook clearance clause on this edge only, deliberately outside cumulative_conditions, and that is the difference between a stale step warning and a stale step blocking an unrelated later transition. The rendering half is exercised ten ways; the evaluation half survives only as the shape of an if block plus a comment, so the refactor that folds it back in for uniformity would go green while silently changing the machine. Not repaired in-slice because all 16 phases are completed and this is new test surface against an EX-16 guarantee, not a defect in landed code. IMP-379 carries the measurement, the positive control and the shape of the missing test."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Discharge::verified records a hardcoded exit 0 rather than the observed exit code"
 detail = """
@@ -94,10 +98,12 @@ Positive control, that the constructor really does take an exit code rather than
   -> exit: i32 parameter, stored as exit: Some(exit)
 
 Raised from an S2 cheap-tier candidate (pass A on PHASE-16, C-3) and verified against source during adjudication."""
+disposition = "fixed"
+response = "FIXED at 4f2816efa. The guard above the call now BINDS the code it checked, via let Some(exit) = checked.exit.filter(code == 0), and Discharge::verified records that binding rather than a literal 0. Upheld as stated: the record is the auditable trace of what the verifier did, so it must carry the OBSERVATION and not the guard conclusion. The future relaxation the finding names, accepting a set of success codes, now changes only the predicate and cannot leave the record asserting 0 for a non-zero exit."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "PHASE-05 checkpoint has a deterministically unrecoverable crash window, and the EX-8 fault seam cannot reach it"
 detail = '''
@@ -124,10 +130,12 @@ REPRO:
 POSITIVE CONTROL, that the fault seam is genuinely fireable and the search finds every site: rg -n "fault\(CheckpointStep::" src/commands/design.rs returns eight sites (881, 893, 901, 904, 913, 931, 946, 1318), and reading each shows all eight precede their effect. In range: git diff cb45bc958..ba2d9ba9a -- src/commands/design.rs returns 529 changed lines including both the create_record call and the Materialised journal write.
 
 PROVENANCE. S3 pass B on PHASE-05 raised the window (its C-1, rated minor). Pass A independently confirmed EX-2, EX-3 and EX-8 CLEAN and in doing so stated the very fact that makes the finding true, that each fault fires immediately before that step effect, reading it as confirmation rather than as a gap. The untestable-by-construction half and the observation that the recovery test exercises only the recoverable direction came from reading the two passes against each other, then verifying refuse_clobber and all eight fault sites by hand. Adjacent to RV-342 F-2 in shape, a guarantee that survives as structure with no test able to pin it.'''
+disposition = "deferred"
+response = "UPHELD, and the owner ruling is REPAIR rather than tolerate, deferred to ISS-295. Verified by hand: CheckpointStep carries exactly six variants and all eight call sites fire BEFORE their effect, so the window is unreachable through the fault seam by construction, and refuse_clobber bails whenever any artifact target exists, so every retry fails identically. Two facts make this worse than the DEC-100 window that was lawfully tolerated for v0.0.1: it is DETERMINISTICALLY unrecoverable without hand-repair of the journal or the tree, and it is reachable by an ordinary Ctrl-C because the two writes are separated by user-interruptible work and no handler is installed. Not repaired in-slice for three reasons, only one of which is size. It needs a SEVENTH fault point, which amends EX-8 on a completed phase. It spans commands/design.rs, knowledge.rs and entity.rs, and entity.rs is shared machinery under the behaviour-preservation gate. And it contains an unsettled design fork: on resume with the record already on disk, adopt or refuse or overwrite, where overwrite is precisely what D7 no-silent-clobber exists to prevent since a retry days later would eat hand edits, and the partial-write case bricks identically but must not be adopted. ISS-295 carries the window, the reachability, the fork and a sketch of adopt-if-complete and refuse-if-partial."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "A PHASE-07 receipt assertion is satisfied by a substring of an unrelated line, so it pins nothing; proven by mutation"
 detail = """
@@ -150,10 +158,12 @@ WHAT REMAINS COVERED. The cold leg independently exercises fragment_section thro
 IN RANGE: git diff 4435904cd..35ef61cac -- tests/e2e_claude_install.rs shows the test added by PHASE-07, and the assertion is present unchanged at head.
 
 PROVENANCE. S3 pass A on PHASE-07 raised this as its sole candidate, citing only the NOT-held branch. Pass B examined the same test in its class (g) sweep, enumerated four ways it would fail, and returned CLEAN. The mutation, the positive control, and the observation that BOTH fragment_lines branches satisfy the needle were established during adjudication. This is the class IMP-024 section 4a calls catchable by a second pass: pass B held the evidence and misread it."""
+disposition = "fixed"
+response = "FIXED at 4f2816efa, and the repair carries its own positive control. The assertion is now line-anchored: held.lines().any(line starts_with fragment CURRENT) rather than a bare contains, which was satisfied unconditionally by the known_fragment CURRENT line that fragment_lines emits on both of its branches. VERIFIED BY THE FINDING OWN MUTATION: eliding the header in fragment_section when the body is withheld, which deletes exactly the behaviour the test names, now yields FAILED where the finding measured ok. Source restored, file green 9 of 9. A comment records why it must stay anchored."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "The acceptance attestation digest is computed over an empty string when the declaration fails to serialise"
 detail = """
@@ -172,10 +182,12 @@ IN RANGE, and this is the interesting part:
 POSITIVE CONTROL that the range diff is non-empty and the search works: the same diff returns 529 changed lines.
 
 PROVENANCE, and a correction to the campaign record. Both S3 PHASE-05 passes raised this independently (pass A C-1, pass B C-2). It is the SAME line both S2 PHASE-04 passes converged on, which S2 adjudication correctly ruled out of the PHASE-04 range and therefore discarded. It was never out of scope for the campaign, only mis-attributed: the line is added by PHASE-05. IMP-024 section 4b cites that convergence as its example of worthless agreement on an out-of-scope finding. That reading holds for PHASE-04 and should be read alongside this: the finding was real, and phase-scoped ranges plus a mandatory scope gate are what located it."""
+disposition = "fixed"
+response = "FIXED at 4f2816efa. The closure now returns Result and propagates through transpose, so a serialisation failure refuses instead of digesting the empty string. Upheld on the stated ground rather than on probability: the objection was never reachability, it was that a discarded Result on the INPUT TO AN ATTESTATION DIGEST makes two different failed declarations attest identically with nothing saying so. The enclosing plan_checkpoints already returned Result, so the fix cost one question mark."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "PHASE-15 ships a comment citing a decision the same phase superseded, and the DEC reseat renumbered the reference without retargeting it"
 detail = """
@@ -200,10 +212,12 @@ IN RANGE: git diff 7a8a7fe52..540aed959 -- src/commands/design.rs | grep -n DEC-
 NOT THE DEDUP ENTRY. prior-findings section 0 records that the gitignored runtime phase sheets were missed by the reseat while authored files are clean. Both halves are true and neither is this: the sweep DID reach this file. The defect is that a renumber is not a retarget.
 
 PROVENANCE. S4 pass B on PHASE-15 raised this as its C-2 and then dismissed it in its own current: line as REPAIRED AT HEAD, reading the reseat commit as having deleted the line. The reseat deleted the string DEC-099, not the stale reference. Pass A did not find it at all. This is the exact mirror of the S3 case in which a pass rated an already-repaired defect major: here a pass rated a live defect history. The template instruction that a later-repaired defect is history and not a severity helps in one direction and can mislead in the other, and the settling move in both directions is the same, which is to read current state rather than to reason about it."""
+disposition = "fixed"
+response = "FIXED at 4f2816efa. The comment now cites DEC-100, the record describing what actually landed, and names DEC-105 explicitly as the superseded one whose writer-lock-plus-CAS mechanism did NOT land, so the next reader does not re-follow it. Upheld in full, including the sharp part: the DEC reseat renumbered DEC-099 to DEC-105 across authored source and reached this file, so a CORRECT sweep preserved the staleness. A renumber is not a retarget. The generalisation is recorded as mem.pattern.doctrine.reseat-renumbers-does-not-retarget, whose check is not whether the old id is gone, which is a claim about the search, but whether the cited record is accepted."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "A PHASE-15 doc comment names entry_text, a function the same phase renamed out of existence"
 detail = """
@@ -225,6 +239,8 @@ CURRENT: live at head. git diff --shortstat 540aed959..HEAD -- src/design_run/le
 THE CLAIM IS DELIBERATELY NARROW. It is stated as a reference to a function that does not exist, which is directly measurable. Whether rustdoc emits an unresolved-link warning for an intra-doc link on a private item was NOT measured, so that is not part of the warrant. One of the two passes offered it as the warrant; it is dropped here rather than inherited.
 
 PROVENANCE. Both S4 PHASE-15 passes raised this independently, A as its C-1 and B as its C-1. Per IMP-024 section 4a that convergence is weak evidence rather than confirmation, so it was settled by measurement and not by agreement, which was the right call: the two passes also flatly disagreed about whether it survives at head, B asserting in one line that a head-level search returns zero hits and in the next line that it is still present at head. The measurement above resolves that contradiction in favour of still present."""
+disposition = "fixed"
+response = "FIXED at 4f2816efa. The doc comment now names entry_label_and_text. Confirmed live at head before repair by measurement rather than by either pass assertion, the two having contradicted each other on survival: 1 hit for entry_text at legacy.rs:311, control 2 hits for entry_label_and_text being the definition and its call site."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
