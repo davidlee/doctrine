@@ -1,0 +1,59 @@
+memory_uid = "mem_019fc236d78674e39f2a6e909d7ef0b9"
+memory_key = "mem.pattern.testing.count-the-repetition-not-the-sameness"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Count the repetition, not the sameness of its outcome"
+summary = "An idempotency/duplication observable must count the repetition — sameness is what a single occurrence also produces"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = ["scripts/spike-capsule/**"]
+commands = []
+tags = ["testing", "falsifiability", "positive-control"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "c16e17a3ac9b3f1b8c877e7219cf3ff61589b70a"
+tree = "b423804c21213610602a53847f9371af76d31b98"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "c16e17a3ac9b3f1b8c877e7219cf3ff61589b70a"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-241"
+
+[[source]]
+kind = "finding"
+ref = "F-P05-30"
+
+[[relation]]
+label = "related"
+target = "mem_019fbd70c9247f02a4c25c76fa3ca57e"
+
+[[relation]]
+label = "related"
+target = "mem_019fbe0509397ea197c772a6864e3249"
+
