@@ -1,0 +1,46 @@
+memory_uid = "mem_019fc00c3b797eb38167f035f066d723"
+memory_key = "mem.pattern.shell.printf-flush-enables-fifo-synchronised-kill"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Bash printf flushes per call, so a FIFO can drive deterministic mid-run interruption"
+summary = "Bash's printf builtin flushes stdout on every call, so a watcher reading the far end of a FIFO sees each line as it is emitted and can kill the writer at a chosen point — no fault-injection seam needed in the subject."
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["shell", "testing", "process-control"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d5aca6040cf51c219a724cfe3a969b189a968235"
+ref_name = "refs/heads/edge"
+checkout_state_id = "87cbae42c592a80ad5d11027880ed454cc8af999d69380a07df83f824f5e180e"
+base_commit = "6554c8427b6c38599140035641bee6ef0b3b9878"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "measured"
+ref = "SL-241 PHASE-05 T4b, 2026-08-02"
+
