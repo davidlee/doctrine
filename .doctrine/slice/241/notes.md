@@ -736,6 +736,49 @@ are VA-3's business and are re-runnable as `control/audit-dq4.sh
   measurement row filled or recorded after-side-only" plus the ASM-007 line;
   only the ASM-007 line is affected.
 
+### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
+
+Written 2026-08-03, mid-phase and deliberately so: this range is the most
+contended in the slice by an order of magnitude, and it is the kind of thing
+that cannot be reconstructed at close. **The range is still OPEN** — PHASE-05 is
+`in_progress`; the end below is HEAD at writing, not the phase's end.
+
+**The start is bound, and it is not in `boundaries.toml`.**
+`code_start_oid = 8e962656` lives in the runtime `phases/phase-05.toml`;
+`boundaries.toml` only receives a phase's row when the completion flip captures
+`code_end_oid` and upserts it. So the four rows there are the four completed
+phases and PHASE-05's absence is correct, not a missed binding. A reader who
+checks only `boundaries.toml` will conclude the opposite — which is why this
+paragraph exists.
+
+Range `8e962656..HEAD`. **162 commits, 51 mine, 111 FOREIGN.** For scale,
+PHASE-04's most contended portion was 15 commits with 8 foreign. The foreign
+work is not noise from one neighbour — it is a dozen concurrent efforts:
+
+| scope | commits | scope | commits |
+|---|---|---|---|
+| SL-233 | 36 | CHR-051 | 5 |
+| SL-243 | 16 | SL-244 | 3 |
+| CHR-049 | 16 | IMP-104 | 3 |
+| RFC-027 | 6 | *(12 further scopes)* | 1–2 each |
+
+**Two INTERIOR MERGES**, which is new for this slice and matters to the
+mechanism rather than only to the reading: `e2c2f4ab` (`Merge branch 'main' into
+edge`) and `a45ce30b` (`candidate(233/close-001)`). `record-delta`'s guard
+requires a **non-merge end** — satisfied, since both are interior — but a range
+containing merges is not a linear patch series, so `--start/--end` over it folds
+in everything those merges brought. The phase's own code tip is what should be
+recorded, and `--commit <S>` per commit is the safe default the CLI already
+prefers.
+
+**Do not read `slice conformance 241` as this slice's footprint.** The same
+warning PHASE-04's section gives applies here with 111 foreign commits behind
+it rather than 8.
+
+Operating rule inherited from PHASE-04 and vindicated again: **every commit in
+this phase was path-limited**, and the tree was shared throughout with other
+agents' uncommitted work sitting in it.
+
 ### PHASE-04 boundary — EIGHT foreign commits, and a hostile shared tree
 
 Range `b548f65d4..090148ef` (step 0 portion). **15 commits, 7 mine, 8 foreign** —
