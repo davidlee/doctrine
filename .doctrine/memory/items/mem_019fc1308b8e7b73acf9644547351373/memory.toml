@@ -1,0 +1,50 @@
+memory_uid = "mem_019fc1308b8e7b73acf9644547351373"
+memory_key = "mem.pattern.spec.read-anchors-via-json-not-grep"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Read spec [[source]] anchors via spec show --json — grepping the TOML lies twice"
+summary = "spec show --json exposes spec.source[] plus the spine; a raw rg over spec-*.toml double-counts via slug symlinks and picks up commented scaffold lines"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["spec", "source-anchor", "footgun", "json-contract", "census"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9f166466ff27d79a1020e8a30aa55597cedcf018"
+ref_name = "refs/heads/edge"
+checkout_state_id = "df826ddda7af844d78fc7c0901349659b8c1ebe6ed62bceef31ec3f0e9d39e05"
+base_commit = "946d78031b411048a9dbdfc311ddf0c45d3b4408"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-243"
+
+[[source]]
+kind = "backlog"
+ref = "CHR-052"
+
