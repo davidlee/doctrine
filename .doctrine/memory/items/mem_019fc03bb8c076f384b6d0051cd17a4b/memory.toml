@@ -1,0 +1,50 @@
+memory_uid = "mem_019fc03bb8c076f384b6d0051cd17a4b"
+memory_key = "mem.fact.git.clone-inherits-stale-commit-graph"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "git fsck fails while every pack verifies — a clone-inherited commit-graph"
+summary = "git fsck fails but every pack verifies: a clone inherited a commit-graph naming commits a prune removed"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["git", "fsck", "clone", "fixtures"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c064a468992a0c639ff3da9e333f2f6ec22fea43"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0244ed260a4ef99ff93f578d44dc7c6e30b451b80f29444d1977bf4fb356a2e8"
+base_commit = "36d930ca43220f309175f30d7250b5dff71129ae"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-241"
+
+[[source]]
+kind = "backlog"
+ref = "ISS-296"
+
