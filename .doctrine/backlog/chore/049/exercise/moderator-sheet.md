@@ -177,8 +177,8 @@ S4 is collected **only** over the five state-visible obligations:
 `review.passes`. The four it cannot reach — `explore.scope`, `explore.canon`,
 `explore.memory`, `inquire.knowledge` — are named, never subtracted.
 
-**For this exercise `explore.research` is desensitised** by the kickoff (§3), so
-four of the five are collectible. Both numbers are reported.
+All five are collectible for this exercise: §3's two cuts leave
+`explore.research` unprimed in both surfaces rather than steered.
 
 | # | candidate | edge | step | stated condition unsatisfied? | sibling contrast | firing items 1–4 | verdict |
 |---|---|---|---|---|---|---|---|
