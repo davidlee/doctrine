@@ -181,10 +181,30 @@ returns **one line** — the `model:`. The project `researcher.md` is not merely
 a frontmatter copy but a *whole-file* copy of `scout.md`, body prose included,
 with the model changed to the wrong one. There is no researcher profile in this
 project; there is a second scout that costs less and is advertised as smarter.
-The fix is to author one, taking the frontmatter contract from
-`~/.pi/agents/researcher.md` (`name: researcher`, `tools: read, write,
-web_search, fetch_content, get_search_content`, `model:
-deepseek/deepseek-v4-pro`, `output: research.md`).
+
+**But (b)'s conclusion about `web_search` is wrong — corrected on the way to
+fixing it.** (b) reasoned from the script's usage examples (*"What's new in Rust
+2025?"*) that `pi-research` must be a web researcher and that the missing
+`web_search` / `fetch_content` was the larger defect. It is the other way round:
+those examples are themselves copy-paste from the *home* profile, of a piece
+with the rest of this card. In this project both runners are repo-facing —
+`.doctrine/governance.md` "Research agents" scopes `pi-research` to *"governance
+applicability or when a thread needs judgement"* and has both piping stdout to
+`.doctrine/slice/NNN/research/raw/`, and no skill or caller in the tree invokes
+either for web research (`grep -rn 'pi-scout\|pi-research' .agents .claude
+install` → no hits; `CLAUDE.md` and `governance.md` are the only references).
+
+Flagged as an **inference, not a quotation**: `governance.md` does not say
+"repository, not web" in as many words — it is silent on web access, and the
+repo role is read off the stated purpose plus the absent callers. If that read
+is wrong the correction is cheap and local (swap the profile's `tools:` line
+and restore the web examples), but the whole-file rewrite was authored on it.
+
+Resolved by giving the project a real researcher persona — judgement,
+governance applicability, verified-vs-inferred discipline — on repo tools
+(`read, write, grep, find, ls, bash`) and `deepseek-v4-pro`. `output:` is
+deliberately NOT carried over from the home profile: these runners return on
+stdout, and an `output:` key would divert the brief to a file.
 
 **A negative check on the home profiles is a false negative for this item** —
 they read correct, and that is not the file the scripts load. Positive control:

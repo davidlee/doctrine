@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# pi-research — shell-invocable researcher for claude code agents.
-# Uses the project's researcher agent profile (deepseek-v4-pro).
+# pi-research — shell-invocable repo researcher for claude code agents.
+# The smarter, judgement-led tier: uses the project's researcher agent profile
+# (deepseek-v4-pro). For plain structural recon, use the cheaper pi-scout.
 # Parses .pi/agents/researcher.md for model, tools, and system prompt.
 #
+# This researches the REPOSITORY, not the web — it is the tier for governance
+# applicability and tradeoffs (see .doctrine/governance.md "Research agents").
+# The profile carries no web tools; that is deliberate, not an omission.
+#
 # Usage:
-#   ./scripts/pi-research "What's new in Rust 2025?"
-#   ./scripts/pi-research --think off "quick fact check"
-#   echo "Compare Bun vs Node 2025" | ./scripts/pi-research
+#   ./scripts/pi-research "Does ADR-006 govern the confined-worker spawn path?"
+#   ./scripts/pi-research --think off "which policy covers host-project layout?"
+#   echo "Where should a new dispatch rule live?" | ./scripts/pi-research
+#
+# Env:
+#   PI_BACKSTOP   hard timeout in seconds (default: 900)
 
 set -euo pipefail
 
@@ -44,11 +52,33 @@ else
   exit 1
 fi
 
-exec pi --print \
+# pi writes session and settings state at runtime. Left to its default it writes
+# under $HOME/.pi, which is read-only (or absent) for any confined caller — an
+# EROFS there kills the run before it inspects a single file (IMP-322). Point the
+# session at a disposable dir we own and clean up after ourselves. This is why
+# the runner cannot `exec`: an exec'd pi would leave the trap unrun.
+SESSION_DIR=$(mktemp -d)
+trap 'rm -rf "$SESSION_DIR"' EXIT
+
+# stdin MUST be closed. With the query passed as an argument the `[[ ! -t 0 ]]`
+# branch above never fires, so nothing consumes fd 0 and it passes straight into
+# pi — which does not self-exit while stdin is held open. Termination then
+# depends on whatever the caller happened to do with fd 0: observed six threads
+# launched identically, four complete, two zero-byte with no exit status and no
+# error (ISS-266). `timeout` is the backstop for the residual — a wedged run
+# fails loudly and non-zero rather than hanging forever.
+status=0
+timeout "${PI_BACKSTOP:-900}" pi --print \
   --model "$model" \
   --system-prompt "$sysprompt" \
   --tools "$tools" \
   --thinking "$thinking" \
+  --session-dir "$SESSION_DIR" \
   --no-skills \
   --no-context-files \
-  "$query"
+  "$query" </dev/null || status=$?
+
+if [[ $status -eq 124 ]]; then
+  echo "ERROR: pi-research hit the ${PI_BACKSTOP:-900}s backstop — no result" >&2
+fi
+exit "$status"
