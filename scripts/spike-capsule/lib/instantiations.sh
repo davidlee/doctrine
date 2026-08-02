@@ -639,11 +639,18 @@ H6_assert() {
 # dotfile included (2026-08-02).
 C3_H9_FILTER=h9-hostile
 
-c3_h9_dir() {
+# c3_design_target_dir <fixture> — a directory this fixture's slice declares
+# design-target, and the answer to the question three rows now ask.
+#
+# Shared rather than per-row: H9 and H12 both need "somewhere leg 2 will admit",
+# and a second copy is a second place to disagree with the fixtures' selectors.
+# Measured on both fixtures, dotfiles included (2026-08-02) — light `src/**`
+# from SL-001, heavy `scripts/spike-capsule/**` from SL-241.
+c3_design_target_dir() {
   case "$1" in
     light) printf 'src' ;;
     heavy) printf 'scripts/spike-capsule' ;;
-    *) rig_die "H9: no design-target plant directory for fixture: $1" ;;
+    *) rig_die "no design-target plant directory for fixture: $1" ;;
   esac
 }
 
@@ -652,7 +659,7 @@ c3_h9_dir() {
 # must agree about the form set without a `case` in each.
 c3_h9_paths() {
   local dir
-  dir=$(c3_h9_dir "$1")
+  dir=$(c3_design_target_dir "$1")
   C3_H9_PATHS=(
     "${dir}/.gitattributes"
     "${dir}/h9-payload.txt"
@@ -669,7 +676,7 @@ c3_h9_escape_target() { printf '%s' "$1/h9-escaped"; }
 H9_mutate() {
   local run=$1 fixture=$2 repo dir
   repo=$(c3_capsule_repo "${run}")
-  dir=$(c3_h9_dir "${fixture}")
+  dir=$(c3_design_target_dir "${fixture}")
 
   # A filter driver named in the attributes and DEFINED in the capsule's own
   # repo config — the complete hazard, and the half that cannot travel is the
@@ -695,7 +702,7 @@ H9_mutate() {
 H9_planted() {
   local run=$1 repo dir
   repo=$(c3_capsule_repo "${run}")
-  dir=$(c3_h9_dir "$2")
+  dir=$(c3_design_target_dir "$2")
   # The symlink must be a SYMLINK in the tree, not a regular file git happened
   # to record: mode 120000 is what conform leg 4 leaves legal (SL-012), and a
   # dereferenced copy would make the row a different one entirely.
@@ -708,7 +715,7 @@ H9_planted() {
 H9_assert() {
   local run=$1 fixture=$2 at="H9/$2/$3/$4" alt=$4 dir
   local q="${run}/quarantine"
-  dir=$(c3_h9_dir "${fixture}")
+  dir=$(c3_design_target_dir "${fixture}")
   c3_h9_paths "${fixture}"
 
   c3_assert_stage_passed "${at}" "${run}" harvest
@@ -748,6 +755,118 @@ H9_assert() {
   # driver is NAMED by an object and DEFINED by config, and only the first half
   # travels — which is H6's dissolution arriving as H9's.
   c3_assert_never_ran_in "${at}" "${run}" "${q}" "${run}/canonical"
+}
+
+# H12 — THE EVALUATION SURFACES `.envrc` AND `flake.nix`, MODIFIED AGAINST B.
+#
+# Dissolved by construction, and § 5.6 is precise about the shape: *an audit
+# row, not a pipeline row*. `audit-dq4` proves no trusted-side step exists that
+# could evaluate them; the pipeline cell exists to show the surfaces TRAVELLING
+# — they are ordinary objects and conform admits them — while nothing on the
+# trusted side reads what they say.
+#
+# PLANTED UNDER THE DESIGN-TARGET DIRECTORY (D-P05-11). The matrix's original
+# root-level pair is unreachable on heavy for two independent reasons measured
+# at F-P05-26: root `flake.nix` is undeclared under SL-241's selectors, so
+# conform leg 2 refuses `undeclared-path` and any refusal falsifies a
+# dissolution; and `/.envrc` is gitignored in this repository, so `git add`
+# refuses it outright. The move costs the hazard nothing — `.envrc` is a
+# PER-DIRECTORY direnv surface and nix evaluates a `flake.nix` wherever it is
+# invoked, so the class-2/3 trigger is unchanged and only the directory differs.
+C3_H12_ENVRC=.envrc
+C3_H12_FLAKE=flake.nix
+
+# PUBLISHES `C3_H12_PATHS`, for the reason `c3_h5_paths` and `c3_h9_paths` do.
+c3_h12_paths() {
+  local dir
+  dir=$(c3_design_target_dir "$1")
+  C3_H12_PATHS=("${dir}/${C3_H12_ENVRC}" "${dir}/${C3_H12_FLAKE}")
+}
+
+H12_mutate() {
+  local run=$1 fixture=$2 repo dir log
+  repo=$(c3_capsule_repo "${run}")
+  dir=$(c3_design_target_dir "${fixture}")
+  log=$(c3_execution_log "${run}")
+
+  # `.envrc` is plain shell, so this is the class-3 trigger itself rather than a
+  # stand-in for one: anything that evaluated the file would run the payload.
+  cat >"${repo}/${dir}/${C3_H12_ENVRC}" <<EOF
+# ${C3_PAYLOAD_MARK}: ${dir}/${C3_H12_ENVRC}
+printf 'h12/envrc evaluated in %s\n' "\$(pwd -P)" >>"${log}"
+EOF
+
+  # And a flake whose devShell hook runs the same payload — class 2. Nix is
+  # ABSENT from this jail, which is exactly why the row's claim rests on the
+  # audit rather than on nix declining to run: an evaluator that is not
+  # installed proves nothing about a trusted side that would have called it.
+  cat >"${repo}/${dir}/${C3_H12_FLAKE}" <<EOF
+# ${C3_PAYLOAD_MARK}: ${dir}/${C3_H12_FLAKE}
+{
+  description = "H12 planted payload";
+  outputs = _: {
+    devShells.x86_64-linux.default.shellHook = ''
+      printf 'h12/flake evaluated in %s\n' "\$(pwd -P)" >>"${log}"
+    '';
+  };
+}
+EOF
+
+  c3_h12_paths "${fixture}"
+  c3_commit "${run}" 'H12: the evaluation surfaces, modified against B' \
+    "${C3_H12_PATHS[@]}"
+  c3_publish "${run}"
+}
+
+H12_planted() {
+  c3_h12_paths "$2"
+  c3_planted_paths "$1" "${C3_H12_PATHS[@]}"
+}
+
+H12_assert() {
+  local run=$1 fixture=$2 at="H12/$2/$3" dir audit
+  local q="${run}/quarantine"
+  dir=$(c3_design_target_dir "${fixture}")
+  c3_h12_paths "${fixture}"
+
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  # The surfaces TRAVELLED. Stated first, because every claim below is about
+  # something not happening and each would hold vacuously against a transport
+  # that had dropped the payload.
+  c3_assert_ingested "${at}" "${run}" "${C3_H12_PATHS[@]}"
+
+  # I4, and here it is the mechanism rather than a restatement of H9's: no
+  # trusted-side worktree is written at all, so there is no `.envrc` on disk for
+  # direnv to find and no `flake.nix` for a `nix` invocation to pick up —
+  # whatever a trusted-side step's working directory happened to be.
+  rig_assert "${at}: no ${C3_H12_ENVRC} materialised trusted-side" \
+    c3_path_absent "${q}/${dir}/${C3_H12_ENVRC}"
+  rig_assert "${at}: no ${C3_H12_FLAKE} materialised trusted-side" \
+    c3_path_absent "${q}/${dir}/${C3_H12_FLAKE}"
+  c3_assert_never_ran_in "${at}" "${run}" "${q}" "${run}/canonical"
+
+  # THE STRUCTURAL PROOF — § 5.6's actual evidence for this row: no trusted-side
+  # step exists that COULD evaluate them. Run against THIS RUN'S OWN pinned
+  # declaration, so the tokens under audit are the heavy fixture's
+  # `cargo nix direnv just rustc` rather than the light default (F-P05-3).
+  #
+  # The EMITTED CLAIM is asserted, not the exit status, and that is VA-2's
+  # discipline rather than a convenience: pointed at a non-default declaration
+  # the audit ALSO reds its own exemption-staleness check, which is bookkeeping
+  # about which token set was passed in and says nothing about DQ-4 (F-P05-27).
+  # Redirected to a file, never piped — a pipe would report the reader's exit
+  # status instead of the audit's, which this phase has met three times.
+  audit="${run}/h12-audit-dq4"
+  "${RIG_DIR}/control/audit-dq4.sh" \
+    --declaration "${run}/interpretation-surface.txt" >"${audit}" 2>&1 || true
+  rig_assert "${at}: DQ-4 — no unaccounted trusted-side invocation of the declared evaluators" \
+    command grep -q 'clean — no unaccounted trusted-side invocation' "${audit}"
+
+  # And the capsule gained nothing: all four stages pass on the modified
+  # surfaces, because nothing trusted-side ever asked what they contained.
+  c3_assert_stage_passed "${at}" "${run}" conform
+  c3_assert_stage_passed "${at}" "${run}" verify
+  c3_assert_stage_passed "${at}" "${run}" advance
 }
 
 # H15 — THE PIPELINE IS KILLED MID-RUN, AT EACH STAGE IN TURN (EX-9).

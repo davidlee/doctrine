@@ -7,8 +7,9 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
-T0–T3 done, T4a DONE (five rows live, all model-level); T4b next** · head
-`d8e59952`
+T0–T3 done, T4a DONE (five rows live, all model-level), T4b's four rows WRITTEN
+and shakeout-green; the authoritative `rig c3` run is what remains** · head
+`efbb097a`
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -101,6 +102,38 @@ Lifted here so the ids survive the sheet:
   that must clear all four stages — so the first to pay heavy's ~6-min verify,
   which re-shapes T4b's cost (H9/H15 pay it too). H5's form set is per fixture
   (**D-P05-10**). Six mutants, six reds, no survivors.
+- **T4b — the four DISSOLUTIONS written** (`efbb097a` H6/H9/H15; H12 follows).
+  Each performs the hostile thing and shows the pipeline unbothered, which is
+  H2's shape; each carries its own positive control, so a mutate that silently
+  did nothing reds instead of stamping the table's strongest claim on a probe
+  that never ran.
+  - **H6** — hostile `.git/config` + executable hooks. Config and hooks are
+    repo-local and never objects, so neither mechanism carries them. Its control
+    is the CAPSULE firing its own `reference-transaction`: without it, a payload
+    with a bad shebang would leave the trusted side silent for the wrong reason.
+    `core.hooksPath` is planted ABSOLUTE on purpose — a repo-relative one copied
+    into the quarantine would find nothing there and the observable would be
+    vacuous. Also observes git's protected-configuration defence of
+    `uploadpack.packObjectsHook`, which `upload-pack` would otherwise run as a
+    child of the trusted side's own fetch.
+  - **H9** — out-of-tree symlink + a `.gitattributes` filter driver, scored as
+    two. The `dissolution` leg states I4 as a PAIRING (the payload is in the
+    range the trusted side folded, and no candidate tree exists to follow it);
+    the `verify` leg observes containment where the tree IS materialised.
+  - **H12** — the evaluation surfaces, per **D-P05-11** planted at the slice's
+    design-target directory: the matrix's root pair is unreachable on heavy
+    (**F-P05-26**, and `/.envrc` is gitignored besides). Asserts `audit-dq4`'s
+    EMITTED CLAIM, not its exit status — **F-P05-27**.
+  - **H15** — the pipeline killed mid-run, synchronised on its own `stage=`
+    emission through a FIFO (bash's `printf` flushes per call, measured) and
+    SIGKILLed by process group so no sandbox is orphaned. A timed kill would be
+    D-P05-8's racer. **D-P05-12**: stage 4 has no kill of its own because it has
+    no interruptible interior — the row observes the consequence instead, a
+    repeat advance refusing `stale-base`, i.e. the CAS applied exactly once.
+  - shared vehicle grew `c3_execution_log` (a LOG, not a flag — these rows need
+    WHERE a payload ran), `c3_design_target_dir` (H9 and H12 both need "somewhere
+    leg 2 admits"; one definition, not two), `c3_path_absent` (`-e` is false for
+    a dangling symlink and every escape here dangles by design).
 - **D-P05-6..10** and **F-P05-10..25** are in the runtime sheet in full. Four
   are operator rulings from one `/consult` (D-P05-6 named sandbox statuses +
   `verify/resource-cap`; D-P05-7 heavy builds assets on site; D-P05-8 H2
