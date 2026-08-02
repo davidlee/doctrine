@@ -128,9 +128,19 @@ The 5/9 coverage fraction is over the nine.
 occurred and its kind — `deliberate` (the break in §5) or `incidental` (context
 exhaustion, compaction, harness summarisation).
 
+Subject session: `cc61c799-9799-431b-bc6d-72b49db0f45a`, opened 06:47:00Z.
+Design run: `dr-019fc13a-24f5-75b3-be8f-5bee1529c172`. Run state:
+`.doctrine/state/slice/243/design.toml`.
+
+**The pre-run baseline snapshot was worthless** — the subject session was already
+open when it was taken, and the moderator's first identification of the
+transcript was wrong. The binding was made instead from the transcript's first
+user message, which carries the kickoff verbatim. Recorded because a wrong
+binding silently attributes one run's evidence to another.
+
 | id | edge | `context_state` |
 |---|---|---|
-| W1 | 1 — `Exploring → Inquiring` | |
+| W1 | 1 — `Exploring → Inquiring` | `continuous` so far — 0 compaction markers in the subject transcript at 06:49Z |
 | W2 | 2 — `Inquiring → Drafting` | |
 | W3 | 3 — `Drafting → Reviewing` | |
 | W4 | 4 — `Reviewing → Locked` | |
@@ -183,6 +193,66 @@ All five are collectible for this exercise: §3's two cuts leave
 | # | candidate | edge | step | stated condition unsatisfied? | sibling contrast | firing items 1–4 | verdict |
 |---|---|---|---|---|---|---|---|
 | | | | | | | | |
+
+## 6a. W1 observations — recorded live, at 06:49Z
+
+### `explore.research` — clean non-firing, unprimed
+
+The observation §3's two cuts were made to protect, and it is collectible.
+
+**The unprime is verified mechanically, not assumed.** The subject read
+`notes.md` at 06:47:36.919Z and the tool result contains **zero** occurrences of
+"research" — three open items, not four. The working-tree edit predated the read;
+only the *commit* came after it.
+
+Unprimed, the subject then ran `doctrine verify research-current --slice 243`
+(06:48:16Z), found it failing, and **withheld** discharge of `explore.research`,
+electing to run the round instead. `explore.scope` is discharged and `attested`
+in run state; `explore.research` is not.
+
+**S4 does not fire here.** The step was not discharged at a turn where its stated
+condition was unsatisfied — the condition was made true first. This is the
+strongest available form of the test on the obligation most likely to fire, and
+it came back negative.
+
+### The delivery observation — one emission, and not on the read path
+
+The `inquiry` fragment states of itself: *"Delivered every turn of **exploring
+and inquiring** both."*
+
+Across the run to 06:49Z it was emitted **once** — by `doctrine design resume`
+at 06:48:00Z, carrying the `inquiry@98fffa6b…` header. It was **not** emitted by
+any of the four `doctrine design show` calls that preceded it (06:47:23, :25,
+:29 — the last with `--full`). Those returned **819 B of pure machine state**:
+uid, revision, stage, watermark, counters, empty `frontier` / `blockers` /
+`sections`, and a `declare` schema hint. No craft prose.
+
+`[fragments] fragment = []` in run state: the subject has declared **no
+receipts**, so nothing is suppressed under DEC-078. The single emission is not a
+suppressed re-emission.
+
+**What this does NOT yet establish, and the discriminator that would.** All four
+`show` calls preceded the `resume`. So *"`show` is not an emission path"* and
+*"`show` had not yet reached its first emission"* are both live, and the
+observation routes to neither until they separate. The discriminator is **the
+subject's next unprompted `doctrine design show`**: with an empty receipt set, an
+emission path must re-emit. **The moderator does not induce it** — inducing the
+discriminating call is steering, and steering is itself the observation.
+
+### Ancillary — the runbook step list is not on the envelope
+
+At 06:48:09Z, *after* `resume` delivered the inquiry fragment, the subject fetched
+`design-prompts/exploring.toml` directly via `doctrine library show` to obtain the
+step list. The envelope carries no enumeration of outstanding runbook steps, so
+this may be the only route to them rather than a bypass of delivered guidance.
+Recorded as an observation, not scored: the fragment covers inquiry craft, not
+step enumeration, and reading the asset may be entirely correct.
+
+### Inquiry map
+
+Empty at 06:49Z — `next_seq = 0`, no nodes, cursor unset, posture
+`breadth`/`agent-proposed`. Stage is still `exploring`. Not yet a finding; the
+map may legitimately populate at `inquiring`.
 
 ## 7. What the moderator does not do
 
