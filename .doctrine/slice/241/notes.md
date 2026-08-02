@@ -9,9 +9,11 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
 T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
-5/5; **H7 alone remains**). Eleven of sixteen rows carry scored results: H1–H6
-H9 H12 H13 H14 H15** · last SL-241 commit `6a9b7336` (tree head moves under us —
-other agents commit to `edge` mid-session; verify a hash before citing it)
+5/5; **H7 alone remains, and it wants an operator decision**), T4d PART-DONE
+(H8 scored 100/0 + falsified 3/3; H11 remains). **Twelve of sixteen rows carry
+scored results: H1–H6 H8 H9 H12 H13 H14 H15** · last SL-241 commit `d1e67fb7`
+(tree head moves under us — other agents commit to `edge` mid-session; verify a
+hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -172,6 +174,20 @@ Lifted here so the ids survive the sheet:
     extracted rather than hand-rolled (`e3e4f87d`; selftest assertion list
     byte-identical). Scored 88/0, all four cells `model-level`; falsified 5/5
     with one control, and **M14 changed the row** — see F-P05-30.
+- **T4d — H8 DONE; H11 remains** (`d1e67fb7`). Conform leg 4's two arms, one
+  scored leg each, planted **separately**: leg 4 returns on the first matching
+  entry, so a tree carrying both refuses once and the second alternative would
+  score its sibling's refusal (F-P05-22 from a second direction). `_assert`
+  MEASURES F-2 rather than asserting it — leg 2's own verb is run over the same
+  range and observed to ACCEPT, so the kill is leg 4's alone; the hole was real
+  because `reject_submodules` is index-scoped and unreachable from an
+  object-only pipeline. Both forms sit under the design-target directory
+  (D-P05-11), so `.gitmodules` is a NESTED one — the row does **not** show a
+  root `.gitmodules` reachable under these selectors, and says so. Scored 100/0,
+  both rows `model-level`; falsified 3/3 with 2 controls, and **M16 is the
+  F-P05-14/18/26 trap made reproducible**: planted at an undeclared path the
+  cell refuses `conform/undeclared-path` while `planted?` stays LIVE, so the
+  positive control cannot see it and only the observed token can.
 
 **PHASE-04 steps 1–4 (complete; EX-4/5/6/7/8 + VA-1/2/3 discharged;
 `090148ef..5f42727b`):**
