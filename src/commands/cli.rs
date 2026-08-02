@@ -604,6 +604,16 @@ pub(crate) enum Command {
         with_terminal_slices: bool,
     },
 
+    /// Doctrine's own runbook checks — exit code plus explanatory output.
+    ///
+    /// The durable address a runbook step's `verify` argv names (SL-233
+    /// PHASE-16). Distinct from advisory verbs like `slice research`, which
+    /// exit zero on every outcome and repair what they inspect.
+    Verify {
+        #[command(subcommand)]
+        command: crate::commands::verify::VerifyCommand,
+    },
+
     /// Renumber an entity's canonical id.
     ///
     /// ADR-006 D3 repair. Takes a canonical ref (`SL-031`), moves it to the next
@@ -812,6 +822,20 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: crate::commands::observation::ObservationCommand,
     },
+
+    /// Run a CLI-managed design run for a slice (SL-233).
+    ///
+    /// Visible from PHASE-04, and classified into `change` in the same commit:
+    /// a design run is a stage of a slice's change axis — it is what happens
+    /// between `slice new` and `slice plan` — so it sits beside `slice` rather
+    /// than under `explore` (it mutates) or `infra` (it is authoring, not
+    /// operations). PHASE-03 kept it hidden precisely so this classification
+    /// would be one deliberate, reviewable move rather than a side effect of a
+    /// persistence phase.
+    Design {
+        #[command(subcommand)]
+        command: crate::commands::design::DesignCommand,
+    },
 }
 
 // ── help rendering ───────────────────────────────────────────────────────────
@@ -837,6 +861,7 @@ static FAMILIES: &[Family] = &[
         suppress_verbs: false,
         members: &[
             "slice",
+            "design",
             "revision",
             "rfc",
             "rec",
@@ -906,6 +931,7 @@ static FAMILIES: &[Family] = &[
             "dispatch",
             "catalog",
             "observation",
+            "verify",
         ],
     },
 ];
@@ -1486,6 +1512,15 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             },
         ),
         Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),
+        // The deprecated `slice design` shim routes into `commands::design`, not
+        // into `slice::dispatch`: its live-run arm forwards THROUGH the same
+        // `materialise` the canonical verb calls, and reaching that from
+        // `crate::slice` would face a production edge back at this one
+        // (SL-233 PHASE-14 EX-4; ADR-001). Same residual-dispatch shape as
+        // `Memory { Sync }` below.
+        Command::Slice {
+            command: crate::slice::SliceCommand::Design { id, path },
+        } => crate::commands::design::run_deprecated_slice_design(path, id),
         Command::Slice { command } => crate::slice::dispatch(command, color),
         Command::Memory {
             command:
@@ -1734,6 +1769,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             verbose,
             with_terminal_slices,
         } => crate::commands::doctor::run_doctor(path, json, verbose, with_terminal_slices),
+        Command::Verify { command } => crate::commands::verify::verify(command),
         Command::Reseat {
             reference,
             to,
@@ -1877,6 +1913,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Map { command } => crate::commands::map::dispatch(command),
         Command::Onboard => crate::commands::map::run_onboard(),
         Command::Observation { command } => crate::commands::observation::dispatch(command, color),
+        Command::Design { command } => crate::commands::design::dispatch(command),
     }
 }
 
@@ -1940,8 +1977,9 @@ mod tests {
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
         // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02)
         // + `publication` (SL-223 PHASE-02) + `graph` (SL-226 PHASE-04)
-        // + `library` (SL-227 PHASE-02).
-        assert_eq!(visible.len(), 54, "expected 54 visible top-level commands");
+        // + `library` (SL-227 PHASE-02) + `design` (SL-233 PHASE-04)
+        // + `verify` (SL-233 PHASE-16).
+        assert_eq!(visible.len(), 56, "expected 56 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

@@ -10,12 +10,23 @@
 # flip stops landing gets a library address here, so reachability is a *derived*
 # invariant (`{embedded_filenames()} - {base backings}` is a subset of the
 # published backings), not a hand-curated list. All of `install/` is MIT
-# (`install/LICENSE`); every entry is MIT / declared / customizable.
+# (`install/LICENSE`); every entry is MIT / declared.
 #
 # `address` is the stable logical contract; `backing` is the physical
 # InstallAssets embed key (they may diverge — storage independence, D-F).
 # Address category prefixes: templates/ (template), hymns/ (guidance),
-# integration/ (integration: agents, workflows, mod.just), reference/ (reference).
+# design-prompts/ (guidance), integration/ (integration: agents, workflows,
+# mod.just), reference/ (reference).
+#
+# SL-233 added the first `fixed` entries: the sealed `hymns/stage/design.md` and
+# the four `design-prompts/*` process fragments are code-owned with no user
+# override, so they are published but not customizable.
+#
+# PHASE-16 added the store's first `.toml` — an obligation runbook, the
+# structured sibling of those fragments. It is `fixed` for a different reason:
+# not that a project may not disagree with it, but that the override seam does
+# not exist yet (DEC-102 ruling (b); IMP-372 carries the resolution). Declaring
+# it customizable would promise an override no code delivers.
 
 [[entry]]
 address       = "reference/LICENSE"
@@ -79,6 +90,78 @@ title         = "Boot snapshot footer"
 licence       = "MIT"
 provenance    = "declared"
 customization = "customizable"
+
+[[entry]]
+address       = "design-prompts/delegation.md"
+backing       = "design-prompts/delegation.md"
+kind          = "guidance"
+title         = "Design delegation process fragment"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/drafting.md"
+backing       = "design-prompts/drafting.md"
+kind          = "guidance"
+title         = "Design drafting process fragment"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/drafting.toml"
+backing       = "design-prompts/drafting.toml"
+kind          = "guidance"
+title         = "Design drafting obligation runbook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/exploring.toml"
+backing       = "design-prompts/exploring.toml"
+kind          = "guidance"
+title         = "Design exploring obligation runbook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/inquiring.toml"
+backing       = "design-prompts/inquiring.toml"
+kind          = "guidance"
+title         = "Design inquiring obligation runbook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/inquiry.md"
+backing       = "design-prompts/inquiry.md"
+kind          = "guidance"
+title         = "Design inquiry process fragment"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/reviewing.md"
+backing       = "design-prompts/reviewing.md"
+kind          = "guidance"
+title         = "Design reviewing process fragment"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/reviewing.toml"
+backing       = "design-prompts/reviewing.toml"
+kind          = "guidance"
+title         = "Design reviewing obligation runbook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
 
 [[entry]]
 address       = "reference/dispatch-mechanics.md"
@@ -205,6 +288,15 @@ title         = "Worker role hymn"
 licence       = "MIT"
 provenance    = "declared"
 customization = "customizable"
+
+[[entry]]
+address       = "hymns/stage/design.md"
+backing       = "hymns/stage/design.md"
+kind          = "guidance"
+title         = "Design stage invariant hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
 
 [[entry]]
 address       = "integration/mod.just"

@@ -1,0 +1,127 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 104
+slug = "heuristic-sets-are-stage-framing-not-runbook-checklists"
+title = "Heuristic sets are stage framing, not runbook checklists"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-01"
+updated = "2026-08-01"
+tags = ["design-run", "runbook", "prompt", "mediation-axis", "sl-233"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+DEC-103 ruled that instruction is delivered at the moment it must take effect. \
+SL-233 PHASE-08 applied it by hanging every surviving obligation on an edge as a \
+runbook step, producing an edge-3 runbook of nineteen-plus required steps. \
+RV-325 F-2 showed that is not merely a long file: `Mode::Sequence` admits one \
+cursor step at a time (runbook.rs:201-205) and a submission's `discharge` is an \
+`Option`, not a `Vec`, because a batch of two would need an order `Batch` \
+refuses to carry (submission.rs:636-641). Nineteen obligations is nineteen \
+serial CAS mutation turns before advance — against this slice's own named risk \
+R1, protocol ceremony exceeds its value (design.md:568-572). DEC-103 stated no \
+admission limit of any kind.
+"""
+choice       = """
+A SET OF HEURISTICS TO APPLY WHILE DOING THE WORK IS NOT A CHECKLIST TO TICK \
+OFF. It is FRAMING FOR THE ACTIVITY, and an exit gate delivers it when the \
+damage is already done.
+
+Tier 2 of the mediation axis is therefore TWO asset kinds, not one — and the \
+code already says so: `runbook.rs` imports `STORE` from `prompt.rs` because "a \
+runbook is the structured sibling of the prose it guards, in the same store" \
+(runbook.rs:20-24).
+
+  2a RUNBOOK STEP (*.toml) — keyed to an EDGE by `boundary_runbook`, delivered \
+     once at the advance attempt, DISCHARGEABLE, may say `verified` iff a \
+     verifier exits zero.
+  2b STAGE FRAGMENT (*.md) — keyed to a STAGE by `Fragment::for_stage` \
+     (prompt.rs:107-115), delivered EVERY TURN IN THE STAGE and re-emitted \
+     unless the agent holds an exact `name@digest` receipt (DEC-078), NOT \
+     dischargeable.
+
+THE DISCRIMINATOR IS COMPLETABILITY AT A BOUNDARY, NOT VERIFIABILITY. Ask: CAN \
+THIS OBLIGATION BE TRUTHFULLY COMPLETED AT A SPECIFIC BOUNDARY, WITH A FINITE \
+RESULT WHOSE COMPLETION IS NECESSARY BEFORE ADVANCING?
+
+  YES — a finite, gate-worthy act. It is 2a, and it earns its own discharge.
+  NO  — a continuous heuristic or quality lens with no truthful completion \
+        point. It is framing applied THROUGHOUT the activity, and it is 2b.
+
+VERIFICATION STRENGTH IS AN ORTHOGONAL AXIS, NOT THE SORTING RULE. \
+`DischargeOutcome` has three arms in the record but two on the wire: a caller \
+may say `attested` or `skipped` and may never say `verified`, so "a step \
+carrying no verifier cannot acquire the stronger word by any route" \
+(runbook.rs:604-606, 745-752). A verifier therefore STRENGTHENS a step's \
+discharge from `attested` to `verified`; its availability does not decide \
+whether the obligation is a step at all. CODICIL: a 2a step that ships no \
+verifier must state why mandatory attestation earns blocking the edge.
+
+AMENDED 2026-08-01 (owner ruling, RV-325 round 3 F-3), before this decision \
+governed any authored asset. The rule as first ruled sorted by whether a \
+verifier COULD EVER corroborate an obligation. That is the weakness this \
+record's own consequences declared open, and it does not reproduce its own \
+assignments: *could ever* admits an imagined future verifier for almost any \
+lens, so the rule narrated a judgement instead of making one. Completability \
+is decidable at the boundary, admits mechanically unverifiable but genuinely \
+mandatory human acts honestly, and reproduces every assignment the original \
+made — selector recording stays 2a; the fifteen content items and the \
+adversarial attack surfaces stay 2b. The CHOICE above is untouched.
+"""
+alternatives = [
+  "A GRANULARITY BOUND — obligations sharing a moment and a subject merge into one step carrying the coverage list. Proposed first and REJECTED: it treats the defect as arithmetic. Merging nineteen steps into six leaves the content in the wrong asset kind entirely, and a count was doing the work a missing distinction should do.",
+  "AN OPTIONALITY RULE — mark most steps `required = false`. Rejected: it keeps the ceremony and removes the obligation, which is the worst of both. A step nobody must discharge is a step nobody reads.",
+  "A COST THRESHOLD — cap steps per edge at N. Rejected as unprincipled: it gives no account of WHICH obligations to drop, so the cap would be met by discarding whatever sorted last.",
+  "LEAVE DEC-103 UNBOUNDED AND MEASURE AFTERWARDS via PHASE-09 EX-3. Rejected: EX-3's own EN-1 requires PHASE-08 complete, so the measurement lands after the shape is built. That is a post-mortem, not a bound.",
+]
+rationale    = """
+DEC-103 governs WHEN an obligation is delivered. It was silently read as also \
+governing HOW MANY steps carry it, and one-step-per-obligation was never the \
+requirement — it was smuggled in. But the corrective is not a smaller number. \
+It is that most of the population were never steps.
+
+Rendering fifteen quality lenses as fifteen dischargeable steps converts one \
+thing an agent might hold in mind into fifteen things it clicks through — the \
+incumbent skill's attention failure relocated into TOML, which is the harm \
+RV-325 F-2 named.
+
+AND THIS STRENGTHENS DEC-103 RATHER THAN LIMITING IT. A runbook fires when you \
+attempt to LEAVE a stage; framing for how to draft has to be present WHILE \
+drafting. `Fragment::for_stage` delivers on exactly that moment, every turn, \
+for the whole stage. Under DEC-103's own test that is a STRONGER delivery than \
+a step, not a weaker one. DEC-103 was never wrong; the error was reading \
+"delivered at the moment it takes effect" as "therefore a runbook step".
+"""
+consequences = [
+  "SL-233 PHASE-08 edge-3 runbook goes from nineteen-plus steps to ONE — recording design-target selectors, the only guardrail in the sweep that completes at the boundary. (It also happens to be the only one a verifier could reach, but that is a remark about evidence, not the reason it is a step — see the 2026-08-01 amendment.) RV-325 F-2's objection dissolves rather than being traded away.",
+  "The fifteen content items (SKILL.md:118-143) and guardrails :197, :198, :199, :200-201, :203 go to `design-prompts/drafting.md`; the adversarial attack surfaces (:162-191) and a second copy of :203 go to `reviewing.md`; inquiry craft goes to `inquiry.md`.",
+  "THE DEC-101 TENSION IS CONCEDED, NOT DISSOLVED (corrected 2026-08-01, owner ruling; post-round-4 self-audit). This first read 'THE TENSION IS GONE RATHER THAN CONCEDED' — the two coverage sets that provoked it are fragment prose now, and prose has no order to fake. The premise was true and the conclusion did not follow: RV-325 F-5 then settled edge 2 at two steps and edge 4 carries three, so FIVE ORDER-INDEPENDENT STEPS ship under `sequence`, whose cursor refuses any discharge that does not name the step at it. 'Imposing an order on a coverage set is fake determinism' still applies, at reduced scale, and is accepted as cheap rather than denied. IMP-373 (`set` mode) stays deferred, but NOT on merit — that warrant is withdrawn as false, since these five steps are the very real instances DEC-101 named when it assigned `set` to PHASE-08. It is deferred because `set`'s RENDER (a cursorless runbook under EX-14's token bound) is unsketched and outside PHASE-08 EN-2's gate, so shipping it there would hand a design choice to implementation — the thing F-5 says the gate exists to prevent. Repayment is evidence-triggered: observed `DischargeNotAtCursor` refusals against these runbooks on an order that carries no meaning.",
+  "COST, STATED PLAINLY: a fragment cannot be discharged. Nothing records that an agent read the drafting lens — `name@digest` proves the bytes ARRIVED, not that they were attended to. The trade is fewer receipts for better odds the content is in front of the agent when it matters.",
+  "KNOWN WEAKNESS AS FIRST RULED, NOW CLOSED BY THE 2026-08-01 AMENDMENT: *corroborable in principle* is not *corroborated in fact*. None of the surviving 2a steps ships a verifier, so each will say `attested` exactly as a fragment would — which under the ORIGINAL verifiability discriminator made the sort unreproducible. RV-325 F-3 pressed exactly here. Under completability the observation survives but is no longer a defect: an unverified 2a step is a finite boundary act whose evidence is weak, not a misclassified lens. The codicil is what keeps that honest — each such step must warrant its own ceremony.",
+  "THIS DECISION CARRIES A NAMED REOPENING CONDITION (added 2026-08-01, owner ruling; RV-325 round 4 F-10). SL-233 PHASE-09 EX-8 pre-registers four signals for the post-close exercise, routed by SUBJECT. Three concern DELIVERY — adherence, receipt churn, per-turn cost — and none of them is evidence about completability, so a negative delivery result triggers MECHANISM-SIDE revision and leaves this discriminator standing. The fourth is MISCLASSIFICATION and it reopens THIS RECORD. WITHOUT THAT FOURTH SIGNAL THIS DECISION WOULD BE UNFALSIFIABLE BY CONSTRUCTION, which is the defect F-7 raised about the trade and F-10 caught being re-inserted one level up as an exemption for the decision itself. RE-ANCHORED 2026-08-01 (owner ruling; post-round-4 self-audit): the signal first read `agents discharging a 2a step at a moment where it cannot honestly be complete` and `agents treating a 2b lens as having a natural completion moment they would gate on` — both inferences about a mind, with no adjudicator and no rubric anchor, which is F-3's criticism of the original discriminator reappearing in the falsifier meant to redeem it. An uncollectible falsifier leaves this record unfalsifiable by the same route it was supposed to close. BOTH HALVES ARE NOW OBSERVABLE EVENTS: (i) a 2a step was discharged at a turn where ITS SUBJECT DID NOT YET EXIST IN RUN STATE, scoped to the steps where that is checkable and disclosed as uncollectible for `inquire.scope`'s `or explicitly confirm` branch; (ii) an agent EXPLICITLY ASKED whether a lens was complete or REQUESTED A GATE on one, quoted verbatim. Half (ii) cannot be run-state anchored — a lens has no discharge event — and was kept rather than dropped, because dropping it would leave the falsifier one-directional. CORRECTED AGAIN 2026-08-01 (owner ruling; RV-325 round 5 F-12): the re-anchor fixed the evidence and left the CONSEQUENCE overclaimed. A 2a discharge before its subject exists has THREE live causes — (A) no real boundary, (B) a correctly classified act prematurely attested, (C) step text that misled a compliant agent — so the raw event proves none of them. TWO FIXES. The consequence is weakened to what the evidence carries: a firing REOPENS THE DISCRIMINATOR'S APPLICATION TO THAT STEP, admitting REWORD or RECLASSIFY to 2b [THE TWO ARMS ARE NOT EQUAL — SEE THE ROUND-7 AMENDMENT BELOW]. Reopening is not reversal, and nothing reclassifies on the raw event. (A third outcome, STAND, was admitted here at round 5 and REMOVED at round 6 on RV-325 F-13: unconditioned, it let any firing be narrated after the fact as an anomalous run, which is route-to-no-revision — VA-5's forbidden manoeuvre by the opposite door. The anomaly control now sits in the PRE-REGISTERED FIRING CONDITION instead: sibling control satisfied, no deliberate context break or resume crossed at that edge, no abort or restart mid-edge [INCOMPLETE — WIDENED AT ROUND 7]. Reword is the conservative arm and absorbs the marginal case, so a false firing costs a text improvement rather than a wrong reclassification [THIS WARRANT LAPSED AT ROUND 7 AND IS REPLACED].) And the observation must carry a WITHIN-RUN CONTROL — how the sibling 2a steps at that edge were discharged in the same run — which separates (B) from (A) and (C); (A) is separated from (C) at the reopening, not by the observation. Half (ii) takes the same correction. IMP-373 (`set` mode) is NOT the fallback for a delivery failure; and its deferral no longer rests on this record's merits either — see the DEC-101 tension consequence above. AMENDED AT ROUND 7 (2026-08-01, owner ruling; RV-325 F-14 and F-15). THE ROUND-6 CORRECTION NARROWED THE EXIT SET AND THE EXCLUSION SET IN ONE MOVE AND EACH NARROWING LOST WHAT IT REPLACED. THREE CLAUSES ABOVE ARE AMENDED. (1) `REWORD OR RECLASSIFY` ARE NOT EQUIVALENT UNDER VA-4, AND THE CLAIM THAT BOTH SATISFY IT — made in the sketch and the diagram as `both revise the placement or its boundary contract` — IS WITHDRAWN AS FALSE: rewording a 2a step's boundary text leaves it a 2a step on the same edge, revising the obligation's CONTRACT and not its PLACEMENT. VA-4 is NOT amended; it asks each signal to name A result that would revise the placement, and RECLASSIFICATION is that result. THE REOPENING'S CHOICE BETWEEN THE ARMS IS NOW PRE-REGISTERED, because that is where the route-to-the-cheapest-revision manoeuvre had migrated to once every other link in the chain was fixed: (a) RECLASSIFY TO 2b IS THE DEFAULT; (b) REWORD MUST PRODUCE AN ARTEFACT TO BE TAKEN — the reopening records CANDIDATE STEP TEXT naming a completion boundary that is truthful for the obligation AND observable in run state at the moment the new text says the step completes, the same standard half (i) meets, and no candidate text means no reword; (c) REWORD IS ONE-SHOT PER STEP — a second firing on the same step after a reword spends cause (C) and reclassifies, disclosed as a commitment binding the step's post-close life rather than a control CHR-049's single exercise can collect. (2) THE FIRING CONDITION IS COMPLETED: it excluded only the DELIBERATE context break and the abort/restart, and omitted INCIDENTAL CONTEXT EXHAUSTION OR COMPACTION, which nothing marks — so a run could satisfy it after an UNMARKED context loss and force a revision for exactly the anomaly the control exists to exclude. It now reads: sibling control satisfied; NO CONTEXT BOUNDARY of any kind crossed at that edge, deliberate or incidental (exhaustion, compaction, harness-initiated summarisation); no abort or restart mid-edge; AND THE MODERATOR PROTOCOL RECORDED THE CONTEXT STATE across the window containing the discharge — absent that record the condition is UNDECIDED and the observation is UNCOLLECTED, NOT WEIGHED. The run record cannot supply this and was never going to: Doctrine observes writes, not an agent's context, which is the same limit already disclosed for IMP-373's repayment signal. The instrument is the MODERATOR PROTOCOL, which is SL-233 PHASE-09's to write and not CHR-049's. DISCLOSED: default-deny lowers the probability this signal fires at all, and the kit must report its own deny rate rather than absorb it. (3) `REWORD IS THE CONSERVATIVE ARM ... A RESOLUTION SET WHOSE CHEAP ARM IS SAFE DOES NOT NEED AN ESCAPE HATCH` LAPSES AS THE WARRANT FOR REMOVING STAND, since the cheap arm is no longer freely available. STAND'S REMOVAL STANDS ON A REPLACED WARRANT: it was POST-HOC AND UNCONDITIONED, and anomaly belongs in the pre-registered firing condition — which is where (2) now puts all of it. One principle, applied twice: EVERY EXIT AND EVERY EXCLUSION IS PRE-REGISTERED; NOTHING IS CHOSEN AFTER THE RUN. CLARIFIED AT ROUND 8 (2026-08-01, owner ruling; RV-325 F-15 contest, REJECTED — no rule changes, exposition only). The contest read (c) as the sole route to compulsory reclassification and concluded that placement revision is unreachable within CHR-049's single exercise. IT SKIPS (a) AND (b). THE FIRST-FIRING ROUTE IS (b)-FAILS-THEREFORE-(a)-APPLIES: candidate text that names no observable completion moment does not earn the reword arm, so the firing RECLASSIFIES — first firing, N=1, no second firing required. It is not a formality, because THE CANDIDATE-TEXT BAR IS UNMEETABLE EXACTLY UNDER CAUSE (A): this record classifies content as 2b PRECISELY BECAUSE it has no truthful boundary completion. Text producible means a truthful observable boundary exists, the step is 2a-eligible, and REWORD IS THE CORRECT OUTCOME rather than an escape from one; text not producible means no such boundary exists, which IS cause (A). The artefact test is therefore the (A)-against-(C) discriminator the round-5 scale note leaves `settled at the reopening`, and (c) binds the step's post-close life rather than supplying the compulsion. RESIDUAL, DISCLOSED: failure to produce candidate text is not proof that no boundary exists — it can also mean nobody thought of the right text — so default-deny biases toward the EXPENSIVE arm and the residual is a FALSE RECLASSIFICATION, which is the safe direction for a falsifier and the cost gradient round 7 inverted deliberately. AMENDED AT ROUND 9 (2026-08-01, owner ruling; RV-325 F-16, conceded in full). THE ROUND-8 STEP `TEXT NOT PRODUCIBLE THEREFORE NO SUCH BOUNDARY EXISTS` IS WITHDRAWN AS INVALID: it read a failure of formulation as a fact about the obligation, and the same clause conceded that non-production can equally mean nobody found the wording, so this record's discriminator was being reopened on an admitted false-positive route. THE SEARCH IS BOUNDED AND ENUMERATES MOMENTS, NOT WORDINGS. Wordings are unbounded; the candidate completion MOMENTS are finite — the run record holds a finite sequence of turns in the window at that edge, and at each the obligation's subject is present in run state or it is not. The reopening records the obligation's SUBJECT, the TURNS in that window, and for each whether the subject was present: some turn present means that turn IS a truthful observable boundary and the arm is REWORD; no turn present licenses reclassification ON THE ENUMERATION. THE CLAIM IS SCOPED — no truthful observable boundary WITHIN THE OBSERVED WINDOW, not none exists — so the reclassification is recorded with that scope and its enumeration and is DEFEASIBLE: qualifying candidate text produced later on the same standard REVERSES it. That is not `stand` restored, since the placement is revised immediately and reversal costs exactly the artefact the reword arm would have cost. AND AN UNINFORMATIVE WINDOW IS REPORTED INCONCLUSIVE RATHER THAN RECLASSIFIED. F-16's third remedy — declare the direction unfalsifiable at N=1 — is NOT taken wholesale, because it makes the expensive arm unreachable again, which is F-15 exactly. RESIDUAL: exhaustive over MOMENTS, not over SUBJECTS; which deliverable is the obligation's real subject remains the judgement VA-5 already performs on signal (i). AMENDED AT ROUND 10 (2026-08-01, OWNER RULING; RV-325 F-16 contest, conceded). THE ROUND-9 ENUMERATION IS WITHDRAWN, AND WITH IT THE ATTEMPT TO DERIVE THIS RECORD'S CLASSIFICATION FROM RUN EVIDENCE AT ALL. Subject ABSENCE proves a step is not complete; subject PRESENCE does not prove a truthful completion moment exists — the selector obligation commits to what the code-impact section NOW commits to, so a recorded selector coexists with an unfinished obligation. Every attempt from round 5 onward failed the same way, because CLASSIFICATION IS A PROPERTY OF AN OBLIGATION'S TEXT, NOT OF A RUN. THE DISCRIMINATOR IS NOW AN AUTHORING GATE: every 2a step STATES ITS OWN COMPLETION CONDITION in its text — truthful (satisfying it discharges the obligation rather than starting it) and checkable in run state — and AN OBLIGATION WHOSE COMPLETION CONDITION CANNOT BE STATED IS NOT A STEP. Decidable over the whole set before any run and re-runnable by anyone, which is what makes this record falsifiable by a check that can actually fail. THE EXERCISE NOW COLLECTS ADHERENCE AGAINST THE STATED CONDITION, not classification from behaviour: `discharged at a turn where the stated condition was not satisfied` is mechanical, and a step-specific result means the CONDITION was mis-stated. CHR-049 feeds evidence into the design; the owner arbitrates the design. AMENDED AT ROUND 11 (2026-08-01, OWNER RULING; RV-325 F-17, CONCEDED). THE AUTHORING GATE'S TWO LIMBS ARE SPLIT, AND `CHECKABLE IN RUN STATE` IS WITHDRAWN FROM THE CLASSIFICATION LIMB. The gate now reads: every 2a step STATES A TRUTHFUL COMPLETION CONDITION in its text — satisfying it discharges the obligation rather than starting it — and an obligation that cannot state one is not a step. THE WITHDRAWN CLAUSE CONTRADICTED THIS RECORD'S OWN CHOICE FACET AND ITS ROUND-3 AMENDMENT: `VERIFICATION STRENGTH IS AN ORTHOGONAL AXIS, NOT THE SORTING RULE`, and completability was adopted precisely because it gives mechanically unverifiable but genuinely mandatory human acts — semantic scope reconciliation, knowledge capture — somewhere honest to sit rather than demoting them to lenses. Round 10 argued against RUN INFERENCE; it did not argue against that orthogonality, and the clause rode in as a qualifier rather than as a considered reversal. APPLYING the gate is what exposed the conflict, which is F-17's finding: it demotes the two acts the round-3 amendment protects BY NAME, and it condemns FOUR OF `install/design-prompts/exploring.toml`'S FIVE SHIPPED STEPS, only `explore.research` carrying a verifier — a runbook whose only admissible steps carry mechanical verifiers is a verifier list, which is this record and DEC-102 gutted. STATE-VISIBILITY SURVIVES ON THE COLLECTION LIMB: a stated condition is STATE-VISIBLE when both its terms can be read from run state; the adherence observation is collected ONLY over those; and the kit NAMES the obligations the signal cannot reach and REPORTS the covered fraction, alongside its deny rate. That grades a condition's EVIDENCE exactly as a verifier grades a discharge's — this record's own orthogonality one level down, not a new escape. THE GATE IS NOW APPLIED OVER ALL NINE 2a OBLIGATIONS: the four SL-233 relocates and `exploring.toml`'s five, which are 2a assignments this slice made. ALL NINE STATE A CONDITION AND ALL NINE SURVIVE AS 2a; FIVE OF NINE ARE STATE-VISIBLE. Two step texts gained a landing site to get there — `explore.triage` and the edge-4 repeat-pass judgement both now record their finite result into the slice notes. KNOWLEDGE CAPTURE WAS DELIBERATELY NOT BOUGHT: making its condition state-visible needs a new artefact enumerating what the inquiry settled, which is RV-325 F-2's ceremony objection returning by the back door, so it stays 2a on a truthful condition with weak evidence — the position the round-3 amendment ruled honest. RECORDED SO A LATER READER DOES NOT REPEAT F-17'S STEP: VERIFIER-REACHABILITY IS NOT STATE-VISIBILITY. A verifier is an argv whose exit code decides; scope reconciliation has no reachable verifier and is state-visible at edge 4.",
+  "SURFACES A GAP THIS DECISION DOES NOT CLOSE: nothing in `design-prompts/` is project-overridable, though the shipped authoring rule and DEC-102 both promise it is. Runbooks and fragments alike resolve to embedded assets, and `prompt check` knows nothing about this store. Carried as backlog; design.md §7's rejection is flagged for reopening.",
+]
+decided_by   = "owner"
+decided_on   = "2026-08-01"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "src/design_run/runbook.rs:20-24 — a runbook is the structured sibling of the prose it guards, IN THE SAME STORE",
+  "src/design_run/prompt.rs:107-115 — `Fragment::for_stage`, exhaustive over Stage; Locked yields None",
+  "src/design_run/runbook.rs:604-606, 745-752 — `verified` unreachable without a verifier exiting zero",
+  "src/design_run/runbook.rs:201-205 — Mode::Sequence is a cursor, one step at a time, no skipping",
+  "src/design_run/submission.rs:636-641 — `discharge` is an Option, not a Vec (DEC-063)",
+  "RV-325 F-2 — the finding this decision answers",
+]
+contradicts = [
+  "SL-233 D7 as originally ruled — 'an imposed order on a short list costs almost nothing' was asserted without evidence against R1, this slice's own named risk that protocol ceremony exceeds its value (design.md:568-572)",
+]
+notes       = [
+  "install/design-prompts/exploring.toml:8-13 — the shipped authoring rule still has two branches and no account of 2a vs 2b; IMP-374 already carries a third clause and now needs this one too",
+  "PHASE-09 EX-3 measures interaction cost, but its EN-1 requires PHASE-08 complete — it cannot supply a design-time bound",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

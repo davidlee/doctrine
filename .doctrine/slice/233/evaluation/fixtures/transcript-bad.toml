@@ -1,0 +1,59 @@
+# SL-233 PHASE-09 — the KNOWN-BAD transcript fixture, and the kit's negative
+# control (`VA-3`).
+#
+# Without this file the rubric is unfalsifiable and PHASE-09 is decorative: a
+# scale that assigns everything the same value is not measuring anything. The
+# ordering assertion in `tests/e2e_design_evaluation.rs` is what makes the rubric
+# capable of being wrong.
+#
+# WHAT THIS TRANSCRIPT IS. Not a broken run — a SUCCESSFUL one that adopted
+# nothing. Every fragment arrived and was receipted; every step was discharged;
+# the run locked. Nothing in the record shows the content was read, that a step's
+# stated condition held when it was discharged, or that guidance was restored
+# after the break. That failure mode is the one DEC-104's trade is exposed to:
+# delivery without attention, which under DEC-078's caller-declared suppression
+# looks identical to a genuine hold.
+#
+# THE EVIDENCE SET IS A STRICT SUBSET OF THE KNOWN-GOOD ONE. Deliberately: the
+# ordering then isolates the rubric, rather than comparing two unrelated runs
+# where any difference could explain the gap. The test asserts the subset relation
+# so a future edit cannot quietly widen it back.
+#
+# As with the good fixture, NO SCORE IS STATED HERE.
+
+schema    = 1
+id        = "known-bad"
+treatment = "T-frag — every-turn 2b fragment delivery, as shipped by SL-233"
+
+# One key per class: the `claimed` band and no further. Each is the observation
+# that costs an agent nothing to produce.
+evidence = [
+  "adopt.fragment_receipted",   # receipted; nothing in the turn reproduces it
+  "adhere.steps_discharged",    # discharged; conditions never established
+  "refresh.state_change_marked", # the change was marked; nothing re-resolved
+  "recover.boundary_recorded",  # the break was recorded; guidance was not restored
+  "complete.run_locked",        # the run locked — which is exactly EX-6's warning
+]
+
+# The moderator still discharged the standing obligation. That matters: a run
+# whose context state went UNRECORDED would be uncollected rather than bad, and
+# the two must not be confused. This run is collectible AND poor.
+[[window]]
+id            = "w1"
+edge          = "exploring -> inquiring"
+context_state = "continuous"
+
+[[window]]
+id            = "w2"
+edge          = "inquiring -> drafting"
+context_state = "continuous"
+
+[[window]]
+id            = "w3"
+edge          = "drafting -> reviewing"
+context_state = "deliberate break and resume — the agent resumed without re-rendering the envelope"
+
+[[window]]
+id            = "w4"
+edge          = "reviewing -> locked"
+context_state = "continuous"

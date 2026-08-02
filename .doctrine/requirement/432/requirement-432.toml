@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 432
+slug = "adopt-an-existing-canonical-record-without-duplication-or-reservation"
+title = "Adopt an existing canonical record without duplication or reservation"
+status = "pending"
+kind = "functional"
+
+description = "An existing canonical record may be accepted as a checkpoint's outcome, creating no duplicate and consuming no reservation, after its kind and usable status are validated."
+tags = []
+acceptance_criteria = [
+  "Adoption creates no new record and consumes no reservation.",
+  "The record's kind and usable status are validated before adoption.",
+  "A required relation absent at adoption time is applied.",
+]

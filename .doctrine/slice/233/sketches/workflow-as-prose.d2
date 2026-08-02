@@ -1,0 +1,201 @@
+# Diagram A — the design workflow AS THE CURRENT SKILL PROSE DESCRIBES IT.
+#
+# Source: plugins/doctrine/skills/design/SKILL.md (214 lines) at dispatch/233.
+# The eight boxed states and their edges are the file's own <Process State
+# Machine>. Everything INSIDE a state is process the prose implies but the
+# machine does not model — which is the point of drawing this.
+#
+# Shape legend is deliberate:
+#   step        — an ordered instruction ("do this now")
+#   checklist   — an unordered set the agent must remember to sweep
+#   vigilance   — a standing "be on the lookout" with no trigger point
+#   escape      — a conditional bail-out
+#   gate        — waits on the human
+#   orphan      — prose process with NO state in the machine
+
+direction: down
+
+classes: {
+  state: {
+    shape: rectangle
+    style: { stroke-width: 2; fill: "#eef4fb"; stroke: "#2b6cb0"; font-size: 20 }
+  }
+  step: {
+    shape: step
+    style: { fill: "#ffffff"; stroke: "#4a5568"; font-size: 14 }
+  }
+  checklist: {
+    shape: stored_data
+    style: { fill: "#fffaf0"; stroke: "#b7791f"; font-size: 14 }
+  }
+  vigilance: {
+    shape: callout
+    style: { fill: "#fff5f5"; stroke: "#c53030"; stroke-dash: 3; font-size: 14 }
+  }
+  escape: {
+    shape: hexagon
+    style: { fill: "#faf5ff"; stroke: "#6b46c1"; font-size: 14 }
+  }
+  gate: {
+    shape: diamond
+    style: { fill: "#f0fff4"; stroke: "#276749"; font-size: 14 }
+  }
+  orphan: {
+    shape: parallelogram
+    style: { fill: "#f7fafc"; stroke: "#718096"; stroke-dash: 4; font-size: 14 }
+  }
+}
+
+legend: Legend {
+  style: { fill: "#ffffff"; stroke: "#a0aec0" }
+  near: top-left
+  l1: ordered instruction { class: step }
+  l2: checklist to sweep { class: checklist }
+  l3: standing vigilance\n(no trigger) { class: vigilance }
+  l4: conditional escape { class: escape }
+  l5: waits on the human { class: gate }
+  l6: prose step with\nNO state { class: orphan }
+}
+
+s1: "1 · Explore context" {
+  class: state
+  e1: read slice scope,\nspecs, ADRs, prior art { class: step }
+  e2: "doctrine slice research <id>\n(or run /research first)" { class: step }
+  e3: "/canon — ADRs, policies,\nstandards for this surface" { class: step }
+  e4: "/retrieve-memory over the\nfiles you expect to touch" { class: step }
+  e5: triage the design surface { class: checklist }
+  t: "the five triage buckets" {
+    class: checklist
+    t1: open questions to resolve
+    t2: risks + underspecified areas
+    t3: assumptions carried
+    t4: critical shaping decisions
+    t5: constraining ADR / POL / STD
+  }
+  e1 -> e2 -> e3 -> e4 -> e5
+  e5 -> t
+}
+
+s2: "2 · Ask clarifying questions" {
+  class: state
+  c0: apply to the slice SCOPE first,\nthen the technical design { class: step }
+  c1: summarise — understood,\nassumptions, open questions { class: step }
+  c2: pick the most impactful\nOR most naturally related { class: step }
+  c3: consider implications\n+ related questions { class: step }
+  c4: bounded context exploration { class: step }
+  c5: offer 2-3 options\nwith tradeoffs { class: step }
+  c6: recommend one,\nwith rationale { class: step }
+  rules: operating principles { class: vigilance }
+  r: "the standing rules" {
+    class: vigilance
+    r1: "prefer multiple choice\n(CONFLICTS with project CLAUDE.md)"
+    r2: one question per message
+    r3: qualify doc-local ids\n(OQ-17, F-4) by container
+  }
+  k: "capture as it lands\nQUE / DEC / ASM via /knowledge" { class: step }
+  sc: reconcile slice-nnn.md\nwith shared understanding { class: step }
+  g: user accepts\nthe summary { class: gate }
+  c0 -> c1 -> c2 -> c3 -> c4 -> c5 -> c6
+  c6 -> c1: loop until clear
+  rules -> r
+  c6 -> k -> sc -> g
+}
+
+s3: "3 · Propose 2-3 approaches" {
+  class: state
+  p0: identify the next\nUNANSWERED design question { class: step }
+  p1: options + tradeoffs\n+ your recommendation { class: step }
+  note: "in the prose this is the SAME\nloop as state 2 — the machine\nsplits what the text merges" { class: vigilance }
+  p0 -> p1
+}
+
+s4: "4 · Present design" {
+  class: state
+  d1: draft section by section,\napproval after EACH { class: step }
+  d2: foundation sections first;\nlater ones stay provisional { class: step }
+  d3: concrete detail, not\nhand-wavey prose { class: checklist }
+  d3list: "the content checklist — 15 items\n(boundaries, signatures, data flow,\ninvariants, C4, test titles, …)\nunordered, no trigger, agent must sweep" { class: checklist }
+  d4: targeted research for fit\nto the implementation surface { class: step }
+  d1 -> d2 -> d3 -> d4
+  d3 -> d3list
+}
+
+sel: "Record design-target selectors" {
+  class: orphan
+  x1: "the code-impact summary IS\nthe declared touch-set" { class: step }
+  x2: "doctrine slice selector add <id>\n… --intent design-target" { class: step }
+  x3: "when: as the code-impact\nsection locks" { class: vigilance }
+  x1 -> x2
+}
+
+s5: "5 · Write design.md" {
+  class: state
+  w1: save to the slice design.md { class: step }
+  w2: commit { class: step }
+  w1 -> w2
+}
+
+s6: "6 · Adversarial review" {
+  class: state
+  a1: attack vague sections, hidden\nassumptions, weak verification { class: checklist }
+  a2: attack missing / misread /\nweakly applied ADR-POL-STD { class: checklist }
+  a3: record findings in the doc\nor companion slice notes { class: step }
+  a4: reconcile slice-nnn.md AND\nslice-nnn.toml (link / status,\nnot hand-edits) { class: step }
+  a5: "MUST offer the user a choice:\n/inquisition or external prompt\nvs proceed to /plan" { class: gate }
+  a6: multiple passes may be needed —\ndo NOT presume approval { class: vigilance }
+  a1 -> a2 -> a3 -> a4 -> a5
+}
+
+s7: "7 · Integrate review feedback" {
+  class: state
+  i1: triage and respond { class: step }
+  i2: integrate into slice / design doc { class: step }
+  i3: repeat until the design LOCKS\n(explicit user approval) { class: gate }
+  i1 -> i2 -> i3
+}
+
+s8: "8 · Transition to planning" {
+  class: state
+  n1: "doctrine slice status <id> plan\n(bare number)" { class: step }
+  n2: "invoke /plan" { class: step }
+  n1 -> n2
+}
+
+guard: "Guardrails — ambient, no trigger point" {
+  class: vigilance
+  style: { fill: "#fff5f5"; stroke: "#c53030" }
+  g1: design doc is canon for design intent
+  g2: design and plan conflict → reconcile via design
+  g3: don't present "the whole design" as settled early
+  g4: don't hide unresolved assumptions in polished prose
+  g5: don't confuse detailed design with planning
+  g6: a polished full-file rewrite is not progress
+  g7: don't plan while scope tells an older story
+  g8: governance is not optional background reading
+}
+
+consult1: "/consult\nunresolved tradeoffs" { class: escape }
+consult2: "/consult\ngovernance conflict,\nmissing authority" { class: escape }
+
+# --- the machine's own edges ---
+s1 -> s2
+s2 -> s3
+s3 -> s4
+s3 -> s2: back
+s4 -> s5
+s5 -> s6
+s6 -> s7
+s7 -> s6: repeat
+s6 -> s2: back
+s6 -> s3: back
+s6 -> s4: back
+s6 -> s8
+
+# --- prose process the machine does not model ---
+s4 -> sel: "prose places it here;\nthe machine has no state for it" {
+  style: { stroke-dash: 4; stroke: "#718096" }
+}
+sel -> s5: { style: { stroke-dash: 4; stroke: "#718096" } }
+
+s2 -> consult1: { style: { stroke-dash: 3; stroke: "#6b46c1" } }
+s6 -> consult2: { style: { stroke-dash: 3; stroke: "#6b46c1" } }

@@ -326,6 +326,56 @@ pub(crate) fn materialise(
     }
 }
 
+/// The `on_reserved` midpoint every caller that has nothing to do there passes.
+///
+/// Named rather than spelled `|_, _| Ok(())` at each site, so "this path does not
+/// use the midpoint" reads as a fact instead of as an inline accident (STD-001).
+pub(crate) fn no_midpoint() -> impl FnMut(u32, &str) -> anyhow::Result<()> {
+    |_, _| Ok(())
+}
+
+/// Fresh placement with the **id-claim midpoint exposed** (SL-233 DEC-086).
+///
+/// The numbered twin of [`materialise`]'s `Fresh` arm, and the only difference is
+/// that `on_reserved` runs after the id is won and before any byte is written. A
+/// recoverable checkpoint needs exactly that window: DEC-086 journals the claimed
+/// canonical id at step 3 so that step 4's authored record can never be
+/// unidentified, and a crash before the journal leaves at worst an empty
+/// reservation.
+///
+/// It is a **sibling entry point** rather than a widened [`materialise`]
+/// signature on purpose: `materialise` is the kind-blind seam a dozen callers and
+/// the in-crate suite drive directly, and threading a midpoint nobody else uses
+/// through it would ripple into every one of them.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the Fresh arm's full parameter set plus the DEC-086 midpoint (SL-233)"
+)]
+pub(crate) fn materialise_fresh_hooked(
+    kind: &Kind,
+    scaffold: Scaffold,
+    claim: &dyn Claim,
+    project_root: &Path,
+    inputs: &Inputs<'_>,
+    trunk_ids: &[u32],
+    reserved: ReservedIds<'_>,
+    on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
+) -> anyhow::Result<Materialised> {
+    let tree_root = project_root.join(kind.dir);
+    fs::create_dir_all(&tree_root)
+        .with_context(|| format!("Failed to create {}", tree_root.display()))?;
+    allocate_fresh_hooked(
+        kind,
+        scaffold,
+        claim,
+        &tree_root,
+        inputs,
+        trunk_ids,
+        reserved,
+        on_reserved,
+    )
+}
+
 /// The fresh-id scan source injected from [`crate::reserve::backend`] (F-V6). Given
 /// the entity tree's local numeric dir ids, it returns the FULL candidate id set the
 /// allocation must avoid. For `LocalFs` this is the identity (just the local dirs);
@@ -355,12 +405,46 @@ fn allocate_fresh(
     trunk_ids: &[u32],
     reserved: ReservedIds<'_>,
 ) -> anyhow::Result<Materialised> {
+    allocate_fresh_hooked(
+        kind,
+        scaffold,
+        claim,
+        tree_root,
+        inputs,
+        trunk_ids,
+        reserved,
+        no_midpoint(),
+    )
+}
+
+/// [`allocate_fresh`] with the id-claim midpoint exposed.
+///
+/// The parameter is added **here** rather than on `allocate_fresh` itself, and
+/// that is a deliberate behaviour-preservation choice: `allocate_fresh` is driven
+/// directly by the entity suite, and widening its signature would force every one
+/// of those tests to be edited to accommodate a seam they do not use. The seam is
+/// additive; the existing arity is the evidence that it is.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the placement parameter set plus the DEC-086 id-claim midpoint (SL-233)"
+)]
+fn allocate_fresh_hooked(
+    kind: &Kind,
+    scaffold: Scaffold,
+    claim: &dyn Claim,
+    tree_root: &Path,
+    inputs: &Inputs<'_>,
+    trunk_ids: &[u32],
+    reserved: ReservedIds<'_>,
+    on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
+) -> anyhow::Result<Materialised> {
     claim_fresh_id(
         claim,
         tree_root,
         kind.prefix,
         trunk_ids,
         || reserved(&scan_ids(tree_root)?),
+        on_reserved,
         |id, canonical| {
             let ctx = ScaffoldCtx {
                 id,
@@ -398,6 +482,7 @@ pub(crate) fn materialise_fresh_prebuilt(
         prefix,
         trunk_ids,
         || reserved(&scan_ids(&tree_root)?),
+        no_midpoint(),
         build,
     )
 }
@@ -407,12 +492,23 @@ pub(crate) fn materialise_fresh_prebuilt(
 /// `trunk_ids` is constant (read once at the shell edge, D-b). `build` renders the
 /// fileset for the won `(id, canonical)`. A `Won` claim owns the dir, so any
 /// build/write failure removes it — no ghost entity survives (H2).
+///
+/// `on_reserved` is the **caller-visible midpoint between the id claim and the
+/// byte write** (SL-233 EX-1). It runs once, after the claim is `Won` and the
+/// canonical ref is formed, and before `build` renders anything: the only point
+/// at which the claimed identity exists and no authored byte does. A recoverable
+/// checkpoint journals the canonical id there (DEC-086 step 3), so that from step
+/// 3 onward recovery names the exact target. It is *not* a second `build` hook —
+/// returning `Err` from it aborts the placement, and the `Won` dir is cleaned by
+/// the same H2 path a build failure takes, which is exactly DEC-086's tolerated
+/// "empty or partial reservation" before step 3.
 fn claim_fresh_id(
     claim: &dyn Claim,
     tree_root: &Path,
     prefix: &str,
     trunk_ids: &[u32],
     mut scan: impl FnMut() -> anyhow::Result<Vec<u32>>,
+    mut on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
     mut build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
 ) -> anyhow::Result<Materialised> {
     let mut last_id = 0u32;
@@ -425,7 +521,10 @@ fn claim_fresh_id(
         match claim.claim(&ctx)? {
             Acquired::Won => {
                 let canonical = format!("{prefix}-{name}");
-                let written = build(id, &canonical).and_then(|fs| write_fileset(tree_root, &fs));
+                // The midpoint: the identity is claimed, no byte is written yet.
+                let written = on_reserved(id, &canonical)
+                    .and_then(|()| build(id, &canonical))
+                    .and_then(|fs| write_fileset(tree_root, &fs));
                 return match written {
                     Ok(()) => Ok(Materialised {
                         eid: OwnedEntityId::Numbered { id, canonical },

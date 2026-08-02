@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 415
+slug = "supply-mechanically-derivable-facts-instead-of-requesting-them"
+title = "Supply mechanically derivable facts instead of requesting them"
+status = "pending"
+kind = "functional"
+
+description = "Repository, slice-lifecycle, configuration, and linked-record facts the workflow depends on are derived by Doctrine and supplied to the agent, never solicited from it."
+tags = []
+acceptance_criteria = [
+  "Facts Doctrine can read from the repository, the slice, or configuration are present in the turn without the agent restating them.",
+  "A derived fact is marked as derived and is distinguishable from an agent-supplied claim.",
+]

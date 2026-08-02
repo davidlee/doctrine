@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 422
+slug = "enter-a-managed-run-conservatively-from-an-existing-authored-design"
+title = "Enter a managed run conservatively from an existing authored design"
+status = "pending"
+kind = "functional"
+
+description = "An existing design document can seed a run: sections import as unreviewed drafts and non-terminal shaping questions become durable inquiries, with nothing inferred as evidence."
+tags = []
+acceptance_criteria = [
+  "Imported sections carry unreviewed standing and never inherit approval.",
+  "Conventional inline open-question entries import as unverified prose proposals only.",
+  "No procedural evidence is inferred from the presence of authored prose.",
+  "Records are never deduplicated by text similarity.",
+]

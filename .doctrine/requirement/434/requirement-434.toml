@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 434
+slug = "guard-the-authored-design-watermark-at-entry-and-immediately-before-each-write"
+title = "Guard the authored design watermark at entry and immediately before each write"
+status = "pending"
+kind = "functional"
+
+description = "The run holds a fingerprint of the authored design it last agreed with; divergence refuses entry, and a re-check immediately before the snapshot write abandons the write if the bytes moved."
+tags = []
+acceptance_criteria = [
+  "Entry-refusing verbs refuse on divergence rather than advancing.",
+  "Every mutating verb re-fingerprints immediately before the write and abandons it if the bytes moved.",
+  "A re-adoption compares against the fingerprint it was admitted on, never against the superseded watermark.",
+  "The abandoned-write guarantee is that the run does not advance; journalled effects remain and stay recoverable.",
+]

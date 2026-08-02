@@ -1,0 +1,54 @@
+schema = "doctrine.knowledge"
+version = 1
+id = 105
+slug = "authored-watermark-guard-tiered-by-write-target"
+title = "Authored watermark guard tiered by write target"
+record_kind = "decision"
+status = "superseded"
+created = "2026-07-30"
+updated = "2026-07-30"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-092 established the authored watermark under three rules and admitted one residual: an edit landing between the final comparison and the atomic rename escapes the current invocation but is caught at the next entry — 'delayed detection, never silent acceptance'. RV-324 F-2 established that `materialise` does not honour that residual. It re-checks, then writes the AUTHORED document, then re-baselines the watermark from the body it just rendered — so a hand-edit landing in that window is destroyed AND the next entry check compares Doctrine's output against Doctrine's own fingerprint, finds alignment, and reports nothing. The admitted residual's discharge mechanism is unreachable on the one path that overwrites authored bytes."
+choice       = "Keep DEC-092's rules 1 and 2 unchanged and split rule 3 by WHAT IS BEING WRITTEN. (3a) A runtime-snapshot write keeps the weaker guarantee — re-check immediately before the write, abandon on divergence, residual discharged by next-entry detection. (3b) The authored-document write `materialise` performs carries the STRONGER same-file guarantee: a writer lock plus a compare-and-swap against the fingerprint just checked, borrowing `src/review.rs::with_turn`'s shape, and no re-baseline of the watermark unless the bytes on disk are the bytes Doctrine wrote."
+alternatives = [
+  "Keep the uniform weaker guarantee and merely state the materialise case as a second admitted residual — rejected: the residual would be permanent undetectable loss of authored user bytes, which is a different kind of concession from delayed detection and is not one DEC-092's reasoning ever weighed.",
+  "Plug only the self-certification (re-read after write; refuse to re-baseline when the bytes are not ours) and leave the overwrite — rejected as the whole answer: it restores detection but still destroys the edit, when the mechanism that preserves it is already in the tree. Retained as the fallback leg if lock generalisation proves infeasible.",
+  "Leave DEC-092 accepted and add a narrow sibling decision for materialise only — rejected: two live records describing one watermark, with rule 3 disagreeing between them, and a reader who reaches DEC-092 first is actively misled.",
+]
+rationale    = "DEC-092's rationale derived the weaker guarantee from a stated premise: `with_turn` 'holds a writer lock and hashes the very file it atomically replaces; a design run hashes design.md while writing a runtime snapshot, a checkpoint journal, and possibly an authored record.' That premise is true of every run-advancing verb EXCEPT `materialise`, which hashes and replaces the same file. So the asymmetry that justified the weaker wording does not hold for the one verb that can destroy authored bytes, and the stronger mechanism is not hypothetical: `with_turn_hooked` (src/review.rs:2056) already ships LockGuard acquisition, an entry CAS, and a `mid_turn` seam its own comment calls 'the pre-write CAS test seam'. Nothing below the seam supplies the guarantee — `fsutil::write_atomic` (src/fsutil.rs:52-75) performs no compare-and-swap, and `entity::write_body` skips only the byte-identical case. Tiering by write target states what each site can actually honour instead of claiming one guarantee for both."
+consequences = [
+  "`materialise` gains a writer lock and a pre-rename CAS; `LockGuard`'s key must generalise beyond a review id, or a sibling guard must exist for the design run. That generalisation is the load-bearing unknown and is the reason this is a decision rather than a fix.",
+  "The watermark re-baseline becomes conditional: Doctrine re-baselines only after confirming the bytes on disk are the bytes it wrote. A failed confirmation abandons the re-baseline and reports divergence — it never certifies a replacement it cannot vouch for.",
+  "`materialise` needs a test seam INSIDE the guarded window. The existing `pre_write` hook fires before the re-check, so it cannot express F-2's race; `with_turn_hooked`'s `mid_turn` placement is the precedent to copy.",
+  "SPEC-029's watermark responsibility says 'before every snapshot write' and does not govern the authored write — corrected by REV-044.",
+  "The guarantee is now non-uniform across run-advancing verbs, so the difference must be stated where an implementer meets it rather than inferred from the call site.",
+  "DEC-092's rules 1 and 2 (entry refusal; adopt_authored as the sole lawful crossing) are carried forward unchanged and remain the operative text for those rules.",
+]
+decided_by   = "owner — RV-324 F-2 adjudication, option (a)"
+decided_on   = "2026-07-30"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "src/commands/design.rs:1382 re-check, :1399 unconditional write_body(.., BodyMode::Replace), :1406 re-baseline from the rendered body — the three lines that make the overwrite self-certifying.",
+  "src/fsutil.rs:52-75 — write_atomic is temp-write + rename with no compare-and-swap against the fingerprint just checked.",
+  "src/entity.rs:772-776 — write_body skips only the byte-identical case, so a differing hand-edit is always overwritten.",
+  "src/review.rs:2056-2091 — with_turn_hooked: LockGuard, entry CAS, and the mid_turn seam; the mechanism DEC-092's rationale cited as unavailable here.",
+]
+contradicts = [
+  "DEC-092 rule 3 as written, and its consequence 'a residual comparison-to-rename race is accepted and stated, discharged by next-entry detection rather than eliminated' — on the materialise path the discharge cannot fire.",
+]
+notes       = [
+  "Supersedes DEC-092 rather than sitting beside it, so exactly one live record describes the watermark.",
+  "RV-324 F-5 (digest derivations not single-sourced) points at the same extraction instinct as this record's borrow of with_turn; the two may be one shared-primitive decision. Deliberately left open — the owner reserved F-5's fix shape for slice close.",
+  "SETTLED 2026-07-30, after this record was accepted: the consequence above calls LockGuard generalisation 'the load-bearing unknown'. It is no longer unknown — the owner's call is to extract the guard to src/fsutil.rs as a domain-free leaf keyed by an explicit lock path, conditional on it being suitably generic. Recorded as SL-233 PHASE-15 EX-13/EX-14/EX-15 (shape, genericity bar, behaviour-preservation gate). The consequence is left as authored rather than rewritten — it was true when decided, and this note is where the resolution lives.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-092"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = ["DEC-100"]   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-233"

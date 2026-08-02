@@ -14,9 +14,32 @@ mod test_support;
 
 pub(crate) use test_support::{WORKER_MARKER_REL, doctrine_bin, repo_root, under_worker_marker};
 
+/// Entity-tree roots, from the same bytes the binary compiles — `src/kinds/dirs.rs`
+/// imports nothing precisely so a fixture can plant `.doctrine/…` without typing
+/// a second copy of the path (STD-001; SL-233 RV-321 F-4).
+#[path = "../../src/kinds/dirs.rs"]
+mod kind_dirs;
+
+pub(crate) use kind_dirs::SLICE_DIR;
+
 /// Canonical config path — mirrors `src/dtoml::DOCTRINE_TOML` (which
 /// integration tests can't import from a binary-only crate).
 pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
+
+/// The digest convention the shell uses (`crate::git::sha256`), mirrored so a
+/// test can declare what a content binding must match. Byte-identical to it,
+/// and to `contentset`'s own copy — the shape a leaf owns directly rather than
+/// depending on the impure `git` seam.
+///
+/// One copy, here: it was written out three times across the design e2e crates
+/// (SL-233 PHASE-16), which is three chances for one of them to drift into a
+/// different convention while still passing.
+pub(crate) fn sha256(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
 
 /// The built binary, spawned with `cwd` **bound** and the worker-mode env leg
 /// stripped — the single spawn seam for every integration test (IMP-352).

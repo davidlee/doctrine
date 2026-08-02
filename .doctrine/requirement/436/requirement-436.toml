@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 436
+slug = "keep-the-run-model-pure-of-clock-randomness-git-and-filesystem"
+title = "Keep the run model pure of clock, randomness, git, and filesystem"
+status = "pending"
+kind = "quality"
+
+description = "The workflow model computes over values and injected derived facts only, keeping impurity in the surrounding shell."
+tags = []
+acceptance_criteria = [
+  "The model reads no clock, randomness, repository, or filesystem.",
+  "Derived facts enter as inputs.",
+  "The model's behaviour is verifiable without a fixture repository.",
+]

@@ -1,0 +1,329 @@
+# SL-233 PHASE-09 — evidence collectors, machine tier.
+#
+# What the moderator collects, per signal, and what each collected thing is
+# allowed to conclude. Authored from `pre-registration.md` (the settled state),
+# NOT from `plan.toml`'s `EX-8`/`VA-5` — those are append-only and present nine
+# withdrawn clauses before their withdrawals (§8 registers all nine).
+#
+# The load-bearing property here is SUBJECT ROUTING, and it is expressed as set
+# disjointness so it can be checked rather than believed: the delivery signals'
+# admissible evidence keys and the classification signal's admissible evidence
+# keys share nothing. A shared key would let one observation be routed to
+# whichever revision was cheapest, which is exactly what VA-5 exists to catch.
+
+schema = 1
+
+# The named field the moderator protocol records at every window. The S4 firing
+# condition's item (4) is satisfied only by a positive value in this field —
+# never by its absence. Single-sourced here; `protocol.md` names it and the
+# kit's tests assert that it does.
+context_state_field = "context_state"
+
+# ── the four signals ──────────────────────────────────────────────────────
+#
+# Three concern DELIVERY. One concerns CLASSIFICATION. Different subjects,
+# therefore different consequences.
+
+[[signal]]
+id                  = "S1"
+name                = "adherence"
+subject             = "delivery"
+fires_when          = "fragment-delivered craft is followed no more often than the same content was as a step"
+consequence_kind    = "mechanism"
+consequence         = "mechanism-side revision. DEC-104 stands: deliver the same lenses better, do not reclassify them."
+routes_to           = ["mechanism.re-emission", "mechanism.fragment-split"]
+admissible_evidence = [
+  "delivery.adherence_rate_frag",
+  "delivery.adherence_rate_base",
+  "delivery.adherence_rate_step",
+]
+
+[[signal]]
+id                  = "S2"
+name                = "receipt churn"
+subject             = "delivery"
+fires_when          = "agents re-request or re-receipt fragments at a rate implying they are not read on arrival"
+consequence_kind    = "mechanism"
+consequence         = "mechanism-side revision, and the one candidate (1) attacks directly."
+routes_to           = ["mechanism.re-emission"]
+admissible_evidence = [
+  "delivery.receipt_count",
+  "delivery.re_request_count",
+  "delivery.suppression_count",
+]
+
+[[signal]]
+id                  = "S3"
+name                = "cost"
+subject             = "delivery"
+fires_when          = "per-turn fragment tokens exceed the interaction cost of the step shape they replaced"
+consequence_kind    = "mechanism"
+consequence         = "mechanism-side revision. The trade was `fewer receipts`; if it is not also cheaper, only attention remains and S1 must carry it alone."
+routes_to           = ["mechanism.fragment-split"]
+admissible_evidence = [
+  "delivery.fragment_tokens_per_turn",
+  "delivery.step_interaction_tokens",
+  "delivery.turn_count",
+]
+
+[[signal]]
+id               = "S4"
+name             = "adherence against the stated condition"
+subject          = "classification"
+fires_when       = "the agent discharged a 2a step at a turn where the step's STATED completion condition was not satisfied"
+consequence_kind = "placement"
+consequence      = "reopens DEC-104's discriminator and nothing else."
+routes_to        = ["reopening"]
+default          = "deny"
+note = """
+Mechanical: it contains no inference about a mind. Every earlier formulation \
+asked a moderator to read intent (`could not honestly have completed`, `treated a \
+lens as gate-worthy`) and all of those are withdrawn — pre-registration §8. \
+Collected only over the state-visible obligations; see `[gate]` for the four it \
+cannot reach."""
+admissible_evidence = [
+  "classification.discharge_turn",
+  "classification.stated_condition_unsatisfied",
+  "classification.sibling_contrast",
+  "classification.context_state_recorded",
+]
+
+  # Four items, ALL required, default-deny. Absent (4), item (2) is UNDECIDED and
+  # the observation is UNCOLLECTED — not weighed. Satisfied only on positive
+  # evidence, never by the absence of a mark.
+  [[signal.firing_condition]]
+  id       = "sibling-control"
+  required = true
+  text     = "the within-run sibling control is satisfied: the moderator recorded how the same run treated the sibling obligations at that edge"
+
+  [[signal.firing_condition]]
+  id       = "no-context-boundary"
+  required = true
+  text     = "the run crossed no context boundary at that edge — neither the deliberate break the protocol induces, nor an incidental one (exhaustion, compaction, harness summarisation)"
+
+  [[signal.firing_condition]]
+  id       = "no-abort"
+  required = true
+  text     = "the run was not aborted or restarted mid-edge"
+
+  [[signal.firing_condition]]
+  id       = "context-state-recorded"
+  required = true
+  text     = "the moderator protocol recorded the context state across the window containing the discharge, in the `context_state` field"
+
+# ── the sibling contrast routes S4's firing ───────────────────────────────
+#
+# A signal with more than one live explanation routes to none of them. An
+# observation offered with no sibling contrast is rejected as UNCOLLECTED.
+
+[[sibling_contrast]]
+observed  = "premature across the board"
+reading   = "agent-general adherence"
+routes_to = "S1"
+note      = "reaches the discriminator not at all"
+
+[[sibling_contrast]]
+observed  = "premature for one step beside correct siblings"
+reading   = "step-specific — the condition was mis-stated"
+routes_to = "reopening"
+
+# ── the reopening — two arms, pre-registered ──────────────────────────────
+#
+# There is no third exit. `stand` was admitted at round 5 and removed at round 6:
+# unconditioned, it let any firing be narrated after the fact as an anomalous run
+# — route-to-NO-revision, the mirror of route-to-the-cheapest. Anomaly now lives
+# entirely in the firing condition above.
+
+[reopening]
+default_arm = "reclassify"
+note = """
+Which arm a firing takes is itself pre-registered; leaving the selection to \
+judgement is the routing manoeuvre with one step renamed. A kit that offered the \
+two arms as EQUIVALENT would have restored `stand` under the name `reword`."""
+
+  [[reopening.arm]]
+  id                 = "reclassify"
+  requires_artefact  = false
+  one_shot           = false
+  text               = "the obligation moves to 2b. This is what a firing means unless reword earns its exit."
+
+  [[reopening.arm]]
+  id                = "reword"
+  requires_artefact = true
+  one_shot          = true
+  text = """
+records CANDIDATE STEP TEXT naming a completion boundary that is truthful for \
+that obligation AND observable in run state at the moment the new text says the \
+step completes. No candidate text, no reword. A second firing on the same step \
+after a reword reclassifies with no further reopening: the reworded boundary is \
+a prediction, and a second firing spends it."""
+
+# ── mechanism-side candidates — two, in escalating cost ───────────────────
+#
+# A third (`deliver a fragment digest in the envelope so non-attention is
+# visible`) was withdrawn on inspection at round 6: the digest ALREADY rides
+# every emission as the `name@digest` header, so the suggestion was either
+# vacuous or a restatement of (1).
+
+[[mechanism_candidate]]
+id   = "mechanism.re-emission"
+cost = "cheap"
+text = """
+Re-emission semantics. Bound the suppression, or take it off the caller. \
+DEC-078's suppression is caller-declared: an agent can suppress a fragment by \
+claiming a receipt for bytes it never read, and Doctrine cannot tell that from a \
+genuine hold. Re-emit unconditionally every n turns so a claimed-but-unread \
+receipt cannot suppress indefinitely."""
+
+[[mechanism_candidate]]
+id   = "mechanism.fragment-split"
+cost = "costlier"
+text = """
+Fragment size / split. Shorten or split the fragment so the lens is not buried in \
+bytes an agent skims. It reopens what belongs in each fragment, but it is the \
+only lever that helps when the bytes genuinely arrive and are genuinely not \
+absorbed."""
+
+# ── the gate record ───────────────────────────────────────────────────────
+#
+# Classification is an AUTHORING gate, not a run inference: it is a property of an
+# obligation's text, decidable before any run and re-runnable by anyone. Every one
+# of the nine states a truthful completion condition, so every one survives as 2a.
+#
+# STATE-VISIBILITY IS NOT PART OF THAT GATE. It grades a condition's evidence and
+# never decides classification — round 11 split the two limbs precisely so they
+# could not be conflated. It appears here as S4's COLLECTION SCOPE.
+#
+# Source of truth: `sketches/thin-adapter.md:1158-1168`.
+
+[gate]
+covered = 5
+total   = 9
+unreachable = [
+  "explore.scope",
+  "explore.canon",
+  "explore.memory",
+  "inquire.knowledge",
+]
+note = """
+The coverage number is a disclosure, not a footnote. S4 reaches five of nine. A \
+kit reporting an adherence rate over a denominator it never covered fails VA-5, \
+so the four unreachable obligations are named above rather than subtracted."""
+
+  [[gate.obligation]]
+  n             = 1
+  id            = "explore.scope"
+  condition     = "the slice's governing specs and ADRs can be named, and prior art is located or its absence established"
+  state_visible = false
+  evidence      = "none — nothing records a read"
+
+  [[gate.obligation]]
+  n             = 2
+  id            = "explore.research"
+  condition     = "the slice's pre-design research round is current"
+  state_visible = true
+  evidence      = "`doctrine verify research-current`, the one shipped verifier"
+
+  [[gate.obligation]]
+  n             = 3
+  id            = "explore.canon"
+  condition     = "the ADRs, policies and standards governing this surface have been loaded in this run"
+  state_visible = false
+  evidence      = "none"
+
+  [[gate.obligation]]
+  n             = 4
+  id            = "explore.memory"
+  condition     = "memory has been retrieved over the files and subsystems the slice expects to touch"
+  state_visible = false
+  evidence      = "none"
+
+  [[gate.obligation]]
+  n             = 5
+  id            = "explore.triage"
+  condition     = "the slice notes carry a triage entry naming each of open questions, risks, assumptions, shaping decisions, constraining governance"
+  state_visible = true
+  evidence      = "the slice notes — the step text names its landing site"
+
+  [[gate.obligation]]
+  n             = 6
+  id            = "inquire.knowledge"
+  condition     = "every answer this inquiry accepted that outlives the session has a settled knowledge record shaping this slice"
+  state_visible = false
+  evidence      = "none — the left-hand term is in context, not in run state"
+  note = """
+Left alone deliberately. Making this state-visible needs a durable artefact \
+enumerating what the inquiry settled — a new obligation invented to make an old \
+one measurable. That is the ceremony objection arriving by the back door, and the \
+trade is refused. The step stays 2a on a truthful condition with weak evidence."""
+
+  [[gate.obligation]]
+  n             = 7
+  id            = "review.scope"
+  condition     = "`slice-nnn.md` asserts nothing the accepted decisions contradict and omits nothing they add to scope"
+  state_visible = true
+  evidence      = "`design.md` carries the decisions at edge 4; at edge 2 (`inquire.scope`) only so far as the sibling step recorded them"
+
+  [[gate.obligation]]
+  n             = 8
+  id            = "draft.selectors"
+  condition     = "the recorded selector set matches the code-impact section's current commitments"
+  state_visible = true
+  evidence      = "`slice selector list` against the section; re-checked at edge 4 by `review.selectors`"
+
+  [[gate.obligation]]
+  n             = 9
+  id            = "review.passes"
+  condition     = "the slice notes carry the statement of what a further review pass would probe, or why none is needed, written after the last pass"
+  state_visible = true
+  evidence      = "the slice notes — the step text names its landing site"
+
+# ── instruments ───────────────────────────────────────────────────────────
+#
+# R1 is that the kit becomes ceremony. These exist so ceremony-exceeding-value is
+# judged on evidence rather than impression — including the kit's own cost.
+
+[[instrument]]
+id           = "cost.interaction"
+collected_as = "turns_to_lock"
+question     = "how many turns, tool calls and moderator interventions did the run spend reaching a locked design?"
+judges       = "R1, and S3's step-shape comparison"
+note = """
+Counted against T-base and, where a fixture permits, T-step. An absolute turn \
+count answers nothing on its own."""
+
+[[instrument]]
+id           = "cost.token"
+collected_as = "fragment_tokens_per_turn"
+question     = "what did every-turn fragment prose cost per turn, against the interaction cost of the nineteen-step shape it replaced?"
+judges       = "R1, S3"
+
+[[instrument]]
+id           = "acceptance-basis"
+collected_as = "basis_sample"
+question     = "does the concise acceptance `basis` earn its interaction cost?"
+judges       = "EX-4"
+samples = [
+  "faithfulness — does each `basis` describe the turn it cites?",
+  "detectability — can a reviewer or a resumed agent notice a mismatch from the record alone?",
+  "cost — what did stating it cost, per acceptance?",
+]
+note = """
+DEC-088 makes the basis mandatory on every user acceptance \
+(`src/design_run/run.rs` refuses a blank one). The question is not whether it is \
+present — the shell guarantees that — but whether it disambiguates anything."""
+
+# ── what the kit reports about ITSELF ─────────────────────────────────────
+#
+# Rates reported, never absorbed. A run whose context state went unrecorded is
+# evidence the exercise cannot support S4, and saying so is the honest outcome.
+
+[reporting]
+deny_rate_field         = "s4_deny_rate"
+inconclusive_rate_field = "s4_inconclusive_rate"
+coverage_fraction       = "5/9"
+note = """
+Default-deny lowers the probability S4 fires at all, and at N=1 a falsifier that \
+cannot fire is a formality. Recording context boundaries is a standing moderator \
+obligation with a named field, so the deny branch should be rare — AND IF IT IS \
+NOT RARE THE KIT MUST REPORT THAT."""

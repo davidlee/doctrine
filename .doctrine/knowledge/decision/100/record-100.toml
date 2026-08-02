@@ -1,0 +1,53 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 100
+slug = "materialise-tolerates-the-check-to-rename-lost-update-window"
+title = "Materialise tolerates the check-to-rename lost-update window"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-30"
+updated = "2026-07-30"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-105 split DEC-092's rule 3 by write target and gave the authored-document write (`materialise`) the STRONGER same-file guarantee: a writer lock plus a compare-and-swap, borrowing `src/review.rs::with_turn`'s shape. It named its own escape — the cheap leg was 'retained as the fallback leg if lock generalisation proves infeasible' — and rested its rejection of that leg on the premise that the strong mechanism was 'already in the tree' and therefore cheap to borrow. SL-233 PHASE-15 EX-13/EX-14/EX-15 are the discovery that borrowing it is NOT cheap: a genericity bar (the guard must not carry a domain term, a ReviewError, or build a `.doctrine/state/...` path), a behaviour-preservation gate (no existing `review.rs` test may change), and RV-321 open against the same file with two stored blockers. That is the named infeasibility condition, so this is a feasibility judgement rather than a reversal."
+choice       = "Land the fallback leg DEC-105 named, and state its residual in the contract instead of claiming a guarantee the code does not provide. (3b) becomes: `materialise` re-baselines the authored watermark ONLY to bytes read back from `design.md`, never to the bytes it rendered. No writer lock, no compare-and-swap, no move-before-write. The lost-update window between the final pre-write check and the atomic rename is CONSCIOUSLY TOLERATED for v0.0.1: a write landing there is destroyed, the read-back then matches, and the run advances. DEC-092/DEC-105 rules 1 and 2 are carried forward unchanged."
+alternatives = [
+  "Keep DEC-105's strong leg and extract `LockGuard` to `fsutil` as planned — rejected on feasibility, not merit, per the context above. It was also the riskiest work in the phase (shared machinery, an open RV against the same file), and it does not address the documented actor anyway: a lock excludes concurrent `doctrine` invocations, while a human editor or an agent using a file-write tool never consults it.",
+  "On detected conflict, move the authored file aside and then write — rejected by the raiser, and correctly: the troublesome edit arrives AFTER the conflict check, so there is nothing to move aside at the moment the check runs.",
+  "Unconditional move-before-write — rename `design.md` to a unique recovery sibling, create the replacement with `create_new`, keep and report the recovery file. This is the cheapest mechanism that genuinely preserves every racing edit. Rejected for v0.0.1 on cost: it introduces backup naming, crash-recovery, and cleanup semantics for a window the project has never observed in ~200 design documents.",
+  "Report the overwrite after the fact without preserving the bytes — rejected by the raiser as not clearing its bar, and not chosen here: the reread cannot see bytes the rename already destroyed, so there is nothing to report.",
+]
+rationale    = "Two things are true at once and the contract must say both. (1) The self-certification half is worth fixing on its own: deriving the watermark from the rendered body made the claim unfalsifiable, so any write landing after the re-check was certified as Doctrine's own and the next entry check saw alignment — DEC-092's promised delayed detection could never fire on the one path that overwrites authored bytes. Silent, unbounded, and cheap to close. (2) The race half is not worth the mechanism DEC-105 specified, at v0.0.1, against this threat model: SPEC-029 H4 already assumes one active run per slice, the corpus shows ~200 design documents with zero hand-edits, and `install/hymns/stage/design.md:32` instructs agents never to edit authored design bytes behind a run's back. The decisive point is a MISMATCH, not a frequency argument: a lockfile excludes cooperating `doctrine` processes, and every plausible non-cooperating writer — a human in an editor, another agent's file-write tool, a formatter watcher — bypasses it entirely. So the expensive leg buys protection against the actor H4 already excludes and none against the actor that motivates the finding."
+consequences = [
+  "The window between the final pre-write check and the atomic rename is a REACHABLE, IRREVERSIBLE residual, consciously accepted and disclosed. It is not unreachable and must never be described as such: the raiser's rebuttal stands on the evidence — the hymn line is a behavioural prohibition rather than an enforcement boundary, the subsystem explicitly supports foreign authored edits via `adopt_authored`, H4 excludes concurrent RUNS rather than concurrent invocations or external file writes, and the window spans directory handling, `write_body`'s existing-file read, temp-file creation, temp-file write, and rename.",
+  "No surface may claim preservation OR detection of an overwritten edit. This is the raiser's explicit acceptance condition, so it is a correctness obligation on the prose, not a documentation nicety.",
+  "What IS guaranteed, and is worth stating positively: Doctrine never certifies prose it did not write. On a read-back mismatch nothing advances — no revision, no watermark, no change-log row — so the ordinary entry check sees the divergence at the next verb.",
+  "The post-write read-back is a THIRD observation of the authored document, so SPEC-029's 'two check points' summary is corrected to three.",
+  "EX-13/EX-14/EX-15 (guard shape, genericity bar, behaviour-preservation gate) are discharged by recorded infeasibility under EX-5 rather than implemented. `src/review.rs::LockGuard` is untouched, which also keeps PHASE-15 clear of RV-321's two stored blockers on that file.",
+  "Preserving every racing edit remains available later at a known price — unconditional move-before-write, costed in the alternatives above. This decision defers that mechanism; it does not argue against it.",
+]
+decided_by   = "owner, on the raiser's terms — codex (RV-324 raiser) named this exit and committed to accepting it once the governance stops claiming preservation or detection"
+decided_on   = "2026-07-30"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "src/commands/design.rs — `materialise` now derives the watermark from `read_authored_fingerprint` (the file as Doctrine reads it back) rather than from `sha256(body)`, and refuses to advance on a mismatch.",
+  "tests/e2e_design_state.rs `a_foreign_write_after_materialises_rename_is_not_certified` — VT-2. Observed RED with the injection seam in place and only the read-back removed, so the red is the finding: `materialise` succeeded and advanced to revision 4 while the document held foreign bytes.",
+  "SPEC-029 H4 — one active run per slice is sufficient for v1; the premise the lock's value rests on, and one it already assumes away.",
+  "install/hymns/stage/design.md:32 — 'Never edit authored design bytes behind the run's back.' Evidence about the DOCUMENTED actor only; the raiser is right that it binds behaviour rather than enforcing a boundary.",
+]
+contradicts = [
+  "DEC-105 rule 3b as accepted — 'a writer lock plus a compare-and-swap against the fingerprint just checked, borrowing src/review.rs::with_turn's shape'. Not implemented, and this record is why.",
+  "spec-029.toml responsibility 3 as landed by REV-044 — 'carries a same-file writer lock and compare-and-swap'. Corrected in the same phase; the claim outlived the mechanism by one commit.",
+]
+notes    = [
+  "Supersedes DEC-105 rather than sitting beside it, for the reason DEC-105 gave for superseding DEC-092: two live records describing one watermark, with rule 3 disagreeing between them, actively mislead whichever a reader reaches first.",
+  "The raiser's verification turn (`review verify --as raiser` on RV-324) is still owed and is where this record's acceptance condition is actually tested. F-2 stays stored `blocker` until then — severity is raiser-owned and fixed at raise.",
+  "RV-324 F-5 (digest derivations not single-sourced) is untouched here, as it was in DEC-105. IMP-370 owns it, settled at slice close.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = ["DEC-105"]   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

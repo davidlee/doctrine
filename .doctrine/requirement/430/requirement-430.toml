@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 430
+slug = "resume-a-retried-submission-and-refuse-a-changed-payload-under-a-reused-id"
+title = "Resume a retried submission and refuse a changed payload under a reused id"
+status = "pending"
+kind = "functional"
+
+description = "Submission identity makes retries safe: the same id with the same payload resumes, the same id with different content is refused, and an id outside the replay window is refused as expired."
+tags = []
+acceptance_criteria = [
+  "A retried submission with identical content resumes rather than duplicating effects.",
+  "A reused id carrying changed content is refused.",
+  "An id outside the replay window is refused as expired and never treated as new.",
+]

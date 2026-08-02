@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 418
+slug = "accept-user-traversal-direction-at-any-point-in-a-run"
+title = "Accept user traversal direction at any point in a run"
+status = "pending"
+kind = "functional"
+
+description = "The user may pin, defer, prune, or set breadth and depth posture at any moment, and those directions are recorded distinguishably from agent-proposed structure."
+tags = []
+acceptance_criteria = [
+  "Pin, defer, prune, and posture selection are available at any point in the run.",
+  "The adaptive default — major branches breadth-first, then a consequential or blocking arm depth-first, then reassess — is the posture a run starts in.",
+  "A user-directed change is distinguishable from an agent-proposed one by the record itself, not by convention.",
+]

@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 417
+slug = "hold-open-design-questions-as-an-inspectable-decomposition-with-a-visible-frontier"
+title = "Hold open design questions as an inspectable decomposition with a visible frontier"
+status = "pending"
+kind = "functional"
+
+description = "Open questions form a run-local map whose nodes carry stable identity, one primary parent, concise question text, lifecycle status, and sparse dependency references, with the active path and nearby frontier surfaced without injecting the whole map."
+tags = []
+acceptance_criteria = [
+  "Each node has stable run-local identity, one primary parent, and a lifecycle status.",
+  "Dependency or activation references beyond the tree are expressible and sparse.",
+  "The active path, nearby frontier, blockers, and resolved and open counts are visible without the full map.",
+  "Blocked standing is derived from the graph rather than stored as an independent flag.",
+]

@@ -1,0 +1,52 @@
+# The runbook guarding the edge out of `exploring` (SL-233 PHASE-16, DEC-101).
+#
+# Structured data in TOML, prose in Markdown — this store's two-tier convention.
+# Its sibling `.md` files are process fragments: what the machine will reject.
+# This is the other register, the one the built surface had none of — do this
+# now, in this order.
+#
+# THE AUTHORING RULE. Could a project legitimately do this differently?
+#   Yes -> a runbook step. Overridable, verifier substitutable.
+#   No  -> an engine invariant, enforced by `apply` / `advance`. Never a step.
+# A user cannot override "every mutation compare-and-swaps against the run's
+# revision"; an override there would not be different, it would be false. True
+# invariants stay out of runbooks altogether.
+#
+# Step ids are API. Doctrine's downstream logic keys on the id and never on the
+# command behind it, so a project will be able to substitute a verifier and keep
+# the contract's identity once the override seam lands (IMP-372). Ids are
+# explicit and author-assigned, never positional: if identity were list
+# position, inserting a step at the top would silently repoint every persisted
+# discharge — the rule this repo already enforces on `PHASE-NN` and `EN-/EX-/VT-`.
+#
+# A discharge binds the digest of the whole step definition (`id`, `text`,
+# `required`, `verify`), so editing any of them makes it stale and it is re-made
+# deliberately. Editing prose here is cheap and safe; it is not free.
+
+mode = "sequence"
+
+[[step]]
+id       = "explore.scope"
+text     = "Read the slice scope, the specs and ADRs it descends from, and prior art."
+required = true
+
+[[step]]
+id       = "explore.research"
+text     = "Ensure the pre-design research round has run for this slice."
+verify   = ["doctrine", "verify", "research-current", "--slice", "{slice}", "-p", "{repo_root}"]
+required = true
+
+[[step]]
+id       = "explore.canon"
+text     = "Run /canon so the ADRs, policies and standards governing this surface are in view."
+required = true
+
+[[step]]
+id       = "explore.memory"
+text     = "Run /retrieve-memory over the files and subsystems you expect to touch."
+required = true
+
+[[step]]
+id       = "explore.triage"
+text     = "Record the design surface triage in the slice notes: open questions, risks, assumptions, shaping decisions, constraining governance."
+required = true

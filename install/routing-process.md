@@ -44,9 +44,13 @@ new` instead of losing it; check `backlog list` at the start of substantive work
 Finished a coherent unit → `/harvest`. Handing off to fresh context → `/handover`.
 Agent confusion / stale memory corpus → `/reviewing-memory`.
 
-**Core process:** `slice new` (scope) → `slice design` (author + adversarial
-review until locked) → `slice plan` → `slice phases` → per phase: `phase-plan`
-the runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
+**Core process:** `doctrine slice new` (scope) → `doctrine design start` opens
+the managed design run; read the turn with `doctrine design show`, mutate it
+with `doctrine design apply`, write the authored prose with
+`doctrine design materialise`, and re-enter a cold context with
+`doctrine design resume` — the run locks when its gate clears →
+`doctrine slice plan` → `doctrine slice phases` → per phase: `/phase-plan` the
+runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
 green, flip `completed` → `/audit` → reconcile → `/close`.
 
 **Guardrails:** use the CLI (prefer the MCP tools if available); don't guess
@@ -60,7 +64,12 @@ are immutable — edits append, never renumber.
 **Reference forms.** Entity ids — prefixed, 3-digit zero-padded (`SL-023`,
 `ADR-005`, `REQ-059`); cite the durable id, never a mobile membership label
 (`FR-`/`NF-`). Doc-local enumerations — bare (`OQ-1`, `D1`, `R1`, `Q1`, `C1`).
-Criteria modes — `VT` by test / `VA` by agent / `VH` by human.
+A doc-local id means nothing outside the artefact holding it, and your reader
+has not memorised it, so **introduce it qualified by that artefact's durable
+id** on first use in a message — `SL-233`'s `OQ-1`, `RV-325` `F-4` — with a
+one-line synopsis where context does not supply one. This binds your own prose,
+not only what you quote. Criteria modes — `VT` by test / `VA` by agent / `VH` by
+human.
 
 **Reference docs (read on demand).** Cited bare as `<name>.md` throughout the
 skills and templates; they are **published, not projected** — there is no copy

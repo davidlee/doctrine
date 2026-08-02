@@ -238,6 +238,62 @@ pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
     }
 }
 
+/// The token a DEC-088 user acceptance unlocks. One spelling, one owner (STD-001).
+const ACCEPTED_STATUS: &str = "accepted";
+
+/// The status a **user acceptance** moves a record to, or `None` where the kind's
+/// vocabulary has no such state (SL-233 DEC-088).
+///
+/// Derived from the kind's own vocabulary rather than invented per kind: a
+/// hypothesis is `confirmed` by evidence and a question is `answered` by an
+/// answer, and neither is a user *accepting* something as true. Only the decision
+/// vocabulary carries `accepted`, so only a decision has anything for an
+/// acceptance to unlock — and if another kind gains the token, this follows
+/// without an edit.
+pub(crate) fn accepted_status(k: RecordKind) -> Option<&'static str> {
+    statuses(k).iter().copied().find(|s| *s == ACCEPTED_STATUS)
+}
+
+/// Statuses that make a record **unusable as an adoption target** (SL-233 EX-4):
+/// withdrawn from the corpus rather than merely settled.
+///
+/// Distinct from both the hide-set and the terminal set, and the difference is
+/// the point. An `answered` question or a `validated` assumption is settled and
+/// hidden, and adopting one is exactly right — the inquiry it disposes has its
+/// answer. A `superseded` decision is not an answer to anything; binding a design
+/// inquiry to it records a resolution against a record the corpus has withdrawn.
+const WITHDRAWN_STATUSES: &[&str] = &[
+    "invalidated",
+    "obsolete",
+    "rejected",
+    "superseded",
+    "retracted",
+    "retired",
+    "waived",
+    "refuted",
+];
+
+/// Whether `status` withdraws a record from use as an adoption target.
+pub(crate) fn is_withdrawn(status: &str) -> bool {
+    WITHDRAWN_STATUSES.contains(&status)
+}
+
+/// Resolve `reference` to a record that exists and is usable as an adoption
+/// target (SL-233 EX-4) — the kind check and the status check, together, because
+/// a ref that names a real kind but no record is the more likely mistake.
+pub(crate) fn adoptable(root: &Path, reference: &str) -> anyhow::Result<(RecordKind, u32)> {
+    let (kind, id) = resolve_ref(reference)?;
+    let record = read_record(root, kind, id)
+        .with_context(|| format!("`{reference}` names no record this project holds"))?;
+    anyhow::ensure!(
+        !is_withdrawn(&record.status),
+        "`{reference}` is `{}` — a withdrawn record cannot be adopted as a design \
+         disposition; adopt a live record or create one",
+        record.status
+    );
+    Ok((kind, id))
+}
+
 /// Whether `status` is in the kind's default-list hide-set (a settled state). An
 /// out-of-vocab token (impossible on a serde-validated item, but the predicate is
 /// stringly) is treated as not-hidden. `--all` / explicit `--status` override in
@@ -969,7 +1025,7 @@ fn record_prefix_list_slash() -> String {
 /// numeric tail (`DEC-7` and `DEC-007` both yield 7). The six counters are
 /// independent, so the prefix is load-bearing for disambiguation (`ASM-1` ≠ `DEC-1`).
 /// An unknown prefix or a non-numeric tail is a hard error — never an implicit create.
-fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
+pub(crate) fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
     let (prefix, tail) = reference.rsplit_once('-').with_context(|| {
         format!("`{reference}` is not a canonical record ref (expected e.g. ASM-007)")
     })?;
@@ -1081,38 +1137,89 @@ pub(crate) fn run_new(
     slug: Option<String>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let trunk_ids = crate::git::trunk_entity_ids(&root, record_kind.kind().dir)?;
+    let title = crate::input::resolve_title(title)?;
+    let slug = crate::input::resolve_slug(&title, slug)?;
+    let (id, dir) = create_record(&root, record_kind, &title, &slug, entity::no_midpoint())?;
+    writeln!(
+        io::stdout(),
+        "Created {}: {}",
+        record_kind.canonical_id(id),
+        dir.display()
+    )?;
+    Ok(())
+}
+
+/// Create a knowledge record at a freshly reserved id, exposing the **id-claim
+/// midpoint** (SL-233 DEC-086 steps 2–4). Returns the minted id and its dir.
+///
+/// The one fresh-creation path for the seven kinds: `knowledge new` passes
+/// [`entity::no_midpoint`], and the design-run checkpoint passes a closure that
+/// journals the claimed canonical id before any byte is written. Refactored out
+/// of `run_new` rather than added beside it — a second reservation+scaffold path
+/// is exactly the parallel implementation that drifts.
+pub(crate) fn create_record(
+    root: &Path,
+    record_kind: RecordKind,
+    title: &str,
+    slug: &str,
+    on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
+) -> anyhow::Result<(u32, PathBuf)> {
+    let trunk_ids = crate::git::trunk_entity_ids(root, record_kind.kind().dir)?;
     let (backend, mut reserved) = crate::reserve::backend(
-        &root,
+        root,
         record_kind.kind().prefix,
         crate::install::prompt_confirm,
     )?;
-    let title = crate::input::resolve_title(title)?;
-    let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
-    let out = entity::materialise(
+    let out = entity::materialise_fresh_hooked(
         record_kind.kind(),
         record_kind.scaffold(),
         &*backend,
-        &root,
-        &MaterialiseRequest::Fresh,
+        root,
         &Inputs {
-            slug: &slug,
-            title: &title,
+            slug,
+            title,
             date: &date,
         },
         &trunk_ids,
         &mut reserved,
+        on_reserved,
     )?;
     let id = out
         .eid
         .numeric_id()
         .context("knowledge kind must yield a numeric id")?;
-    writeln!(
-        io::stdout(),
-        "Created {}: {}",
-        record_kind.canonical_id(id),
-        out.dir.display()
+    Ok((id, out.dir))
+}
+
+/// Scaffold a record into an **already-reserved** id (SL-233 DEC-086 step 4, on
+/// resume).
+///
+/// The reservation is the caller's — it was claimed and journalled before the
+/// crash, so this must not claim a second one. `InExisting` placement is exactly
+/// that: no claim, no allocation, and it refuses to clobber, so a resume that
+/// races a completed write reports rather than overwrites.
+pub(crate) fn materialise_record_at(
+    root: &Path,
+    record_kind: RecordKind,
+    id: u32,
+    title: &str,
+    slug: &str,
+) -> anyhow::Result<()> {
+    let date = crate::clock::today();
+    entity::materialise(
+        record_kind.kind(),
+        record_kind.scaffold(),
+        &crate::entity::LocalFs,
+        root,
+        &MaterialiseRequest::InExisting { id },
+        &Inputs {
+            slug,
+            title,
+            date: &date,
+        },
+        &[],
+        &mut entity::local_reserved(),
     )?;
     Ok(())
 }
@@ -1589,6 +1696,35 @@ pub(crate) fn run_status(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kind, id) = resolve_ref(reference)?;
+    set_record_status(&root, kind, id, state)?;
+    writeln!(
+        io::stdout(),
+        "{}: {}",
+        kind.canonical_id(id),
+        crate::listing::status_colored(state, color)
+    )?;
+    Ok(())
+}
+
+/// The authored `record-NNN.toml` for one record — the single derivation of that
+/// path, shared by the status seam, the relation seam, and the design-run
+/// checkpoint that writes both (STD-001).
+pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBuf {
+    let name = format!("{id:03}");
+    root.join(kind.kind().dir)
+        .join(&name)
+        .join(format!("{RECORD_STEM}-{name}.toml"))
+}
+
+/// Transition one record's status through the edit-preserving seam, validating
+/// `state` against the kind's own vocabulary and **refusing a foreign-kind
+/// state** (FR-002). No resolution coupling: `status` and `updated`, nothing else.
+pub(crate) fn set_record_status(
+    root: &Path,
+    kind: RecordKind,
+    id: u32,
+    state: &str,
+) -> anyhow::Result<()> {
     let vocab = statuses(kind);
     if !vocab.contains(&state) {
         anyhow::bail!(
@@ -1599,24 +1735,14 @@ pub(crate) fn run_status(
     }
     let today = crate::clock::today();
     let name = format!("{id:03}");
-    let record_path = root
-        .join(kind.kind().dir)
-        .join(&name)
-        .join(format!("{RECORD_STEM}-{name}.toml"));
     let hint = format!(
         "malformed record {name}: missing seeded `status`/`updated` \
          — restore the missing keys and retry; the file is left untouched"
     );
     crate::dep_seq::set_authored_status(
-        &record_path,
+        &record_toml_path(root, kind, id),
         &[("status", state), ("updated", &today)],
         &hint,
-    )?;
-    writeln!(
-        io::stdout(),
-        "{}: {}",
-        kind.canonical_id(id),
-        crate::listing::status_colored(state, color)
     )?;
     Ok(())
 }
