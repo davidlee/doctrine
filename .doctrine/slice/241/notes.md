@@ -13,7 +13,7 @@ T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
 (H8 scored 100/0 + falsified 3/3; **H11's light half built and falsified 5/5 but
 UNSCORED** — F-P05-32 and F-P05-33 both owe an operator call). **Twelve of
 sixteen rows carry scored results: H1–H6 H8 H9 H12 H13 H14 H15** ·
-last SL-241 commit `f4c61fa4`
+last SL-241 commit `607c3339`
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
