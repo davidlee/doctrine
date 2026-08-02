@@ -869,6 +869,133 @@ H12_assert() {
   c3_assert_stage_passed "${at}" "${run}" advance
 }
 
+# H13 — A HOSTILE BUNDLE AT THE HARVEST PATH (EX-3's four legs, RT-4/F-6).
+#
+# THE ONLY ROW WHOSE SUBJECT IS A CAPSULE-AUTHORED FILE. Every other row hands
+# the trusted side git objects; the bundle is the one artifact this design does
+# not delete, so M-B carries a file-ingestion boundary M-A simply does not have.
+# That asymmetry is the row — and it is why the fetch cells are `n/a` in the
+# matrix rather than a duplicate pass: M-A reads no capsule-authored artifact at
+# all, so there is no subject to attack. A QUE-200 verdict input in its own
+# right (F-6).
+#
+# FOUR ALTERNATIVES, one scored leg each (`cell_alternatives` splits the token
+# on `|`). The mutators are SHARED with `selftest_bundle` via `lib/common.sh` —
+# the same attack on the same path, deliberately not a second copy.
+#
+# The row refuses at stage 1, so it is the first instantiated row where nothing
+# reaches conform. `_assert` therefore observes the ingestion boundary itself:
+# no result ref in the quarantine, and no later stage emitted at all.
+
+# The size cap is a THRESHOLD, not a mutation (see `lib/common.sh`): capped
+# below the honest bundle's size so the leg bites on a real artifact. It must
+# refuse BEFORE `git bundle verify` reads a byte — a cap applied after the read
+# is not a cap, and the point is that a hostile 2 GiB file is never streamed.
+C3_H13_CAP=64
+
+c3_h13_bundle() { printf '%s/capsule/%s' "$1" "${RIG_BUNDLE}"; }
+
+H13_mutate() {
+  local run=$1 mechanism=$3 alt=$4 bundle
+  bundle=$(c3_h13_bundle "${run}")
+
+  [ "${mechanism}" = bundle ] ||
+    rig_die "H13: only M-B has a capsule-authored artifact to attack; got ${mechanism}"
+
+  # Recorded BEFORE the mutation, because three of the four observables are
+  # absence-shaped and an absence proves nothing without evidence the thing was
+  # ever there. This is the per-cell form of `selftest_bundle`'s positive
+  # control, which the row cannot borrow because it runs one leg per cell.
+  stat -c %s -- "${bundle}" >"${run}/h13-size.before"
+
+  # SET ON EVERY BRANCH, never only on the leg that needs it: `cell_run` leaves
+  # the variable in this shell, so a cap set for one cell would silently ride
+  # into the next one's harvest (D-P05-7's hazard, in a different register).
+  # `unset` rather than a literal default — harvest-bundle.sh owns that number
+  # and a second copy here would be a magic string (STD-001).
+  case "${alt}" in
+    bundle-unsafe-path)
+      unset RIG_BUNDLE_CAP
+      bundle_symlink "${bundle}"
+      ;;
+    bundle-absent)
+      unset RIG_BUNDLE_CAP
+      bundle_remove "${bundle}"
+      ;;
+    bundle-invalid)
+      unset RIG_BUNDLE_CAP
+      bundle_truncate "${bundle}"
+      ;;
+    resource-cap)
+      # The artifact is left HONEST — `bundle_leave` is the whole mutation.
+      export RIG_BUNDLE_CAP="${C3_H13_CAP}"
+      bundle_leave "${bundle}"
+      ;;
+    *) rig_die "H13: unknown alternative: ${alt}" ;;
+  esac
+}
+
+H13_planted() {
+  local run=$1 alt=$4 bundle before
+  bundle=$(c3_h13_bundle "${run}")
+  before=$(cat "${run}/h13-size.before")
+
+  # Every leg pairs its observable with the pre-mutation size, so no leg can
+  # pass by attacking a bundle that was never written.
+  [ "${before}" -gt 0 ] || return 1
+
+  case "${alt}" in
+    bundle-unsafe-path)
+      # `-L`, and `-e` would be WRONG here: the target is deliberately absent,
+      # so `-e` is FALSE for the very symlink the leg plants (cf. c3_path_absent).
+      [ -L "${bundle}" ] || return 1
+      printf 'a symlink at the harvest path → %s (an honest %s-byte bundle stood here)' \
+        "$(readlink -- "${bundle}")" "${before}"
+      ;;
+    bundle-absent)
+      c3_path_absent "${bundle}" || return 1
+      printf 'the bundle is GONE at ring time (an honest %s-byte bundle stood here)' "${before}"
+      ;;
+    bundle-invalid)
+      [ -f "${bundle}" ] || return 1
+      [ "$(stat -c %s -- "${bundle}")" -lt "${before}" ] || return 1
+      git bundle verify "${bundle}" >/dev/null 2>&1 && return 1
+      printf 'truncated to %s bytes from %s — git bundle verify rejects it' \
+        "$(stat -c %s -- "${bundle}")" "${before}"
+      ;;
+    resource-cap)
+      # The one leg whose observable is that NOTHING was done to the artifact.
+      [ -f "${bundle}" ] || return 1
+      [ "${before}" -gt "${C3_H13_CAP}" ] || return 1
+      printf 'an HONEST %s-byte bundle against a %s-byte cap — the threshold bites, not a forgery' \
+        "${before}" "${C3_H13_CAP}"
+      ;;
+    *) rig_die "H13: unknown alternative: ${alt}" ;;
+  esac
+}
+
+H13_assert() {
+  local run=$1 at="H13/$2/$3/$4"
+  local q="${run}/quarantine"
+
+  # 1. THE INGESTION BOUNDARY HELD. The refusal is at stage 1, so the result
+  #    never became a ref in the quarantine — the claim M-B has to earn that
+  #    M-A gets for free.
+  rig_assert_fails "${at}: no result ref in the quarantine — nothing was ingested" \
+    git -C "${q}" rev-parse --verify --quiet "${RIG_QUARANTINE_REF}"
+
+  # 2. AND THE RUN STOPPED THERE. Stage 1 is the first line, so a refusing
+  #    harvest emits exactly one — this is what would red if a later stage ran
+  #    on an unharvested quarantine. Asserted on the emitted lines (VA-2), not
+  #    on an exit code.
+  rig_assert_eq "${at}: the run stops at the first refusal — harvest emitted alone" \
+    1 "$(wc -l <"${run}/stages")"
+
+  # 3. Nothing executed trusted-side. The symlink leg points at a path outside
+  #    every writable root, and a harvester that followed it would say so.
+  c3_assert_never_ran_in "${at}" "${run}" "${q}" "${run}/canonical"
+}
+
 # H15 — THE PIPELINE IS KILLED MID-RUN, AT EACH STAGE IN TURN (EX-9).
 #
 # Dissolved AND REPLACED (§ 5.6): there is no journal to replay, and the
