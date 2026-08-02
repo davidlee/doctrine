@@ -95,5 +95,83 @@ Positive control, that the constructor really does take an exit code rather than
 
 Raised from an S2 cheap-tier candidate (pass A on PHASE-16, C-3) and verified against source during adjudication."""
 
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "PHASE-05 checkpoint has a deterministically unrecoverable crash window, and the EX-8 fault seam cannot reach it"
+detail = '''
+execute_checkpoint step 4 has a window in which an interruption leaves the run permanently stuck, and the EX-8 fault seam cannot express that window, so no test can reach it.
+
+THE WINDOW. In the first-attempt Create branch (src/commands/design.rs:898-921), crate::knowledge::create_record claims the id, journals Reserved from inside the on_reserved callback, and then materialises the record to disk. Only after create_record RETURNS does line 921 journal the Materialised transition. An interruption between those two events leaves the record fully written on disk while the journal still says Reserved.
+
+WHY RETRY CANNOT RECOVER. On retry the intent state is Reserved, so control takes the resume branch at line 923 (state below Materialised). That branch calls knowledge::materialise_record_at, which calls entity::materialise with MaterialiseRequest::InExisting, which reaches refuse_clobber at src/entity.rs:576. refuse_clobber bails with Refusing to overwrite existing whenever any artifact target already exists (src/entity.rs:635-644). Every subsequent retry takes the same branch and fails the same way. Recovery requires hand-repair of the journal or the tree.
+
+REACHABILITY. This is not only a power-loss window. The two writes are separated by ordinary user-interruptible work, so a SIGINT lands there; the binary installs no handler, so Ctrl-C at that instant bricks the checkpoint.
+
+WHY NO TEST CAN CATCH IT. EX-8 supplies six named fault points and every one fires BEFORE the effect it names. Both RecordMaterialise sites do: line 913 fires inside the on_reserved callback, which runs before create_record writes anything, and line 931 fires before materialise_record_at in the resume branch. There is no fault point between record-on-disk and journal-says-Materialised, so the unrecoverable window is unreachable through the fault seam by construction.
+
+THE TEST THAT APPEARS TO COVER IT COVERS ONLY THE EASY HALF. post_journal_recovery_resumes_the_exact_reserved_id crashes at record-materialise, which is before the write, so it exercises retry with nothing on disk, where materialise succeeds. The hard half, interruption AFTER the write, is exactly the half that cannot be reached and is not asserted.
+
+SCOPE. This does not violate EX-2 or EX-3 as literally worded: the id IS journalled before the record exists, and recovery DOES resume against the reserved id rather than claiming a fresh one. It defeats the stated objective, DEC-083 and DEC-086 recoverable checkpoint, in the one window where recovery is impossible.
+
+REPRO:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n 898,935p src/commands/design.rs
+  sed -n 633,644p src/entity.rs
+  rg -n "fault\(CheckpointStep::" src/commands/design.rs
+
+POSITIVE CONTROL, that the fault seam is genuinely fireable and the search finds every site: rg -n "fault\(CheckpointStep::" src/commands/design.rs returns eight sites (881, 893, 901, 904, 913, 931, 946, 1318), and reading each shows all eight precede their effect. In range: git diff cb45bc958..ba2d9ba9a -- src/commands/design.rs returns 529 changed lines including both the create_record call and the Materialised journal write.
+
+PROVENANCE. S3 pass B on PHASE-05 raised the window (its C-1, rated minor). Pass A independently confirmed EX-2, EX-3 and EX-8 CLEAN and in doing so stated the very fact that makes the finding true, that each fault fires immediately before that step effect, reading it as confirmation rather than as a gap. The untestable-by-construction half and the observation that the recovery test exercises only the recoverable direction came from reading the two passes against each other, then verifying refuse_clobber and all eight fault sites by hand. Adjacent to RV-342 F-2 in shape, a guarantee that survives as structure with no test able to pin it.'''
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "minor"
+title = "A PHASE-07 receipt assertion is satisfied by a substring of an unrelated line, so it pins nothing; proven by mutation"
+detail = """
+The current-receipt leg of known_fragment_receipt_omits_body_stale_receipt_reemits (tests/e2e_claude_install.rs:487) asserts held.contains(format!("fragment {current}")) where current is inquiry@DIGEST. It is meant to pin the identity-is-never-elided behaviour of fragment_section, namely that the header stays when the body is withheld.
+
+It cannot fail. run_resume calls fragment_lines and fragment_section back to back on the same slice (src/commands/design.rs:1619-1620), both receiving the raw args.known_fragment strings. fragment_lines formats known_fragment {name} ... where name is the whole receipt string inquiry@DIGEST (src/commands/design.rs:1848-1865). The rendered line therefore contains the needle fragment inquiry@DIGEST as a substring of the token known_fragment, at offset 6. Both of its branches do:
+  known_fragment inquiry@DIGEST NOT held by this run  -> contains the needle
+  known_fragment inquiry@DIGEST held digest deadbeef  -> contains the needle
+So the assertion is satisfied by fragment_lines output alone, unconditionally, whatever fragment_section does.
+
+PROVEN BY MUTATION, not by argument. Mutating fragment_section to elide the header exactly when the body is withheld, that is deleting the behaviour the test names:
+  if holds_current { return Ok(Vec::new()); }
+  Ok(vec![format!("fragment {}", fragment.receipt(&digest)), body])
+then running cargo test --test e2e_claude_install known_fragment_receipt_omits_body_stale_receipt_reemits gives: test result: ok. 1 passed.
+
+POSITIVE CONTROL on that mutation result, because a pass proves nothing unless the harness can fail. Replacing the body of fragment_section with Ok(Vec::new()) unconditionally makes the same command report: test result: FAILED. 1 failed. So the test binary genuinely rebuilds and observes edits to that function, and the earlier pass is real rather than a stale artefact. Source was restored from backup afterwards and the full file is green, nine of nine.
+
+WHAT REMAINS COVERED. The cold leg independently exercises fragment_section through emitted_fragment_digest, which panics on absence, so the function is not untested; and the body-omission and stale-re-emission assertions are sound. It is specifically the header-presence claim on the current-receipt leg that measures the wrong producer. A one-word fix, asserting on a line-anchored match rather than a bare substring, restores it.
+
+IN RANGE: git diff 4435904cd..35ef61cac -- tests/e2e_claude_install.rs shows the test added by PHASE-07, and the assertion is present unchanged at head.
+
+PROVENANCE. S3 pass A on PHASE-07 raised this as its sole candidate, citing only the NOT-held branch. Pass B examined the same test in its class (g) sweep, enumerated four ways it would fail, and returned CLEAN. The mutation, the positive control, and the observation that BOTH fragment_lines branches satisfy the needle were established during adjudication. This is the class IMP-024 section 4a calls catchable by a second pass: pass B held the evidence and misread it."""
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "nit"
+title = "The acceptance attestation digest is computed over an empty string when the declaration fails to serialise"
+detail = """
+At src/commands/design.rs:834-838 the acceptance attestation payload is built as:
+  crate::git::sha256(serde_json::to_string(declaration).unwrap_or_default().as_bytes())
+
+A serialisation error is discarded and becomes the empty string, so the payload digest silently becomes sha256 of nothing, the constant e3b0c442..., for ANY declaration that fails to serialise. That payload then feeds acceptance_digest and is bound into an AcceptanceAttestation, which is an auditable integrity artefact: two different declarations that both failed to serialise would produce identical attestations, and nothing would say so.
+
+Reachability is low. declaration serialises through a derived Serialize over owned string and enum fields, so serde_json only errors in exotic cases. The objection is not the probability, it is that a discarded Result on the input to an attestation digest is the one place a silent default costs nothing to avoid: the enclosing function already returns Result, so the fix is the question mark operator.
+
+Class (a), a swallowed Result. NOT the corpus entry: prior-findings records unwrap_or_default swallowing PARSE refusals in PHASE-13 (PHASE-13 F-3 and F-6, and that instance is repaired at head, now map_err into refusal). This is a different site, a different value, and live at head. Adjacent to IMP-367, which records that AcceptanceAttestation::basis, the auditable half of DEC-088, has no reader at all.
+
+IN RANGE, and this is the interesting part:
+  git diff cb45bc958..ba2d9ba9a -- src/commands/design.rs | grep -n "to_string(declaration)"
+  -> 338:+                serde_json::to_string(declaration)
+POSITIVE CONTROL that the range diff is non-empty and the search works: the same diff returns 529 changed lines.
+
+PROVENANCE, and a correction to the campaign record. Both S3 PHASE-05 passes raised this independently (pass A C-1, pass B C-2). It is the SAME line both S2 PHASE-04 passes converged on, which S2 adjudication correctly ruled out of the PHASE-04 range and therefore discarded. It was never out of scope for the campaign, only mis-attributed: the line is added by PHASE-05. IMP-024 section 4b cites that convergence as its example of worthless agreement on an out-of-scope finding. That reading holds for PHASE-04 and should be read alongside this: the finding was real, and phase-scoped ranges plus a mandatory scope gate are what located it."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
