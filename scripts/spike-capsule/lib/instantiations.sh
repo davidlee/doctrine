@@ -37,11 +37,43 @@
 # put it there (STD-001).
 C3_PAYLOAD_MARK='p-c3 planted payload'
 
-# H4's undeclared path. Undeclared under BOTH fixtures' slices — light's SL-001
-# declares `src/**` alone, heavy's SL-241 declares `scripts/spike-capsule/**`,
-# `.doctrine/rfc/025/**` and `.gitignore` — and deliberately NOT under
-# `.doctrine/`/`.claude/`, which is conform leg 3's subject and H5's row.
+# The two fixtures' declared surfaces, measured rather than recalled
+# (2026-08-02) — H4 and H5 both key off them, and the difference is what
+# F-P05-14/18/21 kept rediscovering the hard way. Only **design-target**
+# satisfies `slice conformance --strict`; `scope-relevant` does not.
+#
+#   light  SL-001   src/**                          design-target
+#                   .doctrine/**                    design-target   (D-P05-9)
+#   heavy  SL-241   scripts/spike-capsule/**        design-target
+#                   .doctrine/rfc/025/evidence/**   design-target   (EMPTY at B)
+#                   .doctrine/rfc/025/**            scope-relevant
+#                   .doctrine/knowledge/**          scope-relevant
+#
+# H4's undeclared path, undeclared under BOTH — `docs/` is named by neither, and
+# deliberately not under `.doctrine/`/`.claude/`, which is conform leg 3's
+# subject and H5's row.
 C3_UNDECLARED_PATH=docs/h4-undeclared.md
+
+# H5's forms. Both fixtures must be able to express a form for it to be common
+# to the row (D-P05-10), and leg 2 runs BEFORE leg 3 — so every path here has to
+# be design-target on the fixture that plants it, or the cell refuses
+# `undeclared-path` and scores a defect of the MODEL (F-P05-18, R4's direction).
+#
+# `.doctrine/rfc/025/evidence/` is the ONLY prefix satisfying that on both:
+# heavy declares nothing else as design-target under `.doctrine/`, and light's
+# `.doctrine/**` covers it. The spec's literal `.doctrine/naïve.md` would refuse
+# on heavy.
+C3_H5_PLAIN='.doctrine/rfc/025/evidence/h5-plain.md'
+C3_H5_NONASCII='.doctrine/rfc/025/evidence/h5-naïve.md'
+
+# The rename-out, LIGHT ONLY (F-P05-21). Leg 3 reads a two-dot tree diff, so the
+# source must exist AT B — a file created and renamed inside the range is in
+# neither tree and never appears. Heavy's only design-target `.doctrine/` prefix
+# holds zero files at B, so it has no source to rename; a guard is observed once
+# rather than per fixture (D-P05-10), and T6's isolated probe is where that
+# observation is made.
+C3_H5_RENAME_SRC='.doctrine/project-orientation.md'
+C3_H5_RENAME_DST='src/h5-renamed.md'
 
 # ── the shared vehicle ──────────────────────────────────────────────────────
 
@@ -69,7 +101,14 @@ c3_commit() {
   local run=$1 message=$2 repo
   shift 2
   repo=$(c3_capsule_repo "${run}")
-  git -C "${repo}" add -- "$@"
+  # A failed `add` must not be survivable. It leaves the payload out of the
+  # commit while the commit itself still succeeds on whatever else was staged,
+  # so the cell runs on a range missing the very thing it was planting — and
+  # `planted?` is the only thing standing between that and a scored result.
+  # Met for real on H5's rename leg, where the fatal was tolerated in a GREEN
+  # log (2026-08-02).
+  git -C "${repo}" add -- "$@" ||
+    rig_die "c3_commit: could not stage $* in ${repo}"
   git -C "${repo}" commit --quiet -m "${message}"
 }
 
@@ -190,6 +229,87 @@ H1_assert() {
   c3_assert_stage_passed "${at}" "${run}" harvest
 }
 
+# H2 — the capsule REWRITES ITS PUBLISHED RESULT AFTER RINGING, and the pipeline
+# passes anyway. A DISSOLUTION row (D-P05-8, F-P05-13): the hazard is not
+# undefended, it is unreachable by construction.
+#
+# `harvest-fetch.sh:66-79` pins the ref ITSELF, then fetches, then compares — so
+# its `oid-mismatch` guard covers exactly the window between its own `rev-parse`
+# and its own `fetch`, inside one process. A mutate in the A-2 seam is upstream
+# of BOTH reads, so pin and fetch agree and no mismatch is producible. The row
+# therefore demonstrates the dissolution rather than asserting it: the rewrite is
+# PERFORMED, and the observable is that the trusted side pinned the rewritten
+# result and never consulted the OID the doorbell announced (I5).
+#
+# MESSAGE-ONLY amend, and that is a control rather than a shortcut — the same
+# argument H1's `commit-tree` makes. The tree stays byte-identical to the
+# worker's, so the row differs from the happy path in the OID and in nothing
+# else; a tree-changing amend would have to clear conform and verify on its own
+# merits, and a refusal could then be about the payload instead of about the
+# rewrite. It also keeps the row off the fixtures' verify surfaces, where
+# arbitrary bytes appended to a declared `.ts` or `.rs` path would refuse at
+# stage 3 for a reason that is about the payload and not about H2.
+#
+# Descendant-preserving on purpose: `--amend` keeps the worker's parent, so S
+# stays a non-merge descendant of B. An amend that moved the parent would be H1,
+# and one that introduced a second parent would be H3 — `_planted` asserts
+# against both, so this row cannot pass while wearing another row's payload.
+H2_mutate() {
+  local run=$1
+  git -C "$(c3_capsule_repo "${run}")" commit --quiet --amend \
+    -m 'H2: the result, rewritten after the doorbell rang'
+  c3_publish "${run}"
+}
+
+# c3_doorbell_oid <run> — the OID the capsule ANNOUNCED when it rang.
+#
+# The one place in the rig that reads the doorbell's content, and it reads it as
+# EVIDENCE, never as authority: this is the value the pipeline must be shown NOT
+# to have used. `worker-stub.sh:72` writes `capsule=… oid=…` non-empty precisely
+# so the "content is never read" claim has something to be tested against.
+c3_doorbell_oid() {
+  sed -n 's/.*oid=\([0-9a-f]\{7,\}\).*/\1/p' "$1/capsule/${RIG_DOORBELL}" | head -1
+}
+
+H2_planted() {
+  local run=$1 repo base rung published
+  repo=$(c3_capsule_repo "${run}")
+  base=$(c3_base "${run}")
+  rung=$(c3_doorbell_oid "${run}")
+  published=$(c3_result "${run}")
+  # A doorbell that never rang would make the comparison below vacuous — the
+  # empty string differs from every OID — so its absence reds the cell.
+  [ -n "${rung}" ] || return 1
+  [ "${rung}" != "${published}" ] || return 1
+  # Still H2 and not H1/H3: a rewrite that broke either relation would be scored
+  # against H2's dissolution while carrying another row's hostility.
+  git -C "${repo}" merge-base --is-ancestor "${base}" "${published}" 2>/dev/null || return 1
+  [ -z "$(git -C "${repo}" rev-list --min-parents=2 "${base}..${published}" 2>/dev/null)" ] || return 1
+  printf 'the ref moved %s → %s after the ring; S is still a non-merge descendant of B' \
+    "${rung}" "${published}"
+}
+
+H2_assert() {
+  local run=$1 at="H2/$2/$3" rung pinned
+  rung=$(c3_doorbell_oid "${run}")
+  pinned=$(cat "${run}/pinned-oid")
+
+  # THE DISSOLUTION, stated as the two observations that constitute it.
+  rig_assert_eq "${at}: the trusted side pinned the REWRITTEN result" \
+    "$(c3_result "${run}")" "${pinned}"
+  rig_assert "${at}: I5 — the pinned OID is NOT the one the doorbell carried" \
+    test "${pinned}" != "${rung}"
+
+  # And the rewrite cost the capsule nothing: every stage names that same OID
+  # consistently, so all four pass. Asserted per stage rather than inferred from
+  # the absence of a refusal — `cell_score` already reads the absence, and a row
+  # that only re-read it would add nothing the scorer does not have.
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_stage_passed "${at}" "${run}" conform
+  c3_assert_stage_passed "${at}" "${run}" verify
+  c3_assert_stage_passed "${at}" "${run}" advance
+}
+
 # H3 — a MERGE COMMIT inside the result range (I3).
 #
 # The side parent is built off B with B's own tree, so the merge introduces no
@@ -247,4 +367,74 @@ H4_assert() {
   local run=$1 at="H4/$2/$3"
   c3_assert_stage_passed "${at}" "${run}" harvest
   c3_assert_ingested "${at}" "${run}" "${C3_UNDECLARED_PATH}"
+}
+
+# H5 — a GOVERNANCE-PATH touch, refused by conform leg 3 (`forbidden-path`).
+#
+# The first row that needs to know which fixture it is running against. That is
+# not a signature change: `probe-c3.sh:569` has always called
+# `"${row}_mutate" <run> <fixture> <mechanism> <alt>`, and H1/H3/H4 take only
+# `<run>` because they happened not to need more.
+#
+# THE ROW'S JOB IS THE BOUNDARY, not the belt's hardening (D-P05-10). Leg 3
+# returns on the first matching path, so a range carrying several `.doctrine/`
+# paths cannot show which hardening caught it — an unhardened leg 3 refuses on
+# another form's path and the cell still scores `pass` (F-P05-22). The two
+# hardening guards are T6's isolated probes; here the forms are simply the
+# governance touches each fixture can express.
+
+# c3_h5_paths <fixture> — PUBLISHES `C3_H5_PATHS`, the form set this fixture
+# plants. One definition, because `_mutate`, `_planted` and `_assert` must agree
+# about it and a `case` in each is three places to disagree in.
+#
+# Published rather than printed, the way `cell_pipeline_leg` publishes
+# `CELL_OBSERVED` (`probe-c3.sh`): an array of paths cannot survive a `$( … )`
+# intact, and reconstructing one by splitting a string is the bug the rig's `-z`
+# discipline exists to avoid.
+c3_h5_paths() {
+  C3_H5_PATHS=("${C3_H5_PLAIN}" "${C3_H5_NONASCII}")
+  # Both legs of the rename: `--no-renames` means leg 3 sees the SOURCE as its
+  # own deletion, and the range carries the destination too.
+  [ "$1" = light ] || return 0
+  C3_H5_PATHS+=("${C3_H5_RENAME_SRC}" "${C3_H5_RENAME_DST}")
+}
+
+H5_mutate() {
+  local run=$1 fixture=$2
+  c3_plant_file "${run}" "${C3_H5_PLAIN}"
+  c3_plant_file "${run}" "${C3_H5_NONASCII}"
+  c3_commit "${run}" 'H5: a governance-path edit, and a non-ASCII governance path' \
+    "${C3_H5_PLAIN}" "${C3_H5_NONASCII}"
+
+  if [ "${fixture}" = light ]; then
+    # `git mv` rather than a delete-plus-add, so the range carries a real rename
+    # for `--no-renames` to decompose. A hand-rolled pair would exercise the
+    # decomposition against something git never had to detect in the first place.
+    git -C "$(c3_capsule_repo "${run}")" mv -- \
+      "${C3_H5_RENAME_SRC}" "${C3_H5_RENAME_DST}"
+    # DESTINATION ONLY. `git mv` has already staged both legs, so the source
+    # exists in neither the worktree nor the index and re-adding it matches no
+    # pathspec at all — `c3_commit` now dies on that rather than leaving a
+    # `fatal:` inside a passing log. The deletion still lands: `c3_commit`'s
+    # `git commit` carries no pathspec and takes the whole index.
+    c3_commit "${run}" 'H5: a rename OUT of the governance surface' \
+      "${C3_H5_RENAME_DST}"
+  fi
+
+  c3_publish "${run}"
+}
+
+H5_planted() {
+  local run=$1
+  c3_h5_paths "$2"
+  c3_planted_paths "${run}" "${C3_H5_PATHS[@]}"
+}
+
+H5_assert() {
+  local run=$1 at="H5/$2/$3"
+  c3_h5_paths "$2"
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  # Every form reached the trusted side. The token cannot say this: it names one
+  # path at most, and a transport that dropped a form would refuse identically.
+  c3_assert_ingested "${at}" "${run}" "${C3_H5_PATHS[@]}"
 }
