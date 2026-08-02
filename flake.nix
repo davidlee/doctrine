@@ -77,6 +77,8 @@
 
           shellcheck
           procps # pgrep
+          tinyproxy
+          iproute2
 
           codex
           claude
