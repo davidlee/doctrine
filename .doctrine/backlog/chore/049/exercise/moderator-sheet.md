@@ -69,28 +69,36 @@ modification of a result.** The distinction is the whole of its defence: it is a
 experimental control over an input, recorded pre-run and reproducible. Had it
 been decided afterwards it would be the manoeuvre §4 forbids.
 
-### `explore.research` is desensitised regardless — registered pre-run
+### The second cut — open item 4, removed from the slice notes
 
-**The cut does not decontaminate the obligation, and the sheet says so rather
-than claiming a clean instrument.** Open item 4 — *"whether the pre-design
-`/research` round adds anything over the grounding already cited"* — is authored
-into `.doctrine/slice/243/notes.md:36`, and the handover independently directs
-the subject to read that file. The subject meets the question either way. Fully
-removing the exposure would mean editing another agent's harvest to un-record a
-design question that genuinely exists, and that is refused: it distorts the
-design work in order to flatter the measurement.
+The handover cut alone would **not** have decontaminated `explore.research`. The
+same question was authored into `.doctrine/slice/243/notes.md` as open item 4 —
+*"whether the pre-design `/research` round adds anything over the grounding
+already cited"* — and the handover directs the subject to read that file. So the
+owner also removed it from the notes, before the run.
 
-**The bias has a direction, and it governs how a null reads.** Priming the
-subject on the research question makes careful handling of that obligation *more*
-likely, not less. So this is a **sensitivity loss, not a false-positive risk** —
-and a non-firing on `explore.research` therefore **cannot** be read as evidence
-that its condition is well-stated. Recorded here because that is precisely the
-inference the write-up would otherwise make for free.
+**Why this is admissible where a general licence to edit the slice would not
+be.** Item 4 is a **procedural** question — whether to run a research round — not
+one of the slice's design commitments. Items 1–3 (spec home, new PRD-012
+requirements, identifier-form convention ownership) are the substantive ones and
+are **untouched**. The design work the subject does is therefore unchanged; only
+the prompt's steer on the obligation under test is gone.
 
-**Effective S4 reach for this exercise: four obligations** — `explore.triage`,
-`review.scope`, `draft.selectors`, `review.passes` — against the instrument's
-nominal **5/9**. The write-up reports both numbers. A rate over a denominator the
-run never covered is what `VA-5` exists to catch.
+**What it costs, recorded rather than assumed away.** The prior agent's judgement
+that a research round was likely redundant is no longer visible to the subject.
+If the subject now runs one, that is real work possibly spent for nothing — a
+cost to the slice, borne to serve the measurement. Small, and stated.
+
+**What it buys — the reason it was worth doing.** The subject now meets
+`explore.research` **cold**. SL-243 has no research round, `doctrine verify
+research-current` will say so, and whether the step is discharged anyway is
+observable without priming in either direction. That is the strongest available
+form of the test, on the obligation most likely to fire.
+
+**Effective S4 reach for this exercise: the full nominal 5/9** —
+`explore.research`, `explore.triage`, `review.scope`, `draft.selectors`,
+`review.passes`. The four unreachable obligations are named in §6, never
+subtracted.
 
 Routing is not scored, so the handover's `Next: /design` costs nothing.
 

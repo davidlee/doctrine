@@ -33,5 +33,3 @@ No DEC / QUE / ASM minted — the open items are design questions held in
 3. Which spec owns the identifier-form convention, where IMP-316 leg 2 overlaps
    this slice's `qualified_name` corroboration. Requirement membership is not
    exclusive, so this is a preference for clean boundaries, not a blocker.
-4. Whether the pre-design `/research` round adds anything over the grounding
-   already cited in `slice-243.md`.
