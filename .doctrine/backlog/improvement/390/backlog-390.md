@@ -28,13 +28,34 @@ issue in one line.
 
 ## Three faces of it
 
-**1. `next_obligation` exists and is empty.** The field is on the snapshot and
-renders when present (`render/envelope.rs:256,408,987`). It read `none recorded`
-at revision 9 and at revision 17. It is populated from the runbook, so it goes
-null exactly when a stage's steps are all discharged — the moment the agent most
-needs *advance the stage*. SL-243 has sat in `exploring` since revision 6 with
-its runbook cleared and nothing anywhere proposing the move. `Locked` is only
-reachable through that move.
+**1. `next_obligation` exists and has never been written.** The field is on the
+snapshot and renders when present (`render/envelope.rs:256,408,987`). It read
+`none recorded` at revision 9 and at revision 17 — and at every other revision,
+because **nothing anywhere assigns it**. It is constructed `None`
+(`snapshot.rs:466`) and has no writer in the repository; the only other mentions
+are the declaration, the projection, and the render. It is not populated from the
+runbook and does not "go null" when a stage's steps discharge. It has been
+permanently empty since it shipped.
+
+SL-233 knew this and left it deliberately — `prior-findings.md:35`
+(PHASE-07 `F-12` · PHASE-14 `F-7`) lists it beside `FragmentGroup` as a
+staged-but-unwritten surface, and `notes.md:2164` records the constraint that
+kept it that way:
+
+> `RunHeader.next_obligation` (rendered as *elided prose*, so it could not serve
+> as EX-2's closed enum without a v1 wire change)
+
+That constraint bounds the remedy. Writing the field so it can *name a stage
+advance* wants a closed vocabulary, but the envelope renders it as elided prose,
+so the fix is a **v1 envelope wire change** under `DEC-064` — not filling in a
+blank. `notes.md:2164` also assigns the writerless family to one item at harvest
+rather than three, so whether this face or [[IMP-367]] owns the disposition is
+unsettled.
+
+The finding survives the correction and is sharpened by it: SL-243 has sat in
+`exploring` since revision 6 with its runbook cleared and nothing anywhere
+proposing the move, and the field that exists to propose it was never capable of
+doing so. `Locked` is only reachable through that move.
 
 **2. The `declare` hint is one example, not a contract.** It shows a single
 declaration shape and a `traversal` example carrying `pin`/`posture`/`authority`
