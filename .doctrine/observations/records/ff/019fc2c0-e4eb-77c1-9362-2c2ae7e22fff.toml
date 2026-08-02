@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc2c0-e4eb-77c1-9362-2c2ae7e22fff"
+recorded_at = "2026-08-02T13:54:09.259504262Z"
+kind = "friction"
+summary = "/research: fanned out three threads on a runner I had not smoke-tested; all wedged silently"
+detail = "Launched three pi research threads in background against scripts/pi-{research,scout}. All three produced zero bytes, no stderr, no exit status — the ISS-266 failure mode (query passed as argv means the stdin branch never fires, nothing consumes fd 0, pi does not self-exit while stdin is held open). Cause was already known and was fixed in b9a91952 five minutes after I launched, adding </dev/null plus a timeout backstop. My cost was the whole round, and I did not detect it: because the processes never exited, no background-task completion notification fired, so the failure was invisible until the user told me. A single 4.5s smoke call would have caught it before I spent three long prompts. The durable lesson generalises past pi: verify a fan-out runner with one cheap call before fanning out, and treat silent-zero-byte-plus-no-notification as a hang, not as pending work."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

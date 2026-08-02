@@ -25,6 +25,13 @@ Finish every turn which references a doctrine entity by printing its ID:
 if your first message is a handover from another agent, read it and follow 
 the instructions.
 
+## Talking to humans
+
+Whatever acronym you're referencing: the user didn't read the document, and if 
+they did, they didn't memorise every pithy identifier in it. If you're going to
+use shorthand references, introduce each one for the first time with a
+reference to the owning artifact and a concise summary.
+
 ## Research agents
 
 The `/research` pre-design round spawns these — one read-only agent per thread.
