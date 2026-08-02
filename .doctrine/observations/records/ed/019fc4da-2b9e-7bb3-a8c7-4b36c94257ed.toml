@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc4da-2b9e-7bb3-a8c7-4b36c94257ed"
+recorded_at = "2026-08-02T23:41:00.190458329Z"
+kind = "friction"
+summary = "/execute T5 — candidate create --help asserts the opposite of the branch it always takes, costing a probe-cycle"
+detail = "SL-241 PHASE-05 T5, writing the H10/H16 conflict sub-probe. The clap help for 'dispatch candidate create' says a content conflict 'aborts cleanly, writing no row/ref/worktree'. Post-SL-212 that arm is unreachable for a review_surface (--worktree is mandatory there), and the arm actually taken writes a ref, a Conflicted row and a worktree, then exits ZERO. I wrote the probe's refusal assertion against the documented contract; it reddened against correct software, and resolving it cost a source read of create_conflict_worktree to establish that Ok(()) was deliberate. Filed as ISS-305; recorded on the phase sheet as F-P05-40. The generalisable cost: a CLI whose refusal is carried by a ledger rather than by exit status must SAY so in its help, or every scripted caller encodes the wrong contract once."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
