@@ -8,15 +8,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-03 · **PHASE-04 complete (4/6), PHASE-05 in flight —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
-T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
-5/5; **H7 alone remains — its 20G bound is RULED (D-P05-16), the cap it binds
-is not, and the `/consult` before the row starts still stands**), T4d **DONE**
-(H8 scored 100/0 + falsified 3/3; **H11 scored 80/0 + falsified 9 cases/0
-survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and D-P05-15),
-**T4e DONE** (H10/H16 scored **128/0**, 8/8 cells `model-level`, + falsified
-6/6 — M25 measures F-14 rather than arguing it).
-**FIFTEEN of sixteen rows carry scored results: H1–H6 H8–H16**; **only H7
-remains** · last SL-241 commit — verify before citing (`git log --oneline -1`)
+**T4c DONE** (H13 110/0 + 4/4; H14 88/0 + 5/5; **H7 100/0 + falsified 6/6**),
+T4d **DONE** (H8 scored 100/0 + falsified 3/3; **H11 scored 80/0 + falsified 9
+cases/0 survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and
+D-P05-15), **T4e DONE** (H10/H16 scored **128/0**, 8/8 cells `model-level`, +
+falsified 6/6 — M25 measures F-14 rather than arguing it).
+**ALL SIXTEEN ROWS CARRY SCORED RESULTS: H1–H16. THE MATRIX IS COMPLETE** —
+`T4` is done and the next unit is **T5** (conflict sub-probe, the leg H10/H16
+still owe) · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
@@ -917,6 +916,8 @@ mid-phase would convert a legible structural finding into a silent pass.
 - mem.pattern.doctrine.path-policy-shell-hardening (raiser-side, 3afa085e)
 - mem.pattern.sandbox.git-ident-unset-dns-stall — F-P04-7 made reusable
 - mem.pattern.evidence.witness-the-exact-set-not-the-emptiness — F-P04-8 ditto
+- mem.pattern.tests.assert-the-refused-writes-signature — F-P05-38 made reusable
+- mem.pattern.handover.cite-artifacts-by-tier-not-just-path — F-P05-39 ditto
 - CPT-001 — five numbered classes, one with a git-level sub-class
 - **environment**: `nix` and `direnv` are ABSENT in the jail (`/nix/store`,
   `bwrap`, `node`, `npm`, `claude` present); `$HOME` writable, `~/capsules/`
@@ -1048,20 +1049,28 @@ mid-phase would convert a legible structural finding into a silent pass.
 - **ISS-296** — any local clone of this repo inherits the stale commit-graph
   landmine (F-P05-28). Carried OUT of the slice; `git gc` on the primary was
   assessed and deliberately rejected.
-- **T4c's plan framing was WRONG, and H7 is what is left of it** — "all three
-  rows need a hostile worker vehicle" holds for **H7 only**; H13 and H14 are
-  both done, both attacking control-plane surfaces trusted-side.
-  `capsule/worker-hostile.sh` (§ 9.1) still does not exist and is H7's
-  precondition; H7 also carries the phase's only resource-exhaustion risk (own
-  disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). Correction recorded
-  in the runtime sheet's T4c entry.
-  **PARTLY RULED 2026-08-03 (D-P05-16): the bound is 20G.** What the 20G BINDS
-  is deliberately not inferred — H7's own worker-capsule `--disk-cap` and a
-  host-level ceiling are different work, and the sheet records both readings as
-  live. Headroom is not the constraint (300G free, capsule root 188M). The
-  ruling **unblocks** H7; the `/consult` before the row starts still stands, and
-  that is where the binding resolves. `worker-hostile.sh` remains unwritten.
-  **H7 is now the ONLY unscored row of the sixteen.**
+- **~~T4c / H7~~ SETTLED AND SCORED 2026-08-03 (`6312f519`) — T4c is DONE and
+  the matrix is COMPLETE.** `rig c3 H7` exit 0, 100 assertions, 0 FAIL, 4/4
+  cells `model-level`, 4s; falsified 6/6, no survivors. `worker-hostile.sh`
+  written. Both open decisions ruled:
+  - **D-P05-18** — the 20G bounds the **blast radius**, not the cap H7 crosses.
+    Neither reading D-P05-16 named was taken. The worker cap is raised
+    row-locally and modestly (512 MiB, against a measured 201M heavy capsule);
+    attribution is earned by a control, not a margin; **no host-level ceiling is
+    built here**.
+  - **D-P05-19** — the capsule-time seam is a declarative per-cell lookup, not a
+    hook. `pipeline_capsule` takes the vehicle and worker cap as parameters;
+    `cell_run` sets them beside the verify bounds. D-P05-5 is honoured on its own
+    stated reason — the harness learns a parameter, not a row.
+  - **F-P05-37** disposed by D-P05-19; **F-P05-38** (a refused write leaves no
+    oversized artifact) and **F-P05-39** (the T4a–T4e falsification drivers were
+    never tracked and are gone) recorded.
+- **F-P05-39 carries forward into T7/T8** — the falsification evidence trail is
+  **asymmetric** and the evidence artefacts must say so rather than smooth it:
+  H7's round is committed and re-runnable (`scripts/spike-capsule/drivers/`);
+  T4a–T4e's rounds are **attested only**, their drivers gone and their sweep
+  logs surviving for T4e alone. Reconstructing them was deliberately not
+  attempted — see the finding.
 - **~~H11's two operator calls~~ BOTH LANDED 2026-08-02, and H11 is SCORED** —
   `rig c3 H11` exit 0, 80 assertions, 0 FAIL, all four cells `pass`, row
   `model-level`. Thirteen of sixteen rows now carry scored results.

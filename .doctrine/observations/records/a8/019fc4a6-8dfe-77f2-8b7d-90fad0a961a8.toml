@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc4a6-8dfe-77f2-8b7d-90fad0a961a8"
+recorded_at = "2026-08-02T22:44:37.502561832Z"
+kind = "friction"
+summary = "execute (SL-241 PHASE-05 T4c): handover cited drivers/falsify-lib.sh, drivers/shake.sh and four falsify-t4*.sh sweeps as if durable; none were ever git-tracked and none exist anywhere on the filesystem"
+detail = "Cost a filesystem-wide search to establish. The T4b-T4e falsification scaffolding (rebind + expect_planted/expect_refusal/expect_assert(+also)) must be rebuilt from the handover's prose description before H7 can be falsified per F-P05-31. Sweep logs survive for T4e ONLY, and only in a prior session's /tmp scratchpad. results.tsv survives at ~/capsules/probes/c3/ (outside the repo, uncommitted). Root cause: a harvest/handover cited untracked working-tree scratch by path without recording its tier, so a reader cannot tell a durable artefact from a disposable one."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

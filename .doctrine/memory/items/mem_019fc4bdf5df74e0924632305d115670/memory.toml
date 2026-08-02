@@ -1,0 +1,42 @@
+memory_uid = "mem_019fc4bdf5df74e0924632305d115670"
+memory_key = "mem.pattern.tests.assert-the-refused-writes-signature"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A refused write leaves no oversized artifact"
+summary = "A resource bound that refuses at the limit never materialises the oversize — assert the refusal's signature, not its product"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = ["scripts/spike-capsule"]
+globs = []
+commands = []
+tags = ["testing", "falsifiability", "resource-limits", "sandbox"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "09469763761327ab0297dd91f9520665e8c0810f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a03a2748acf18aa20b4f3b288f21506e221dddea0e0e95df4eccc1c2338c121c"
+base_commit = "6312f51961aebbda2c4a506249eca984daa90ad5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
