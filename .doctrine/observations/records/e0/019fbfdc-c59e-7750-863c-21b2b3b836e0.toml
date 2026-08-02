@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfdc-c59e-7750-863c-21b2b3b836e0"
+recorded_at = "2026-08-02T00:25:44.606739573Z"
+kind = "friction"
+summary = "execute: three different absence-shaped results read as verdicts in one session"
+detail = """
+SL-241 PHASE-05 T4a. The same error shape bit three times in one session, each time in an ad-hoc measurement harness rather than in the rig (whose own assertions are hardened against exactly this):
+
+1. `timeout 600 ./rig c3 H2 2>&1 | tail -40` — the pipeline exit status is tail's, so a timeout KILL surfaced as exit 0 and I reported a four-cell pass that had not happened.
+2. A hand-rolled emulation of conform leg 3 put diff-level flags (--no-renames) in git's global option position. Every variant errored, produced no paths, and my loop read 'no forbidden path found' as 'guard evaded' — a fabricated finding about the belt's hardening.
+3. A mutant driver scored 'SURVIVED' from the absence of a FAIL line. Two mutants had run ZERO cells (the I6 real-repo guard correctly refused a scratch SPIKE_CAPSULE_ROOT I had placed inside the sibling repo), so 'survived' meant 'never ran'.
+
+Each was caught by an unrelated cross-check, not by the harness. The rig itself never makes this error — `rows_assert_complete` counts against a spec-derived expectation, `planted?` is a per-cell positive control, and `stage_emit` refuses tokens outside the closed set. The lesson is that a THROWAWAY harness needs the same discipline as the instrument it is checking: every absence-shaped verdict (no output, no failure, exit 0) needs a positive control that proves the measurement ran at all. Generalises the existing memory mem_019fa18161f47651af7687d8dccbbc67 about negative greps."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

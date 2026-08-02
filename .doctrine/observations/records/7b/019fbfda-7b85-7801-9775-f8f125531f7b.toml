@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfda-7b85-7801-9775-f8f125531f7b"
+recorded_at = "2026-08-02T00:23:14.565589597Z"
+kind = "friction"
+summary = "execute: the falsifiability sibling isolates rig CODE but not its RESULTS file"
+detail = "SL-241 PHASE-05 T4a. F-P05-12 established mutant testing by copying the rig into a git-init'd sibling and mutating there. The copy isolates the code, but SPIKE_CAPSULE_ROOT still defaults to $HOME/capsules in the sibling (lib/common.sh:46), so mutant cells APPEND to the same probes/c3/results.tsv the real runs write — and a mutant row is indistinguishable from a real one in that file. Noticed only because I was counting rows for an unrelated reason. Two mitigating accidents, neither of them design: a mutant killed by a timeout writes nothing at all (results are emitted after the completeness count), and results.tsv is runtime tier so it can simply be regenerated. The fix for next time is to point SPIKE_CAPSULE_ROOT at a scratch root with the fixtures symlinked in, so a mutant run cannot reach the real evidence file. Cost here is a full re-run of the written rows to regenerate a clean table, ~15 min of which is H2's two heavy cells."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

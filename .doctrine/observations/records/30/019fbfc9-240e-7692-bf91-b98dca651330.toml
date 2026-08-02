@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfc9-240e-7692-bf91-b98dca651330"
+recorded_at = "2026-08-02T00:04:18.062862478Z"
+kind = "friction"
+summary = "execute: piping a probe run to tail masked its exit code and a timeout kill read as a pass"
+detail = "SL-241 PHASE-05 T4a. Ran the P-C3 harness as `timeout 600 ./rig c3 H2 2>&1 | tail -40`. The pipeline's exit status is tail's, so `timeout` killing the run at 600s surfaced as exit 0, and `tail -40` made the truncated log look like a complete run that simply ended after the last cell's first assertion. Reported it to the operator as a four-cell pass before checking results.tsv, which was still yesterday's file — the harness only writes it after the completeness count, so a killed run leaves no trace there at all. Cost one 10-minute heavy run plus a correction. This is the F-P01-1 footgun the rig documents about ITSELF (`pipeline_run` is redirected, never piped, because a subshelled RIG DEFECT return cannot reach the caller) reappearing one level up, in how an agent invokes the rig from the shell. The rig's own convention is the fix: redirect to a file, never pipe, and read the exit code directly."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
