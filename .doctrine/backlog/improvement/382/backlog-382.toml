@@ -1,12 +1,12 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 381
-slug = "assess-specification-coverage-for-plan-criterion-lineage"
-title = "Assess specification coverage for plan criterion lineage"
+id = 382
+slug = "govern-the-phase-plan-content-model"
+title = "Govern the phase-plan content model"
 kind = "improvement"
-status = "resolved"
-resolution = "done"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-02"
 updated = "2026-08-02"
 tags = ["area:governance", "area:slice", "area:spec", "planning"]
@@ -20,3 +20,27 @@ tags = ["area:governance", "area:slice", "area:spec", "planning"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "related"
+target = "IMP-381"
+
+[[relation]]
+label = "related"
+target = "RFC-027"
+
+[[relation]]
+label = "related"
+target = "EVD-005"
+
+[[relation]]
+label = "related"
+target = "PRD-001"
+
+[[relation]]
+label = "related"
+target = "SPEC-014"
+
+[[relation]]
+label = "related"
+target = "SPEC-002"

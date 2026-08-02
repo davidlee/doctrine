@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 381
-slug = "assess-specification-coverage-for-plan-criterion-lineage"
-title = "Assess specification coverage for plan criterion lineage"
-kind = "improvement"
-status = "resolved"
-resolution = "done"
+id = 52
+slug = "anchor-spec-002-to-coverage-and-verification-implementation-sources"
+title = "Anchor SPEC-002 to coverage and verification implementation sources"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-02"
 updated = "2026-08-02"
-tags = ["area:governance", "area:slice", "area:spec", "planning"]
+tags = ["area:coverage", "area:governance", "area:spec"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,3 +20,15 @@ tags = ["area:governance", "area:slice", "area:spec", "planning"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "related"
+target = "IMP-381"
+
+[[relation]]
+label = "related"
+target = "SPEC-002"
+
+[[relation]]
+label = "related"
+target = "IMP-316"
