@@ -1,0 +1,43 @@
+memory_uid = "mem_019fc1f011c177939096cbbcd34ea3bd"
+memory_key = "mem.fact.tooling.shellcheck-source-dev-null-hides-cross-file"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "shellcheck source=/dev/null disables cross-file checks and invents SC2034/SC2153"
+summary = "Stubbing a shellcheck source directive to /dev/null suppresses cross-file resolution, so variables published by the sourced file read as unused/misspelled — point the directive at the real path instead of adding disable directives."
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = ["**/*.sh"]
+commands = []
+tags = ["shellcheck", "shell", "lint", "false-positive", "rig"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "0eae25e9a77b915da553b72a785fa6fbf8b6bdd5"
+tree = "fd8eaba3ef17ec9c5827467d35192ad378c3a659"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "0eae25e9a77b915da553b72a785fa6fbf8b6bdd5"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
