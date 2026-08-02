@@ -6,23 +6,27 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
+fresh-as-of: 2026-08-03 · **PHASE-04 complete (4/6), PHASE-05 in flight —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
 T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 scored 88/0 + falsified
-5/5; **H7 alone remains, and it wants an operator decision**), T4d **DONE**
+5/5; **H7 alone remains — its 20G bound is RULED (D-P05-16), the cap it binds
+is not, and the `/consult` before the row starts still stands**), T4d **DONE**
 (H8 scored 100/0 + falsified 3/3; **H11 scored 80/0 + falsified 9 cases/0
-survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and D-P05-15).
-**Thirteen of sixteen rows carry scored results: H1–H6 H8 H9 H11 H12 H13 H14
-H15**; remaining H7 H10 H16, and **T4e (H10/H16) is unblocked** ·
-last SL-241 commit `b9405397`
+survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and D-P05-15),
+**T4e DONE** (H10/H16 scored **128/0**, 8/8 cells `model-level`, + falsified
+6/6 — M25 measures F-14 rather than arguing it).
+**FIFTEEN of sixteen rows carry scored results: H1–H6 H8–H16**; **only H7
+remains** · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
 090148ef..5f42727b, **2 foreign, both INTERIOR** so `record-delta --commit`
-cannot excise them. Every range's detail is in its own § PHASE-NN boundary —
-**do not read `start..end` as all ours**.)
+cannot excise them; **PHASE-05 `8e962656`..open, 162 commits and 111 FOREIGN
+plus two interior merges** — by far the worst, now written up. Every range's
+detail is in its own § PHASE-NN boundary — **do not read `start..end` as all
+ours**.)
 
 ### Produced
 
@@ -997,6 +1001,32 @@ mid-phase would convert a legible structural finding into a silent pass.
   verdict (F-P05-32). Scoring a design question from inside a test is the
   failure mode; `--no-net` would have greened the row in one line and retired
   EX-2's uniformity claim silently.
+- **two rows scoring the SAME token is a result, not a redundancy** (T4e) —
+  H10's genuinely conflicting pair and H16's trivially mergeable trunk advance
+  both refuse `advance/stale-base`, because stage 4 compares two OIDs and never
+  reads a tree. The instinct is to collapse them or to differentiate the
+  expectation; both would destroy the finding. § 5.1's *safety yes, resolution
+  no* IS that indistinguishability, so what the token cannot carry the rows
+  carry in `_planted` / `_assert` instead. When two cells agree, ask whether the
+  agreement is the measurement before treating it as duplication.
+- **a mutant can INVERT an ordering by wrapping, without restating the body** —
+  T4e's M25 had to test stage 4 transferring before its precondition. Rewriting
+  `advance_stage` inverted would have measured the copy. Instead the wrapper
+  performs the transfer itself and then calls through, so the real precondition
+  runs against the forbidden state. Composition reaches orderings that
+  substitution would have to fork the subject to reach. **Candidate memory.**
+- **the isolation control is where a falsification round earns its keep** — M25
+  reds only the object-count clause; the refusal token, canonical's REFS, and
+  all seven of the row's own clauses hold. Stating that is what turns "the
+  mutant died" into the finding that a refs-only `stale-base` clause would have
+  scored an inverted stage 4 GREEN. The red proves the row works; the control
+  proves *which* part of the design is load-bearing.
+- **a rule with a genuine exception should be SCOPED in place, not silently
+  broken** (T4e) — `lib/instantiations.sh` forbade rows touching `canonical`,
+  and H10/H16 cannot exist without it. Editing the row to sneak past, or
+  deleting the rule, both lose the reason it was written. The preamble now names
+  the carve-out, says why the protected property survives (both re-snapshot),
+  and confirms `quarantine` is still untouched by every row.
 
 ### Open
 
@@ -1009,6 +1039,8 @@ mid-phase would convert a legible structural finding into a silent pass.
   Operator: egress acceptable **if allowlisted**, but that is per-project toil —
   and the shared-capsule-at-a-known-HEAD direction is the real target. Shares a
   lever with F-P05-20 option 4; settle together if either is settled.
+  **PLACED 2026-08-03 (D-P05-17): a FOLLOW-ON SLICE, settled together with
+  QUE-204**, the two being one lever. PHASE-05 builds none of it.
 - **~~OQ-a~~ RESOLVED** (`c4a26004`, D-P05-6) — every sandbox-injected status is
   now named above `*)`, and `verify/resource-cap` joined the closed set.
   **OQ-b / OQ-c still live** (§ PHASE-03 open questions): worker wall-clock
@@ -1021,9 +1053,15 @@ mid-phase would convert a legible structural finding into a silent pass.
   both done, both attacking control-plane surfaces trusted-side.
   `capsule/worker-hostile.sh` (§ 9.1) still does not exist and is H7's
   precondition; H7 also carries the phase's only resource-exhaustion risk (own
-  disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). **It wants an
-  operator decision before it starts.** Correction recorded in the runtime
-  sheet's T4c entry.
+  disk cap; heavy worker capsule at 195M/256 MiB, F-P05-10). Correction recorded
+  in the runtime sheet's T4c entry.
+  **PARTLY RULED 2026-08-03 (D-P05-16): the bound is 20G.** What the 20G BINDS
+  is deliberately not inferred — H7's own worker-capsule `--disk-cap` and a
+  host-level ceiling are different work, and the sheet records both readings as
+  live. Headroom is not the constraint (300G free, capsule root 188M). The
+  ruling **unblocks** H7; the `/consult` before the row starts still stands, and
+  that is where the binding resolves. `worker-hostile.sh` remains unwritten.
+  **H7 is now the ONLY unscored row of the sixteen.**
 - **~~H11's two operator calls~~ BOTH LANDED 2026-08-02, and H11 is SCORED** —
   `rig c3 H11` exit 0, 80 assertions, 0 FAIL, all four cells `pass`, row
   `model-level`. Thirteen of sixteen rows now carry scored results.
@@ -1042,7 +1080,8 @@ mid-phase would convert a legible structural finding into a silent pass.
     installed, `socat`/`python3` were already there, and all are DQ-4-clean
     (in neither declaration's `exec:` list). Topology: no route at all, a unix
     socket bound in, the proxy the sole chokepoint — which forces an EXPLICIT
-    proxy and is fail-closed by construction. **Not built; work not yet placed.**
+    proxy and is fail-closed by construction. **Not built. PLACED 2026-08-03 —
+    D-P05-17 sends the work to a follow-on slice with QUE-204.**
   - **F-P05-33 → D-P05-15 — heavy is NOT `n/a`; it scores at `conform`.** The
     trigger is live on heavy (cargo really runs a root `build.rs`) and
     undeclared, so conform refuses it at leg 2 — one boundary EARLIER than § 5.6
@@ -1062,8 +1101,28 @@ mid-phase would convert a legible structural finding into a silent pass.
     looks like). Latent and not amended: `cell_altitude`'s `client-local` is
     overloaded — it means both "one fixture FAILED" and "the other had nothing
     to plant", with contradictory labels asserted three lines apart.
-- **DEC records are OWED at close for D-P05-6..13** — the sheet's convention is
-  "lift to notes.md at close", so they were deliberately not minted mid-phase
+- **QUE-202 gains its first EVIDENCE input** (T4e, 2026-08-03) — H10 and H16 are
+  scored, 8/8 cells `model-level`, and what they measure is the *shape* of the
+  admission gap rather than only its existence. The refusal is safe and total;
+  it is also **content-blind**, since stage 4 compares two OIDs and never reads
+  a tree. So the capsule model cannot distinguish a genuine conflicting pair
+  from a trunk advance a three-way merge would take without a murmur — both are
+  `advance/stale-base`. Any admission design QUE-202 eventually reaches has to
+  supply that discrimination itself; the pipeline will not be narrowing the
+  problem for it. The sub-probe (T5) measures the incumbent's recovery path and
+  **counts toward nothing** (F-9).
+- **F-14 is MEASURED, not argued** (T4e falsification M25) — inverting stage 4
+  so the transfer precedes the precondition leaves the token (`stale-base`),
+  canonical's REFS, and all seven of the row's own clauses intact; **only the
+  object count reds.** So § 5.5's strict-clause carve-out is confirmed as a
+  scope correction rather than a weakening, by measurement: had `stale-base`
+  carried the refs-only clause that `cas-lost` legitimately carries, that defect
+  would have scored GREEN, and H10/H16 are the only place in the matrix where it
+  shows. Worth citing at close wherever F-14 is defended.
+- **DEC records are OWED at close for D-P05-6..17** — the sheet's convention is
+  "lift to notes.md at close", so they were deliberately not minted mid-phase.
+  The range extended twice this session: D-P05-16 (H7's 20G bound) and
+  D-P05-17 (allowlist work → follow-on slice).
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
   trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see
