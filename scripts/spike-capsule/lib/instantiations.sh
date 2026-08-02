@@ -1060,7 +1060,7 @@ c3_h14_forge() {
 # file rather than a file per observation, in `contract_field`'s shape: the
 # three legs are one cell, and a reader asking why that cell scored what it did
 # wants them side by side.
-c3_h14_leg() { sed -n "s/^$2=//p" "$1/h14-legs" | head -1; }
+c3_h14_leg() { rig_field "$1/h14-legs" "$2"; }
 
 H14_mutate() {
   local run=$1 capsule bell rung published echoed status started elapsed line
@@ -1547,4 +1547,303 @@ H8_assert() {
     >"${run}/h8-conformance" 2>&1 || rc=$?
   rig_assert_eq "${at}: F-2 — leg 2's OWN verb ACCEPTS this range; only leg 4 kills it" \
     0 "${rc}"
+}
+
+# H11 — A HOSTILE TEST-TIME PAYLOAD THAT ACTUALLY RUNS.
+#
+# The one row in T4 whose subject is EXECUTION rather than admission, and so the
+# only one whose payload has to survive all four legs of conform to say anything
+# at all. Every row above it is refused before the verify capsule is built; H11
+# asks what the sandbox profile does with code the pipeline ADMITTED.
+#
+# ── S3: the payload goes into the capsule RESULT, never the fixture ─────────
+#
+# `control/fixture-light.sh` runs `npm` TRUSTED-SIDE while assembling the
+# fixture from this repo's own authored sources. A payload-bearing fixture that
+# reused that loop would execute the payload on the control plane and break DQ-4
+# for real — `audit-dq4.sh:77` says exactly that, conditionally, and this row is
+# the condition it names. So the plant rides the same A-2 seam as every other
+# row: into the capsule's clone, after the worker has published.
+#
+# ── the two observables, and why only one of them is scored ─────────────────
+#
+# The matrix asks for `sentinel-absent on the HOST path` AND `canary unreached`.
+# Both were measured against the profile itself before this row was written
+# (`drivers/T4d-h11-probe.log`):
+#
+#   filesystem escape   CONTAINED — the host path is not in the namespace at all
+#   network canary      REACHED   — two clients, two arrivals, trusted-side log
+#
+# The second is not a defect this row discovered; it is the profile behaving as
+# specified. `sandbox.sh` carries `--unshare-all` and then `--share-net`, and
+# `--kind` is validated once and never reaches the mount array — EX-2's claim is
+# that both capsule kinds get the SAME posture, and EX-7 wants egress for the
+# worker capsule because the agent needs the API. "Canary unreached" is
+# therefore an inherited expectation that no mechanism makes, and § 5.6's
+# verdict on it is a re-derivation rather than a bug report (F-P05-32).
+#
+# So this row MEASURES the canary and refuses to score it, pending the
+# operator's call. Asserting it either way would settle a design question from
+# inside a test: `unreached` reds a profile that is behaving as designed, and
+# `reached` quietly enshrines egress as intended. What IS scored is the half a
+# mechanism does claim — containment of the filesystem escape — together with
+# the non-vacuity clauses without which that claim means nothing.
+#
+# ── heavy is not instantiable, and the row says so out loud (F-P05-33) ──────
+#
+# H11's payload must be BOTH admitted by conform AND executed by the fixture's
+# own `verify:` command. On light those two sets intersect: `npm test` is
+# `node --test src/*.test.ts` and `src/**` is SL-001's design target. On heavy
+# they are disjoint — `just web-build && cargo test` executes only undeclared
+# paths, and everything SL-241 declares is shell that the Rust build never
+# reads. `_mutate` therefore REFUSES the heavy fixture rather than planting an
+# inert file, because an unexecuted payload's absent sentinel reads exactly like
+# containment. That is this phase's recurring vacuity trap, caught at the plant.
+
+C3_H11_PAYLOAD=h11-payload.test.ts
+C3_H11_RECORD=h11-executed
+C3_H11_CANARY_PORT=45711
+# The listener's own deadline, and it has to EXCEED the verify bound it spans
+# (`fixture_verify_timeout`: 300 light, 900 heavy) or the canary would stop
+# listening while the payload was still being built. It is a backstop for a run
+# that dies between the plant and the assert, never the reaping path — that is
+# `c3_h11_canary_stop`.
+C3_H11_CANARY_TTL=1200
+C3_H11_CANARY_MARK='h11 payload reached the canary'
+C3_H11_CANARY_KNOCK='h11 rig knock'
+C3_H11_CANARY_PID=''
+
+# c3_h11_path <fixture> — where the payload goes. Under the design-target
+# directory like every other row, and — unlike every other row — also required
+# to be a path the `verify:` command runs.
+c3_h11_path() { printf '%s/%s' "$(c3_design_target_dir "$1")" "${C3_H11_PAYLOAD}"; }
+
+# c3_h11_reachable <fixture> <path> — DOES THIS FIXTURE'S `verify:` COMMAND
+# EXECUTE THIS PATH? F-P05-33's question, asked mechanically so the next
+# execution row cannot forget to ask it.
+#
+# Light's glob is a TRANSCRIPTION of its `package.json` `test` script, measured
+# 2026-08-02: `node --test src/*.test.ts`. The declaration only says `npm test`,
+# so the glob cannot be derived from it and has to be stated here — with the
+# script it mirrors named, so a fixture that changed its runner is one grep away.
+#
+# ANSWERS rather than dies, including on an unknown fixture: `_planted` calls it
+# from inside a `$( … )`, where a `rig_die` would end only the substitution's
+# subshell and the caller would carry on with an empty observable (F-P01-1).
+# `_mutate` is where an unusable fixture is fatal.
+c3_h11_reachable() {
+  case "$1" in
+    light) case "$2" in src/*.test.ts) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
+# The host path the payload tries to write, and the containment observable. It
+# points INSIDE the rig's own disposable run directory on purpose: if the
+# profile ever failed open, the escape lands somewhere `pipeline_teardown` will
+# remove rather than somewhere real.
+c3_h11_escape_target() { printf '%s/h11-escaped' "$1"; }
+
+c3_h11_canary_log() { printf '%s/h11-canary.log' "$1"; }
+
+# c3_h11_canary_start <run> — arm the trusted-side canary.
+#
+# A listener OUTSIDE the sandbox, because egress has to be observed where it
+# ARRIVES. The capsule's own note that it connected is a capsule-authored file,
+# and I4's rule about verdicts applies one level down to observations too.
+#
+# ── SOCAT, AND NOT NODE, AND THE AUDIT IS WHY (DQ-4) ────────────────────────
+#
+# The first version of this listener was six lines of `node`, and `audit-dq4`
+# refused it on sight: `node` is one of the LIGHT declaration's `exec:` tokens,
+# and DQ-4's condition is that the control plane never runs the project's
+# toolchain. It is a structural guard, deliberately not a judgement call — the
+# listener reads no project content, and that is exactly the argument an
+# exemption would be built on. F-P05-3 predicted this audit would be the thing
+# that caught a payload-bearing row reaching for the project's tools; it was,
+# on the first run, against the row it was predicted for.
+#
+# `socat` is in neither fixture's `exec:` list and does the job more directly:
+# it appends the BYTES IT RECEIVES, never the fact of a connection.
+c3_h11_canary_start() {
+  local run=$1 log tries=0
+  log=$(c3_h11_canary_log "${run}")
+  command -v socat >/dev/null ||
+    rig_die 'H11: socat is missing — the canary has no listener, and node is DQ-4-forbidden here'
+
+  : >"${log}"
+  # `timeout` forwards the signal it receives to the command it manages, so
+  # killing this pid still reaps the socat underneath it.
+  timeout "${C3_H11_CANARY_TTL}" \
+    socat -u "TCP-LISTEN:${C3_H11_CANARY_PORT},reuseaddr,fork" \
+    "OPEN:${log},creat,append" >/dev/null 2>&1 &
+  C3_H11_CANARY_PID=$!
+
+  # READINESS AND OWNERSHIP IN ONE OBSERVATION. Knock, then wait for the knock
+  # to appear IN THIS LOG. A port that merely answers is not enough: a leaked
+  # listener from an earlier run would answer too, while logging somewhere else,
+  # and this cell would then read its own silence as containment. Because the
+  # log is keyed on BYTES, an unanswered knock leaves nothing behind.
+  until command grep -qF -- "${C3_H11_CANARY_KNOCK}" "${log}"; do
+    (printf '%s\n' "${C3_H11_CANARY_KNOCK}" >"/dev/tcp/127.0.0.1/${C3_H11_CANARY_PORT}") 2>/dev/null || true
+    tries=$((tries + 1))
+    [ "${tries}" -lt 100 ] ||
+      rig_die "H11: nothing of ours is listening on :${C3_H11_CANARY_PORT} — held by an earlier run?"
+    sleep 0.1
+  done
+
+  # Truncated AFTER the knock lands, so `planted?`'s quiet clause means "quiet
+  # since this cell armed it" rather than "never used by anyone".
+  : >"${log}"
+}
+
+# c3_h11_canary_stop — reap it. Called from `_assert`, which runs in the same
+# shell as `_mutate`, so `wait` really can reap the child.
+#
+# The pid is a SHELL GLOBAL rather than a file in the run directory, and that is
+# not a style preference: `pipeline_teardown` removes the run directory, so a
+# pid file is a record that dies before the process it names. A caller that
+# never reaches `_assert` — the falsifiability round's `_planted` cases, which
+# stop at the plant — could then not reap the listener at all, and the next case
+# would meet its own predecessor holding the port. The TTL inside the listener
+# is the backstop for the case where the shell itself goes.
+c3_h11_canary_stop() {
+  [ -n "${C3_H11_CANARY_PID}" ] || return 0
+  kill "${C3_H11_CANARY_PID}" 2>/dev/null || true
+  wait "${C3_H11_CANARY_PID}" 2>/dev/null || true
+  C3_H11_CANARY_PID=''
+}
+
+# c3_h11_write_payload <file> <escape-target>
+#
+# Plain JS in a `.ts` file — node strips types and the fixture's own tests are
+# written the same way, so the payload is indistinguishable from project code
+# until it runs.
+#
+# IT NEVER THROWS. The row's claim is containment, not the suite's verdict, and
+# a payload that reds `npm test` would move the observed refusal to
+# `verify/suite-failed` — scoring a different row, at the same boundary, for a
+# reason that has nothing to do with the hazard.
+c3_h11_write_payload() {
+  cat >"$1" <<PAYLOAD
+import { test } from 'node:test'
+import fs from 'node:fs'
+import net from 'node:net'
+
+// ${C3_PAYLOAD_MARK}: planted by the P-C3 rig (SL-241 PHASE-05, H11).
+const RECORD = '${C3_H11_RECORD}'
+const ESCAPE = '$2'
+const CANARY_PORT = ${C3_H11_CANARY_PORT}
+
+const note = (line) => fs.appendFileSync(RECORD, line + '\n')
+
+test('h11 hostile payload', async () => {
+  note('cwd=' + process.cwd())
+
+  // 1 — the filesystem escape, at a HOST path outside every mount the profile
+  // grants. The sentinel's absence trusted-side is the verdict; this line is
+  // what stops that absence being an absence of anything having been tried.
+  try {
+    fs.writeFileSync(ESCAPE, 'h11 escaped\n')
+    note('escape=WROTE')
+  } catch (e) {
+    note('escape=denied:' + (e && e.code))
+  }
+
+  // 2 — the network canary. What lands in the canary's own log is the
+  // observation; this records only that the attempt was made.
+  await new Promise((resolve) => {
+    const sock = net.connect(CANARY_PORT, '127.0.0.1')
+    const done = (what) => { note('canary=' + what); sock.destroy(); resolve() }
+    sock.setTimeout(5000, () => done('timeout'))
+    sock.on('error', (e) => done('refused:' + (e && e.code)))
+    sock.on('connect', () => sock.write('${C3_H11_CANARY_MARK}\n', () => done('connected')))
+  })
+})
+PAYLOAD
+}
+
+H11_mutate() {
+  local run=$1 fixture=$2 repo path
+  repo=$(c3_capsule_repo "${run}")
+  path=$(c3_h11_path "${fixture}")
+
+  c3_h11_reachable "${fixture}" "${path}" ||
+    rig_die "H11: ${fixture}'s verify command never executes ${path} — F-P05-33, and an inert plant would score as containment"
+
+  c3_h11_canary_start "${run}"
+  mkdir -p -- "$(dirname -- "${repo}/${path}")"
+  c3_h11_write_payload "${repo}/${path}" "$(c3_h11_escape_target "${run}")"
+  c3_commit "${run}" 'H11: a hostile test-time payload at a declared path' "${path}"
+  c3_publish "${run}"
+}
+
+H11_planted() {
+  local run=$1 fixture=$2 path
+  path=$(c3_h11_path "${fixture}")
+
+  # Reachability FIRST, because it is this row's version of "the payload
+  # landed": a file the `verify:` command never runs is a plant that cannot
+  # fire, and its absent sentinel reads exactly like containment (F-P05-33).
+  c3_h11_reachable "${fixture}" "${path}" || return 1
+  c3_planted_paths "${run}" "${path}" >/dev/null || return 1
+
+  # Armed AND quiet. Without the second half, a mark found afterwards could have
+  # been left at this port by an earlier run rather than by this payload; the
+  # arming half is a live listener rather than a file, because a file saying
+  # "listening" outlives the process that wrote it.
+  #
+  # The emptiness test is NOT redundant with the signal below, and M18 is what
+  # says so: `kill -0 0` addresses the CALLER'S OWN PROCESS GROUP and succeeds,
+  # so a never-armed canary read as armed and the clause passed vacuously. A
+  # `${x:-0}` default that lands on a meaningful pid is a default that answers a
+  # different question.
+  [ -n "${C3_H11_CANARY_PID}" ] || return 1
+  kill -0 "${C3_H11_CANARY_PID}" 2>/dev/null || return 1
+  [ ! -s "$(c3_h11_canary_log "${run}")" ] || return 1
+
+  printf 'an executable payload at %s, which "%s" runs; canary armed and quiet on :%s' \
+    "${path}" "$(contract_field "${run}" verify)" "${C3_H11_CANARY_PORT}"
+}
+
+H11_assert() {
+  local run=$1 fixture=$2 at="H11/$2/$3/$4" path record arrivals
+  path=$(c3_h11_path "${fixture}")
+  # The capsule's writable root is bound at /capsule and provisioned to
+  # /capsule/repo, so what the payload wrote relative to its cwd is readable
+  # here without the rig ever entering the sandbox.
+  record="${run}/verify-capsule/repo/${C3_H11_RECORD}"
+  c3_h11_canary_stop
+
+  c3_assert_stage_passed "${at}" "${run}" harvest
+  c3_assert_ingested "${at}" "${run}" "${path}"
+  # Conform is a CLAUSE of this row, not scaffolding: the payload has to be
+  # admitted at a declared path for stage 3 to see it at all, and that is the
+  # half of F-P05-33 heavy cannot satisfy.
+  c3_assert_stage_passed "${at}" "${run}" conform
+
+  # NON-VACUITY, FIRST. Everything below is about what did NOT happen, and each
+  # of those clauses holds against a payload that never executed — the failure
+  # this row exists to avoid.
+  rig_assert "${at}: the payload EXECUTED — the verify capsule ran it" \
+    test -s "${record}"
+  rig_assert_eq "${at}: and it ran inside the capsule's own clone" \
+    /capsule/repo "$(rig_field "${record}" cwd)"
+  c3_assert_stage_passed "${at}" "${run}" verify
+
+  # THE CLAIM A MECHANISM MAKES: the filesystem escape is contained.
+  rig_assert "${at}: the escape sentinel is ABSENT on the host path" \
+    c3_path_absent "$(c3_h11_escape_target "${run}")"
+  rig_assert_eq "${at}: … and the payload TRIED — denied by the profile, not skipped" \
+    denied "$(rig_field "${record}" escape | cut -d: -f1)"
+
+  # THE CLAUSE HELD OPEN (F-P05-32). Measured, named, and deliberately not
+  # scored: `--share-net` is in the profile by EX-2's construction, so neither
+  # verdict is this row's to reach. The pairing below is what keeps the
+  # measurement honest — an arrival count means nothing unless an attempt was
+  # made, and the attempt means nothing unless the canary was listening.
+  rig_assert "${at}: the canary attempt was MADE — the measurement is of something" \
+    test -n "$(rig_field "${record}" canary)"
+  arrivals=$(command grep -cF -- "${C3_H11_CANARY_MARK}" "$(c3_h11_canary_log "${run}")" 2>/dev/null || true)
+  rig_warn "${at}: F-P05-32 NOT SCORED — payload attempt '$(rig_field "${record}" canary)', arrivals at the canary: ${arrivals}"
 }
