@@ -47,16 +47,32 @@ generalises. It covers exactly one of four edges today.
 
 ### 1. A condition states its own contract
 
-Give `Condition` the data it needs to explain itself: what the condition requires,
-what subject kind it binds to, and how it is discharged. This is enrichment of a
-closed vocabulary by its own authors — no open-vocabulary term is narrowed into
-it, and the `DEC-101` rule is untouched.
-
-The shape of that payload (associated const data, a trait, a table beside
-`boundary_conditions`) is `/design`'s decision, not fixed here. What scope fixes
-is that the nine words at `design.md:268` become data the program can reach and
-render, in the register `mem.pattern.design.classify-at-authoring-not-from-behaviour`
+Make what a condition requires, what subject kind it binds, and how it is
+discharged into something the program can reach and render. What scope fixes is
+that the nine words at `design.md:268` stop being prose in a design document, in
+the register `mem.pattern.design.classify-at-authoring-not-from-behaviour`
 prescribes: the artefact states the property, rather than a run inferring it.
+
+**Where the contract lives is open, and the two candidates differ in kind.** It
+may be Rust-side data (associated const, a trait, a table beside
+`boundary_conditions`), or a **correspondence between the closed `Condition`
+vocabulary and prompt prose** dispensed by the CLI at the moments it is needed —
+the same register the design prompt pack and obligation runbooks already occupy.
+
+Either way `DEC-101` is untouched: the closed set is the **key** and the contract
+is the **value**, a total function out of ten known members. Nothing is narrowed
+into the vocabulary. The prose direction carries a mirror hazard instead, and
+naming it is part of this slice's work: overridable prose that states what
+discharges a condition lets a project change what the gate *appears* to require
+without changing what it *checks*.
+
+**Working hypothesis, to be tested not assumed.** `DEC-102` seals an asset when a
+project override would make its content *false* rather than merely *different*.
+Applied per condition, that line may coincide with `is_derived()` — a derived
+condition's prose describes an enforced check and is sealed; a claimed
+condition's prose describes a convention nothing enforces and is craft. If the
+seal line and the derivation line are the same line, one decision governs the
+vocabulary, the asset policy, and `ISS-285`'s fork together.
 
 ### 2. Derive what is derivable
 
@@ -142,6 +158,23 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
   `mem.pattern.design.classify-at-authoring-not-from-behaviour`, it can establish
   adherence but not a universal claim about what an obligation *is* — so it
   informs the retire/keep decision without settling it by itself.
+- **The override seam does not exist.** `DEC-102` identified and *deferred* it:
+  `customization` is parsed and displayed with no execution consumer outside the
+  library view, and design assets resolve straight from the embed
+  (`install::asset_text`), so overriding one requires a rebuild. If the contract
+  lands in prose that projects may supersede, this slice inherits that deferred
+  work — project-path lookup, framework fallback, precedence, fingerprint scope.
+  Whether it can deliver a seam narrowed to one asset class, rather than the
+  general one, is a scoping question for `/design`.
+- **There is no prose interpolation anywhere.** The only interpolation in the
+  subsystem is `runbook.rs`'s closed `PLACEHOLDERS` (`slice`, `run`, `repo_root`,
+  `step`) substituted into verifier **argv elements**. It is a good precedent for
+  the shape — closed vocabulary, unknown placeholder refused at parse — and has
+  no prose consumer to extend.
+- **Three prose systems, three loaders.** Hymns load through the cascade
+  (`prompt check`), the design prompt pack (`Fragment`) resolves from the embed,
+  and runbooks needed a second loader and validation domain of their own
+  (`DEC-101`). Condition contracts must not become a fourth without argument.
 - **Behaviour-preservation gate.** The design-run e2e suites
   (`tests/e2e_design_*.rs`) currently encode the claimed-condition path, including
   tests that bind conditions to `sec-01`. Some will legitimately change; each such
@@ -151,8 +184,10 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
 
 Carried into `/design`, not answered here.
 
-- **OQ-1** — What does a condition's contract consist of? Requirement text alone,
-  or also a subject rule, a discharge procedure, and a remedy string?
+- **OQ-1** — What does a condition's contract consist of, and where does it live —
+  Rust-side data, or a correspondence to prompt prose? If prose: what must it
+  interpolate, and how is the correspondence enforced (every condition has prose,
+  and the prose describes the check that exists)?
 - **OQ-2** — Is "derived vs claimed" the right partition, or does the vocabulary
   want three kinds (derived / attested-by-human / retired)? `UserAcceptsSufficiency`
   and `UserAcceptanceAttested` sit on opposite sides of `is_derived()` today while
@@ -164,6 +199,17 @@ Carried into `/design`, not answered here.
   and the recompile-per-edit cost it weighs?
 - **OQ-5** — Does a contract-carrying `Condition` subsume `ISS-286`'s subject rule,
   or is subject resolution a separate repair?
+- **OQ-6** — Does `DEC-102`'s seal criterion, applied condition by condition,
+  coincide with `is_derived()`? The working hypothesis says yes. If it holds, one
+  line governs the vocabulary, the asset policy, and `ISS-285`'s fork; if it
+  fails at any member, that member is where the interesting design is.
+- **OQ-7** — Is a contract **delivered** (pushed on the turn envelope at the
+  moment it applies, competing with the byte budget) or **fetchable** (pulled on
+  demand, helping only an agent that knows to ask)? Probably both with different
+  content — but which is which is a decision, not a default.
+- **OQ-8** — How much of `DEC-102`'s deferred override seam must this slice
+  deliver, and can it be narrowed to one asset class without prejudicing the
+  general seam?
 
 ## Verification / Closure Intent
 

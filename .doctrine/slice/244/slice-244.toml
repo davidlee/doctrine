@@ -30,6 +30,14 @@ intent = "scope-relevant"
 selector = "tests/e2e_design_*.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "install/hymns/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "scope-relevant"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
@@ -72,6 +80,18 @@ label = "references"
 role = "concerns"
 descriptor = "the open-to-closed type rule bounding where satisfaction may be sourced"
 target = "DEC-101"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the seal-vs-craft line and its deferred override seam"
+target = "DEC-102"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the prose/mechanism split this extends to condition contracts"
+target = "DEC-077"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
