@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc4bf-443a-74f0-92a0-8d463442d93a"
+recorded_at = "2026-08-02T23:11:37.018753496Z"
+kind = "friction"
+summary = "record-memory: memory verify refuses on a tree made dirty by ANOTHER agent's file — second consecutive session blocked"
+detail = "Two memories minted and committed this session (mem.pattern.tests.assert-the-refused-writes-signature, mem.pattern.handover.cite-artifacts-by-tier-not-just-path) cannot be attested because .doctrine/governance.md carries an unrelated uncommitted edit by another agent. The gate is whole-tree dirty, but the attestation anchors a specific memory path. AGENTS.md forbids stashing and committing another agent's work, so the only exits are to wait or to leave the memory unattested — and the previous session hit exactly this on mem.pattern.shell.default-must-be-inert-in-its-consumer, carrying it a whole session. In a repo whose own doctrine says multiple agents share one tree, a whole-tree cleanliness gate on a per-path attestation is the wrong granularity."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
