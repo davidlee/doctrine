@@ -74,3 +74,34 @@ criteria are the owner's (cf. the standing PHASE-09 `F-P09.3` `VA-4`/`EX-8`
 tension). That is precisely why this is a separate ledger from `RV-342`: it stops
 a design dispute from being dispositioned as a code defect. All 16 phases are
 `completed`, so no landed phase is edited by this review.
+
+## Reconciliation Outcome
+
+All 3 findings terminal (`verified`) and accepted by the raiser; ledger `done`,
+`await=none`, 9 rounds. One finding carried a `reconcile-action`.
+
+### Direct edits applied
+
+- `sketches/projection-bounds.md:133` — **F-3**. The settled budgeted-rendering
+  section stated a *single-byte-marked* elision; the code ships `U+2026`
+  HORIZONTAL ELLIPSIS at three UTF-8 bytes. Re-measured before writing: line 133
+  as cited, `ELISION_MARKER` at `src/design_run/render/mod.rs:159`, and the
+  positive control at `:305` confirming `cap.saturating_sub(ELISION_MARKER.len())`
+  consults the length rather than assuming 1. No invariant broke — the divergence
+  was documentation-versus-code on a *stated byte property*, which is exactly the
+  kind of thing later arithmetic leans on. Prose corrected to state the marker
+  and that its encoded length is subtracted; the code is unchanged, because the
+  glyph is the better choice.
+
+### Withdrawn / tolerated
+
+- **F-1** — `not-a-defect`. The finding argued the ROUND-10 gate, which
+  `RV-325` F-17's round-11 owner ruling overturned using those same four steps;
+  PHASE-08's entire diff to `exploring.toml` (`78d00a074`) is the one line that
+  ruling prescribed. Rationale in the finding disposition.
+- **F-2** — `deferred`. Rationale in the finding disposition.
+
+### REVs completed
+
+None. No item on this ledger touched governance or spec truth, so no REV was
+authored and no half-applied row blocks the close gate.

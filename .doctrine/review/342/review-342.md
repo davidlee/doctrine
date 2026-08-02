@@ -71,3 +71,49 @@ all. Reading and evidence run in the coord tree. See the campaign doc §5.
 **Standing.** Findings are raised and open; dispositions are the owner's call.
 All 16 phases are `completed` with `record-delta` recorded, so no landed phase is
 edited by this review.
+
+## Reconciliation Outcome
+
+All 8 findings terminal (`verified`) and accepted by the raiser; ledger `done`,
+`await=none`, 24 rounds. **No finding carried a `reconcile-action`** — five were
+repaired inside the campaign and three were deferred to backlog items, so this
+ledger contributed no write to the reconcile pass.
+
+### Repaired in-campaign (`4f2816efa`, `dispatch/233`)
+
+- **F-3** — the observed exit code now reaches the discharge record, in place of
+  a hardcoded `0`.
+- **F-5** — the PHASE-07 receipt assertion is line-anchored, and is proven by the
+  finding's own mutation, which now **fails** where it previously measured ok.
+- **F-6** — the acceptance attestation digest refuses rather than digesting `""`.
+- **F-7** — the PHASE-15 comment citing `DEC-105` retargeted to `DEC-100`, the
+  decision that actually survives.
+- **F-8** — the doc comment naming `entry_text` corrected.
+
+`doctrine check gate` exit 0 after the repairs.
+
+### Deferred to backlog (`229b98205`, `edge`)
+
+- **F-1** → **ISS-290**, appended rather than given a new item, because one
+  repair closes F-1, ISS-290 and `RV-341` F-2 together and three parallel items
+  would be three parallel implementations of one fix. The append records that the
+  gap has a *demonstrated* escape, not a hypothetical one: at `63b348de6` three
+  numbers disagreed and a step id refused at admission had passed validation.
+- **F-2** → **IMP-379**. New test surface against an `EX-16` guarantee, not a
+  defect in landed code: the clause's rendering half is exercised ten ways, its
+  evaluation half survives only as the shape of an `if` plus a comment, so a
+  refactor folding it back into `cumulative_conditions` for uniformity would go
+  green while silently changing the machine.
+- **F-4** → **ISS-295**, owner ruling **repair, not tolerate**. Worse than the
+  `DEC-100` window lawfully tolerated for v0.0.1 on two counts: deterministically
+  unrecoverable without hand-repair of the journal or tree, and reachable by an
+  ordinary Ctrl-C, since the two writes are separated by user-interruptible work
+  with no handler installed. Not repaired in-slice — all 16 phases are
+  `completed`.
+
+Also minted from this leg: **IMP-380** (the `explore.scope` residual).
+
+### REVs completed
+
+None. No item on this ledger touched governance or spec truth, so no REV was
+authored and no half-applied row blocks the close gate.

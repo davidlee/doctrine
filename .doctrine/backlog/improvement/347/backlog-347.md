@@ -50,3 +50,36 @@ phase:
   component"), so a single selector row per entity is not available. It takes
   two: `NNN/**` for contents and `NNN*` for the directory entry and slug
   symlink.
+
+## Second instance — SL-233 reconcile (2026-08-02)
+
+SL-233's conformance report closed with eleven undeclared paths, and every one
+is the slice's **own process output**: the two dispatch bookkeeping files
+(`boundaries.toml`, `funnel.toml`); the governance the work itself minted (the
+`DEC-100` record, its body and its slug symlink, plus the `DEC-099` supersession
+edit); the `RV-324` ledger, its body and its slug symlink; and the slice's own
+two entity files (`notes.md`, `slice-233.toml`).
+
+**This is the same class arriving from the opposite direction, and the
+distinction is worth keeping.** The PHASE-01 instance above is a *knowable*
+write set — `spec req add` lands bytes in a directory you can look up before you
+run it, so the sweep could in principle have caught it. These eleven are not
+knowable: a selector list declares what a slice sets out to **change**, and it
+cannot name an id that does not exist until the work **mints** it. Requiring the
+declaration would mean declaring `DEC-100` before `DEC-100` was allocated.
+
+So the prose-only fix proposed above ("check where its bytes actually land")
+does **not** reach this half. A rule an author cannot follow is not a fix. What
+this instance argues for is the *other* branch — making it answerable rather
+than remembered — plus a prior question the first instance did not raise:
+**should process output be in the conformance denominator at all?** Minted
+governance records, review ledgers, dispatch bookkeeping and the slice's own
+entity files are a closed, recognisable set. If conformance excluded them by
+kind, eleven of SL-233's thirteen undeclared rows would never have been
+reported, and the two that carried real signal (`src/commands/verify.rs`,
+`tests/runbook_fixture/**` — a genuine declaration gap in the hand-enumerated
+command tier) would have stood alone instead of at 15% of the noise.
+
+Disposition at SL-233 reconcile: **accepted, no selector action.** Recorded here
+so the exclusion-by-kind question is carried rather than re-derived — it is the
+part of this item with the most leverage and the least design.
