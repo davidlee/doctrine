@@ -1,0 +1,50 @@
+memory_uid = "mem_019fc0ec6a047501a7a9e573ec1b3b39"
+memory_key = "mem.fact.tooling.x-bit-is-not-runnability"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "The executable bit is not runnability"
+summary = "A binary can be -x and still exit 127; a tool that cannot be invoked must never be reported as a verdict about the thing it was measuring"
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["tooling", "nix", "jail", "shared-tree", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ccd24f75f1b0e84f3acf57ca6c22d134dcc46fc4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "daeec9bbe37e9b1531a529e1c847aaee6d642ffc49bba5ae0d397293532966c2"
+base_commit = "dcc5e28056706955b06e02bd9ac75012b71ea992"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-241"
+
+[[source]]
+kind = "finding"
+ref = "F-P05-29"
+
