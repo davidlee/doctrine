@@ -232,12 +232,32 @@ the node it pointed at. **No finding against the subject on that axis.**
 Recorded because the near-miss is the point: a snapshot taken one tier below the
 one the rubric reasons about manufactures a false positive.
 
-**Two incidental positives worth keeping.** Both cursor and posture carry
-`user-pinned` authority, so SL-233 §2's *"permit immediate user pin, defer,
-prune, breadth, and depth direction during the run"* is demonstrably exercised —
-the traversal-direction capability works and was used. And the map is doing real
-work: three nodes deferred and one resolved is a decomposition being managed, not
-a list being appended to. Neither reaches the user (ISS-299); both are real.
+**One incidental positive worth keeping.** Posture carries `user-pinned`
+authority, so SL-233 §2's *"permit immediate user pin, defer, prune, breadth,
+and depth direction during the run"* is demonstrably exercised — the
+traversal-direction capability works and was used. It does not reach the user
+(ISS-299); it is real.
+
+**The second positive was withdrawn — it was the opposite of true.** This sheet
+claimed *"the map is doing real work: three nodes deferred and one resolved is a
+decomposition being managed, not a list being appended to."* A flat list being
+appended to is exactly what it is. **The run holds zero parent edges** —
+`grep -c parent` over `design.toml` returns `0` across all nine nodes; every one
+was declared parentless.
+
+The lifecycle transitions are genuine (nodes really were deferred and resolved),
+but no node was ever declared *under* another, so there is no decomposition. The
+claim was inferred from lifecycle variety and never checked against the edge set.
+Recorded as a withdrawal rather than a silent edit: it was queued to enter the
+write-up as evidence the map capability works.
+
+**What it does to ISS-299 — the issue is understated.** ISS-299 says the render
+is correct and nothing obliges an agent to *surface* the map. True, and not the
+whole gap: nothing obliges an agent to *build structure* either. The affordance
+is on the envelope — the `declare` hint's own example is
+`{"subject":"inq-2","question":"...","parent":"inq-1"}` — and across nine
+declarations it went unused. A perfect renderer would still have had a flat list
+to render. See §5c.
 
 ## 5b. `recover`, as actually scored — W2's resume leg
 
@@ -340,6 +360,44 @@ exactly what happened. Nothing on the resume path proposes the stage advance, an
 `Locked` is reachable only through it. Promoted from *watching* to **the
 mechanism is identified**; still not filed, pending whether the run advances on
 its own.
+
+## 5c. The tree surface — shipped, working, and empty
+
+Asked where the *"see the decision tree"* command is, the answer is that there is
+no dedicated verb: `doctrine design show` is the map surface, and it carries two
+structural fields, both live in the shipped 0.35.1 binary.
+
+| field | what it is | state in this run |
+|---|---|---|
+| `active_path` | the ancestry chain to the cursor — `PathEntry { id, question }`, evicted from the **root** end so the cursor end is retained | `[]` |
+| `frontier` | nearby open nodes, capped at `ENVELOPE_FRONTIER_NODES = 7`, ranked children → siblings → grandparent → `needs` neighbours | flat list, every entry `kinship=child` |
+
+**Neither is broken, and `kinship=child` is not a mislabel.** With no cursor,
+`frontier_candidates` takes a documented branch — *"candidates are the roots' own
+children — here, the parentless open nodes"* — and labels them `Child` against a
+virtual root. Given a cursor and real edges it computes genuine children,
+siblings and grandparent classes. The machinery is there.
+
+It has nothing to work on. Zero parent edges, so `active_path` is empty **by
+construction** rather than by cursor state, and the frontier can only ever fall
+through to its cursorless branch. The tree view renders an empty tree, correctly.
+
+**`--full` is not an escape hatch.** `show 243` and `show 243 --full` are still
+byte-identical at revision 17 (sha `fa58aff774ce1246…`) — ISS-298 reconfirmed
+eight revisions after it was filed. `--format json` exposes no `parent` on
+`FrontierEntry` (`id`, `question`, `kinship`, `needs_in_degree`, `provenance`);
+the sole `parent` token anywhere in the output is inside the `declare` hint
+string. So parent edges are **writable and never readable back** on any surface,
+in any format, at any detail — though in this run the question is moot, since
+none were written.
+
+**The degeneration is worth stating plainly.** As nodes resolve they leave the
+frontier. At revision 17 — 5 resolved, 3 deferred, `DEC-111`…`DEC-115` — the
+entire visible map is **one node**, `inq-7`. The surface is thinnest exactly when
+the design is richest, because the only structural view is over *open* nodes and
+there is no hierarchy to hold the resolved ones in place. The `records` list
+carries the five decisions with their originating node, which is the closest
+thing to a decomposition the output has, and it is a flat list too.
 
 ## 6. Sibling contrast — mandatory for every S4 candidate
 
