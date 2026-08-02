@@ -1,9 +1,9 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 298
-slug = "design-show-full-widens-nothing"
-title = "design show --full widens nothing"
+id = 299
+slug = "inquiry-map-never-reaches-the-user"
+title = "Inquiry map never reaches the user"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
@@ -25,3 +25,7 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "concerns"
 target = "SL-233"
+
+[[relation]]
+label = "related"
+target = "ISS-298"

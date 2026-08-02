@@ -367,11 +367,33 @@ Recorded as an observation; not filed, because which of the two the change log
 `[fragments] fragment = []` throughout: **no receipt has ever been declared**, so
 at no point has suppression been available to explain a non-emission.
 
-### Inquiry map
+### Inquiry map — populated at 07:04Z, never rendered to the user. ISS-299.
 
-Empty at 06:49Z — `next_seq = 0`, no nodes, cursor unset, posture
-`breadth`/`agent-proposed`. Stage is still `exploring`. Not yet a finding; the
-map may legitimately populate at `inquiring`.
+Nine nodes at revision 7 — three `user-directed`, six `agent-proposed`. The map
+is being maintained.
+
+**It has never been rendered with content.** All three `design show` calls
+happened between 06:47:23Z and 06:47:29Z, when `nodes = 0`; no `show` has
+followed the declaration. The moderator, watching the session, reported the
+map as missing and could not tell whether it had been built.
+
+It was built. `render/envelope.rs` carries `frontier()` — ranked by kinship and
+posture, capped with an `omitted` count — plus `pinned()`, blockers and totals,
+which is the bounded surface SL-233 §2 committed. A **full** per-turn tree was
+explicitly excluded by that same sentence, and the exclusion looks right.
+
+What is missing is the obligation to surface it. Zero references to `frontier`,
+`map`, `design show` or a decision tree across `exploring.toml`,
+`inquiring.toml`, `drafting.{toml,md}`, `reviewing.{toml,md}` and `inquiry.md` —
+including the every-turn fragment that governs the whole interview. Filed as
+**ISS-299**.
+
+**This is the delivery finding arriving from the other direction, and it is the
+sharper form of it.** The map renders only on the read path, and the read path is
+the one the subject abandoned after four calls — its single attempt to widen it
+returning byte-identical bytes (ISS-298). A committed user-facing surface whose
+visibility depends on agent initiative that nothing prompts is not delivered by
+being implemented.
 
 ## 7. What the moderator does not do
 
