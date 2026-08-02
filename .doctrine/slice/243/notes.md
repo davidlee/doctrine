@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 22 · 0fcd09e8
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 28 · 73cb3b09
 
 ### Produced
 
@@ -83,9 +83,19 @@ rather than from a copy here. What the run cannot represent, and so lives here:
   `inq-1` → DEC-117, `inq-2` → DEC-118, `inq-3` → non-durable (SPEC-017
   `REQ-232` already owns the identifier-form convention, `IMP-316` enforces it —
   nothing new to author). **The run is 9/9 disposed, 0 open**, exploring's
-  runbook fully discharged. What remains before drafting is the user's
-  acceptance, which the machine requires and will not infer.
-- **Plan obligation from the census, owned by no node.** SPEC-017 `REQ-236`
+  runbook fully discharged. **The run is now at `drafting`** (rev 28) — accepted
+  by the user, with three sections authored to clear the stage gates:
+  `sec-governing-context`, `sec-initial-concerns`, `sec-decisions`. All three are
+  `outstanding_review`.
+- **Scope grew an `O6`** (`inquire.scope`): the runner extraction out of
+  `coverage_verify` (DEC-114) and the `lint-all` gate addition (DEC-116) were
+  obliged by decisions but unnamed in the original objectives. Both scope edits
+  this session drifted the research baseline and were restamped — the check
+  fired correctly both times, which is worth knowing before editing scope again.
+- **ISS-302** now carries the REQ-236 obligation below as a backlog entity, so it
+  survives independently of this file. Detail retained here because it is a
+  plan obligation, not merely queued work:
+- **Plan obligation from the census.** SPEC-017 `REQ-236`
   states anchor liveness "is not checked, so a stale anchor ships silently".
   This slice's report probes path existence. Report-only preserves the
   requirement's *intent* — nothing fails because of a stale anchor — but not its

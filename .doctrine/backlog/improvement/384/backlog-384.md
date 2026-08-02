@@ -46,6 +46,19 @@ knowingly-ignored fields? The first is the coherent answer and the larger change
 - A migration note: this turns previously-accepted config files into a hard
   parse error, including any table a project added speculatively.
 
+## This has no spec to author against
+
+SL-243's `/spec-coverage-assessment` census found `src/dtoml.rs` — 203 loc that
+every project config read passes through — **anchored by no spec**. Each
+`doctrine.toml` *table* is governed by its consuming spec (`[verification]` →
+SPEC-002 REQ-254–257, `[dispatch]` → SPEC-021, `[estimation]` → SPEC-020), but
+the shared reader's own behaviour — tolerance, defaulting, error posture — is
+governed by nothing.
+
+That per-table pattern is coherent and worth preserving. What is missing is
+governance for exactly the surface this item changes. So scoping this work
+includes deciding where the reader's behaviour is governed, not only changing it.
+
 ## Related
 
 - DEC-113 — SL-243's local guard on its own adapter table, and the reasoning for

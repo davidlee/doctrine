@@ -69,10 +69,24 @@ dogfooding the contract, outside the shipped binary. Emits the module tree with
 non-test sizes and dependency edges.
 
 **O4 — new PRD-012 requirements for the report**, and the spec homes for the
-engine and the adapter contract.
+engine and the adapter contract. Settled by design: three requirements plus an
+`OQ-2` status edit (DEC-118), and **one** new component spec descending from
+PRD-012 with `parent` deliberately unset (DEC-117) — the report and the adapter
+contract share it rather than splitting.
 
 **O5 — wire the tool into `/spec-coverage-assessment`** as a documented step, so
 the skill stops instructing a manual grep.
+
+**O6 — the shared machinery the above needs** (added by design; DEC-114,
+DEC-116). Two deliverables outside O1–O5 that the decisions oblige and the
+original scope did not name:
+
+- Extract the capture-with-timeout argv runner out of `coverage_verify` into a
+  leaf taking a `Duration`, with `coverage_verify` folding its result. This
+  modifies a module SPEC-002 governs; its existing suites are the proof and must
+  stay green **unchanged**.
+- Add `lint-all: cargo clippy --workspace` to `gate`, mirroring the existing
+  `test`/`test-all` pairing, so the adapter crate is linted rather than exempted.
 
 ### Design commitments carried in from the pre-slice discussion
 
