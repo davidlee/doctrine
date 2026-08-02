@@ -21,6 +21,54 @@ responsibilities = [
   "Specify the closure gate: default-refuse on residual drift with an explicit recorded override that is itself a reconciliation act, atop the ADR-009 F12 closure-seam topology.",
 ]
 
+# Anchors are narrow and responsibility-mapped — see § Source anchors in the .md
+# for which responsibility each supports and where ownership is shared.
+
+[[source]]
+language = "rust"
+identifier = "src/rec.rs"
+module = "doctrine::rec"
+
+[[source]]
+language = "rust"
+identifier = "src/reconcile.rs"
+module = "doctrine::reconcile"
+
+[[source]]
+language = "rust"
+identifier = "src/coverage.rs"
+module = "doctrine::coverage"
+
+[[source]]
+language = "rust"
+identifier = "src/coverage_store.rs"
+module = "doctrine::coverage_store"
+
+[[source]]
+language = "rust"
+identifier = "src/coverage_scan.rs"
+module = "doctrine::coverage_scan"
+
+[[source]]
+language = "rust"
+identifier = "src/coverage_view.rs"
+module = "doctrine::coverage_view"
+
+[[source]]
+language = "rust"
+identifier = "src/coverage_verify.rs"
+module = "doctrine::coverage_verify"
+
+[[source]]
+language = "rust"
+identifier = "src/verify.rs"
+module = "doctrine::verify"
+
+[[source]]
+language = "rust"
+identifier = "src/slice.rs"
+module = "doctrine::slice"
+
 # category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
 #   category = "cli"
 # c4_level — closed C4 set: context | container | component | code. Add as:

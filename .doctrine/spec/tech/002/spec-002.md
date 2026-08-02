@@ -60,6 +60,54 @@ read); own the **reconcile writer** (sole author, accept/revise/redesign, one RE
 per act); and own the **closure gate** (default-refuse + recorded override atop the
 ADR-009 topology).
 
+## Source anchors
+
+The `[[source]]` anchors in `spec-002.toml` are narrow and
+responsibility-mapped — the anchor schema carries no description field, so the
+mapping lives here. R1–R7 index the structured `responsibilities` list above, in
+order.
+
+| Anchor | Responsibility | What it carries |
+|---|---|---|
+| `src/rec.rs` | R1 | The REC kind itself — schema, scaffold/show/list, `validate` wiring. Status-less, one REC per act (D1, D-Q3). |
+| `src/reconcile.rs` | R6 | The reconcile writer: one requirement per invocation, exactly one move, exactly one atomic REC (D7). |
+| `src/coverage.rs` | R2, R3, R5 | The **pure leaf**: entry types, the 4-tuple key `(slice, requirement, contributing_change, mode)`, `CoverageStatus`, `derive_status`, and the `composite` / `drift` folds (D3, D4, D6). |
+| `src/coverage_store.rs` | R2 | The observed-tier **write path** — the single `record`/`forget` seam over slice-side `coverage.toml`, stamping the git anchor. Date is injected, never read from a hidden clock. |
+| `src/coverage_scan.rs` | R3, R5 | The reconcile-**reader** shell and the only git/disk seam in the coverage data flow; resolves staleness once per scan and hands the pure folds in-memory cells. |
+| `src/coverage_view.rs` | R2 | The derived per-requirement composite as a **read** — rows and rendering for `doctrine coverage <ref>`. Never a stored scalar (D4). |
+| `src/coverage_verify.rs` | R3 | Continuous re-derivation of `VT` status — resolves each check, dedups argv, folds `RunOutcome` through `derive_status`, re-stamps the anchor (D5). |
+| `src/verify.rs` | R3 | The project `[verification]` config and the pure `resolve` that turns a config plus a check into a runnable command — the language-neutral executable seam (REQ-254–REQ-257), POL-002-clean. |
+| `src/slice.rs` | R7 | The **closure gate only** — `read_gate_extra_reqs`, `gate_requirement_set`, `undischarged_drift`, and the refusal on the `reconcile → done` edge (D8). |
+
+**R4 (two-tier separation) has no anchor of its own** — by construction. It is an
+invariant proved by the *absence* of an edge: no function in `coverage*.rs`,
+`reconcile.rs`, or `slice.rs` maps observed coverage to authored requirement
+status (`REQ-105`). An anchor would imply a module owns it; nothing does, and
+that is the point.
+
+### Shared ownership joints
+
+- **`src/slice.rs` is shared with SPEC-014.** SPEC-014 owns the slice kind,
+  scaffold, status vocabulary, lifecycle FSM, conduct axis, and phase-rollup join
+  in that file. This spec owns **only** the closure gate's drift predicate and its
+  refusal. The FSM edge topology itself (`done` only from `reconcile`) stays
+  ADR-009 F12 and SPEC-014; this spec adds a predicate on it, not an edge.
+- **The CLI verb and flag shapes are SPEC-013's, not anchored here.** D9 names the
+  surface (coverage recorder/reader, the `reconcile` writer, the closure-gate
+  hook) and defers the shapes; `src/commands/coverage.rs` and
+  `src/commands/verify.rs` are thin dispatch over the anchored engine modules and
+  are deliberately left unanchored by this spec.
+- **`src/verify.rs` is the projection target for phase-plan VT criteria.** A
+  future phase-plan surface may reference or project into this seam; it must not
+  introduce a parallel command schema (RFC-027 H6). This spec owns verification
+  *procedure identity*; the plan criterion that cites it does not.
+- **`src/git.rs` is not anchored here** though the attestation-staleness mechanism
+  reuses it (H1). It is the memory subsystem's anchor; reuse is a dependency, not
+  co-ownership.
+- **The dispatch regression gate (`src/regression*.rs`) is not this gate.** SL-170's
+  funnel-side failure-set diff is unrelated to closure-time residual drift and is
+  deliberately excluded.
+
 ## Concerns
 
 - **Two-tier purity (load-bearing).** The acceptance proof is structural: no
