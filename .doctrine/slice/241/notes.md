@@ -7,9 +7,11 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-02 · **PHASE-04 complete (4/6), PHASE-05 in flight —
-T0–T3 done, T4a DONE (five rows live, all model-level), T4b's four rows WRITTEN
-and shakeout-green; the authoritative `rig c3` run is what remains** · head
-`efbb097a`
+T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
+T4c PART-DONE (H13 scored 110/0 + falsified 4/4; H14 and H7 remain). Ten of
+sixteen rows carry scored results: H1–H6 H9 H12 H13 H15** · last SL-241 commit
+`5c5ed437` (tree head moves under us — other agents commit to `edge` mid-session;
+verify a hash before citing it)
 (code ranges — PHASE-01 tip 29c7acf3; PHASE-02 b3ad3eed3..d041f6b39, none
 foreign; PHASE-03 acc4b2b34..e14c22cc, one foreign interior; PHASE-04 step 0
 b548f65d4..090148ef, **8 of 15 foreign**; PHASE-04 steps 1–4
@@ -818,6 +820,23 @@ mid-phase would convert a legible structural finding into a silent pass.
   absence-shaped verdict needs a control proving the measurement ran. Committed
   as friction observations (`d8e59952`); generalises
   `mem_019fa18161f47651af7687d8dccbbc67`. **Candidate memory.**
+- mem.fact.tooling.x-bit-is-not-runnability — F-P05-29 made reusable
+- mem.fact.tooling.shellcheck-source-dev-null-hides-cross-file (`bd3aa0d9`)
+- mem.fact.git.clone-inherits-stale-commit-graph — F-P05-28 made reusable
+- **a falsifiability round need not pay the row's own cost** — `planted?` is
+  evaluated BEFORE the pipeline leg, and the harness's own positive control
+  already proves a forced-false `planted?` reds the cell, so the two halves of
+  the composition are established at opposite ends and a `planted?` mutant needs
+  no verify leg. T4b's round ran in seconds against a ~75-min row sweep. Only a
+  mutant whose red is a *refusal* needs a pipeline. **Candidate memory.**
+- **a mutation must WRAP the real function, never restate it** — a hand-copied
+  function body in the mutant driver is the same
+  vehicle-differs-from-the-real-one defect as F-P05-25 and F-P05-29, arriving
+  from a third direction. `rebind` + wrapper keeps the driver honest.
+- **an isolation control is what turns "it red" into "it red for this reason"** —
+  each mutant asserts the clauses it did NOT target still hold. Without it a
+  mutant that breaks everything proves nothing about the clause it was written
+  for. Both rounds carry one per mutant.
 - **a falsifiability sibling isolates the rig's CODE but not its RESULTS** —
   `SPIKE_CAPSULE_ROOT` still defaults to `~/capsules` in the copy, so mutant
   cells append rows indistinguishable from real ones. Point it at a scratch root
@@ -839,7 +858,16 @@ mid-phase would convert a legible structural finding into a silent pass.
   now named above `*)`, and `verify/resource-cap` joined the closed set.
   **OQ-b / OQ-c still live** (§ PHASE-03 open questions): worker wall-clock
   overrun is H15's business; M-A has no absent-result token
-- **DEC records are OWED at close for D-P05-6..10** — the sheet's convention is
+- **ISS-296** — any local clone of this repo inherits the stale commit-graph
+  landmine (F-P05-28). Carried OUT of the slice; `git gc` on the primary was
+  assessed and deliberately rejected.
+- **T4c is part-done and its plan framing was WRONG** — "all three rows need a
+  hostile worker vehicle" holds for **H7 only**. H13 (done) and H14 attack
+  control-plane surfaces trusted-side. `capsule/worker-hostile.sh` (§ 9.1) still
+  does not exist and is H7's precondition; H7 also carries the phase's only
+  resource-exhaustion risk (own disk cap; heavy worker capsule at 195M/256 MiB,
+  F-P05-10). Correction recorded in the runtime sheet's T4c entry.
+- **DEC records are OWED at close for D-P05-6..13** — the sheet's convention is
   "lift to notes.md at close", so they were deliberately not minted mid-phase
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
