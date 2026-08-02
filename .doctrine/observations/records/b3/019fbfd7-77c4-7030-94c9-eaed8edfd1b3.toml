@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fbfd7-77c4-7030-94c9-eaed8edfd1b3"
+recorded_at = "2026-08-02T00:19:56.996454062Z"
+kind = "friction"
+summary = "code-review campaign S4: review-campaign.md PHASE-14 row measured one commit, not the phase"
+detail = "SL-233 review-campaign.md section 1 tabulates per-phase code delta and states it comes from boundaries.toml code_start_oid..code_end_oid. Seven of the eight funnel rows reproduce exactly. The PHASE-14 row (4 files / 3 src / 1 test / 205 churn) does not: the recorded range 51a74c231..b18b3c157 yields 10 files / 7 src / 2 test / 1217 churn. The tabulated numbers are those of a single commit, 0c0fe4135 feat PHASE-14 shim live-run arm, which is 4/3/1/205 exactly. The whole worker import c744e58bd (9 files, 6 src, 2 test, 1014 churn) is missing from the table. Cost: S4 could not simply trust the file/src/test counts the S3 handover said to trust, and had to measure all eight boundary rows to establish that PHASE-14 was the only bad one. Downstream, the campaign session plan understates S4 at 1297 churn when the true figure is 2309. The S3 gen.py check_range would have refused to emit the prompt, which is the rig working, but the refusal would have read as a wrong base rather than a wrong table."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

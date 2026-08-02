@@ -173,5 +173,58 @@ POSITIVE CONTROL that the range diff is non-empty and the search works: the same
 
 PROVENANCE, and a correction to the campaign record. Both S3 PHASE-05 passes raised this independently (pass A C-1, pass B C-2). It is the SAME line both S2 PHASE-04 passes converged on, which S2 adjudication correctly ruled out of the PHASE-04 range and therefore discarded. It was never out of scope for the campaign, only mis-attributed: the line is added by PHASE-05. IMP-024 section 4b cites that convergence as its example of worthless agreement on an out-of-scope finding. That reading holds for PHASE-04 and should be read alongside this: the finding was real, and phase-scoped ranges plus a mandatory scope gate are what located it."""
 
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = "PHASE-15 ships a comment citing a decision the same phase superseded, and the DEC reseat renumbered the reference without retargeting it"
+detail = """
+src/commands/design.rs:1496 carries the comment: DEC-105 as revised (D7-R): re-baseline only to bytes demonstrably on disk. DEC-105 reads status = superseded, superseded_by = DEC-100. The live record describing what PHASE-15 actually shipped is DEC-100, Materialise tolerates the check-to-rename lost-update window.
+
+ALREADY STALE WHEN WRITTEN, NOT MERELY OVERTAKEN. The comment was added by this phase, as DEC-099. At the phase tip 540aed959 the record it cited ALREADY read status = superseded, superseded_by = DEC-100. The same phase that wrote the comment superseded the record the comment points at.
+
+STILL LIVE AT HEAD, AND THE THING THAT LOOKS LIKE A REPAIR IS NOT ONE. The DEC reseat at b8cfbf3d8 renumbered DEC-099 to DEC-105 across the authored source, so the comment now reads DEC-105. The sweep reached this file and worked exactly as intended. It renumbered the reference without retargeting it, so a correct-looking sweep preserved the staleness. A reader following the citation lands on a superseded record whose mechanism, a writer lock plus a compare-and-swap, is precisely what did NOT land, while the tolerance that did land is recorded only in DEC-100.
+
+The code is correct. This is a citation defect sitting on the one comment that explains a deliberately tolerated data-loss window, which is where a wrong pointer is worth the most and costs the most.
+
+REPRO:
+  cd /workspace/doctrine/.dispatch/SL-233
+  sed -n 1496p src/commands/design.rs
+  rg -N status .doctrine/knowledge/decision/105/record-105.toml
+  git show 540aed959:.doctrine/knowledge/decision/099/record-099.toml
+
+POSITIVE CONTROL that the search works rather than merely missing: rg -c DEC-099 src/commands/design.rs returns 0, while rg -c DEC-105 src/commands/design.rs returns 1.
+
+IN RANGE: git diff 7a8a7fe52..540aed959 -- src/commands/design.rs | grep -n DEC-099 returns 225:+ the comment line. Control: the same diff reports 1 file changed, 152 insertions, 35 deletions.
+
+NOT THE DEDUP ENTRY. prior-findings section 0 records that the gitignored runtime phase sheets were missed by the reseat while authored files are clean. Both halves are true and neither is this: the sweep DID reach this file. The defect is that a renumber is not a retarget.
+
+PROVENANCE. S4 pass B on PHASE-15 raised this as its C-2 and then dismissed it in its own current: line as REPAIRED AT HEAD, reading the reseat commit as having deleted the line. The reseat deleted the string DEC-099, not the stale reference. Pass A did not find it at all. This is the exact mirror of the S3 case in which a pass rated an already-repaired defect major: here a pass rated a live defect history. The template instruction that a later-repaired defect is history and not a severity helps in one direction and can mislead in the other, and the settling move in both directions is the same, which is to read current state rather than to reason about it."""
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "nit"
+title = "A PHASE-15 doc comment names entry_text, a function the same phase renamed out of existence"
+detail = """
+src/design_run/legacy.rs:311 carries a doc comment on continues_id reading: The single source of that boundary for both readers here. [entry_text] gets the property for free. No function named entry_text exists anywhere in the crate. PHASE-15 renamed it to entry_label_and_text in this same diff, and the doc line naming the old name is itself one of the phase additions.
+
+REPRO:
+  cd /workspace/doctrine/.dispatch/SL-233
+  rg -n entry_text src/design_run/legacy.rs
+  rg -n fn.entry_text src/
+
+The first returns exactly one hit, line 311, which is the doc comment itself. The second returns nothing.
+
+POSITIVE CONTROL that the search works and the renamed function is present: rg -n fn.entry_label_and_text src/ returns src/design_run/legacy.rs:255, and rg -c entry_label_and_text src/design_run/legacy.rs returns 2, being the definition and its call site.
+
+IN RANGE: git diff 7a8a7fe52..540aed959 -- src/design_run/legacy.rs shows the doc line as an addition at diff line 67.
+
+CURRENT: live at head. git diff --shortstat 540aed959..HEAD -- src/design_run/legacy.rs is empty, so no later phase touched the file. Control: the same command against src/commands/design.rs reports 1 file changed, 191 insertions, 2 deletions.
+
+THE CLAIM IS DELIBERATELY NARROW. It is stated as a reference to a function that does not exist, which is directly measurable. Whether rustdoc emits an unresolved-link warning for an intra-doc link on a private item was NOT measured, so that is not part of the warrant. One of the two passes offered it as the warrant; it is dropped here rather than inherited.
+
+PROVENANCE. Both S4 PHASE-15 passes raised this independently, A as its C-1 and B as its C-1. Per IMP-024 section 4a that convergence is weak evidence rather than confirmation, so it was settled by measurement and not by agreement, which was the right call: the two passes also flatly disagreed about whether it survives at head, B asserting in one line that a head-level search returns zero hits and in the next line that it is still present at head. The measurement above resolves that contradiction in favour of still present."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
