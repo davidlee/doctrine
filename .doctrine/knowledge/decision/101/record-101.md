@@ -165,13 +165,41 @@ today is a **static** conjunction fixed at compile time; a runbook guard is a
 gains a runbook standing beside `ReviewStanding` — its precedent — and one refusal
 variant that names the outstanding steps.
 
-**Truth does not flow from user-customisable material into the closed vocabulary.**
-The runbook does not derive, satisfy, or feed the incumbent conditions. Once the
-override seam lands a project could delete a step and a built-in condition would
-derive true with no work done — the name still promising what it no longer
-delivers. There is also nothing to reconcile: `governing-context-recorded` and
+**Narrowing an open vocabulary into a closed one is a type error.** The runbook
+does not derive, satisfy, or feed the incumbent conditions, and the reason is
+structural rather than a matter of trust. Runbook steps are an **open** set: an
+author adds one and nothing determines which of the closed ten `Condition`s it
+discharges. A mapping from an open set into a closed one cannot be total or
+stable, so the coercion is malformed whoever authored the source. The override
+seam makes the instability concrete — a project deletes a step and a built-in
+condition derives true with no work done, the name still promising what it no
+longer delivers — but that is the type error showing itself, not a second
+argument.
+
+> **Restated 2026-08-02** (owner's original formulation, recovered). This section
+> and the matching `consequences` entry previously read *"truth does not flow from
+> user-customisable material into the closed vocabulary"*. That renders a type
+> rule as a **provenance** rule, and so implies that sufficiently trustworthy
+> material could flow. It cannot; trust is beside the point. The restatement
+> changes no decision — the rejected escape hatches (mixed step ownership, a
+> decorative OR-fallback) stay rejected, each being the same ill-typed narrowing
+> in disguise.
+>
+> **Scope**, because the earlier wording has already misled a reader into treating
+> this as a bar on improving the conditions at all: it constrains only where a
+> condition's **satisfaction** may be sourced. Whether a `Condition` may
+> **describe itself** is untouched — enriching a closed vocabulary with its own
+> contract narrows nothing and crosses no boundary. The clause above is the
+> precedent to read, not the prohibition: `RunbookStanding` sits *beside*
+> `ReviewStanding` guarding its own edge, so the open vocabulary stays open, the
+> closed stays closed, and no mapping is attempted between them.
+
+There is also nothing to reconcile: `governing-context-recorded` and
 `initial-concerns-recorded` are stubs, specified in nine words, named in no
-shipped guidance, and bound to an arbitrary draft section's fingerprint.
+shipped guidance, and bound to an arbitrary draft section's fingerprint. That
+they are stubs has a separate cause — nobody specified them — and is **not** a
+consequence of this rule. This rule explains only why one candidate repair was
+refused.
 
 **No subprocess runs inside `apply`'s admit→persist span.** `apply` reads one
 snapshot, and the only pre-write recheck covers the authored watermark before the
