@@ -180,9 +180,7 @@ pipeline_setup() {
   accepted=$(git -C "${run}/canonical" symbolic-ref HEAD)
   base=$(git -C "${run}/canonical" rev-parse --verify "${accepted}")
 
-  git clone --no-hardlinks --quiet -- "${run}/canonical" "${run}/quarantine"
-  quiesce_clone "${run}/quarantine"
-  git -C "${run}/quarantine" config fetch.fsckObjects true
+  pipeline_quarantine "${run}/canonical" "${run}/quarantine"
 
   # The declaration, pinned control-plane-side as a SIBLING of canonical. This
   # is "read from B" in F-5's sense — the content the control plane itself
@@ -210,6 +208,38 @@ pipeline_setup() {
   pipeline_snapshot "${run}"
 
   PIPELINE_RUN="${run}"
+}
+
+# pipeline_quarantine <source> <dest> — WHAT A QUARANTINE IS, in one place.
+#
+# A clone of canonical, quiesced, with `fetch.fsckObjects` on: the fsck setting
+# is the half that is easy to leave out, and a quarantine without it ingests
+# unchecked objects while still looking like a quarantine. Extracted because
+# P-C3's H14 builds a second one to re-harvest into (I2), and a hand-rolled copy
+# there would be a quarantine that differs from the one every stage ran against
+# — the difference being invisible until it mattered.
+pipeline_quarantine() {
+  local source=$1 dest=$2
+  git clone --no-hardlinks --quiet -- "${source}" "${dest}"
+  quiesce_clone "${dest}"
+  git -C "${dest}" config fetch.fsckObjects true
+}
+
+# pipeline_harvester <fetch|bundle> — the mechanism → harvester mapping, named
+# once. `pipeline_run` and H14's second harvest both need it, and two copies
+# would be two places for the matrix's mechanism column to stop meaning the
+# same thing in each.
+#
+# PUBLISHES `PIPELINE_HARVESTER` rather than printing it, for the reason
+# `cell_pipeline_leg` publishes `CELL_OBSERVED` (F-P01-1): a caller forced into
+# `$( … )` to read the path would swallow the `rig_die` below in the
+# substitution's subshell and go on to invoke an empty command.
+pipeline_harvester() {
+  case "$1" in
+    fetch) PIPELINE_HARVESTER="${HARVEST_FETCH}" ;;
+    bundle) PIPELINE_HARVESTER="${HARVEST_BUNDLE}" ;;
+    *) rig_die "unknown harvest mechanism: $1 (fetch|bundle)" ;;
+  esac
 }
 
 # The pre-run canonical snapshot — what `assert_outcome` compares against.
@@ -283,11 +313,8 @@ pipeline_run() {
 
   # ── stage 1: harvest ──────────────────────────────────────────────────────
   local harvester
-  case "${mechanism}" in
-    fetch) harvester="${HARVEST_FETCH}" ;;
-    bundle) harvester="${HARVEST_BUNDLE}" ;;
-    *) rig_die "unknown harvest mechanism: ${mechanism} (fetch|bundle)" ;;
-  esac
+  pipeline_harvester "${mechanism}"
+  harvester="${PIPELINE_HARVESTER}"
 
   # ONE SIGNATURE for both mechanisms (EX-1), so this call does not branch.
   # The worker capsule's own bound, folded in trusted-side (I5, D-P02-4).
