@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 11 · 0eae25e9
+fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 13 · f6a51758
 
 ### Produced
 
@@ -20,6 +20,12 @@ fresh-as-of: 2026-08-02 · stage:design/exploring run dr-019fc13a rev 11 · 0eae
 - **IMP-383** — the deferred half of `inq-5`: a self-identifying JSON head for
   non-list report verbs, retrofitted to `graph`, with the SPEC-013 amendment
   that would state the convention. Spawned by DEC-112
+- **DEC-113** — the report states adapter provenance, and the adapter table
+  denies unknown fields; disposes `inq-8`. A partial guard, labelled as one
+- **IMP-384** — `deny_unknown_fields` for `doctrine.toml` generally. Not an
+  attribute: `[priority]` and `[reservation]` are read out of band and are not
+  fields of `DoctrineToml`, so the central struct would reject doctrine's own
+  config today. Spawned by DEC-113
 - **Pre-design research round** — `research/research.md` + `research/raw/` (five
   threads). **Runtime tier, gitignored, disposable.** Its durable residue is
   DEC-111 and the `## Design surface triage` section below; do not treat the
@@ -49,10 +55,12 @@ rather than from a copy here. What the run cannot represent, and so lives here:
 - `inq-1`, `inq-2`, `inq-3` are deferred **to a `/spec-coverage-assessment`
   pass**, not parked indefinitely. A lifecycle move carries no reason field, so
   this note is the only record of where they route. See `## Routing` below.
-- `inq-6`…`inq-9` are the open engineering questions; the triage section states
-  each with the evidence that bears on it. `inq-5` is disposed by DEC-112 — its
-  triage entry (Q-b) is settled, and Q-b's second half, the golden SPEC-013
-  `REQ-204` bills the verb, is an obligation the plan must carry.
+- `inq-6`, `inq-7` and `inq-9` are the open engineering questions; the triage
+  section states each with the evidence that bears on it. `inq-5` is disposed by
+  DEC-112 (triage entry Q-b) and `inq-8` by DEC-113 (Q-e).
+- Obligations the plan must carry, from those dispositions: the black-box golden
+  SPEC-013 `REQ-204` bills the verb (DEC-112), and the provenance block as part
+  of the report struct rather than a wrapper (DEC-113).
 
 ## Design surface triage
 <!-- explore.triage, design run dr-019fc13a rev 5. Evidence: research/research.md -->
