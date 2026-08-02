@@ -1,0 +1,76 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 102
+slug = "craft-is-overridable-invariants-stay-sealed"
+title = "Craft is overridable, invariants stay sealed"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-31"
+updated = "2026-07-31"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+`hymns/stage/design.md` and the four `design-prompts/*` fragments are the ONLY \
+`customization = "fixed"` entries in publication/manifest.toml, and \
+`stage/design` sits in [hymns].seal. The open question was whether all of them \
+should become customizable, on the principle that fragments are hymns and \
+hymns are ultimately end-user overridable."""
+choice       = """
+Do not reverse them. Invariants stay sealed; craft ships overridable. An asset \
+is sealed when a project override would make its content FALSE rather than \
+merely different, and customizable when a project could legitimately disagree. \
+The five existing fixed entries state what the engine enforces, so they stay \
+fixed; the craft moving out of skill prose into obligation runbooks (DEC-101) \
+belongs on the overridable side of that line. This record settles WHERE THE LINE \
+FALLS, not when the seam is delivered: per the owner's ruling (b) the override \
+mechanism is identified and DEFERRED, so the v1 runbook ships embedded like every \
+other design asset and overriding still requires a rebuild."""
+alternatives = [
+  "reverse all five entries to customizable and unseal stage/design — the wholesale reading of 'fragments are hymns'; rejected because an override of an engine invariant is false, not different",
+  "keep everything fixed including the new runbooks — leaves the craft unoverridable and leaves the SKILL.md:98 contradiction unfixable in place",
+]
+rationale    = """
+The live proof that craft is taste rather than doctrine is in this repository: \
+plugins/doctrine/skills/design/SKILL.md:98 says "prefer multiple choice \
+questions when possible" and this project's own CLAUDE.md says the opposite for \
+design loops. A project that disagrees today has to disagree in a different \
+file. The stage hymn, by contrast, restates what the code does — "every \
+mutation compare-and-swaps", "adopt_authored is the only lawful crossing", "a \
+payload cannot declare itself accepted" — and a project cannot override those \
+by editing text. This is DEC-101's authoring rule applied to the asset policy \
+axis, which is why one line answers both."""
+consequences = [
+  "no manifest entry is reversed; the five fixed entries and the [hymns].seal membership stand",
+  "the override seam is IDENTIFIED AND DEFERRED, not delivered (owner's ruling (b), 2026-07-31). `customization` is parsed and displayed but has NO execution consumer outside the library view, and design assets resolve straight from the embed — so declaring a runbook customizable would make it no more overridable than anything else. The v1 runbook ships embedded",
+  "the reasoning survives intact and only the delivery claim is downgraded: which assets are sealed and which are craft is unaffected, and the craft has genuinely moved out of skill prose into data",
+  "the SKILL.md:98 / CLAUDE.md contradiction is therefore fixed FOR THIS REPO and not yet for anyone else — overriding still requires a rebuild",
+  "DEC-077 is narrowed, not superseded — it DEFERRED user-override semantics rather than forbidding them. This record narrows the LINE (what may ever be overridden), not the delivery",
+  "ADR-019 does not move: it mandates only that every projected asset declare a customization, and names no hymn",
+  "a backlog item carries the deferred resolution work — project-path lookup, framework fallback, precedence, fingerprint scope. A deferral nobody recorded is indistinguishable from an oversight",
+]
+decided_by   = "owner"
+decided_on   = "2026-07-31"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  ".doctrine/slice/233/sketches/runbook-runner.md §8 — the fork and its dissolution",
+  "publication/manifest.toml — the four design-prompts entries and hymns/stage/design.md at :250-257, the only five fixed entries",
+  "plugins/doctrine/skills/design/SKILL.md:98 against this project's CLAUDE.md — craft is taste, demonstrated in the repo",
+  "install/hymns/stage/design.md — invariants restating engine behaviour, unoverridable in substance",
+]
+contradicts = [
+  "src/commands/library.rs:111 — the ONLY production consumer of customization() outside publication.rs, and it merely displays the value. src/commands/design.rs:1633-1638 resolves fragments through install::asset_text, i.e. the embed. An external review established that declaring an asset customizable delivers no override, which is why the seam is deferred rather than claimed",
+]
+notes       = [
+  "the open fork asked 'is design craft doctrine or taste?'. The answer is that the question was mis-shaped: invariants are doctrine, craft is taste, and the assets already split along that line",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-233"

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 425
+slug = "expose-provenance-and-unresolved-structure-rather-than-certifying-coherence"
+title = "Expose provenance and unresolved structure rather than certifying coherence"
+status = "pending"
+kind = "quality"
+
+description = "Map surfaces report provenance, material restructuring, and unresolved branches, and do not present tidiness as evidence that the reasoning is sound."
+tags = []
+acceptance_criteria = [
+  "Material restructuring of the map is surfaced rather than absorbed silently.",
+  "Unresolved and blocked branches remain visible in the ordinary view.",
+  "No surface asserts or implies that the decomposition is complete or correct.",
+]

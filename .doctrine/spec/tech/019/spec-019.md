@@ -296,6 +296,14 @@ FR-006 is IMP-006-gated and lands after it. Both cited above, neither restated. 
 surface is pinned the same way every kind's is: the SPEC-013 parse-conformance matrix
 plus per-verb black-box goldens.
 
+**Provenance of capture.** `knowledge new` is the interactive capture path, not the
+only legitimate one. A **managed design run** (PRD-019, mechanism owned by SPEC-029)
+may create `DEC`/`QUE`/`ASM` records through its own reserve-then-journal protocol
+rather than through an interactive invocation. Nothing about this family changes as a
+result: identity, kind discrimination, the per-kind lifecycle vocabulary, the typed
+`[facet]`, and the relation seam apply identically whatever created the record. This
+spec acknowledges the provenance and owns none of that protocol.
+
 ## Concerns
 
 - **Kind-relative status validation.** The transition vocabulary is selected by

@@ -90,3 +90,35 @@ fn cli_subcommand_help_depth2() {
     assert!(ok, "memory sync --help must exit 0");
     assert!(out.contains('│'), "cozy-table separator present at depth 2");
 }
+
+// SL-233 PHASE-04 EX-5 — `design show` is a strict SUBSET surface, and the
+// polarity is guarded by the help text itself rather than by prose asserting it.
+//
+// Two legs, because either alone is evadable. (a) `design` exposes no
+// `inspect`-style verb, so nothing design-specific can invert the established
+// metadata-only meaning of `inspect` by claiming the name. (b) `show`'s own help
+// names `--full` as THE widening, which is what makes the default the narrow
+// end: a surface that had to be widened by a different verb would have made the
+// subset relation a convention instead of a flag.
+#[test]
+fn design_show_is_the_narrow_surface_and_names_its_own_widening() {
+    let (ok, _code, family) = run(&["design", "--help"]);
+    assert!(ok, "design --help must exit 0");
+    assert!(family.contains("show"), "the family lists `show`: {family}");
+    assert!(
+        !family.contains("inspect"),
+        "design exposes no `inspect`-style verb, so `show` cannot be the wider \
+         of a pair: {family}"
+    );
+
+    let (ok, _code, show) = run(&["design", "show", "--help"]);
+    assert!(ok, "design show --help must exit 0");
+    assert!(
+        show.contains("--full"),
+        "`show`'s help names its own widening: {show}"
+    );
+    assert!(
+        show.to_lowercase().contains("widen"),
+        "and says which direction it goes, so the default is the narrow end: {show}"
+    );
+}

@@ -1,0 +1,33 @@
+# The runbook guarding the edge out of `inquiring` (SL-233 PHASE-08, DEC-101).
+#
+# THE AUTHORING RULE, the step-id-is-API contract and the digest-staleness rule
+# are stated once, in `exploring.toml`, and govern this file unchanged. The one
+# thing worth repeating here is the consequence: editing `text` restates the
+# obligation and makes every discharge of it stale, deliberately.
+#
+# WHY THESE TWO AND NOTHING ELSE (DEC-104, RV-325 F-5). The craft of asking
+# questions — one question per message, options with tradeoffs, a preference for
+# multiple choice — is a LENS with no truthful completion point, so it lives in
+# the sibling `inquiry.md` fragment and is delivered every turn of the stage.
+# What is left here is the residue that COMPLETES AT THIS BOUNDARY: two discrete
+# acts the run cannot honestly advance without. A file count is not a reason to
+# demote an act to a lens, and "capture everything important" would be a lens
+# wearing a step's costume.
+#
+# Neither step ships a verifier, and neither could: both are semantic. Under the
+# codicil that is a fact about EVIDENCE, not about classification — a verifier
+# strengthens a discharge from `attested` to `verified`; its absence does not
+# make the obligation framing. Each earns the block on its own warrant, stated
+# in `sketches/thin-adapter.md` (a.3).
+
+mode = "sequence"
+
+[[step]]
+id       = "inquire.knowledge"
+text     = "Record, via /knowledge, what this inquiry settled that outlives the session. Complete when every answer this inquiry accepted that outlives the session carries a settled knowledge record shaping this slice."
+required = true
+
+[[step]]
+id       = "inquire.scope"
+text     = "Update or explicitly confirm the slice scope against the decisions this inquiry accepted. Complete when the scope asserts nothing those decisions contradict and omits nothing they add to it."
+required = true

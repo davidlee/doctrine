@@ -1,0 +1,41 @@
+# The runbook guarding the edge out of `reviewing` (SL-233 PHASE-08, DEC-101).
+#
+# THE AUTHORING RULE, the step-id-is-API contract and the digest-staleness rule
+# are stated once, in `exploring.toml`, and govern this file unchanged.
+#
+# THE ATTACK SURFACES ARE NOT HERE. Attacking vague sections, hidden
+# assumptions, weak verification and missing code-impact detail is a lens set
+# with no truthful completion point, and a lens delivered at the exit arrives
+# after the review is over. It lives in the sibling `reviewing.md` fragment,
+# delivered every reviewing turn. What is here is what COMPLETES AT THIS
+# BOUNDARY.
+#
+# TWO OF THE THREE FIRE FOR A SECOND TIME. Scope reconciliation fires on edge 2
+# and again here; selector recording fires on edge 3 and again here. That is
+# DEC-103, not bookkeeping error: an obligation that bites at several moments is
+# delivered at every one of them, and the review is precisely where a decision
+# may have moved the scope or the touch-set.
+#
+# THE ORDER IS ARBITRARY AND IS CONCEDED AS SUCH. Nothing makes scope
+# reconciliation precede selector recording, and `sequence` refuses any discharge
+# that does not name the step at the cursor. `set` mode — a coverage set with no
+# order — is deferred to IMP-373 because its RENDER is unsketched, not because
+# these steps do not want it. Imposed order on three discrete acts is fake
+# determinism, judged cheap, not argued away.
+
+mode = "sequence"
+
+[[step]]
+id       = "review.scope"
+text     = "Update or explicitly confirm the slice scope against the decisions this review accepted. Complete when the scope asserts nothing those decisions contradict and omits nothing they add to it."
+required = true
+
+[[step]]
+id       = "review.selectors"
+text     = "Record the design-target selectors the code-impact section now commits to, as the review may have moved them. Complete when the recorded selector set matches that section's current commitments."
+required = true
+
+[[step]]
+id       = "review.passes"
+text     = "Record, in the slice notes, what a further review pass would probe — or why none is needed. Complete when that statement is in the notes and was written after the last pass."
+required = true

@@ -1,0 +1,92 @@
+id    = 321
+slug  = "phase-03-landed-delta-copied-literals-and-constructor-bypass"
+title = "PHASE-03 landed delta — copied literals and constructor bypass"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "orchestrator"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-233"
+phase = "PHASE-03"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected DESIGN_* admission bounds on every rendered identity/label; observed unvalidated persisted PayloadTerm strings"
+detail = "src/design_run/change_log.rs:245-285 derives Deserialize for PayloadTerm, exposes key/kind/value crate-wide, and its token/label constructors accept arbitrary strings without DESIGN_ID_BYTES or DESIGN_STAGE_LABEL_BYTES validation. src/design_run/snapshot.rs:308-327 deserializes the whole snapshot and returns it after checking only schema/version. src/design_run/render/mod.rs:156-160 then renders Token and Label whole. A hand-edited/corrupt design.toml can therefore claim an arbitrarily long value is token/label; design show accepts it and emits beyond the 160-byte payload premise instead of refusing at admission. The same loose constructor means a future provenance/lifecycle/disposition spelling can exceed 16 without a refusal. rendered_payload_fits_its_cap_for_every_event_kind misses this because it manufactures already-capped synthetic strings rather than exercising wire admission or the real closed-vocabulary values. Instance-level layer-rule failure: the rule already requires refusal at admission; the implementation does not enforce it."
+disposition = "accepted — carried to PHASE-04"
+response = """
+Valid, and correctly reasoned from EX-16(d)'s own rationale generalised from ids to payload terms: per-path checks are insufficient because it is the unenumerated route that carries the defect. Verified independently: PayloadTerm::token/label take `impl Into<String>` with no admission check, fields are pub(crate), Deserialize is derived, and render_value emits Token and Label whole, so nothing structurally prevents an over-bound identity reaching the rendered payload.
+
+SEVERITY REDUCED to major, and the reason matters for what the fix must do. Every construction site was checked and all pass .as_str() from already-validated types; the one raw-string caller (PayloadKey::Record, run.rs:581) IS explicitly bounded at run.rs:539 against DESIGN_ID_BYTES. So there is no live breach — the finding is that the bound is enforced BY CONVENTION AT EACH CALL SITE rather than by construction, plus a deserialization route that re-enters without re-validating. That is a latent gap, not a current defect, which is what separates it from a blocker.
+
+CARRIED, not fixed here. PHASE-03's boundary is recorded (7c4eb95b..4e2ad8e6) and re-recording it wider would pull the funnel commit inside the range — the conformance-noise hazard PHASE-02 already hit. PHASE-04 owns the budgeted projection that load-bears the 160-byte payload premise this finding is about, and it starts from the current tip, so the fix lands inside its boundary naturally. Appended to PHASE-04 as a criterion so it is a mandate, not a memory."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected row bound derived from the encoder and named sources; observed fictional framing plus copied 264/from/to/reason literals"
+detail = 'src/design_run/render/mod.rs:78 sets ROW_FRAMING_BYTES = 10 while src/design_run/render/change_row.rs:45-53 emits five fields with join(" "), i.e. exactly four separator bytes and no other framing. The claimed worst-case rendered row is therefore 258 bytes under the current encoder, not 264; the extra six bytes are asserted headroom, not derived from the encoding. src/design_run/render/mod.rs:82-88 also retypes "from=", "to=", and "reason=" instead of deriving their lengths from PayloadKey::as_str at src/design_run/change_log.rs:199-216, and line 105 pins the result to a second bare 264 despite WIDEST_ROW_BYTES already naming the value. This is both STD-001 copied-literal drift and an instance-level provenance-rule failure. It makes the mandated 264-byte row and dependent 15,576-byte saturated table assertions rather than measurements: changing a payload-key spelling or the actual framing can leave the arithmetic stale, and the present arithmetic already does not describe the emitted row.'
+disposition = "accepted in part — literals carried to PHASE-04; framing claim rejected"
+response = """
+Split, because the two claims do not share a severity and accepting both would record a defect where none exists.
+
+ACCEPTED — the copied literals, squarely in this review's remit. render/mod.rs:82-88 retypes "from=", "to=" and "reason=" instead of deriving their lengths from PayloadKey::as_str (change_log.rs:199-216), and :105 pins a second bare 264 when WIDEST_ROW_BYTES already names that value. Both are STD-001 copied-literal drift and both can go stale silently against a payload-key respelling. Carried to PHASE-04 with F-1 and F-3.
+
+REJECTED — the 'fictional framing' half. The arithmetic is right: render() joins five fields with " ", so the encoder emits four separator bytes against ROW_FRAMING_BYTES = 10. But the constant's own doc comment at render/mod.rs:76-78 discloses exactly this — 'four separating spaces, inside the 10 B the sketch's derivation reserves.' It is a DISCLOSED CONSERVATIVE RESERVE, not an undischarged assertion, and the reserve runs in the safe direction: the emitted row is smaller than the bound, so the containment claim (every row fits) holds a fortiori. The provenance rule requires that every bound state what derives it; this one states its derivation and names the sketch as its source. A conservative reserve that is documented as such is not the defect class the rule targets — that class is an underivable number presented as measured, which is what got CHANGE_REASON_INPUT_BYTES = 2048 deleted.
+
+The residual worth keeping is narrower than the finding claims: WIDEST_ROW_BYTES describes a reserved budget, not the emitted row, and nothing states that distinction where a reader meets the constant. That is a comment-clarity point, carried with the literals rather than as a separate obligation.
+
+Raiser retains the right to contest if the disclosure argument is not persuasive."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected constructor-bypass test to reject every alternate construction route; observed a one-spelling source count"
+detail = 'tests/e2e_design_state.rs:1029-1068 counts only the exact text "DesignId {" in ids.rs and merely checks that the file contains DESIGN_ID_BYTES somewhere. An idiomatic bypass `fn unchecked(raw: String) -> Self { Self { raw } }` adds a second raw constructor while the count stays one; deriving Default or replacing serde try_from with a direct/manual Deserialize route also passes without adding that spelling. The current implementation is externally verified clean — private raw field, one actual DesignId literal in parse, serde -> TryFrom<String> -> parse, no Default or inbound From — but this test does not establish the invariant it claims and will remain green for multiple explicit EX-16(d) bypass classes. This is test-theatre, not a current constructor bypass.'
+disposition = "fixed — VA-7(3) record leg discharged; the demonstration leg re-observed, not transcribed"
+response = """
+CONTEST ACCEPTED. The raiser is right, and it is right about the part that is easy to wave through: `VA-7(3)` has two legs — the test must be DEMONSTRATED to fail under `#[derive(Default)]`, and the failing output must be RECORDED. The fix discharged the first leg and the sheet asserted the demonstration without carrying its output, so a reader could not check the claim. That is F-3's own defect shape — claiming more enforcement than is evidenced — one level up, in the record of F-3's remedy. Back-dating the output would have repeated it a third time.
+
+WHAT WAS DONE, and it was re-run rather than transcribed. The demonstration was performed from scratch at `dispatch/233` HEAD `9330efc1`, not copied from the worker's report and not from the raiser's own run:
+
+- baseline `cargo test --test e2e_design_state no_id_is_constructed_outside_the_validating_constructor -- --exact` — exit 0, `1 passed; 0 failed; 89 filtered out`;
+- `Default` added to `DesignId`'s derive list (`src/design_run/ids.rs:91`) — same command, exit 101:
+
+    thread 'no_id_is_constructed_outside_the_validating_constructor' (135622) panicked at tests/e2e_design_state.rs:1297:5:
+    `DesignId: Default` would mint an unvalidated empty id with no field access and no call to `parse`
+
+- derive restored — `git diff --exit-code -- src/design_run/ids.rs` exit 0, and the test green again at exit 0. No production code moved.
+
+THE PANIC SITE IS THE POINT. `:1297` is `implements!(DesignId, Default)`, a type-system query, not a source-text scan. The withdrawn test counted the literal `DesignId {`, which `#[derive(Default)]` never adds — so the old test COULD NOT have gone red here, and this output is the difference between the two tests rather than decoration on the same one. That is exactly the discrimination `VA-7(3)`'s demonstrated-to-fail leg exists to force, and it is why a demonstration against only the `DesignId {` spelling would not have discharged it.
+
+RECORDED IN TWO PLACES, DELIBERATELY. The output is now in the PHASE-04 sheet under `### VA-7(3) — the mandated failing output, recorded late and labelled as such`, which satisfies the criterion as written, and it is in this response, which is authored and committed. The sheet is runtime state: gitignored and disposable. A criterion whose evidence lives only there can be honestly discharged and still leave nothing an auditor can check, and no convention currently names an authored sink for that evidence. Filed as IMP-371 (with a candidate that `/harvest` promote sheet Findings evidence at phase close, since that is the only shape covering evidence with no RV finding attached). The subsection is explicitly dated 2026-07-30 and marked as recorded after PHASE-04 closed — the record says what it is.
+
+NOTHING ELSE IN F-3's REMEDY MOVED. The fix the raiser already verified in behaviour is untouched: no code change, no test change, no second grep. The disposition is the record leg only.
+
+DISPOSITION: fixed — `VA-7(3)`'s record leg discharged, its demonstration leg unchanged and independently re-observed. Returning to `await=raiser`."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected STD-001 single-source fixture paths and marker grammar; observed black-box copies of production literals"
+detail = 'tests/e2e_design_state.rs:66 and :89 hand-type ".doctrine/slice" although crate::kinds::SLICE_DIR names it; :91 hand-types "design.md" although src/commands/design.rs:61 defines DESIGN_DOC; :258 and :307 hand-build the full `<!-- doctrine:section sec-1 -->` marker although src/commands/design.rs:63-65 defines MARKER_OPEN/MARKER_CLOSE. These additions are inside the reviewed delta and STD-001 explicitly covers tests. The binary-only integration-test constraint explains why private command constants are inaccessible but does not make copied protocol literals single-sourced. A path or marker grammar change now has independent fixture copies to reconcile. Instance-level STD-001 failure; it does not require widening the layer/provenance pair.'
+disposition = "accepted — carried to PHASE-04, partial by construction"
+response = """
+Valid. tests/e2e_design_state.rs:66 and :89 hand-type '.doctrine/slice' where crate::kinds::SLICE_DIR names it; :91 hand-types 'design.md' where DESIGN_DOC does; :258 and :307 hand-build the '<!-- doctrine:section sec-1 -->' marker where MARKER_OPEN/MARKER_CLOSE do. These lines are inside the reviewed delta.
+
+The raiser's own judgement call is answered explicitly rather than left implicit: black-box protocol fixtures are NOT ruled an exception to STD-001. The standard covers tests, and the concrete cost is the one named — a path or marker-grammar change now has independent fixture copies to reconcile, and the copies are exactly where a drift would go unnoticed because the suite would still pass against the stale spelling.
+
+SCOPE OF THE FIX IS PARTIAL BY CONSTRUCTION, and that limit is recorded so PHASE-04 is not held to an unreachable bar. The crate is binary-only (EX-17's finding), so an integration test cannot name DESIGN_DOC or MARKER_OPEN/MARKER_CLOSE — they are private to src/commands/design.rs and there is no lib target to import them through. crate::kinds::SLICE_DIR is reachable and should be used. For the two genuinely unreachable groups the obligation is single-sourcing WITHIN the test support module (one fixture helper owning the marker grammar and the doc name), so the suite holds one copy instead of five — not zero copies, which the crate layout forbids. Claiming zero here would be the same over-claim F-3 is about.
+
+Carried to PHASE-04 with F-1, F-2's literal half and F-3."""
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

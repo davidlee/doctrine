@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 426
+slug = "keep-provisional-process-state-and-accepted-truth-in-separate-stores"
+title = "Keep provisional process state and accepted truth in separate stores"
+status = "pending"
+kind = "quality"
+
+description = "Provisional inquiry state, accepted epistemic truth, raw adherence signals, and authored design prose retain separate lifecycles and are not folded into one store."
+tags = []
+acceptance_criteria = [
+  "Discarding provisional run state does not remove accepted records.",
+  "Accepted records do not carry traversal or delivery state.",
+  "Adherence signals are not read as workflow state.",
+]

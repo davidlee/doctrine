@@ -446,7 +446,12 @@ pub(crate) enum SliceCommand {
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
     match cmd {
         SliceCommand::New { title, slug, path } => run_new(path, title, slug),
-        SliceCommand::Design { id, path } => run_design(path, id),
+        SliceCommand::Design { .. } => {
+            anyhow::bail!(
+                "SliceCommand::Design is handled by the residual cli.rs dispatch \
+                 (SL-233 PHASE-14 EX-4: the shim forwards to `design materialise`)"
+            )
+        }
         SliceCommand::Plan { id, path } => run_plan(path, id),
         SliceCommand::Phases { id, prune, path } => run_phases(path, id, prune),
         SliceCommand::Notes { id, path } => run_notes(path, id),
@@ -549,6 +554,21 @@ const CLOSE_DRIFT_RECIPE_MEMORY: &str = "mem.pattern.doctrine.close-drift-discha
 /// The top-level reserved slice kind: toml + md + slug symlink. The identity
 /// value lives in the leaf `kinds` module (SL-204 PHASE-02).
 pub(crate) use crate::kinds::SLICE_KIND;
+
+/// The one spelling of the `doctrine slice design` deprecation notice (STD-001;
+/// SL-233 PHASE-14 EX-4).
+///
+/// Emitted on EVERY invocation of the shim, not once per process: a latch would
+/// let the second and later calls of a session pass silently, and a warning a
+/// caller can outrun is not a warning. It names both destinations because the
+/// shim has two arms and the caller does not know which one they are in — new
+/// work goes to `design start`, an existing document to `design start
+/// --from-design`, which adopts it as the run's baseline rather than clobbering
+/// it. The legacy scaffold and the managed writer are mutually exclusive
+/// (DEC-075), so this text is the migration, not an apology for it.
+pub(crate) const DESIGN_DEPRECATION_NOTICE: &str = "warning: `doctrine slice design` is deprecated. \
+     Start a managed design run with `doctrine design start <SLICE>`; to bring an \
+     existing design.md into a run, use `doctrine design start <SLICE> --from-design`.";
 
 /// The non-reserved design-doc sibling: one `design.md` under an existing slice.
 const DESIGN_KIND: Kind = Kind {
@@ -730,9 +750,24 @@ pub(crate) fn run_new(
     Ok(())
 }
 
-/// `doctrine slice design <id>` — scaffold `design.md` into an existing slice.
-pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
-    let root = crate::root::find(path, &crate::root::default_markers())?;
+/// The NO-RUN arm of the deprecated `doctrine slice design <id>` shim
+/// (SL-233 PHASE-14, EX-4).
+///
+/// It keeps the legacy scaffold-only contract: create `design.md` from the
+/// template only when the slice has none, and otherwise retain the no-clobber
+/// refusal. It **never creates or reconstructs runtime state** — the legacy
+/// fallback and the managed writer are mutually exclusive rather than parallel
+/// writers (DEC-075), so a document scaffolded here is adopted into a run by
+/// `doctrine design start --from-design`, not by this command growing a second
+/// way to reach a run.
+///
+/// The arm stays here because the scaffold it writes is a slice-shaped authored
+/// entity (`DESIGN_KIND` over `design_scaffold`, both this module's own). Its
+/// caller — the arm selection and the live-run forward — lives in
+/// `commands::design` instead, beside the `materialise` it must forward
+/// *through*: `commands → slice` is the established direction (ADR-001), and
+/// calling the other way would close a command-tier cycle.
+pub(crate) fn scaffold_design_doc(root: &Path, id: u32) -> anyhow::Result<()> {
     let slice_root = root.join(SLICE_DIR);
     // The design doc inherits its parent's title (the only context its template
     // needs); reading it confirms the parent exists before we materialise.
@@ -742,7 +777,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         &DESIGN_KIND,
         design_scaffold,
         &LocalFs,
-        &root,
+        root,
         &MaterialiseRequest::InExisting { id },
         &Inputs {
             slug: "",

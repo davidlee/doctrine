@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 437
+slug = "hold-named-projection-limits-against-a-large-run"
+title = "Hold named projection limits against a large run"
+status = "pending"
+kind = "quality"
+
+description = "Named limits bound the ordinary projection's frontier, change summary, blockers, and declaration detail, and hold against a run large enough to exceed each of them."
+tags = []
+acceptance_criteria = [
+  "Limits are named constants in one place rather than literals at use sites.",
+  "The bounding fixture exceeds every limit before projection.",
+  "Assertions compare against the named constants rather than against observed output.",
+]

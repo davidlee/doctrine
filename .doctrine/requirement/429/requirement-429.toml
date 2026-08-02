@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 429
+slug = "compare-and-swap-every-mutation-against-a-monotonic-revision"
+title = "Compare-and-swap every mutation against a monotonic revision"
+status = "pending"
+kind = "functional"
+
+description = "Each mutation asserts the revision the caller believes current; a mutation from a stale writer is refused with a conflict report rather than merged."
+tags = []
+acceptance_criteria = [
+  "The run's revision increases monotonically.",
+  "A submission naming a superseded revision is refused, and the refusal reports the conflict.",
+  "A refused mutation leaves persisted state byte-identical.",
+]

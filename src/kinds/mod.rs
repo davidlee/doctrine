@@ -124,30 +124,21 @@ pub(crate) struct Kind {
 // for a root re-export the leaf const; the rest are leaf-private.
 // ---------------------------------------------------------------------------
 
-pub(crate) const SLICE_DIR: &str = ".doctrine/slice";
-pub(crate) const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";
-pub(crate) const REV_DIR: &str = ".doctrine/revision";
-pub(crate) const REC_DIR: &str = ".doctrine/rec";
-pub(crate) const REVIEW_DIR: &str = ".doctrine/review";
-pub(crate) const REQUIREMENT_DIR: &str = ".doctrine/requirement";
-pub(crate) const RFC_DIR: &str = ".doctrine/rfc";
-const ADR_DIR: &str = ".doctrine/adr";
-const POLICY_DIR: &str = ".doctrine/policy";
-const STANDARD_DIR: &str = ".doctrine/standard";
-const PRODUCT_SPEC_DIR: &str = ".doctrine/spec/product";
-const TECH_SPEC_DIR: &str = ".doctrine/spec/tech";
-const ASSUMPTION_DIR: &str = ".doctrine/knowledge/assumption";
-const DECISION_DIR: &str = ".doctrine/knowledge/decision";
-const QUESTION_DIR: &str = ".doctrine/knowledge/question";
-const CONSTRAINT_DIR: &str = ".doctrine/knowledge/constraint";
-const EVIDENCE_DIR: &str = ".doctrine/knowledge/evidence";
-const HYPOTHESIS_DIR: &str = ".doctrine/knowledge/hypothesis";
-const CONCEPT_DIR: &str = ".doctrine/knowledge/concept";
-const ISSUE_DIR: &str = ".doctrine/backlog/issue";
-const IMPROVEMENT_DIR: &str = ".doctrine/backlog/improvement";
-const CHORE_DIR: &str = ".doctrine/backlog/chore";
-const RISK_DIR: &str = ".doctrine/backlog/risk";
-const IDEA_DIR: &str = ".doctrine/backlog/idea";
+// The literals themselves live in the dependency-free [`dirs`] leaf so an
+// integration-test fixture can `#[path]`-include them instead of hand-typing a
+// second copy (SL-233 PHASE-04 / RV-321 F-4). Visibility is unchanged: the seven
+// roots an origin module re-exports stay `pub(crate)` here, and the rest stay
+// leaf-private through a non-`pub` `use`.
+mod dirs;
+
+use dirs::{
+    ADR_DIR, ASSUMPTION_DIR, CHORE_DIR, CONCEPT_DIR, CONSTRAINT_DIR, DECISION_DIR, EVIDENCE_DIR,
+    HYPOTHESIS_DIR, IDEA_DIR, IMPROVEMENT_DIR, ISSUE_DIR, POLICY_DIR, PRODUCT_SPEC_DIR,
+    QUESTION_DIR, RISK_DIR, STANDARD_DIR, TECH_SPEC_DIR,
+};
+pub(crate) use dirs::{
+    CONCEPT_MAP_DIR, REC_DIR, REQUIREMENT_DIR, REV_DIR, REVIEW_DIR, RFC_DIR, SLICE_DIR,
+};
 
 // ---------------------------------------------------------------------------
 // Per-kind identity descriptors — the leaf owns exactly one `Kind` value per

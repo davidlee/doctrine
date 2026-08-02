@@ -1,0 +1,63 @@
+# SL-233 PHASE-09 — the KNOWN-GOOD transcript fixture.
+#
+# A synthetic moderator record of a design run in which every evidence class
+# reached its top band. It is deterministic and it is not a real run: it exists so
+# the rubric's own machinery can be exercised before CHR-049 spends a live
+# human-moderated session against it.
+#
+# THE FIXTURE STATES NO SCORE. It records only what a moderator observed; the band
+# each class lands in is derived by `tests/e2e_design_evaluation.rs` from
+# `rubric.toml`. A fixture that declared its own result would make the ordering
+# test a restatement of the fixture, and the kit's negative control would be
+# theatre.
+
+schema    = 1
+id        = "known-good"
+treatment = "T-frag — every-turn 2b fragment delivery, as shipped by SL-233"
+
+# Every evidence key the moderator recorded as OBSERVED. Keys are namespaced by
+# evidence class; `rubric.toml` owns which combinations reach which band.
+evidence = [
+  # adopt
+  "adopt.fragment_receipted",
+  "adopt.content_reproduced",
+  "adopt.acted_on",
+  # adhere
+  "adhere.steps_discharged",
+  "adhere.conditions_met",
+  "adhere.sibling_contrast_recorded",
+  # refresh
+  "refresh.state_change_marked",
+  "refresh.reresolved",
+  "refresh.reresolved_before_acting",
+  # recover
+  "recover.boundary_recorded",
+  "recover.guidance_restored",
+  "recover.resumed_exactly",
+  # complete
+  "complete.run_locked",
+  "complete.materialised",
+  "complete.review_survived",
+]
+
+# The standing obligation, discharged. Every window carries `context_state`
+# positively — which is what makes S4 collectible over this run at all.
+[[window]]
+id            = "w1"
+edge          = "exploring -> inquiring"
+context_state = "continuous — no compaction, no summarisation, no restart"
+
+[[window]]
+id            = "w2"
+edge          = "inquiring -> drafting"
+context_state = "continuous"
+
+[[window]]
+id            = "w3"
+edge          = "drafting -> reviewing"
+context_state = "deliberate break and resume — induced by the protocol, recorded, and the recover class is scored across it"
+
+[[window]]
+id            = "w4"
+edge          = "reviewing -> locked"
+context_state = "continuous"

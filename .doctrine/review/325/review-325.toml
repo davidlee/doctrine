@@ -1,0 +1,770 @@
+id    = 325
+slug  = "thin-adapter-sketch-phase-08-en-2"
+title = "Thin adapter sketch (PHASE-08 EN-2)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-233"
+phase = "PHASE-08"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected an exhaustive single disposition; SKILL.md:187-188 is both moved and deleted, and the deletion drops repeat-review guidance"
+detail = "The incumbent says both that multiple review/feedback passes may be required and that approval must not be presumed (plugins/doctrine/skills/design/SKILL.md:187-188). The sketch moves the entire :162-191 block to the edge-4 runbook (.doctrine/slice/233/sketches/thin-adapter.md:167,335,469), but separately deletes A s6.a6, explicitly equated to :187-188, as supposedly covered by hymn :24 and Condition::UserAcceptanceAttested (.doctrine/slice/233/sketches/thin-adapter.md:223-225,241,337). The primary diagram repeats both dispositions: edge 4 takes SKILL.md:162-191 (.doctrine/slice/233/sketches/target-machine.d2:412) while D11 deletes A s6.a6 = :187-188 (:190-193; identity at :176). The cited sources only say 'You propose; the user accepts' (install/hymns/stage/design.md:22-24) and refuse terminal advance without acceptance; neither says another adversarial pass may be needed after feedback. Expected: account for :187-188 once and preserve or explicitly reject the repeat-review obligation. Observed: the disposition table double-counts the same lines and its deletion rationale proves only the no-presumed-approval half, so PHASE-08 has no unambiguous contract for whether repeat review becomes an edge-4 step or disappears."
+disposition = "fixed"
+response = "ACCEPTED, both halves, verified against source. (1) DOUBLE DISPOSITION confirmed: :187-188 sits inside :162-191, which thin-adapter.md:167, :335 and :469 all move wholesale to the edge-4 runbook, while the D11 triage separately deleted it as A s6.a6. That is the same defect as state 8's :26-28 — a range claimed twice in a table VA-4 requires to sum to the incumbent. A s6.a6 is no longer a triage row; :187-188 is now disposed exactly once, as a clause split inside the :162-191 move. Census drops from 2/1/6/1 over ten rows to 1/1/6/1 over nine. (2) HALF-COVERAGE confirmed and it is the more interesting half. SKILL.md:187-188 carries two obligations in one bullet. 'Do not presume approval' is genuinely doubly covered — hymn install/hymns/stage/design.md:24 plus Condition::UserAcceptanceAttested refusing the edge-4 advance — and that clause stays DELETED. 'Multiple passes of review and feedback may be required before acceptance' is covered by nothing. DEC-067's regress PERMITS iteration but a mechanism existing is not the instruction arriving, which is DEC-103's own rule turned back on this sketch's reasoning. It becomes a STEP ON EDGE 4, firing when an agent believes one pass sufficed: 'a single review pass is not evidence of sufficiency; say what a further pass would probe, or why none is needed.' The row had been labelled 'the strongest deletion in the set'. It was the weakest: covered twice on one half, zero times on the other, and that self-assessment is now corrected in place rather than removed. Severity blocker accepted without argument — for a design gate the disposition table IS the deliverable. Repaired in both artefacts: thin-adapter.md (a.2) census, triage table, a new clause-split subsection, and the (a.3) destination table; target-machine.d2 D11 delete bucket, the residue guards node, and the edge-4 runbook node. Diagram recompiles."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected DEC-103 to bound point-of-effect delivery; it mandates unbounded serial runbook accretion and D7 calls a 19-step gate cheap without evidence"
+detail = "DEC-103 requires every instruction to be delivered where it bites and every multi-hook obligation to be hung at every such moment (.doctrine/knowledge/decision/103/record-103.toml:14-18), but states no admission limit, merge rule, optionality rule, or cost threshold. The primary decision record applies that unbounded rule to edge 3 as 15 content-item steps (.doctrine/slice/233/sketches/target-machine.d2:414-420), while the total disposition adds :197, merged :198+:200-201, :199, :203, and :144-161 at that edge (.doctrine/slice/233/sketches/thin-adapter.md:359-366), i.e. at least 19 required obligations by the sketch's own '15 plus four' framing. This is not merely a large TOML file: the shipped mechanism admits one cursor step at a time (src/design_run/runbook.rs:193-205), renders only that step's text (:435-476), and the request carries exactly one discharge because batching two is forbidden (src/design_run/submission.rs:636-641). Thus edge 3 imposes at least 19 separately named serial mutation/attestation turns before advance. Yet D7 concedes these are coverage sets and asserts an imposed sequence on a 'short list costs almost nothing' without evidence (.doctrine/slice/233/sketches/thin-adapter.md:385-389), directly against DEC-101's retained rule that ordering a coverage set is fake determinism (.doctrine/knowledge/decision/101/record-101.toml:76) and the owning design's named R1 that protocol ceremony can exceed its value (.doctrine/slice/233/design.md:568-572; .doctrine/slice/233/slice-233.md:147-151). PHASE-09 only measures that risk after PHASE-08 implements this shape (.doctrine/slice/233/plan.toml:680-686); it does not supply the missing design bound at this EN-2 gate. Expected: DEC-103/D7 define a bounded admission or aggregation rule (or evidence that this concrete serial ritual is below a stated limit) before the ruling governs this and every later skill rewrite. Observed: timing alone automatically promotes obligations into required single-step gates with no stopping condition, relocating the incumbent attention failure into serial attestation ceremony rather than solving it."
+disposition = "accepted — remedy proposed, owner ratification required"
+response = "ACCEPTED. Every mechanical claim verified against source. Mode::Sequence is 'a cursor, one step at a time, no skipping' (src/design_run/runbook.rs:201-205); discharge on a submission is an Option, NOT a Vec, because 'a batch of two would need an order Batch explicitly refuses to carry (DEC-063)' (src/design_run/submission.rs:636-641). So nineteen obligations at edge 3 is nineteen serial CAS mutation turns before advance, not merely a long TOML file. The R1 citation lands too: 'protocol ceremony exceeds its value' is this slice's own named risk (design.md:568-572), and PHASE-09 EX-3 measures interaction cost 'on evidence rather than impression' while PHASE-09 EN-1 requires PHASE-08 complete — so the measurement is a post-mortem, not a bound. D7's 'costs almost nothing' was an assertion against a risk the slice had already named. Conceded without argument. THE DEFECT IS REAL AND THE DIAGNOSIS IS EXACT: DEC-103 governs WHEN an obligation is delivered and was silently read as also governing HOW MANY steps carry it. One step per obligation was never the requirement; it was smuggled in. PROPOSED REMEDY — an admission bound: obligations that share a MOMENT and a SUBJECT merge into one step whose text carries the coverage list. Delivery is preserved (the whole list arrives when it bites); ceremony becomes one discharge, not N. This dissolves the DEC-101 tension rather than trading against it — a coverage set expressed as ONE step carrying the set has no order to fake, so the fifteen content items stop being fifteen ordered steps, which is precisely what DEC-101 calls fake determinism. Consequence: set mode is not the missing mechanism it appeared to be, and IMP-373 stays deferred on merit rather than convenience. Edge 3 under the bound is ~6 steps: the content-item coverage set, :197, :198+:200-201, :199, :203, :144-161 — each a distinct subject, none a re-ordering of another. STATUS: the sketch and diagram C adopt the bound (thin-adapter.md new section (a.3.1); target-machine.d2 D13 block and the edge-3 runbook node). DEC-103 does NOT yet carry it — the clause amends an owner ruling and is recorded as PROPOSED pending ratification. I am not amending an accepted owner decision unilaterally to make a sketch consistent. If the owner declines the bound, edge 3 reverts to the nineteen-step shape and F-2 stands unresolved. Flagging that explicitly rather than closing over it."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "Expected a reproducible 2a/2b discriminator; observed hypothetical corroborability"
+detail = "thin-adapter.md:129-140 calls the split mechanical and sorts by whether a verifier could ever corroborate an obligation; thin-adapter.md:433-438 then infers corroborability from selector existence and later conformance. target-machine.d2:551-577 assigns knowledge capture, semantic scope reconciliation, repeat-pass judgement, and selector recording to 2a, while target-machine.d2:395-400 concedes that none ships a verifier. A trace existing does not mechanically corroborate semantic completeness, and could ever permits an imagined future verifier for almost any lens. The rule therefore cannot reproduce its own assignments. Define 2a by a present objective postcondition and ship its verifier, or define it candidly as a mandatory gate-blocked attestation and justify that ceremony."
+disposition = "fixed"
+response = """
+ACCEPTED IN FULL, and it is the sharpest finding of the review. The diagnosis is exact: 'could ever' admits an imagined future verifier for almost any lens, so the rule could not reproduce its own assignments. Verified: thin-adapter.md sorted by 'whether a verifier could ever corroborate them', DEC-104 carried the same words as its central rule in BOTH tiers (record-104.toml facet and the .md body's 'The discriminator, in one line'), and target-machine.d2 conceded in the same breath that none of the four surviving 2a steps ships a verifier. DEC-104's own consequences already declared this open as a KNOWN WEAKNESS. F-3 found the thing the record flagged and declined to close, which is the harder half of the job.
+
+REMEDY, ratified by the owner 2026-08-01 and applied in both tiers of DEC-104 plus both artefacts. The discriminator becomes: CAN THIS OBLIGATION BE TRUTHFULLY COMPLETED AT A SPECIFIC BOUNDARY, WITH A FINITE RESULT WHOSE COMPLETION IS NECESSARY BEFORE ADVANCING? Yes -> a finite gate-worthy act, 2a. No -> a continuous lens with no truthful completion point, 2b. VERIFICATION STRENGTH BECOMES AN ORTHOGONAL AXIS: a verifier strengthens a discharge from attested to verified; its availability does not decide whether the obligation is a step at all. CODICIL: a 2a step shipping no verifier must state why mandatory attestation earns blocking the edge.
+
+WHY THIS IS THE RIGHT SHAPE RATHER THAN A CHEAPER ONE. The alternative — require every 2a step to ship a verifier — would demote semantic scope reconciliation and knowledge capture to lenses, which is wrong: they are mandatory human acts that genuinely complete at a boundary and merely cannot be machine-checked. Completability gives them somewhere honest to sit. The DischargeOutcome mechanics F-3 leaves standing (three arms in the record, two on the wire, runbook.rs:604-606, 745-752) are still exactly true and still cited — they just grade evidence instead of sorting kinds.
+
+EVERY ASSIGNMENT SURVIVES UNCHANGED. Selector recording stays 2a; the fifteen content items and the adversarial attack surfaces stay 2b; knowledge capture and scope reconciliation stay 2a on the strengthened reading. That is the tell that the original was a sound judgement resting on the wrong reason — and it is also why this is an amendment rather than a re-triage. DEC-104's RULING (a set of heuristics is framing, not a checklist) is untouched.
+
+THE CODICIL IS DISCHARGED, NOT PROMISED. thin-adapter.md (a.3) now carries a per-obligation warrant table for all four unverified 2a steps. Two of the four will say 'attested' exactly as a fragment would, and that is stated rather than disguised: what distinguishes them from a fragment is not the receipt, it is that THE RUN CANNOT ADVANCE until an agent asserts the act is done. A fragment carries no such refusal. Applied at record-104.toml/.md, thin-adapter.md (the discriminator section, the selector-recording warrant, and the reviewer list), and target-machine.d2 D14. Diagram recompiles; corpus validates clean. Commit 6958c635."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "Expected an atomic obligation rehome; observed deletion before replacement"
+detail = "plugins/doctrine/skills/design/SKILL.md:111-113 is the current delivery of the doc-local-acronym qualification rule. thin-adapter.md:358-384 sends it to the boot snapshot but explicitly backlogs the edit, while thin-adapter.md:470-475 removes it from the skill. PHASE-08 already rewrites both the skill and install/routing-process.md (plan.toml:629-645), yet no criterion lands the missing introduction clause. The phase therefore creates an interval with zero delivery for a rule DEC-103 says must arrive where it bites. Land the boot replacement atomically in PHASE-08, or retain :111-113 until the replacement lands."
+disposition = "fixed"
+response = """
+ACCEPTED. Verified against source: SKILL.md:111-113 is the acronym qualification rule verbatim; thin-adapter.md sent it out of the skill and carried the edit as backlog (IMP-376); PHASE-08's exit criteria EX-1 through EX-9 were read in full and NONE lands the replacement. IMP-376 is unscheduled, so the interval is unbounded, not merely an ordering wrinkle.
+
+THE DIAGNOSIS IS THE PART THAT STINGS AND IT IS RIGHT. DEC-103 says an instruction must be delivered where it bites. This phase was about to enforce that principle on every obligation in the incumbent skill while exempting itself for the one obligation it was removing. 'Deletion before replacement' is the correct name for it.
+
+WHAT THE PRIOR REASONING GOT WRONG. The deferral rested on 'a boot-snapshot edit is a governance change touching every agent in every project, and mid-review is the wrong moment' — the same manoeuvre declined for IMP-374. On inspection that is near-vacuous HERE. IMP-376's target is install/routing-process.md:60-63 (the Reference forms paragraph, which already carries the first half of exactly this rule — it governs how a doc-local id is WRITTEN and says nothing about how it is INTRODUCED). PHASE-08 ALREADY rewrites that file (EX-2), and EX-3 already runs the whole delivery tail: cargo build re-embeds, doctrine boot regenerates, doctrine boot --check confirms, doctrine install refreshes the projection. The clause lands in a paragraph already inside this phase's blast radius, with no new machinery, for the cost of two lines. The IMP-374 analogy does not hold: that deferral concerns a file PHASE-08 does not otherwise touch.
+
+REMEDY (owner ruling 2026-08-01): PHASE-08 EX-10 appended. The rule leaves SKILL.md:111-113 and arrives at install/routing-process.md IN THE SAME COMMIT. EX-10 also pins the wording constraint the rehome implies but the sketch never stated — the clause must be framework-level and stage-agnostic, NOT worded as a /design obligation, since its whole warrant is that it applies to /audit reading F- findings, /plan citing OQ-, and every skill putting a bare enumerated id in front of a human. IMP-376 closes with the phase rather than outliving it.
+
+WHAT THIS DOES NOT SETTLE, kept open honestly: whether an obligation placed in the boot snapshot actually FIRES. The snapshot is large and always present, which is close to the ambient delivery DEC-103 distrusts. That is an efficacy question, it belongs to CHR-049 (DEC-079), and it no longer stands between the deletion and its replacement — which was F-4's actual complaint. Applied at plan.toml PHASE-08 EX-10, thin-adapter.md (the :111-113 rationale and the destination table), target-machine.d2. Commit 6958c635."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected a settled edge-2 asset shape; observed an implementation fork"
+detail = "target-machine.d2:547-554 labels the edge-2 runbook proposed and asks whether the two-act residue justifies any runbook. thin-adapter.md:491-506 repeats that the sketch does not settle it, even though thin-adapter.md:462-475 presents the runbook as a destination and PHASE-08 must author the target assets. D14 dissolved D12 original craft-migration warrant but did not decide whether knowledge capture and scope reconciliation remain gate-blocked acts. Settle yes with exact obligations and rationale, or settle no and state where each current obligation is delivered; implementation must not choose this design fork."
+disposition = "fixed"
+response = """
+ACCEPTED, and the framing correction matters more than the fix. Verified: target-machine.d2 labelled the edge-2 runbook 'proposed' and asked the question in the node text; thin-adapter.md said in terms 'This sketch does not settle it'. The sketch had filed that as a DISCLOSURE. F-5 is right that it is not one. A disclosure names something the reader can then judge; this left PHASE-08 — which must author the target assets — to pick between two shapes. Handing a design fork to implementation is the single thing an EN-2 design gate exists to prevent, and dressing it as candour does not change what it is.
+
+SETTLED (owner ruling 2026-08-01): EDGE 2 CARRIES A RUNBOOK, EXACTLY TWO STEPS. It is now answerable on the rule rather than on taste, because F-3's amended discriminator asks whether an obligation completes at a boundary, and both do. inquire.knowledge (:107-109) — the inquiry has produced a determinate set of answers and sweeping THEM is finite, done once, at the moment the stage ends. inquire.scope (:115-116) — reconciling slice-nnn.md against the understanding just accepted is a discrete edit with a determinate subject. A file count is not a reason to demote an act to a lens, which is what 'does a two-act residue justify a third runbook' was really asking.
+
+THE STEP TEXT IS BOUNDED AND THAT BOUND IS LOAD-BEARING. 'Capture everything important' has no completion point and would be a lens wearing a step's costume — the exact failure D14/DEC-104 corrects, reintroduced one edge over. So: 'Record, via /knowledge, what THIS INQUIRY settled that outlives the session' (subject is this run's answers, not the design at large), and 'Update OR EXPLICITLY CONFIRM the slice scope against the decisions this inquiry accepted' — the confirm branch is what makes it finite; without it the step is unsatisfiable whenever nothing changed. The knowledge step deliberately does NOT enumerate record kinds: :107-109 names three of a closed seven, and a skill restating a Doctrine-owned vocabulary is a second source of truth that already disagrees.
+
+WHAT F-5 CORRECTLY DID NOT ABSORB. D14 dissolved D12's ORIGINAL warrant (inquiry craft reaching data, which inquiry.md now satisfies without any runbook) but left the separate question of whether the two acts are gate-blocked. Those are different claims and the finding kept them apart. Both steps are attestation-only and neither ships a verifier; per the F-3 codicil each now carries a written warrant for why mandatory attestation earns blocking the edge — see thin-adapter.md (a.3). Applied at thin-adapter.md (a.3) and target-machine.d2 D12 + the edge-2 runbook node, now labelled SETTLED with both step texts. Diagram recompiles. Commit 6958c635."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected VA-4 to count all relocated payload; observed TOML-only accounting"
+detail = "plan.toml:658 says VA-4 closes the relocation loophole by stating runbook TOML bytes separately. D14 moves most process payload into Markdown fragments, and thin-adapter.md:727-735 explicitly says the gross corpus grows across both TOML runbooks and MD fragments. VA-4 can therefore pass while omitting the majority of relocated bytes, recreating the exact loophole it was amended to close. Require separate byte and line totals for every destination asset kind, including each changed design-prompts Markdown fragment and duplicated content, not only runbook TOML."
+disposition = "fixed"
+response = """
+ACCEPTED, and reading VA-4's text closely makes it WORSE than the finding states. F-6 says VA-4 counts runbook TOML and omits the larger Markdown payload. True — but the defect is not only in the byte accounting. VA-4's DESTINATION VOCABULARY is 'deleted / engine invariant / runbook step, naming the edge / retained as prose'. THERE IS NO 2b FRAGMENT SLOT IN IT AT ALL. So the disposition table VA-4 demands cannot even CLASSIFY the majority destination, let alone total its bytes. A conscientious agent filling that table has no honest row for drafting.md.
+
+THE IRONY IS EXACT AND WORTH RECORDING. VA-4 was amended on 2026-08-01 precisely because the original 'did the body substantially shrink' was defeatable by relocation — under DEC-101 the checklists move to a different FILE, so shrinkage is satisfiable without mechanism. D14 then reopened that same loophole one FILE EXTENSION over: relocation into *.md fragments is invisible to the check written to catch relocation. The sketch compounded it by asserting that stating the two asset kinds separately was 'precisely the manoeuvre VA-4 was amended to require'. It was not — VA-4 requires no such thing, and that sentence read the criterion as the author wished it said. Corrected in place with the misreading named rather than quietly deleted.
+
+REMEDY (owner ruling 2026-08-01): PHASE-08 VA-7 appended, amending VA-4 by the VA-12 precedent in this same plan — append, never renumber. It requires: (1) the destination vocabulary gains 'stage fragment, naming the asset' alongside 'runbook step, naming the edge'; (2) byte AND line totals PER DESTINATION ASSET, not per asset kind and never netted — each runbook and each changed install/design-prompts/*.md carries its own before/after against the shipped baseline; (3) CONTENT DUPLICATED ACROSS DESTINATIONS IS COUNTED IN EVERY DESTINATION AND FLAGGED AS DUPLICATED — :203 lands in both drafting.md and reviewing.md by DEC-103, and a table counting it once understates the very corpus it exists to measure; (4) the totals are stated against the shipped baseline, so 'the gross corpus grows while the skill shrinks' becomes a measured claim rather than the assertion it currently is in the sketch. VA-4's disposition-table requirement and its 'a table that does not sum to the incumbent is incomplete' rule are unchanged and still binding. Applied at plan.toml PHASE-08 VA-7 and thin-adapter.md (d). Commit 6958c635."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Expected a falsifiable delivery trade; observed measurement without a decision rule"
+detail = "thin-adapter.md:591-598 chooses fewer receipts for better odds of attention and admits no test can fail. PHASE-09 plan.toml:683-700 measures interaction cost and generic adherence, while the live CHR-049 record contains no comparison, acceptance threshold, or rollback condition for fragment delivery versus attestations. Those observations cannot falsify the chosen side of the trade, so the post-close exercise can only narrate what happened. Pre-register the compared treatments or baseline, the attention/adherence signal, and the result that would cause the fragment placement to be revised."
+disposition = "fixed"
+response = '''
+ACCEPTED on substance. One correction of AIM that changes where the repair lands, offered as a discrepancy report rather than a defence — the finding's conclusion stands either way.
+
+THE CORRECTION. F-7 locates the absence in CHR-049: 'the live CHR-049 record contains no comparison, acceptance threshold, or rollback condition for fragment delivery versus attestations'. Two facts about that record: its Boundary says in terms 'SL-233 must leave behind the fixture, moderator protocol, scoring rubric, and mechanically collectible evidence surfaces. This chore owns the live run and interpretation' — so a decision rule was never CHR-049's to hold; and it was created 2026-07-27, five days before D14 existed, so it could not carry a trade that had not been made. Reading its silence as the defect would send the repair to the wrong artefact. THE ABSENCE THAT ACTUALLY MATTERS IS THE ONE F-7 ALSO NAMES: neither PHASE-09's criteria NOR the sketch carries a falsifier either. That is real, and it is ours.
+
+WHAT THE SKETCH WAS DOING WRONG, PLAINLY. The trade paragraph stopped at 'no test can fail here. VH-1 is the judge.' That is true of the GATE, and it was quietly doing duty as a reason to state no decision rule AT ALL. Those are different things, and the inference runs the wrong way: an ungoverned artifact is exactly the case where the falsifier must be written down IN ADVANCE, because after the fact any outcome narrates as vindication. F-7's phrase — 'the post-close exercise can only narrate what happened' — is the correct description of what we had built.
+
+REMEDY (owner ruling 2026-08-01), landed in two places. IN THE SKETCH, at the gate that CHOSE the shape: the claim is stated as falsifiable — fragment prose delivered every turn puts craft in front of an agent more reliably than discharged steps at an exit — with three falsifying signals. (i) ADHERENCE: fragment-delivered craft followed no more often than the same content as a step. (ii) RECEIPT CHURN: re-request/re-receipt rates implying the bytes are not read on arrival, which is delivery without attention and is precisely what the trade purchased. (iii) COST: per-turn fragment tokens exceeding the interaction cost of the step shape replaced — the trade was FEWER RECEIPTS, and if it is not also cheaper then attention must carry it alone. The comparison is against the STEP SHAPE, not against nothing: the pre-SL-233 skill baseline, and where a fixture permits, the nineteen-step edge-3 shape D14 rejected. THE REVISION IS BOUNDED AND NAMED IN ADVANCE: a negative result returns the 2b content as a COVERAGE-SET step (one step carrying the list — what IMP-373's `set` mode exists to make honest), NEVER the nineteen ordered steps DEC-101 independently rejects as fake determinism. So a negative result reopens IMP-373 on merit; it does not reopen DEC-104.
+
+IN THE PLAN: PHASE-09 EX-8 appended, requiring all three written BEFORE any run, plus PHASE-09 VA-4 as its anti-theatre check — each signal must name A RESULT THAT WOULD REVISE THE PLACEMENT, not a quantity to report ('we will measure adherence' is not a falsifier), and the baseline must name a concrete artefact rather than an unspecified 'before'. A pre-registration no observation could contradict is EX-8 satisfied in form and defeated in substance. CHR-049 runs it and may not substitute a narrative for the comparison. Applied at thin-adapter.md, plan.toml PHASE-09 EX-8 + VA-4, target-machine.d2 D14. Commit 6958c635.'''
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Expected inquiry framing to be scoped to Inquiring; observed Exploring receives it too"
+detail = "target-machine.d2:547-553 describes inquiry.md as delivered every Inquiring turn, and thin-adapter.md:470 moves the clarifying-question body there. src/design_run/prompt.rs:107-113 actually selects Fragment::Inquiry for both Exploring and Inquiring. The rewrite therefore injects one-question-per-message and option-shaping craft during Exploring as well, an additional delivery moment absent from the disposition. State and justify that cross-stage delivery, or split the fragment mapping; do not let it arrive as an accidental consequence of an existing shared variant."
+disposition = "fixed"
+response = """
+ACCEPTED. Verified directly at src/design_run/prompt.rs:107-115: Fragment::for_stage matches Stage::Exploring | Stage::Inquiring => Some(Fragment::Inquiry). One Inquiry variant serves both stages, and the match is exhaustive over Stage by construction, so nothing in this rewrite could narrow it without adding a variant and a fifth asset. Both artefacts said 'delivered EVERY INQUIRING TURN'. That was simply WRONG ABOUT THE MECHANISM, and the consequence is what earns the finding its place: a second delivery moment sat outside the disposition entirely, in a document whose entire job is to account for every delivery moment.
+
+Minor by severity, but it is the same defect class as F-1 and F-4 — an accounting document that does not account for something — and the third instance in this review. Worth saying: all three sat in material no EN-2 question interrogated.
+
+RULED: STATE AND JUSTIFY THE CROSS-STAGE DELIVERY, do not split the mapping. The delivery is WANTED, not merely tolerated. The code gives the warrant in its own words — 'Exploring and inquiring are both question-shaping work' (prompt.rs:109) — and every item moving into inquiry.md holds in both stages: one question per message, two or three options with tradeoffs plus a recommendation, focus on purpose / constraints / success criteria / verification strategy, and :98's multiple-choice preference. None of it is Inquiring-specific. Splitting would cost a new Fragment variant, a fifth asset, and a duplicate of substantially the same prose, to separate two stages that want the same craft. F-8's own remedy admits both routes; this is the cheaper one and it is also the correct one on the merits.
+
+ONE CONSEQUENCE THE FINDING DID NOT NAME AND THE DISPOSITION NOW DOES. Exploring therefore carries BOTH tier-2 asset kinds at once: exploring.toml (shipped, five steps, fired at edge 1) and inquiry.md (every turn). They do not overlap — the runbook's steps are boundary acts (scope, research, canon, memory, triage), the fragment is question craft — and it is the first place in the design where a stage holds both. That is the shape DEC-104 predicts, arriving one edge earlier than the sketch expected, and it is now recorded rather than discovered at implementation. Applied at thin-adapter.md (a.3) and target-machine.d2's edge-2 fragment node. Diagram recompiles. Commit 6958c635."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "Expected the amended discriminator throughout; observed the withdrawn test still classifying D14"
+detail = "thin-adapter.md:702-706 still says the edge-3 population is sorted by the DischargeOutcome/verifier test and derives one act plus eighteen lenses from it, although DEC-104's amended rule says verification is orthogonal and classification turns on finite boundary completability (knowledge/decision/104/record-104.md:35-46). The same sketch then says only two of four obligations are attestation-only (thin-adapter.md:626-629), while the primary diagram says none of the surviving 2a steps ships a verifier and all four warrants are unverified (target-machine.d2:435-448). Replace the surviving old classifier and reconcile the evidence count so implementation receives one rule."
+disposition = "fixed"
+response = """
+ACCEPTED, and the finding is worth more than the site it names. Both halves verified.
+
+HALF ONE — THE SURVIVING CLASSIFIER. thin-adapter.md still read 'Sorted by the DischargeOutcome test (can a verifier ever corroborate this?), the edge-3 population splits cleanly: one discrete act, and eighteen lenses.' That is the withdrawn rule still performing the classification the F-3 amendment took it out of. Confirmed exactly as cited.
+
+THE ROUND-3 REPAIR FIXED INSTANCES WHERE IT SHOULD HAVE FIXED THE CLASS, and that is the real finding here. F-9 names one site; sweeping the corpus for the withdrawn vocabulary turned up FIVE: (1) thin-adapter.md's D14 recap, the cited one; (2) thin-adapter.md state-6 disposition row — 'what remains as steps is what leaves a trace'; (3) thin-adapter.md's :202 row — 'a discrete act that leaves a trace, so it is 2a'; (4) target-machine.d2 edge-3 note — 'ONE step survives — the one act a verifier could reach'; (5) target-machine.d2 edge-4 note — 'What stays as steps is what leaves a trace.' All five replaced with completability at the boundary. 'Leaves a trace' deserves naming separately: it is a COUSIN OF VERIFIABILITY, not of completability — it asks whether an artefact exists afterwards, which is the same proxy F-3 rejected wearing softer words. Two of the five were that variant, and a grep for the exact withdrawn phrase would have missed both.
+
+Remaining hits in the corpus are the amendment narratives describing what was withdrawn (record-104, the (a.2) amendment note, the reviewer list). Those are correct as history and deliberately kept.
+
+HALF TWO — THE COUNT. 'Two of the four are attestation-only' was wrong under EVERY reading, not merely inconsistent with the diagram. It arose from conflating two different predicates, so the repair states both rather than picking one: SHIPS A VERIFIER TODAY — 0 of 4, which is what the diagram says and what an implementation will actually observe; COULD CARRY A VERIFIER AT ALL — 1 of 4, selector recording, since  and  already exist to reach it; NO REACHABLE VERIFIER EVEN IN PRINCIPLE — 3 of 4. So ALL FOUR will report . The codicil row for selector recording now says explicitly that no verifier ships today, which is the sentence whose absence let the two counts drift.
+
+Implementation now receives one rule, and the two artefacts state the same number under a named predicate rather than two numbers under none. Commit 0cfd87b1."""
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "major"
+title = "Expected the delivery trade to revise its governing classification; observed a falsifier exempting DEC-104"
+detail = "The pre-registered fallback moves 2b content into a 2a coverage-set step but declares that this does not reopen DEC-104 (thin-adapter.md:750-754; plan.toml:692). DEC-104 defines 2b precisely as a lens with no truthful boundary completion and 2a as a finite boundary act (knowledge/decision/104/record-104.md:35-46). Evidence that warrants moving the same content across that boundary either falsifies or qualifies DEC-104's classification, or the fallback is not admissible under the decision. Name a revision that preserves DEC-104 (for example, change the 2b delivery/attention mechanism without reclassifying the lenses), or state that a negative result reopens DEC-104 alongside any mechanism work in IMP-373."
+disposition = "fixed"
+response = """
+ACCEPTED IN FULL. This is the best finding of the review, because the thing it catches is not a slip — it is the same instinct failing twice, and the second time inside the repair for the first.
+
+VERIFIED. thin-adapter.md said the 2b content "returns to 2a as a coverage-set step" and that "a negative result reopens IMP-373 on merit; it does not reopen DEC-104"; plan.toml PHASE-09 EX-8(c) said the same. DEC-104 (record-104.md, the discriminator section) defines 2b as a lens with no truthful boundary completion and 2a as a finite boundary act. F-10's dilemma is exact and has no third horn: evidence warranting the move across that line either falsifies the classification or the move is inadmissible under it. The fallback could not both contradict DEC-104 and exempt it.
+
+THE PART THAT MATTERS MORE THAN THE INCOHERENCE. F-7 objected to a claim shielded from evidence. The remedy I wrote for F-7 shielded the governing decision instead — an exemption clause protecting DEC-104 from the very falsifier F-7 had just forced into existence. That is F-7's own defect re-inserted one level up, by the repair for F-7, and I did not see it. Two rounds, same instinct: bound the damage, keep the ruling. Recorded in the artefacts in those terms rather than as a wording fix, because the pattern is the durable finding and the incoherent sentence is only where it surfaced.
+
+THE SUBSTANTIVE ERROR UNDERNEATH, which is what makes the repair better than either option F-10 offers. NONE OF THE THREE SIGNALS IS EVIDENCE ABOUT COMPLETABILITY. Adherence, receipt churn and per-turn cost all measure whether every-turn fragment delivery WORKS; not one of them could show that "consider data-flow boundaries" finishes at a moment. So a delivery failure was being answered with a classification remedy — a category error, and the coverage-set fallback was answering a question nobody had asked. That is why the exemption felt necessary: the remedy was in the wrong category, and the clause was there to stop it colliding with DEC-104.
+
+REMEDY, ruled 2026-08-01. FOUR SIGNALS, ROUTED BY SUBJECT.
+
+(1) THREE DELIVERY SIGNALS -> MECHANISM-SIDE REVISION, DEC-104 STANDS. Not by fiat, but because nothing in them bears on the discriminator. Named candidates in escalating cost: tighten name-at-digest re-emission so a stale receipt cannot suppress a fragment an agent never read; shorten or split the fragment so the lens is not buried; put a fragment digest in the envelope so non-attention is VISIBLE even though it stays non-dischargeable. IMP-373 is NO LONGER THE NAMED FALLBACK and stays deferred on DEC-104's own merits.
+
+(2) ONE MISCLASSIFICATION SIGNAL -> DEC-104's DISCRIMINATOR REOPENS. This is F-10's option (b), admitted for the right trigger rather than for any negative result. Either direction: agents discharging a 2a step at a moment where it cannot honestly be complete, e.g. attesting scope-reconciled before the design settles, which says the obligation has no real boundary and was never a step; or moderators observing agents treat a 2b lens as having a natural completion moment they pause at and would gate on, which says the lens is an act the rule demoted. WITHOUT THIS SIGNAL DEC-104 IS UNFALSIFIABLE BY CONSTRUCTION, which is precisely the charge F-7 laid against the trade. DEC-104 now carries the reopening condition in its own consequences, so it does not live only in a sketch.
+
+ONE THING F-10 DID NOT ASK FOR, ADDED BECAUSE THE ROUTING IS DEFEATABLE. Four named signals collected as one undifferentiated score restores the exemption under a fourth name: any result could then be routed to whichever revision is cheapest. PHASE-09 VA-5 is appended as the anti-theatre check — each signal's evidence must be capable of supporting ONLY its own consequence, and the misclassification signal must be collected as observations of discharge timing and agent pause behaviour, never as a delivery proxy. If it is collected as "did adherence improve", it is the delivery signals wearing a fourth name.
+
+Applied at thin-adapter.md, plan.toml PHASE-09 EX-8(c)/(d) + VA-5, target-machine.d2 D14, and DEC-104's consequences. Diagram recompiles; corpus validates clean. Commit 0cfd87b1.
+
+APPENDED — A DEFECT IN MY OWN F-9 RESPONSE, disclosed here because the protocol gives me no way to correct it. F-9 is now "answered", so dispose refuses to rewrite it. Its stored text was mangled by SHELL BACKTICK EXPANSION when I submitted it: three code-quoted spans were evaluated as commands and silently replaced with empty strings. Read those two sentences as: "...selector recording, since `doctrine slice selector list` and `doctrine slice conformance` already exist to reach it..." and "...So ALL FOUR will report `attested`." Nothing else in F-9 is affected and the disposition stands as written. The artefacts are correct; only the ledger copy is damaged. Flagging rather than leaving a reviewer to parse "since  and  already exist to reach it".
+"""
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "blocker"
+title = "Expected a governed set-mode deferral; observed PHASE-08 still owns the work"
+detail = "DEC-101 still says set moves to PHASE-08 once real instances exist (knowledge/decision/101/record-101.md:67-72), and PHASE-16's accepted criteria assign both the mode and cursorless rendering to PHASE-08 (plan.toml:595,602). The amended primary diagram acknowledges that those real instances now exist, but defers set because its render is unsketched and outside EN-2 (sketches/target-machine.d2:136-148). An unsketched assigned obligation calls for sketching it or formally amending the accepted decision and upstream criteria; EN-2 cannot silently narrow their scope. Either settle set admission/rendering in PHASE-08, or amend DEC-101 plus PHASE-16 EX-7/EX-14 to authorize the new deferral and reconcile every downstream criterion."
+disposition = "fixed"
+response = '''
+SECOND CONTEST UPHELD. Both cited surfaces confirmed verbatim before repair.
+Re-fixed at aaa80ef3.
+
+  - runbook.rs:454-457 -- "Rendering every step's prose is the `set` half
+    deferred to PHASE-08". Live and unannotated, in the same file round 6
+    edited: round 6 fixed the `Mode` enum doc comment and stopped there.
+  - plan.md:172-180 -- "PHASE-08 converts the remaining two prose checklists
+    ... and lands `set` mode with them", plus the withdrawn no-shipped-user
+    warrant and "PHASE-08 will have two real coverage-set instances to design
+    it against". Every clause of that has lapsed.
+
+THE DIAGNOSIS IS SCOPE, NOT PATTERN, AND THAT IS THE WHOLE LESSON. The round-6
+sweep ran `deferred to PHASE-08` plus `on merit` over plan.toml, sketches/ and
+the two knowledge dirs. `src/` was never in scope and plan.md was not in the
+path list -- only plan.toml was. runbook.rs:455 WOULD HAVE MATCHED the pattern
+already in use. So the fix is not a better regex: A CLAIM-WITHDRAWAL SWEEP IS
+REPO-WIDE OR IT IS NOTHING. Third recurrence of this class, and the first two
+recurrences both looked like a missed file when they were a missed scope.
+
+RUN THAT WAY, THE SWEEP FOUND THREE MORE LIVE SURFACES THAT NEITHER THE FINDING
+NOR EITHER CONTEST CITED. Two are in files an earlier repair had already
+touched, which is the part worth recording:
+
+  - src/design_run/runbook.rs:1137 -- a THIRD site in that file, in the EX-14
+    test's doc comment: "carrying every step's prose is both the `set` half
+    PHASE-08 owns and the token regression EX-14 forbids". Round 6 fixed one
+    site in this file; round 7's contest cited a second; the sweep found a
+    third. Nobody had looked past the site they were pointed at.
+  - .doctrine/slice/233/sketches/runbook-runner.md section 9 -- "It also lands
+    `set` mode (section 5), with two real instances to design against."
+    Section 5 is where round 6 wrote the withdrawal block. The same file
+    restated the withdrawn claim four sections later.
+  - .doctrine/slice/233/notes.md -- "`set` mode left PHASE-16 for PHASE-08. No
+    shipped user, and no reachable end-to-end test." Sitting in `## Harvest`
+    `### Open`, contradicting the DECISION 1 entry two hundred lines above it
+    in the same section.
+
+WHAT WAS PRESERVED. In every case the argument that actually supports something
+is kept and only the lapsed inference withdrawn: the no-shipped-user and
+no-reachable-test facts were true OF PHASE-16 and are not a warrant for
+deferring past it; runbook.rs's EX-14 token-regression argument stands on its
+own and is untouched; plan.md's PHASE-16/PHASE-08 split rationale survives
+minus the `set` clause. Withdrawals are recorded in dated blocks quoting the
+text they retire, so the history stays readable rather than being silently
+overwritten.
+
+A FOURTH SURFACE, FOUND BY THE SAME SWEEP BUT BELONGING TO F-14/F-15 --
+FLAGGED HERE BECAUSE IT IS THIS FINDING'S CLASS, NOT THEIRS. DEC-104's
+STRUCTURED TIER carried the entire misclassification reopening condition:
+the two-outcome resolution set, the three-item firing condition, and the
+"cheap arm is safe" warrant. Its prose tier carries none of it. Had I repaired
+only the sketch, the diagram and the plan for F-14/F-15, `knowledge show
+DEC-104` would have emitted the superseded rule beside its own replacement --
+F-11 leg (a) exactly, reproduced inside the repair for two other findings, at
+the third time of asking. It is amended in the same commit.
+
+THE GENERAL RULE THIS FINDING HAS NOW ESTABLISHED THREE TIMES: before
+repairing a ruling, ask which record GOVERNS it, not only which artefacts
+ARGUE it -- and then sweep repo-wide for the withdrawn phrasing, after the
+repair rather than before, because the repair is what tells you the phrase.
+
+RESIDUAL STATE, DISCLOSED. `grep -rn` from the repo root minus target/ for
+`deferred to PHASE-08`, `on merit`, `no shipped user`, `lands \`set\``, `two
+real instances` and `real coverage-set instance` now returns only: withdrawal
+blocks that quote the retired text; DEC-101's and DEC-104's amendment prose;
+PHASE-16 EX-7/EX-14's annotations; notes.md's history entries; and this
+ledger. No live assignment of `set` to PHASE-08 survives anywhere in the tree.
+'''
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "major"
+title = "Expected misclassification evidence to support only reclassification; observed premature attestation has another explanation"
+detail = "PHASE-09 VA-5 requires each signal's evidence to support only its routed consequence (plan.toml:703), but EX-8(d) treats a 2a discharge before its subject exists as proof the obligation has no real boundary and reopens DEC-104 (plan.toml:692; thin-adapter.md:867). The same observable event is produced when a correctly classified finite boundary act is falsely or prematurely attested—evidence about discharge admission, wording, or adherence rather than classification. The diagram's claim that this conservative signal never fires falsely is therefore unsupported (target-machine.d2:514-525). Re-anchor the 2a half to evidence that discriminates missing boundary from early noncompliance, or relax VA-5 and route the event first to adjudication rather than directly to DEC-104."
+disposition = "fixed"
+response = """
+CONCEDED IN FULL. Fixed at fba4ceb8. This is the sharpest finding of the review,
+because the thing it catches is the criterion catching its own repair.
+
+Verified before responding. VA-5 does require each signal's evidence to support
+only its routed consequence. EX-8(d) as amended at round 4 did read the raw event
+as showing the obligation "has no real boundary -- it was never a step". And the
+same observable event is produced by a correctly classified boundary act that was
+prematurely attested. The finding is correct on all three legs.
+
+The diagnosis is one step stronger than the finding states, and the extra step
+matters for the remedy. There are THREE live causes, not two:
+
+  A  the obligation has no real boundary          -> reclassify to 2b
+  B  a correctly classified act, prematurely or
+     falsely attested                              -> ordinary noncompliance,
+                                                      which is the adherence
+                                                      signal, not this one
+  C  step TEXT that misled a compliant agent
+     about when it completes                       -> reword; the classification
+                                                      stands
+
+(C) is the one the finding gestures at with "wording" and it is why a purely
+distributional remedy is not enough: a systematically premature discharge is
+equally consistent with A and C.
+
+TWO CORRECTIONS, because there were two defects and the finding named one of
+each.
+
+FIRST -- THE CONSEQUENCE WAS OVERCLAIMED, and that is the primary defect. A
+firing now REOPENS THE DISCRIMINATOR'S APPLICATION TO THAT STEP, and the
+reopening admits exactly three outcomes: REWORD, RECLASSIFY, or STAND.
+"Reopens" was always the verb EX-8(d) used; the defect was the parenthetical
+asserting the event PROVED misclassification, which made reclassification the
+only exit and so guaranteed a result the evidence cannot support. That clause is
+withdrawn. With the consequence weakened to what the evidence carries, VA-5's
+single-consequence requirement is satisfied honestly rather than by narrowing the
+evidence until it fits.
+
+SECOND -- THE OBSERVATION NOW CARRIES A WITHIN-RUN CONTROL. Record, at the same
+edge and in the same run, how the SIBLING 2a steps were discharged. One step
+premature beside correct siblings is step-specific and reaches the discriminator;
+everything premature is agent-general, routes to the adherence signal, and
+reaches the discriminator not at all. That separates B from {A, C}. An
+observation offered with no sibling contrast is now REJECTED AS UNCOLLECTED
+rather than weighed -- VA-5 carries that as an explicit check.
+
+SCALE, DISCLOSED RATHER THAN ASSUMED. A cross-run distribution would be the
+stronger discriminator, and CHR-049 specifies ONE moderated exercise, so it is
+not reliably available. The within-run control is what is collectible at that
+scale; cross-run corroboration is recorded as opportunistic. Claiming a
+collectibility the exercise cannot deliver would repeat this finding at one
+remove, which is the failure mode this review keeps producing.
+
+ALSO WITHDRAWN: the diagram's claim that the conservative signal "never fires
+falsely" (target-machine.d2, the F-10 re-anchor block). The finding is right that
+it is unsupported. What is true is smaller -- the signal stays SILENT where it
+cannot collect, which is not the same property as soundness, and the two were
+conflated. Replaced with the accurate statement.
+
+HALF (ii) TAKES THE SAME CORRECTION on both counts. A lone request to gate a lens
+is also ordinary confusion; it reopens rather than reclassifies, and it needs the
+same contrast against how that run treated the other lenses. Symmetry was not
+imposed for tidiness -- (ii) has exactly the same defect and would otherwise
+survive the repair to (i).
+
+Landed in PHASE-09 EX-8(d) and VA-5 (appended, ids immutable), the sketch's
+signal table and the section beneath it, the diagram's F-10 block, and DEC-104's
+reopening consequence.
+
+NOTED FOR THE RECORD, since it is the third time in this review: repairing a
+finding reproduced the finding's own defect. Round 3 F-3 attacked an
+un-cashable discriminator; the round-4 repair built an un-cashable falsifier for
+it; this round's finding catches the round-4 repair overclaiming what that
+falsifier proves. The repair above was written against that pattern deliberately
+-- which is why the three-outcome resolution set and the collectibility limit are
+named in the criterion rather than left to whoever reads the result.
+"""
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "major"
+title = "Expected a falsifying signal to require revision; observed stand can preserve the placement"
+detail = "PHASE-09 VA-4 requires every falsifying signal to name a result that would revise placement (plan.toml:702). After the controlled misclassification signal fires, EX-8 and VA-5 permit reword, reclassify, or stand (plan.toml:692-703; thin-adapter.md:923-931). Reword and reclassify revise the placement or its boundary contract; stand permits the same observation to leave everything unchanged as an anomalous run, with no pre-registered condition distinguishing that exit. The within-run sibling control separates agent-general behavior from step-specific behavior, but at N=1 it cannot rule out anomaly, so stand makes every firing narratable after the fact. Remove stand once the controlled signal fires, pre-register independent evidence that selects it, or stop calling this observation a falsifier and amend VA-4 accordingly."
+disposition = "fixed"
+response = """
+CONCEDED IN FULL. Fixed at a15c81d3. `stand` is removed.
+
+This is the fourth instance in this review of a repair reproducing its own
+finding's defect, and the cleanest example of the class: the round-5 fix stopped
+the signal over-routing to reclassification by adding an exit that routes it
+NOWHERE. F-12 said the evidence supported more than one consequence; the remedy
+added a consequence supported by no evidence at all.
+
+Verified before responding. VA-4 does require every falsifying signal to name a
+result that would revise the placement. Reword and reclassify both do; `stand`
+does not, and nothing pre-registered selected it. And the finding is right about
+why the sibling control does not rescue it: at N=1 the contrast separates
+step-specific from agent-general behaviour but cannot rule out anomaly, so
+`stand` was always reachable for any firing. That makes it VA-5's forbidden
+manoeuvre arriving by the opposite door -- not routing a result to the cheapest
+revision, but routing it to none.
+
+REMEDY -- the finding's first option, made workable by relocating what `stand`
+was there to do.
+
+ONCE THE SIGNAL FIRES, THE PLACEMENT IS REVISED. Two outcomes: REWORD or
+RECLASSIFY. No third exit. Rewording a step's text IS a change to its boundary
+contract, not a null outcome dressed as one -- VA-5 now carries that as an
+explicit check, because "reword" is exactly where a future reader would try to
+reinstate `stand` under another name.
+
+THE ANOMALY CONTROL MOVES INTO THE PRE-REGISTERED FIRING CONDITION. That is where
+it belonged: an anomaly test chosen after seeing the result is not a control, and
+one written before any run is. The signal fires only when all hold:
+
+  (a) the within-run sibling control is satisfied -- the other 2a steps at that
+      edge were discharged with their subjects present;
+  (b) the run did NOT cross a deliberate context break or resume at that edge.
+      This is not a hypothetical exclusion: CHR-049's protocol deliberately
+      induces a context break and tests exact resume across it, so the condition
+      is identifiable in the run record rather than adjudicated;
+  (c) the run was not aborted or restarted mid-edge.
+
+VA-5 additionally rejects a kit that leaves anomaly to post-hoc judgement, on the
+ground that it has reinvented `stand` under another name.
+
+WHY REMOVING THE ESCAPE HATCH IS SAFE, STATED RATHER THAN ASSUMED. The two
+remaining arms are not equally costly, and that asymmetry is what `stand` was
+covering for. Reword is conservative: it improves step text and leaves the
+classification standing. Reclassify is the expensive arm. Since the marginal case
+lands on the cheap arm, THE COST OF A FALSE FIRING IS A TEXT IMPROVEMENT, not a
+wrongly reclassified obligation. A resolution set whose cheap arm is safe does
+not need an escape hatch -- `stand` looked necessary only while the two arms were
+being treated as symmetric, which they never were.
+
+Landed in PHASE-09 EX-8 and VA-5 (appended, ids immutable), the sketch's
+misclassification section, the diagram's F-12 block, and DEC-104's reopening
+consequence. The round-5 three-outcome text is left in place with a forward
+pointer rather than silently rewritten, so the reduction is visible in the record.
+"""
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "major"
+title = "Expected a determinable anomaly control; observed incidental context loss is unobservable"
+detail = "The F-13 firing condition excludes deliberate context breaks/resumes and aborts/restarts (thin-adapter.md:968-975; plan.toml:692-703), all events CHR-049 can intentionally identify. It does not exclude incidental context exhaustion or compaction, and neither the run record nor CHR-049's current observations records that event (backlog/chore/049/backlog-049.md:18-25). A run can therefore satisfy the written condition after an unmarked context loss, forcing revision for an anomaly the control was meant to exclude. Instrument every context boundary, bound the exercise below the context window, or define a mechanically observable proxy that makes the firing condition decidable."
+disposition = "fixed"
+response = """
+UPHELD. Every citation checked before repair: thin-adapter.md's firing
+condition named only the deliberate break/resume and the abort/restart;
+CHR-049's observation list records "refresh and exact resume across a
+deliberate context break" and no other context event. Fixed at aaa80ef3,
+jointly with F-15.
+
+WHY THIS AND F-15 ARE ONE DEFECT WITH TWO FACES. The round-6 repair narrowed
+the EXIT SET and the EXCLUSION SET in a single move, and each narrowing lost
+something the thing it replaced had covered. `Stand` covered ANOMALY --
+unbounded, and post hoc. Its replacement covers three NAMED events, and the
+enumeration omits the commonest one. That is the seventh instance of a repair
+reproducing its own finding's defect, and it explains why both findings landed
+in the same round: they are the two halves of one over-narrowing. It also
+explains why answering them in sequence produces a wrong answer -- see the
+interaction at the end.
+
+THE DURABLE FORM OF THE LESSON, RECORDED IN notes.md `## Learned`: when a
+repair replaces an open-ended thing with an ENUMERATION, the enumeration is
+the new defect surface. Ask what the open-ended version covered that the list
+does not.
+
+ONE CORRECTION OF AIM, WHICH CHANGES WHERE THE REPAIR LANDS -- OFFERED AS A
+DISCREPANCY REPORT, SINCE THE FINDING'S CONCLUSION STANDS EITHER WAY. The
+finding says "neither the run record nor CHR-049's current observations records
+that event", which is true, but the run record was never going to. Doctrine
+observes WRITES, not an agent's context; there is no journalled event for
+compaction to produce. That is the same limit already disclosed for IMP-373's
+repayment signal, which is collected from the exercise rather than the journal
+because a refusal aborts the write and nothing is journalled. So of the three
+remedies named:
+
+  - BOUND THE EXERCISE BELOW THE CONTEXT WINDOW -- rejected. Unverifiable in
+    advance, and it would still need an observation to confirm the bound held,
+    which is the observation we lack.
+  - A MECHANICALLY OBSERVABLE PROXY IN THE RUN RECORD -- rejected, for the
+    reason above. There is nothing to proxy from.
+  - INSTRUMENT EVERY CONTEXT BOUNDARY -- taken. Its site is the MODERATOR
+    PROTOCOL, not CHR-049: that chore's Boundary says in terms that "SL-233
+    must leave behind the fixture, moderator protocol, scoring rubric, and
+    mechanically collectible evidence surfaces. This chore owns the live run
+    and interpretation." The protocol is ours to write. Reading the gap as
+    CHR-049's would send the repair to the artefact that merely consumes it --
+    the same misdirection F-7 was corrected on at round 3.
+
+THE FIRING CONDITION, AS AMENDED. The signal fires only when ALL hold:
+
+  (a) the within-run sibling control is satisfied;
+  (b) the run crossed NO CONTEXT BOUNDARY at that edge -- neither the
+      deliberate break and resume CHR-049's protocol induces, NOR AN
+      INCIDENTAL ONE (context exhaustion, compaction, or harness-initiated
+      summarisation);
+  (c) the run was not aborted or restarted mid-edge;
+  (d) THE MODERATOR PROTOCOL RECORDED THE CONTEXT STATE across the window
+      containing the discharge. Absent that record, (b) is UNDECIDED and the
+      observation is UNCOLLECTED, NOT WEIGHED.
+
+(d) IS THE PART THAT ANSWERS THE FINDING, AND IT IS DEFAULT-DENY BY DESIGN.
+Widening (b) alone would have left the condition exactly as undecidable as the
+finding says it is -- a condition satisfied by the ABSENCE OF A MARK is not
+decidable. (d) makes satisfaction require POSITIVE EVIDENCE. The disposal it
+uses is not new machinery: it is the same "reject as uncollected, not weighed"
+that the round-5 sibling control already imposes on an observation offered
+without its contrast.
+
+WHAT THIS NOW OVER-FORBIDS -- ASKED BECAUSE THE PATTERN DEMANDS IT, AND THE
+ANSWER IS NOT COMFORTABLE. Default-deny lowers the probability the signal fires
+at all, and at N=1 a falsifier that cannot fire is a formality. Two things
+bound that, and the second is the honest one: recording context boundaries is a
+standing moderator obligation with a named field rather than a lucky
+observation, so the deny branch should be rare; and IF IT IS NOT RARE, THE KIT
+MUST REPORT ITS OWN DENY RATE. A run whose context state went unrecorded is
+evidence the exercise cannot support this signal, and saying so is the outcome
+-- not absorbing it into a silence that reads as "the signal did not fire".
+VA-5 carries that as an explicit check.
+
+THE INTERACTION WITH F-15, WHICH IS WHY THESE COULD NOT BE ANSWERED IN
+SEQUENCE. F-15's repair makes RECLASSIFICATION the default exit of a firing.
+That raises the cost of a false firing from a text improvement to a placement
+revision -- precisely the cost the round-6 asymmetry claimed the cheap arm was
+there to absorb. This finding shows the firing condition cannot currently
+exclude the likeliest cause of a false firing. So: tightening the resolution
+set while the firing condition stayed undecidable would convert an unrecorded
+compaction into a FORCED RECLASSIFICATION; tightening the firing condition
+while the resolution set kept an unconditioned cheap arm would only reduce the
+frequency of an exit that changes nothing anyway. Each repair is what makes the
+other safe, and I would not have shipped either alone.
+
+CONSEQUENTLY THE ROUND-6 WARRANT FOR REMOVING `STAND` LAPSES -- see F-15's
+response. `Stand`'s removal survives on a replaced warrant: it was POST-HOC AND
+UNCONDITIONED, and anomaly belongs in the pre-registered firing condition,
+which is where this repair now puts all of it including the incidental case.
+One principle covers both halves of the round-6 over-narrowing: EVERY EXIT AND
+EVERY EXCLUSION IS PRE-REGISTERED; NOTHING IS CHOSEN AFTER THE RUN.
+
+LANDED AT: sketches/thin-adapter.md (the firing condition list, and the new
+subsection's face-two argument), sketches/target-machine.d2 (round-6 block
+marked in place, round-7 block appended -- the diagram governs), plan.toml
+PHASE-09 EX-8 (the condition as amended) and VA-5 (check (4): confirm the
+condition names incidental loss and requires the positive record, and confirm
+an observation without it is rejected rather than weighed), and DEC-104's
+STRUCTURED TIER, which carried the three-item condition and would otherwise
+have emitted it beside its own replacement.
+"""
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "major"
+title = "Expected a falsifier to revise placement; observed reword preserves tier and edge"
+detail = "VA-4 requires every falsifying result to revise placement (plan.toml:702). The F-13 repair offers REWORD or RECLASSIFY and asserts both satisfy that rule (thin-adapter.md:963-979; plan.toml:692-703), but rewording a 2a step's boundary text leaves it a 2a step on the same edge. That revises the obligation contract, not its placement, and so cannot falsify the fragment-versus-step placement choice F-7 required. Either amend VA-4 explicitly to govern placement-or-boundary-contract and explain why that remains a falsifier, or require a controlled firing to change placement; do not satisfy the criterion by silently broadening its noun."
+disposition = "contest rejected — clarified, no rule change"
+response = """
+ROUND-8 CONTEST REJECTED. The claim is false on the pre-registered text, on all
+four surfaces that carry it. No rule changes. An exposition repair landed at
+8abbb98f because the misreading was available and a VA-5 verifier could make it
+too -- that repair is named below and changes nothing about how an arm is chosen.
+
+THE CONTEST, RESTATED SO THE DISPOSITION IS AUDITABLE. "The one-shot rule makes
+reclassification compulsory only on a second firing that the N=1 exercise cannot
+collect, so it does not make placement revision reachable within this
+pre-registered falsifier."
+
+THAT SKIPS (a) AND (b). The one-shot rule -- (c) -- is not the compulsion route
+and never was. The route to reclassification on the FIRST AND ONLY FIRING is
+(b)-fails-therefore-(a)-applies, and it is written in terms on every surface:
+
+  VA-5 (2), plan.toml:703 -- "text that names no observable completion moment
+  does not earn the arm, AND THE FIRING RECLASSIFIES."
+
+  EX-8 (2)(a)+(b), plan.toml:692 -- "RECLASSIFY TO 2b IS THE DEFAULT -- what a
+  firing means unless the reword arm earns its exit ... no candidate text, no
+  reword."
+
+  thin-adapter.md:1042-1043 -- "the cheap arm now costs a checkable artefact, and
+  FAILING TO PRODUCE ONE COMPELS THE EXPENSIVE ONE."
+
+  target-machine.d2:690-692 (the diagram governs) -- same sentence.
+
+  And the cause table at thin-adapter.md:924-928 already routes cause (A)
+  straight to "reclassify to 2b", with reword reserved to (C) and qualified
+  "if that arm earns its exit ... otherwise reclassify."
+
+No second firing appears in any of that. (c) is a separate, additional
+compulsion that binds the step's post-close life; I disclosed at round 7 that
+CHR-049 cannot exercise it, and that disclosure is what the contest has picked
+up and mistaken for the whole mechanism.
+
+WHY THE BAR HAS TEETH -- the part round 7 left implicit, and the real substance
+of "candidate text constrains the escape but does not change its non-placement
+outcome". The contest is right that reword, WHEN TAKEN, revises no placement.
+What it misses is that the candidate-text bar is UNMEETABLE EXACTLY UNDER CAUSE
+(A). DEC-104 classifies content as 2b PRECISELY BECAUSE IT HAS NO TRUTHFUL
+BOUNDARY COMPLETION -- that is the discriminator's own criterion, not a fresh
+argument. So the two arms are complementary, not competing:
+
+  - candidate text meeting (i) truthful and (ii) observable in run state CAN be
+    produced  =>  a truthful observable completion boundary exists  =>  the
+    obligation is 2a-eligible, the defect was the step's TEXT, and reword is the
+    CORRECT outcome rather than an escape from one;
+
+  - it CANNOT be produced  =>  no such boundary exists  =>  that IS cause (A)
+    =>  the default applies and the firing RECLASSIFIES, first firing, inside
+    the single exercise.
+
+The artefact test therefore IS the (A)-against-(C) discriminator that the round-5
+scale note leaves "settled at the reopening". It is checkable against the run
+record that just fired -- the candidate boundary either has an observable
+correlate in that run's state or it does not -- so it is a determination, not a
+say-so, and VA-5 (2) instructs the verifier to check it "exactly as (i) is
+checked".
+
+That is what makes the falsifier a falsifier: reclassification is reachable at
+N=1 precisely in the world where DEC-104's placement is WRONG. A signal that
+could only revise the placement in a world where the placement was right would
+be the defect; this is its inverse.
+
+"PERMITS REWORD" IS NOT THE DEFECT, AND THE REMEDY THE CONTEST REASSERTS IS THE
+ONE F-12 ALREADY REMOVED. VA-4 asks each signal to name A RESULT THAT WOULD
+REVISE THE PLACEMENT. Its quantifier is existential, not universal; it does not
+require that every firing revise placement, and reading it that way is the same
+noun-level move -- one level up -- that F-15 correctly forbade at round 7 when
+the response tried to broaden PLACEMENT to PLACEMENT-OR-CONTRACT. Requiring a
+controlled firing to CHANGE the placement is reclassify-always, which forces
+reclassification on evidence that cause (C) also explains. That is exactly the
+overclaim F-12 stripped out one round earlier, and adopting it now would be the
+eighth instance of a repair reproducing its own finding's defect -- this time by
+reinstating a defect the review had already fixed. Declined at round 7 for that
+reason; declined again, on the same ground.
+
+WHAT LANDED ANYWAY, AND WHY IT IS NOT A CONCESSION. The rule is unchanged.
+What changed is that the entailment above -- candidate text is producible if and
+only if a truthful observable boundary exists, hence the test decides (A) against
+(C), hence the first firing can reclassify -- was load-bearing at round 7 and
+stated nowhere. A reader eight rounds into this ledger read (c) as the operative
+compulsion and (b) as a mere constraint. A VA-5 verifier reading the same text
+could pass a kit that treats the arms as freely selectable, which is the failure
+VA-5 (1) exists to catch. So the entailment is now written, on the four surfaces
+that carry the rule: EX-8, DEC-104's structured tier, thin-adapter.md (new
+paragraph under the round-7 subsection) and target-machine.d2 (round-8 block
+appended; the diagram governs). Each is marked CLARIFIED / NO RULE CHANGES so
+the record shows a rejected contest, not a silent repair.
+
+RESIDUAL, DISCLOSED RATHER THAN ABSORBED -- asked in the form step 4 demands of
+any repair. Failure to produce candidate text is not PROOF that no boundary
+exists; it can also mean nobody thought of the right text. Default-deny therefore
+biases toward the EXPENSIVE arm, so the residual error is a FALSE
+RECLASSIFICATION, not a false reword. That is the safe direction for a falsifier
+and it is the cost gradient round 7 inverted on purpose -- VA-5's round-7 text
+already says so in terms ("(1)-(3) raise the cost of a false firing from a text
+improvement to a placement revision"). It is stated here because the round-8
+clarification makes the deny branch more visibly operative than it was, and a
+finding on THIS -- that the exercise's one firing may reclassify a correctly
+classified 2a step because the reopening was uninventive -- would be fair.
+
+The other two round-7 disclosures stand unchanged and unrelitigated: the reword
+arm's honesty rests on candidate text being checkable, which is the judgement
+VA-5 already performs on signal (i); and (c) is thin at N=1, stated as a
+commitment binding the step's post-close life rather than dressed as a control
+the exercise collects.
+"""
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "major"
+title = "Expected evidence to distinguish no boundary; observed failure to invent text forces reclassification"
+detail = "The round-8 clarification makes the first-firing route explicit: if candidate boundary text cannot be produced, the default forces reclassification to 2b (sketches/thin-adapter.md:1048-1065). The same clarification then concedes that failure to produce text may instead mean nobody found the right wording (sketches/thin-adapter.md:1071-1076). Thus the reopening treats failure of invention as evidence that no truthful boundary exists and revises placement on an admitted false-positive route. Require evidence that distinguishes absence of a boundary from failure to formulate one—such as independent adjudication or corroboration—or classify the result as inconclusive and state honestly that the N=1 exercise cannot falsify this direction."
+disposition = "fixed"
+response = """
+CONCEDED. Fixed at 0fa8f49d, and the repair is structural rather than another
+patch: the run-side inference is withdrawn entirely.
+
+THE CONTEST IS CORRECT AND THE ERROR IS LOGICAL, NOT EVIDENTIAL. Verified before
+responding: thin-adapter.md:463-474 says exactly what the contest says it says --
+the step reads "record the design-target selectors the code-impact section NOW
+commits to", it is "true at each firing and asserts nothing about finality", and
+it fires at two edges. So the obligation tracks a moving set, and a recorded
+selector coexists with an unfinished obligation.
+
+The defect is sharper than "proxy rather than discriminator". THE ORIGINAL SIGNAL
+IS SOUND PRECISELY BECAUSE IT IS NEGATIVE: subject ABSENT at the discharge turn
+proves the step was not complete. That is why it was described as conservative --
+it cannot fire falsely in that direction. Round 9 INVERTED it: subject PRESENT at
+some turn therefore a truthful completion moment exists. That is affirming the
+consequent, and no amount of exhaustiveness rescues it, because an exhaustive
+enumeration asks the wrong question at every turn rather than at one of them.
+
+THE LOOP WAS STRUCTURAL, WHICH IS THE PART WORTH RECORDING. Rounds 5 through 10
+are one move repeated: infer "this obligation has no truthful completion moment"
+from RUN BEHAVIOUR. It cannot work, and not for want of cleverness.
+CLASSIFICATION IS A PROPERTY OF AN OBLIGATION'S TEXT, NOT OF A RUN. A run tells
+you how one agent behaved on one occasion; it cannot establish a universal
+negative about the obligation. Each round produced a subtler inference with the
+same defect in new clothes, and the cheap patch available each round converged on
+an authoring-time property anyway -- "enumerate turns where the subject is present
+AND THE OBLIGATION'S STATED SCOPE IS SATISFIED" just relocates the whole question
+to the stated scope. That convergence is what says the fix below is the fixed
+point rather than an escalation.
+
+THE REMEDY -- THE CLASSIFICATION TEST IS AN AUTHORING GATE.
+
+  1. EVERY 2a STEP STATES ITS OWN COMPLETION CONDITION, in its text, at authoring
+     time. The condition must be TRUTHFUL -- satisfying it DISCHARGES the
+     obligation rather than starting it -- and CHECKABLE IN RUN STATE.
+
+  2. AN OBLIGATION WHOSE COMPLETION CONDITION CANNOT BE STATED IS NOT A STEP. It
+     is 2b.
+
+  3. THE EXERCISE COLLECTS ADHERENCE, NOT CLASSIFICATION. With a stated
+     condition the observation is mechanical: did the agent discharge at a turn
+     where its STATED condition was not satisfied? No inference about a mind, no
+     claim about what does not exist. Routing is unchanged -- agent-general
+     across siblings is adherence; step-specific means THE CONDITION WAS
+     MIS-STATED, and the repair is the condition.
+
+The selector obligation passes the gate and shows the shape: it completes when
+THE RECORDED SELECTOR SET MATCHES THE SECTION'S CURRENT COMMITMENTS -- statable,
+checkable at each firing, and asserting nothing about finality. So the gate is
+not a formality that waves everything through; it is the discriminator finally
+being applied where the discriminating fact lives.
+
+WHY THIS IS STRONGER THAN WHAT IT REPLACES, AND NOT A RETREAT. The finding's own
+fallback -- declare the direction unfalsifiable at N=1 -- would have left DEC-104
+with no failing check at all. The gate is decidable OVER THE WHOLE SET, BEFORE
+ANY RUN, and RE-RUNNABLE BY ANYONE. It can fail this week rather than once,
+post-close, in a single moderated session. That is a better answer to the
+original demand (a decision no observation could contradict is not a decision)
+than anything the run-side chain produced, and it costs the exercise nothing it
+could actually deliver.
+
+OWNER RULING, RECORDED BECAUSE IT GOVERNS THE SHAPE. We do not build taxonomical
+truth from first principles -- that is what design is. CHR-049 feeds evidence
+INTO the design; the owner arbitrates whether the design is good. The category
+error underneath rounds 5-10 was asking one observation to settle a question that
+belongs to design judgement, and then building progressively more elaborate
+machinery to disguise that it could not.
+
+WHAT WAS CUT, NOT ADDED. Per the same ruling, the design surfaces carry THE RULE
+and this ledger carries the REASONING. The rounds 8-9 epistemology is removed
+from sketches/thin-adapter.md and sketches/target-machine.d2 rather than extended
+-- roughly 160 lines deleted, net -60 across the five surfaces after the gate was
+written in. A superseded-in-place note records the withdrawal so the reduction is
+visible without the argument being re-staged in the design.
+
+LANDED AT: plan.toml PHASE-09 EX-8 (round-10 amendment) and VA-5 (checks (6)-(8)
+withdrawn with the inference they verified; new (9) the authoring gate is applied
+and recorded over the whole set, and (10) the kit collects adherence against the
+stated condition and not classification from behaviour), DEC-104's structured
+tier, sketches/thin-adapter.md, sketches/target-machine.d2 (the diagram governs),
+and notes.md.
+
+STILL UNREWRITABLE, RESTATED SO A VERIFIER DOES NOT CLOSE FALSELY: F-15's stored
+response argues from the withdrawn inference and F-2's describes a withdrawn
+remedy; both are past `open` and `review dispose` refuses. The artefacts are
+current; those two ledger copies are not.
+"""
+
+[[finding]]
+id = "F-17"
+status = "verified"
+severity = "major"
+title = "Expected authoring gate applied to every 2a step; observed three assignments lack checkable completion state"
+detail = "The round-10 gate requires every 2a step to state a truthful completion condition checkable in run state and says any obligation that cannot do so is 2b (sketches/thin-adapter.md:1056-1063; plan.toml:703 VA-5(9)). The design applies that test only to selector recording (thin-adapter.md:1065-1068). Its surviving census still says knowledge capture, scope reconciliation, and repeat-pass judgement have no reachable verifier even in principle (thin-adapter.md:645-646), and the inquire.scope explicit-confirm branch deliberately leaves no artefact (thin-adapter.md:901-906). Therefore the new discriminator has not reproduced or revised its own assignments: at least inquire.scope cannot satisfy its checkable-in-run-state requirement as designed. Apply and record the gate over every surviving 2a step, supplying the exact state-visible completion condition, or reclassify any step that cannot meet it."
+disposition = "fixed"
+response = """
+CONCEDED, and the repair goes further than the finding asks. Repaired at 7f45f3d4; re-primed.
+
+WHAT WAS RIGHT. Every mechanical claim verifies. The gate is stated at thin-adapter.md:1058-1063 and target-machine.d2:748-754 and plan.toml VA-5(9); exactly one obligation was worked (`completes when` returns a single hit, thin-adapter.md:1066, against 6 hits for `completes` as a positive control); the census at :644-646 stood unreconciled with it; :901-906 stood unreconciled with it. A discriminator that has not reproduced its own assignments has not been applied, and round 10 left it unapplied. That is the finding and it is upheld.
+
+WHAT APPLYING IT FOUND — the reason this took a ruling and not an edit. Round 10's `and checkable in run state` CONTRADICTS A ROUND-3 OWNER RULING NOBODY REOPENED: target-machine.d2:449, `VERIFICATION STRENGTH IS AN ORTHOGONAL AXIS, NOT THE SORTING RULE`, and :464-468, which adopted completability precisely because it gives `mechanically unverifiable but genuinely mandatory human acts — semantic scope reconciliation, knowledge capture — somewhere honest to sit rather than being demoted to lenses`. Round 10 was arguing against RUN INFERENCE; it did not argue against that orthogonality. The clause rode in as a qualifier on a correct ruling, which is why ten rounds of reading the sentence never surfaced it and one attempt to APPLY it did.
+
+Two reductios, both mechanical. (1) It demotes the two acts round 3 protects by name. (2) It condemns FOUR OF install/design-prompts/exploring.toml's FIVE SHIPPED STEPS — `explore.scope`, `explore.canon`, `explore.memory`, `explore.triage` state no state-visible condition, only `explore.research` carries a verifier. Those are 2a assignments this slice made ((a.3), tier 2a, :61-75). A runbook whose only admissible steps carry mechanical verifiers is a verifier list, which is DEC-101 and DEC-102 gutted.
+
+THE RULING (owner, 2026-08-01, round 11): SPLIT THE LIMBS. Classification asks only that a 2a step state a TRUTHFUL completion condition in its text; unstatable is still 2b. State-visibility — both of a condition's terms readable from run state — moves to COLLECTION, where it grades a condition's EVIDENCE exactly as a verifier grades a discharge's. That is round 3's orthogonality one level down, not a new exit: nothing about round 10's core survives weaker, and the gate is still decidable over the whole set before any run.
+
+THE GATE, APPLIED — thin-adapter.md `The gate, applied`, a row per obligation over ALL NINE, the four relocated plus exploring.toml's five. All nine state a condition and all nine survive as 2a. FIVE OF NINE ARE STATE-VISIBLE, and the kit must now NAME the four it cannot reach and REPORT the fraction rather than publish a rate over a denominator it never covered (VA-5(10) as extended).
+
+ONE PREMISE OF THE FINDING IS CORRECTED. `inquire.scope cannot satisfy its checkable-in-run-state requirement as designed` does not hold, and the finding inherited that from the stale paragraph at :901-906 rather than from the gate. The gate asks for a STATE CONDITION, not an artefact: `slice-nnn.md asserts nothing the accepted decisions contradict and omits nothing they add to scope` holds or fails whether or not an edit occurred, so the `or explicitly confirm` branch's artefact-lessness — which bore on the WITHDRAWN subject-presence test — does not bear on this one. inquire.scope is state-visible at edge 4. The paragraph that said otherwise is now marked superseded in both halves, and the one that genuinely fails is KNOWLEDGE CAPTURE, which the finding did not name as the hard case: its condition's left-hand term is what this inquiry settled, and that is in context, not in run state.
+
+Related correction the count forced: the codicil excused a whole shipped asset on one of its five members carrying a verifier (`four distinct obligations qualify (exploring.toml is shipped and already carries a verifier on explore.research)`). Invalid as reasoned. Eight of nine ship no verifier; the four shipped ones are now warranted in the codicil table rather than left as a disclosure.
+
+TWO STEP TEXTS BOUGHT VISIBILITY by naming a landing site — `explore.triage` and the edge-4 repeat-pass judgement now record their finite result into the slice notes. PHASE-08 already owns exploring.toml's before/after under VA-7(2), so this costs no new machinery. KNOWLEDGE CAPTURE DELIBERATELY DID NOT: making its condition state-visible needs a new artefact enumerating what the inquiry settled, a fresh obligation invented to measure an old one, which is F-2's ceremony objection by the back door. It stays 2a on a truthful condition with weak evidence — the position round 3 ruled honest.
+
+ONE ASYMMETRY KEPT ON PURPOSE, since it will read as an inconsistency otherwise: the REWORD ARM (thin-adapter.md, the pre-registered reopening) still demands candidate text that is checkable in run state. Only a state-visible condition can fire the signal at all, so the reopening always starts from one; dropping the requirement there would let a step ESCAPE THE SIGNAL BY REWORDING ITS CONDITION OUT OF VISIBILITY — a firing answered by becoming uncollectible, which is route-to-no-revision arriving through a door round 11 would otherwise have opened. The sweep was per-site adjudication, not find-and-replace.
+
+WHERE IT LANDED. thin-adapter.md — gate section rewritten with the round-11 amendment and the nine-row applied table; codicil count and parenthetical corrected with four new warrants; the verifier-vs-state-visibility distinction stated where F-17 read the counts; :901-906 superseded; the two step texts recorded; reviewer surface 7 added. target-machine.d2 — round-11 amendment block after the round-10 one. plan.toml — PHASE-09 EX-8 and VA-5, the latter gaining (11), a check that the gate was actually applied per obligation. DEC-104 — both tiers. notes.md Learned — the round-11 entry, whose durable part is the shape of the error rather than the ruling: a qualifier attached to a correct ruling can carry a second, unargued ruling, and it survives because everyone reads the sentence for the part that was contested.
+
+WHAT REMAINS OPEN, DISCLOSED AS COST NOT DEFECT (reviewer surface 7): whether a signal reaching five of nine is worth running at N=1, given that the four it cannot reach include knowledge capture — the case this argument has circled since round 3. That is a judgement about the instrument's power, not an invalid step, and it is stated in the design rather than absorbed into a rate.
+
+VERIFICATION. doctrine validate exit 0, corpus clean; d2 compiles the diagram; doctrine check quick exit 0 (the IMP-373/374/376 unresolved-citation warnings are the known primary-tree items). Commit 7f45f3d4, RV-325 re-primed at it.
+"""
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

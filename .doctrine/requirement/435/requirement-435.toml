@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 435
+slug = "compose-the-delivered-turn-prompt-from-the-design-prompt-pack"
+title = "Compose the delivered turn prompt from the design prompt pack"
+status = "pending"
+kind = "functional"
+
+description = "The prompt delivered on a turn is composed from one invariant stage fragment, at most one coarse obligation fragment, and the dynamic envelope, addressed through the existing cascade rather than a parallel composition mechanism."
+tags = []
+acceptance_criteria = [
+  "The delivered prompt is those three parts and no more.",
+  "Fragments are addressed by stable identity with content binding.",
+  "The store has no consumer outside the design run.",
+]

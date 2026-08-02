@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 428
+slug = "reject-an-unknown-snapshot-schema-version-at-parse-time"
+title = "Reject an unknown snapshot schema version at parse time"
+status = "pending"
+kind = "functional"
+
+description = "The persisted run snapshot carries a schema identifier and version, and a version the binary does not understand is refused when parsed rather than partially interpreted."
+tags = []
+acceptance_criteria = [
+  "An unknown version is refused at parse time with a message naming the version.",
+  "No field of an unrecognised snapshot is acted upon.",
+  "The scheme follows the existing schema-and-version precedent rather than introducing a second one.",
+]

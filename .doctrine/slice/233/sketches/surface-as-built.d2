@@ -1,0 +1,149 @@
+# Diagram B — the DETERMINISTIC SURFACE AS BUILT at dispatch/233, restricted to
+# things that can emit textual instruction (or that hold the state such text
+# would be selected by).
+#
+# Verified against: `doctrine design --help`, `doctrine prompt resolve --help`,
+# src/design_run/{mod,prompt,submission}.rs, src/mcp_server/tools.rs,
+# publication/manifest.toml, install/hymns/**, install/design-prompts/**.
+#
+# Shape/colour legend encodes the WIRING, which is the question:
+#   hymn      — text resolved from the hymn cascade, customization = customizable
+#   sealed    — text from a code-owned asset, customization = FIXED, no override
+#   stdout    — plain CLI stdout; carries data or a refusal, no guidance asset
+#   state     — state Doctrine tracks (what guidance could be selected BY)
+#   absent    — no endpoint / no asset exists yet
+
+direction: right
+
+classes: {
+  hymn: {
+    shape: document
+    style: { fill: "#f0fff4"; stroke: "#276749"; stroke-width: 2; font-size: 14 }
+  }
+  sealed: {
+    shape: document
+    style: { fill: "#fffaf0"; stroke: "#b7791f"; stroke-width: 3; font-size: 14 }
+  }
+  stdout: {
+    shape: rectangle
+    style: { fill: "#ffffff"; stroke: "#2b6cb0"; font-size: 14 }
+  }
+  state: {
+    shape: cylinder
+    style: { fill: "#eef4fb"; stroke: "#4a5568"; font-size: 14 }
+  }
+  absent: {
+    shape: cloud
+    style: { fill: "#fff5f5"; stroke: "#c53030"; stroke-dash: 4; font-size: 14 }
+  }
+}
+
+legend: Legend {
+  near: top-left
+  style: { fill: "#ffffff"; stroke: "#a0aec0" }
+  l1: hymn cascade —\ncustomizable { class: hymn }
+  l2: code-owned asset —\nFIXED, no override { class: sealed }
+  l3: plain stdout —\ndata or refusal { class: stdout }
+  l4: state doctrine tracks { class: state }
+  l5: does not exist yet { class: absent }
+}
+
+cli: "doctrine design — the run surface (CLI only)" {
+  style: { stroke: "#2b6cb0"; fill: "#fbfdff" }
+  start: "start <SLICE>\ncreate a run" { class: stdout }
+  show: "show <SLICE>\n--format prompt | json | status\nDEFAULT IS prompt" { class: stdout }
+  apply: "apply <SLICE> --input <JSON>\none sparse idempotent mutation;\nvalidates whole candidate first" { class: stdout }
+  resume: "resume <SLICE>\n--run --known-revision --known-fragment\nthe compact re-entry projection" { class: stdout }
+  mat: "materialise <SLICE>\nrender sections to authored prose" { class: stdout }
+}
+
+prompt: "doctrine prompt — the cascade surface" {
+  style: { stroke: "#276749"; fill: "#f7fffb" }
+  resolve: "resolve --role <R>\n[--band --stage --model --harness --arm]\nassembled markdown to stdout" { class: stdout }
+  explain: "explain\nresolution order + provenance" { class: stdout }
+  check: "check\nvalidate replaces graph\n+ stage vocabulary" { class: stdout }
+}
+
+assets: "Guidance assets — where instruction text actually lives" {
+  style: { stroke: "#276749"; fill: "#f7fffb" }
+
+  cascade: "hymn cascade — install/hymns/**" {
+    pre: "preamble/core.md" { class: hymn }
+    role: "role/orchestrator.md\nrole/worker.md" { class: hymn }
+    model: "model/anthropic/…\nmodel/deepseek/…\nmodel/adherence/low.md" { class: hymn }
+    harness: "harness/claude.md\nharness/cursor.md" { class: hymn }
+    stage: "stage/design.md — 37 lines\nTHE ONLY STAGE HYMN\ncustomization = FIXED" { class: sealed }
+  }
+
+  frags: "process fragments — install/design-prompts/**\nNOT in the hymn cascade; a separate asset root\nall four customization = FIXED" {
+    style: { stroke: "#b7791f"; fill: "#fffdf7" }
+    inq: "inquiry.md — 15 lines" { class: sealed }
+    draft: "drafting.md — 15 lines" { class: sealed }
+    rev: "reviewing.md — 15 lines" { class: sealed }
+    del: "delegation.md — 16 lines" { class: sealed }
+  }
+}
+
+runstate: "Run state — what selection can key on" {
+  style: { stroke: "#4a5568"; fill: "#fbfcfe" }
+
+  stages: "Stage — five coarse landmarks\ngate::can_advance is the sole authority" {
+    class: state
+    st: "exploring → inquiring → drafting\n→ reviewing → locked"
+  }
+
+  acts: "writer acts — six, closed (submission.rs:620)" {
+    class: state
+    a: "stage · declare · evidence\nacceptance · adopt_authored · traversal"
+  }
+
+  models: "separate state models (DEC-065)" {
+    class: state
+    m: "inquiry lifecycle · traversal cursor+posture\nattestation/review · delegation · recovery"
+  }
+
+  cas: "revision — every mutation compare-and-swaps" { class: state }
+}
+
+mcp: "MCP surface — src/mcp_server/tools.rs" {
+  style: { stroke: "#c53030"; fill: "#fffbfb" }
+  have: "memory_* (8) · review_* (10)\ndispatch_* (7) · observation_record\nworker_commit · doctrine_onboard" { class: stdout }
+  none: "NO design_* TOOL EXISTS\nthe managed run is unreachable\nfrom an MCP-only agent" { class: absent }
+}
+
+gaps: "Gaps — process with no deterministic home" {
+  style: { stroke: "#c53030"; fill: "#fffbfb" }
+  g1: "exploring has NO fragment of its own —\nfor_stage maps Exploring|Inquiring → inquiry.md,\nwhich says nothing about /canon,\n/retrieve-memory or slice research" { class: absent }
+  g2: "locked yields None BY DESIGN —\nbut state 8 (transition to planning)\nstill has work to instruct" { class: absent }
+  g3: "the five-step explore checklist\nhas no tracked state and no endpoint\nthat can say \"do step 3 now\"" { class: absent }
+  g4: "design-target selector recording\nhas a command (slice selector add)\nbut no design-run hook or prompt" { class: absent }
+  g5: "the 15-item section content checklist\nlives only in skill prose" { class: absent }
+  g6: "no fragment for craft/manner —\n\"one question at a time\",\n\"2-3 options + recommendation\"" { class: absent }
+}
+
+# --- composition: how a turn's text is assembled (EX-1) ---
+show -> assets.cascade.stage: "composes" { style.stroke: "#276749" }
+show -> assets.frags: "…plus AT MOST ONE fragment" { style.stroke: "#b7791f" }
+show -> runstate.stages: "…plus the TurnEnvelope\nprojected from" { style.stroke: "#4a5568" }
+
+resolve -> assets.cascade: "resolves the band cascade" { style.stroke: "#276749" }
+
+# --- selection: what picks the fragment ---
+runstate.stages -> assets.frags.inq: "exploring | inquiring" { style: { stroke: "#b7791f"; stroke-dash: 2 } }
+runstate.stages -> assets.frags.draft: drafting { style: { stroke: "#b7791f"; stroke-dash: 2 } }
+runstate.stages -> assets.frags.rev: reviewing { style: { stroke: "#b7791f"; stroke-dash: 2 } }
+runstate.models -> assets.frags.del: "delegation state,\nNOT the stage machine" { style: { stroke: "#b7791f"; stroke-dash: 2 } }
+
+# --- mutation path ---
+apply -> runstate.acts: "carries exactly one" { style.stroke: "#2b6cb0" }
+apply -> runstate.cas: "CAS or refuse" { style.stroke: "#2b6cb0" }
+apply -> runstate.stages: "stage act advances,\ngate::can_advance decides" { style.stroke: "#2b6cb0" }
+mat -> assets: "adopt_authored is the\nONLY lawful crossing" { style: { stroke: "#2b6cb0"; stroke-dash: 3 } }
+
+# --- re-entry ---
+resume -> assets.frags: "--known-fragment lets the caller\nSKIP a fragment it already holds\n(the just-in-time lever, already built)" { style: { stroke: "#b7791f"; stroke-dash: 2 } }
+
+# --- what is missing ---
+mcp.none -> cli: "would have to wrap" { style: { stroke: "#c53030"; stroke-dash: 4 } }
+gaps.g1 -> assets.frags.inq: "shares a fragment\nabout something else" { style: { stroke: "#c53030"; stroke-dash: 4 } }
+gaps.g3 -> runstate.stages: "no sub-state to advance" { style: { stroke: "#c53030"; stroke-dash: 4 } }

@@ -7,208 +7,51 @@ description: Use when a slice needs architectural shaping before implementation 
 
 You are translating scoped intent into implementable design.
 
-Inputs:
-- existing slice folder
-- existing `design.md` or equivalent design artifact
-- relevant related artifacts, source material, research, etc.
+**This skill is an adapter, not the workflow.** The stages, their order, and the
+obligations on each live in the design run — a deterministic machine in
+Doctrine. Every `doctrine design` command prints the guidance for the turn you
+are on, and that output is your instruction: read it and do what it says. Do
+not decide the order here, and do not reconstruct it from this file.
 
-## Workflow State Machine
+## Activation
 
-Complete in order without deviation. Each depends on the preceding stage:
+1. **Establish or resume the run.** `doctrine design start <slice>` when none
+   exists, `doctrine design resume` when one does.
+2. **Surface the envelope and do what it says.** It carries the stage, the next
+   obligation, and the outstanding runbook steps.
 
-1. **Explore context** — specs, ADRs, memories, files, docs, recent commits. Begin high-level.
-2. **Ask clarifying questions** — one at a time, understand purpose/guiding principles/constraints/success criteria
-3. **Propose 2-3 approaches** — identify the next unanswered design question; propose options with trade-offs and your recommendation
-4. **Present design** — in sections scaled to their complexity, get user approval after each section.
-5. **Write design.md** — save to the slice `design.md` file and commit
-6. **Adversarial Review** — perform a hostile review of the design doc, probing for imprecision and flawed reasoning
-7. **Integrate Review Feedback** — triage and respond to feedback; integrate into slice / design doc; repeat until the design locks (explicit user approval)
-8. **Transition to planning** — record the lifecycle move (`doctrine slice
-   status <id> plan` — bare number), then invoke `/plan` to create the
-   implementation plan
+## Recovery
 
-<Process State Machine>
-  <state name="Explore context">
-    <transition to="Ask clarifying questions" />
-  </state>
-  <state name="Ask clarifying questions">
-    <transition to="Propose 2-3 approaches" />
-  </state>
-  <state name="Propose 2-3 approaches">
-    <transition to="Present design" />
-    <transition to="Ask clarifying questions" />
-  </state>
-  <state name="Present design">
-    <transition to="Write design doc" />
-  </state>
-  <state name="Write design doc">
-    <transition to="Adversarial review" />
-  </state>
-  <state name="Adversarial review">
-    <transition to="Ask clarifying questions" />
-    <transition to="Propose 2-3 approaches" />
-    <transition to="Present design" />
-    <transition to="Write design doc" />
-    <transition to="Transition to planning" />
-  </state>
-  <state name="Transition to planning">
-    <transition to="invoke /plan skill" />
-  </state>
-</Process State Machine>
+No run exists — start one. There is nothing to recover.
 
-## Process (detail)
+A stale one exists — `doctrine design resume --run <id> --known-revision <rev>
+--known-fragment <frag>`, the compact re-entry projection.
 
-### Explore context
+There is no per-state recovery logic, deliberately: the run reports where it
+stands and its outstanding obligations return with it. Recover through
+`doctrine design resume`, never by replaying the conversation. If evidence is
+absent, it is absent, and saying so is the correct answer.
 
-1. Read the slice scope + relevant specs, ADRs, prior art first.
-2. Run `doctrine slice research <id>`; if the artefact is absent, run the round
-   per `/research` first. Thread 1 stands in for the bulk of the `/canon` sweep
-   below; design assertions cite `research.md`, load-bearing on ✓ rows only.
-3. Run `/canon` before drafting so relevant ADRs, policies, and standards are in view for this design surface.
-4. Run `/retrieve-memory` against the files and subsystems you expect to touch, so scope-bound gotchas surface early.
-5. Before drafting sections, explicitly generate a list of concerns and then triage the design surface:
-   - open questions that must be resolved
-   - risks and underspecified areas
-   - assumptions you are carrying
-   - critical design decisions that shape the rest of the design
-   - relevant ADRs, policies, and standards that constrain the design
+## Degradation
 
-### Ask clarifying questions
+**Detect and surface. Do not self-heal, and do not improvise a design workflow
+of your own.** A skill and its binary can desync in both directions. If
+`doctrine design` is missing or refuses, report what it said — a refusal names
+what it objected to — and stop.
 
-Proceed in a light loop to clarify intent, surface known and unknown unknowns,
-and drive towards sufficient clarity to lock a design.
+## Residue
 
-Apply this process first to the slice scope itself if necessary, then to the
-technical design.
+One obligation the machine does not carry:
 
-At each step:
+| item | why it is not delivered at a moment |
+|---|---|
+| **The Locked exit.** Record the lifecycle move — `doctrine slice status <id> plan`, bare number — then invoke `/plan`. | Deferred, not ambient. `Stage::Locked` has no outbound forward edge to key a runbook to, so neither asset kind can hold it. Awaiting a second case to shape the handoff against. |
 
-1. Summarize:
-   - what's already understood
-   - carrying assumptions
-   - open questions, risks, concerns, dependencies
-2. Work through unresolved design questions one at a time. Ask questions one at a time, choosing the most impactful or most naturally related:
-   - consider it carefully (implications, related questions)
-   - lightly explore related context if necessary, but keep it bounded
-   - suggest 2-3 options, with tradeoffs
-   - recommend one, with rationale
+## Pointers
 
-Operating principles:
-
-- Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it
-  into multiple questions
-- Focus on understanding: purpose, constraints, success criteria, verification
-  strategy
-
-Continue in this manner until you have sufficient clarity to begin the design
-proper, and the user has accepted your summary.
-
-As answers land, capture what should outlive the session via `/knowledge`: an
-unresolved question → QUE, a locked design choice → DEC, an assumption the
-design carries → ASM.
-
-If the conversation hinges on document-local acronyms (OQ-17, F-4): don't
-assume the user has them memorized. Introduce them qualified by the ID of the
-containing artifact, and provide a brief synopsis if not obvious from context.
-
-Once accepted, ensure the slice scope (`slice-nnn.md`) is consistent with and
-reflects your current shared understanding before proceeding.
-
-### Present design
-
-1. Draft or revise the design section by section, interactively, rather than dumping a full design at once:
-   - Current behavior vs target behavior
-   - Code impact summary (paths + intended changes)
-   - Verification alignment (what evidence must change/add)
-   - Design decisions and remaining open questions
-2. When a section shapes later sections, present that section first and treat later sections as provisional until the foundation is coherent.
-3. Prefer concrete design detail over hand-wavey prose:
-   - Current behavior vs target behavior
-   - module responsibility boundaries
-   - imports, coupling, cohesion analysis
-   - structs/types/interfaces/function signatures
-   - data structures & algorithms
-   - example data shapes
-   - data flow boundaries
-   - verification impact
-   - invariants & boundary conditions
-   - samples of critical code, protocols
-   - titles / descriptions of key test cases
-   - text c4 diagrams
-   - Code impact summary (paths + intended changes)
-   - Verification alignment (what evidence must change/add)
-   - Impact on design decisions and remaining open questions
-4. Perform targeted research if required to ensure fit to implementation surface
-
-### Record design-target selectors
-
-The code-impact summary (paths + intended changes) **is** the slice's declared
-touch-set. Capture it as **`design-target` selectors** — the load-bearing input
-the audit-time `slice conformance` delta diffs against git actuals (undeclared
-edits, undelivered targets):
-
-```
-doctrine slice selector add <id> "src/conformance.rs" "src/slice.rs" --intent design-target
-```
-
-Record them when the code-impact section locks (during or right after writing
-`design.md`), at the precision the design commits to — literal paths where the
-design names a file, a glob only where it genuinely declares a directory. These
-are distinct from `/slice`'s coarse `scope-relevant` fence: `design-target` is
-what conformance holds the implementation to. `doctrine slice selector list <id>`
-shows both intents.
-
-### Adversarial review
-
-1. Once the design feels coherent, perform an adversarial self-review before
-   treating it as done:
-   - attack vague sections, hidden assumptions, weak verification, missing
-     code-impact detail, and places where a short sample would remove ambiguity
-   - attack missing, misread, or weakly applied ADR/policy/standard constraints
-   - ensure doctrinal alignment
-   - record the findings in the design doc or companion slice notes as needed
-2. Review for doctrinal alignment.
-   - If the doctrine pass exposes governance conflicts, missing authorities, or
-     ambiguous constraints, stop and `/consult` rather than normalizing around
-     guesswork.
-3. Integrate the feedback before offering next steps.
-   - Occasionally this might require revisiting earlier steps.
-4. After integrating design feedback, reconcile the owning slice — `slice-nnn.md`
-   so scope, risks, acceptance criteria, open questions, and follow-up direction
-   still match the revised design, **and** `slice-nnn.toml` (relations, metadata);
-   relations move via `doctrine link` and lifecycle status via `doctrine slice
-   status` — not hand-edits (`using-doctrine.md` § Relating entities).
-5. After the internal adversarial pass is integrated, you MUST offer the user a
-   choice:
-   1. run a formal hostile pass via `/inquisition`, or print a prompt for an
-      external adversarial reviewer.
-   2. initiate `/plan` to create the implementation plan and runtime phase sheets.
-6. Multiple passes of review & feedback may be required before acceptance. Do
-   not presume approval until it is explicitly granted.
-
-If meaningful tradeoffs or uncertainty remain unresolved, stop and `/consult`.
-
-## Guardrails
-
-The design doc is canon for design intent.
-
-- If design and plan conflict, reconcile via the design first.
-- Do not present "the whole design" as settled before the foundational sections and decisions have been validated.
-- Do not hide unresolved assumptions inside polished prose; name them explicitly.
-- Do not confuse detailed design with implementation planning.
-- Do not treat a polished full-file rewrite as progress if the hard design questions
-  are still unresolved.
-- Do not move on to planning while the slice scope still tells an older story than the design.
-- Do not treat governance as optional background reading when the design makes architectural or workflow choices.
-
-## Outcomes
-
-- The design gives a clear, defensible target for implementation.
-- Foundational questions are closed or made explicit before downstream planning.
-- The design evolves through short feedback loops instead of one large speculative draft.
-- Verification impact is explicit before coding starts.
-- The author gets an internal adversarial pass and an optional external challenge
-  prompt before planning starts.
-- Slice scope and design stay aligned before plan/phase work begins.
-- Relevant ADRs, policies, and standards shape both the draft and the critical review.
+- `/consult` — meaningful tradeoffs or uncertainty left unresolved. Do not
+  improvise past them.
+- `/knowledge` — an open question → QUE, a locked choice → DEC, an assumption
+  the design carries → ASM.
+- `doctrine library show reference/using-doctrine.md` — relations move via
+  `doctrine link` and lifecycle via `doctrine slice status`, never by hand-edit.

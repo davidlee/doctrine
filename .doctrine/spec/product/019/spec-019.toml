@@ -1,0 +1,31 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 19
+slug = "managed-design-workflow"
+title = "Managed design workflow"
+status = "active"
+kind = "product"
+category = "workflow"
+product_level = "capability"
+tags = ["design", "workflow", "inquiry-map", "checkpoint", "continuity", "provenance", "adherence", "token-efficiency"]
+responsibilities = [
+  "Own the coordination state of the design workflow for one slice — stage, pending obligation, refresh boundary, and idempotent submission identity — so the workflow's deterministic half is held by Doctrine rather than reconstructed by an agent from its own transcript.",
+  "Derive the repository, slice-lifecycle, configuration, and linked-record facts the workflow needs, instead of asking the agent to restate what Doctrine can already know mechanically.",
+  "Maintain a run-local, inspectable decomposition of the open design questions — the inquiry map — carrying stable node identity, provenance, lifecycle, and a bounded adaptive traversal the user may redirect at any point.",
+  "Make the active path, nearby frontier, blockers, resolved and open counts, and material map changes visible without injecting the whole map into every turn.",
+  "Require every meaningful workflow checkpoint to disposition its semantic result — create a record, adopt an existing canonical record, retain an explicitly unresolved outcome, or mark the exchange intentionally non-durable — reusing the established decision, question, and assumption record kinds as the durable sink rather than minting a parallel one.",
+  "Keep agent-authored proposal separable from accepted truth: Doctrine-derived fact, direct user direction, agent-proposed structure, and attested acceptance each retain distinct provenance, and a semantic payload never declares its own accepted status.",
+  "Offer a compact continuity projection — active path, accepted decisions, open questions, assumptions, evidence references, blockers, and next obligation — sufficient to resume after context compaction or a session boundary without replaying the transcript.",
+  "Define the boundary for assigning one bounded inquiry obligation to another session or agent and accepting an attributed proposal back, while global transition authority stays with the coordinating run.",
+  "Preserve the review choreography that makes a lock legitimate: section-level alignment with the human, then an integrated adversarial pass, then an explicit content-bound acceptance.",
+  "Leave the workflow's judgement half with the agent — open-ended inquiry, synthesis, drafting, and adversarial reasoning are coordinated, never mechanised.",
+]
+
+[[relation]]
+label = "governed_by"
+target = "ADR-005"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-009"

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 416
+slug = "recover-a-design-run-after-context-loss-without-replaying-the-transcript"
+title = "Recover a design run after context loss without replaying the transcript"
+status = "pending"
+kind = "functional"
+
+description = "A resume projection reconstitutes the run sufficiently for a fresh context to continue from the same next obligation, without access to prior conversation."
+tags = []
+acceptance_criteria = [
+  "Resume returns the active path, accepted decisions, open questions, assumptions, evidence references, blockers, and next obligation.",
+  "The happy path requires only the slice reference; addressing and change-only options are refinements, never required.",
+  "A fresh agent given only the projection arrives at the same next obligation as the agent before the loss.",
+]

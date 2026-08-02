@@ -54,7 +54,9 @@ The loader (the one impurity, in `src/install.rs`) unions both roots at read
 time; **provenance is derived from the source root**, never stored. The
 **seal set** (embedded, from the install manifest) is enforced at resolution:
 a user-provenance snippet whose slot is sealed is dropped *before matching* —
-sealed framework content wins by active exclusion of disk twins. **Expose is
+sealed framework content wins by active exclusion of disk twins. Sealed slots are
+enumerated in the manifest's `[hymns].seal`; `stage/design` is one, sealing the
+invariant stage fragment of the managed design workflow (PRD-019). **Expose is
 the symmetric complement**: at an unsealed slot the projected editable starter
 is kept and carries a self-`replaces` on its own slot, so the user overlay
 suppresses its framework origin (§ Suppression) and the slot still resolves

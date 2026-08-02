@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 431
+slug = "reserve-and-journal-canonical-identity-before-authored-materialisation"
+title = "Reserve and journal canonical identity before authored materialisation"
+status = "pending"
+kind = "functional"
+
+description = "Creating a record reserves its canonical id and journals it before any authored bytes are written, so a crash cannot leave an unidentified authored record and recovery resumes the reserved id."
+tags = []
+acceptance_criteria = [
+  "A crash before the identity is journalled leaves no unidentified authored record.",
+  "Every post-journal recovery resumes against the exact reserved id, never a fresh one.",
+  "The ordering is verified by deterministic fault injection at each step, not by inspection.",
+]

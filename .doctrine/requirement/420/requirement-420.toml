@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 420
+slug = "record-accepted-design-outcomes-as-durable-epistemic-records"
+title = "Record accepted design outcomes as durable epistemic records"
+status = "pending"
+kind = "functional"
+
+description = "Accepted decisions, unresolved questions, and carried assumptions become records of the established epistemic kinds, linked to the owning slice, so accepted design state is reconstructible incrementally."
+tags = []
+acceptance_criteria = [
+  "Accepted choices, open questions, and carried assumptions map onto the established record kinds without a new parallel kind.",
+  "Each durable checkpoint is linked to the owning slice.",
+  "Section drafts, traversal state, and delivery receipts do not enter the knowledge graph.",
+]

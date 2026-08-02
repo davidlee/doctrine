@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 424
+slug = "bound-a-normal-turns-projection-by-named-limits"
+title = "Bound a normal turn's projection by named limits"
+status = "pending"
+kind = "quality"
+
+description = "The projection delivered on an ordinary turn is bounded by named limits so the protocol's attention cost stays below the cost it removes."
+tags = []
+acceptance_criteria = [
+  "Every bounded field has a named limit rather than an inline literal.",
+  "When a limit binds, the omission is signalled rather than silently dropped.",
+  "A full-detail view may scale where the ordinary view may not.",
+  "The ordinary turn's cost is measurable as a figure and comparable across runs.",
+]

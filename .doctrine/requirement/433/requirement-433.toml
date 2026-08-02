@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 433
+slug = "derive-every-read-projection-from-one-canonical-turn-envelope"
+title = "Derive every read projection from one canonical turn envelope"
+status = "pending"
+kind = "functional"
+
+description = "One structured envelope is the single read model; prompt, machine, and human renderings are projections of it rather than independently maintained views."
+tags = []
+acceptance_criteria = [
+  "One type is the canonical read model and is named in the module's public surface.",
+  "Prompt, machine-readable, and human renderings all derive from it.",
+  "No rendering carries a field the envelope does not.",
+]

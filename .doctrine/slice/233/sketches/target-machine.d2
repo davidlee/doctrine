@@ -1,0 +1,1211 @@
+# Diagram C — the DESIRED TARGET machine for the managed design run.
+#
+# Third of a triptych. Read the other two first if you have not:
+#   workflow-as-prose.d2   (A) the machine the CURRENT SKILL PROSE claims
+#   surface-as-built.d2    (B) the deterministic surface AS BUILT — note that B
+#                              predates PHASE-16 and says "writer acts — six";
+#                              there are now SEVEN (`discharge`), and B's gap g1
+#                              ("exploring has NO fragment of its own") is closed.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS DIAGRAM IS FOR
+# ---------------------------------------------------------------------------
+# SL-233 PHASE-08 rewrites `plugins/doctrine/skills/design/SKILL.md` (214 lines,
+# 10,178 bytes) from an eight-state workflow machine into a thin
+# activation/recovery adapter. The question this diagram exists to answer is
+# narrow and practical: WHAT NEEDS TO CHANGE ABOUT THE SKILL.
+#
+# It is therefore NOT an attempt to make the design process formally rigorous.
+# The incumbent skill was never modelled as an FSM; it was written to stop agents
+# forgetting to do things, and neither A nor B would pass muster as a state
+# chart. This diagram borrows FSM questions only where they earn their keep —
+# is this a state or a transition? what guards a transition? is it one machine or
+# several? — and stops at the point where the answer stops changing the skill.
+#
+# ---------------------------------------------------------------------------
+# THE MEDIATION AXIS — the whole point of the colours
+# ---------------------------------------------------------------------------
+# Every obligation in the design process sits in exactly one of three tiers.
+# The rule separating the first two is NOT invented here; it is authored in the
+# shipped runbook, `install/design-prompts/exploring.toml:8-13`:
+#
+#     THE AUTHORING RULE. Could a project legitimately do this differently?
+#       Yes -> a runbook step. Overridable, verifier substitutable.
+#       No  -> an engine invariant, enforced by `apply` / `advance`.
+#
+# DEC-102 (craft is overridable, invariants stay sealed) states the same line on
+# the asset-policy axis: an asset is sealed when a project override would make
+# its content FALSE rather than merely different.
+#
+#   TIER 1  ENGINE INVARIANT   Rust-owned, closed vocabulary, cannot be
+#                              overridden or forgotten. `Condition`,
+#                              `Refusal`, the CAS revision check.
+#   TIER 2  RUNBOOK STEP       Doctrine-sequenced obligation, contents are asset
+#                              data (TOML), optionally verified by an executable.
+#                              The "do this now" register. DEC-101.
+#   TIER 3  SKILL PROSE        Soft. Voluntary. Agent judgement. What is left
+#                              after tiers 1 and 2 — and the smaller this tier
+#                              gets, the more honest `VA-4`'s size comparison is.
+#
+# The third tier is the residue, and PHASE-08's real deliverable is deciding how
+# much residue is legitimate rather than merely unmoved.
+#
+# ---------------------------------------------------------------------------
+# WHAT IS ALREADY SETTLED BY EVIDENCE (decisions, not proposals)
+# ---------------------------------------------------------------------------
+# D1  EIGHT PROSE STATES MAP ONTO FIVE ENGINE STAGES. `Stage` is five coarse
+#     landmarks and `gate::can_advance` is the sole authority
+#     (src/design_run/gate.rs). The mapping is in the `mapping` panel below.
+#     Three of the incumbent's eight "states" are not states at all.
+#
+# D2  "5 · Write design.md" IS AN EFFECT, NOT A STATE. `materialise` is a CLI
+#     verb and `Condition::MaterialisationCurrent` guards drafting → reviewing
+#     (gate.rs:174-177). Writing the doc is already an engine-checked effect of
+#     being in Drafting. It needs no state and no step.
+#
+# D3  "7 · Integrate review feedback" IS WORK INSIDE Reviewing, NOT A STATE.
+#     This is why the incumbent's own XML has SEVEN states while its numbered
+#     list has EIGHT (SKILL.md:19-28 vs :30-57) — the XML already folded it into
+#     Adversarial review's outbound transitions. The engine agrees: it is gated
+#     at the exit by `IntegratedReviewPresent` + `BlockingFindingsDisposed`
+#     (gate.rs:179-184). The discrepancy is a defect in the incumbent, and this
+#     diagram resolves it in the XML's favour.
+#
+# D4  IT IS NOT ONE MACHINE. DEC-065 records separate state models, and B's
+#     `runstate.models` shows them: inquiry lifecycle, traversal cursor+posture,
+#     attestation/review, delegation, recovery. They are ORTHOGONAL REGIONS, not
+#     sub-states of the stage machine. The incumbent skill prose flattens all of
+#     them into one numbered list, which is a large part of why it reads as an
+#     eight-state machine that does not behave like one.
+#
+# D5  GUARDS BELONG ON EDGES, AND EVERY NON-TERMINAL STAGE HAS EXACTLY ONE
+#     FORWARD EDGE. `can_advance` is total on non-terminal stages, so edge-keying
+#     and origin-state-keying are isomorphic. There are exactly FOUR forward
+#     edges, and they are the only places an obligation can be hung. This is the
+#     structural fact that makes the whole disposition tractable: an obligation
+#     either lands on one of four edges, or it stays prose.
+#
+#     EVIDENCE, CORRECTED. An earlier revision cited gate.rs:186-204 — which is
+#     `boundary_runbook`'s DOC COMMENT ASSERTING the isomorphism, i.e. the claim
+#     cited as evidence for itself. The proof is:
+#       gate.rs:150-158   `can_advance`, a nine-line const fn over a literal
+#                         four-arm `matches!`. Read it; the claim is settled.
+#       tests.rs:56-77    `stage_gate_table_admits_only_legal_forward_moves`
+#                         asserts the admitted set EXHAUSTIVELY over all 25
+#                         ordered pairs. A fifth edge cannot land silently.
+#     And the linearity has THREE dependants, not one: boundary_runbook
+#     (gate.rs:199-204), forward_runbook (commands/design.rs:1801-1806, which
+#     WALKS Stage::ALL to find the single edge), and cumulative_conditions
+#     (gate.rs:208-218, which iterates Stage::ALL.windows(2) and so assumes a
+#     chain). D5 is therefore not an assumption this diagram makes; it is a
+#     property the engine holds and a test locks. The open question is DURABILITY
+#     — is a branch ever wanted? — and it is item 5 for the reviewer, not item 1.
+#
+# D6  `set` MODE IS DEFERRED — IMP-373. `Mode` is a one-variant enum
+#     (runbook.rs:201-206); `mode = "set"` is a hard parse refusal with a test
+#     locking it (:986-993). It collides with `EX-14`'s token bound: only the
+#     step AT THE CURSOR carries its full text, and a coverage set has no cursor
+#     (notes.md:425-427). Consequence for THIS diagram: any obligation proposed
+#     as a runbook here must be admissible as a SEQUENCE, or it stays prose.
+#
+# ---------------------------------------------------------------------------
+# THE FOUR OPEN QUESTIONS — ALL RULED ON BY THE OWNER, 2026-08-01
+# ---------------------------------------------------------------------------
+# D7  (was Q2) THE TWO CHECKLISTS TAKE EDGES 3 AND 4, AS SEQUENCES.
+#     The fifteen content items guard drafting → reviewing; the attack list
+#     guards reviewing → locked. Both are coverage sets, but they ship as
+#     `sequence` and the arbitrary order is accepted: the purpose is to stop
+#     agents forgetting, and an imposed order on a short list costs almost
+#     nothing. CONSEQUENCE: IMP-373 does NOT block PHASE-08. `set` mode becomes
+#     a later refinement, not a precondition. This overrides D6's caution.
+#
+#     >>> AMENDED — post-round-4 self-audit, owner ruling 2026-08-01. D7'S
+#         SUBJECT NO LONGER EXISTS, AND THE CLAIM THAT REPLACED IT IS FALSE.
+#         D14 turned the fifteen content items and the attack list into
+#         fragment prose, so the two coverage sets D7 ruled on are gone — and
+#         thin-adapter (a.3) then concluded "the DEC-101 tension is GONE
+#         rather than conceded". IT IS NOT. F-5 settled edge 2 at two steps
+#         and edge 4 carries three: FIVE ORDER-INDEPENDENT STEPS under
+#         `mode = "sequence"`, whose cursor refuses any discharge that does
+#         not name the step at it (run.rs:1369-1377). Nothing makes knowledge
+#         capture precede scope reconciliation, or repeat-pass judgement
+#         precede selector recording. D7'S ORIGINAL STANCE IS RESTORED WITH
+#         THE NEW SUBJECT: the tension is CONCEDED as true and judged cheap,
+#         at reduced scale (five steps across two edges, not nineteen on one).
+#
+#         THE DEFERRAL'S WARRANT IS REPLACED, NOT REPAIRED. "On merit" —
+#         nobody needs the mode — is WITHDRAWN AS FALSE. The five steps are
+#         `set`'s real instances, which is the very condition DEC-101 named
+#         when it assigned `set` to PHASE-08. What warrants deferring anyway
+#         is F-5'S OWN RULE APPLIED TO ITSELF: `set`'s ADMISSION is six lines
+#         (run.rs:1369-1377), but its RENDER is not — RunbookStanding::cursor
+#         drives the turn lines (runbook.rs:435-470), and what a CURSORLESS
+#         runbook renders under EX-14's token bound is unsketched and sits
+#         OUTSIDE EN-2's gate. Shipping `set` in PHASE-08 therefore either
+#         widens a gate at round 4, or hands a design choice to
+#         implementation — the one thing F-5 says this gate exists to
+#         prevent. D6's consequence is load-bearing again: an obligation
+#         admissible only as a set stays prose.
+#
+#         REPAYMENT IS EVIDENCE-TRIGGERED, NOT A PROMISE. IMP-373 repays when
+#         agents are observed hitting `Refusal::DischargeNotAtCursor`
+#         (refusal.rs:198) against the edge-2/edge-4 runbooks on an order that
+#         carries no meaning. Collected in PHASE-09's exercise, NOT from the
+#         run record: a refusal aborts the write, so nothing is journalled
+#         (change_log records applied changes only). The refusal string is
+#         machine-emitted and quotable, so this is an observation rather than
+#         a judgement.
+#
+#         >>> THE UPSTREAM RECORDS NOW SAY SO — RV-325 round 5 F-11.
+#             The ruling above first landed HERE ONLY, while DEC-101's body
+#             still assigned `set` to PHASE-08 and PHASE-16's EX-7/EX-14
+#             still moved the mode AND its cursorless rendering there. A
+#             sketch and a gate cannot narrow an accepted decision or a
+#             discharged criterion by describing them differently.
+#             AMENDED: DEC-101 carries a dated amendment withdrawing the
+#             assignment; EX-7 and EX-14 carry annotations recording that
+#             their FORWARD ASSIGNMENT moved to IMP-373. Neither discharged
+#             obligation changes — PHASE-16 shipped `sequence` only and
+#             rendered the cursor step, both correct then and now. PHASE-08
+#             holds no criterion assigning `set`; VH-1 already reads it as
+#             deferred, so no downstream criterion contradicts this.
+#
+#             >>> CONTESTED AND RE-FIXED — round 6. The round-5 repair
+#                 amended DEC-101's PROSE TIER ONLY. `record-101.toml`'s
+#                 consequences still carried the live structured assignment,
+#                 so `knowledge show` — which synthesizes both tiers —
+#                 emitted the assignment beside its own withdrawal. That is
+#                 the two-tier reading rule this project states everywhere
+#                 and it was broken in the record used to state it. The
+#                 structured consequence now carries the amendment too.
+#                 Also swept with it: PHASE-09 EX-8 still asserted `IMP-373
+#                 stays deferred on DEC-104's own merits`, withdrawn at
+#                 round 5 and not swept into the criterion. The contest
+#                 accepted the completed-phase annotations as correct
+#                 because they preserve the discharged obligations.
+#
+# D8  (was Q1) THE LOCKED EXIT STAYS IN THE ADAPTER as TIER 3 prose.
+#     No terminal runbook, no new selector shape, no conclude/handoff output.
+#     Owner's reasoning: if this programme succeeds, `/plan` gets the same
+#     treatment, and the stage-to-stage handoff interface is better designed
+#     once against two real cases than guessed at now against one.
+#     RE-WARRANTED BY D13 — the ruling stands, the JUSTIFICATION narrows. The
+#     Locked exit has the MOST PRECISE TRIGGER MOMENT IN THE WHOLE FILE: the
+#     instant the run reaches terminal. So "no delivery moment could be located"
+#     is emphatically NOT why it stays prose. The reason is DEFERRAL — we know
+#     the moment and are declining to build the mechanism until a second case
+#     shows what shape it wants. Legitimate, and a DIFFERENT warrant. Recorded
+#     as DEFERRED AND KNOWN-WEAK, not as legitimately kept; the residue most
+#     likely to be repaid first.
+#
+# D9  (was Q3) THE EIGHT GUARDRAILS ARE TRIAGED, NOT MOVED WHOLESALE — and the
+#     triage is itself a DESIGN ACTIVITY, not a mechanical sort. Three buckets:
+#     restates an engine invariant -> delete or fold into the sealed stage hymn;
+#     is really a step at a specific moment -> assign an edge, make it a step;
+#     genuinely ambient judgement -> TIER 3, and the adapter keeps it without
+#     apology. This triage IS the `EN-2` (b) answer.
+#
+# D10 (was Q4) SELECTOR RECORDING — RULED "STAYS AS PROSE", THEN **REVERSED BY
+#     D13**. It is now STEPS ON EDGES 3 AND 4.
+#     The original ruling: this wants MORE THAN ONE hook across design and plan
+#     — it is iterative, research can trigger it, a decision can trigger it —
+#     and modelling it as a single step on one edge would be a worse lie than
+#     prose, because a discharge asserts a completeness the obligation lacks.
+#     UNPICKED, that objection has two parts and only one survives:
+#       OVERCLAIMING IS A GENUINE HARM. "Record the design-target selectors",
+#         discharged once, does assert the touch-set is settled when it is not.
+#       MULTI-HOOK IS NOT THE HARM. It was carrying the original ruling, and
+#         under D13 corollary (2) it argues the opposite way.
+#     So the remedy is STEP TEXT THAT DOES NOT OVERCLAIM, not the absence of
+#     delivery: "record the design-target selectors the code-impact section NOW
+#     COMMITS TO" is true at each firing and asserts nothing about finality.
+#     Edge 3 is where the code-impact section locks — exactly where the
+#     incumbent prose says it fires; edge 4 is where review may have moved it.
+#     RESIDUAL, still open: the hooks ACROSS DESIGN AND PLAN stay unmodelled,
+#     because /plan has no runbook machinery yet. D13 makes that a known gap in
+#     coverage rather than a warrant for delivering nothing at the two moments
+#     we can already reach.
+#
+# D11 THE EIGHT GUARDRAILS, TRIAGED (executing D9).
+#
+#     THE DENOMINATOR, CORRECTED. An earlier revision headed this "Outcome,
+#     4 / 1 / 6 / 3" = 14 items from an eight-item section. The six "become
+#     steps" had folded in :98, :99-100, :101-102 and :107-109 — Operating-
+#     principles and /knowledge lines from :96-113 that feed the EDGE-2 RUNBOOK
+#     (D12). They are not guardrails and they are not part of this triage. The
+#     honest census:
+#       :192-204 is EIGHT items — the standalone canon line :194, plus seven
+#       bullets (:196 :197 :198 :199 :200-201 :202 :203). Triage: 3 delete /
+#       1 hymn / 2 step / 2 keep.
+#       The sketch's table adds two rows from OUTSIDE the range, marked as such:
+#       A s6.a6 (= SKILL.md:187-188) and :111-113, giving 4 / 1 / 2 / 3 = 10.
+#     Three different counts across two artefacts is what a reviewer finds first
+#     and learns nothing from. Fixed here; the sketch states the same numbers.
+#
+#     RE-TRIAGED UNDER D13. The first pass sorted by "is this stated with more
+#     authority elsewhere" and produced 4 delete / 1 hymn / 2 step / 3 keep. Two
+#     deletions failed a self-check and the keeps did not survive the ruling.
+#     Sorting instead by WHEN MUST THIS ARRIVE gives 1 / 1 / 6 / 1 over nine
+#     rows, and the shape of the change is that almost everything has a moment.
+#     (Was 2 / 1 / 6 / 1 over ten until RV-325 F-1 removed `A s6.a6` as a row
+#     — see below. The census has now been wrong three times and corrected
+#     three times; that history is left visible on purpose.)
+#
+#     DELETE — stated with more authority AT THE MOMENT IT BITES (1):
+#       :196 design/plan conflict reconciles via design -> the boot snapshot
+#            says "the plan is not higher authority than the design", and the
+#            boot snapshot is in context at EVERY turn. Delivery is continuous.
+#
+#     >>> RV-325 F-1 — `A s6.a6` (= SKILL.md:187-188) WAS A SECOND DELETION
+#         HERE AND IS NOT ONE. Two defects in one row:
+#         (a) DOUBLE DISPOSITION. :187-188 sits inside :162-191, which already
+#             moves wholesale to the edge-4 runbook. Listing it here as well
+#             disposed the same lines twice, in a table VA-4 requires to sum to
+#             the incumbent. Same defect as state 8's :26-28.
+#         (b) HALF-COVERED. The bullet carries TWO obligations and the deletion
+#             evidence reached only one:
+#               "do not presume approval" -> hymn :24 AND
+#                 Condition::UserAcceptanceAttested. Genuinely doubly covered;
+#                 this clause is still DELETED.
+#               "multiple passes of review & feedback may be required before
+#                 acceptance" -> NOTHING STATES IT. DEC-067's `regress` PERMITS
+#                 iteration, but a mechanism existing is not the instruction
+#                 arriving — D13's own point, turned on this diagram's
+#                 reasoning. -> STEP ON EDGE 4, firing when an agent believes
+#                 one pass sufficed.
+#         The row was labelled "the strongest deletion in the set". It was the
+#         weakest: covered twice on one half, zero times on the other.
+#     MOVE TO THE SEALED HYMN (1):
+#       :194 "the design doc is canon for design intent" — a real invariant and
+#            the one thing the hymn lacks. NOT a duplicate of "the run is the
+#            record": the run is authoritative for PROCEDURAL state, the design
+#            doc for design INTENT, and `adopt_authored` is the lawful crossing.
+#            Stating both is what stops that reading collapsing.
+#     BECOME STEPS ON AN EDGE (6). Trigger named for each:
+#       :197 -> edge 3. Handing a draft to the reader (foundation sections
+#            first, per-section acceptance).
+#       :198 -> edge 3. Handing a draft to the reader. WAS DELETE, against the
+#            hymn's "show provenance, unresolved branches and blockers rather
+#            than a tidy surface" — but that bullet's SUBJECT is THE INQUIRY MAP
+#            (hymns/stage/design.md:19-21, under "Provisional is not evidence").
+#            :198's subject is the DESIGN DOCUMENT'S PROSE. Different object.
+#       :199 -> edge 3. WAS KEPT as ambient. The failure mode is plan content
+#            leaking into design sections, checkable as a lens at the moment the
+#            draft is claimed ready. It was never ambient; nobody had asked.
+#       :200-201 -> edge 3, MERGING WITH :198. Same trigger, same register,
+#            same object: polish masking unresolved work. WAS KEPT.
+#       :202 -> edge 4, WHERE IT MERGES WITH :115-116 (two prose mentions of one
+#            obligation collapsing into one step).
+#       :203 -> edges 3 AND 4. WAS DELETE, against the shipped step
+#            `explore.canon` — which guards EDGE 1 and discharges ONCE, at the
+#            start of the run, while the obligation bites where architectural
+#            choices are made and reviewed. This is EXACTLY the defect D12
+#            identifies for :98 ("PHASE-16 shipped the exploring runbook — a
+#            different edge"), committed by this diagram's own triage one bucket
+#            away. Two hooks, per D13 corollary (2); the incumbent's own
+#            Outcomes line says governance shapes "both the draft and the
+#            critical review".
+#       (:98, :99-100, :101-102, :107-109 -> edge 2 is D12's runbook content,
+#        NOT part of this triage. See the denominator note above.)
+#     RESIDUE REGISTER — NOT "legitimately kept" (1 from this range):
+#       :111-113 qualify doc-local acronyms by container. UNENFORCED BY
+#       CONSTRUCTION: it fires on EVERY MESSAGE and no edge can hold a
+#       per-message obligation. The only item in the triage for which "no
+#       delivery moment exists" is literally true — and during the session that
+#       produced this revision the agent authoring the triage VIOLATED it while
+#       presenting that triage, in unexpanded D-numbers. The one obligation with
+#       no moment is the one that demonstrably did not fire. Recorded as a known
+#       weakness, not defended.
+#
+# D12 EDGE 2 GETS A RUNBOOK — the third, approved 2026-08-01, expanding D7's
+#     two. The inquiry craft moves to asset data. Justification is DEC-102's
+#     own: it claims the craft has moved out of skill prose, and that is not
+#     yet true for :98, which is inquiry craft on a different edge from the one
+#     PHASE-16 shipped. Cheapest of the three (existing prose, no new
+#     mechanism) and the one that makes an accepted decision record true.
+#
+#     >>> SETTLED — RV-325 round 3 F-5, owner ruling 2026-08-01. D14 moved the
+#         craft to inquiry.md and left OPEN whether the two-act residue still
+#         justified a runbook. F-5 is right that leaving it open is not a
+#         disclosure: PHASE-08 MUST AUTHOR THE TARGET ASSETS, so an open fork
+#         hands a design choice to implementation — the one thing this gate
+#         exists to prevent. RULED: EDGE 2 CARRIES A RUNBOOK, TWO STEPS.
+#         Answerable on the amended discriminator rather than on taste — both
+#         obligations complete at the boundary; a file count is not a reason
+#         to demote an act to a lens. Step text is BOUNDED, and that bound is
+#         load-bearing: "capture everything important" has no completion
+#         point and would be a lens in a step's costume, the exact failure
+#         D14 corrects. See thin-adapter.md (a.3) for the two step texts and
+#         the per-step warrants.
+#
+# ---------------------------------------------------------------------------
+# D13 — THE RULING THAT ARRIVED AFTER THE REST AND RESHAPED THEM (DEC-103)
+# ---------------------------------------------------------------------------
+# D13 INSTRUCTION IS DELIVERED AT THE POINT OF EFFECT. Ruled 2026-08-01, after
+#     D1-D12, in response to a self-check pass that found two of D11's four
+#     deletions dropped an obligation at the moment it fires. Recorded as
+#     DEC-103.
+#
+#       Instruction — and guardrails governing invariants the system does not
+#       itself enforce — is DELIVERED AT THE MOMENT IT MUST TAKE EFFECT. Prose
+#       is not a destination; it is a FAILURE TO LOCATE A DELIVERY MOMENT, and
+#       where it remains it is labelled as such.
+#
+#     THE FRAME THIS REPAIRS. The authoring rule quoted at the top of this
+#     diagram has TWO branches and is total over its two answers. It has NO
+#     PROSE BRANCH. TIER 3 was invented here, unauthorised by the rule this
+#     diagram opens with, and most of the `EN-2` (b) answer was spent
+#     legitimising what lands in it. D13 supplies the missing clause.
+#
+#     THREE COROLLARIES, and they do the work below:
+#       (1) DRY IS THE WRONG MODEL for agent instruction. Its premise — stated
+#           once, referenced perfectly thereafter — is false for agents. So
+#           "something with more authority already says this" warrants a
+#           deletion ONLY where that authority fires WHERE AND WHEN the
+#           obligation bites.
+#       (2) MULTI-HOOK IS A REASON TO DELIVER REPEATEDLY, not to stop. An
+#           obligation firing at several moments is hung at every one of them.
+#       (3) GENERAL VIGILANCE IS THE WEAKEST FORM. "Be on the lookout for X" is
+#           worth little; "apply this lens to this artefact, now" is worth a
+#           great deal. Diagram A's own vocabulary names the weakness
+#           (`vigilance — a standing be-on-the-lookout with NO trigger point`)
+#           without drawing the conclusion.
+#
+#     WHAT IT CHANGES HERE: D10 is REVERSED (selector recording is delivered on
+#     edges 3 and 4). D8 SURVIVES but its warrant narrows from "legitimately
+#     kept" to "DEFERRED, known-weak". D11's two failed deletions become steps,
+#     and its two "kept" items turn out to have a delivery moment nobody had
+#     asked about. TIER 3 keeps its place on the axis but becomes a RESIDUE
+#     REGISTER, each item carrying WHY no moment was found — two items under
+#     D13, then ONE once D14 rehomed :111-113.
+#
+#     WHAT IT DOES NOT CHANGE: which assets may be overridden. That is DEC-102,
+#     on a different axis, and D13 narrows rather than contradicts it — an asset
+#     can be overridable craft and still owe a delivery moment.
+#
+#     NOT DELIVERED BY THIS SLICE: the third clause landing in the shipped
+#     authoring rule (exploring.toml:8-13) and propagating to every runbook
+#     authored after it. Out of PHASE-08 scope; IMP-374 carries it.
+#
+#     >>> RV-325 F-2 — D13 AS RECORDED IS UNBOUNDED. It mandates delivery at
+#         every firing moment and states NO admission limit, merge rule,
+#         optionality rule or cost threshold. Applied literally, edge 3
+#         accretes the 15 content items plus :197, :198+:200-201, :199, :203
+#         and :144-161 — NINETEEN OR MORE required obligations on one edge.
+#         And the mechanism makes that SERIAL: Mode::Sequence is "a cursor,
+#         one step at a time, no skipping" (runbook.rs:201-205), and
+#         `discharge` on a submission is an OPTION, NOT A VEC, because "a
+#         batch of two would need an order Batch explicitly refuses to carry"
+#         (submission.rs:636-641). Nineteen obligations = nineteen serial CAS
+#         mutation turns before advance. D7's "costs almost nothing" was
+#         asserted without evidence against this slice's OWN named risk R1,
+#         "protocol ceremony exceeds its value" (design.md:568-572) — and
+#         PHASE-09 EX-3 measures it only AFTER PHASE-08 builds the shape
+#         (its EN-1 requires PHASE-08 complete). That is a post-mortem, not
+#         a bound.
+#
+#         FIRST PROPOSED REMEDY — WRONG, recorded because the correction is
+#         instructive. It read: obligations sharing a MOMENT and a SUBJECT
+#         merge into ONE step carrying the coverage list. A GRANULARITY bound,
+#         on the premise that D13 governs *when* and had been misread as also
+#         governing *how many*. Half right — D13 does govern only *when* — but
+#         merging 19 steps into 6 leaves the content in the WRONG ASSET KIND,
+#         and arithmetic was doing the work a missing distinction should do.
+#
+# ---------------------------------------------------------------------------
+# D14 — THE ADMISSION BOUND IS A DESTINATION RULE, NOT A COUNTING RULE.
+#       Owner ruling, 2026-08-01, in response to RV-325 F-2. THE LARGEST
+#       STRUCTURAL CHANGE IN THIS DIAGRAM.
+#
+#         "A set of heuristics to apply while doing the work is NOT a
+#          checklist to tick off. It is FRAMING FOR THE ACTIVITY, and an exit
+#          gate delivers it when the damage is done."
+#
+#     TIER 2 WAS ALWAYS TWO THINGS, AND THE CODE SAYS SO. runbook.rs imports
+#     STORE from prompt.rs because "a runbook is the structured sibling of the
+#     prose it guards, IN THE SAME STORE, so spelling the directory twice
+#     would be two sources for one address" (runbook.rs:20-24).
+#
+#       2a RUNBOOK STEP (*.toml)      2b STAGE FRAGMENT (*.md)
+#       selected by an EDGE           selected by a STAGE
+#         boundary_runbook(from,to)     Fragment::for_stage (prompt.rs:107-115)
+#       delivered ONCE, at the        delivered EVERY TURN IN THE STAGE,
+#         advance attempt               re-emitted unless the agent holds an
+#                                       exact name@digest receipt (DEC-078)
+#       DISCHARGED — cursor, CAS      NOT discharged — it is framing
+#       may say `verified` IFF a      n/a
+#         verifier exits zero
+#
+#     THE DISCRIMINATOR IS COMPLETABILITY AT A BOUNDARY. Sort by:
+#
+#         CAN THIS BE TRUTHFULLY COMPLETED AT A SPECIFIC BOUNDARY, WITH A
+#         FINITE RESULT WHOSE COMPLETION IS NECESSARY BEFORE ADVANCING?
+#
+#       · yes — a finite, gate-worthy act -> 2a  (selectors; scope reconcile)
+#       · no  — a continuous lens with no -> 2b  (consider data-flow
+#               truthful completion point        boundaries; don't hide
+#                                                assumptions in polish)
+#
+#     VERIFICATION STRENGTH IS AN ORTHOGONAL AXIS, NOT THE SORTING RULE.
+#     DischargeOutcome has three arms in the record but TWO ON THE WIRE: a
+#     caller may say `attested` or `skipped` and MAY NEVER say `verified` —
+#     "a step carrying no verifier cannot acquire the stronger word by any
+#     route" (runbook.rs:604-606, 745-752). A verifier STRENGTHENS a step's
+#     discharge from `attested` to `verified`; its availability does not
+#     decide whether the obligation is a step. CODICIL: a 2a step shipping no
+#     verifier must state why mandatory attestation earns blocking the edge.
+#
+#     >>> AMENDED — RV-325 round 3 F-3, owner ruling 2026-08-01, BEFORE this
+#         ruling governed any authored asset. D14 first sorted by "could a
+#         verifier EVER corroborate this?" That is unreproducible: *could
+#         ever* admits an imagined future verifier for almost any lens, and
+#         NO surviving 2a step ships one — so the rule narrated a judgement
+#         instead of making it. That was D14's self-declared weakest point
+#         (below) and F-3 pressed exactly there. Completability is decidable
+#         at the boundary and gives mechanically unverifiable but genuinely
+#         MANDATORY HUMAN ACTS — semantic scope reconciliation, knowledge
+#         capture — somewhere honest to sit rather than being demoted to
+#         lenses. EVERY ASSIGNMENT THE ORIGINAL MADE SURVIVES UNCHANGED;
+#         they are now derivable rather than asserted. The RULING above —
+#         heuristics are framing, not a checklist — is untouched.
+#
+#     No exit code proves an agent held a lens in mind. Rendering 15 quality
+#     lenses as 15 dischargeable steps converts ONE thing an agent might hold
+#     in mind into 15 things it clicks through — the incumbent's attention
+#     failure relocated into TOML, which is the harm F-2 named.
+#
+#     AND A LENS AT AN EXIT GATE ARRIVES AFTER THE DAMAGE IS DONE. A runbook
+#     fires when you LEAVE a stage; framing for how to draft must be present
+#     WHILE drafting. Under D13 that makes 2b a STRONGER delivery than a step,
+#     not a weaker one. D13 was never wrong — this diagram read "delivered at
+#     the moment it takes effect" as "therefore a runbook step".
+#
+#     WHAT IT CHANGES: EDGE 3 GOES FROM 19 STEPS TO ONE (:144-161 selector
+#     recording — the only guardrail that COMPLETES AT THE BOUNDARY; it is
+#     also the only one a verifier could reach, but that is evidence, not the
+#     classification reason — see the F-3 amendment). The 15 content
+#     items and :197 :198 :199 :200-201 :203 go to drafting.md. The attack
+#     list goes to reviewing.md. Inquiry craft goes to inquiry.md, which meets
+#     DEC-102's "craft moved into data" WITHOUT D12 and mostly dissolves it.
+#     :111-113 leaves the skill entirely (see below). RESIDUE REGISTER: ONE
+#     ITEM.
+#
+#     WHAT IT COSTS, PLAINLY: a fragment cannot be discharged. Nothing records
+#     that an agent read the drafting lens; name@digest proves the bytes
+#     ARRIVED, not that they were attended to. The 19-step shape would have
+#     produced 19 attestations. THE TRADE IS FEWER RECEIPTS FOR BETTER ODDS
+#     THE CONTENT IS IN FRONT OF THE AGENT WHEN IT MATTERS. RV-315 F-17
+#     applies here too: no test can fail. VH-1 is the judge.
+#
+#     >>> D14's OWN WEAKEST POINT AS FIRST RULED — RAISED AS RV-325 F-3 AND
+#         NOW CLOSED. The original discriminator sorted by whether a verifier
+#         COULD corroborate — but *corroborable in principle* is not
+#         *corroborated in fact*, and NONE of the surviving 2a steps ships
+#         with a verifier. Every one will say `attested`, exactly as a
+#         fragment would. Under the amended (completability) rule that
+#         observation survives but is no longer a defect: an unverified 2a
+#         step is a finite boundary act with weak evidence, not a
+#         misclassified lens. The codicil keeps it honest.
+#
+#         WHAT DISTINGUISHES SUCH A STEP FROM A FRAGMENT IS NOT THE RECEIPT.
+#         It is that the run CANNOT ADVANCE until an agent asserts the act is
+#         done. A fragment carries no such refusal. Per-step warrants for all
+#         four unverified 2a obligations are in thin-adapter.md (a.3).
+#
+#     >>> THE TRADE ABOVE IS NOW PRE-REGISTERED — RV-325 F-7, ROUTED BY
+#         SUBJECT AT F-10. "No test can fail" is true of the GATE and was
+#         doing duty as a reason to state no decision rule at all.
+#
+#         THREE DELIVERY SIGNALS — adherence no better than the step shape;
+#         receipt churn implying arrival without attention; per-turn cost
+#         exceeding the interaction cost replaced. If any fires, the revision
+#         is MECHANISM-SIDE (re-emission semantics, fragment size/split,
+#         fragment size/split) and D14/DEC-104 STANDS. [Round 6, F-11
+#         contest: `envelope-visible digest` was a third candidate here and
+#         is WITHDRAWN AS VACUOUS — the digest already rides every emission
+#         as the `name@digest` header `design resume` emits (prompt.rs), so
+#         it proposed the status quo as a revision. Two candidates, not
+#         three.]
+#
+#         ONE CLASSIFICATION SIGNAL — misclassification, either direction: a
+#         2a step discharged where it cannot honestly be complete (no real
+#         boundary; never a step), or a 2b lens agents treat as having a
+#         completion moment they would gate on (an act the rule demoted).
+#         IF THIS FIRES, D14/DEC-104's DISCRIMINATOR REOPENS.
+#
+#         >>> AMENDED — post-round-4 self-audit, owner ruling 2026-08-01.
+#             BOTH HALVES ABOVE ASK A MODERATOR TO READ INTENT, which is
+#             structurally the criticism F-3 made of the ORIGINAL
+#             discriminator: sound as a rule, un-cashable in practice. "It
+#             cannot HONESTLY be complete" and "agents TREAT a lens as
+#             gate-worthy" are inferences about a mind, with no adjudicator
+#             and no rubric anchor. A falsifier nobody can collect leaves
+#             DEC-104 unfalsifiable by the same route F-7 raised — one level
+#             down this time. BOTH HALVES ARE RE-ANCHORED TO OBSERVABLE
+#             EVENTS:
+#
+#             (i) A 2a STEP WAS DISCHARGED AT A TURN WHERE ITS SUBJECT DID
+#             NOT YET EXIST IN RUN STATE. Checkable from the run record
+#             without inferring honesty — the sketch's own example ("scope
+#             reconciled" attested before the design settles) already IS a
+#             run-state predicate. SCOPED, DELIBERATELY, TO THE STEPS WHERE
+#             IT IS CHECKABLE: selector recording (`slice selector list`) and
+#             knowledge capture (a record `shapes SL-NNN` in the run's
+#             window). NOT collectible for `inquire.scope`'s "or explicitly
+#             confirm" branch, which by design leaves no artefact — that
+#             clause is what makes the step finite. Disclosed, not papered
+#             over: a signal that stays silent where it cannot collect beats
+#             a broad one that needs an inference to fire at all. (An
+#             earlier draft of this block claimed the signal "never fires
+#             falsely". WITHDRAWN — see the F-12 amendment below. Silence
+#             where uncollectible is a smaller property than soundness, and
+#             the two were conflated.)
+#
+#             (ii) THE AGENT EXPLICITLY ASKED WHETHER A LENS WAS COMPLETE,
+#             OR REQUESTED A GATE OR CHECKPOINT ON ONE — QUOTED VERBATIM. A
+#             speech act in the transcript, not a moderator's read of what
+#             the agent "would" do. Half (ii) CANNOT be run-state anchored at
+#             all: a lens is fragment prose with no discharge event, so there
+#             is no state transition to observe. Dropping it was the other
+#             option and was rejected — it would make the falsifier
+#             one-directional, able to detect 2a-was-never-a-step and never
+#             2b-should-have-been-2a.
+#
+#             Both remain incapable of being satisfied by delivery data,
+#             which is what VA-5 actually requires. PHASE-09 EX-8(d) and
+#             VA-5 carry the re-anchored wording.
+#
+#     >>> AMENDED AGAIN — RV-325 round 5 F-12, owner ruling 2026-08-01. THE
+#         RE-ANCHOR ABOVE FIXED THE EVIDENCE AND LEFT THE CONSEQUENCE
+#         OVERCLAIMED, which breaches VA-5 — the criterion reproduced inside
+#         the repair meant to satisfy it. THIRD INSTANCE THIS REVIEW.
+#
+#         A 2a discharge before its subject exists has THREE live causes,
+#         not one: (A) the obligation has no real boundary — misclassified;
+#         (B) a correctly classified act was falsely or prematurely
+#         attested — ordinary noncompliance; (C) the step TEXT misled a
+#         compliant agent about when it completes — a wording defect. The
+#         raw event cannot tell them apart, so routing it straight to
+#         "reopen DEC-104" was a signal with three explanations pointed at
+#         one consequence.
+#
+#         TWO CORRECTIONS. (1) THE CONSEQUENCE IS WEAKENED TO WHAT THE
+#         EVIDENCE CARRIES. Firing REOPENS THE DISCRIMINATOR'S APPLICATION
+#         TO THAT STEP, and the reopening admits three outcomes — REWORD (a
+#         boundary exists; the text failed to name it), RECLASSIFY to 2b (no
+#         boundary exists), or STAND (the run was anomalous). [REDUCED TO
+#         TWO AT ROUND 6 — `stand` is removed; see the F-13 block below.]
+#         Reopening was always the right verb; the defect was
+#         asserting the raw event PROVED "it was never a step". That clause
+#         is withdrawn. (2) THE EVIDENCE CARRIES A WITHIN-RUN CONTROL: at
+#         the same edge, in the same run, how were the SIBLING 2a steps
+#         discharged? One step premature BESIDE correct siblings is
+#         step-specific and reaches the discriminator; everything premature
+#         is agent-general and routes to the ADHERENCE signal instead —
+#         which is exactly the separation VA-5 demands, now doing work.
+#
+#         SCALE, DISCLOSED. CHR-049 specifies ONE moderated exercise, so
+#         the within-run control is the collectible discriminator and
+#         cross-run corroboration is opportunistic. Cause (C) is separated
+#         from (A) at the reopening, not by the observation — which is what
+#         the three-outcome resolution set is for, and why it is named
+#         rather than left to whoever reads the result.
+#
+#         HALF (ii) TAKES THE SAME CORRECTION. A lone request to gate a
+#         lens is also ordinary confusion; it reopens rather than
+#         reclassifies, and needs the same contrast against how that run
+#         treated the other lenses.
+#
+#     >>> AMENDED — RV-325 round 6 F-13, owner ruling 2026-08-01. `STAND`
+#         IS REMOVED. FOURTH INSTANCE THIS REVIEW of a repair reproducing
+#         its own finding's defect, and the cleanest example of the class:
+#         the round-5 fix stopped the signal over-routing to
+#         reclassification by adding an exit that routes it NOWHERE.
+#
+#         VA-4 requires every falsifying signal to name a result that WOULD
+#         REVISE THE PLACEMENT. An unconditioned `stand` let any firing be
+#         narrated after the fact as an anomalous run, with nothing
+#         pre-registered selecting that exit — VA-5's route-to-the-cheapest
+#         -revision manoeuvre arriving by the opposite door, as
+#         route-to-no-revision. At N=1 the sibling control separates
+#         step-specific from agent-general behaviour but cannot rule out
+#         anomaly, so `stand` was always available.
+#
+#         ONCE THE SIGNAL FIRES, THE PLACEMENT IS REVISED: REWORD or
+#         RECLASSIFY, no third exit. Both revise the placement or its
+#         boundary contract, which is what VA-4 asks for — rewording a
+#         step's text IS a change to its boundary contract, not a null
+#         outcome. [WITHDRAWN AS FALSE AT ROUND 7 — reword leaves a 2a step
+#         2a on the same edge; VA-4's noun is PLACEMENT and this broadened
+#         it. See the F-14/F-15 block below.]
+#
+#         THE ANOMALY CONTROL MOVES INTO THE FIRING CONDITION, where it can
+#         be stated BEFORE any run rather than chosen after one. The signal
+#         fires only when ALL hold: (a) the within-run sibling control is
+#         satisfied; (b) the run did NOT cross a deliberate context break or
+#         resume at that edge — CHR-049's protocol deliberately induces one,
+#         which makes this identifiable rather than hypothetical; (c) the
+#         run was not aborted or restarted mid-edge. [(b) WIDENED AND (d)
+#         ADDED AT ROUND 7 — see the F-14/F-15 block below.]
+#
+#         THE ASYMMETRY IS DELIBERATE. Reword is the conservative arm and
+#         absorbs the marginal case, so a false firing costs a text
+#         improvement, not a wrongly reclassified obligation. A resolution
+#         set whose cheap arm is safe does not need an escape hatch — which
+#         is the general lesson, and the reason `stand` looked necessary
+#         only while the two arms were treated as equally costly. [THIS
+#         WARRANT LAPSED AT ROUND 7 AND IS REPLACED, NOT RESTATED — see
+#         below. `stand`'s removal still stands, on a different ground.]
+#
+#     >>> AMENDED — RV-325 round 7, F-14 and F-15, owner ruling 2026-08-01.
+#         SEVENTH INSTANCE OF THE PATTERN, AND ITS TWO FACES. The round-6
+#         repair narrowed the EXIT SET and the EXCLUSION SET in one move,
+#         and each narrowing lost something the thing it replaced covered.
+#         That is why the two findings arrived together and why answering
+#         them in sequence gives a wrong answer.
+#
+#         FACE ONE — THE EXIT SET (F-15). `Both revise the placement or its
+#         boundary contract` is WITHDRAWN AS FALSE. Rewording a 2a step's
+#         boundary text leaves it a 2a step on the same edge: it revises the
+#         obligation's CONTRACT, not its PLACEMENT. The sentence broadened
+#         VA-4's noun so the cheap arm would qualify — structurally what
+#         `stand` was doing. Removing `stand` closed the zero-revision exit
+#         and installed a NO-PLACEMENT-REVISION exit in its place.
+#
+#         VA-4 IS NOT AMENDED. It asks each signal to name A result that
+#         would revise the placement, and RECLASSIFICATION is that result.
+#         What defeats the criterion is not a cheap arm's presence but an
+#         UNREACHABLE EXPENSIVE ONE. The repair goes to reachability.
+#
+#         THE REOPENING IS PRE-REGISTERED. Every other link in the chain was
+#         — observation, sibling control, firing condition, resolution set —
+#         and the CHOICE BETWEEN THE ARMS was left to `the reopening`, which
+#         is route-to-the-cheapest-revision with the routing step renamed: a
+#         VA-5 breach on its own terms. The rule: (1) RECLASSIFY TO 2b IS
+#         THE DEFAULT; (2) REWORD MUST PRODUCE AN ARTEFACT — candidate step
+#         text naming a completion boundary that is truthful AND observable
+#         in run state at the moment it says the step completes, the same
+#         standard signal (i) meets; no candidate text, no reword; (3)
+#         REWORD IS ONE-SHOT PER STEP — a second firing on the same step
+#         spends cause (C) and reclassifies. The cost gradient inverts: the
+#         cheap arm costs a checkable artefact and failing to produce one
+#         compels the expensive one. F-12's correction is untouched; nothing
+#         reclassifies on the raw event, and cause (B) still routes to
+#         adherence.
+#
+#         FACE TWO — THE EXCLUSION SET (F-14). `stand` covered ANOMALY,
+#         unbounded. Its replacement covers three NAMED events and omits the
+#         commonest: INCIDENTAL CONTEXT EXHAUSTION OR COMPACTION, which
+#         nothing marks — CHR-049 records only `refresh and exact resume
+#         across a deliberate context break`. A run can therefore satisfy
+#         the written condition after an unmarked context loss.
+#
+#         THE RUN RECORD CANNOT CLOSE THIS. Doctrine observes writes, not an
+#         agent's context — the limit already disclosed for IMP-373's
+#         repayment signal. So of F-14's three remedies, bounding the
+#         exercise is unverifiable in advance, a run-record proxy does not
+#         exist, and INSTRUMENTING EVERY CONTEXT BOUNDARY is the one that
+#         lands. Its site is the MODERATOR PROTOCOL, which is SL-233's to
+#         write and not CHR-049's (that chore's Boundary says so).
+#
+#         THE FIRING CONDITION BECOMES: (a) sibling control satisfied; (b)
+#         NO CONTEXT BOUNDARY crossed at that edge — deliberate break or
+#         resume, OR INCIDENTAL EXHAUSTION, COMPACTION OR HARNESS-INITIATED
+#         SUMMARISATION; (c) no abort or restart mid-edge; (d) THE PROTOCOL
+#         RECORDED THE CONTEXT STATE across the window containing the
+#         discharge — absent that record (b) is UNDECIDED and the
+#         observation is UNCOLLECTED, NOT WEIGHED, the disposal the sibling
+#         control already takes. DEFAULT-DENY is what makes the condition
+#         decidable: satisfied only on positive evidence, never by the
+#         absence of a mark.
+#
+#         COST, DISCLOSED. Default-deny lowers the firing probability, and
+#         at N=1 a falsifier that cannot fire is a formality. Recording
+#         context boundaries is a standing moderator obligation with a named
+#         field, so the deny branch should be rare — and if it is NOT rare
+#         the kit must REPORT that, because a run whose context state went
+#         unrecorded is evidence the exercise cannot support this signal.
+#
+#         THE ROUND-6 WARRANT LAPSES AND IS REPLACED, NOT RESTATED. `A
+#         resolution set whose cheap arm is safe does not need an escape
+#         hatch` no longer holds once reword must earn its exit. `STAND`
+#         GOES BECAUSE IT WAS POST-HOC AND UNCONDITIONED — anomaly belongs
+#         in the pre-registered firing condition, which is where face two
+#         now puts all of it. One principle, twice in one turn: EVERY EXIT
+#         AND EVERY EXCLUSION IS PRE-REGISTERED; NOTHING IS CHOSEN AFTER THE
+#         RUN.
+#
+#     >>> SUPERSEDED — RV-325 rounds 8 and 9. Both blocks tried to make the
+#         reopening decide the CLASSIFICATION from run evidence: first `no
+#         candidate text => no boundary exists`, then `enumerate the turns
+#         where the subject is present`. WITHDRAWN (F-16 and its contest).
+#         Subject ABSENCE proves a step is not complete; subject PRESENCE
+#         does not prove a truthful completion moment exists — the selector
+#         obligation commits to what the code-impact section NOW commits to,
+#         so a recorded selector coexists with an unfinished obligation. The
+#         reasoning lives in the ledger, not here.
+#
+#     >>> AMENDED — RV-325 round 10, owner ruling. THE CLASSIFICATION TEST IS
+#         AN AUTHORING GATE, NOT A RUN INFERENCE. Every 2a step STATES ITS
+#         OWN COMPLETION CONDITION in its text at authoring time: truthful
+#         (satisfying it DISCHARGES the obligation, not starts it) and
+#         CHECKABLE IN RUN STATE. AN OBLIGATION WHOSE COMPLETION CONDITION
+#         CANNOT BE STATED IS NOT A STEP — it is 2b. Decidable over the whole
+#         set before any run, and re-runnable by anyone.
+#
+#         THE EXERCISE THEN COLLECTS ADHERENCE, NOT CLASSIFICATION: did the
+#         agent discharge at a turn where its STATED condition was not
+#         satisfied? Mechanical — no inference about a mind, no claim about
+#         what does not exist. Routing is unchanged: agent-general across
+#         siblings => adherence; step-specific => the condition was
+#         MIS-STATED and the repair is the condition. The reopening keeps its
+#         two arms and its firing condition; it no longer derives the
+#         classification.
+#
+#         WHY THIS REPLACES rather than supplements: classification is a
+#         property of an obligation's TEXT, not of a run, so no single
+#         exercise can establish that no truthful completion moment exists.
+#         CHR-049 feeds evidence into the design; the owner arbitrates the
+#         design. Rounds 5-10 were a category error.
+#
+#     >>> AMENDED — RV-325 round 11, owner ruling (F-17). THE TWO LIMBS ARE
+#         SPLIT. `CHECKABLE IN RUN STATE` IS WITHDRAWN FROM THE CLASSIFICATION
+#         LIMB, which now reads: every 2a step STATES A TRUTHFUL COMPLETION
+#         CONDITION in its text; unstatable => 2b. Nothing else about round 10
+#         changes.
+#
+#         WHY: the withdrawn clause CONTRADICTED THIS DIAGRAM AT :449 AND
+#         :464-468 — `VERIFICATION STRENGTH IS AN ORTHOGONAL AXIS, NOT THE
+#         SORTING RULE`, and the round-3 ruling that completability gives
+#         `mechanically unverifiable but genuinely mandatory human acts —
+#         semantic scope reconciliation, knowledge capture — somewhere honest
+#         to sit rather than being demoted to lenses`. Round 10 argued against
+#         RUN INFERENCE, not against that orthogonality; the clause rode in as
+#         a qualifier, never as a considered reversal, and APPLYING the gate is
+#         what exposed the conflict. TWO REDUCTIOS: it demotes the two acts
+#         round 3 protected BY NAME, and it condemns FOUR OF exploring.toml's
+#         FIVE SHIPPED STEPS — a runbook whose only admissible steps carry
+#         mechanical verifiers is a verifier list, which is DEC-101/DEC-102
+#         gutted.
+#
+#         STATE-VISIBILITY SURVIVES ON THE COLLECTION LIMB. A stated condition
+#         is STATE-VISIBLE when both its terms can be read from run state. That
+#         grades the CONDITION'S EVIDENCE, exactly as a verifier grades a
+#         DISCHARGE'S — the :449 orthogonality one level down, not a new
+#         escape. The adherence observation is collected ONLY over state-visible
+#         conditions, and the kit NAMES the uncovered steps and REPORTS the
+#         fraction, alongside its deny rate.
+#
+#         THE GATE IS NOW APPLIED OVER ALL NINE 2a OBLIGATIONS — the four this
+#         slice relocates AND exploring.toml's five, which are 2a assignments
+#         this slice made. ALL NINE STATE A CONDITION AND ALL NINE SURVIVE AS
+#         2a; FIVE OF NINE ARE STATE-VISIBLE. The per-obligation table is in
+#         thin-adapter.md, `The gate, applied`. TWO STEP TEXTS GAINED A LANDING
+#         SITE to get there (explore.triage, repeat-pass judgement); KNOWLEDGE
+#         CAPTURE WAS DELIBERATELY NOT BOUGHT — making its condition visible
+#         needs a new artefact enumerating what the inquiry settled, which is
+#         F-2's ceremony objection by the back door.
+#
+#         NOTE FOR ANY LATER READER: VERIFIER-REACHABILITY IS NOT
+#         STATE-VISIBILITY. A verifier is an argv whose exit code decides. Scope
+#         reconciliation has no reachable verifier and IS state-visible at edge
+#         4. Conflating the two is what F-17 read out of the (a.3) codicil's
+#         `no reachable verifier even in principle` row.
+#
+#         F-10 KILLED THE EARLIER FALLBACK. It sent a negative DELIVERY
+#         result to a coverage-set 2a step while declaring DEC-104 not
+#         reopened — incoherent, since DEC-104 classifies that content 2b
+#         BECAUSE it has no boundary completion. And exempting DEC-104 from
+#         its own falsifier was F-7's objection re-inserted one level up.
+#         The premise was a category error: NONE of the three delivery
+#         signals is evidence about completability. IMP-373 is no longer the
+#         fallback. (Its DEFERRAL, however, no longer rests on "DEC-104's own
+#         merits" either — that warrant was withdrawn as false in D7's
+#         amendment above. It is deferred because `set`'s render is
+#         unsketched and outside EN-2's gate.)
+#         PHASE-09 EX-8 carries all four; VA-5 stops them being merged;
+#         CHR-049 runs them.
+#
+# ---------------------------------------------------------------------------
+# :111-113 — LEAVES THE SKILL. Owner ruling, 2026-08-01.
+#     Held through every revision as the sole legitimate residue ("unenforced
+#     by construction; no edge can hold a per-message obligation"). WRONG
+#     SCOPE. Qualifying doc-local acronyms by their containing artefact
+#     applies to /audit reading F- findings, /plan citing OQ-, /reconcile
+#     citing RV- findings — every skill that puts a bare enumerated id in
+#     front of a human. It is DOCTRINE-WIDE, FRAMEWORK-LEVEL, and belongs in
+#     the BOOT SNAPSHOT, which already carries the FIRST HALF of the same
+#     rule at install/routing-process.md:60-63 ("Doc-local enumerations —
+#     bare (OQ-1, D1, R1, Q1, C1)"). That paragraph rules how a doc-local id
+#     is WRITTEN and says nothing about how it is INTRODUCED. :111-113 is the
+#     missing second clause of a rule already in context every turn.
+#     THE EDIT LANDS IN PHASE-08, ATOMICALLY WITH THE DELETION — EX-10.
+#
+#     >>> AMENDED — RV-325 round 3 F-4, owner ruling 2026-08-01. This block
+#         previously read "THE EDIT IS BACKLOG, NOT MADE HERE", deferring the
+#         replacement to IMP-376 on the ground that a boot-snapshot edit is a
+#         governance change and mid-review is the wrong moment — the same
+#         manoeuvre declined for IMP-374. F-4 IS RIGHT THAT THIS CREATES AN
+#         INTERVAL OF ZERO DELIVERY, unbounded because IMP-376 is unscheduled,
+#         for a rule D13/DEC-103 says must arrive where it bites. The rewrite
+#         would have enforced its own governing principle everywhere except
+#         on itself.
+#
+#         The scope objection is near-vacuous on inspection: IMP-376's target
+#         is install/routing-process.md:60-63, and PHASE-08 ALREADY REWRITES
+#         THAT FILE (EX-2), re-embeds it, regenerates the snapshot and
+#         refreshes the projection (EX-3, EX-5). Two lines of authored
+#         guidance inside a blast radius already opened, against an unbounded
+#         gap in a doctrine-wide rule. The IMP-374 analogy fails — that
+#         deferral concerns a file PHASE-08 does not otherwise touch.
+#         IMP-376 closes with the phase. The clause must be worded
+#         framework-level and stage-agnostic, NOT as a /design obligation.
+#
+#     Whether it FIRES from there is an evaluation question — about efficacy,
+#     not delivery; CHR-049 (DEC-079) is the vehicle, and it no longer stands
+#     between the deletion and its replacement.
+#     Live evidence, now cutting the other way: the agent authoring this
+#     triage violated :111-113 while presenting it to the owner in bare
+#     D-numbers. That is not proof it is unenforceable — it is proof that an
+#     obligation buried in one skill's prose does not fire when the work is a
+#     CONVERSATION ABOUT that skill.
+#
+# ---------------------------------------------------------------------------
+# >>> NOTHING IN design-prompts/ IS PROJECT-OVERRIDABLE, and two shipped
+#     artefacts claim otherwise. The authoring rule promises "Yes -> a runbook
+#     step. OVERRIDABLE, verifier substitutable"; DEC-102 promises craft a
+#     project can bend. Both false of this store:
+#       · runbooks -> {STORE}/name.toml, fragments -> {STORE}/name.md
+#         (runbook.rs:185-189, prompt.rs:68-70) — EMBEDDED ASSETS, both.
+#       · `prompt check` "knows nothing about this store's *.toml siblings"
+#         (runbook.rs:318-322). The .doctrine/hymns overlay, `replaces`
+#         suppression and seal/expose DO NOT REACH design-prompts/.
+#       · "verifier substitutable" is narrower than it sounds: the closed
+#         thing is the PLACEHOLDER VOCABULARY a verify argv interpolates
+#         (runbook.rs:59-66), substitutable WITHIN an authored asset.
+#     The design even anticipates project authorship — RUNBOOK_STEP_ID_BYTES
+#     is 64 rather than 32 because 32 "would fit the shipped five while
+#     leaving A PROJECT no room" (runbook.rs:55-57). Headroom reserved for
+#     authorship the load path does not admit.
+#     design.md §7 chose this store for a SOUND reason (KNOWN_STAGE_LABELS is
+#     an ENFORCED lifecycle vocabulary — route/canon/preflight/slice/design/
+#     inquisition/plan/phase-plan/execute/audit/reconcile/close — and
+#     `drafting` is not a lifecycle stage). But it BUNDLED TWO SEPARABLE
+#     QUESTIONS and answered one: (i) should intra-design obligations be
+#     stage-band labels? NO, correctly. (ii) should they be project-
+#     overridable? NEVER ASKED — inherited from the mechanism chosen for (i).
+#     D14 makes this WORSE by moving more craft into the un-overridable
+#     store. Owner ruling: BACKLOG the extension interface, and FLAG §7 as
+#     likely needing reopening. Not resolved in PHASE-08.
+#
+# ---------------------------------------------------------------------------
+# NOTE ON `VA-4` / `VH-1` (plan amended 2026-08-01, pre-start, pre-evidence).
+# This diagram's finding that shrinkage-by-relocation defeats a byte-count check
+# fed straight back into the plan: `VA-4`'s judgement clause was withdrawn to a
+# new `VH-1` (the owner reads the prose and judges), and `VA-4` was strengthened
+# into a DISPOSITION TABLE that must account for every part of the incumbent
+# body with runbook bytes stated SEPARATELY. Reviewers: that table is the
+# artefact to attack, and this diagram is what it must be consistent with.
+#
+# ---------------------------------------------------------------------------
+
+direction: down
+
+classes: {
+  stage: {
+    shape: rectangle
+    style: { stroke-width: 3; fill: "#eef4fb"; stroke: "#2b6cb0"; font-size: 22 }
+  }
+  terminal: {
+    shape: rectangle
+    style: { stroke-width: 4; fill: "#e6fffa"; stroke: "#234e52"; font-size: 22; multiple: true }
+  }
+  engine: {
+    shape: hexagon
+    style: { fill: "#fffaf0"; stroke: "#b7791f"; stroke-width: 3; font-size: 13 }
+  }
+  shipped: {
+    shape: document
+    style: { fill: "#f0fff4"; stroke: "#276749"; stroke-width: 3; font-size: 13 }
+  }
+  proposed: {
+    shape: document
+    style: { fill: "#f0fff4"; stroke: "#276749"; stroke-dash: 4; font-size: 13 }
+  }
+  prose: {
+    shape: parallelogram
+    style: { fill: "#f7fafc"; stroke: "#718096"; stroke-dash: 4; font-size: 13 }
+  }
+  human: {
+    shape: diamond
+    style: { fill: "#f0fff4"; stroke: "#276749"; font-size: 13 }
+  }
+  open: {
+    shape: callout
+    style: { fill: "#fff5f5"; stroke: "#c53030"; stroke-width: 2; font-size: 14 }
+  }
+  decided: {
+    shape: callout
+    style: { fill: "#f0fff4"; stroke: "#276749"; stroke-width: 2; font-size: 14 }
+  }
+  note: {
+    shape: text
+    style: { font-size: 13; italic: true }
+  }
+}
+
+legend: "Legend — the mediation axis" {
+  near: top-left
+  style: { fill: "#ffffff"; stroke: "#a0aec0" }
+  l1: "TIER 1 · engine invariant\nRust, closed, unoverridable" { class: engine }
+  l2: "TIER 2a · runbook step — SHIPPED\nedge-keyed, sequenced, dischargeable" { class: shipped }
+  l3: "TIER 2a · runbook step — PROPOSED\nnot yet built" { class: proposed }
+  l3b: "TIER 2b · stage fragment (*.md) — D14\nstage-keyed, every turn, NOT dischargeable" { class: proposed }
+  l4: "TIER 3 · residue register\nno delivery moment located" { class: prose }
+  l5: "waits on the human\n(still a TIER 1 condition)" { class: human }
+  l6: "OPEN — needs a ruling" { class: open }
+  l7: "RULED ON — 2026-08-01" { class: decided }
+}
+
+# ===========================================================================
+# THE SPINE — five stages, four forward edges.
+# Each edge container holds its TIER 1 conditions and its TIER 2 runbook.
+# Conditions are quoted from `gate::boundary_conditions` (gate.rs:161-185);
+# runbooks from `gate::boundary_runbook` (gate.rs:199-204).
+# ===========================================================================
+
+s_exp: "Stage::Exploring" { class: stage }
+s_inq: "Stage::Inquiring" { class: stage }
+s_dra: "Stage::Drafting" { class: stage }
+s_rev: "Stage::Reviewing" { class: stage }
+s_loc: "Stage::Locked\n(terminal — for_stage yields None)" { class: terminal }
+
+# --- EDGE 1 -----------------------------------------------------------------
+e1: "EDGE · exploring → inquiring" {
+  style: { stroke: "#4a5568"; fill: "#fcfdfe" }
+  c1: "GoverningContextRecorded" { class: engine }
+  c2: "InitialConcernsRecorded" { class: engine }
+  rb: "RUNBOOK exploring.toml — SHIPPED\nmode = sequence · 5 steps · all required" { class: shipped }
+  st: "explore.scope\nexplore.research  ← verified: doctrine verify research-current\nexplore.canon\nexplore.memory\nexplore.triage" { class: shipped }
+  n: "The ONLY populated row in boundary_runbook today.\nPHASE-16 shipped it; it is the exemplar every\nproposal below is measured against." { class: note }
+  rb -> st
+}
+
+# --- EDGE 2 -----------------------------------------------------------------
+e2: "EDGE · inquiring → drafting" {
+  style: { stroke: "#4a5568"; fill: "#fcfdfe" }
+  c1: "BlockingInquiriesDispositioned" { class: engine }
+  c2: "UserAcceptsSufficiency" { class: human }
+  rb: "RUNBOOK inquiring.toml — SETTLED (F-5)\nmode = sequence · 2 steps · both required\n· inquire.knowledge — record, via /knowledge, what THIS\n  INQUIRY settled that outlives the session. Subject is\n  this run's answers, NOT the design at large. Does NOT\n  enumerate the record kinds (see note)\n· inquire.scope — update OR EXPLICITLY CONFIRM the slice\n  scope against the decisions this inquiry accepted\n'or explicitly confirm' is what makes it finite; without\nit the step is unsatisfiable when nothing changed.\nNeither ships a verifier — warrants in thin-adapter (a.3)." { class: proposed }
+  craft: "FRAGMENT design-prompts/inquiry.md (2b) — D14\ndelivered EVERY TURN IN **EXPLORING AND INQUIRING**\nBOTH — Fragment::for_stage maps Exploring|Inquiring to\nthe ONE Inquiry variant (prompt.rs:107-115). Corrected\nat RV-325 F-8; the diagram previously said Inquiring\nonly, which hid a second delivery moment from the\ndisposition. Wanted, not tolerated: 'Exploring and\ninquiring are both question-shaping work' (prompt.rs:109)\nand every item below holds in both. Splitting costs a\nnew variant, a 5th asset and duplicate prose.\nNOTE: Exploring therefore carries BOTH asset kinds at\nonce — exploring.toml (edge 1) and this fragment.\n· one question per message\n· 2-3 options with tradeoffs + a recommendation\n· focus on purpose / constraints / success criteria\n  / verification strategy\n· :98 prefer multiple-choice questions — THE record's\n  own central example of overridable craft\nTHIS is what makes DEC-102's 'craft moved out of skill\nprose into data' TRUE — and it does so WITHOUT D12." { class: proposed }
+  n: "WHY THIS EDGE GETS THE CHEAPEST AND MOST IMPORTANT\nRUNBOOK. SKILL.md:98 'prefer multiple choice questions\nwhen possible' CONTRADICTS this project's own CLAUDE.md,\nwhich asks for prose forks in design loops. DEC-102\ncites exactly this as its live proof that craft is\ntaste, not doctrine.\n\nBut DEC-102's consequences ALREADY CLAIM 'the craft has\ngenuinely moved out of skill prose into data'. That is\nNOT YET TRUE: :98 is INQUIRY craft and PHASE-16 shipped\nthe EXPLORING runbook, a different edge. The record's\nown central example is still sitting unfixed in the\nfile. This runbook is what makes DEC-102 true rather\nthan aspirational — which is why it was added to the\ntwo the runbook sketch had assigned." { class: note }
+  kn: "THE /knowledge STEP — an instance of this phase's\nwhole defect class. SKILL.md:107-109 names THREE kinds\n(QUE / DEC / ASM) of a closed SEVEN — assumption,\ndecision, question, constraint, evidence, hypothesis,\nconcept. A skill restating a Doctrine-owned closed\nvocabulary is a second source of truth that can\ndisagree, and this one already does.\n\nThe step says 'record it via /knowledge' and STOPS.\nLinking conventions need nothing either: /knowledge\nSKILL.md:42-43,60-62 already pins `link <REC> shapes\n<TARGET>`, `spawns` for work caused, `EVD supports|\ndisputes`, and 'the dependent work item authors the\nedge — records never author needs/after themselves'.\nRestating those here would recreate the same problem\none level up.\n\nNOT a duplicate of `BlockingInquiriesDispositioned`\nbeside it: `src/design_run/` writes NO knowledge\nrecords (every DEC- hit in it is a doc comment citing\none). Run inquiries are runtime state scoped to the\nrun; knowledge records are durable and outlive it.\nComplementary, not parallel." { class: note }
+  rb -> craft
+}
+
+# --- EDGE 3 -----------------------------------------------------------------
+e3: "EDGE · drafting → reviewing" {
+  style: { stroke: "#4a5568"; fill: "#fcfdfe" }
+  c1: "RequiredSectionsExist" { class: engine }
+  c2: "MaterialisationCurrent" { class: engine }
+  rb: "RUNBOOK · mode = sequence · ONE STEP (D14)\n· :144-161 record design-target selectors\n  (D10 reversed; also on edge 4)" { class: proposed }
+  frag: "FRAGMENT design-prompts/drafting.md (2b) — D14\ndelivered EVERY DRAFTING TURN, not at this gate\n· the 15 content items as ONE LENS\n  (SKILL.md:118-143, diagram A s4.d3list)\n· :197 foundation sections first\n· :198 assumptions not hidden in polish\n· :199 altitude — design is not planning\n· :200-201 polish is not progress\n· :203 governance applied to choices\nshipped baseline is 15 lines; this is the bulk\nof what leaves the skill" { class: proposed }
+  n: "D7/D14 — RULED, THEN REPLACED. These are the section-\nCONTENT obligations (boundaries, signatures, data flow,\ninvariants, C4, test titles, …). The conditions here\ncheck sections EXIST and are MATERIALISED — they say\nnothing about whether the content is any good.\n\nD7 filled that gap with 19 STEPS. RV-325 F-2 showed\nthat is 19 serial CAS turns, against this slice's own\nnamed risk R1. D14's answer is not a smaller number:\nthe 15 items are a QUALITY LENS, and a lens delivered\nat the exit arrives after the draft is written.\n\nONE step survives — the one obligation that COMPLETES\nAT THIS BOUNDARY and must, before advancing.\nThe DEC-101 'fake determinism' tension is GONE rather\nthan conceded: fragment prose has no order to fake." { class: note }
+  rb -> n
+  frag -> n
+}
+
+# --- EDGE 4 -----------------------------------------------------------------
+e4: "EDGE · reviewing → locked" {
+  style: { stroke: "#4a5568"; fill: "#fcfdfe" }
+  c1: "SectionAttestationsCurrent" { class: engine }
+  c2: "IntegratedReviewPresent" { class: engine }
+  c3: "BlockingFindingsDisposed" { class: engine }
+  c4: "UserAcceptanceAttested" { class: human }
+  rb: "RUNBOOK · mode = sequence · the DISCRETE ACTS (D14)\n· :202 merged with :115-116 — reconcile slice scope\n· :144-161 record design-target selectors (2nd hook)\n· :187-188 first clause — repeat passes (RV-325 F-1)" { class: proposed }
+  frag: "FRAGMENT design-prompts/reviewing.md (2b) — D14\ndelivered EVERY REVIEWING TURN\n· the attack surfaces: vague sections, hidden\n  assumptions, weak verification, missing\n  code-impact detail (SKILL.md:162-191,\n  diagram A s6.a1/a2)\n· :203 governance applied — SECOND COPY, verbatim.\n  Owner ruled the duplication acceptable; the DRY\n  instinct that would object here is the instinct\n  D13 rejects" { class: proposed }
+  n: "D7 — RULED, THEN SPLIT BY D14. Four conditions\nalready: the heaviest edge. The conditions check a\nreview is PRESENT and its findings DISPOSED; they say\nnothing about whether the sweep was any good.\n\nThe attack surfaces are a LENS SET — the same ruling\nas the 15 content items on edge 3 — so they are\nframing for reviewing, not a checklist at its exit.\nWhat stays as steps is what COMPLETES AT THE BOUNDARY." { class: note }
+  rb -> n
+  frag -> n
+}
+
+s_exp -> e1 -> s_inq
+s_inq -> e2 -> s_dra
+s_dra -> e3 -> s_rev
+s_rev -> e4 -> s_loc
+
+# Backward motion. DEC-067: regressing returns the run to the edge's origin,
+# where it faces the guard again. The incumbent's five "back" edges out of
+# Adversarial review (A: s6 -> s2/s3/s4) are this, and they need no special
+# modelling — a regression is not a distinct transition vocabulary.
+s_rev -> s_exp: "regression — re-faces every\nguard on the way back up\n(DEC-067)" {
+  style: { stroke: "#805ad5"; stroke-dash: 3 }
+}
+
+# ===========================================================================
+# ORTHOGONAL REGIONS — D4. These run BESIDE the stage machine, not inside it.
+# Evidence: DEC-065; diagram B `runstate.models`.
+# ===========================================================================
+
+orth: "Orthogonal state models — NOT sub-states (DEC-065)" {
+  style: { stroke: "#4a5568"; fill: "#fbfcfe" }
+  m1: "inquiry lifecycle" { class: engine }
+  m2: "traversal — cursor + posture\n(user-lockable; refusal at refusal.rs:52)" { class: engine }
+  m3: "attestation / review standing" { class: engine }
+  m4: "delegation — selects delegation.md\nby DELEGATION state, not by stage" { class: engine }
+  m5: "recovery / resume" { class: engine }
+  m6: "runbook standing — cursor + discharges\nPHASE-16; third derived input to gate::advance" { class: shipped }
+  m7: "revision — every mutation CAS or refuse" { class: engine }
+  n: "The incumbent skill flattens all seven of these into one\nnumbered list. That is the single biggest reason its prose\nreads as a state machine but does not behave like one." { class: note }
+}
+
+orth -> s_dra: "consulted by the guards,\nadvance independently" {
+  style: { stroke: "#4a5568"; stroke-dash: 2 }
+}
+
+# ===========================================================================
+# THE MAPPING PANEL — D1. Eight prose states onto five engine stages.
+# This IS the line-by-line disposition `EN-2(a)` asks for, in table form.
+# ===========================================================================
+
+mapping: "D1 · the eight prose states, disposed" {
+  near: top-right
+  style: { fill: "#ffffff"; stroke: "#2b6cb0"; stroke-width: 2 }
+  t: |||md
+    | # | incumbent prose state | target | tier |
+    |---|---|---|---|
+    | 1 | Explore context | `Stage::Exploring` + edge-1 runbook | 1+2 — **moved, shipped** |
+    | 2 | Ask clarifying questions | `Stage::Inquiring` + edge-2 runbook | 1 + 2 — **ruled, D12** |
+    | 3 | Propose 2-3 approaches | **not a state** — craft inside Inquiring | 2 — folded into the edge-2 runbook (**D12**) |
+    | 4 | Present design | `Stage::Drafting` | 1 + proposed edge-3 runbook |
+    | 5 | Write design.md | **not a state** — an effect (D2) | 1 — `MaterialisationCurrent` |
+    | 6 | Adversarial review | `Stage::Reviewing` | 1 + proposed edge-4 runbook |
+    | 7 | Integrate review feedback | **not a state** — work in Reviewing (D3) | 1 — two exit conditions |
+    | 8 | Transition to planning (`:26-28`, XML `:54-56`) | terminal exit — retained as adapter prose | 3 — **ruled, D8** |
+  |||
+}
+
+# ===========================================================================
+# THE RESIDUE — what has NO edge to hang on. This is where TIER 3 is decided,
+# and it is the direct source of `EN-2` answers (b) "what the skill still owns
+# on activation" and (c) "what it owns on recovery".
+# ===========================================================================
+
+residue: "The residue — obligations with no natural edge" {
+  style: { stroke: "#c53030"; fill: "#fffbfb" }
+
+  guards: "D9/D11 · the eight guardrails, TRIAGED (SKILL.md:192-204)" {
+    class: decided
+    g: "RE-TRIAGED TWICE. D13 sorted by WHEN MUST THIS ARRIVE;\nD14 then asked WHAT KIND OF THING IS IT.\nOutcome 1 / 1 / 5 / 1 / 1 over 9 rows\n(D13: 1 / 1 / 6 / 1. First pass: 4 / 1 / 2 / 3.)\n\nDELETE — the authority fires WHERE IT BITES (1):\n  :196 -> boot snapshot, in context every turn\n  (A s6.a6 was a second row here — REMOVED, RV-325 F-1:\n   double-disposed inside :162-191, and its evidence\n   covered only the no-presumed-approval clause. The\n   repeat-pass clause becomes an EDGE-4 STEP.)\nTO THE SEALED HYMN (1):\n  :194 'the design doc is canon for design intent'\nTO A STAGE FRAGMENT — 2b, a LENS not an act (5):\n  :197 :198 :199 :200-201 -> drafting.md\n  :203 -> drafting.md AND reviewing.md (duplication\n         ruled acceptable by the owner)\nTO AN EDGE AS A STEP — 2a, a discrete act (1):\n  :202 -> edge 4, merging with :115-116\nTO THE BOOT SNAPSHOT — doctrine-wide (1):\n  :111-113 qualify doc-local acronyms. NOT residue and\n  NOT design-scoped; the missing second clause of\n  routing-process.md:60-63. Edit carried as backlog.\n\nTHE `step` COLUMN COLLAPSED FROM 6 TO 1. Five were\nlenses, not acts. That is the single largest correction\nin this revision, and why F-2's ceremony objection\nDISSOLVES rather than being traded away."
+  }
+  gn: "Diagram A classed these `vigilance` — standing, no trigger point.\nThat is precisely what makes them hard: a runbook step needs an\nEDGE, and 'be on the lookout' has none. RULED: triage into three\nbuckets, which are not exclusive —\n  (i)  the ones that are really INVARIANTS restate what the engine\n       already enforces -> delete, or move to the sealed stage hymn;\n  (ii) the ones that are really STEPS at a specific moment -> assign\n       an edge and make them runbook steps;\n  (iii) the rest are genuinely ambient judgement -> TIER 3, and the\n       adapter legitimately keeps them.\nThe owner's ruling adds the part that matters: this triage is a\nDESIGN ACTIVITY, not a mechanical sort, and it IS the `EN-2` (b)\nanswer. Do not expect it to fall out of a table." { class: note }
+
+  sel: "D10 · design-target selector recording (SKILL.md:144-161)" {
+    class: decided
+    s: "`doctrine slice selector add <id> … --intent design-target`\nhas a command but NO design-run hook and no prompt (diagram B gap g4).\nDiagram A classed it an ORPHAN: prose process with no state at all.\nThe prose says 'when the code-impact section locks' — edge-shaped,\npointing at edge 3.\n\nRULED 'stays as prose' (one step on one edge would be a worse lie,\nasserting a completeness the obligation lacks) — then REVERSED BY\nD13. Unpicked, that objection has two parts: OVERCLAIMING is a real\nharm; MULTI-HOOK is not, and under D13 it argues the other way.\n\nNOW: STEPS ON EDGES 3 AND 4, with text that does not overclaim —\n'record the design-target selectors the code-impact section NOW\nCOMMITS TO' is true at each firing, final at neither.\n\nRESIDUAL, open: hooks ACROSS DESIGN AND PLAN stay unmodelled —\n/plan has no runbook machinery yet. A known coverage gap now,\nnot a warrant for delivering nothing where we can."
+  }
+
+  exit: "D8 · the Locked exit (SKILL.md:26-28, XML :54-56)" {
+    class: decided
+    x: "CITATION CORRECTED: an earlier revision cited :157-162. State 8 is NOT\nthere — :144-161 is the SELECTOR section (D10) and :162 is the\n'### Adversarial review' heading. There is no '### Transition to planning'\nbody section at all; state 8 exists only as the numbered-list entry at\n:26-28 and the XML state at :54-56. Not cosmetic: :26-28 falls inside\n:15-58, which the size arithmetic marked DELETED OUTRIGHT — so the very\nlines this ruling RETAINS were double-disposed, inside the table `VA-4`\nwas amended to require accounting for every part of the body.\n\n`for_stage` yields None at Locked BY DESIGN, but there is still\nwork to instruct: record the lifecycle move (`doctrine slice status\n<id> plan`) then invoke `/plan` (diagram B gap g2).\n\nRULED: (a) — the adapter KEEPS IT as TIER 3 prose. Rejected: (b) a\nterminal runbook keyed to Locked, which breaks D5's edge-keying since\nLocked has no outbound forward edge; and (c) a conclude/handoff\noutput on `doctrine design`.\n\nThe reasoning is forward-looking rather than minimal: if this\nprogramme succeeds, `/plan` receives the same treatment, and the\nstage-to-stage handoff interface is better designed ONCE against two\nreal cases than guessed at now against one."
+  }
+}
+
+# ===========================================================================
+# WHAT THE ADAPTER STILL OWNS — the EN-2 (b) and (c) answers. Q1-Q4 all landed
+# on 2026-08-01 as D7-D10, so nothing here is provisional on their account any
+# more. Kept in the diagram so the sketch back-solves from here.
+# ===========================================================================
+
+adapter: "The thin adapter — what is left for the skill" {
+  style: { stroke: "#718096"; fill: "#f7fafc"; stroke-width: 2 }
+  act: "ON ACTIVATION\n· establish or resume the run (`doctrine design start|resume`)\n· surface the envelope and DO WHAT IT SAYS\n· nothing about workflow order — the machine owns that" { class: prose }
+  keeps: "THE RESIDUE REGISTER (EN-2 b) — under D13 this is no longer\na list of things KEPT, it is a list of things NOT DELIVERED, each\ncarrying WHY. ONE ITEM:\n\n· :26-28 the Locked-exit instructions (D8)\n  WHY: DEFERRED, not ambient. The moment is precise — the instant\n  the run reaches terminal. Stage::Locked has NO outbound forward\n  edge to key a runbook to, and Fragment::for_stage yields None\n  there, so NEITHER 2a NOR 2b can hold it as the machine stands.\n  The mechanism is declined until /plan gives a second case to\n  design the handoff interface against.\n\nSHRANK THREE TIMES, each contraction from a better question.\nFIRST: three items, arguing their smallness was the claim.\nD13 asked WHEN MUST THIS ARRIVE — :199 and :200-201 answered\nimmediately and left. Two.\nD14 asked WHAT KIND OF THING IS IT — :111-113 turned out to be\nneither design-scoped nor unenforceable, just badly homed. One.\n\nONE IS A DEFENSIBLE FLOOR. :26-28 is not residue because no\nmoment exists — its moment is the most precisely identifiable in\nthe file. It is residue because building a handoff interface from\na single case is how you get an interface shaped by one example.\nThat is a deferral WITH A NAMED CONDITION FOR REPAYMENT, which is\na different sentence from 'we could not place this' — and telling\nthose two apart is exactly what VH-1 exists to judge." { class: prose }
+  rec: "ON RECOVERY\n· no run exists -> start one\n· a stale run exists -> `resume` with --known-revision/--known-fragment\n· D5 means re-entry needs no special casing per state: the run\n  reports where it stands and which obligations are outstanding" { class: prose }
+  deg: "ON ABSENCE OR ERROR (EN-2 e)\n· `doctrine design` missing or erroring -> SURFACE IT, do not\n  self-heal and do not fall back to executing the old machine\n· skills ship from github:davidlee/doctrine@main on a manual\n  plugin update, so skill and binary CAN desync in BOTH directions\n· with a known user population of ~4, detection beats degradation\n  engineering" { class: prose }
+  n: "TARGET SIZE (EN-2 d) — the incumbent is 214 lines / 10,178 bytes.\nThis diagram found that a byte-count check is defeatable: under\nDEC-101 the checklists move into runbook TOML, a DIFFERENT FILE, so\nshrinkage by relocation is trivially achievable and no agent reading\na total can tell it from shrinkage by mechanism.\n\nRESOLVED IN THE PLAN, 2026-08-01: `VA-4`'s judgement clause was\nwithdrawn to a new `VH-1` (the owner reads the prose and judges,\nbounded by D7/D8/D10 as the decisions that make residue legitimate),\nand `VA-4` now requires a DISPOSITION TABLE accounting for every part\nof the incumbent body, runbook bytes stated SEPARATELY rather than\nnetted. So (d) answers a target for the SKILL body alone, and the\ntable carries the rest." { class: note }
+}
+
+# ===========================================================================
+# FOR THE REVIEWER — what to attack.
+# ===========================================================================
+
+review: "For the reviewer" {
+  near: bottom-left
+  style: { fill: "#ffffff"; stroke: "#c53030"; stroke-width: 2 }
+  r: |||md
+    **RE-RANKED after a self-check pass, 2026-08-01.** D5 was item 1 as the
+    claim most likely to be false; checking it against source showed it is the
+    best-evidenced claim here, and it is now item 5 restated as a durability
+    question. The D11 triage was item 6 and is now item 1, because the same pass
+    found two of its four deletions do not hold. Both movements are disclosed
+    rather than quietly re-ordered — a ranking that was wrong is itself evidence
+    about the method that produced it.
+
+    1. **D13 / DEC-103 is new, it reshaped this diagram, and it is the thing to
+       attack first.** *Instruction is delivered at the moment it must take
+       effect; prose is a failure to locate a delivery moment, not a
+       destination.* Ruled after D1-D12; it reversed D10, re-warranted D8,
+       repaired two failed deletions and collapsed TIER 3 from three items to
+       two. Three attacks are open, and they land on the RULING, not the phase:
+       - **Is it too strong?** It licenses hanging an obligation on EVERY edge
+         where it fires. Followed far enough each runbook accretes every
+         standing rule and the steps become noise an agent scrolls past — the
+         incumbent's existing failure mode relocated into TOML. Where is the
+         limit, and does the edge-3 runbook (fifteen content items PLUS four
+         moved obligations) already cross it? Strongest attack available.
+       - **Is :111-113 genuinely unenforceable?** The whole "we found no
+         mechanism" claim rests on that one item. The stage hymn IS rendered
+         every turn — if a per-message obligation can ride it, the residue is
+         one item, not two.
+       - **Does it pull against DEC-101?** "Imposing an order on a coverage set
+         is fake determinism" and "deliver at the point of effect" strain
+         against each other when many obligations share one moment. Edge 3 is
+         where that tension is now thickest.
+    2. **DEC-102's overclaim is specific, not rhetorical.** Its consequences do
+       not merely say the craft "has moved into data"; they say the SKILL.md:98
+       / CLAUDE.md contradiction "is therefore fixed FOR THIS REPO". :98 is
+       verbatim unchanged. And DEC-102's own `alternatives` field rejects the
+       keep-everything-fixed option BECAUSE it "leaves the SKILL.md:98
+       contradiction unfixable in place" — so amending the record withdraws a
+       consequence its rejection reasoning leans on. D12 is the cheaper repair
+       of the two once the record is read in full. Still worth attacking from
+       the other side; no longer the balanced fork earlier drafts described.
+    3. **Both new runbooks are coverage sets shipping as sequences (D7).** This
+       was ruled deliberately, not overlooked: forcing an arbitrary order on a
+       short coverage set costs the agent almost nothing, and "stop agents
+       forgetting" is the actual purpose. DEC-101's "imposing an order on a
+       coverage set is fake determinism" is conceded as true and judged cheap.
+       If you think the order will actually mislead — that an agent will read
+       sequence position as dependency and do worse work — that is the attack
+       to make, and it lands on D7 rather than on IMP-373.
+    4. **Re-entry is asserted, not proven.** EN-2(f) asks what breaks in the
+       eight skills that cross-reference `/design`. Every hit is a routing
+       reference, not an internals reference, so the claim is that resumption
+       accounts for all of them. That claim is untested here deliberately —
+       it is offered to the reviewer as the thing most worth probing.
+    5. **D5 is durability-limited, not doubtful.** Settled by gate.rs:150-158
+       (a nine-line literal `matches!`) and locked by an exhaustive 25-pair test
+       (tests.rs:56-77) — a fifth edge cannot land silently. Do not spend a turn
+       re-deriving it. The residual worth probing: IS A SECOND FORWARD EDGE EVER
+       WANTED? If design §5.4 or DEC-067 contemplates a branch, an optional
+       stage or a skip, D5 is true-but-temporary and every disposition here is
+       scheduled to move. Blast radius is three call sites, not one — see the
+       evidence note under D5.
+    6. **The residue may still be larger than it looks.** The guardrail census
+       is now stated honestly (D11), but diagram A also shows `vigilance` nodes
+       scattered INSIDE states (A s2.rules, A s3.note). Only A s6.a6 was pulled
+       in. A sweep of A for every `vigilance` and `orphan` node is the honest
+       denominator for TIER 3, and it has not been run.
+    7. **Method: what the six questions did not name.** `Outcomes` (:205-214)
+       was triaged only when the size arithmetic refused to close, because no
+       EN-2 question named it. The self-check pass is a second instance: state
+       8's line range, D5's circular citation and three conflicting guardrail
+       counts were all in material no question interrogated. Ask what else is
+       unnamed.
+    8. **B is stale and this diagram inherits from it.** Diagram B predates
+       PHASE-16: "six writer acts" is now seven, gap g1 is closed, gap g3 is
+       partly closed. If anything here reads as contradicting B, check whether
+       B is simply older before treating it as a conflict.
+  |||
+}

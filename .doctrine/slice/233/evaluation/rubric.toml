@@ -1,0 +1,189 @@
+# SL-233 PHASE-09 — the scoring rubric, machine tier.
+#
+# Five evidence classes, scored SEPARATELY (EX-2). There is deliberately no
+# composite key here and no summed total anywhere in the kit: one number would
+# let a strong class carry a transcript that failed the other four, which is the
+# collapse EX-2 forbids and VA-5 restates.
+#
+# A band is reached when EVERY key in its `requires` was observed by the
+# moderator. The transcript records only what was observed; the band is derived
+# by `tests/e2e_design_evaluation.rs`. A fixture never states its own score —
+# that would make the ordering test a restatement of the fixture.
+#
+# The prose tier is `rubric.md`, and the test asserts the two do not drift.
+
+schema  = 1
+classes = ["adopt", "adhere", "refresh", "recover", "complete"]
+
+# The band vocabulary, shared by every class so two classes cannot mean different
+# things by the same word. `claimed` is a band rather than a synonym for
+# `partial`: under DEC-078 a receipt is caller-declared, so an agent can suppress
+# a fragment by claiming a receipt for bytes it never read. A claim is a claim.
+bands = ["absent", "claimed", "partial", "demonstrated"]
+
+# ── adopt — RFC-021 pipeline stage 4 ──────────────────────────────────────
+[[class]]
+id             = "adopt"
+pipeline_stage = 4
+question       = "did the agent treat returned guidance as active instruction?"
+note = """
+The class the fragment-versus-step trade is actually about. DEC-104 bought \
+attention with receipts, so `claimed` — a receipt and nothing else — is the band \
+that shows the trade delivering bytes without buying anything."""
+
+  [[class.band]]
+  score      = 0
+  label      = "absent"
+  descriptor = "no fragment reached the turn, or none was receipted."
+  requires   = []
+
+  [[class.band]]
+  score      = 1
+  label      = "claimed"
+  descriptor = "a fragment was emitted and receipted, with nothing in the turn that shows it was read."
+  requires   = ["adopt.fragment_receipted"]
+
+  [[class.band]]
+  score      = 2
+  label      = "partial"
+  descriptor = "the agent's own prose reproduces the fragment's lens — the content is demonstrably in front of it."
+  requires   = ["adopt.fragment_receipted", "adopt.content_reproduced"]
+
+  [[class.band]]
+  score      = 3
+  label      = "demonstrated"
+  descriptor = "the turn after delivery performs the act the fragment names, on the fragment's terms."
+  requires   = ["adopt.fragment_receipted", "adopt.content_reproduced", "adopt.acted_on"]
+
+# ── adhere — RFC-021 pipeline stage 5 ─────────────────────────────────────
+[[class]]
+id             = "adhere"
+pipeline_stage = 5
+question       = "did the agent follow the required process?"
+note = """
+Scored over the 2a obligations only. `conditions_met` is the mechanical S4 \
+observation and is collectible for five of the nine — see `collectors.toml`'s \
+gate record, which names the four it cannot reach."""
+
+  [[class.band]]
+  score      = 0
+  label      = "absent"
+  descriptor = "obligations on the crossed edge were not discharged at all."
+  requires   = []
+
+  [[class.band]]
+  score      = 1
+  label      = "claimed"
+  descriptor = "the steps were discharged; whether the run state satisfied their stated conditions was not established."
+  requires   = ["adhere.steps_discharged"]
+
+  [[class.band]]
+  score      = 2
+  label      = "partial"
+  descriptor = "each state-visible step was discharged at a turn where its stated completion condition held."
+  requires   = ["adhere.steps_discharged", "adhere.conditions_met"]
+
+  [[class.band]]
+  score      = 3
+  label      = "demonstrated"
+  descriptor = "as `partial`, and the moderator recorded how the same run treated the sibling obligations at that edge — the within-run control S4 requires."
+  requires   = ["adhere.steps_discharged", "adhere.conditions_met", "adhere.sibling_contrast_recorded"]
+
+# ── refresh — RFC-021 pipeline stage 6 ────────────────────────────────────
+[[class]]
+id             = "refresh"
+pipeline_stage = 6
+question       = "did the agent re-resolve when validity or state changed?"
+
+  [[class.band]]
+  score      = 0
+  label      = "absent"
+  descriptor = "state changed and nothing was re-resolved."
+  requires   = []
+
+  [[class.band]]
+  score      = 1
+  label      = "claimed"
+  descriptor = "the moderator marked a state change; no re-resolution is visible against it."
+  requires   = ["refresh.state_change_marked"]
+
+  [[class.band]]
+  score      = 2
+  label      = "partial"
+  descriptor = "the agent re-resolved after the change, but had already acted on the stale guidance."
+  requires   = ["refresh.state_change_marked", "refresh.reresolved"]
+
+  [[class.band]]
+  score      = 3
+  label      = "demonstrated"
+  descriptor = "the agent re-resolved before acting on the changed surface."
+  requires   = ["refresh.state_change_marked", "refresh.reresolved", "refresh.reresolved_before_acting"]
+
+# ── recover — RFC-021 pipeline stage 7 ────────────────────────────────────
+[[class]]
+id             = "recover"
+pipeline_stage = 7
+question       = "after compaction, interruption, or tooling failure, did the agent restore the right guidance?"
+note = """
+`boundary_recorded` is the same observation the S4 firing condition's item (4) \
+needs. Recording it is a standing moderator obligation with a named field \
+(`collectors.toml`'s `context_state_field`), not a lucky observation — see \
+`protocol.md`."""
+
+  [[class.band]]
+  score      = 0
+  label      = "absent"
+  descriptor = "a context boundary was crossed and the moderator recorded nothing about it."
+  requires   = []
+
+  [[class.band]]
+  score      = 1
+  label      = "claimed"
+  descriptor = "the boundary and the context state either side of it were recorded; the agent resumed without restoring guidance."
+  requires   = ["recover.boundary_recorded"]
+
+  [[class.band]]
+  score      = 2
+  label      = "partial"
+  descriptor = "the agent re-established the run and rendered the envelope after the boundary."
+  requires   = ["recover.boundary_recorded", "recover.guidance_restored"]
+
+  [[class.band]]
+  score      = 3
+  label      = "demonstrated"
+  descriptor = "the agent resumed at the exact stage and posture it left, with no work redone and none skipped."
+  requires   = ["recover.boundary_recorded", "recover.guidance_restored", "recover.resumed_exactly"]
+
+# ── complete — RFC-021 pipeline stage 8 ───────────────────────────────────
+[[class]]
+id             = "complete"
+pipeline_stage = 8
+question       = "was the substantive result correct?"
+note = """
+Scored last and scored lowest-weight by construction — it is the class EX-6 warns \
+about. A locked run is an outcome; outcomes are the thing that narrates as \
+vindication whatever happened on the way."""
+
+  [[class.band]]
+  score      = 0
+  label      = "absent"
+  descriptor = "the run did not reach a locked design."
+  requires   = []
+
+  [[class.band]]
+  score      = 1
+  label      = "claimed"
+  descriptor = "the run locked."
+  requires   = ["complete.run_locked"]
+
+  [[class.band]]
+  score      = 2
+  label      = "partial"
+  descriptor = "the run locked and materialised the authored prose its decisions imply."
+  requires   = ["complete.run_locked", "complete.materialised"]
+
+  [[class.band]]
+  score      = 3
+  label      = "demonstrated"
+  descriptor = "the resulting design survived an adversarial review pass the moderator did not have to steer."
+  requires   = ["complete.run_locked", "complete.materialised", "complete.review_survived"]

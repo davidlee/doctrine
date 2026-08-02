@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 414
+slug = "hold-design-workflow-state-and-prescribe-the-next-obligation"
+title = "Hold design workflow state and prescribe the next obligation"
+status = "pending"
+kind = "functional"
+
+description = "The framework holds the run's stage, pending obligation, refresh boundary, and submission identity, and resolves the next obligation from that state rather than relying on the agent to recall where it is."
+tags = []
+acceptance_criteria = [
+  "The next obligation is resolved from persisted run state, not from conversational recall.",
+  "A run's stage and pending obligation are readable without consulting the transcript.",
+  "Open-ended inquiry, synthesis, drafting, and adversarial reasoning remain the agent's and are not prescribed as mechanical steps.",
+]

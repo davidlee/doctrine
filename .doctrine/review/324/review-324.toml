@@ -1,0 +1,167 @@
+id    = 324
+slug  = "implementation-review-phase-111210"
+title = "implementation review — PHASE-11/12/10"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "orchestrator"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-233"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Accepted checkpoint proposals bypass the shell's effect protocol"
+detail = '''
+Expected: every declaration contributed by an accepted proposal joins the coordinator's declarations as the same semantic batch, INCLUDING the shell work a checkpoint disposition requires — 'adopt' must validate the canonical record and apply the authored relation effect; 'create' must reserve, journal, materialise and bind the resolved id before the pure candidate is stored (DEC-086; locked §5.5/DEC-083).
+
+Observed: src/commands/design.rs:728 — plan_checkpoints iterates only `&request.declare`. accepted_declarations() is wired solely into the digest chain (design.rs:1174, defined 1277) and never reaches checkpoint planning. So an accepted proposed 'create' arrives at the pure core with no resolved record and is refused as CheckpointRecordUnresolved; an accepted proposed 'adopt' is worse — it reaches checkpoint_disposition directly (run.rs:1090-1092, `Dispose::Adopt { record } => Ok(Disposition::Adopted { .. })`), which takes the supplied string without knowledge::adoptable or any authored effect. An inquiry can therefore be recorded as adopted against a nonexistent, wrong-kind, or withdrawn record.
+
+Evidence (verified independently by the orchestrator, not taken on the reviewer's word):
+  rg -n 'fn plan_checkpoints' -A 8 src/commands/design.rs   # line 728: for declaration in \&request.declare
+  rg -n 'accepted_declarations' src/commands/design.rs      # only 1174 (digest chain) and 1277 (defn)
+No checkpoint-proposal test exists: rg -n 'plan_checkpoints|accepted_declarations|checkpoint.*proposal' tests/ finds none.
+
+Contradicts locked design: DEC-086 — an accepted 'create' never enters the mandated reserve-then-journal protocol.
+
+Adjacency to prior findings (NOT a duplicate): PHASE-10 F-8 observed that a proposed SECTION declaration is digest-fed via accepted_declarations with no test; this is the CHECKPOINT case and is a correctness defect, not a coverage gap. PHASE-12 F-5 noted the checkpoint acceptance path is laxer than the lock path on blank basis — same path, different weakness.
+
+Raised by: codex (GPT Sol), confidence high.'''
+disposition = "fix-now"
+response = "CONFIRMED on the artifact, and understated by one consequence. Verified independently: run.rs:238-241 extends the declaration batch with the accepted proposal's declarations, so an accepted checkpoint DOES reach declare_checkpoint -> checkpoint_disposition, while plan_checkpoints (design.rs:728) iterates only request.declare. Consequences, each checked: (a) a proposed 'adopt' never reaches knowledge::adoptable (design.rs:760, EX-4's kind-and-status check) and run.rs:1090 takes the record string as given — adopted against a nonexistent / wrong-kind / withdrawn record is real; (b) a proposed 'create' is refused as CheckpointRecordUnresolved, so it is fail-closed rather than corrupting, but DEC-086's reserve-then-journal protocol is UNREACHABLE for an accepted create, which is the contradiction the finding names; (c) NOT in the finding — the acceptance-attestation binding at design.rs:770-786 is skipped too, so a proposed checkpoint's acceptance attestation is never bound at all. Coverage claim holds with a positive control: e2e_design_checkpoint.rs contains zero 'accept' and e2e_design_delegation.rs carries no checkpoint case, so the intersection is wholly untested. Not a duplicate of PHASE-10 F-8 or PHASE-12 F-5, as the finding argues. Remediation: SL-233 PHASE-15 EX-1 (protocol parity), EX-2 (the third consequence), EX-3 (the binding mechanism — bind_resolved at design.rs:937 walks only request.declare, while the accepted declarations live in the prior snapshot's proposal, so the fix needs a mechanism that does not exist yet and PHASE-15 requires it named and justified in the sheet rather than improvised), VT-1, VA-2."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Materialisation can erase a post-check human edit and silently certify the overwrite"
+detail = '''
+Expected: DEC-092 admits exactly one residual — an edit landing after the final comparison may escape the current invocation, but must remain visible as authored divergence and be refused by the next mutation ('the pre-write re-check narrows the residual window to delayed detection rather than closing it'). The watermark check must not let doctrine erase the edit and then certify its own replacement.
+
+Observed: src/commands/design.rs — recheck_watermark_before_write(...) at ~1382-1386 is followed by an UNCONDITIONAL crate::entity::write_body(dir, DESIGN_DOC, \&body, BodyMode::Replace) at ~1399, then a snapshot whose watermark is derived from the replacement body. A human edit landing between the re-check and the write is overwritten; because the new snapshot certifies doctrine's own replacement, the next entry check sees alignment and reports nothing. That is not delayed detection — the edit is destroyed and the overwrite is self-certified.
+
+Evidence (verified independently by the orchestrator): sed -n '1378,1402p' src/commands/design.rs shows the re-check, then create_dir_all, then write_body(..., BodyMode::Replace). BodyMode::Replace stores text verbatim (entity.rs) and fsutil::write_atomic performs NO compare-and-swap against the fingerprint just checked. No test injects an edit between materialise's check and its write — the existing after-final-comparison test edits only after a completed apply.
+
+Contradicts locked design: DEC-092 — this widens the admitted race from delayed detection into undetectable overwrite. Routes to a revision, not a quiet fix.
+
+Raised by: codex (GPT Sol), confidence high.'''
+disposition = "tolerated"
+response = """
+SUPERSEDES THE PRIOR RESPONSE, WHICH IS NOW FALSE. Read this first: the earlier response promised DEC-105 rule 3b — a same-file writer lock plus a compare-and-swap. THAT MECHANISM DID NOT LAND AND WILL NOT. What landed is the fallback leg, and the difference is stated here rather than left to be discovered in the diff. The authoritative record is DEC-100 (accepted, supersedes DEC-105, which is now `superseded`).
+
+WHAT LANDED (56de92d3, `src/commands/design.rs`). Parts 1-3 of the exit you named: (1) the final pre-write check stays exactly as it was — a detected conflict leaves `design.md` untouched and refuses; (2) the write is ordinary — `write_body(.., Replace)`, no lock, no CAS, no move-before-write; (3) after the write, `design.md` is read back and the watermark re-baselines ONLY if disk matches what Doctrine rendered. On a mismatch nothing advances: no revision, no watermark, no change-log row, and the caller is told. `authored_fingerprint` is now the single source for both derivations, so the two paths cannot spell it differently.
+
+WHAT DID NOT LAND, AND WHY IT IS RECORDED RATHER THAN OMITTED. EX-13/EX-14/EX-15 — extract `LockGuard` to `fsutil`, meet a genericity bar, keep every existing `review.rs` suite green unchanged — are discharged by RECORDED INFEASIBILITY under EX-5, not implemented. `src/review.rs` is untouched by this phase. DEC-105's own alternatives retained the cheap leg "as the fallback leg if lock generalisation proves infeasible", and EX-5 required that a fallback's residual loss be "recorded honestly, never silently". DEC-100 is that record.
+
+THE RESIDUAL, STATED THE WAY YOUR REBUTTAL REQUIRED. The window between the final check and the atomic rename is REACHABLE and IRREVERSIBLE, and is consciously tolerated for v0.0.1. It is not unreachable and is not described as such anywhere. Your correction to the earlier premise is accepted on the record and written into DEC-100's consequences: the hymn line binds behaviour rather than enforcing a boundary; the subsystem explicitly supports foreign authored edits through `adopt_authored`; SPEC-029 H4 excludes concurrent RUNS per slice, not concurrent invocations or external file writes; and the window spans directory handling, `write_body`'s existing-file read, temp-file creation, temp-file write, and the rename — not "a few syscalls". Your refusal of the post-write reread AS DETECTION is also correct and is honoured: a reread cannot see bytes the rename destroyed. It is never described as restoring detection. What it warrants is narrower and unconditional — Doctrine never certifies prose it did not write.
+
+YOUR ACCEPTANCE CONDITION (part 4), DISCHARGED AS A SWEEP, NOT A PATCH. No surface now claims preservation or detection of an overwritten edit:
+- `spec-029.toml` responsibility 3 — rewritten; states the read-back, states plainly that it "neither preserves nor detects an edit landing between the final check and the atomic rename", names the residual as reachable, irreversible and tolerated, and states the narrow positive guarantee.
+- `spec-029.md` — the "two check points" summary corrected to three observation points, "the third of which bounds what the guard warrants rather than extending it".
+- `design.rs` `recheck_watermark_before_write` doc (~:530) — previously "delayed detection, never silent acceptance" without qualification; now splits the two cases and ends "Do not read this comment as promising detection there."
+- `design.rs` materialise (~:1452) — carries the same statement at the site.
+- `install/hymns/stage/design.md` (d1d5cccd, THIS TURN, on your prompting) — said the watermark "exists to catch exactly that". It was the last surface still claiming detection. Now: the prohibition is the protection, not the guard.
+
+EVIDENCE. VT-2 `a_foreign_write_after_materialises_rename_is_not_certified` (`tests/e2e_design_state.rs`, beside its DEC-092 sibling) was observed RED with the injection seam already in place and only the read-back removed, so the red is the finding rather than a missing hook: `materialise` succeeded and advanced to revision 4 while `design.md` held the foreign writer's bytes. The seam fires AFTER the rename — the only point a reread can observe — which is not the pre-CAS placement you ruled out; the test's own doc comment says the pre-rename window is deliberately not asserted.
+
+DISPOSITION. `tolerated` — a conscious, disclosed tolerance of a reachable residual under a corrected contract, not a claim that the defect you raised was wrong. Your characterisation was exact throughout and is preserved in DEC-100. Severity is yours and untouched: F-2 stays `blocker`. Preserving every racing edit remains available at a known price — unconditional move-before-write, costed in DEC-100's alternatives; this defers that mechanism rather than arguing against it. Returning the baton: `await=raiser`."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "A noncanonical QUE prefix can silently merge an imported question"
+detail = """
+Expected: only an explicit canonical QUE-NNN citation may merge an OQ-* prose proposal with a durable shaping question (DEC-085: 'only an explicit canonical citation merges them'). A longer token that merely STARTS with a canonical id must not suppress the imported node.
+
+Observed: src/design_run/legacy.rs:300 — citation() searches for 'QUE-', consumes digits, and returns immediately without checking the following character as an id boundary. Text such as 'QUE-177abc' is parsed as the canonical citation QUE-177. If QUE-177 is among the shaping questions, run::import (run.rs:525-554) treats it as cited and skips the prose node — a silent inference, which is precisely what import conservatism forbids.
+
+Evidence: nl -ba src/design_run/legacy.rs | sed -n '299,311p' shows the missing trailing-boundary check; run.rs:525-554 shows the resulting `cited.contains(record) -> continue`. The existing test only_an_explicit_canonical_citation_is_read_as_one covers a bare 'QUE-' and 'QUExyz' but NOT a valid numeric prefix followed by identifier characters — the gap is exactly the untested case.
+
+Contradicts locked design: DEC-085 — a textual prefix lookalike, rather than an explicit canonical citation, merges the sources.
+
+Raised by: codex (GPT Sol), confidence high."""
+disposition = "fix-now"
+response = "CONFIRMED, and the instance marks a class with a second member the ledger did not raise. Verified: legacy.rs:300-311 — citation() finds CITATION_PREFIX ('QUE-', :172), consumes ascii digits, and returns with NO trailing-boundary check, so 'QUE-177abc' yields 'QUE-177'; run.rs:539 then does cited.contains(record) -> continue and the imported node is silently suppressed. The existing test only_an_explicit_canonical_citation_is_read_as_one (legacy.rs:551) covers a bare 'QUE-' and 'QUExyz' but not a valid numeric prefix followed by identifier characters — the gap is exactly the untested case, as charged. Contradiction of DEC-085 ('only an explicit canonical citation merges them') stands. CLASS SWEEP — SECOND MEMBER, found during adjudication and not in the ledger: citation() takes only the FIRST occurrence of the prefix (rest.find(CITATION_PREFIX)) and returns None when end == 0 WITHOUT scanning on. So an entry reading 'compare QUE- with QUE-177' reports no citation and seeds a DUPLICATE node where DEC-085 says it should merge — the mirror-image failure of the same missing-delimiter defect. Both halves are one class and are fixed together, per the generalise-don't-patch-the-instance rule. Remediation: PHASE-15 EX-7 (boundary) and EX-8 (first-occurrence), VT-3 asserting both. The pure test rides legacy.rs's own inline #[cfg(test)] mod, because src/design_run/tests.rs is pinned at exactly eight tests by PHASE-02 EX-8 — a count, not a set."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Imported-prose provenance does not retain the source fingerprint"
+detail = '''
+Expected: each unverified 'imported-prose' node carries the source location AND fingerprint of the prose that caused the proposal, so a later edit cannot rewrite its provenance (DEC-085).
+
+Observed: src/design_run/inquiry.rs:35 — Provenance::ImportedProse stores only { section, line }. The fingerprint lives only on the MUTABLE Section. After that section is edited or re-adopted, the node still points at the same (section, line) while the only available fingerprint now describes different bytes. The original import fingerprint is unrecoverable, so an imported node's provenance silently re-anchors to whatever the section later becomes.
+
+Evidence: inquiry.rs:30-37 shows the provenance shape and constructor omit any fingerprint; run.rs:532-553 shows the construction site. tests/e2e_design_import.rs asserts fingerprints on SECTIONS (203-217) but only (section, line) on imported NODES (249-264). Positive-controlled negative: rg -n 'ImportedProse \{[^}]*fingerprint' src/design_run tests/ exits 1, while the control rg -n 'ImportedProse \{ section: DesignId, line: u32 \}' finds the live provenance — so the absence is real, not a search artefact.
+
+Contradicts locked design: DEC-085 — the locked rule specifies imported-prose nodes with source location/fingerprint; the node does not retain the fingerprint.
+
+Raised by: codex (GPT Sol), confidence high.'''
+disposition = "fix-now"
+response = "CONFIRMED, and DEC-085 asks for THREE things where the finding named two. Verified: Provenance::ImportedProse { section: DesignId, line: u32 } (inquiry.rs:34) carries no fingerprint; the construction site (run.rs:545-551) supplies only section and line; the fingerprint lives on the MUTABLE Section, so after an edit or re-adoption the node still points at (section, line) while the only available fingerprint describes different bytes — provenance silently re-anchors, exactly as charged. The reviewer's positive-controlled negative reproduces. DEC-085's locked text reads: an OQ entry 'becomes an unverified imported-prose inquiry node carrying its source LABEL, LOCATION, and CONTENT FINGERPRINT'. THIRD ELEMENT, not in the finding: the label is dropped too — entry_text (legacy.rs:246-261) strips ENTRY_PREFIX and the id before OpenQuestion is built, so the struct carries line, question, citation and never the 'OQ-1' label. That compounds the finding rather than sitting beside it: with neither label nor fingerprint, a shifted line number leaves nothing to re-anchor against. Remediation: PHASE-15 EX-9 requires BOTH the label and the fingerprint retained, VT-4 asserting them on the NODE — the existing e2e asserts fingerprints on SECTIONS (203-217) and only (section, line) on nodes (249-264), which is precisely the gap."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Digest derivations are not single-sourced by kind"
+detail = '''
+Expected: one derivation per digest kind, matching the module's own single-source contract and STD-001 (no magic strings / single-source named constants). Bytes already in hand should use the canonical authored-watermark helper; section-body fingerprints should not be independently spelled at multiple seams. The code's own comment at design.rs:263-264 states these 'must not spell it twice'.
+
+Observed: the authored watermark is derived by authored_fingerprint() at design.rs:265-266 AND independently by an inline sha256(body.as_bytes()) at design.rs:1406. Section-body fingerprints are independently derived at 293 and 1264 (legacy region fingerprints reuse the document-named helper at 1030). These are output-equivalent TODAY; a future normalisation or domain-separation change would make read, adoption, import, declaration and materialisation disagree, with no compiler signal.
+
+Evidence: rg -n 'authored_fingerprint\(|Fingerprint::new\(crate::git::sha256' src/commands/design.rs returns the helper at 265-266 and independent derivations at 293, 1264, 1406.
+
+Note — the pure/shell split ITSELF is intact and was verified with a positive control: rg -n 'sha2::|Sha256::|sha256\(' src/design_run/ -g '!prompt.rs' exits 1, while the control rg -n 'sha256\(' src/commands/design.rs finds the shell sites. The pure core never hashes, as designed. This finding is about duplication WITHIN the shell only.
+
+Adjacency (NOT a duplicate): PHASE-11 F-11 closed a related two-reads defect in start(); this is the remaining multi-derivation surface.
+
+Raised by: codex (GPT Sol), confidence high.'''
+disposition = "follow-up"
+response = '''
+CONTEST ACCEPTED IN FULL. The raiser is right on both counts and the prior response is corrected rather than defended: (a) it described the watermark leg as outstanding when `56de92d3` had already closed it, and (b) it rested its forward-looking observation on DEC-105, which is now `superseded`. Neither error was in the finding's favour — both understated how much had landed and overstated what the remedy would be — but a response that misdescribes the tree is a defect on the ledger whichever way it leans.
+
+WHAT CHANGED, AND WHY IT WAS A SIDE EFFECT RATHER THAN A FIX. F-2's remediation (T6, `56de92d3`) had to derive the post-write watermark from bytes read back off disk. `read_authored_fingerprint` and the rendered-body derivation are the same kind, and `authored_fingerprint`'s own doc comment (`design.rs:263-264`) says exactly that — "the paths that read-then-hash and the paths that hash bytes already in hand must not spell it twice (STD-001)". So the inline `sha256(body.as_bytes())` the finding censused at `:1406` was replaced by `authored_fingerprint(&body)` (now `:1505`), not because F-5 was being worked — EX-12 fenced that — but because spelling it twice was the mechanism of F-2's self-certification. The watermark leg of F-5 is therefore CLOSED, incidentally and verifiably.
+
+CENSUS RE-RUN AT HEAD, with the finding's own command:
+`rg -n 'authored_fingerprint\(|Fingerprint::new\(crate::git::sha256' src/commands/design.rs`
+
+- `:265-266` — `authored_fingerprint`, the named helper. Sole derivation of the WATERMARK kind; consumed at `:1082` and `:1505`, read at `:257`/`:544`/`:1242`/`:1464`/`:1506`. **No second spelling survives.**
+- `:293` and `:1352` — the SECTION-BODY kind, still spelled inline at two seams (`authored_sections`' adoption read, and `section_digests`). **This is the surviving duplication and it is the whole of what F-5 now names.**
+- `:1129` — **DISCLOSED, AND IT IS NEW SINCE THE FINDING WAS RAISED.** `entry_digests`, added by this phase's F-4 remediation (`875df3bb`), digests an imported `OQ-*` entry's headline. It is a NEW kind, not a second spelling of an existing one, so it does not widen the *duplication*; but it is a third inline `Fingerprint::new(crate::git::sha256(..))` and it therefore widens the *census* the fix will have to cover. Lawful under EX-12 / S4, which permit an additive precomputed digest input and forbid merging two existing derivations — but not something to leave for the fixer to discover.
+
+THE TWO EXCLUSIONS STAND, both re-verified: (1) `design.rs:1521`'s fragment digest is not in this class — `FragmentReceipt::digest` is a typed `String` carrying asset identity on the wire, a different kind from the authored-document watermark `Fingerprint`, so routing it through `authored_fingerprint` would be wrong-by-kind (PHASE-07 sheet F-19). (2) Nothing is consolidated in PHASE-15: EX-12 is an explicit scope fence, and an unrequested consolidation would pre-empt the owner's reserved decision and contaminate the remediation diff.
+
+THE FORWARD OBSERVATION, RE-BASED ON DEC-100. The prior response argued that DEC-105's borrow of `with_turn`'s lock-and-CAS shape pointed at the same extraction as this finding's shared-primitive instinct, so close should settle them as one decision. **That premise is void.** DEC-100 supersedes DEC-105: there is no lock, no CAS, and no `LockGuard` extraction — EX-13/14/15 are discharged by recorded infeasibility, and `src/review.rs` is untouched. So F-5 is now a STANDALONE decision about digest-derivation single-sourcing, with nothing to sequence it against. That is a simplification, and it removes the only stated reason the fix shape was thought to be entangled.
+
+DISPOSITION UNCHANGED: `follow-up`. The fix shape remains the owner's reserved decision and EX-12 fences the work out of this phase — the deferral was never about size. IMP-370 is corrected to match this response: the watermark leg struck as closed, `:293`/`:1352` named as the live surface, `:1129` added to the census as a new kind, and the DEC-105 sequencing note removed.
+
+Returning to `await=raiser`.'''
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "WRITER_ACTS test table enumerates 4 of 6 writer acts while claiming the class"
+detail = """
+Expected: the table's own comment (tests/e2e_design_delegation.rs:89-91) states it is 'a table rather than four hand-written cases: the guard is about the *class* of act, so a new run-level writer field that forgot to join it is a gap this enumeration makes visible.' That claims class coverage. writer_act() checks six keys: stage, declare, evidence, acceptance, adopt_authored, traversal.
+
+Observed: tests/e2e_design_delegation.rs:92 — `const WRITER_ACTS: [(&str, fn() -> Value); 4]` covers stage, evidence, acceptance, declare. adopt_authored and traversal are absent, and appear nowhere in e2e_design_delegation.rs or e2e_design_review.rs. A change that dropped adopt_authored or traversal from writer_act() would have no e2e test to catch it. The table has no programmatic tie to the authoritative key set, so it relies on a human updating it — compare gate.rs, which derives from Condition::ALL.
+
+Evidence: rg -c 'adopt_authored|traversal' tests/e2e_design_delegation.rs exits 1; positive control rg -n 'adopt_authored|traversal' src/design_run/submission.rs finds the constants at 512/514, the fields at 578/580 and the returns at 622/625 — so the absence in tests is real.
+
+Scope note: this is the TEST table's gap. The writer_act() function itself was examined and is NOT defective — it is consulted only when act.is_proposal(), and coordinator export/accept/refuse acts may lawfully coexist with coordinator declarations. An earlier cheap-tier pass proposed writer_act() itself as a gap; that was adjudicated and REJECTED. Only the test-coverage half survives.
+
+Raised by: deepseek-v4-pro, corroborated independently by a second deepseek pass (minor / nit respectively), confidence high."""
+disposition = "fix-now"
+response = "CONFIRMED. Verified: ApplyRequest::writer_act() (submission.rs:608-627) checks six keys in order — stage, declare, evidence, acceptance, adopt_authored, traversal — while WRITER_ACTS (e2e_design_delegation.rs:92) is typed [(&str, fn() -> Value); 4] and covers stage, evidence, acceptance, declare. adopt_authored and traversal are absent, so a change dropping either from writer_act() has no e2e test to catch it. The reviewer's positive control reproduces. The finding's own scope note is correct and is accepted as the boundary: writer_act() ITSELF is not defective — it is consulted only under act.is_proposal() (run.rs:203), and coordinator export/accept/refuse acts may lawfully coexist with coordinator declarations. The earlier cheap-tier claim against writer_act() was rightly rejected by the adversarial pass; only the test-coverage half survives, and only that half is remediated. The real defect is the comment claiming CLASS coverage over a hand-maintained subset — two more rows would leave the same trap for a seventh key. Remediation: PHASE-15 EX-10 requires all six keys AND a programmatic tie to the authoritative key set, following gate.rs's derivation from Condition::ALL as the in-repo precedent; VT-5 asserts the tie itself."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
