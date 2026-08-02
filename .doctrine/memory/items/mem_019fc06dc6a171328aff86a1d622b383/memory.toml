@@ -1,0 +1,43 @@
+memory_uid = "mem_019fc06dc6a171328aff86a1d622b383"
+memory_key = "mem.pattern.doctrine.doc-only-validation"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Documentation-only Doctrine changes use doctrine validate"
+summary = "For documentation-only Doctrine changes, corpus validation is sufficient; do not run code-oriented check gates."
+created = "2026-08-02"
+updated = "2026-08-02"
+
+[scope]
+paths = []
+globs = [".doctrine/**/*.md", ".doctrine/**/*.toml"]
+commands = ["doctrine validate"]
+tags = ["docs", "validation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "615dd6a2ffb3f842465e99fcd17baa339e528a8c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c24c7ed2af80c00e931e8b38f211930063dba5512a76f72a5695c8f73ff22d10"
+base_commit = "9ed12339e6250835bd96d6c691e380626bb774ec"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
