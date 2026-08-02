@@ -955,6 +955,158 @@ H12_assert() {
   c3_assert_stage_passed "${at}" "${run}" advance
 }
 
+# ── T4c — the capsule-time rows ─────────────────────────────────────────────
+
+# H7 — THE CAPSULE EXHAUSTS ITS DISK BOUND (F-3, `harvest/resource-cap`).
+#
+# THE ONLY ROW WITH NO `_mutate` BODY, and that is the row rather than an
+# omission. Its hazard is authored INSIDE the capsule by `worker-hostile.sh`,
+# because the bound it trips is evaluated by `sandbox.sh` before control returns
+# to the harness — the trusted-side plant seam arrives too late to reach it
+# (F-P05-37). The vehicle and the cap are stated declaratively at the head of
+# this file and applied per cell by `cell_run` (D-P05-19).
+#
+# ── what the vehicle does, and why the honest work comes first ──────────────
+#
+# The capsule commits, publishes `RIG_RESULT_REF`, writes a VALID bundle and
+# rings — and only then exhausts its bound. So a harvestable result genuinely
+# stands at the moment of refusal, and the row can say the cap arrived BEFORE
+# ingestion rather than instead of it. A capsule that only died would refuse at
+# stage 1 for the uninteresting reason that there was nothing to ingest, and
+# `harvest/resource-cap` would be indistinguishable from an empty capsule.
+#
+# ── the two legs, and the one this row exercises ────────────────────────────
+#
+# The cap has two: `ulimit -f` per file, and cumulative `du` on the way out. The
+# blob is SPARSE, so the PER-FILE leg is the one that fires — F-P03-1's leg,
+# which reported SUCCESS before the 153 classification existed. The cumulative
+# leg is deliberately not driven here: P-C2 already owns it against both capsule
+# kinds with a positive control (`probe-capsule.sh:139-177`), and driving it on
+# H7's cap would cost cap-many REAL bytes per execution for attribution that
+# `planted?` earns with a control instead (D-P05-18).
+#
+# ── NO FILE OVER THE BOUND EVER EXISTS, and that is what the bound MEANS ────
+#
+# The first `planted?` written here looked for one — it is the obvious
+# observable and it is unobtainable. `ulimit -f` refuses the write AT the bound,
+# so the oversize is never materialised: `dd` opens the file, seeks past the
+# limit, takes SIGXFSZ on the write, and leaves a ZERO-LENGTH file behind. A
+# clause asserting an oversized artifact can only ever red (F-P05-38).
+#
+# So the observable is the REFUSED WRITE'S SIGNATURE, not its product: the file
+# the capsule attempted is present and empty. Paired, as ever, with the clause
+# that makes it mean something — the capsule's cumulative footprint UNDER the
+# cap, which says both that the honest work is nowhere near the bound
+# (attribution, D-P05-18) and that the `du` leg had nothing to say, so the leg
+# that fired was the per-file one (F-P03-1). H13's M6 lesson at the disk cap.
+
+# The row's own bar for "pathological", NOT a copy of the vehicle's depth. The
+# vehicle may deepen its tree without this moving: what the row claims is that a
+# tree far past anything a build produces reached the capsule and went no
+# further.
+C3_H7_DEEP_MIN=100
+
+# The trusted-side twins of `worker-hostile.sh`'s `BLOB` and `DEEP`. Restated
+# here for the same reason `c3_capsule_repo` restates that vehicle's `CLONE`:
+# the capsule cannot source this library, and these are the capsule's OWN
+# artifacts — not the harvest path, which RT-4/F-6 forbids it to name and which
+# crosses as env for exactly that reason.
+c3_h7_blob() { printf '%s/capsule/hostile-blob' "$1"; }
+c3_h7_deep() { printf '%s/capsule/hostile-deep' "$1"; }
+
+# H7 PLANTS NOTHING TRUSTED-SIDE. Left as a stated no-op rather than omitted:
+# the harness refuses a row whose trio is absent (`c3_assert_ready`), and a
+# reader finding two of three functions would reasonably suspect the third was
+# forgotten. It was not — there is no seam here to plant into.
+H7_mutate() { :; }
+
+H7_planted() {
+  local run=$1 capsule="$1/capsule" blob cumulative depth
+  local cap="${C3_H7_WORKER_CAP}"
+  blob=$(c3_h7_blob "${run}")
+
+  # 1. THE ATTEMPT IS MATERIALISED AND EMPTY. Present, so the capsule really
+  #    reached for the oversize; zero-length, because the bound refused the
+  #    write rather than trimming a file it let through. A non-empty blob here
+  #    would mean the write SUCCEEDED and whatever refused this cell was not
+  #    the per-file bound.
+  [ -f "${blob}" ] || return 1
+  [ "$(stat -c %s -- "${blob}")" -eq 0 ] || return 1
+
+  # 2. AND THE CUMULATIVE FOOTPRINT IS UNDER THE CAP. Two things at once: the
+  #    honest work is nowhere near the bound, so the overrun is attributable to
+  #    the blob alone (D-P05-18); and the `du` leg had nothing to say, so the
+  #    leg that fired was the per-file one (F-P03-1). Without this the empty
+  #    blob above would pass just as well against a capsule that never wrote it.
+  cumulative=$(du -s -B1 -- "${capsule}" | cut -f1)
+  [ "${cumulative}" -lt "${cap}" ] || return 1
+
+  # 3. The pathological tree landed too — the row's second vector, and the one
+  #    whose containment the quarantine has to bound.
+  depth=$(find "${capsule}" -type d -printf '%d\n' 2>/dev/null | sort -rn | head -1)
+  [ "${depth:-0}" -ge "${C3_H7_DEEP_MIN}" ] || return 1
+
+  printf 'the oversize is present and ZERO-LENGTH against a %sB bound, beside a %s-deep tree, and the capsule measures %sB CUMULATIVELY — the per-file leg fired, du had nothing to say' \
+    "${cap}" "${depth}" "${cumulative}"
+}
+
+H7_assert() {
+  local run=$1 at="H7/$2/$3/$4"
+  local q="${run}/quarantine" repo blob deep
+  repo=$(c3_capsule_repo "${run}")
+  blob=$(c3_h7_blob "${run}")
+  deep=$(c3_h7_deep "${run}")
+
+  # 1. THE CAPSULE DIED ON THE DISK BIT, not on something that merely looks
+  #    like it. This is the join between the sandbox's verdict and the token
+  #    stage 1 emitted — without it the row would score a `resource-cap`
+  #    produced by any nonzero worker status the mapping happened to catch.
+  rig_assert_eq "${at}: the capsule's own status is the disk bit" \
+    "${RIG_EXIT_DISK}" "$(cat "${run}/worker-status")"
+
+  # 2. AND A HARVESTABLE RESULT GENUINELY STOOD. The sharpest clause in the
+  #    row: the refusal is the cap arriving BEFORE ingestion, not in place of
+  #    it. Both artifacts are checked on both mechanisms — the vehicle writes
+  #    both, and checking only the one this cell harvests would leave the other
+  #    mechanism's cells unable to make this claim at all.
+  rig_assert "${at}: the capsule published a result ref before it died" \
+    git -C "${repo}" rev-parse --verify --quiet "${RIG_RESULT_REF}"
+  rig_assert "${at}: … and a VALID bundle — there was something worth ingesting" \
+    git bundle verify "${run}/capsule/${RIG_BUNDLE}"
+
+  # 3. THE INGESTION BOUNDARY HELD ANYWAY. H13's clause, and it carries more
+  #    here: there, nothing was ingested because the artifact was hostile; here
+  #    the artifact is honest and the bound refused it regardless.
+  rig_assert_fails "${at}: no result ref in the quarantine — nothing was ingested" \
+    git -C "${q}" rev-parse --verify --quiet "${RIG_QUARANTINE_REF}"
+
+  # 4. AND THE RUN STOPPED THERE — stage 1 is the first line, so a refusing
+  #    harvest emits exactly one. Asserted on the emitted lines (VA-2).
+  rig_assert_eq "${at}: the run stops at the first refusal — harvest emitted alone" \
+    1 "$(wc -l <"${run}/stages")"
+
+  # 5. THE BLAST RADIUS. Both hostile artifacts stayed in the capsule's own
+  #    writable root. `assert_outcome`'s object-count clause covers canonical's
+  #    OBJECT database; this covers the two trees ON DISK, which is where a
+  #    resource hazard actually lands.
+  #
+  #    NOT asserted here: "no file over the bound reached them". It would pass
+  #    on every run for a reason that has nothing to do with containment — no
+  #    such file exists ANYWHERE, because the bound refuses the write rather
+  #    than materialising the oversize (F-P05-38). A clause that cannot fail is
+  #    not a control, and this phase has paid for that lesson twice already.
+  local d
+  for d in "${q}" "${run}/canonical"; do
+    rig_assert "${at}: the capsule's oversize is absent from ${d##*/}" \
+      c3_path_absent "${d}/${blob##*/}"
+    rig_assert "${at}: … and so is its pathological tree" \
+      c3_path_absent "${d}/${deep##*/}"
+    rig_assert "${at}: nothing of that depth reached ${d##*/} by another name" \
+      test "$(find "${d}" -type d -printf '%d\n' 2>/dev/null | sort -rn | head -1)" \
+      -lt "${C3_H7_DEEP_MIN}"
+  done
+}
+
 # H13 — A HOSTILE BUNDLE AT THE HARVEST PATH (EX-3's four legs, RT-4/F-6).
 #
 # THE ONLY ROW WHOSE SUBJECT IS A CAPSULE-AUTHORED FILE. Every other row hands

@@ -57,6 +57,7 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/instantiations.sh
 . "${RIG_DIR}/lib/instantiations.sh"
+SPIKE_C3_MUTANT="${SPIKE_C3_MUTANT:-}"
 
 # P-C3 records the spec's eleven columns: the derived verdict is spliced in at
 # `outcome` (10), and the field the recorder refuses to finish without is
@@ -679,6 +680,32 @@ c3_run_conflict() {
 
 # ── run ─────────────────────────────────────────────────────────────────────
 
+# ── the falsifiability overlay (F-P05-31's middle beat) ─────────────────────
+#
+# An OPTIONAL file of rebinds. A mutant WRAPS a row or harness function without
+# owning a copy of its body — the only way its red is evidence about the real
+# function rather than about a fork of it. Inert when unset, so a scored run is
+# byte-identical to one without it.
+#
+# LOADED HERE, NOT BESIDE THE OTHER SOURCES, and the position is load-bearing:
+# this file interleaves definitions with execution, so an overlay sourced at the
+# top can only see the four libraries and not the harness's own functions. It
+# refused `fixture_verify_timeout` from up there — correctly, which is why
+# `rebind` fails closed on an unknown name.
+#
+# The same shape `RIG_DEFECT_CANONICAL_HOP` already uses one file over: a
+# falsifiability affordance wired into the real path deliberately, because a
+# clause shown to red against a REAL perturbation is worth more than one
+# hand-waved against a hypothetical. The positive control above has already run
+# UNMUTATED by this point, which is the right order — a mutant must not be able
+# to quiet the harness's own red/green check.
+if [ -n "${SPIKE_C3_MUTANT}" ]; then
+  [ -r "${SPIKE_C3_MUTANT}" ] || rig_die "no such mutant overlay: ${SPIKE_C3_MUTANT}"
+  rig_warn "FALSIFY MODE: overlay ${SPIKE_C3_MUTANT} — this run is NOT evidence"
+  # shellcheck source=/dev/null
+  . "${SPIKE_C3_MUTANT}"
+fi
+
 c3_assert_ready
 
 expected=$(c3_expected_entries)
@@ -699,8 +726,9 @@ printf '\n'
 rows_assert_complete 'VA-1' "${expected}"
 
 rows_write "${REPORT}" "${MATRIX_COLUMNS}" \
-  "$(printf 'p-c3: %s\tin-jail\tlegs=%s\trows=%s' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${C3_LEGS}" "${rows[*]}")"
+  "$(printf 'p-c3: %s\tin-jail\tlegs=%s\trows=%s%s' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${C3_LEGS}" "${rows[*]}" \
+    "${SPIKE_C3_MUTANT:+$(printf '\tMUTATED=%s' "${SPIKE_C3_MUTANT##*/}")}")"
 
 printf '\nresults: %s\n' "${REPORT}"
 printf '%s\n' "${ROWS_RECORDED[@]}" | cut -f1,2,3,10,11 | sed 's/^/  /'
