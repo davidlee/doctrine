@@ -1,0 +1,81 @@
+allowed_clobbers = []
+
+[[row]]
+source_oid = "b10445f6c93e282354ff464d3c2d8afdf985aba6"
+target_ref = "refs/heads/review/233"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "ceba47cd8d6aca7399245ae66be26d91367ad043"
+applied_new_oid = "ceba47cd8d6aca7399245ae66be26d91367ad043"
+status = "verified"
+
+[[row]]
+source_oid = "9bc1e729a11413ccf130d5f948054f37fc1c576d"
+target_ref = "refs/heads/phase/233-01"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "97076807380d3c80a62939fad880410de52ff660"
+applied_new_oid = "97076807380d3c80a62939fad880410de52ff660"
+status = "verified"
+
+[[row]]
+source_oid = "5edf4733847f3a75de200a9c1f8b93da78e6a504"
+target_ref = "refs/heads/phase/233-02"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "db4816b862c128fd154c5465eff7458cc36a2179"
+applied_new_oid = "db4816b862c128fd154c5465eff7458cc36a2179"
+status = "verified"
+
+[[row]]
+source_oid = "4e2ad8e674d9ea077b2a1c3590d43769cae1bfba"
+target_ref = "refs/heads/phase/233-03"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "9775c402c27d5117f9aaaa83dba3255a181eb01f"
+applied_new_oid = "9775c402c27d5117f9aaaa83dba3255a181eb01f"
+status = "verified"
+
+[[row]]
+source_oid = "228a7ed324ad692babdd3c4ca2fee03e539bf757"
+target_ref = "refs/heads/phase/233-04"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "e578adaa641f47a8d12ac4d90d140904edef5c6e"
+applied_new_oid = "e578adaa641f47a8d12ac4d90d140904edef5c6e"
+status = "verified"
+
+[[row]]
+source_oid = "ba2d9ba9a1cb709be0e2193ea76f2e286fd416a3"
+target_ref = "refs/heads/phase/233-05"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "a087e1719dd19d63c5ce932d04b4b1585e28c71b"
+applied_new_oid = "a087e1719dd19d63c5ce932d04b4b1585e28c71b"
+status = "verified"
+
+[[row]]
+source_oid = "813ca3721cc02a497c183cca6a619679f0aed362"
+target_ref = "refs/heads/phase/233-06"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "4f41fc666ddc1d23697239a336ef75508b900ba6"
+applied_new_oid = "4f41fc666ddc1d23697239a336ef75508b900ba6"
+status = "verified"
+
+[[row]]
+source_oid = "5acb8d304854931936b64378bb56f5aecaa8b676"
+target_ref = "refs/heads/phase/233-13"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "33a426e1ba0264c0b8a921fd5224aa37954210e0"
+applied_new_oid = "33a426e1ba0264c0b8a921fd5224aa37954210e0"
+status = "verified"
+
+[[row]]
+source_oid = "b18b3c15756bcac20cf1f18969f98e852bc70c21"
+target_ref = "refs/heads/phase/233-14"
+expected_old_oid = "0000000000000000000000000000000000000000"
+planned_new_oid = "32fd310d601aff8be8e939dae5b4c4aa735eb440"
+applied_new_oid = "32fd310d601aff8be8e939dae5b4c4aa735eb440"
+status = "verified"
+
+[[row]]
+source_oid = "869838a7b3fd3bc44ea6bac65e9deabc35aaaa96"
+target_ref = "refs/heads/main"
+expected_old_oid = "36d930ca43220f309175f30d7250b5dff71129ae"
+planned_new_oid = "869838a7b3fd3bc44ea6bac65e9deabc35aaaa96"
+applied_new_oid = "869838a7b3fd3bc44ea6bac65e9deabc35aaaa96"
+status = "verified"

@@ -1,0 +1,156 @@
+schema = 1
+
+[[phase]]
+id = "PHASE-04"
+position = "reaped"
+updated_at = "2026-07-29T03:54:49.407108869Z"
+
+[phase.spawn]
+fork = "dispatch/agent-ab54223be3934d87c"
+base_oid = "b0e5e9080127a3fcd920c1ab8fa6372c499a54ec"
+at = "2026-07-29T03:03:07.340814949Z"
+
+[phase.worker_commit]
+fork_tip = "11d76bf645e8465761c97897224b1815ded86625"
+at = "2026-07-29T03:17:49.790844722Z"
+
+[phase.import]
+fork_tip = "e7d2c26830e21bee090ce0da9fe9e5163edc11a5"
+onto = "27e6bfcdf8512928affeb02d5d21a8abe3d4a612"
+at = "2026-07-29T03:47:46.76685675Z"
+
+[phase.verify]
+status = "pass"
+verified_oid = "38c3c2f03a4daca686b99e9aeb8e1cb9c81d9be1"
+suite = "gate"
+at = "2026-07-29T03:49:53.511712282Z"
+
+[phase.conclude]
+at = "2026-07-29T03:53:36.133197822Z"
+
+[phase.reap]
+at = "2026-07-29T03:54:49.407108869Z"
+
+[[phase]]
+id = "PHASE-05"
+position = "reaped"
+updated_at = "2026-07-29T05:40:15.437542806Z"
+
+[phase.spawn]
+fork = "dispatch/agent-a5a264abd4c2064b8"
+base_oid = "cb45bc958d8170aa05a3732606c3acb285dd0af1"
+at = "2026-07-29T05:03:54.328707424Z"
+
+[phase.worker_commit]
+fork_tip = "7c74439311f535cedbdaa26b074b118809755c53"
+at = "2026-07-29T05:33:56.620279446Z"
+
+[phase.import]
+fork_tip = "7c74439311f535cedbdaa26b074b118809755c53"
+onto = "f3db6c0e83d04c81c27fb3f1f76163c7e17f468b"
+at = "2026-07-29T05:36:23.507206733Z"
+
+[phase.verify]
+status = "pass"
+verified_oid = "4ef43889f4352b53cfe32e53e0b0a612d6992807"
+suite = "gate"
+at = "2026-07-29T05:38:11.111054866Z"
+
+[phase.conclude]
+at = "2026-07-29T05:39:28.67886299Z"
+
+[phase.reap]
+at = "2026-07-29T05:40:15.437542806Z"
+
+[[phase]]
+id = "PHASE-06"
+position = "reaped"
+updated_at = "2026-07-29T10:41:17.360087556Z"
+
+[phase.spawn]
+fork = "dispatch/agent-af66cf9278b2ac12c"
+base_oid = "7e8f78aa6a885997500e1b2127ad8bfbde5a024d"
+at = "2026-07-29T10:16:30.650728838Z"
+
+[phase.worker_commit]
+fork_tip = "564e8775bc70cdec474c3ea4255639c69c3ce9d1"
+at = "2026-07-29T10:37:14.800757606Z"
+
+[phase.import]
+fork_tip = "564e8775bc70cdec474c3ea4255639c69c3ce9d1"
+onto = "0618b3a8a89d5160f15bcf23981cc751ddc16f6d"
+at = "2026-07-29T10:38:44.397073885Z"
+
+[phase.verify]
+status = "pass"
+verified_oid = "6a7624e86d66a3a3a37bccef8cf947865ba2f17f"
+suite = "gate"
+at = "2026-07-29T10:40:08.34268996Z"
+
+[phase.conclude]
+at = "2026-07-29T10:41:00.501505391Z"
+
+[phase.reap]
+at = "2026-07-29T10:41:17.360087556Z"
+
+[[phase]]
+id = "PHASE-13"
+position = "reaped"
+updated_at = "2026-07-29T11:37:15.510577587Z"
+
+[phase.spawn]
+fork = "dispatch/agent-aee5a2ed76e6483fa"
+base_oid = "03339c62ae1b7c833bf85bb41c2ff8076aea2ff1"
+at = "2026-07-29T11:11:19.793874652Z"
+
+[phase.worker_commit]
+fork_tip = "f4edc9e6fe08b23d452352d79f601e0bbfde68cd"
+at = "2026-07-29T11:32:22.334228547Z"
+
+[phase.import]
+fork_tip = "f4edc9e6fe08b23d452352d79f601e0bbfde68cd"
+onto = "eca9927d9b57b3d0b01300cf3fb82f206ccc4a0e"
+at = "2026-07-29T11:34:14.891005127Z"
+
+[phase.verify]
+status = "pass"
+verified_oid = "dfdf1b5e6e488f2350ea537888ed516c6d035d2e"
+suite = "gate"
+at = "2026-07-29T11:36:15.523235301Z"
+
+[phase.conclude]
+at = "2026-07-29T11:37:06.480595035Z"
+
+[phase.reap]
+at = "2026-07-29T11:37:15.510577587Z"
+
+[[phase]]
+id = "PHASE-14"
+position = "reaped"
+updated_at = "2026-07-29T13:16:01.49047706Z"
+
+[phase.spawn]
+fork = "dispatch/agent-a7d4ed4268ad012c5"
+base_oid = "51a74c23159f33b33204a67788f9a139ba6d5641"
+at = "2026-07-29T12:19:34.010919887Z"
+
+[phase.worker_commit]
+fork_tip = "20e532970ea26bbaa8f199f8fa5048d771ebc1cb"
+at = "2026-07-29T12:49:26.135286057Z"
+
+[phase.import]
+fork_tip = "20e532970ea26bbaa8f199f8fa5048d771ebc1cb"
+onto = "0f56ac21d4829fe8bbdc50db2edc5c93d0841bd3"
+at = "2026-07-29T12:51:54.328290964Z"
+
+[phase.verify]
+status = "pass"
+verified_oid = "0c0fe413502a2286fbeeaba430e9fa7e4ecccb7b"
+suite = "gate"
+at = "2026-07-29T13:15:03.317383742Z"
+
+[phase.conclude]
+at = "2026-07-29T13:15:37.979230107Z"
+
+[phase.reap]
+at = "2026-07-29T13:16:01.49047706Z"
