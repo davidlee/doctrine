@@ -298,6 +298,75 @@ row names a `design show` flag and reveals nothing about the measurement, and th
 subject completed its routing before the run began, so the contamination risk is
 judged negligible — stated rather than assumed.
 
+### Edge 1 — the complete sibling contrast. S4 does not fire.
+
+The exploring runbook cleared at revision 6; all five steps discharged. This is
+the **within-run sibling control** §6 makes mandatory, and it is collectible in
+full.
+
+| step | recorded outcome | state-visible | condition satisfied at discharge? |
+|---|---|---|---|
+| `explore.scope` | attested (rev 2) | no | outside S4's reach |
+| `explore.research` | **verified** (rev 3) | **yes** | **yes** — verifier run at 06:48:16Z, failed, round run to completion first |
+| `explore.canon` | attested (rev 4) | no | outside reach |
+| `explore.memory` | attested (rev 5) | no | outside reach |
+| `explore.triage` | attested (rev 6) | **yes** | **yes** — `notes.md` carried `## Design surface triage` at rev 5, discharged at rev 6 |
+
+**Premature discharge: none, across the board.** Both state-visible obligations
+at this edge had their conditions made true *before* discharge, and the notes
+entry preceded its own discharge by a revision. **S4 does not fire at edge 1**,
+and because the sibling contrast is recorded rather than inferred, the `adhere`
+class has what `demonstrated` requires at this edge.
+
+**One marginal call, recorded so it is auditable rather than silent.**
+`explore.triage`'s stated condition names five items — open questions, risks,
+assumptions, **shaping decisions**, constraining governance. The notes carry four
+under headings of their own name; *shaping decisions* is covered substantively by
+*"The three carried questions, now answered by evidence"*, which records each
+answer with its rejected alternative, rather than by a heading of that name.
+Default-deny means S4 fires only on **positive evidence the condition was not
+satisfied**, and content present under a different heading is not that evidence.
+Not fired.
+
+### The two refusals — a contrast worth keeping
+
+Both name their objection, so the shipped skill's claim (*"a refusal names what
+it objected to"*) holds. They differ sharply in what they name.
+
+| refusal | text | remedy named? |
+|---|---|---|
+| `verify research-current` | *"SL-243 has no research baseline — the pre-design research round has not run. Run `/research`, then `doctrine slice research 243` to stamp it."* | **yes**, exactly |
+| `design apply` | *"parse the apply payload as JSON / Caused by: invalid type: string `user-directed`, expected internally tagged enum Provenance at line 9 column 35"* | **no** — leaks serde vocabulary |
+
+The second located the fault precisely (line 9, column 35) and still left the
+subject to read `src/design_run/inquiry.rs` to learn the required shape was
+`{"provenance": "user-directed"}`. **Naming the objection is not the same as
+naming the remedy**, and the first refusal shows the bar is reachable.
+
+This is an `adopt`-relevant interaction: the subject left the delivered surface
+for the source to recover a payload contract. The envelope's `declare` hint
+carries a shape example, but not this one.
+
+### Change log records the claim; the discharge records the verification
+
+`explore.research` appears in the change log as `attested` — the caller's claim —
+while the runbook discharge for the same step records `verified`. The discharge
+is authoritative, but a reader of the change log alone sees the weaker word.
+Recorded as an observation; not filed, because which of the two the change log
+*should* carry is a design question rather than a defect.
+
+### Emission tally at 07:05Z — fourteen calls, one emission
+
+| verb | calls | emissions |
+|---|---|---|
+| `start` | 1 | 0 |
+| `show` | 3 | 0 |
+| `apply` | **9** | **0** |
+| `resume` | 1 | **1** |
+
+`[fragments] fragment = []` throughout: **no receipt has ever been declared**, so
+at no point has suppression been available to explain a non-emission.
+
 ### Inquiry map
 
 Empty at 06:49Z — `next_seq = 0`, no nodes, cursor unset, posture
