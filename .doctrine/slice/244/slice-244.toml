@@ -16,11 +16,13 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "sec-5 shell: contract-block emission in `design resume` beside the fragment and runbook step, the repeatable --known-contracts <edge> token, forward edge via Advance::from_stage retiring the can_advance walk, and DerivedInput gaining ObservedReview and the run's review policy."
 
 [[selector]]
 selector = ".doctrine/spec/tech/029/**"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SPEC-029 owns the gate table and is revised by this slice regardless; under DEC-127 it cites the published diagram address rather than holding a copy."
 
 [[selector]]
 selector = "install/design-prompts/**"
@@ -28,7 +30,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_design_*.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "The e2e design suites encode the claimed-evidence path, including tests binding conditions to sec-1; each change is an argued edit, not a green-chase."
 
 [[selector]]
 selector = "install/hymns/**"
@@ -36,7 +39,83 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "publication/manifest.toml"
-intent = "scope-relevant"
+intent = "design-target"
+note = "Ten new [[entry]] rows — nine contract narratives (kind=guidance) plus the stage diagram (kind=reference); all customization=fixed, the diagram's structurally so (IMP-372 must not move it)."
+
+[[selector]]
+selector = "src/design_run/gate.rs"
+intent = "design-target"
+note = "sec-3 core: Condition/Contract/CONTRACTS macro-generated from one list, closed Advance with from_stage, DerivationRule + ActRequirement + ActorClass, reach/activation filters, satisfied() signature change, Condition::contract_asset_key."
+
+[[selector]]
+selector = "src/design_run/attestation.rs"
+intent = "design-target"
+note = "sec-4: new CheckpointAct and AgentDeclaration records; Attestation survives as SectionReviewed's home; LockAcceptance and IntegratedReview retire into CheckpointAct / ReviewPass (type subsumption, hand repair not migration)."
+
+[[selector]]
+selector = "src/design_run/facts.rs"
+intent = "design-target"
+note = "sec-4: Evidence retires — the existential DerivedDesignFacts::satisfies scan is dissolved by sec-3's derivation rules."
+
+[[selector]]
+selector = "src/design_run/snapshot.rs"
+intent = "design-target"
+note = "sec-4: six changes — ReviewPolicy on the run header, checkpoint-act group, agent-declaration group, LockAcceptance and IntegratedReview retirements, gate group's evidence rows; review_standing takes the policy (ISS-310)."
+
+[[selector]]
+selector = "src/design_run/submission.rs"
+intent = "design-target"
+note = "sec-4: act/declaration wire types and their build order, ReviewPolicyDeclaration, three WRITER_ACTS additions; EvidenceDeclaration and the evidence wire field retire."
+
+[[selector]]
+selector = "src/design_run/refusal.rs"
+intent = "design-target"
+note = "sec-5: GateNotCleared carries Vec<Unmet> (condition + every Cause) replacing missing: Vec<Condition>; new ActAdmissionInvalid with ActFault, the single write-time correspondence refusal."
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+note = "sec-4/5: admission checks the act/rule correspondence on write; invalidation_rows re-sources from the evidence set to the act set; live_reviews deliberately unchanged (not policy-filtered)."
+
+[[selector]]
+selector = "src/design_run/change_log.rs"
+intent = "design-target"
+note = "sec-5: the EvidenceInvalidated vocabulary member is renamed with its re-sourced feed, plus rows for policy change and waiver reason."
+
+[[selector]]
+selector = "src/design_run/render/envelope.rs"
+intent = "design-target"
+note = "sec-5: SectionRow::clearances and clearances_for retire with the evidence store; review_outstanding takes the run's review policy; two scalars added (currency lamp, severity summary)."
+
+[[selector]]
+selector = "src/design_run/mod.rs"
+intent = "design-target"
+note = "Declares the new artifact module."
+
+[[selector]]
+selector = "src/design_run/artifact.rs"
+intent = "design-target"
+note = "sec-6: NEW leaf-tier module — ARTIFACT_PATH + render_artifact(), on funnel_machine.rs's shape, out-degree into gate only."
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+note = "Unit tests for the new vocabulary, act admission, reach/activation and the golden artefact; the existing gate.rs tests are the behaviour-preservation proof."
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+note = "sec-3 DEC-138: supplies the per-finding blocker predicate (severity==Blocker AND status in {open, contested}) that ObservedReview::undisposed_blockers reads — doc_unresolved_blockers minus the state restriction; also the concluded-pass marker's read side (lands with IMP-392)."
+
+[[selector]]
+selector = "install/design-run-stages.md"
+intent = "design-target"
+note = "sec-6: new generated stage-machine artefact (mermaid stateDiagram-v2 + edge/condition tables), rendered by artifact.rs::render_artifact and golden-pinned to the gate tables; published at reference/design-run-stages.md."
+
+[[selector]]
+selector = "install/design-prompts/conditions/**"
+intent = "design-target"
+note = "sec-5 / DEC-122: nine per-condition contract narratives keyed by kebab token, in a subdirectory so the corpus set-equality test is a prefix filter rather than an exclusion list (STD-001)."
 
 [[relation]]
 label = "governed_by"
