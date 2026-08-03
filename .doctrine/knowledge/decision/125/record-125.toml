@@ -1,0 +1,73 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 125
+slug = "review-findings-unify-on-rv-with-a-section-reference"
+title = "Review findings unify on RV with a section reference"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "The design run holds its own Finding (snapshot.rs:293-307) alongside the RV kind's richer ledger. The runtime one is strictly poorer — `blocking` defaults to false so a finding is non-blocking BY OMISSION, with no severity, no verify and no contest — and it is the one that gates the design lock. SL-233's design (design.md:298-299) intended two tiers with a promotion leg; the promotion leg was never built."
+choice       = "Scrap the runtime Finding. Enrich RV findings with a document-section reference and let the design run derive over the ledger."
+alternatives = [
+  "Keep both tiers and build the promotion leg SL-233 specified. Rejected: it preserves two models of one concept and leaves the gate reading the poorer one.",
+  "Keep Finding and add severity to it. Rejected: parallel implementation, and it still lacks verify and contest.",
+]
+rationale    = "The tier objection does not hold. The run already crosses into authored state three ways: `design materialise` writes design.md guarded by the authored watermark; checkpoints mint authored entities from inside `apply` via DEC-086's journalled intent (DEC-120..DEC-126 were minted this way in one run); and the project already made this exact tier call for observations, deliberately and with the tradeoff written down. 'Findings are runtime data' was a choice, not a constraint."
+consequences = [
+  "Severity, verify and contest come for free; the derived outstanding-findings summary DEC-126 needs becomes buildable.",
+  "The promotion leg dissolves rather than being built — findings are born authored.",
+  "DEC-124's `Conducted { review }` arm becomes satisfiable; today the run cannot hold or resolve an RV (`IntegratedReview.id` is a DesignId).",
+  "Section-by-section adversarial review becomes a first-class RV capability rather than a design-run-only trick.",
+  "COMPLICATION: a section's fingerprint moves and DEC-066 invalidation is snapshot-internal, but RV has no fingerprint concept. The RV must record the fingerprint it was raised against. This is where the design should expect to be hardest.",
+  "Entering `reviewing` mints an RV, so the review is a first-class artefact from the start.",
+  "SL-244 specifies its conditions against the RV-backed model; the migration is its own item.",
+  "Fourth instance in this subsystem of a design bullet specifying something never built, with a thinner mechanism left standing in.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "finding model unification"
+target = "DEC-124"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "finding model unification"
+target = "DEC-126"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "finding model unification"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "finding model unification"
+target = "ADR-007"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
+
+[[relation]]
+label = "spawns"
+target = "IMP-392"

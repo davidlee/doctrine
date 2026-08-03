@@ -1,0 +1,87 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 126
+slug = "what-the-design-run-gate-should-check"
+title = "What the design-run gate should check"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-120 requires every condition to be Derived or Attested or retire, emptying the Claimed tier. This record applies that over the ten members and answers the root question SL-244 opened: what should the engine actually check?"
+choice       = "The design-run gate is overwhelmingly an ATTESTATION LEDGER, not a checker. Ten conditions in, NINE out — two Derived, seven Attested, zero Claimed. The discriminator is not 'is it a judgement' (nearly all are) but 'does the actor's identity matter'."
+alternatives = [
+  "Derive the six claimed conditions, per IMP-361's framing. Rejected: three of the six are human or adversarial acts, and computing them is the error DEC-120 names. The answer is three derive, three attest, one retires.",
+  "Keep `required-sections-exist` and specify a required-section set. Rejected: it has NO implementation today, and which sections a design must have is craft under DEC-102 — Doctrine owning a mandatory list is the wrong shape.",
+  "Keep `integrated-review-present` blocking on whole-map currency. Rejected: that enforces review-to-fixpoint, a termination rule RFC-026 E3 provably refutes.",
+]
+rationale    = "Design quality is not mechanically decidable. The six claimed conditions are what happened when the machine needed a check, could not write one, and accepted an assertion instead. The engine's job at these boundaries is to ensure the judgements happened, bind each to the content it was made over, present state accurately enough that the judgement is informed, and record it for audit."
+consequences = [
+  "`required-sections-exist` RETIRES, replaced by `drafting-readiness-attested` — the same shape as user-accepts-sufficiency one stage later. Retiring outright would leave drafting→reviewing guarded by materialisation-current alone, which is trivially true of an empty document.",
+  "`integrated-review-present` and `blocking-findings-disposed` FOLD into one `review-disposition-attested` (Attested, blocking), following DischargeClaim's shape: `Conducted { review }` | `Waived { reason }`, reason admission-checked.",
+  "Integrated-pass currency and an outstanding-findings summary BY SEVERITY become derived state that WARNS, not blocks — the second non-cumulative element in the machine, on DEC-101's stale-discharge precedent.",
+  "Presenting all outstanding findings by severity dissolves `blocking`'s default-false problem without flipping the default: zero outstanding BLOCKERS is compatible with six major, five minor and eleven nits.",
+  "Today's four derived and the proposed two Derived are substantially disjoint — three of four become Attested. The old boolean tracked implementation coverage, not the nature of the condition.",
+  "Corrects IMP-361's framing.",
+  "DEPENDS ON DEC-125: `Conducted { review }` and the severity summary are unbuildable against the runtime Finding model.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "DEC-121"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "DEC-124"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "DEC-125"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "IMP-361"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "ISS-285"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gate condition classification"
+target = "IMP-390"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
