@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc521-2c5b-77a2-a644-f6c59d8ae331"
+recorded_at = "2026-08-03T00:58:33.435024863Z"
+kind = "friction"
+summary = "execute: knowledge show/inspect render no inbound reciprocity, contradicting using-doctrine.md"
+detail = "SL-241 PHASE-05 T7. using-doctrine.md § Relating entities states 'Storage is outbound-only — you link from the source side and reciprocity is derived (ADR-004); inspect / show render both directions.' For knowledge records the second clause is false: after 'doctrine link EVD-006 supports QUE-200', 'knowledge show QUE-200' and 'knowledge inspect QUE-200' render nothing, and --json's relationships map carries outbound only. EVD-006's own view renders 'supports: [QUE-200]' correctly. Verified against pre-existing data too: 'knowledge show DEC-048' does not render 'supported_by: EVD-002'. Cost: a detour to establish how VA-5 ('show QUE-200 renders the linked EVD records in BOTH tiers') could be satisfied at all. Resolved by populating each question's own [evidence] supports/contradicts citation block plus a prose section — but that was discovered empirically, against a reference doc that asserted the opposite."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
