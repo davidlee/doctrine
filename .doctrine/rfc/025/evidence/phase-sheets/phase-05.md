@@ -927,26 +927,65 @@ first matching path and the other forms refuse on its behalf (F-P05-22). (d) and
 QUE-200's own body makes for candidate 2 ("cleanest trust story"), not to the
 question. The other five are inputs the question consumes, so `supports`.
 
-### T8 — evidence artefacts (EX-14) ⌁
+### T8 — evidence artefacts (EX-14) ✅ DONE (2026-08-03, `d730ee50`)
 
-- [ ] Committed **text summaries** under `.doctrine/rfc/025/evidence/`.
-- [ ] **Raw logs** under `.doctrine/state/rfc-025/raw/` — runtime tier,
-      gitignored by `.doctrine/state/`, **no new `.gitignore` entry** (§ 5.3
-      amendment; the v0 entry broke `every_runtime_gitignore_glob_is_classified`).
+- [x] Committed **text summaries** under `.doctrine/rfc/025/evidence/` —
+      `README.md` (verdict + six things it does NOT establish), `matrix.md`
+      (the 16 rows), `guards.md` (five guards + the sub-probe).
+- [x] **Raw logs** under `.doctrine/state/rfc-025/raw/` — 80 files, 488K,
+      runtime tier, gitignored by `.doctrine/state/`, **no new `.gitignore`
+      entry**. Verified with `git check-ignore -v`.
 
-### T9 — close ⌁
+**Beyond the authored brief, on operator ruling (2026-08-03):**
 
-- [ ] `LC_ALL=C.UTF-8 shellcheck -x -S style` on every touched rig file (without
-      the locale it aborts on em-dashes with no line and no rule id, F-P02-5).
-- [ ] `doctrine validate`; `doctrine check quick|commit|gate` only if Rust
-      appears (it must not — S4).
-- [ ] `doctrine slice verify-vt 241` — VT-1 will read **UNATTRIBUTABLE** while
-      the phase is `in_progress` and resolve on the flip to `completed`
-      (F-P04-11). Do not chase it.
-- [ ] Lift durable decisions / findings / evidence out of this sheet into
-      `notes.md` §§ PHASE-05 **before** it is discarded; record the phase
-      boundary (foreign commits) the way §§ PHASE-01..04 do.
-- [ ] `doctrine slice record-delta` / `phase --status completed`.
+- [x] **`results-c3.tsv` + `results-guards.tsv` committed verbatim** — the
+      "generated measurement table" of § 5.3. These were the **only** copies and
+      lived outside the repo under `~/capsules`; this is the durability step.
+- [x] **`phase-sheets/` — the runtime sheets copied straight**, with a README
+      framing them as frozen exhibits and naming what is authoritative instead.
+      Operator's rationale: a citational summary is only useful while its
+      citations resolve, and distilling costs context on reasoning that may
+      never be read — whereas losing it is irreversible (F-P05-39).
+- [x] **`drivers/` committed** — T5's/T6's falsification + diagnostic drivers.
+      My call, not the operator's brief; F-P05-39's precedent is exactly this
+      loss, and the copy is free.
+
+**⚠ T9 MUST RE-COPY `phase-05.md`.** The archive was taken *before* these boxes
+were ticked and before T9's own entries exist, so `phase-sheets/phase-05.md` is
+already one edit stale. Re-copy as the **last** authored act of the phase:
+
+```bash
+cp .doctrine/state/slice/241/phases/phase-0*.md \
+   .doctrine/state/slice/241/phases/phase-0*.toml \
+   .doctrine/rfc/025/evidence/phase-sheets/
+```
+
+### T9 — close ✅ DONE (2026-08-03)
+
+- [x] **Re-copy the phase sheets** (above) — last authored act, after every other
+      T9 edit to this sheet had landed.
+- [x] `LC_ALL=C.UTF-8 shellcheck -x -S style` on every touched rig file — **exit
+      0, clean** across `rig` + every `*.sh` outside `probes/`. No rig file was
+      touched after T6, so this confirms rather than re-earns.
+- [x] `doctrine validate` — corpus clean. **No `doctrine check`**: S4 held, no
+      Rust appeared in PHASE-05 at all.
+- [x] `./rig selftest` — **all assertions hold**, exit 0. Not owed (no rig change
+      since T6) but run anyway: this phase's whole discipline is that an
+      observation beats an assertion, and "still green" was an assertion.
+- [x] `doctrine slice verify-vt 241` — PHASE-05 VT-1 read **UNATTRIBUTABLE**
+      before the flip, exactly as F-P04-11 predicted. Not chased.
+- [x] Lift durable decisions / findings / evidence into `notes.md` §§ PHASE-05
+      (`09e6a69f`). Written as an **INDEX, not a transcription** — the sheet is
+      no longer discarded (T8 committed it verbatim), so restating 23 decisions
+      and 46 findings would duplicate a file in the same tree. Expanded only
+      where the lesson binds work outside SL-241. The sections say so in their
+      own headers, so a future reader is not left wondering whether the lift was
+      lazy.
+- [x] `doctrine slice record-delta` / `phase --status completed`.
+
+**PHASE-05 CLOSED.** Six of six tasks' criteria met; EX-1..EX-15 and VA-1..VA-5
+discharged across T0–T8. Next: PHASE-06 (`go-no-go.md` — its VT-1 currently
+FAILs on the absent file, which is correct for an unstarted phase).
 
 ## Risks
 
@@ -1540,6 +1579,68 @@ question. The other five are inputs the question consumes, so `supports`.
   name would let two files mean different things by the same marker.
 
 ## Findings
+
+- **F-P05-47 — THE COMPLETION FLIP CAPTURES `HEAD` AS `code_end_oid`, AND IN A
+  SHARED TREE `HEAD` IS WHOEVER COMMITTED LAST** (2026-08-03, T9, caught by
+  reading `boundaries.toml` after the flip rather than trusting it).
+
+  `doctrine slice phase 241 PHASE-05 --status completed` wrote
+
+  ```toml
+  code_end_oid = "5c78c892…"   # design(SL-244): DEC-121 — another agent's commit
+  ```
+
+  PHASE-05's real code tip is **`fdebae1e`** (T6's falsification round); T7, T8
+  and T9 touched no source at all. The flip captured HEAD, and HEAD at that
+  instant belonged to a **different slice**.
+
+  **The tool warned, and the warning is not the same shape as the defect.** It
+  said *"PHASE-05 boundary spans 12+ commits — any that are not this phase's are
+  attributed to it"* and offered `record-delta --commit <code tip>`. That reads
+  as "your range is wide", which for a multi-commit phase in this tree is
+  unavoidable and expected — §§ PHASE-05 boundary documents 111 foreign commits.
+  It does **not** read as "the endpoint I just wrote is another slice's commit",
+  which is a different and worse thing. **I nearly filed the warning as known.**
+
+  **Corrected by hand** in `boundaries.toml` (runtime tier, gitignored,
+  hand-editable) with a comment naming the cause. The `record-delta` registry was
+  already correct — it takes an explicit `--start`/`--end` and I gave it
+  `8e962656..fdebae1e`. So the two stores disagreed, and only one of them asks.
+
+  **The generalisation, and it is not about this phase.** *Any* phase closed in a
+  shared tree has this exposure, and the four earlier boundaries in this file
+  were captured the same way — **PHASE-01..04's `code_end_oid`s are unverified
+  against the same failure.** Worth a look at audit before their ranges are
+  believed. Filed as **ISS-307**.
+
+  Sibling of F-P05-31's lesson at a different altitude: there, a run started
+  before the row was final was void; here, a boundary captured at an arbitrary
+  instant records whatever the tree happened to be.
+
+- **F-P05-46 — THE FALSIFICATION ROUND IS RECORDED IN-BAND, SO FOUR `fail` ROWS
+  IN THE SCORED TABLE ARE FOUR SUCCESSES** (2026-08-03, T8, found while writing
+  the evidence summaries — not by a red).
+
+  `results-c3.tsv` carries four rows with `outcome=fail`. All four are the
+  conflict sub-probe's mutants, and each is stamped on the **preceding**
+  `p-c3:` preamble line: `MUTATED=m32-peer-not-from-b.sh`,
+  `m33-halves-agree.sh`, `m34-trunk-never-moves.sh`,
+  `m35-move-before-pinning.sh`. A mutant that reds is the mutant **working**.
+
+  **The hazard is that the discriminator is not on the row.** Anything that
+  counts outcomes — a reader, an `awk`, a future audit — must carry the
+  preamble's `MUTATED=` state forward across rows to read the table correctly. A
+  naive `awk '$10=="fail"'` reports four failures in a matrix that has none.
+  This is the same shape as D-P05-20's reason for giving the guards their own
+  file: **a discriminator a reader must *notice* is weaker than a separation
+  they cannot miss.** The guards got the separation; the sub-probe's mutants did
+  not, and this is the cost.
+
+  Not repaired — the table is scored evidence and rewriting it post-hoc is worse
+  than documenting it (S2's spirit). Documented instead, in the two places a
+  reader arrives from: `evidence/README.md` (limits list, item 7) and
+  `evidence/guards.md` (opening section). **A future probe should stamp the
+  discriminator per row, not per preamble.**
 
 - **F-P05-45 — THE PROBE'S RESULT IS THAT THE MECHANISM AXIS BARELY MATTERS, AND
   THE ONE MEASURED ASYMMETRY RUNS AGAINST THE BUNDLE** (2026-08-03, T7, from

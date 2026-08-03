@@ -1,15 +1,24 @@
 schema  = "doctrine.phase.tracking"
 version = 1
 phase   = "PHASE-05"
-status = "in_progress"
+status = "completed"
 started = "2026-08-01T15:49:38.831933796Z"
-completed = ""
-last_updated = "2026-08-01T15:49:38.831933796Z"
+completed = "2026-08-03T02:02:22.68260056Z"
+last_updated = "2026-08-03T02:02:30.915941064Z"
 code_start_oid = "8e962656b988dda5febdcd0293fffaa85c2bf385"
 
 [[progress]]
 timestamp = "2026-08-01T15:49:38.831933796Z"
 status = "in_progress"
 note = "sheet expanded: T0 baseline, T1 F2/F3 variants, T2 matrix spec, T3 harness, T4a-e rows, T5 sub-probe, T6 guard probes, T7 EVD, T8 evidence, T9 close. S1 (verify-disk token) live."
+
+[[progress]]
+timestamp = "2026-08-03T02:02:22.68260056Z"
+status = "completed"
+note = "T0-T9 complete; EX-1..EX-15 and VA-1..VA-5 discharged. Matrix complete (16 rows, all scored pass), five guard probes observed refusing, six EVD records linked, RFC-025 evidence artefacts committed."
+
+[[progress]]
+timestamp = "2026-08-03T02:02:30.915941064Z"
+status = "completed"
 
 # Append-only runtime progress log, written by `doctrine slice phase`.

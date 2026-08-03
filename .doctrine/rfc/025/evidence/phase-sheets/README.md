@@ -4,7 +4,9 @@
 authoritative for anything.**
 
 Copied verbatim from `.doctrine/state/slice/241/phases/` at the end of PHASE-05,
-2026-08-03. That directory is **runtime tier** — gitignored, disposable, and
+2026-08-03 — refreshed as the last authored act of T9, so the sheets carry their
+own close. `boundaries.toml` rides along because its PHASE-05 row was
+hand-corrected at close and the correction is part of the record (F-P05-47). That directory is **runtime tier** — gitignored, disposable, and
 `rm -rf`'d at slice close. These copies exist so that the `F-P05-nn` / `D-P05-nn`
 citations in `../README.md`, `../matrix.md`, `../guards.md` and in EVD-006…011
 still resolve after the originals are gone.
