@@ -1,0 +1,77 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 122
+slug = "condition-contracts-ship-as-embedded-prose-declared-fixed"
+title = "Condition contracts ship as embedded prose declared fixed"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "A `Condition` is payload-free, so what an edge requires exists nowhere the program can reach. DEC-120 says a condition must state which kind it is and what act discharges it; DEC-121 gives two of them contracts several sentences long. Where that content lives was the slice's open fork."
+choice       = "Prose keyed off the closed `Condition` vocabulary, in the design-prompt store beside `Fragment` and `RunbookKey`. Shipped from the embed; `customization` declared `fixed` citing IMP-372. The vocabulary is the key and the contract is the value — a total function out of ten known members, so DEC-101's open→closed type error is not in reach."
+alternatives = [
+  "Rust-side data (associated const, or a table beside `boundary_conditions`). Rejected on the slice's own acceptance test — an agent should learn the contract WITHOUT reading src/**, and Rust data satisfies that only once something renders it. Also taxes every match site and costs a recompile per sentence (DEC-077).",
+  "A hybrid split now — machine-relevant fields in a const, explanation in prose. Deferred to inq-5 rather than rejected; 'a bit of both' is also how a fourth prose system arrives unannounced.",
+]
+rationale    = "The contract is for the agent and belongs where the agent already reads — which matters most in an installed client project, which has no source at all. Totality is a solved problem, not a novel risk: the `WRITER_ACTS` BTreeSet set-equality test is DEC-101's own template and makes a contract-less condition a test failure."
+consequences = [
+  "`Condition` keeps its fieldless `Copy`/`Ord`/serde shape; no match site changes.",
+  "A set-equality test over the vocabulary and the asset set is required, on the `WRITER_ACTS` template.",
+  "Overridability is NOT claimed. Embedded and `fixed`, citing IMP-372, is the runbook pattern.",
+  "Two forward directions are named and deliberately not built: structured extraction with CLI surface (IDE-047) and user hook-in points (IMP-375, over IMP-372).",
+  "One shape concession only: contracts stay addressable per condition rather than one monolithic document, since that granularity is what both forward directions need and costs nothing now.",
+  "Open: whether the machine-relevant part of a contract is a small const beside the prose. SL-244 inq-5 owns it.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition contract asset home"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition contract asset home"
+target = "DEC-121"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition contract asset home"
+target = "DEC-101"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition contract asset home"
+target = "DEC-077"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "condition contract asset home"
+target = "DEC-102"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
+
+[[relation]]
+label = "spawns"
+target = "IDE-047"
