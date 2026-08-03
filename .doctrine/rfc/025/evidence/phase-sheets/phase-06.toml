@@ -1,9 +1,20 @@
 schema  = "doctrine.phase.tracking"
 version = 1
 phase   = "PHASE-06"
-status  = "planned"   # planned | in_progress | completed | blocked
-started      = ""
-completed    = ""
-last_updated = ""
+status = "completed"
+started = "2026-08-03T03:10:53.851378467Z"
+completed = "2026-08-03T06:13:09.049427174Z"
+last_updated = "2026-08-03T06:13:09.049427174Z"
+code_start_oid = "e43572d4ee4e88a19589aa9221e303b0d40bd9ce"
+
+[[progress]]
+timestamp = "2026-08-03T03:10:53.851378467Z"
+status = "in_progress"
+note = "sheet expanded; D-P06-1/2/3 ruled by operator (EX-8 by intent, one scored attempt, full token accounting)"
+
+[[progress]]
+timestamp = "2026-08-03T06:13:09.049427174Z"
+status = "completed"
+note = "T1-T13 complete. Scoped go/no-go landed and operator-accepted with its scope (VH-1). EX-1..EX-10, VT-1, VA-1..VA-3 discharged."
 
 # Append-only runtime progress log, written by `doctrine slice phase`.

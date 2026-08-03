@@ -6,39 +6,34 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · **PHASE-05 `completed` (5/6). PHASE-06 IN FLIGHT** —
-T1–T4, T7 done; **T5 VOID as a phase measurement and disclosed as a prior
-attempt** (F-P06-7 — the agent had no shell); **T5b DONE** (the capability leg
-written red-first, the `--tmpfs` agent home, P-C2 re-run and its `api-cred` row
-realigned, P-C1b **re-run scored and REAL** — F-P06-8/9, D-P06-5..8);
-**T6 DONE** (`measurements.md`, all nine rows — and counting rows 2 and 5
-**corrected design § 9**, F-P06-10, FOR RECONCILIATION).
-**EX-1, EX-2, EX-3, EX-4 discharged.** Remaining: **T8** (EX-9 — rule whether
-the EVD suffices to settle QUE-200; "does not suffice" is permitted, record
-don't force), **T9** (`go-no-go.md`, EX-5/6/7/8 — the substantial one),
-**T10** (VT-1), **T11** (EX-10 backlog lodging), **T12** (VH-1 — operator
-accepts verdict AND scope as ONE ask), **T13** (close).
-Prior-phase detail below, retained:
-**PHASE-04 complete (4/6), PHASE-05 —
-T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
-**T4c DONE** (H13 110/0 + 4/4; H14 88/0 + 5/5; **H7 100/0 + falsified 6/6**),
-T4d **DONE** (H8 scored 100/0 + falsified 3/3; **H11 scored 80/0 + falsified 9
-cases/0 survivors** — F-P05-32 and F-P05-33 both DISPOSED, D-P05-14 and
-D-P05-15), **T4e DONE** (H10/H16 scored **128/0**, 8/8 cells `model-level`, +
-falsified 6/6 — M25 measures F-14 rather than arguing it).
-**ALL SIXTEEN ROWS CARRY SCORED RESULTS: H1–H16. THE MATRIX IS COMPLETE** —
-`T4` is done. **T5 DONE** (the conflict sub-probe — H10/H16's owed leg, scored
-2/2 `counts-toward-nothing` + falsified 4/4; F-P05-40 and ISS-305 out of it).
-**H10/H16 NOW OWN BOTH LEGS.** **T6 DONE** (the five guard probes — scored 9/9
-`pass`, 71 assertions, 0 red, + falsified 4/4; F-P05-41/42/43 and D-P05-20..23
-out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** **T7 DONE** (six EVD
-records — EVD-006..011 linked to QUE-200/QUE-201; **EX-13 and VA-5 discharged**;
-F-P05-44/45 and ISS-306 out of it). **T8 DONE** (RFC-025 evidence artefacts —
-**EX-14 discharged**; the scored results are now IN THE REPO; F-P05-46 out of
-it). **T9 DONE — PHASE-05 IS `completed` (5/6 phases).** All fifteen EX and all
-five VA criteria discharged; VT-1 flipped UNATTRIBUTABLE → PASS on the
-completion, as F-P04-11 predicted. **F-P05-47 and ISS-307 out of the close
-itself.**
+fresh-as-of: 2026-08-03 · **ALL SIX PHASES `completed`. SL-241 is ready for
+`/audit`.**
+
+**PHASE-06 closed the spike.** The scoped verdict is
+`.doctrine/rfc/025/go-no-go.md` — **GO on Linux/bwrap** for the ingestion and
+confinement halves, operator-accepted **with its scope** (VH-1). Every EX and
+every VA/VT criterion across the six phases is discharged.
+
+Carried forward, pointer-only:
+
+- **FOR RECONCILIATION — design § 9, three items.** Row 2's parenthetical and
+  row 5's axis (F-P06-10); *"model-level rows proven portable"* reading as
+  OS-portability when the altitude grades fixtures (F-P06-12); and the ASM-007
+  closure bullet, false since PHASE-04 step 0 (D-P06-1).
+- **DEC records owed at close** — D-P05-6..23 and D-P06-1..9.
+- **ISS-307 stays as filed** — the **end** boundary is the defect (PHASE-06's
+  flip captured SL-244's commit; corrected by `record-delta`). F-P06-4's
+  "widen it to the start boundary too" is **withdrawn** — F-P06-13: an
+  *exclusive* start boundary naming a foreign commit is correct by construction,
+  and `e43572d4` really is `de0d49a9^`.
+- **Open questions, all `open`, all settling in the post-spike REV** — QUE-200
+  (T8/D-P06-9 ruled the EVD insufficient), QUE-201, QUE-202, QUE-204.
+- **Follow-on work lodged** — CHR-053, CHR-054; and D-P05-17's allowlist /
+  QUE-204 slice, still unsliced and the largest piece.
+- **Not lodged, deliberately** — the agent home's write scope; it rides the
+  slice rather than presuming the model ships. § Open holds the three
+  directions and the `EROFS`-not-`EACCES` constraint any design must keep.
+
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
@@ -1086,11 +1081,93 @@ only where the lesson generalises past SL-241.
   refreshes an index. **"Fetch is proven safe against hostile config" is not what
   this matrix says.**
 
-### PHASE-06 — IN FLIGHT, lifted early because the phase found something
+### PHASE-06 close — the verdict, and what the close itself found
 
-Not the close-time lift (PHASE-06 is `in_progress`). These two survive the sheet
-because they bind work outside SL-241 and because the second one is the kind of
-result that gets quietly smoothed away by a later green.
+**PHASE-06 is `completed`. All six phases are done and SL-241 is ready for
+`/audit`.**
+
+**The deliverable is `.doctrine/rfc/025/go-no-go.md`** — **GO on Linux/bwrap**,
+for a client of this build shape, for the **ingestion and confinement** halves of
+the capsule model. **VH-1: the operator accepted the verdict *and* its scope
+together**, which is the form the criterion required, because acceptance of the
+verdict alone is what the downstream REV would over-claim from.
+
+The four anti-over-claim requirements, each verified rather than asserted:
+
+| requirement | how it reads |
+|---|---|
+| the count | *sixteen rows with a capsule-model boundary or a recorded dissolution, plus two regression legs* — the only `16/16` in the file is the sentence forbidding it |
+| scope | admission-boundary rows portable *in reasoning* and unmeasured off Linux; every environment-conditional row **outstanding for macOS**; H12 below model-level even on Linux |
+| QUE-202 | **out of evidence, not disproven** — refusal proven safe, total and content-blind; admission not designed |
+| ASM-007 | **falsified and `invalidated`**, replaced by ASM-008 which is *strengthened, not discharged* (D-P06-1) |
+
+#### The two findings the close itself produced
+
+- **F-P06-11 — the `upload-pack` limit was misstated in four committed places,
+  and the real gap is sharper.** EVD-006, `evidence/README.md` limit 1 and
+  `notes.md` twice all said QUE-200's `upload-pack` worry *"was never
+  exercised"*. **H6's own plant disproves it**: `instantiations.sh:640` sets
+  `uploadpack.packObjectsHook` deliberately — the rig's comment says so — and a
+  plain-path `git fetch` spawns `git-upload-pack` in the source repo (verified
+  in-jail under `GIT_TRACE`, git 2.54.0). It ran on every M-A cell.
+  **The generalisable fact, and the reason this is worth its length: git's
+  protected-config defence is PER-KEY, not blanket.**
+  `uploadpack.packObjectsHook` is refused from repo-level config and git's
+  defence was *observed* holding; **`core.fsmonitor` is honoured from it** and
+  stayed silent only because nothing in the M-A harvest path refreshes an index
+  (`git status` fires it, `rev-parse` does not). So H6's green is one part
+  defence and one part *which commands the harvester happens to run*. Recorded as
+  `mem.fact.git.protected-config-defence-is-per-key`.
+  - The corollary the dissolution's own reasoning misses: *"config and hooks are
+    repo-local, never objects"* covers what **travels** and is silent on the
+    trusted side **going to** the hostile config. M-A runs git in the capsule
+    repo three times; M-B runs it **zero**.
+  - **Corrected in place** rather than deferred, on an operator ruling (D-P06-9)
+    — EVD-006 is what VA-3 checks and README limit 1 is what the go/no-go must
+    not over-claim past, so writing the anti-over-claim document while knowingly
+    citing a false limit would have inverted the exercise.
+- **F-P06-12 — `model-level` grades FIXTURES; design § 9 reads it as grading
+  OPERATING SYSTEMS.** § 9's *"model-level rows proven portable, env-conditional
+  rows outstanding for macOS"* pairs the altitude against macOS and so reads as a
+  platform claim. It is not one — `model-level` means the row held on **both
+  fixtures**. Taken literally § 9 asserts fifteen rows proven portable to macOS,
+  and **nothing in the spike measured a single row off Linux**. The over-claim
+  sits inside the instruction written to prevent over-claiming.
+
+#### EX-9 — QUE-200 does NOT settle, and that is the recorded answer
+
+D-P06-9. EX-9 permits "does not suffice" and the ruling took it. Candidate 3
+(tree materialization) **is** excluded on the question's own grounds (EVD-008).
+Candidates 1 and 2 cannot be separated because **each carries exactly one
+trusted-side surface the other lacks and only one was measured** — M-B's *parse a
+capsule-authored file* is enumerated and tested (EVD-010's four legs); M-A's *run
+git inside a capsule-authored repository* is sampled at two config keys, and the
+sample shows the surface is not uniformly defended.
+
+**The asymmetry that decides it:** the three measured asymmetries all sit on M-B
+and are all **costs** (an extra boundary, a defective two-site token, a quiesce
+obligation); the one on M-A is a **safety** asymmetry. QUE-200 asks for the
+minimal *safe* mechanism, so *"M-B has costs"* is not *"M-A is safe."*
+**What would close it:** bound or eliminate M-A's trusted-side git surface rather
+than sample it further — the residual is a universal over git's config space that
+no probe can exhaustively discharge, so the tractable question is whether the
+parent needs to run git in that repository **at all**.
+
+#### The close's own process lessons
+
+- **A criterion's checkbox is not its evidence.** T7 was recorded unticked and
+  was in fact complete — verified by reading the structured tier of all four
+  records rather than trusting the sheet. The reverse error is the expensive one,
+  but both come from reading the tracking instead of the artefact.
+- **VA-3 caught a real gap on the first pass.** The go/no-go never mentioned
+  **QUE-201**, so its "settles no open question" list named three of four.
+  Consistent-by-omission is not consistent, and a criterion that names its
+  subjects explicitly is what surfaced it.
+
+#### Lifted from the in-flight section — the phase's earlier findings
+
+These were lifted early because they bind work outside SL-241 and because the
+second is the kind of result a later green quietly smooths away.
 
 - **P-C1b's first scored run reached green and the phase never executed.** The
   agent had **no shell at all**: the profile ro-binds the agent home
@@ -1186,6 +1263,60 @@ owns, because the design's text is what is wrong, not the table's:
 The general lesson, and the reason the sheet insisted these two be *counted*:
 **a design's parenthetical enumeration is a starting point, not a count.** Both
 errors are invisible until someone tries to turn the list into a number.
+
+### PHASE-06 decisions and findings — INDEX, because the sheet is archived
+
+Same convention as § PHASE-05: the sheet is committed verbatim at
+`.doctrine/rfc/025/evidence/phase-sheets/phase-06.md`, so this indexes rather
+than transcribes. Chasing any `D-P06-n` / `F-P06-n` means grepping `## Decisions`
+or `## Findings` in that file; findings are newest-first.
+
+| id | decided |
+|---|---|
+| D-P06-1 | **EX-8 discharged by its INTENT, not its letter** — ASM-007 is `invalidated`, ASM-008 is strengthened-not-discharged |
+| D-P06-2 | **one scored attempt**; any prior attempt disclosed with its usage, never discarded |
+| D-P06-3 | token accounting reported in full, with the phase-attributable subset named; no headline figure |
+| D-P06-4 | a rig defect is not an "attempt" — the line is whether `claude` was invoked, and it was drawn **before** the first run |
+| D-P06-5 | the read-only agent home is a **setup oversight, not a weakening**; fix it and re-run |
+| D-P06-6 | `--dangerously-skip-permissions` in the worker is **endorsed** — the OS boundary IS the boundary |
+| D-P06-7 | **P-C2 IS re-run against the changed profile** — settled by running it, and the prediction was wrong |
+| D-P06-8 | `api-cred`'s observable **realigned onto the credential itself**; the replacement row is strictly stronger |
+| D-P06-9 | **EX-9 ruled: the EVD does not suffice**; QUE-200 stays `open` and the corpus is corrected in place |
+
+| id | found |
+|---|---|
+| F-P06-1 | the phase entry understated the phase — `probe-c1b.sh` and `worker-agent.sh` did not exist |
+| F-P06-2 | `claude -p` usage is cache-dominated, so a bare "tokens" figure is under-specified |
+| F-P06-3 | `--output-format` is undocumented in this `claude --help`; cite the observed run |
+| F-P06-4 | **ISS-307 bites at the START boundary too** — `code_start_oid` captured SL-244's commit |
+| F-P06-5 | tokens are the one measurement with **no trusted-side source**, and the rig's own discipline says so |
+| F-P06-6 | **the A2 smoke certified a profile that could not carry the workload** |
+| F-P06-7 | the first scored run reached green and **the phase never executed** — the agent had no shell |
+| F-P06-8 | **`api-cred` asserted a PROXY**, and the tmpfs pulled the proxy apart from the claim |
+| F-P06-9 | the re-run is a REAL phase; **a degraded agent cost roughly double** a working one |
+| F-P06-10 | counting the measurement rows **corrected design § 9's row 2 and row 5** |
+| F-P06-11 | the `upload-pack` limit was misstated in four places; **git's protected-config defence is per-key** |
+| F-P06-12 | **`model-level` grades fixtures, not operating systems** — design § 9 reads it as the latter |
+| F-P06-13 | **F-P06-4 was half wrong** — the START boundary is correct by construction; ISS-307 stays as filed |
+
+**The three that bind work outside this phase:**
+
+- **D-P06-9 / F-P06-11 — QUE-200's residual is now precisely stated**, and the
+  work that would close it is *architectural* (does the parent need to run git in
+  the untrusted repo at all?), not *another probe*. A future agent that reads
+  "sampled, not cleared" as an invitation to plant a third config key has
+  misread it: two keys did not discharge a universal and three will not either.
+- **F-P06-10 / F-P06-12 — design § 9 is wrong in three places**, all of them in
+  the section that exists to stop over-claiming. `/reconcile` owns all three.
+- **F-P06-6 — the capability leg belongs in the rig permanently.** A dependency
+  smoke that exercises the happy path without exercising the capability the real
+  workload needs will certify a configuration that cannot carry it, and the
+  failure surfaces at the most expensive possible moment. Generalised as
+  `mem.pattern.tests.smoke-the-capability-not-the-dependency`.
+
+**DEC records are owed at close for D-P06-1..9**, alongside PHASE-05's
+D-P05-6..23. Sheet convention is to lift at close; that obligation falls to
+`/reconcile` or `/close`, not to PHASE-06.
 
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
