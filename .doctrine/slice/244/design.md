@@ -2404,13 +2404,19 @@ missing answer.
   `section-attestations-current`, and the two derivations that read it.
 - **`SL-243` needs no policy repair.** It holds no section attestations, so the
   lane question never arises for it. Its actual cost is `sec-2`'s to record.
-- **The snapshot changes in five ways, not one** — `ReviewPolicy` on the run
+- **The snapshot changes in six ways, not one** — `ReviewPolicy` on the run
   header, a checkpoint-act group, an agent-declaration group, `LockAcceptance`
-  retiring into `CheckpointAct`, and the gate group's evidence rows retiring with
-  the record. The last two are migrations rather than additions, and are the only
-  ones that touch data an existing run already holds. `sec-2` carries both costs,
-  read off `SL-243` rather than inferred — it is the same run's
-  `user-accepts-sufficiency` evidence row that section already prices.
+  retiring into `CheckpointAct`, the gate group's evidence rows retiring with the
+  record, and `IntegratedReview` retiring into `sec-3`'s `ReviewPass`. The last
+  three are migrations rather than additions. Two of them touch data an existing
+  run already holds and `sec-2` carries both costs, read off `SL-243` rather than
+  inferred — the same run's `user-accepts-sufficiency` evidence row that section
+  already prices, and the acceptance slot. The third costs `SL-243` nothing: it
+  holds no integrated review, so `ReviewPass` arrives absent and is minted on the
+  next entry to `reviewing` like any other run's.
+  `ReviewPass` replaces `ReviewGroup::integrated` in place rather than taking a
+  group of its own — it is about review, which is the same test that sends the
+  act groups elsewhere.
 - **The policy is not a security boundary**, and the design says so. If a later
   slice wants it to be one, the missing piece is not a stricter gate but a way to
   distinguish a user's payload from an agent's — which is `DEC-088`'s standing
