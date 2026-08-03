@@ -1068,6 +1068,42 @@ only where the lesson generalises past SL-241.
   different. **"Fetch is proven safe against hostile config" is not what this
   matrix says.**
 
+### PHASE-06 — IN FLIGHT, lifted early because the phase found something
+
+Not the close-time lift (PHASE-06 is `in_progress`). These two survive the sheet
+because they bind work outside SL-241 and because the second one is the kind of
+result that gets quietly smoothed away by a later green.
+
+- **P-C1b's first scored run reached green and the phase never executed.** The
+  agent had **no shell at all**: the profile ro-binds the agent home
+  (`sandbox.sh:225-228`, `HOME=/agent`) and the harness must create a
+  per-session working directory under `$HOME` before any Bash tool call runs, so
+  every shell path died on `EROFS … mkdir '/agent/.claude/session-env/<id>'`. It
+  wrote `src/split.ts` by reading the tests and reasoning through the cases by
+  hand, was **correct**, and the suite passed when the probe ran it trusted-side
+  afterwards. `agent-committed=no tree-dirty=yes` — the worker's residue sweep is
+  the only reason there was anything to harvest. **EX-1's assertion passed for a
+  reason unrelated to EX-1.** Recording the ritual separately from the commit is
+  what kept this visible; folded together it would have read as a clean green.
+- **The A2 smoke certified a profile that cannot carry the workload** — the
+  generalisable one. `probe-smoke.sh` proved *credential* and *egress* with
+  `claude -p 'print OK'`, a prompt needing **no tools**, and both legs are green
+  in `probes/smoke/results.tsv`. It never proved the agent can **work**. The
+  smoke already split credential from network on exactly this reasoning (A8:
+  "distinct failure modes and a single test conflates them"); the same argument
+  extends one step further, to *can it work*, and was not taken. **A dependency
+  smoke that exercises the happy path without exercising the capability the real
+  workload needs will certify a configuration that cannot carry it, and the
+  failure surfaces at the most expensive possible moment.** A third A2 leg is the
+  cheap fix and belongs in the rig regardless of P-C1b's fate.
+- **Operator ruling (2026-08-03): the read-only agent home is a SETUP OVERSIGHT,
+  not a weakening.** The profile gains a writable `$HOME` (`--tmpfs
+  /agent/.claude`, credential ro-bound inside) and P-C1b re-runs; the first
+  attempt is disclosed with its usage, never discarded.
+  `--dangerously-skip-permissions` inside the worker is endorsed — **the capsule
+  model's claim is that the OS boundary IS the boundary**, and a harness inside
+  it need not re-litigate confinement per tool.
+
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
 Written 2026-08-03, mid-phase and deliberately so: this range is the most
