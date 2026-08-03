@@ -101,22 +101,47 @@ design says which is which.
 ## `Conducted` over an empty ledger
 
 `DEC-125` mints the `RV` on **entry** to `reviewing`, and `derived_status` reads
-an empty finding list as `(Done, None)`. So `Conducted { review }` is satisfiable
-the moment the stage is entered, naming a review that has not happened. This is
-accepted, and it is worth saying why it is not the empty-draft defect `sec-3`
-refuses for `PerSection`.
+an empty finding list as `(Done, None)`. Without a rule, `Conducted { review }`
+would therefore be satisfied the moment the stage was entered, naming a review
+that had not happened.
 
-There, an `EverySection` spelling would report the row satisfied with **no act
-performed at all** — vacuous truth straight out of the engine. Here the row is
-always discharged by a user disposition carrying an acceptance. A user who names
-`Conducted` over an unreviewed `RV` has made a false statement in a durable record;
-they have not slipped past a gate. The two cases differ in whether anybody acted.
+Two things are true and easy to confuse. Nothing **defaults** to `Conducted`:
+until the user performs `ReviewDisposed` the act does not exist, the row is
+unmet, and the edge is barred. But when they do act, both arms are on offer and
+`Conducted` reads as the normal path — so the false claim is available, and it is
+the *front door* being claimed rather than the exit being taken. That is
+`DEC-138`'s own concern one step in, and it wants refusing.
 
-The alternative — demanding evidence that a review occurred — is the toll this
-record exists to refuse, and it would misfire immediately: the ledger's own
-guidance is that *a clean review harvests nothing — a valid outcome, not a skipped
-step*, so a review that found nothing is indistinguishable from one never run, by
-construction.
+So `Conducted` is **admissible only over an `RV` carrying a concluded-pass
+marker**, and `Waived { reason }` is where an unreviewed run goes. That costs
+nothing: declining a pass and never getting to one are both true things to say,
+both clear the edge, and both leave the reason on the record.
+
+### Why the marker, and not the findings or the prose
+
+**Findings cannot carry it.** A clean pass that found nothing is structurally
+identical to one never run — `findings: []`, `status: Done`, `await: None` in
+both cases — so a findings test would refuse exactly the review that went best.
+
+**The `## Synthesis` prose does distinguish them**, and is refused on a different
+ground. §5 of the ledger protocol has every real review append one, including a
+clean one; the *harvest* may be empty, the synthesis is not. But reading it means
+the gate parses authored prose to answer a condition — `sec-2`'s fourth-prose-
+loader risk, in its thinnest and most brittle form.
+
+So the signal is **structured state on the `RV`**, added by `IMP-392`, which is
+already opening that record to give findings a section reference. One migration,
+not two.
+
+## Where the arms live
+
+`DEC-125` fixed two arms and no design said where the value was stored — eight
+passages of prose over a type with no slot for it. They ride a fourth optional
+field on `CheckpointAct`, beside `covered`, `observed` and `confirms`: `None` for
+the seven acts whose rule names no disposition, and paired with the rule by the
+same admission check. The omission is worth recording because it is the third
+time in this slice that a decision's substance lived in prose with no home in the
+types.
 
 ## Standing limitation
 

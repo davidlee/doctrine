@@ -227,6 +227,9 @@ pub(crate) struct ActRequirement {
     /// an order. `Some` on exactly one requirement today; `None` means this
     /// act confirms nothing and its record must carry no confirmation.
     pub(crate) confirms: Option<AgentActKind>,
+    /// Whether this act disposes of a review, and therefore must carry
+    /// `DEC-125`'s two-armed value. True on `ReviewDisposed` alone.
+    pub(crate) disposes_review: bool,
 }
 
 pub(crate) enum ActorClass { User, Agent, Adversarial }
@@ -729,18 +732,33 @@ to the raiser's assent has no exit at all, and binding to **content currency**
 diverges outright, because integrating a finding moves the sections the pass
 covered (`RFC-026` E3, and `DEC-126`'s stated reason for refusing it).
 
-**`Conducted` over an empty ledger is satisfiable, and that is accepted.**
-`DEC-125` mints the `RV` on *entry* to `reviewing`, and an empty finding list
-reads as `(Done, None)` — so the arm can name a review that has not happened.
-This is not the empty-draft defect this section refuses for `PerSection`: there,
-an `EverySection` spelling would report the row satisfied with **no act performed
-at all**, vacuous truth straight out of the engine. Here the row is always
-discharged by a user disposition carrying an acceptance, so a user naming
-`Conducted` over an unreviewed `RV` has made a false statement in a durable
-record rather than slipped past a gate. The two cases differ in whether anybody
-acted. Demanding evidence that a review *occurred* is the toll `DEC-138` refuses,
-and it would misfire anyway: a clean review that finds nothing is
-indistinguishable from one never run, by construction.
+**`Conducted` is admissible only over a concluded pass**, and that closes the one
+hole this row had. `DEC-125` mints the `RV` on *entry* to `reviewing`, and an
+empty finding list reads as `(Done, None)` — so without a rule the arm would be
+satisfied the moment the stage was entered, naming a review that had not
+happened. Nothing *defaults* to `Conducted`: until the user performs
+`ReviewDisposed` the act does not exist and the edge is barred. But a user or an
+agent reaching for a disposition sees two arms, and `Conducted` reads as the
+normal path, so the claim wants refusing rather than merely discouraging.
+
+**The evidence is a marker on the `RV`, not its findings and not its prose.**
+Findings cannot carry it: a clean pass that found nothing is structurally
+identical to one never run — `findings: []`, `status: Done`, `await: None`
+either way — so testing for findings would refuse exactly the review that went
+best. The `RV`'s `## Synthesis` section *does* distinguish them, and is refused
+on a different ground: the gate would be parsing authored prose to answer a
+condition, which is the fourth prose loader `sec-2` names as a live risk, in its
+thinnest and most brittle form. So the signal is structured state on the `RV`,
+recording that a pass concluded, and it lands with `IMP-392` — which is already
+opening that record to add findings a section reference. One migration, not two.
+
+`Waived { reason }` is where an unreviewed run goes, and it costs nothing it was
+not already going to pay: declining a pass and never getting to one are both true
+things to say, both clear the edge, and both leave the reason on the record. What
+the pair now buys is that the *front door* cannot be claimed falsely — which is
+the same concern as `DEC-138`'s fence, one step in. There the risk was an agent
+taking the exit as its own; here it is an agent taking the normal path without
+having walked it.
 
 **Two gates read this `RV` under different rules, deliberately.** This row gates
 the design run's `reviewing → locked` on *undisposed blockers*; the `RV`
@@ -1114,15 +1132,17 @@ generator emits and what the asset test iterates.
   `DEC-073`'s per-run review policy, which this slice builds. The repair reaches
   `review_standing` and the envelope's `review_outstanding`, and deliberately not
   `live_reviews` — that section says why.
-- **`review-disposition-attested` is owed two things by `IMP-392`, not one**, and
-  both need the same missing input — `DEC-125`'s `RV`-backed ledger — so they are
-  one gap with two consequences. *Reach:* the cumulative label outruns what
-  `Artefact` coverage can enforce, so until then only the disposition's own record
-  invalidates it. *`Conducted`'s turn test:* whether the `RV` awaits the responder
-  on a `blocker` is unreadable, so until then a conducted review discharges the
-  row on its existence alone. `DEC-138`'s waiver arm needs nothing from
-  `IMP-392` — it is unconditional — so the interim is the same on both arms, not
-  a strict path and a lax one.
+- **`review-disposition-attested` is owed three things by `IMP-392`**, all needing
+  the same missing input — `DEC-125`'s `RV`-backed ledger — so they are one gap
+  with three consequences. *Reach:* the cumulative label outruns what `Artefact`
+  coverage can enforce, so until then only the disposition's own record
+  invalidates it. *`Conducted`'s blocker test:* which findings are `blocker` and
+  in `open`/`contested` is unreadable. *`Conducted`'s admissibility:* the
+  concluded-pass marker does not exist, so until it does the arm can name a
+  review that never ran. That marker is the one thing this slice asks `IMP-392`
+  to add rather than merely to expose; `sec-4` says why findings and prose cannot
+  supply it. `DEC-138`'s waiver arm needs nothing from `IMP-392`, so the interim
+  is the same on both arms, not a strict path and a lax one.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
   It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
@@ -1284,6 +1304,9 @@ pub(crate) struct CheckpointAct {
     observed: BTreeMap<ObservedFact, Fingerprint>,
     /// The agent declaration this act confirms, where its rule names one.
     confirms: Option<Fingerprint>,
+    /// How the act disposes of a review, where its rule names a disposition.
+    /// `Some` on `ReviewDisposed` alone.
+    disposition: Option<ReviewDisposition>,
 }
 
 /// A covered map in the shape the act's `Coverage` selector names.
@@ -1291,7 +1314,23 @@ pub(crate) enum CoveredSet {
     Sections(ContentCoverage<Fingerprint>),
     Nodes(ContentCoverage<NodeMaterial>),
 }
+
+/// `DEC-125`'s two arms, given a home. Admissibility is `DEC-138`'s.
+pub(crate) enum ReviewDisposition {
+    /// A pass was run and is being disposed of. The `RV` it names must carry a
+    /// concluded marker; the gate then checks its blockers.
+    Conducted { review: ReviewRef },
+    /// The user declines a pass, on the record. Always admissible.
+    Waived { reason: String },
+}
 ```
+
+**The arm is a slot, not prose.** `DEC-125` fixed the two arms and this design
+carried them in eight passages without ever saying where the value lives — so
+`Conducted`'s `RV` reference and `Waived`'s reason had no home in any type. The
+slot is the fourth of exactly this shape on `CheckpointAct`, beside `covered`,
+`observed` and `confirms`: per-act optional, `None` for the seven acts whose rule
+names no disposition, and paired with its rule by the same admission check.
 
 `CoveredSet` is a sum rather than one map type because `sec-3` generalised
 `ContentCoverage` over what it covers, and a *persisted* coverage must name which
@@ -1321,6 +1360,7 @@ stating it per slot would leave the next slot to be found the way this one was:
 | `Binding::coverage` | `CheckpointAct::covered` | the `CoveredSet` variant is the one the `Coverage` names, and `Artefact` pairs with `None` |
 | `Binding::observed` | `CheckpointAct::observed` | the map's key set is exactly the rule's `ObservedFact` list — no missing fact, no extra one |
 | `ActRequirement::confirms` | `CheckpointAct::confirms` | a confirmation is present exactly when the rule names a declaration, and absent exactly when it does not |
+| `ActRequirement::disposes_review` | `CheckpointAct::disposition` | a disposition is present exactly when the rule names one — `ReviewDisposed` alone — and absent exactly when it does not |
 
 The third row is why `confirms` is on the requirement rather than inferred from
 the conjunction. Reading it off the rule's agent conjunct would work only while
@@ -1795,6 +1835,15 @@ missing answer.
   name, is refused at the same point. Asserted separately from the coverage case
   because the correspondence is over the whole record, and testing only the slot
   that was found first is what left this one unchecked.
+- **A disposition is refused where the rule names none, and required where it
+  does** — a `ReviewDisposed` act carrying no `ReviewDisposition` is refused, and
+  a `DesignAccepted` act carrying one is refused. The fourth correspondence row,
+  asserted like the other three.
+- **`Conducted` over an unconcluded `RV` is refused on write** — naming the
+  auto-minted `RV` before any pass has concluded is refused at admission, so the
+  claim cannot enter the record. Complementary to the waiver test: the same run
+  clears immediately under `Waived { reason }`. Needs `IMP-392`'s marker, so it
+  is specified here and lands with that item.
 - **A missing confirmation is refused on write, and so is a gratuitous one** — a
   `GraphReviewed` act carrying no `confirms` is refused because its rule names a
   declaration, and a `SufficiencyAccepted` act carrying one is refused because

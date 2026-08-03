@@ -26,21 +26,44 @@ with a **document-section reference**, so one model serves both.
 - The derived outstanding-findings summary **by severity** that `DEC-126`'s
   `review-disposition-attested` is informed by.
 
-## Two things `SL-244` specified against this item and cannot enforce without it
+## Three things `SL-244` specified against this item and cannot enforce without it
 
-Both need the same missing input — the outstanding-finding set — so they land
-together or not at all. `SL-244`'s `sec-3` records them as one gap with two
-consequences; this is the delivering end of it.
+All three need this record open, so they land together or not at all. `SL-244`'s
+`sec-3` records them as one gap with three consequences; this is the delivering
+end of it. **Superseded reading:** an earlier version of this section conditioned
+`Waived` on nothing being outstanding, with `withdraw` as the escape. `DEC-138`
+reversed that — see below.
 
 - **Cumulative reach.** `review-disposition-attested` is labelled cumulative
   while its `Artefact` coverage means only the disposition record's own content
   invalidates it. Binding it to the finding set is what makes the label true.
-- **The `Waived` arm's admissibility.** `SL-244` conditions `Waived { reason }`
-  on nothing being outstanding to dispose: once findings are raised the row
-  requires `Conducted`, releasing when the user disposes them, with `withdraw`
-  as the escape rather than a waiver. Unenforceable until the finding set is
-  readable — so until this item lands, a waiver clears the lock edge over live
-  findings. That is the sharper of the two.
+- **`Conducted`'s blocker predicate.** `DEC-138` satisfies the arm while the `RV`
+  carries no finding that is both `blocker`-severity **and** in `open` or
+  `contested` state. Note this is *not* `derived_status`'s `await` — that is
+  severity-blind (`review.rs:1009-1022`) and its own doc calls it a display
+  summary, never a gate. Nor is it D-C9b's `doc_unresolved_blockers`
+  (`review.rs:1490`), which is the same filter minus the state restriction and so
+  counts `answered`. The one-state difference is the whole point: the responder
+  must always hold an act that clears.
+- **`Conducted`'s admissibility — the one addition, not just an exposure.** The
+  arm may only be claimed over an `RV` carrying a **concluded-pass marker**, and
+  no such marker exists. Without it, `Conducted` is satisfied on entry to
+  `reviewing`, since this item mints the `RV` there and an empty ledger reads
+  `(Done, None)`. Findings cannot supply the signal — a clean pass is
+  structurally identical to one never run — and the `## Synthesis` prose is
+  refused because a gate parsing authored prose is `SL-244` `sec-2`'s
+  fourth-prose-loader risk. So this item adds structured state saying a pass
+  concluded, alongside the section reference it is already adding.
+
+`DEC-138` also carries the arms themselves into a home: `SL-244` gives
+`CheckpointAct` a fourth optional slot for `Conducted { review } | Waived
+{ reason }`, which `DEC-125` fixed and no type held. That part is `SL-244`'s to
+build, not this item's — noted so the two are not confused.
+
+**The `Waived` arm asks nothing of this item.** It is unconditional under
+`DEC-138`: a user act, findings left standing on the `RV`, reason in the change
+log. So until this item lands the interim is the same on both arms, rather than
+one strict path and one lax one.
 
 ## What this dissolves
 
