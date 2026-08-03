@@ -16,7 +16,10 @@ falsified 6/6 — M25 measures F-14 rather than arguing it).
 **ALL SIXTEEN ROWS CARRY SCORED RESULTS: H1–H16. THE MATRIX IS COMPLETE** —
 `T4` is done. **T5 DONE** (the conflict sub-probe — H10/H16's owed leg, scored
 2/2 `counts-toward-nothing` + falsified 4/4; F-P05-40 and ISS-305 out of it).
-**H10/H16 NOW OWN BOTH LEGS.** Next unit is **T6** (the five guard probes)
+**H10/H16 NOW OWN BOTH LEGS.** **T6 DONE** (the five guard probes — scored 9/9
+`pass`, 71 assertions, 0 red, + falsified 4/4; F-P05-41/42/43 and D-P05-20..23
+out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** Next unit is **T7**
+(EVD records → QUE-200/QUE-201), then T8, T9.
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
@@ -298,6 +301,43 @@ Lifted here so the ids survive the sheet:
     conflict — the refusal is LEDGERED, not status-borne — while integrate's
     staleness refusal is non-zero. The clap help asserts the opposite, and for a
     `review_surface` the arm it describes is unreachable. A QUE-202 input.
+
+- **T6 — THE FIVE GUARD PROBES DONE** (`1de56f9c`, `fdebae1e`).
+  `control/probe-guards.sh` + `rig guards [a…e]`; **EX-10, EX-11, VA-2, VA-3
+  discharged**. Scored **9/9 `pass`, 71 assertions, 0 red** —
+  `~/capsules/probes/guards/results.tsv`. Falsified 4/4 first
+  (`drivers/falsify-t6.sh`, m36–m39). Order per F-P05-31 honoured throughout.
+  - **Its OWN executable and its OWN results file** (D-P05-20). The guards have
+    no `Hnn` trio, no fixture × mechanism cross-product and no altitude, so they
+    are not matrix rows and must never be summed with them. `lib/conflict.sh`
+    could sit on the matrix's axes and take a `counts-toward-nothing` altitude;
+    these cannot, and a discriminator column a reader must *notice* is weaker
+    than a separate file.
+  - **`lib/fixtures.sh`** lifts the fixture table out of `probe-c3.sh` (plus the
+    `light-inrepo` arm) so both probes share one set of joins — the `lib/rows.sh`
+    move at T3, on the same second-real-caller bar. Behaviour-preserving.
+  - **(a) is a CITATION, and it can fail** (D-P05-21). H8 *is* guard (a); the leg
+    counts its `conform/gitlink` and `conform/gitmodules` entries out of the
+    committed `results.tsv`, with a negative control on a token H8 never
+    produces. A citation that cannot fail is prose.
+  - **(b)/(c) isolation is ASSERTED, not assumed** — exactly one governance path
+    in the range. Leg 3 returns on the first match, so without the count guard
+    (b) is a differently-named re-run of H5 (F-P05-22). **m36 proves it**: the
+    refusal and the ingestion stay green while the observation quietly becomes
+    about another path.
+  - **(c) both directions** — with `--find-renames` the `.doctrine/` source leg
+    vanishes and the same capsule passes, so `--no-renames` is *shown*
+    load-bearing rather than asserted.
+  - **(d) needed a genuinely broken suite to observe anything** (F-P05-42) — and
+    `audit-i4a` ran as the static half in both directions alongside it.
+  - **(e) is three legs** (D-P05-22): F1 baseline · F2 worktree rewrite
+    (byte-identical trusted-side — **QUE-201's evidence input**) · F2 committed
+    rewrite. The trusted-side observable excludes the OIDs deliberately; those
+    are fixture identity, not behaviour.
+  - **F-P05-41 / F-P05-42 / F-P05-43** out of it, the first two now memories.
+    F-P05-43 — the committed-rewrite leg's `conform/undeclared-path` is
+    **fixture-specific** (F2 puts its declaration at the repo root, which SL-001
+    declares no selector for) and is recorded as an observation, not generalised.
 
 ### PHASE-01 decisions (durable)
 
@@ -951,6 +991,8 @@ mid-phase would convert a legible structural finding into a silent pass.
 - mem.pattern.evidence.witness-the-exact-set-not-the-emptiness — F-P04-8 ditto
 - mem.pattern.tests.assert-the-refused-writes-signature — F-P05-38 made reusable
 - mem.pattern.handover.cite-artifacts-by-tier-not-just-path — F-P05-39 ditto
+- mem.pattern.tests.guard-needs-a-discriminating-difference — F-P05-42 ditto
+- mem.pattern.tests.baseline-needs-its-own-positive-control — F-P05-41 ditto
 - CPT-001 — five numbered classes, one with a git-level sub-class
 - **environment**: `nix` and `direnv` are ABSENT in the jail (`/nix/store`,
   `bwrap`, `node`, `npm`, `claude` present); `$HOME` writable, `~/capsules/`
@@ -1174,10 +1216,12 @@ mid-phase would convert a legible structural finding into a silent pass.
   carried the refs-only clause that `cas-lost` legitimately carries, that defect
   would have scored GREEN, and H10/H16 are the only place in the matrix where it
   shows. Worth citing at close wherever F-14 is defended.
-- **DEC records are OWED at close for D-P05-6..17** — the sheet's convention is
+- **DEC records are OWED at close for D-P05-6..23** — the sheet's convention is
   "lift to notes.md at close", so they were deliberately not minted mid-phase.
-  The range extended twice this session: D-P05-16 (H7's 20G bound) and
-  D-P05-17 (allowlist work → follow-on slice).
+  The range has extended repeatedly: D-P05-16 (H7's 20G bound), D-P05-17
+  (allowlist work → follow-on slice), D-P05-18/19 (T4c/T4e), and **T6 added
+  D-P05-20..23** (guard-probe placement · guard (a) as citation · guard (e)'s
+  three legs and its OID-excluding observable · the `fx_case` lift).
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
   trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see
@@ -1186,7 +1230,11 @@ mid-phase would convert a legible structural finding into a silent pass.
   evidence input banked**: M-B's trusted-side file-ingestion boundary is four
   observed refusal legs that M-A does not carry at all — the asymmetry is a
   cost, and it is now measured rather than argued
-- QUE-201 — declaration home; now ergonomics-only, gains a probe-evidence input
+- QUE-201 — declaration home; now ergonomics-only. **Its evidence input is
+  OBSERVED as of T6** (guard (e), three legs): a capsule that rewrites its own
+  in-repo declaration leaves trusted-side behaviour byte-identical, worktree-side
+  and committed alike. T7 owes the EVD. Carry F-P05-43 with it — *where* the
+  committed rewrite refuses is fixture-specific and must not be generalised.
 - QUE-202 — how the capsule model *admits* the second result; refusal proven,
   admission not designed
 - ~~ASM-007~~ — **FALSIFIED and `invalidated` in PHASE-04 step 0**, exactly as
