@@ -262,8 +262,11 @@ each candidate answer costs, because `acts` is a conjunction — two
 `ActRequirement` entries mean *both*, never *either*:
 
 - **human**, a fixed actor — fits `ActRequirement` exactly;
-- **either** — needs the actor slot to admit a disjunction, which the conjunctive
-  `acts` slice deliberately does not;
+- **either** — needs the actor slot to admit a *disjunction*, satisfiable by one
+  lane or by the other, which the conjunctive `acts` slice deliberately does not.
+  This is not what `RunPolicy` does below, and the two should not be read as the
+  same move: a run-declared lane set is a conjunction whose arity the run fixes,
+  never an alternation the rule leaves open;
 - **per section, where the section opted in** — is not a typing gap at all. The
   requirement would vary per *section* from run data, so no shape of the actor
   slot puts it in a `&'static` table;
@@ -278,6 +281,13 @@ pub(crate) enum RequiredActor {
     /// Read from the run's review policy (DEC-073). Exactly one requirement.
     RunPolicy,
 }
+
+impl RequiredActor {
+    /// The lanes an act must satisfy — ALL of them, never any of them.
+    /// `Fixed` is the singleton case; `RunPolicy` yields the policy's
+    /// membership, which is one lane or two.
+    fn resolve(self, policy: ReviewPolicy) -> &'static [ActorClass] { /* … */ }
+}
 ```
 
 The table stays `&'static` and stays total; resolution moves into `satisfied`,
@@ -286,6 +296,26 @@ so the policy arrives with no signature change. What makes this work where the
 per-section candidate fails is *what varies*: a per-run policy is one value an
 evaluation reads once, where a per-section rule would need the table to hold a
 different actor per subject.
+
+**Resolution fixes the conjunction's arity, so the `acts` slice is a template for
+it rather than the conjunction itself.** `Fixed` resolves to one lane, so seven
+requirements mean exactly what they say. `RunPolicy` resolves to the policy's
+membership — one lane under `HumanOnly` or `AdversarialOnly`, two under either
+ordered variant — so the single `SectionReviewed` requirement stands for one
+required act or for two, and which is not known until the run is read. Said
+plainly because a reader counting `&'static` entries will otherwise count the
+requirements wrong, and because a refusal owes the missing **lane**, not merely
+the missing act.
+
+For `section-attestations-current` that composes with `PerSection` into a nested
+quantification: for every current section, for every lane the policy requires,
+some live attestation carries that section's id, its current digest, and that
+lane's reviewer. The incumbent (`snapshot.rs:419-433`) has the section dimension
+and no lane dimension, which is precisely what `ISS-310` is. Keeping the lane
+dimension in the actor slot rather than folding it into `PerSection` is the same
+independence this section insists on between reach and coverage: coverage fixes
+the subject set a requirement ranges over, the actor slot fixes who must have
+authored each act, and one row needing both is not a reason to merge two axes.
 
 **Conjuncts must be current together, and currency is not yet ordering.** A
 conjunction of independent acts is satisfiable by acts that never met: an old
@@ -322,8 +352,8 @@ pub(crate) enum Coverage {
     /// node's current canonical material.
     InquiryMap,
     /// Quantified over subjects instead of carried by the act: every current
-    /// section must have its OWN live act of the required kind and actor,
-    /// against that section's current digest.
+    /// section must have its OWN live act of the required kind, one per
+    /// resolved lane, against that section's current digest.
     PerSection,
 }
 ```
@@ -590,6 +620,15 @@ satisfiable, so it never bars the edge and needs no activation exception. It is
 tracked by `IMP-392`. The workflow consequence is stated rather than hidden:
 until `IMP-392` lands, `reviewing → locked` is crossable by *waiving* review with
 an admission-checked reason, and the refusal text says so.
+
+**`Waived` is a permanent arm, not an interim crutch**, and the sentence above
+would read as the opposite left on its own. `DEC-125` gives the row two arms
+because both are wanted: a review conducted, or a review declined for a stated
+reason. The gate's job is to make the choice deliberate and legible, not to
+extract a toll — a user who decides this design does not need another
+adversarial pass says so, and the run advances carrying the reason. What
+`IMP-392` unblocks is the `Conducted` arm, which is the *stricter* path; nothing
+about the waiver is provisional.
 
 Activation is a column on the one classification table rather than a second table
 to drift against the first, and the enforced set is that table filtered:
@@ -1377,6 +1416,20 @@ this. That was wrong twice over: `DEC-074` is about section posture, and far fro
 mandating the integrated pass it explicitly grants the adversarial-only run this
 policy implements.
 
+**Both lanes means reading twice, and neither reading is a gate fee.** Under
+either ordered variant an adversarial reviewer reads each section and then reads
+the document — a defensible template, since the per-section pass catches what is
+local and the integrated pass catches what is not. It must not become a toll.
+Both readings are escapable by a user act, and the design says so in one place
+rather than leaving it inferable from two subsections that never mention each
+other: the integrated pass is declinable through `review-disposition-attested`'s
+`Waived { reason }` arm, which `sec-3` records as a permanent arm rather than an
+interim one; and the per-section lanes are escapable by revising the run's
+policy, which this subsection has already argued must stay mutable. A user who
+says skip it is obeyed. What the gate keeps is not the reading but the record of
+the choice — a reason on the waiver, a change row on the policy — which is the
+whole of what it is for.
+
 `Reviewer` maps into `ActorClass` — `Human → User`, `Adversarial → Adversarial` —
 as an `impl From`, not a merge. `sec-3` refused to unify the three actor-ish
 vocabularies and that refusal stands; this is the one direction it required.
@@ -1489,9 +1542,17 @@ missing answer.
   Asserted against both surfaces, because their disagreeing was the finding.
 - **Invalidation is not policy-filtered** — an adversarial attestation going
   stale under `HumanOnly` still emits its invalidation row.
+- **Both lanes are required, per section** — under `HumanThenAdversarial` a
+  section carrying only a human attestation leaves `section-attestations-current`
+  unmet, and the refusal names the *adversarial lane* specifically. The nested
+  quantification, tested where the single-lane policies cannot reach it.
 - **Order is not enforced** — a run whose policy is `HumanThenAdversarial`
   clears with the adversarial attestation recorded first. The order is rendered;
   the gate does not read it.
+- **Waiving is not a degraded path** — `reviewing → locked` clears on a
+  `Waived { reason }` disposition with no integrated pass recorded, and the
+  reason is rendered. Asserted so that a later slice tightening this is a visible
+  break rather than a silent one, the same reason the loosening test exists.
 - **Adversarial review is still recorded** — under `HumanOnly` the section
   renders its adversarial attestation, so the act is visible without being
   sufficient.
