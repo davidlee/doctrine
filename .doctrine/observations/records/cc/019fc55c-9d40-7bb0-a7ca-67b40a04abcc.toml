@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc55c-9d40-7bb0-a7ca-67b40a04abcc"
+recorded_at = "2026-08-03T02:03:28.960977829Z"
+kind = "friction"
+summary = "execute: phase completion flip wrote another slice's commit as PHASE-05's code_end_oid"
+detail = "SL-241 PHASE-05 T9. 'doctrine slice phase 241 PHASE-05 --status completed' captured code_end_oid = 5c78c892, which is 'design(SL-244): DEC-121' — another agent's commit, HEAD at that instant. The phase's real code tip is fdebae1e; T7/T8/T9 touched no source. The emitted warning ('boundary spans 12+ commits — any that are not this phase's are attributed to it') describes range width, which for a multi-commit phase in this shared tree is expected and documented, so it reads as known-and-fine rather than as 'the endpoint is another slice's commit'. Cost: nearly filed as known; caught only by reading boundaries.toml after the flip instead of trusting it. Corrected by hand (runtime tier). PHASE-01..04's boundaries in the same file were captured the same way and are unverified. Filed as ISS-307."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
