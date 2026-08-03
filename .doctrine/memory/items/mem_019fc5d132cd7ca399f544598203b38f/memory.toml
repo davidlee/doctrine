@@ -1,0 +1,42 @@
+memory_uid = "mem_019fc5d132cd7ca399f544598203b38f"
+memory_key = "mem.pattern.tests.smoke-the-capability-not-the-dependency"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A smoke test must exercise the capability, not just the dependency"
+summary = "A smoke that proves a dependency reachable without exercising what the real workload does with it will certify a configuration that cannot carry the workload."
+created = "2026-08-03"
+updated = "2026-08-03"
+
+[scope]
+paths = ["scripts/spike-capsule"]
+globs = []
+commands = []
+tags = ["testing", "smoke-test", "sandbox", "falsifiability", "confinement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "307c261bf145021d47e0341de3add48dcdee905c"
+tree = "e97dd9240f7370e19df0421b4fa945de06da9aec"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "307c261bf145021d47e0341de3add48dcdee905c"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
