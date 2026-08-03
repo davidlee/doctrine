@@ -6,8 +6,12 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · **ALL SIX PHASES `completed`. SL-241 is ready for
-`/audit`.**
+fresh-as-of: 2026-08-03 · lifecycle **`audit`** · phases **6/6 `completed`** ·
+head `cf444109` (verify before citing — other agents commit to `edge`).
+
+**The spike is finished and the slice is at the `/audit` stage.** The divergence
+warning `doctrine slice status 241` prints is expected and stays until
+`/audit` → `/reconcile` → `/close` run.
 
 **PHASE-06 closed the spike.** The scoped verdict is
 `.doctrine/rfc/025/go-no-go.md` — **GO on Linux/bwrap** for the ingestion and
