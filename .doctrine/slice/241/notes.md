@@ -18,8 +18,10 @@ falsified 6/6 — M25 measures F-14 rather than arguing it).
 2/2 `counts-toward-nothing` + falsified 4/4; F-P05-40 and ISS-305 out of it).
 **H10/H16 NOW OWN BOTH LEGS.** **T6 DONE** (the five guard probes — scored 9/9
 `pass`, 71 assertions, 0 red, + falsified 4/4; F-P05-41/42/43 and D-P05-20..23
-out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** Next unit is **T7**
-(EVD records → QUE-200/QUE-201), then T8, T9.
+out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** **T7 DONE** (six EVD
+records — EVD-006..011 linked to QUE-200/QUE-201; **EX-13 and VA-5 discharged**;
+F-P05-44/45 and ISS-306 out of it). Next unit is **T8** (evidence artefacts —
+and it is what rescues the only copy of the scored results), then T9.
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
@@ -338,6 +340,53 @@ Lifted here so the ids survive the sheet:
     F-P05-43 — the committed-rewrite leg's `conform/undeclared-path` is
     **fixture-specific** (F2 puts its declaration at the repo root, which SL-001
     declares no selector for) and is recorded as an observation, not generalised.
+
+- **T7 — THE SIX EVD RECORDS DONE** (`0b9581b1`). **EX-13 and VA-5 discharged.**
+  QUE-200's five verdict inputs plus QUE-201's one, derived from
+  `probes/c3/results.tsv` and the PHASE-05 findings — no new probe run.
+  - **EVD-006** `supports` QUE-200 — H6/H7 are **mechanism-neutral**: 8 cells,
+    all `pass` at `model-level`. H6 dissolves on both because config and hooks
+    are repo-local and both mechanisms transfer objects; the plant was live
+    (a reference-transaction hook observed firing in the capsule). Carries
+    F-P05-37/38's caveats — H7's cap is enforced *in-capsule*, and its observable
+    is the refused write's signature, not its product.
+  - **EVD-007** `supports` QUE-200 — every scored refusal token is produced by
+    the **mechanism-independent** downstream pipeline and computed trusted-side
+    from object identity. The mechanism decides the transfer, not the admission
+    boundary. States the one defective line rather than smoothing it: M-B's
+    `harvest/fsck-failed` is emitted at two sites with stderr discarded, and the
+    harvester fscks the *whole* quarantine (F-P05-28).
+  - **EVD-008** `supports` QUE-200 — forensic completeness, **scoped explicitly**:
+    no row *scores* retention, so it opens by saying so. What the rows do show is
+    that both mechanisms carry the worker's commit into quarantine as a
+    first-class object (H1/H3's trusted-side-computed `S`, H15's clean
+    `verify-pack`). Discriminates only against candidate 3, which was never
+    rigged.
+  - **EVD-009** `supports` QUE-200 — operational friction. Cost is **equal**
+    (heavy cell: M-A 2.50s, M-B 2.55s), so cost is not the discriminator. The
+    asymmetry is fragility: M-B's 27 MB transfer trips git auto-maintenance in
+    the quarantine and produced a spurious refusal M-A did not. Bounded honestly
+    at N=1 and fixture-caused — **not** generalised to "bundles are fragile".
+  - **EVD-010 `disputes`** QUE-200 — the previously banked input, and the only
+    `disputes` edge. H13's four legs exist on M-B only; on M-A the row is
+    **structurally** `n/a`. It disputes a claim QUE-200's own body makes for
+    candidate 2 ("cleanest trust story"), not the question — the bundle **moves**
+    the trusted-side surface rather than removing it.
+  - **EVD-011** `supports` QUE-201 — guard (e)'s three legs; byte-identical
+    trusted-side behaviour. Carries F-P05-43 in full: the committed leg's
+    `conform/undeclared-path` is fixture-specific and the generalisable claim is
+    the byte-identity, not the token.
+  - **VA-5 resolved differently than the sheet implied** (F-P05-44). `knowledge
+    show`/`inspect` render **no inbound reciprocity**, so the Tier-1 edges are
+    invisible from the question's side. "Both tiers" is satisfied on the
+    *question's own* record: its `[evidence]` citation block (structured) plus an
+    `## Evidence` section (prose), both verified via `show`. Filed as **ISS-306**
+    — pre-existing, `src/` untouched (S4).
+  - **F-P05-45** — the phase's actual result: **the mechanism axis barely
+    matters.** Equal on config/hooks, resource bounds, forensic retention and
+    cost; the one measured asymmetry runs against the bundle. And the gap that
+    must ride with it — QUE-200's `upload-pack`-in-hostile-context worry was
+    **never exercised** and stays argument, not evidence.
 
 ### PHASE-01 decisions (durable)
 
@@ -1226,15 +1275,24 @@ mid-phase would convert a legible structural finding into a silent pass.
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
   trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see
   that the fixture's provenance changed
-- QUE-200 — ingestion mechanism M-A vs M-B; the rig's whole point. **First
-  evidence input banked**: M-B's trusted-side file-ingestion boundary is four
-  observed refusal legs that M-A does not carry at all — the asymmetry is a
-  cost, and it is now measured rather than argued
+- QUE-200 — ingestion mechanism M-A vs M-B; the rig's whole point. **All five
+  evidence inputs are now recorded and linked** (T7, `0b9581b1`): EVD-006
+  (H6/H7 mechanism-neutral) · EVD-007 (every refusal token trusted-side,
+  downstream of the mechanism) · EVD-008 (both preserve worker commit identity)
+  · EVD-009 (cost equal; M-B trips git auto-maintenance) · **EVD-010
+  `disputes`** (M-B's trusted-side file-ingestion boundary — the previously
+  banked input, now counter-evidence to candidate 2's "cleanest trust story").
+  **The result is that the mechanism axis barely matters** and the one measured
+  asymmetry runs against the bundle — F-P05-45. **Do not read the matrix as
+  "fetch is proven safe against hostile config"**: QUE-200's own `upload-pack`
+  worry is untested and stays argument. The question remains `open` — it settles
+  in the post-spike REV, not here.
 - QUE-201 — declaration home; now ergonomics-only. **Its evidence input is
   OBSERVED as of T6** (guard (e), three legs): a capsule that rewrites its own
   in-repo declaration leaves trusted-side behaviour byte-identical, worktree-side
-  and committed alike. T7 owes the EVD. Carry F-P05-43 with it — *where* the
-  committed rewrite refuses is fixture-specific and must not be generalised.
+  and committed alike. **EVD-011 recorded and linked at T7**, carrying F-P05-43
+  — *where* the committed rewrite refuses is fixture-specific and must not be
+  generalised. Question remains `open`; settles post-spike.
 - QUE-202 — how the capsule model *admits* the second result; refusal proven,
   admission not designed
 - ~~ASM-007~~ — **FALSIFIED and `invalidated` in PHASE-04 step 0**, exactly as
