@@ -34,7 +34,11 @@ record that governing context had been captured until that context was restated
 as prose. Holding this section to citation-plus-judgement narrows the duplication
 but does not dissolve it. Recorded as `EVD-012`, which assesses the forced
 restatement as a violation of the single-source-of-truth rule and as poorly
-conceived independent of that. `DEC-126` is where the design answers it.
+conceived independent of that. `DEC-121` is where the design answers it: the
+artefact becomes the confirmed governance edge set, so the subject stops being a
+prose section at all — which is why that record notes it settles `ISS-286`'s
+subject-rule complaint as a side effect. `DEC-126` is where the condition is
+reclassified to match.
 
 <!-- doctrine:section sec-2 -->
 ## Concerns carried into the design
@@ -50,8 +54,12 @@ remembered one. Each is a live risk to this design, not a general caution.
   the acceptance slot that retires into `CheckpointAct`, carrying no act to
   migrate as. And it clears `user-accepts-sufficiency` through an evidence row
   this design replaces with an act that cannot be reconstructed from what is
-  stored — an active, cumulative row, so it bars the next forward move. `SL-243`
-  has not been drafted, so re-giving one acceptance is the whole repair. The
+  stored — an active, cumulative row, so it bars the next forward move. It holds
+  three declared sections and has never been materialised, so nothing else it
+  holds is at stake, and the repair is two acts rather than a migration: the user
+  re-gives the acceptance as `SufficiencyAccepted`, and the agent declares
+  `DraftingReady` — a condition this design *adds* to the very edge that run is
+  standing at, which is why the second act is a cost and not just workflow. The
   concern is retained because the next live run need not be this cheap, not
   because this one is expensive.
 - **Envelope byte budget.** The refusal path has no byte budget; the envelope has
@@ -379,7 +387,8 @@ pub(crate) enum Coverage {
 
 **`PerSection` is not `EverySection` with the acts spread out**, and the
 incumbent is where the difference is visible: `review_standing`
-(`snapshot.rs:419-433`) derives both, ten lines apart, in two different shapes.
+(`snapshot.rs:419-433`) derives both, nineteen lines apart, in two different
+shapes.
 `acceptance_current` is `acceptance.is_current(&current)` — whole-map equality
 against a map *stored on the act*. `sections_attested` is a quantification with
 no stored map at all, assembling its covered set from the attestation set at
@@ -959,7 +968,7 @@ pub(crate) struct Contract {
     pub(crate) prose: &'static str,
 }
 
-pub(crate) const CONTRACTS: [(Condition, Contract); N];
+pub(crate) const CONTRACTS: [(Condition, Contract); 9];
 ```
 
 `DEC-123` requires set equality over **three** enumerations: the `Condition`
@@ -1281,8 +1290,8 @@ duplication it inherited. `DesignAccepted` becomes a `CheckpointAct` and
 The subsumption is of the **type**, not of whatever the slot currently holds.
 Because any run-level acceptance writes it, a stored value carries no act to
 migrate as, and a migration that assumed `DesignAccepted` would mislabel one.
-With a single live run that has not been drafted, that is a hand repair rather
-than a mechanism — recorded so nobody writes the assuming migration.
+With a single live run that has never been materialised, that is a hand repair
+rather than a mechanism — recorded so nobody writes the assuming migration.
 
 `IntegratedReview` (`attestation.rs:224`) passes the test that `Attestation`
 passes, and is a third incumbent rather than an omission from a pair.
@@ -1392,7 +1401,9 @@ pub(crate) struct CheckpointAct {
     acceptance: AcceptanceAttestation,
     /// What it was given over. `None` is `Coverage::Artefact`.
     covered: Option<CoveredSet>,
-    /// Each observed fact as it stood when the act was given.
+    /// Each observed fact as it stood when the act was given. Deliberately the
+    /// bare map rather than `sec-3`'s `ObservedFacts`: that type is transient by
+    /// construction and says so, and this one is persisted (invariant 10).
     observed: BTreeMap<ObservedFact, Fingerprint>,
     /// The agent declaration this act confirms, where its rule names one.
     confirms: Option<Fingerprint>,
@@ -1472,10 +1483,42 @@ ordering guarantee without failing anything. A slot the rule names is a slot
 admission can require.
 
 What was missing is who checks the correspondence. **Admission does**, over the
-record as a whole rather than slot by slot: a `CheckpointAct` that does not
-correspond to its rule is refused on write. Every stored act therefore satisfies
-the invariant by construction, and the gate never re-checks it — the same move
-`sec-3` makes for the generated tables, one layer out.
+record as a whole rather than slot by slot: a recorded act that does not
+correspond to its rule is refused on write, whichever shape holds it. Every
+stored act therefore satisfies the invariant by construction, and the gate never
+re-checks it — the same move `sec-3` makes for the generated tables, one layer
+out.
+
+**The correspondence ranges over three record shapes, and three of its four rows
+reach only one.** Writing it against `CheckpointAct` alone was the same
+slot-by-slot mistake one level up: two of the eight acts are `AgentDeclaration`s
+and one is an `Attestation`, and a rule naming a slot those shapes lack would be
+an unenforceable requirement rather than a refused act.
+
+- **Coverage applies to all three.** `AgentDeclaration::covered` pairs with its
+  rule's `Coverage` exactly as `CheckpointAct::covered` does — `Artefact` with
+  `None`, `InquiryMap` with `Nodes(…)` — so `BlockingSetDeclared` and
+  `DraftingReady` are admitted under the same check. `SectionReviewed` is the
+  degenerate case already argued: `PerSection` is carried by no act, so an act of
+  any shape whose rule names it is refused.
+- **The other three rows are user-only by rule, not by record shape.** A
+  requirement whose actor is `Fixed(ActorClass::Agent)` may name no confirmation,
+  no disposition and no observed fact, and the generated table is where that
+  holds — so `AgentDeclaration` lacks those slots because no rule can ask for
+  them, not because it was given fewer.
+
+Each of the three earns the restriction separately, and only the third is a
+decision rather than a consequence. `confirms` runs one way: `DEC-121`'s
+interaction is *the agent declares, the user confirms*, so an agent act
+confirming another is an interaction nobody specified. `disposition` is
+`DEC-138`'s, and both of its arms are user acts carrying an
+`AcceptanceDeclaration` — an agent-authored disposition is exactly the value
+`AgentActKind` exists to make unrepresentable. `observed` is not intrinsic: an
+agent declaration *could* be bound to canonical state outside the run. It is
+refused because that state is governance, confirming governance is
+`GovernanceConfirmed`'s job, and that is a user act under `DEC-121`. If a later
+act wants the pairing it is a decision, and the slot arrives with it — which is
+this section's rule for shapes, applied to a slot.
 
 Two consequences worth naming. An act whose `observed` map is simply **absent**
 where its rule names a fact is refused rather than treated as an empty
@@ -1513,9 +1556,14 @@ implementations diverge, so:
   so `AcceptanceAttestation::bind` stays the only route to user authority and
   `DEC-088` is untouched.
 - **Replaced by act**, not by id: at most one live `CheckpointAct` per `ActKind`,
-  a new one superseding the prior, the way `run.rs:1062` retains-then-pushes an
-  attestation. Two live acts of one kind would make *which one is current*
-  ambiguous with no rule to break the tie.
+  a new one superseding the prior. The mechanism is the incumbent's —
+  `run.rs:1062` retains-then-pushes — but the **key is not**, and the difference
+  matters. An `Attestation` is replaced by its own id, deliberately, because two
+  lanes reviewing one section must coexist under a both-lanes policy; that is
+  what a per-subject record needs and what a per-act one must not do. Reading the
+  incumbent's key as this design's is how a two-lane run would silently lose a
+  lane. Two live acts of one kind would make *which one is current* ambiguous
+  with no rule to break the tie.
 - **Stored** in its own snapshot group, for the reason `delegation` and `runbook`
   have theirs: a recorded act is its own state model, and `ReviewGroup`'s members
   are all about review.
@@ -1649,11 +1697,17 @@ It is also **not** "the same triple minus the authority claim": it drops nothing
 and adds `id`, `act`, `covered` and `fingerprint`. `turn` is kept for the reason
 an acceptance keeps it, and `basis` because a declaration owes its reader one.
 
+**It carries no `observed`, `confirms` or `disposition`**, and that is the rule
+stated with the correspondence above rather than a shape decision taken here: no
+requirement whose actor is an agent may name any of the three, so there is
+nothing for those slots to hold.
+
 **Replacement is by act, not by id.** At most one live declaration per
-`AgentActKind`; a new one replaces the prior, the way `run.rs:1062` retains-then-
-pushes an attestation. Two live `BlockingSetDeclared`s would make *which one did
-the user confirm* ambiguous, and removing that ambiguity is what the confirmation
-link below exists for. Its wire shape is a run-level field on `ApplyRequest`,
+`AgentActKind`; a new one replaces the prior, on the same retain-then-push
+mechanism and with the same key difference from `Attestation` noted above. Two
+live `BlockingSetDeclared`s would make *which one did the user confirm*
+ambiguous, and removing that ambiguity is what the confirmation link below exists
+for. Its wire shape is a run-level field on `ApplyRequest`,
 joining `WRITER_ACTS` as the second of this slice's three new writers.
 
 **What the fingerprint is taken over.** `act` and `basis`, each on its own line,
@@ -1776,7 +1830,7 @@ attestation set. Two take the policy; one must not.
 | site | the question it answers | takes the policy |
 |---|---|---|
 | `snapshot.rs:428` `review_standing` | is the condition met? | yes — this is `ISS-310` |
-| `envelope.rs:799` `review_outstanding` | does the envelope call this section settled? | yes |
+| `render/envelope.rs:799` `review_outstanding` | does the envelope call this section settled? | yes |
 | `run.rs:1495` `live_reviews` | which attestations stopped being live this apply? | **no** |
 
 Repairing only the first would leave a gate that refuses a section the envelope
@@ -1961,6 +2015,11 @@ missing answer.
 - **A mismatched coverage is refused on write** — a `CheckpointAct` whose
   `CoveredSet` is `Sections` where its rule's `Coverage` names `InquiryMap` is
   refused at admission, so no stored act can violate the correspondence.
+- **And on an agent declaration too** — a `BlockingSetDeclared` whose
+  `CoveredSet` is `Sections` where its rule names `InquiryMap` is refused at the
+  same point. Asserted separately because the correspondence was first written
+  against one record shape and holds over three; testing only the shape it was
+  written against is what left this unchecked.
 - **A mismatched observed set is refused on write too** — a `GovernanceConfirmed`
   act carrying no `observed` entry, or one keyed by a fact its rule does not
   name, is refused at the same point. Asserted separately from the coverage case
