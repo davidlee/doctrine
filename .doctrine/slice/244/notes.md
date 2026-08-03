@@ -55,13 +55,44 @@ embedded-and-`fixed`-with-a-citation, the pattern runbooks already use.
 `mem_019faca1f05277729cb407f8d4487206` (ratify the incumbent before specifying a
 format — here the kebab token, load-bearing four ways, and the two prose stores).
 
-## Exploring closed — handover state (2026-08-03)
+## Drafting entered — handover state (2026-08-03, superseding the exploring note)
 
-Run `dr-019fc4dd-e049-7db0-8cea-9af8ff970810`, revision 25, stage `exploring`.
-**All 13 inquiry nodes resolved, 0 open; the exploring runbook is discharged.**
-Re-enter with `doctrine design resume 244` — the graph, the dispositions and the
-linked records come back with it. This section holds only what the run cannot
-carry.
+Run `dr-019fc4dd-e049-7db0-8cea-9af8ff970810`, revision 36, stage **`drafting`**.
+**15 inquiry nodes, 0 open, 15 resolved; exploring and inquiring runbooks both
+discharged.** Re-enter with `doctrine design resume 244`.
+
+**What the exploring→inquiring crossing cost, and why it is a result.** The edge
+could not be cleared as written: evidence resolves its subject only against
+`design.md` sections (`run.rs:1471-1478`) and the run had none, sections being a
+drafting artefact. Two sections were authored to pass it — `sec-1` governing
+context, `sec-2` concerns — held to citation-plus-judgement to narrow the
+duplication. `EVD-012` records the whole thing, including the user's assessment
+that forcing canonical entity content into prose violates single-source-of-truth
+and is poorly conceived independent of that. It is bound into the run at `inq-14`
+→ `cp-14`, so `resume` carries it. `SL-244`'s `OQ-5` (does a contract-carrying
+condition subsume `ISS-286`'s subject rule?) is answered **yes, as a consequence
+of `DEC-121`**, not as a separate repair.
+
+**`explore.research` regressed and was right to.** Objective 6 entered scope
+after the research baseline was stamped. Research thread 4 (documentation
+surfaces) closed the gap before the restamp; its finding drove `DEC-127`.
+
+**Nine decisions now, not seven.** `DEC-120`…`DEC-126` as before, plus:
+`DEC-127` (objective 6 ships published **and** generated — a client repo cannot
+read this repo's spec, so thread 4's spec-sibling champion is refused; the
+citation direction inverts and `SPEC-029` cites the published address).
+
+**Spawned since:** `ISS-309` (shipped assets cite repo-private ids that collide
+in client repos — the id half resolves to a *different* record in a client repo
+rather than dangling), `IMP-393` (`show` is reader-facing for every kind except
+`design`, where it is the writer's turn envelope), `IMP-394` (collaborator
+orientation asset), `IMP-395` (skills hand collaborators their literal
+invocation and binary).
+
+**Scope is reconciled.** `slice-244.md` carries an answer key for `OQ-1`…`OQ-9`,
+all dispositioned. `OQ-6` is recorded as **dropped, not answered**.
+
+This section holds only what the run cannot carry.
 
 **Seven decisions, in dependency order.** `DEC-120` (kinds: derived / attested /
 claimed, plus the 2026-08-03 sharpening that Attested names *input provenance*,
@@ -91,12 +122,18 @@ The `design materialise` authored-watermark pattern is the shape to follow.
 `Conducted { review }` arm and the severity summary are unbuildable until
 `IMP-392`.
 
-**Still owed by the slice:** objective 6 — spec-adjacent documentation with
-canonical interaction diagrams. Two things belong in it that appear in no shipped
-guidance and that an agent currently discovers by being refused: that a productive
-integrated pass invalidates its own clearance under whole-map currency, and that
-review nevertheless terminates when the user declines another round
-(`RFC-026` E3), so staleness informs that decision rather than barring it.
+**Still owed by the slice:** objective 6 — now specified by `DEC-127` as a
+**published, generated** artefact: source under `install/` (already grafted, so
+no `flake.nix` change), a `publication/manifest.toml` entry, and a golden test
+pinning the render to `gate.rs`'s tables, following
+`.doctrine/spec/tech/021/funnel-machine.md`. This will be the first diagram in
+the shipped corpus, so the hand-edit-vs-generated policy is net-new.
+
+Two things belong in it that appear in no shipped guidance and that an agent
+currently discovers by being refused: that a productive integrated pass
+invalidates its own clearance under whole-map currency, and that review
+nevertheless terminates when the user declines another round (`RFC-026` E3), so
+staleness informs that decision rather than barring it.
 
 **Correction carried forward:** an earlier turn claimed the missing
 promotion leg was captured as `ISS-303`. It was not — nothing was created, and
