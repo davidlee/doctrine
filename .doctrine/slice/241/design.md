@@ -954,7 +954,7 @@ runtime rows either name an incumbent source or are recorded as after-side-only.
 | metric | before (incumbent) source | after (capsule) source |
 |---|---|---|
 | trust-bearing lifecycle states | static — `mechanism-census.md` + the dispatch state machine | static — the four stages (§ 5.1) |
-| mutable refs written per accepted phase | static — **3 attributable per phase** (`dispatch/<N>`, the worker's fork branch, `phase/<N>-NN`) **+ a share of 3–4 slice-level refs** amortised over *k* phases (`review/<N>`, `candidate/<N>/<label>`, trunk, optionally `edge`). Enumerated from REQ-311 (SPEC-022 FR-001) — `measurements.md` § 2 | static — one, asserted by I1 |
+| mutable refs written per accepted phase | static — **3 attributable per phase** (`dispatch/<N>`, the worker's fork branch, `phase/<N>-NN`) **+ a share of 3–4 slice-level refs** amortised over *k* phases (`review/<N>`, `candidate/<N>/<label>`, trunk, optionally `edge`). Enumerated from REQ-311 (SPEC-022 FR-001) — `measurements.md` § 2 | **measured** — one, asserted by I1 (`assert_outcome`, green in P-C1a and P-C1b) |
 | security-significant hooks (target 0) | static grep of the shipped hook set | `audit-nohooks` |
 | role-detection rules (target 0) | static grep — `worker_mode`, marker | `audit-nohooks` |
 | git operations between **doorbell and accepted-ref advance** — and, load-bearing, **their kind**: the incumbent materialises a tree and stages into a shared index (ISS-234's hazard class); the capsule model never materialises a tree, it moves objects and one ref | static enumeration — **subprocess arm**; the claude arm self-commits and its import leg differs | static enumeration + P-C1a |

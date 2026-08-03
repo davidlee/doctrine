@@ -6,11 +6,36 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · lifecycle **`audit`**, ledger closed · phases
+fresh-as-of: 2026-08-03 · lifecycle **`done`**, ledger closed · phases
 **6/6 `completed`** (verify head before citing — other agents commit to `edge`).
 
-**The spike is finished and the audit is done.** The divergence warning
-`doctrine slice status 241` prints stays until `/reconcile` → `/close` run.
+**The spike is finished, audited, reconciled and closed.** `/reconcile`
+discharged RV-343's brief (design § 9, two selectors, DEC-128..132); `/close`
+landed the two items reconcile carried forward, both on operator ruling
+2026-08-03:
+
+- **PHASE-06 EX-8** (RV-343 F-5) — `plan.toml`'s criterion gains a trailing
+  amendment parenthetical, following PHASE-01 EX-7/EX-8's own precedent in the
+  same file. Ids are immutable; the edit appends. The letter presumed step 0's
+  outcome, the intent did not; the intent is what was discharged.
+- **design § 9 row 2's after-cell** — `static` → **`measured`**. It contradicted
+  `measurements.md` § 2, which states the after-side is measured, not static
+  (`assert_outcome` green in both P-C1a and P-C1b). Raised at close, outside
+  RV-343's brief, because F-1 scoped itself to that row's *before*-cell.
+
+**`doctrine check gate` is RED at close, and the red is FOREIGN.** The single
+failure is `every_authored_design_in_this_repo_imports_losslessly`, refusing
+`.doctrine/slice/244/design.md` with `UnheadedPreamble { line: 1 }` — SL-244's
+`design materialise` output leads with `<!-- doctrine:section sec-1 -->` before
+any heading, the only section-led design of 457 in the corpus. 67 of 68 tests
+pass. Nothing in SL-241 touches that path and SL-241's own `design.md` imports
+clean. Closed through it on the operator's ruling: they own SL-244, it is under
+post-landing surgery on several fronts, and no backlog item was raised because
+the owner is already on it. **Do not read this red as SL-241 evidence.**
+
+> Gate-invocation footgun observed at close: `doctrine check gate | tail -40`
+> exits **0** even when the recipe fails 101 — the pipe masks it. Read the
+> output, not `$?`, or use `PIPESTATUS`.
 
 **PHASE-06 closed the spike.** The scoped verdict is
 `.doctrine/rfc/025/go-no-go.md` — **GO on Linux/bwrap** for the ingestion and
@@ -85,10 +110,11 @@ spot-checked against its source held. What it found is canon lagging the work.
   **DEC-132** (D-P06-8, the `EROFS` credential refusal). The remaining **22**
   are **indexed in DEC-132's prose body**, one line each, resolving into the
   archived sheets. Nothing is owed at close.
-- **PHASE-06 EX-8's letter is unmet** (RV-343 F-5, `tolerated`) — discharged by
-  intent on an operator ruling (D-P06-1). `plan.toml` is off reconcile's write
-  surface; the one-sentence amendment following PHASE-01 EX-7/EX-8's own
-  precedent is the operator's call at `/close`.
+- **~~PHASE-06 EX-8's letter is unmet~~ SETTLED at close** (RV-343 F-5,
+  `tolerated`) — discharged by intent on an operator ruling (D-P06-1). It was
+  off reconcile's write surface; at close the operator ruled the amendment in,
+  and `plan.toml` PHASE-06 EX-8 now carries the trailing parenthetical following
+  PHASE-01 EX-7/EX-8's precedent in the same file. Nothing outstanding.
 - **ISS-307 stays as filed** — the **end** boundary is the defect (PHASE-06's
   flip captured SL-244's commit; corrected by `record-delta`). F-P06-4's
   "widen it to the start boundary too" is **withdrawn** — F-P06-13: an
