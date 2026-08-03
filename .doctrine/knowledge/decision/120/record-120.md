@@ -40,19 +40,56 @@ The decision is that Claimed has no legitimate surviving members in this
 vocabulary. Every condition resolves to Derived or Attested, or it retires. Where
 a member cannot, that is a finding about the member, not a licence for the tier.
 
+> **Sharpened 2026-08-03** — *Attested names the provenance of an input, not a
+> second way of deciding.*
+>
+> The three kinds above read as three evaluation mechanisms. They are not. **Every
+> condition is derived**; what varies is whether the state it derives from can be
+> authored by the engine or only by a human act.
+>
+> - *Derived over run state* — every input is engine-authored.
+>   `materialisation-current`, `required-sections-exist`.
+> - *Derived over an attested artefact* — some input can only be put there by a
+>   human, and the engine derives over it once it is there.
+> - *Claimed* — there is no artefact to derive over, only an existential scan of
+>   evidence rows. Still the defect class, and now visibly so: it is the case
+>   where nothing was recorded to derive *from*.
+>
+> **The incumbent already does this.** `ReviewStanding::acceptance_current` is
+> documented as *"a user acceptance covers current content"* (`gate.rs:248-249`)
+> and `sections_attested` as *"every section carries an attestation bound to its
+> current content"* (`:242-243`). Both are `is_derived() == true`. The reviewing
+> edge has been deriving over attested artefacts since SL-233 — the pattern is
+> built, used, and unnamed, which is why the boolean looked like it partitioned
+> mechanism when it was partitioning coverage.
+>
+> **What this buys.** `satisfied()`'s branch dissolves: there is no
+> `if is_derived() { standing } else { facts }` fork to preserve, because
+> derivation is uniform and the kind describes where the inputs come from.
+>
+> **The general form, which is why this generalises past the gate.** A step that
+> looks too subjective to derive is usually one whose *artefact* was never
+> recorded. Record the artefact as structured state and the condition over it
+> becomes derivable without making the judgement mechanical — the human still
+> judges, the engine still derives, and the state is then available to renderers
+> and to downstream consumers that have not been imagined yet. Subjectivity is
+> not the obstacle; the missing artefact is.
+
 ## Why this is not merely documentation
 
 The three kinds differ in engine behaviour, which is the test the alternative
 failed:
 
-| | who answers | storage | liveness | refusal on claim |
+| | who authors the input | storage | liveness | payload claiming it |
 |---|---|---|---|---|
 | Derived | engine | none — recomputed | n/a | refused |
-| Attested | human, held by engine | bound record | binding breaks | admitted, bound |
+| Attested | human | bound artefact | binding breaks | refused; the *artefact* is submitted instead |
 | Claimed | agent | evidence row | fingerprint expiry only | admitted, unbound |
 
 Had the rows been identical, prose over the existing boolean would have been the
-cheaper truth.
+cheaper truth. Read with the 2026-08-03 sharpening: the "who answers" question is
+uniform — the engine derives in every row — and this table is the input-provenance
+axis it derives *over*.
 
 ## The attestation primitive already exists
 

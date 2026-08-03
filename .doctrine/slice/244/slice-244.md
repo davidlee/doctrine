@@ -89,6 +89,15 @@ and stop the vocabulary from implying they are interchangeable.
 
 ### 4. Settle the exploring pair
 
+> **Decided 2026-08-03 — `DEC-121`.** `ISS-285`'s three options all read the pair
+> as run state. It is not run state: `exploring.toml`'s five steps and
+> `inquiring.toml`'s two are **all agent-solo**, so the only user contact across
+> orientation and interrogation is one blanket `user-accepts-sufficiency` at the
+> far end. The pair is the residue of an interaction `SL-233` specified in a
+> bullet and never built. Both become Attested user checkpoints — a governance
+> confirmation carrying the dismissal list, and an inquiry-graph review carrying
+> the agent's blocking-set declaration.
+
 `ISS-285` offers three options for `GoverningContextRecorded` and
 `InitialConcernsRecorded`: specify them with a subject rule that means something,
 derive them from framework-owned run state, or retire them and let the runbook
@@ -100,6 +109,18 @@ and its consequences, including `ISS-286`'s subject-rule half.
 Surface a stage's unmet conditions — and what would satisfy them — on the turn
 envelope and in the refusal, so an agent learns the contract without reading
 source. Bounded by the envelope's existing byte budget.
+
+### 6. Document the interactions, with diagrams
+
+Ship spec-adjacent documentation carrying **canonical diagram(s)** of the stage
+interactions this slice specifies — who acts, what artefact the act produces, what
+derives over it. Its presence guides agents even where the tooling affordance has
+not landed, which is the case for the whole of `IMP-391` until that ships.
+
+This is a first-class deliverable, not a write-up. `SL-233`'s failure was
+attending to everything except the interaction design that was most of its point;
+the corrective is not more prose about mechanism but a stated, diagrammed account
+of the interactions themselves.
 
 ## Non-Goals
 
@@ -117,6 +138,19 @@ source. Bounded by the envelope's existing byte budget.
   problem, not an engine one.
 - **Changing what the runbook guard does.** The runbook stays a separate guard on
   the same edges. This slice does not merge, map, or reconcile the two.
+
+  > **Amended 2026-08-03 — `DEC-121`.** Still true of *reconciling* the guards,
+  > and now explained rather than merely asserted: the step is agent-attested and
+  > prompts the interaction, the condition holds the **user's** attested artefact.
+  > Different actors, different bindings, different repairs. `IMP-391` adds steps
+  > that prompt the new checkpoints; that is authoring within the existing
+  > mechanism, not changing what the guard does.
+- **Building the exploring-stage checkpoints** (`IMP-391`, spawned by `DEC-121`).
+  This slice specifies the interactions, their contracts, and their artefact
+  shapes, and ships the diagrams; the wire acts, the artefact storage, the runbook
+  steps and the CLI rendering are the follow-on. Stated interim state: until
+  `IMP-391` lands, `exploring → inquiring` passes on the runbook alone — no worse
+  than the status quo it replaces, but a gap, not an oversight.
 
 ## Affected Surface
 

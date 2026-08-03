@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc523-c616-7b93-bd7c-ece417f7bc9d"
+recorded_at = "2026-08-03T01:01:23.862927825Z"
+kind = "friction"
+summary = "/design: batch declare refused an in-batch parent chain two levels deep"
+detail = "Declaring inq-9 (parent inq-3, pre-existing) together with inq-10/11/12 (parent inq-9, same batch) was refused with bare 'Error: unknown node: inq-9'. Splitting into two applies worked unchanged. An earlier batch in the same run created inq-1 (no parent) plus inq-2/3/7 parented to it and was accepted, so the rule is not simply 'parent must pre-exist' — the discriminator appears to be that inq-9 itself carries a parent. The refusal names the node but not the rule, so the repair was guesswork; cost one round trip."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

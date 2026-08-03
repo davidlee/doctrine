@@ -11,13 +11,23 @@ updated = "2026-08-02"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = ""
-choice       = ""
-alternatives = []
-rationale    = ""
-consequences = []
-decided_by   = ""
-decided_on   = ""
+context      = "`Condition::is_derived()` is a boolean answer to a three-valued question. Both user-acceptance conditions are the same human act sitting on opposite sides of it, so the boolean names whether the engine checks a condition yet — not a property of the condition."
+choice       = "Three kinds. Derived: every input engine-authored. Attested: some input can only be authored by a human act, and the engine derives over the recorded artefact. Claimed: no artefact, only an existential scan of evidence rows — the defect class, with no legitimate surviving members."
+alternatives = [
+  "Complete the boolean — give the exploring acceptance a standing structure like the reviewing one. Rejected: leaves the category slip in place and rebuilds the same confusion one condition later.",
+  "Put the kind on Evidence rather than on Condition. Rejected: keeps Condition payload-free but cannot say what act would satisfy an UNMET condition, which is the half IMP-390 complains about.",
+]
+rationale    = "The kinds differ in engine behaviour, not only in description: who authors the input, whether anything is stored, whether liveness applies, and whether a payload claiming the condition is refused. Had those rows been identical, prose over the existing boolean would have been the cheaper truth."
+consequences = [
+  "`satisfied()`'s `if is_derived() { standing } else { facts }` fork dissolves — derivation is uniform and the kind describes input provenance (2026-08-03 sharpening).",
+  "The reviewing edge is the incumbent template, not new machinery: `ReviewStanding::acceptance_current` and `sections_attested` already derive over attested artefacts and are `is_derived() == true`.",
+  "Attested generalises DEC-088's content-bound attestation from checkpoint dispositions to gate conditions; no new attestation primitive is needed.",
+  "Every condition must resolve to Derived or Attested or retire. Where a member cannot, that is a finding about the member, not a licence for the Claimed tier.",
+  "Generalises past the gate: a step that looks too subjective to derive usually has an unrecorded artefact, not an unmechanisable judgement.",
+  "RFC-022's agent-trust-without-human-attestation question is named and deliberately untouched; the kinds separate it rather than answer it.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-02"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

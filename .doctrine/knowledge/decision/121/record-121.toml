@@ -1,0 +1,78 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 121
+slug = "the-exploring-edge-is-guarded-by-attested-user-checkpoints"
+title = "The exploring edge is guarded by attested user checkpoints"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "ISS-285's three futures for `governing-context-recorded` and `initial-concerns-recorded` all read the pair as run state. It is not: `exploring.toml`'s five steps and `inquiring.toml`'s two are all agent-solo, so the only user contact across orientation and interrogation is one blanket `user-accepts-sufficiency` at the far end. The pair is the residue of an interaction SL-233 specified in a bullet and never built."
+choice       = "Specify both as DEC-120 Attested conditions over real user interactions. Governing context: the agent presents what binds AND what it dismissed with reasons; the artefact is the confirmed edge set. Initial concerns: the user reviews the seeded inquiry graph, and the agent declares which questions it considers settled or settleable without asking."
+alternatives = [
+  "Derive both from run state (node presence). Rejected: derives the wrong thing — one junk inquiry clears the gate. Worse than the status quo because it looks enforced.",
+  "Fold both into `user-accepts-sufficiency`. Rejected: makes the edge a single yes/no with nothing decomposed, so a refusal can never say which part is missing.",
+  "Retire both and let the runbook guard the edge alone (ISS-285's 'cleanest and most disruptive'). Rejected: removes the only remaining trace of the missing interaction, which would then stay missing.",
+]
+rationale    = "The runbook and the conditions have looked redundant on this edge since they were built. They are not: the step is agent-attested against a definition digest and PROMPTS the interaction; the condition holds the USER's artefact under DEC-088's content-bound attestation. Different actors, different bindings, different repairs."
+consequences = [
+  "ISS-285 is closable on this decision.",
+  "ISS-286's subject-rule complaint is answered as a side effect — the attested artefact IS the subject, replacing the arbitrary section fingerprint.",
+  "The empty case becomes the strict path in both checkpoints: a governance sweep finding nothing, and an exploration raising no question, are shown with what was searched and are never skippable.",
+  "Arbitration of relative import is explicitly NOT a checkpoint field; genuine conflict routes to /consult.",
+  "Enumerating governance ids in design prose is not the artefact and does not substitute for it — that would be queried data in prose.",
+  "Spawns IMP-391 to build the interactions. Until it lands, `exploring → inquiring` passes on the runbook alone — a stated interim state.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "exploring-edge user checkpoints"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "exploring-edge user checkpoints"
+target = "DEC-088"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "exploring-edge user checkpoints"
+target = "ISS-285"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "exploring-edge user checkpoints"
+target = "ISS-286"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "exploring-edge user checkpoints"
+target = "SPEC-029"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
+
+[[relation]]
+label = "spawns"
+target = "IMP-391"

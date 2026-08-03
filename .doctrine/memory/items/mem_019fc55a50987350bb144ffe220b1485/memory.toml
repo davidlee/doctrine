@@ -1,0 +1,54 @@
+memory_uid = "mem_019fc55a50987350bb144ffe220b1485"
+memory_key = "mem.pattern.design.record-the-artefact-not-the-judgement"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A step too subjective to derive usually has an unrecorded artefact"
+summary = "Subjectivity is rarely why a workflow step resists derivation; a missing structured artefact is. Record what the act produces and the condition over it derives."
+created = "2026-08-03"
+updated = "2026-08-03"
+
+[scope]
+paths = ["src/design_run", ".agents/skills"]
+globs = []
+commands = []
+tags = ["design", "interaction-design", "derivation", "workflow"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2846f0ef99830102312070e35aa04c4fc5b255ee"
+ref_name = "refs/heads/edge"
+checkout_state_id = "382e630ccf4acf67ac53b38089651533481073ee2f6eaa8fad8677f5ee9ae071"
+base_commit = "ae6650aa64687cddccf037386503f024cba17d85"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "decision"
+ref = "DEC-120"
+
+[[source]]
+kind = "decision"
+ref = "DEC-121"
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+
