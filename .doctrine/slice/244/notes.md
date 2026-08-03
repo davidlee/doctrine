@@ -55,6 +55,54 @@ embedded-and-`fixed`-with-a-citation, the pattern runbooks already use.
 `mem_019faca1f05277729cb407f8d4487206` (ratify the incumbent before specifying a
 format — here the kebab token, load-bearing four ways, and the two prose stores).
 
+## Exploring closed — handover state (2026-08-03)
+
+Run `dr-019fc4dd-e049-7db0-8cea-9af8ff970810`, revision 25, stage `exploring`.
+**All 13 inquiry nodes resolved, 0 open; the exploring runbook is discharged.**
+Re-enter with `doctrine design resume 244` — the graph, the dispositions and the
+linked records come back with it. This section holds only what the run cannot
+carry.
+
+**Seven decisions, in dependency order.** `DEC-120` (kinds: derived / attested /
+claimed, plus the 2026-08-03 sharpening that Attested names *input provenance*,
+not a second way of deciding) → `DEC-121` (the exploring pair becomes attested
+user checkpoints) → `DEC-122` (contracts ship as embedded prose, `fixed`) →
+`DEC-123` (structure rides a const table, prose stays narrative) → `DEC-124`
+(refusal carries the remedy, stage-entry receipt carries the contract, no digest)
+→ `DEC-125` (findings unify on `RV` with a section reference) → `DEC-126` (what
+the gate should check — the classification, and the answer to the slice's root
+question).
+
+**Spawned, all with contracts already written:** `IMP-391` (build the
+exploring-stage checkpoints), `IMP-392` (the `RV` finding migration), `IDE-047`
+(structure extracted from contract prose).
+
+**The one thing a drafting agent must not re-litigate.** `DEC-126` is specified
+against the `RV`-backed finding model, not the runtime `Finding`. Writing
+contracts against a record `DEC-125` deletes is the mistake `DEC-121` caught on
+the other edge.
+
+**Where the design will be hardest** (`DEC-125`): a section's fingerprint moves,
+`DEC-066` invalidation is snapshot-internal, and `RV` has no fingerprint concept.
+The `design materialise` authored-watermark pattern is the shape to follow.
+
+**Interim states this slice knowingly ships**, both stated rather than accidental:
+`exploring → inquiring` passes on the runbook alone until `IMP-391`; the
+`Conducted { review }` arm and the severity summary are unbuildable until
+`IMP-392`.
+
+**Still owed by the slice:** objective 6 — spec-adjacent documentation with
+canonical interaction diagrams. Two things belong in it that appear in no shipped
+guidance and that an agent currently discovers by being refused: that a productive
+integrated pass invalidates its own clearance under whole-map currency, and that
+review nevertheless terminates when the user declines another round
+(`RFC-026` E3), so staleness informs that decision rather than barring it.
+
+**Correction carried forward:** an earlier turn claimed the missing
+promotion leg was captured as `ISS-303`. It was not — nothing was created, and
+`ISS-303` is an unrelated existing issue. `DEC-125` supersedes that framing
+entirely (unification dissolves the promotion leg), so nothing is outstanding.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
