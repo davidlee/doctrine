@@ -32,8 +32,8 @@ The scope comes from RFC-025's go/no-go, not from a flat reading of the census:
 
 - the measured confinement result is **Linux/bwrap only** on two client fixture
   shapes; it is not a macOS result;
-- conflict/staleness **refusal** is evidenced, but resolution and admission are
-  not (QUE-202);
+- conflict/staleness **refusal** is evidenced by the spike; resolution and
+  admission are designed, not newly evidenced, by DEC-137 (QUE-202);
 - bundle ingestion is settled by DEC-135, with hostile bytes snapshotted into
   owned storage and imported through a fresh quarantine repository (QUE-200);
 - the client interpretation policy is settled by DEC-136 as a required
@@ -45,10 +45,10 @@ The scope comes from RFC-025's go/no-go, not from a flat reading of the census:
   or production-readiness assessment.
 
 The Revision retains its hard `needs` edges to QUE-200, QUE-201, and QUE-202.
-The first two are now terminal and supply DEC-135 and DEC-136 respectively;
-QUE-202 remains unsettled. All three answers belong in the authored target
-contract before approval; this scope does not manufacture answers from
-incomplete evidence.
+All three are now terminal and supply DEC-135, DEC-136, and DEC-137
+respectively. Their answers belong in the authored target contract before
+approval; this scope does not promote the spike's refusal evidence into an
+unmeasured admission claim.
 
 ## Governance boundary
 
@@ -76,17 +76,24 @@ Revision does not migrate solo execution to capsules.
 Author a new **Dispatch execution capsules** technical container under SPEC-003,
 descending from PRD-015. It owns the harness-neutral capsule contract:
 
-`provision → launch → notify/inspect → harvest → verify in a separate capsule →
-normalize → admit/integrate → gc`.
+`provision → launch → notify/inspect → harvest/freeze → verify in a separate
+capsule → normalize → admit/integrate → close → explicit cleanup`.
 
 It also owns the control-plane/capsule authority split, fresh phase transaction
-lifecycle, contracted base and interpretation policy, admission-journal versus
-forensic-exhibit boundary (DEC-133), and the platform-backend contract. Per
+lifecycle, contracted base and interpretation policy, the live-work versus
+admission-journal versus forensic-exhibit boundary (DEC-133 and DEC-137), and
+the platform-backend contract. Per
 DEC-136 it extends the shared `.doctrine/doctrine.toml` parser with a required
 `[interpretation]` block for capsule dispatch, resolves it once from the
 contracted base, and permits work contracts only monotonic restriction. The
 Linux backend may name bwrap as measured. The cross-platform contract states
 equivalent properties, not an unmeasured macOS mechanism.
+
+For v0 the frozen source capsule is the rescue payload. It is never
+automatically destroyed before an incorporating result is integrated and
+closed; formal repair always uses a fresh capsule. Capacity handling begins
+with a conspicuous configurable free-space warning and manual intervention,
+not a new archive, pre-reservation, backpressure, or eviction subsystem.
 
 The new container and its requirements are not created by this scoping chore.
 They are authored when QUE-200–202 are settled and then added to this Revision's
@@ -135,9 +142,13 @@ integration, trunk resolution, and the no-force/no-auto-resolve envelope.
 
 Revise only the topology-dependent parts: ref population, contracted-base
 refresh, capsule-result provenance inputs, admission-journal sourcing,
-forensic-exhibit lifecycle, and the working-tree-specific legs of projection.
-QUE-202 must map same-base conflict/staleness resolution onto the existing
-candidate layer; this Revision must not introduce a second conflict system.
+live-work/forensic-exhibit lifecycle, and the working-tree-specific legs of
+projection. Per DEC-137, same-base conflict/staleness resolution extracts the
+existing candidate engine behind an explicit capsule-provenance seam; it does
+not introduce a second conflict system or carry the incumbent coordination
+journal forward as scaffolding. Clean candidates and hand-resolved candidates
+are verified in fresh capsules before immutable admission and expected-tip
+integration.
 
 ### ADR-006 — separate dispatch cutover from surviving solo worktrees (`modify`)
 
@@ -205,7 +216,9 @@ Before this Revision may be approved or applied:
 - macOS sandbox-backend selection and re-measurement;
 - IMP-397 / QUE-204 egress allowlisting and non-Git build inputs;
 - retention duration, quotas, or project/slice/machine policy hierarchy beyond
-  DEC-133's journal/exhibit separation;
+  DEC-133/DEC-137's live-work/journal/exhibit separation;
+- automated capacity reservation, throughput backpressure, capsule eviction,
+  and a separate content-addressed rescue archive;
 - migration of solo `/execute` worktrees to capsules;
 - production optimisations such as overlays, snapshots, reflinks, shared caches,
   or remote execution; and
@@ -219,5 +232,7 @@ Before this Revision may be approved or applied:
 - DEC-134 (persistent control-plane orchestration, fresh headless phase worker);
 - DEC-135 (bundle ingestion and its parent-side protocol);
 - DEC-136 (`doctrine.toml` interpretation policy and contract refinement);
+- DEC-137 (same-base candidate admission, frozen source capsules, and fresh
+  repair transactions);
 - DEC-129 and IMP-397 for the explicit egress/build-input exclusion; and
 - the settled outputs of QUE-200, QUE-201, and QUE-202.

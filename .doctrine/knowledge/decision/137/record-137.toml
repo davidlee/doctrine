@@ -1,0 +1,53 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 137
+slug = "stale-results-use-candidate-admission-while-source-capsules-stay-frozen"
+title = "Stale results use candidate admission while source capsules stay frozen"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["admission", "capsule", "dispatch", "rfc-025"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "answers the same-base conflict and staleness admission question"
+target = "QUE-202"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "records RFC-025's candidate-admission and frozen-source lifecycle"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "supplies the capsule cutover's conflict, repair, and cleanup design"
+target = "REV-046"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "refines the boundary between live work and expiring forensic exhibits"
+target = "DEC-133"
