@@ -245,20 +245,44 @@ row_api_cred() {
   row_begin 'API cred presence — the one admitted secret arrives, and only it'
   reset_capsule
 
-  # The credential arrives by the profile's read-only bind of the agent home.
-  # This row asserts the MOUNT; that the credential actually authenticates is
-  # A2's assertion (design § 5.4 step 2, control/probe-smoke.sh) and is read
-  # from A2's record rather than re-run — an authenticated `claude -p` per P-C2
-  # run would spend an API call to re-observe something already recorded.
+  # The credential arrives ro-bound INSIDE a writable agent home. This row
+  # asserts the MOUNT; that the credential actually authenticates is A2's
+  # assertion (design § 5.4 step 2, control/probe-smoke.sh) and is read from A2's
+  # record rather than re-run — an authenticated `claude -p` per P-C2 run would
+  # spend an API call to re-observe something already recorded.
+  #
+  # ── the observable is the CREDENTIAL, not its directory (F-P06-8) ───────────
+  #
+  # This row used to assert that a write to `/agent/.claude/<other-file>` failed,
+  # and call that "the capsule cannot rewrite the credential". The two coincided
+  # only while the whole of `~/.claude` was ro-bound, and D-P06-5's writable home
+  # pulled them apart. The proxy was never sound in the direction that matters:
+  # a read-only directory with the secret bind-mounted rw over it passes the old
+  # leg while the secret is writable. So the legs below name the file.
+  #
+  # The POSITIVE CONTROL is what makes the refusals mean anything. The agent home
+  # is writable by design — the harness creates a per-session directory there
+  # before its first tool call (F-P06-6) — so "the capsule cannot write the
+  # credential" must be shown against a capsule that demonstrably CAN write right
+  # next to it, or the row would pass just as well on a broken write mechanism
+  # (`mem_019fa18161f4`: a negative is untrustworthy without a positive control).
   rig_assert 'the agent home is the capsule HOME' \
     # The expansion must run INSIDE the sandbox, so it is deliberately not
     # expanded out here.
     # shellcheck disable=SC2016
     in_sandbox -- sh -c '[ "${HOME}" = /agent ]'
-  rig_assert 'the credential directory resolves read-only at /agent/.claude' \
-    in_sandbox -- test -d /agent/.claude
-  rig_assert_fails 'and it is READ-ONLY — the capsule cannot rewrite the credential' \
+  rig_assert 'the credential resolves at /agent/.claude/.credentials.json' \
+    in_sandbox -- test -f /agent/.claude/.credentials.json
+  rig_assert 'and it READS — an unreadable secret would fail these legs for the wrong reason' \
+    in_sandbox -- sh -c 'head -c 1 /agent/.claude/.credentials.json >/dev/null'
+  rig_assert 'positive control: the agent home IS writable — the harness needs a session dir' \
     in_sandbox -- sh -c 'printf x >>/agent/.claude/.capsule-write-probe'
+  rig_assert_fails 'the capsule cannot APPEND to the credential' \
+    in_sandbox -- sh -c 'printf x >>/agent/.claude/.credentials.json'
+  rig_assert_fails 'the capsule cannot TRUNCATE it' \
+    in_sandbox -- sh -c ': >/agent/.claude/.credentials.json'
+  rig_assert_fails 'the capsule cannot UNLINK it — a rw dir would otherwise allow replacement' \
+    in_sandbox -- sh -c 'rm -f /agent/.claude/.credentials.json'
 
   local a2
   if [ -f "${SMOKE_REPORT}" ] &&
@@ -266,13 +290,13 @@ row_api_cred() {
     rig_assert 'A2 recorded an authenticated run with this credential arrangement' \
       test -n "${a2}"
     record_row api-cred \
-      'HOME=/agent and /agent/.claude resolves read-only inside; A2 recorded an authenticated claude -p run' \
-      'the admitted secret, named: its blast radius is API usage, accepted (probe-specs P-C2). Authentication itself is A2 evidence, cited not re-run'
+      'HOME=/agent; the credential reads and is refused on append, truncate and unlink, against a positive control writing beside it; A2 recorded an authenticated claude -p run' \
+      'the admitted secret, named: its blast radius is API usage, accepted (probe-specs P-C2). The legs name the FILE, not its directory (F-P06-8). Authentication itself is A2 evidence, cited not re-run'
   else
     # Not a silent pass and not a failure of THIS row: the mount assertions
     # above held, and the thing missing is another probe's record.
     record_row_na api-cred \
-      'HOME=/agent and /agent/.claude resolves read-only inside' \
+      'HOME=/agent; the credential reads and is refused on append, truncate and unlink, against a positive control writing beside it' \
       "no A2 authenticated record at ${SMOKE_REPORT} — run \`rig smoke\`; the mount legs above passed, only the authentication citation is missing"
   fi
 }
