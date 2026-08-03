@@ -1145,6 +1145,30 @@ Three more that survive the sheet:
   fact discharging EX-1's ritual clause is the same fact the new smoke leg
   tests for — at a fraction of the cost.
 
+**FOR RECONCILIATION — counting the measurement rows corrected design § 9.**
+`measurements.md` landed (`a9924134`, EX-4). Two corrections that `/reconcile`
+owns, because the design's text is what is wrong, not the table's:
+
+- **Row 2's parenthetical** — *"coord branch, projected refs, candidate branch,
+  `candidates.toml`, trunk"* — is wrong twice. **`candidates.toml` is a FILE,
+  not a ref**, so it cannot appear in a count of "mutable refs written". And the
+  list **conflates per-phase with per-slice**: `dispatch/<N>`, the worker fork
+  branch and `phase/<N>-NN` are attributable to one accepted phase, while
+  `review/<N>`, `candidate/<N>/<label>`, trunk and `edge` amortise over the
+  slice's *k* phases. The difference is 3 vs 7 depending on how *k* falls, so
+  quoting the list would have published a number with **no fixed meaning**.
+  Enumerated instead from **REQ-311** (SPEC-022 FR-001) and checked against the
+  write sites.
+- **Row 5's axis.** The honest contrast is the **kind** of git operation, not
+  the count. The incumbent materialises a tree and stages into a shared index —
+  ISS-234's hazard class; the capsule model never materialises one, it moves
+  objects and one ref. A row reporting "4 vs 2" and stopping there describes the
+  wrong axis.
+
+The general lesson, and the reason the sheet insisted these two be *counted*:
+**a design's parenthetical enumeration is a starting point, not a count.** Both
+errors are invisible until someone tries to turn the list into a number.
+
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
 Written 2026-08-03, mid-phase and deliberately so: this range is the most
