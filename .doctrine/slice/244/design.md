@@ -630,6 +630,47 @@ adversarial pass says so, and the run advances carrying the reason. What
 `IMP-392` unblocks is the `Conducted` arm, which is the *stricter* path; nothing
 about the waiver is provisional.
 
+**A waiver disposes of one pass, not of the run's capacity to be reviewed.** Two
+mechanisms already give this and neither says so, so a reader assembles it from
+three places or assumes the opposite. Acts replace **by act**, so a later
+`Conducted` disposition displaces a `Waived` one and the row reads the new
+answer. And `DEC-125` mints an RV on entry to `reviewing` — *"the review is a
+first-class artefact from the start"* — so a run that regresses to `drafting`
+and advances again mints a *second* RV rather than reopening the waived one.
+Waiving is therefore never terminal: a design waived through to `plan` that
+comes back for another cycle can be reviewed properly on the next pass, with no
+unwind and no special case.
+
+**But the waiver is over an absent review, never over a live one.** Unconditioned,
+`Waived { reason }` clears the edge with blocking findings sitting undisposed on
+the minted RV — which makes waive-with-a-reason a synonym for dismiss-the-
+findings, and spends the ledger `DEC-125` bought. So the arm carries an
+admissibility rule: **`Waived` is admissible while nothing is outstanding to
+dispose. Once findings are raised, the row requires `Conducted`, and the binding
+releases when the user disposes them.** Declaring the intent to review binds
+until the user's acceptance.
+
+The escape is not a waiver but **withdrawal** — `withdraw` is already one of the
+`RV` ledger's five verbs, it is a user act, and it leaves its own record. So
+abandoning a review that turned out to be misconceived stays possible and stays
+visible, which is the same fence this design puts around the review policy: the
+route out is authority plus a trace, never a silent one.
+
+**Why this does not reintroduce the fixpoint**, stated because it is the row that
+motivated making currency a lamp. The binding here is to the **outstanding
+finding set**, and disposal is monotone — the user can always dispose, and
+disposing strictly reduces what is outstanding, so the requirement terminates.
+Binding instead to **content currency** does not terminate, because integrating a
+finding moves the sections the pass covered, which is `RFC-026` E3 and `DEC-126`'s
+stated reason for refusing it. One row, two candidate bindings, opposite
+termination properties. The design argues the second at length above and was
+silent on the first.
+
+Both the admissibility rule and the row's cumulative reach need the same input —
+the `RV`-backed outstanding-finding set — and neither is buildable until
+`IMP-392`. That is the footing `DEC-125` sets for this slice: *"SL-244 specifies
+its conditions against the RV-backed model; the migration is its own item."*
+
 Activation is a column on the one classification table rather than a second table
 to drift against the first, and the enforced set is that table filtered:
 
@@ -945,6 +986,17 @@ generator emits and what the asset test iterates.
 - **The currency lamp is rendered and never refuses** — a stale integrated pass
   sets the envelope flag and `reviewing → locked` still succeeds. Tested at the
   render surface, not the gate, because it is not a condition.
+- **A waiver does not dismiss findings** — a `Waived { reason }` disposition with
+  blocking findings outstanding leaves `review-disposition-attested` unmet, and
+  the refusal says they must be disposed or the review withdrawn. Needs
+  `IMP-392`'s finding set, so it is specified here and lands with that item.
+- **Withdrawal releases the binding** — withdrawing the review leaves nothing
+  outstanding, so `Waived` is admissible again and the edge clears. The stated
+  escape, asserted so a later change cannot close it quietly.
+- **A waiver is not terminal** — a run waived to `locked`, regressed to
+  `drafting` and re-advanced mints a second `RV`, and a later `Conducted`
+  disposition displaces the waiver by act replacement. Both halves asserted: the
+  fresh artefact, and the displacement.
 
 ### Carried forward
 
@@ -960,10 +1012,15 @@ generator emits and what the asset test iterates.
   `DEC-073`'s per-run review policy, which this slice builds. The repair reaches
   `review_standing` and the envelope's `review_outstanding`, and deliberately not
   `live_reviews` — that section says why.
-- **`review-disposition-attested`'s cumulative reach is not yet enforceable.**
-  Binding it to the finding set requires `DEC-125`'s `RV`-backed model
-  (`IMP-392`); until then its `Artefact` coverage means only its own record
-  invalidates it.
+- **`review-disposition-attested` is owed two things by `IMP-392`, not one.**
+  Both need the same missing input — `DEC-125`'s `RV`-backed outstanding-finding
+  set — so they are one gap with two consequences rather than two gaps.
+  *Reach:* the cumulative label outruns what `Artefact` coverage can enforce,
+  so until then only the disposition's own record invalidates it. *Admissibility:*
+  the `Waived` arm's precondition — nothing outstanding to dispose — is
+  unenforceable for the same reason, so until `IMP-392` lands a waiver can clear
+  the edge over live findings. The second is the sharper of the two and was the
+  one previously unstated.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
   It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
@@ -1550,9 +1607,11 @@ missing answer.
   clears with the adversarial attestation recorded first. The order is rendered;
   the gate does not read it.
 - **Waiving is not a degraded path** — `reviewing → locked` clears on a
-  `Waived { reason }` disposition with no integrated pass recorded, and the
-  reason is rendered. Asserted so that a later slice tightening this is a visible
-  break rather than a silent one, the same reason the loosening test exists.
+  `Waived { reason }` disposition with no integrated pass recorded and no
+  findings raised, and the reason is rendered. Asserted so that a later slice
+  tightening this is a visible break rather than a silent one, the same reason
+  the loosening test exists. The complementary case — findings outstanding — is
+  `sec-3`'s, with the admissibility rule it belongs to.
 - **Adversarial review is still recorded** — under `HumanOnly` the section
   renders its adversarial attestation, so the act is visible without being
   sufficient.
