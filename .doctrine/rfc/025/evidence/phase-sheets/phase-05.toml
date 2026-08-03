@@ -1,0 +1,15 @@
+schema  = "doctrine.phase.tracking"
+version = 1
+phase   = "PHASE-05"
+status = "in_progress"
+started = "2026-08-01T15:49:38.831933796Z"
+completed = ""
+last_updated = "2026-08-01T15:49:38.831933796Z"
+code_start_oid = "8e962656b988dda5febdcd0293fffaa85c2bf385"
+
+[[progress]]
+timestamp = "2026-08-01T15:49:38.831933796Z"
+status = "in_progress"
+note = "sheet expanded: T0 baseline, T1 F2/F3 variants, T2 matrix spec, T3 harness, T4a-e rows, T5 sub-probe, T6 guard probes, T7 EVD, T8 evidence, T9 close. S1 (verify-disk token) live."
+
+# Append-only runtime progress log, written by `doctrine slice phase`.

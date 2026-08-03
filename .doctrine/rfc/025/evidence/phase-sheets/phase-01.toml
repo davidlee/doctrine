@@ -1,0 +1,20 @@
+schema  = "doctrine.phase.tracking"
+version = 1
+phase   = "PHASE-01"
+status = "completed"
+started = "2026-08-01T11:23:36.764540284Z"
+completed = "2026-08-01T11:43:28.112768876Z"
+last_updated = "2026-08-01T11:43:28.112768876Z"
+code_start_oid = "25540cfe1606dc2d3787813d0e04904f9498ebf1"
+
+[[progress]]
+timestamp = "2026-08-01T11:23:36.764540284Z"
+status = "in_progress"
+note = "PHASE-01 start: rig foundation, fixtures, R2 probe. shellcheck 0.11.0 added to the jail for this slice."
+
+[[progress]]
+timestamp = "2026-08-01T11:43:28.112768876Z"
+status = "completed"
+note = "Rig foundation, both base fixtures, R2 settled. I6 guard observed red then green; leg 3 proven load-bearing."
+
+# Append-only runtime progress log, written by `doctrine slice phase`.

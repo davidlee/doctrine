@@ -1,0 +1,18 @@
+schema  = "doctrine.phase.tracking"
+version = 1
+phase   = "PHASE-02"
+status = "completed"
+started = "2026-08-01T11:55:43.014690908Z"
+completed = "2026-08-01T12:12:21.052719076Z"
+last_updated = "2026-08-01T12:12:21.052719076Z"
+code_start_oid = "b3ad3eed3da108c7114bd263537c68e8184ee7e7"
+
+[[progress]]
+timestamp = "2026-08-01T11:55:43.014690908Z"
+status = "in_progress"
+
+[[progress]]
+timestamp = "2026-08-01T12:12:21.052719076Z"
+status = "completed"
+
+# Append-only runtime progress log, written by `doctrine slice phase`.

@@ -1,0 +1,11 @@
+guard	fixture	leg	outcome	observed	claim
+guards: 2026-08-03T00:16:02Z	in-jail	guards=a b c d e
+a	-	cite:H8/gitlink	pass	4 scored entries at conform/gitlink	F-2 leg 4, the mode-aware leg. OBSERVED by H8 on both fixtures and both mechanisms; cited, not re-run, so the corpus holds one copy of the observation
+a	-	cite:H8/gitmodules	pass	4 scored entries at conform/gitmodules	F-2 leg 4, the mode-aware leg. OBSERVED by H8 on both fixtures and both mechanisms; cited, not re-run, so the corpus holds one copy of the observation
+b	light	nonascii	pass	conform/forbidden-path	leg 3 fires on a non-ASCII path, isolated in the range. Does NOT prove core.quotePath=false is load-bearing — -z already defeats that evasion (F-P05-23)
+b	heavy	nonascii	pass	conform/forbidden-path	leg 3 fires on a non-ASCII path, isolated in the range. Does NOT prove core.quotePath=false is load-bearing — -z already defeats that evasion (F-P05-23)
+c	light	rename-out	pass	conform/forbidden-path	leg 3 fires on a rename OUT of .doctrine/, isolated. Both directions: with --find-renames the source leg vanishes and the same capsule passes, so --no-renames is load-bearing. LIGHT ONLY — heavy has no source to rename at B (F-P05-21)
+d	light	verify-shadow	pass	verify/suite-failed	a capsule-authored verify.sh at /capsule/ and at a declared tree path changes nothing: the verdict is the ro-bound /rig/verify.sh running B's command. Behavioural half; audit-i4a is the static half and both ran
+e	light	baseline	pass	no refusal	the run the substitution legs are compared against: F1 keeps its declaration outside the clone, so the capsule has nothing to rewrite
+e	light-inrepo	decl-worktree	pass	no refusal	byte-identical to the F1 baseline: the control plane never reads a declaration the capsule can write. QUE-201 candidates 1 and 2, evidenced by comparison
+e	light-inrepo	decl-committed	pass	conform/undeclared-path	the S-side substitution never reaches the control plane's read either. WHERE it refuses is fixture-specific — F2's declaration sits at the repository root, undeclared by SL-001's selectors — and is recorded, not generalised

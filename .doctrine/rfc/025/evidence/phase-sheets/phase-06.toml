@@ -1,0 +1,9 @@
+schema  = "doctrine.phase.tracking"
+version = 1
+phase   = "PHASE-06"
+status  = "planned"   # planned | in_progress | completed | blocked
+started      = ""
+completed    = ""
+last_updated = ""
+
+# Append-only runtime progress log, written by `doctrine slice phase`.
