@@ -897,6 +897,143 @@ are VA-3's business and are re-runnable as `control/audit-dq4.sh
   measurement row filled or recorded after-side-only" plus the ASM-007 line;
   only the ASM-007 line is affected.
 
+### PHASE-05 decisions (durable) — INDEX, because the sheet is archived
+
+**Read this differently from §§ PHASE-01..04.** Those phases' sections restate
+their decisions because the sheets that held them were discarded. **PHASE-05's
+sheet is not discarded** — it is committed verbatim at
+`.doctrine/rfc/025/evidence/phase-sheets/phase-05.md` (T8, operator ruling). So
+this is an **index with the binding ones stated**, not a transcription. Chasing
+any `D-P05-n` means grepping `## Decisions` in that file; the id is stable and
+the reasoning is intact.
+
+| id | decided |
+|---|---|
+| D-P05-1 | `matrix.tsv` is the **authored input** (VT-1's subject); `probes/c3/results.tsv` is the generated output |
+| D-P05-2 | sixteen row ids; a `\|` alternation carries a multi-part boundary |
+| D-P05-3 | the spec's validator lives beside its reader and runs before it |
+| D-P05-4 | **an unwritten row is a REFUSAL, never a recorded `n/a`** |
+| D-P05-5 | the rows live beside the harness, not inside it; the rig plays adversary trusted-side for convenience |
+| D-P05-6 | every sandbox-injected status is named; `*)` means the command's own |
+| D-P05-7 | the heavy capsule builds its assets on site |
+| D-P05-8 | **H2 is re-derived in § 5.6 as DISSOLVED** (operator-ruled) |
+| D-P05-9 | F1 gains a `.doctrine/**` design-target selector so H5 can reach leg 3 |
+| D-P05-10 | guards (b) and (c) become their own T6 probes; H5 plants per fixture |
+| D-P05-11 | H12 plants its evaluation surfaces under the slice's selectors |
+| D-P05-12 | H15 interrupts three stages; stage 4's indivisibility is asserted |
+| D-P05-13 | **a tool the rig cannot invoke is a defect of the rig** |
+| D-P05-14 | **egress is allowlisted, not binary, and the allowlist is per capsule** |
+| D-P05-15 | H11 scores at a different boundary per fixture, and that is correct |
+| D-P05-16 | H7's disk bound is 20G (operator-ruled) |
+| D-P05-17 | **the allowlist work lands in a follow-on slice, not here** |
+| D-P05-18 | the 20G bounds the blast radius, not the cap H7 crosses |
+| D-P05-19 | the capsule-time seam is a declarative per-cell lookup |
+| D-P05-20 | **the guard probes get their own executable and their own results file** |
+| D-P05-21 | guard (a) is a mechanical citation of H8, not a fifth script |
+| D-P05-22 | guard (e) is three legs, and the baseline is one of them |
+| D-P05-23 | `fx_case` lifted to `falsify-lib.sh` |
+
+**The four that bind work outside this phase:**
+
+- **D-P05-17 — the allowlist work is a FOLLOW-ON SLICE.** D-P05-14 established
+  that egress must be allowlisted per capsule rather than on/off. Implementing
+  that is explicitly *not* SL-241's, and the follow-on has not been sliced. This
+  is the largest piece of forward work the phase created.
+- **D-P05-8 — H2 is DISSOLVED in § 5.6**, operator-ruled. A future reader who
+  finds H2 scored as a dissolution and reaches for "the rig didn't try" has it
+  backwards; F-P05-13 carries why no deterministic instantiation exists on M-A.
+- **D-P05-4 — an unwritten row is a REFUSAL.** The rule that kept the matrix
+  honest, and the one most likely to be quietly relaxed by a future probe under
+  time pressure. Its sibling is R-C: every `n/a` names a *structural* absence.
+- **D-P05-20 — separate executable, separate results file** for anything that is
+  not a matrix row. F-P05-46 is what it costs when a discriminator rides a
+  preamble instead of a separation.
+
+**DEC records are owed at close for D-P05-6..23.** Sheet convention is to lift at
+close and they were deliberately not minted mid-phase. That obligation now falls
+to `/reconcile` or `/close`, not to PHASE-05.
+
+### PHASE-05 findings (durable) — INDEX, same reason
+
+Forty-six findings, F-P05-1..46, all intact in the archived sheet under
+`## Findings` (**newest first**). Indexed here by what they establish; expanded
+only where the lesson generalises past SL-241.
+
+| ids | about |
+|---|---|
+| F-P05-1, 2, 4, 6, 8, 12 | baseline, fixtures, the matrix gate, the harness landing — the build-out |
+| F-P05-3, 27 | `audit-dq4` is coupled to the light declaration, and its exemption-staleness check with it |
+| F-P05-5 | F3's phase completion is runtime state and does not survive a rebuild |
+| F-P05-7 | **`IFS=$'\t' read` silently collapses empty TSV fields** |
+| F-P05-9 | `rig`'s parser owns the flag space; a probe-specific flag goes to the probe |
+| F-P05-10, 19 | the heavy column is cheap and reaches `advance`; R-B answered |
+| F-P05-11, 15 | S1 was four causes behind one token |
+| F-P05-13, 14, 18, 21, 22, 23 | H2's and H5's instantiation constraints — the fixture-specific ones |
+| F-P05-16, 17 | a fixture's base B must be a commit where `verify:` passes; the visibility floor |
+| F-P05-20 | EX-1's floor is filesystem-only; the capsule's network is not |
+| F-P05-24, 25 | T4a complete; a failed `git add` was survivable and surfaced as `fatal:` in a green log |
+| F-P05-26, 33, 34, 35 | H12's and H11's re-homing, and where class-2 triggers live |
+| F-P05-28, 29 | the H15/heavy/bundle red — fixture commit-graph, not the capsule model; and the shakeout green that is not evidence about the harness |
+| F-P05-30, 31, 38, 41, 42 | **the falsification discipline** — a clause that cannot fail is not a control |
+| F-P05-32 | the verify capsule shares the network namespace by construction |
+| F-P05-36 | `model-level` is earned by two different boundaries and the table cannot say so |
+| F-P05-37 | the trusted-side plant seam cannot reach a hazard the sandbox evaluates |
+| F-P05-39 | **T4a–T4e's falsification drivers were never tracked and are gone** |
+| F-P05-40, 43 | two tokens that must be stated, not smoothed — ISS-305, and guard (e)'s fixture-specific refusal |
+| F-P05-44 | `knowledge show`/`inspect` render no inbound reciprocity — ISS-306 |
+| F-P05-45 | **the phase's actual result** — the mechanism axis barely matters |
+| F-P05-46 | four `fail` rows in the scored table are four successes |
+
+**The five that generalise past this slice:**
+
+- **F-P05-39 — losing the vehicles loses re-runnability even when the results
+  survive.** T4a–T4e's drivers were never git-tracked. The scored data is whole,
+  so the evidence stands; what is gone is the ability to re-run those mutants.
+  **Do not reconstruct them from prose and re-run them under the old claims'
+  names** — an inferred contract's green is new evidence wearing an old label.
+  This finding is why T8 committed `drivers/` and the phase sheets.
+- **F-P05-38 / F-P05-41 / F-P05-42 — a clause that cannot fail is not a
+  control.** Paid for three times in one phase: an assert that counted files over
+  a bound where none can exist; "refuses nowhere" satisfied by a run that skipped
+  a stage; a guard asserting an unaffected verdict against a suite that passes
+  anyway. Every assertion needs a positive control that reds it.
+- **F-P05-28 — an assertion that writes to its own subject** is invisible while
+  everything passes and produces its most misleading output on the first real
+  failure, exactly when it is trusted most. One honest refusal presented as seven
+  reds, two looking like a canonical-safety failure — manufactured by the
+  observer.
+- **F-P05-31 — a scored run started before the row was final is VOID.** Not
+  "probably still fine". The ordering discipline held for the rest of the phase.
+- **F-P05-46 — a discriminator a reader must *notice* is weaker than a
+  separation they cannot miss.** The guards got their own file (D-P05-20); the
+  sub-probe's mutants ride a `MUTATED=` preamble stamp, and a naive count of
+  `outcome=fail` misreports a matrix that has none.
+
+### PHASE-05 evidence (what was OBSERVED, not merely coded)
+
+- **All sixteen hazard rows carry scored results; every scored cell is `pass`.**
+  Two `n/a` cells (H13/M-A, H12/light) are structural, and one altitude is capped
+  (`unproven-beyond-rust`, H12). `~/capsules/probes/c3/results.tsv` — **now
+  committed** at `.doctrine/rfc/025/evidence/results-c3.tsv`.
+- **The five guard probes each OBSERVED refusing at least once** — 9/9 `pass`,
+  71 assertions, 0 red, falsified 4/4 (EX-10, VA-2). A guard never seen to fire
+  is not known to work.
+- **Guard (e): trusted-side behaviour is BYTE-IDENTICAL** between a capsule that
+  rewrote its own in-repo declaration and one that had nothing to rewrite (EX-11,
+  VA-3) — QUE-201's only evidence input, now **EVD-011**.
+- **The conflict sub-probe scored 2/2** at `counts-toward-nothing` (VA-4),
+  falsified 4/4, against the **real** candidate layer.
+- **Six EVD records carry the verdict inputs** — EVD-006..011, linked to QUE-200
+  and QUE-201 (EX-13, VA-5). Four `supports`, one `disputes`, one for QUE-201.
+- **Cost measured, not estimated**: a heavy cell is ~1.5–2.5s (M-A 2.50s / M-B
+  2.55s), because `git clone --no-hardlinks` of a 169 MB fixture reflinks in
+  0.2s. R-B is answered and the heavy column stays.
+- **What was NOT observed, and must ride with all of the above**: QUE-200's
+  `upload-pack`-in-hostile-context worry was never exercised. H6 shows the
+  hazard class does not reach the parent under either mechanism — weaker and
+  different. **"Fetch is proven safe against hostile config" is not what this
+  matrix says.**
+
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
 Written 2026-08-03, mid-phase and deliberately so: this range is the most
