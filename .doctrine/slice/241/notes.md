@@ -22,7 +22,10 @@ out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** **T7 DONE** (six EVD
 records — EVD-006..011 linked to QUE-200/QUE-201; **EX-13 and VA-5 discharged**;
 F-P05-44/45 and ISS-306 out of it). **T8 DONE** (RFC-025 evidence artefacts —
 **EX-14 discharged**; the scored results are now IN THE REPO; F-P05-46 out of
-it). Next and last unit is **T9** (close).
+it). **T9 DONE — PHASE-05 IS `completed` (5/6 phases).** All fifteen EX and all
+five VA criteria discharged; VT-1 flipped UNATTRIBUTABLE → PASS on the
+completion, as F-P04-11 predicted. **F-P05-47 and ISS-307 out of the close
+itself.** Next is **PHASE-06** (`go-no-go.md`).
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
@@ -896,6 +899,37 @@ are VA-3's business and are re-runnable as `control/audit-dq4.sh
 - Knock-on to check while there: § 9's *Closure* paragraph gates on "every
   measurement row filled or recorded after-side-only" plus the ASM-007 line;
   only the ASM-007 line is affected.
+
+### PHASE-05 close (T9) — the gates, and the one thing the close itself found
+
+**Gates, all observed rather than assumed:** `shellcheck -x -S style` exit 0
+across `rig` and every `*.sh` outside `probes/` · `doctrine validate` clean ·
+`./rig selftest` **all assertions hold** (not owed — no rig change since T6 —
+but "still green" was an assertion, and this phase's discipline is that an
+observation beats one) · `slice verify-vt 241` PHASE-05 VT-1 **UNATTRIBUTABLE →
+PASS** on the flip, exactly as F-P04-11 predicted. **No `doctrine check`**: S4
+held and no Rust appeared in PHASE-05 at all.
+
+**F-P05-47 — the completion flip wrote another slice's commit as this phase's
+`code_end_oid`.** `slice phase --status completed` captures `HEAD`, and `HEAD`
+at that instant was `5c78c892` — `design(SL-244): DEC-121`, a different agent's
+commit. PHASE-05's real code tip is `fdebae1e`; T7–T9 touched no source.
+Corrected by hand in `boundaries.toml` (runtime tier). Filed as **ISS-307**.
+
+Two things make this worth carrying rather than filing and forgetting:
+
+1. **The warning does not have the shape of the defect.** It says the boundary
+   "spans 12+ commits — any that are not this phase's are attributed to it",
+   which describes *width*. Width is expected here and documented three sections
+   below (111 foreign commits). It does **not** say the endpoint belongs to
+   another slice. I nearly filed it as known.
+2. **PHASE-01..04's `code_end_oid`s were captured the same way and are
+   unverified.** Worth checking at audit before any of those ranges is believed.
+
+The `record-delta` registry was correct throughout — it takes explicit
+`--start`/`--end` and got `8e962656..fdebae1e`. **Two stores, one of which asks
+and one of which guesses**; they disagreed, and the guessing one is the one audit
+reads.
 
 ### PHASE-05 decisions (durable) — INDEX, because the sheet is archived
 
