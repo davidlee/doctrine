@@ -712,3 +712,238 @@ generator emits and what the asset test iterates.
   this vocabulary. It is a warning-shaped fact by the same convergence argument,
   it lives outside the design run today, and settling it is outside `SL-244`.
 
+<!-- doctrine:section sec-4 -->
+## The attested acts
+
+`sec-3` fixed that `ActKind` is closed and that every requirement pairs an act
+with a required actor. This section fixes the membership, each act's artefact,
+and the three things `sec-3` deferred here: the actor for
+`section-attestations-current`, conjunct ordering, and `GovernanceEdges`'
+projection.
+
+The result is mostly **ratification**. Six of the eight acts already have a home
+in the tree, one type covers all three coverages, and exactly one shape is new.
+
+### One contract, bespoke storage
+
+The gate needs one question answered — *is there a recorded act of this kind, by
+this actor, still current against this binding?* — and that is a question about a
+**view**, not about a struct. `ActKind` and `ActorClass` unify the contract; where
+each act is stored stays as it is.
+
+This is `ADR-010`'s shape applied a second time: unify the contract and the write
+seam, keep storage bespoke. Collapsing three incumbent records into one would be
+a parallel implementation of shipped, argued types, and would buy nothing the
+view does not already give.
+
+### The acts, and where each already lives
+
+| act | actor | stored as | basis |
+|---|---|---|---|
+| `GovernanceConfirmed` | User | `cp-` acceptance | digest + `[GovernanceEdges]` |
+| `GraphReviewed` | User | `cp-` acceptance | inquiry-map coverage |
+| `BlockingSetDeclared` | Agent | **new** — agent declaration | inquiry-map coverage |
+| `SufficiencyAccepted` | User | `cp-` acceptance | digest |
+| `DraftingReady` | Agent | **new** — agent declaration | artefact |
+| `SectionReviewed` | User | `att-` attestation | subject fingerprint |
+| `ReviewDisposed` | User | `cp-` acceptance | artefact |
+| `DesignAccepted` | User | run-level `AcceptedDesign` | every-section coverage |
+
+Three incumbent homes carry six of them:
+
+- **`Attestation`** (`attestation.rs:36`) — `subject`, `fingerprint`, `reviewer`.
+  Declared with an `att-` subject. Content-bound to one section, which is exactly
+  `SectionReviewed`.
+- **`AcceptanceAttestation`** (`attestation.rs:116`) — `authority`, `basis`,
+  `turn`, `digest`, declared against a `cp-` checkpoint. Its digest already
+  *"covers the checkpoint payload fingerprint, the inquiry disposition, and the
+  run revision current when the acceptance was given"*, so it is the right home
+  for every user judgement given at a checkpoint.
+- **`AcceptedDesign`** — `AcceptanceAttestation` plus `ContentCoverage`, for the
+  one act that is about the whole document.
+
+### Coverage is a selector, not a mechanism
+
+`sec-3`'s three `Coverage` variants need no new type. `ContentCoverage` is a
+`BTreeMap<DesignId, Fingerprint>` with `is_current(current)`
+(`attestation.rs:200-214`), and run-local ids are one space — `sec-`, `inq-`,
+`cp-`, `att-`, `fnd-` are all `DesignId`. So the variant selects *which current
+map is handed to the same comparison*:
+
+- `EverySection` — the section digest map. The incumbent use.
+- `InquiryMap` — the node digest map. Same type, different subject set.
+- `Artefact` — no map. The attestation's own recorded content is its binding, so
+  there is nothing to compare against; represented as an absent coverage rather
+  than an empty one, because an empty map is *not* the same claim as no claim.
+
+`ContentCoverage`'s own doc argues for this: *"One type, two users — the
+integrated review and the lock acceptance — so whole-run currency has a single
+owner rather than a spelling in each."* A third user rides the seam as its author
+intended.
+
+### The one new shape: agent declarations
+
+`BlockingSetDeclared` and `DraftingReady` have no home, and `AcceptanceAttestation`
+must not become one. Its constructor *sets* `AcceptanceAuthority::User` rather
+than accepting it — *"the constructor is the only route to the type, so a value of
+it always carries user authority"* — and its single-member authority enum is the
+claim being made. Widening that enum to admit an agent would delete the
+guarantee, which is `DEC-088`'s and not this slice's to spend.
+
+So the agent acts get their own record: the same triple **minus** the authority
+claim.
+
+```rust
+/// An agent's declaration about the state of its own work (DEC-121).
+///
+/// Deliberately NOT an `AcceptanceAttestation`: nothing here is accepted truth,
+/// and the authority enum's single membership is the point of that type.
+pub(crate) struct AgentDeclaration {
+    act: ActKind,
+    /// The stated basis, as an acceptance carries one.
+    basis: String,
+    /// What it was declared over. `None` is `Coverage::Artefact` — the
+    /// declaration's own content is its binding.
+    covered: Option<ContentCoverage>,
+}
+```
+
+`DEC-121` is the reason this exists at all: *"an agent marks its whole graph
+blocking by fiat, and the difference between eight round-trips and four is
+invisible."* An agent declaration that is recorded, bound, and expirable is what
+makes that difference visible.
+
+### `section-attestations-current` requires a human
+
+`ISS-310`, decided: the required actor is **`User`** — a human section review.
+An adversarial attestation is recorded and does not satisfy the condition.
+
+Four reasons, in the order they weigh:
+
+1. **It is the only direction that stays additive.** `human → either` widens a
+   gate and is backward-compatible; `either → human` breaks every run that
+   cleared under the loose rule. Start strict; admit laxity if it is needed.
+2. **It restores meaning to a distinction the tree already draws.** `Reviewer`
+   has had two members since `DEC-073` and the incumbent derivation ignores them
+   — which is the whole of `ISS-310`. Requiring one of them makes the field load
+   bearing rather than decorative.
+3. **Adversarial coverage is separately guaranteed.** `DEC-074` makes the
+   integrated adversarial pass mandatory. Requiring a human at *section* level
+   means the two reviewer classes do different jobs rather than substituting for
+   each other; letting either satisfy would make an all-adversarial run lawful,
+   with no human having read a section.
+4. **It costs nothing to express.** `human` fits `ActRequirement` as drawn.
+   The other two answers cost the actor slot a disjunction, or leave the const
+   table altogether.
+
+`Reviewer` maps into `ActorClass` — `Human → User`, `Adversarial → Adversarial` —
+as an `impl From`, not a merge. `sec-3` refused to unify the three actor-ish
+vocabularies and that refusal stands; this is the one direction it required.
+
+Opt-in adversarial section review survives unchanged and stays **supplementary**:
+recorded, rendered, and not a substitute for the human attestation.
+
+**Cost, stated.** `SL-243` is the one live run and will not clear this gate on
+sections it attested adversarially. It sits in the gitignored runtime tier and
+will need manual repair, which `sec-2` already carries as a bounded, accepted
+cost of this slice.
+
+### `ActorClass::Adversarial` has acts but no requirements
+
+With currency out of the vocabulary and `ISS-310` answered `human`, **no**
+`ActRequirement` names `Adversarial`. That is not the empty tier `sec-3`
+refused for `Claimed`, and the difference is worth stating before someone
+applies the same argument here.
+
+`ActorClass` classifies *recorded acts*, and adversarial section reviews are
+recorded, rendered, and read. What has no member is the set of *requirements*
+naming that actor. `Claimed` was different in kind: it had no legitimate
+members among the acts themselves, which is why it was made unrepresentable
+rather than merely unused.
+
+### Ordering: a confirmation covers the declaration it confirms
+
+`sec-3` deferred this, having shown that coverage gives simultaneity but not
+order: an old `GraphReviewed` and a later `BlockingSetDeclared` could both be
+current against the same map while the interaction `DEC-121` specifies — the
+agent declares, the user confirms — never happened.
+
+No new mechanism is needed, only a **placement rule**.
+`AcceptanceAttestation`'s digest covers the checkpoint payload, so:
+
+> `BlockingSetDeclared` is recorded **into the checkpoint payload** that
+> `GraphReviewed` is given over.
+
+The user's confirmation digest then covers the agent's declaration by
+construction. A declaration recorded *after* the confirmation is not in the
+payload the digest was derived from, so the digest cannot match and the
+conjunction is unmet — which is the ordering property, obtained from a binding
+that already exists rather than from a new field nobody can forget to set.
+
+### The governance edge projection
+
+`ObservedFact::GovernanceEdges` is a fingerprint, and `sec-3` fixed that every
+observed fact owes a typed projection and a deterministic encoding or the
+comparison means nothing. This is that definition.
+
+**What is included.** The slice's **outbound `governed_by` edges**. `ADR-004`
+stores relations outbound-only and derives reciprocity, so the set is readable
+from the slice's own record with no traversal and no second source that could
+disagree.
+
+**What is excluded, and why it matters.** `references` edges — including
+`--role concerns` — are *not* governance bindings. They are topical, and
+admitting them would let an unrelated topical link, added months later, expire a
+governance confirmation the user gave correctly. The projection is narrow on
+purpose: an observed fact that expires for reasons its user cannot predict
+trains the user to re-confirm without reading, which is worse than not observing
+it at all.
+
+**Encoding.** Each edge as `target_id`, sorted ascending by that id, one per
+line, LF-terminated, UTF-8, hashed with the same sha256 the rest of the run uses
+for content digests. Sorting is what makes the fingerprint a fact about the
+*set* rather than about insertion order — two runs that added the same edges in
+different orders must agree, or the fact expires for no reason. The label is not
+in the encoding because the projection is already label-filtered; including it
+would be a constant in every line.
+
+**Absence.** A slice record that cannot be read is an unobservable fact, which
+`sec-3` fixes reads as **changed**. The gate stays shut rather than opening on a
+missing answer.
+
+### Verification impact
+
+- **Wrong actor does not satisfy** — a section carrying only an adversarial
+  attestation leaves `section-attestations-current` unmet, and the refusal says
+  a human review is required.
+- **Adversarial review is still recorded** — the same section renders its
+  adversarial attestation, so the act is visible without being sufficient.
+- **A late declaration does not satisfy** — `BlockingSetDeclared` recorded after
+  the `GraphReviewed` acceptance leaves `initial-concerns-recorded` unmet,
+  because the confirmation digest does not cover it.
+- **Inquiry-map coverage invalidates** — editing a node unmakes `GraphReviewed`
+  and `user-accepts-sufficiency`, through `ContentCoverage::is_current` against
+  the node map, with no new comparison code.
+- **The projection is order-independent** — two edge sets with the same members
+  added in different orders fingerprint equal.
+- **A topical edge does not expire governance** — adding a `references` edge
+  leaves `governing-context-recorded` satisfied; adding a `governed_by` edge
+  unmakes it.
+- **`Artefact` is absent coverage, not empty coverage** — a `DraftingReady`
+  declaration stays current across section edits, where an empty
+  `ContentCoverage` would read as stale the moment any section existed.
+
+### Carried forward
+
+- **`ActKind` is closed at eight.** A ninth act is a decision, not a
+  declaration — it would mean a condition acquired a discharging act nobody
+  specified.
+- **The `ISS-310` answer wants a decision record.** It is a judgement with
+  alternatives considered and a stated cost, made by the user, and it is
+  currently recorded only in this prose.
+- **`SL-243` needs manual repair** before it can cross `reviewing → locked`
+  under the human-attestation rule.
+- **`AgentDeclaration`'s snapshot group** is a shape change to the design-run
+  snapshot, which `sec-2` names as costing the one live run. It is the only such
+  change this section adds.
+
