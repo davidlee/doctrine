@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · design/drafting (run rev 58) · 7df32e57
+fresh-as-of: 2026-08-04 · design/drafting (run rev 64) · d784b808
 
 ### Produced
 
@@ -152,10 +152,16 @@ fresh-as-of: 2026-08-04 · design/drafting (run rev 58) · 7df32e57
   once when the amendment's own claim proved wrong.
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-048` — backlog.
 - Design run sections `sec-1`..`sec-4` — materialised, watermark current at run
-  rev 58. `sec-1` `ec82d845c010` (untouched since rev 45), `sec-2`
-  `a8b38b1c19ee`, `sec-3` `ad7e18144a24`, `sec-4` `f62c19e67ad9`.
+  rev 64. `sec-1` `8384bae959cb`, `sec-2` `919384dd4d0d`, `sec-3` `148796c1274c`,
+  `sec-4` `c6f65176c9bf`. All four moved this session; none is externally
+  reviewed at its current bytes.
+- Coherence pass `F1`..`F11` — raised as prose, ruled in by the user, integrated,
+  then swept for siblings per
+  `mem.pattern.review.sweep-defect-class-not-instance`; three siblings found and
+  fixed. Design-only session, no code touched, so no `check gate` beat is owed.
 - Commits `dac3cb46`, `bff92556`, `58b428df`, `78378a08`, `1d7d264d`,
-  `cbb0a7a5`, `7df32e57`.
+  `cbb0a7a5`, `7df32e57`, `91a00746`, `35c1e161`, `d784b808`. All `.doctrine`
+  committed promptly and path-limited (`SL-241` holds `rfc/026` dirty).
 - `IMP-392` body rewritten — it carried the pre-`DEC-138` waiver semantics, and
   now names the concluded-pass marker as the one thing `SL-244` asks it to *add*
   rather than merely expose.
@@ -221,33 +227,57 @@ New this session, all read off the tree rather than reasoned:
   `design.md` section and those conditions are about the inquiry graph.
 - `mem.pattern.review.observation-right-prescription-wrong` and
   `mem.pattern.feedback.rule-findings-in-dependency-order` — both earned again
-  this session; `DEC-138` reversed a finding integrated two revisions earlier.
+  in the prior session; `DEC-138` reversed a finding integrated two revisions
+  earlier.
+
+New this session, all read off the tree:
+
+- **`apply` takes `DerivedInput` as a parameter** and threads it into the
+  declaration handlers (`run.rs:224-230`). So an admission-time check reads
+  shell-observed state without the pure layer touching disk — which is what let
+  `DEC-138`'s *admissible* stand verbatim instead of being moved to the gate.
+  **Memory candidate**, not yet recorded.
+- **`ObservedFact` is a currency mechanism, not a general external-input
+  channel.** It compares a stored fingerprint against a refreshed one; a fact
+  evaluated *fresh* needs a `DerivedInput` field instead. Getting that backwards
+  is what made the first `F1` recommendation wrong.
+- **`run.rs:1062` replaces an `Attestation` by its own `id`**, not by act or
+  subject — load-bearing, since two lanes reviewing one section must coexist
+  under a both-lanes policy.
+- **The `RV` TOML carries an explicit no-status-because-derived refusal**, so the
+  concluded-pass marker has to be argued against it (an event, not a function of
+  the finding set) rather than merely specified.
+- **`IntegratedReview` is a third incumbent in `ReviewGroup`**
+  (`snapshot.rs:330`), and the sole input to `integrated_current` — the currency
+  lamp.
+- **`SL-243` holds three declared sections and has never been materialised** — no
+  `design.md` on disk, `attestation = []`, one acceptance covering all three.
+- `mem.pattern.review.sweep-defect-class-not-instance` earned itself sharply: the
+  `F7` repair contained a surviving sibling **of its own class**, one record
+  shape over.
 
 ### Open
 
-- **Handed over for a coherence pass** — see the continuation. Four reversals
-  landed this session and cross-references are the known casualty (one was
-  already caught: `sec-4` pointed at a `sec-3` rule that no longer existed).
-- **Missing type declarations** — `ActKind` was used as a field type in two
-  structs and never declared until this session. `ReviewRef` and the concluded
-  marker are named in `sec-4` and not defined. A sweep is owed.
 - **`sec-5` is unwritten** — `DEC-124`'s two channels (refusal remedy,
   edge-grained stage-entry receipt on the `Fragment` register,
   `design.rs:1832-1851`), where `DEC-123`'s injection rule is built. `sec-3` and
   `sec-4` reference all three of `DEC-122`/`123`/`124` but specify no channel.
   **Order not yet ruled**: before the codex round (so one round closes the
   document) or after (leaving `sec-5` unreviewed).
-- **`sec-2`'s two clearances are stale** — the run cannot cross
-  `drafting → reviewing` until they are re-recorded. Deliberately not
-  re-recorded by an agent: under the incumbent's claimed arm it could be, and an
-  agent asserting *the user accepts sufficiency* is the defect this slice exists
-  to close.
+- **Four clearances are stale** — the run cannot cross `drafting → reviewing`
+  until they are re-recorded. `governing-context-recorded`,
+  `initial-concerns-recorded` and `user-accepts-sufficiency` are **user acts**,
+  deliberately not re-recorded by an agent: under the incumbent's claimed arm
+  they could be, and an agent asserting *the user accepts sufficiency* is the
+  defect this slice exists to close. `blocking-inquiries-dispositioned` is the
+  fourth and is mechanical (16 nodes, 0 open) — left in the same batch rather
+  than split on an agent's judgement of its own entitlement.
 - **The codex round is not run.** Thread `019fc628-0f72-73e0-bd25-3d99c05d0965`
-  holds four rounds and last saw `sec-3` v4 / `sec-4` v1 — now v13 / v11.
-  `sec-2` has never been externally reviewed and is now correct enough to be.
+  holds four rounds and last saw `sec-3` v4 / `sec-4` v1. All four sections have
+  since moved; `sec-1` and `sec-2` have never been externally reviewed at all.
 - **`ObservedFact`'s single member** — the seam has no enforced consumer this
   slice, since `GovernanceEdges` is named only by a `Pending` row. Stated
   honestly in `sec-3`'s carried-forward; left open rather than forced.
-- **`DEC-138` has been amended twice and not re-checked against code since.**
-  The per-finding predicate, the `answered` distinction and the concluded marker
-  are all as-specified, not as-verified.
+- **`CHR-049` is one moderated run** — `sec-2` asserts it; the chore is open and
+  the claim is a judgement, so it stands unverified rather than verified. The
+  only unchecked claim left in the design.
