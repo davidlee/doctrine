@@ -209,8 +209,15 @@ of the interactions themselves.
 > `install/dispatch-mechanics.md` / `install/review-ledger.md` are the right
 > reader-facing template for a *who acts, what does the act produce* narrative,
 > but neither carries a diagram, so shipping one there is net-new too and needs
-> its own hand-edit-vs-generated policy. What remains open is the **audience** —
-> carried below as `OQ-9`.
+> its own hand-edit-vs-generated policy.
+>
+> **Settled 2026-08-03 — `DEC-127`.** Published surface, generated. Thread 4's
+> spec-sibling champion is refused: a client repo cannot read this repo's spec,
+> and the gate-standing agent is always a repo-external consumer. Source under
+> `install/` (already grafted, so no `flake.nix` change), a
+> `publication/manifest.toml` entry, and a golden test pinning the render to
+> `gate.rs` — the `funnel-machine.md` mechanism, transferred. `SPEC-029` cites the
+> published address rather than holding a copy.
 
 ## Non-Goals
 
@@ -358,16 +365,29 @@ Carried into `/design`, not answered here.
 > | `OQ-7` | delivered vs fetchable | `DEC-124` — by channel: refusal takes the remedy, the stage-entry receipt takes the contract, no digest |
 > | `OQ-8` | how much of the override seam this slice delivers | `DEC-122` — none. Embedded and `fixed` defers it honestly |
 >
-> **New, and open** — the only one carried forward:
+> **`OQ-9`, raised and closed the same day — `DEC-127`.** Objective 6's
+> **audience**, which decides where the diagram lives. Raised because research
+> thread 4's champion was a generated sibling artefact in `SPEC-029`'s directory,
+> costing no manifest entry, no embed change and no flake graft.
 >
-> - **`OQ-9`** — objective 6's **audience**. If the diagram is for the reviewer of
->   this design, a generated sibling artefact to `SPEC-029` suffices — golden-pinned
->   to `gate.rs`, no manifest entry, no embed change, no flake graft. If it is for
->   the agent standing at the gate, it needs a *published* surface, and then the
->   reference-doc template plus a `publication/manifest.toml` entry, plus a stated
->   hand-edit-vs-generated policy that no shipped asset currently has. `ADR-005`'s
->   PULL/EXPLAIN tiering is what decides it. Both may be right, with different
->   content — as with `OQ-7`, that is a decision and not a default.
+> **Closed against that champion.** A client repo has no access to this repo's
+> spec — `.doctrine/` is not distributed — and objective 6's primary audience,
+> the agent standing at the gate, is *always* a repo-external consumer. So the
+> diagram ships on the **published** surface (embedded under `install/`, declared
+> in `publication/manifest.toml`, reachable by `doctrine library show`) and it is
+> **generated**, golden-pinned to `gate.rs`'s tables. One artefact, not two:
+> publication answers *can the reader reach it*, generation answers *is what they
+> reach true*, and an external consumer cannot check freshness for itself, so
+> freshness must be structural rather than promised.
+>
+> The citation direction inverts from thread 4's proposal: `SPEC-029` cites the
+> published address, because here the **spec** is the private artefact.
+>
+> **General rule, and a debt.** No shipped asset may cite a repo-private artefact
+> — not a path, not an entity id. Entity ids are per-repo sequential, so a shipped
+> asset citing `DEC-101` does not dangle in a client repo, it resolves to an
+> unrelated record silently. `ISS-309` records that the corpus already violates
+> this and owns the sweep plus the check that stops it returning.
 
 - **OQ-1** — What does a condition's contract consist of, and where does it live —
   Rust-side data, or a correspondence to prompt prose? If prose: what must it

@@ -1,0 +1,63 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 127
+slug = "objective-6-ships-on-the-published-surface-generated"
+title = "Objective 6 ships on the published surface, generated"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["publication", "documentation", "diagrams", "asset-policy", "design-run"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "Objective 6 ships canonical interaction diagrams for the design-run stages. Research thread 4 found one in-tree precedent — SPEC-021's funnel-machine.md, a mermaid state diagram golden-pinned byte-for-byte to a const table — and proposed a sibling artefact in SPEC-029's directory as the champion, because it needs no manifest entry, no embed change and no flake graft."
+choice       = "The spec-sibling is refused. Objective 6 ships on the PUBLISHED surface — embedded under install/, declared in publication/manifest.toml, reachable by `doctrine library show` — and it is GENERATED, golden-pinned to the gate table in src/design_run/gate.rs. One artefact, not two: the currency guarantee and the reachability guarantee are both non-negotiable, and only the published-plus-generated combination has both."
+alternatives = [
+  "Generated sibling artefact in .doctrine/spec/tech/029/ (thread 4's champion). REFUSED: a client repo has no access to this repo's spec, so the artefact is unreachable by every reader except someone working in the doctrine repo itself — and the agent standing at the gate, objective 6's primary audience, is always a repo-external consumer.",
+  "Both: generated artefact beside the spec, published reference doc citing it. REFUSED: the citation would point at a repo-private path, which is the same defect one level of indirection away. It also duplicates the diagram's home for no gain.",
+  "Hand-authored published reference doc. REFUSED: the stage vocabulary is code-authoritative (gate.rs's can_advance / boundary_conditions), so a hand-rolled diagram drifts. Generation is what makes 'ensured up to date' a property rather than a promise.",
+]
+rationale    = "Two independent constraints, and only one option satisfies both. REACHABILITY: doctrine is installed into client repos, and this repo's .doctrine/ is not distributed — ADR-019's publication seam exists precisely to expose an asset without projecting it. CURRENCY: a repo-external consumer cannot verify a copy is fresh, so freshness must be structural — the golden test that pins funnel-machine.md to its const table is the mechanism, and it transfers unchanged."
+consequences = [
+  "The diagram source lives under install/ (an already-grafted embed root), so no flake.nix srcWithDist change is needed. A publication/manifest.toml [[entry]] is required — an embedded-but-undeclared asset is invisible, and a declared entry with a stale backing is a gate failure.",
+  "A golden test pins the shipped diagram to src/design_run/gate.rs's tables, following the funnel-machine.md precedent. This is the first diagram in the shipped corpus; no shipped asset currently carries one.",
+  "SPEC-029 CITES the published address rather than holding a copy. The spec is the private artefact here, so the direction of citation inverts from thread 4's proposal.",
+  "Generalises past objective 6: no shipped asset may cite a repo-private artefact. ISS-309 records that the corpus already violates this — install/design-prompts/inquiring.toml cites `sketches/thin-adapter.md` (really .doctrine/slice/233/sketches/), and shipped assets cite this repo's DEC-/SL-/RV-/ADR-/ISS- ids, which are per-repo sequential and therefore resolve to DIFFERENT records in a client repo.",
+  "Closes SL-244's OQ-9, the only open question carried out of the inquiry stage.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  ".doctrine/spec/tech/021/funnel-machine.md:1-4 — the generated-and-golden-pinned precedent",
+  "install/manifest.toml — base projection is .gitignore, doctrine.toml, project-orientation.md only; nothing else reaches a client repo as a copy",
+  "src/commands/library.rs:112-113 — an embedded-but-undeclared asset is invisible",
+  "ADR-019 — embedding, publication and projection are independent asset policies",
+]
+contradicts = [
+  "Research thread 4's champion recommendation (spec-sibling artefact), which optimised for zero manifest/embed/graft cost and did not weigh client-repo reachability.",
+]
+notes       = [
+  "The reachability constraint was supplied by the user; the currency half follows from it, since an external consumer cannot check freshness itself.",
+  "ISS-309 is the sweep for existing violations of the general rule.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-019"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the corpus already violates the general rule this decision establishes"
+target = "ISS-309"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
