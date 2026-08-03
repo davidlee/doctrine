@@ -214,6 +214,10 @@ pub(crate) struct ActRequirement {
     /// Who must have authored it. NOT optional — though one requirement names
     /// the actor indirectly; see `RequiredActor` below.
     pub(crate) actor: RequiredActor,
+    /// The agent declaration this act must confirm, where the interaction has
+    /// an order. `Some` on exactly one requirement today; `None` means this
+    /// act confirms nothing and its record must carry no confirmation.
+    pub(crate) confirms: Option<AgentActKind>,
 }
 
 pub(crate) enum ActorClass { User, Agent, Adversarial }
@@ -326,10 +330,13 @@ rule's binding covers a run-owned subject set, every conjunct must be current
 against the *same present* state, so a review made over a superseded inquiry map
 is not live and the pair cannot be assembled from different eras. What coverage
 does **not** give is order — that the user's confirmation came after, and over,
-the agent's declaration. That requires the confirming act's artefact to cover the
-declaring act's digest, which is a statement about artefact shape rather than
-about this rule, and it is specified in the attested-acts section. Recorded here
-so it is a deferral and not an omission.
+the agent's declaration. So order is split across the two: the **rule** names
+which declaration a requirement must confirm, which is what `confirms` is; the
+**artefact** carries the digest that answers whether it is still the one
+confirmed, which is a statement about record shape and is specified in the
+attested-acts section. Putting the requirement in the rule is what makes a
+missing confirmation a refusal rather than a silently weaker act — a record may
+omit only what its rule leaves `None`.
 
 ```rust
 pub(crate) struct Binding {
@@ -650,6 +657,17 @@ dispose. Once findings are raised, the row requires `Conducted`, and the binding
 releases when the user disposes them.** Declaring the intent to review binds
 until the user's acceptance.
 
+**And `Conducted` is not the weaker arm**, which reading the arms as *review or
+excuse* would make it. This row is the fold of `integrated-review-present` and
+`blocking-findings-disposed`, so both halves live in it: `Conducted { review }`
+is satisfied when the named review exists **and** its blocking findings are
+disposed. Naming an `RV` is not itself the discharge. Stated because the
+admissibility rule above only constrains the waiver, and an arm that cleared the
+edge on a review with findings outstanding would clear it on exactly the evidence
+the waiver is refused for — inverting the two and silently dropping half the
+fold. Both arms therefore rest on the same input, the `RV`-backed outstanding
+set, which is why `IMP-392` gates them together rather than separately.
+
 The escape is not a waiver but **withdrawal** — `withdraw` is already one of the
 `RV` ledger's five verbs, it is a user act, and it leaves its own record. So
 abandoning a review that turned out to be misconceived stays possible and stays
@@ -698,10 +716,10 @@ out: **two Derived, seven Attested, zero Claimed.**
 | `blocking-inquiries-dispositioned` | `Engine(Dispositions)` | — | — | cumulative | active |
 | `materialisation-current` | `Engine(Materialisation)` | — | — | cumulative | active |
 | `governing-context-recorded` | `Attested([{GovernanceConfirmed, User}])` | artefact | `[GovernanceEdges]` | cumulative | pending `IMP-391` |
-| `initial-concerns-recorded` | `Attested([{GraphReviewed, User}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative | pending `IMP-391` |
+| `initial-concerns-recorded` | `Attested([{GraphReviewed, User, confirms BlockingSetDeclared}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative | pending `IMP-391` |
 | `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | inquiry map | — | cumulative | active |
 | `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local | active |
-| `section-attestations-current` | `Attested([{SectionReviewed, …}])` | per section | — | cumulative | active |
+| `section-attestations-current` | `Attested([{SectionReviewed, RunPolicy}])` | per section | — | cumulative | active |
 | `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative | active |
 | `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative | active |
 
@@ -917,8 +935,9 @@ generator emits and what the asset test iterates.
 8. **A guard is evaluated on its own edge and, if `Cumulative`, on every edge
    above it.** `EdgeLocal` rows are admitted from the crossing edge only.
 9. **Binding is conjunctive.** An attestation covers its own content; every named
-   observed fact must also still match; and every conjunct act must be current
-   against the same covered state.
+   observed fact must also still match; every conjunct act must be current
+   against the same covered state; and where a requirement names a confirmed
+   declaration, the act must still name that declaration's current digest.
 10. **Observed facts are never persisted as facts**, and each defines its own
     projection and encoding. They are transient input; what the run stores is the
     fingerprint an attestation was made over, keyed by the fact it is of. The key
@@ -990,6 +1009,11 @@ generator emits and what the asset test iterates.
   blocking findings outstanding leaves `review-disposition-attested` unmet, and
   the refusal says they must be disposed or the review withdrawn. Needs
   `IMP-392`'s finding set, so it is specified here and lands with that item.
+- **Neither does a conducted review** — a `Conducted { review }` disposition
+  naming a review whose blocking findings are outstanding leaves the row unmet
+  on the same edit. Asserted beside the waiver case rather than folded into it,
+  because testing only the waiver arm is what would let the stricter arm become
+  the laxer one.
 - **Withdrawal releases the binding** — withdrawing the review leaves nothing
   outstanding, so `Waived` is admissible again and the edge clears. The stated
   escape, asserted so a later change cannot close it quietly.
@@ -1001,10 +1025,13 @@ generator emits and what the asset test iterates.
 ### Carried forward
 
 - `ActKind`'s full membership is fixed by the sections specifying each act. This
-  section fixes that it is closed and that `ActRequirement` pairs it with an actor.
-- **Conjunct ordering** — that a confirming act's artefact covers the declaring
-  act's digest is an artefact-shape requirement, specified in the attested-acts
-  section. Coverage gives simultaneity; only the artefact can give order.
+  section fixes that it is closed, and that `ActRequirement` pairs it with an
+  actor and — where the interaction has an order — with the declaration it
+  confirms.
+- **Conjunct ordering** — the rule half is here, in `ActRequirement::confirms`.
+  What the attested-acts section owes is the record half: the digest a
+  declaration carries and a confirmation names. Coverage gives simultaneity;
+  only that pair can give order.
 - **`GovernanceEdges`' projection and encoding** — which relation rows, in what
   canonical order, under what encoding. Specified with the artefact it is
   compared against, in the attested-acts section.
@@ -1012,15 +1039,18 @@ generator emits and what the asset test iterates.
   `DEC-073`'s per-run review policy, which this slice builds. The repair reaches
   `review_standing` and the envelope's `review_outstanding`, and deliberately not
   `live_reviews` — that section says why.
-- **`review-disposition-attested` is owed two things by `IMP-392`, not one.**
-  Both need the same missing input — `DEC-125`'s `RV`-backed outstanding-finding
-  set — so they are one gap with two consequences rather than two gaps.
-  *Reach:* the cumulative label outruns what `Artefact` coverage can enforce,
-  so until then only the disposition's own record invalidates it. *Admissibility:*
-  the `Waived` arm's precondition — nothing outstanding to dispose — is
-  unenforceable for the same reason, so until `IMP-392` lands a waiver can clear
-  the edge over live findings. The second is the sharper of the two and was the
-  one previously unstated.
+- **`review-disposition-attested` is owed three things by `IMP-392`, not one.**
+  All three need the same missing input — `DEC-125`'s `RV`-backed
+  outstanding-finding set — so they are one gap with three consequences rather
+  than three gaps. *Reach:* the cumulative label outruns what `Artefact`
+  coverage can enforce, so until then only the disposition's own record
+  invalidates it. *Waiver admissibility:* the `Waived` arm's precondition —
+  nothing outstanding to dispose — is unenforceable for the same reason, so
+  until `IMP-392` lands a waiver can clear the edge over live findings.
+  *`Conducted`'s second half:* the findings-disposed conjunct the fold absorbed
+  is unenforceable too, so until then a conducted review discharges the row on
+  its existence alone. The interim state is therefore the same on both arms,
+  which is the honest reading — not a strict path and a lax one.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
   It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
@@ -1100,6 +1130,26 @@ means justified rather than incumbent.
 | `SectionReviewed` | `RequiredActor::RunPolicy` | `att-` attestation | per-section coverage |
 | `ReviewDisposed` | User | **new** — checkpoint act | artefact |
 | `DesignAccepted` | User | **new** — checkpoint act (run-level) | every-section coverage |
+
+That table **is** `ActKind`'s membership, which is why the type is written here
+and not earlier: `sec-3` uses it as a field type and defers the members to
+whichever section specifies each act, and this is that section.
+
+```rust
+/// Every act a condition may require, in the order the table above lists them.
+/// Closed at eight. `BlockingSetDeclared` and `DraftingReady` are the two an
+/// agent may author, narrowed by `AgentActKind` below.
+pub(crate) enum ActKind {
+    GovernanceConfirmed,
+    GraphReviewed,
+    BlockingSetDeclared,
+    SufficiencyAccepted,
+    DraftingReady,
+    SectionReviewed,
+    ReviewDisposed,
+    DesignAccepted,
+}
+```
 
 One incumbent home survives: **`Attestation`** (`attestation.rs:36-41`) — `id`,
 `subject`, `fingerprint`, `reviewer`, declared with an `att-` subject and
@@ -1187,6 +1237,14 @@ stating it per slot would leave the next slot to be found the way this one was:
 |---|---|---|
 | `Binding::coverage` | `CheckpointAct::covered` | the `CoveredSet` variant is the one the `Coverage` names, and `Artefact` pairs with `None` |
 | `Binding::observed` | `CheckpointAct::observed` | the map's key set is exactly the rule's `ObservedFact` list — no missing fact, no extra one |
+| `ActRequirement::confirms` | `CheckpointAct::confirms` | a confirmation is present exactly when the rule names a declaration, and absent exactly when it does not |
+
+The third row is why `confirms` is on the requirement rather than inferred from
+the conjunction. Reading it off the rule's agent conjunct would work only while
+no rule has two of them — an invariant nothing states — and, worse, would leave
+`confirms: None` corresponding to its rule perfectly, so an act could drop the
+ordering guarantee without failing anything. A slot the rule names is a slot
+admission can require.
 
 What was missing is who checks the correspondence. **Admission does**, over the
 record as a whole rather than slot by slot: a `CheckpointAct` that does not
@@ -1197,11 +1255,24 @@ the invariant by construction, and the gate never re-checks it — the same move
 Two consequences worth naming. An act whose `observed` map is simply **absent**
 where its rule names a fact is refused rather than treated as an empty
 observation, so the strict-path argument `sec-3` makes for conjunctive binding
-cannot be evaded by omitting the field. And because the rule is `&'static` and
-the check is total, a *new* `ObservedFact` on an existing rule invalidates every
-stored act of that kind at admission-time semantics rather than silently
-admitting acts that never observed it — which is the correct reading, since such
-an act was given over less than the rule now requires.
+cannot be evaded by omitting the field. And a *new* `ObservedFact` added to an
+existing rule invalidates every already-stored act of that kind — which is the
+correct reading, since such an act was given over less than the rule now
+requires.
+
+**That second one is the gate's doing, not admission's**, and saying otherwise
+would claim a mechanism that does not exist: admission runs on write and never
+re-runs, so it cannot reach an act stored before the rule changed. The
+invalidation falls out of the conjunct comparison instead — the gate looks up
+the fingerprint for each fact the rule names, finds none stored for the new one,
+and an absent stored fingerprint reads as **changed**, exactly as `sec-3` makes
+an unobservable fact read. So the one qualification on *the gate never
+re-checks the correspondence*: it does not re-derive whether the record matches
+its rule, but it does read the record **through** the rule, and a rule that has
+grown since simply finds less than it asks for. The correspondence stays an
+admission-time invariant for every act admitted under the rule in force; a rule
+change is the one thing that can retire an act, and it does so by making it
+unmet rather than by making it invalid.
 
 **Wire, replacement, and snapshot home.** Left unstated, these are where the
 implementations diverge, so:
@@ -1529,13 +1600,21 @@ a home: the payload is discarded and the digest is opaque, so at evaluation time
 there is nothing to recompute the comparison against. Hashing at submission is
 insufficient when the comparable material does not survive submission.
 
-So the link is explicit and persisted. `AgentDeclaration` carries its own
-`fingerprint`; `CheckpointAct::confirms` holds the fingerprint of the declaration
-the user was shown. **The lookup is by act, not by fingerprint** — the conjunct
-in the rule already names which agent act it requires, so the gate fetches that
-declaration and the fingerprint answers only *is it still the one confirmed*.
-`confirms` therefore needs no act tag of its own; it would be naming a fact the
-rule supplies.
+So the link is explicit and persisted, and it is spelled across both halves.
+`ActRequirement::confirms` is the rule half — `Some(BlockingSetDeclared)` on the
+`GraphReviewed` requirement, `None` everywhere else. `AgentDeclaration` carries
+its own `fingerprint`, and `CheckpointAct::confirms` holds the fingerprint of the
+declaration the user was shown: the record half.
+
+**The lookup is by act, not by fingerprint.** The rule names which declaration
+must be confirmed, so the gate fetches that declaration and the stored
+fingerprint answers only *is it still the one confirmed*. `confirms` on the
+record therefore needs no act tag of its own — it would be naming a fact the rule
+supplies — but the rule must name it, because that is what makes the
+confirmation **required** rather than merely possible. Admission enforces the
+pairing, per the correspondence above, so a `GraphReviewed` act that names no
+declaration is refused on write and never becomes a silently order-free act the
+gate would have to catch later.
 
 The ordering property follows. A declaration made or edited after the
 confirmation carries a different fingerprint, so `confirms` no longer matches and
@@ -1633,6 +1712,16 @@ missing answer.
   name, is refused at the same point. Asserted separately from the coverage case
   because the correspondence is over the whole record, and testing only the slot
   that was found first is what left this one unchecked.
+- **A missing confirmation is refused on write, and so is a gratuitous one** — a
+  `GraphReviewed` act carrying no `confirms` is refused because its rule names a
+  declaration, and a `SufficiencyAccepted` act carrying one is refused because
+  its rule does not. Both directions, because the correspondence is
+  presence-exactly-when and not presence-at-most.
+- **A rule that grows an observed fact unmakes acts stored before it** — adding
+  a second `ObservedFact` to an existing rule leaves an already-stored act of
+  that kind unmet, with no re-admission and no migration. Asserted at the gate,
+  because that is where the mechanism is: admission cannot reach a record it has
+  already written.
 - **A policy change is a user act and is logged** — a payload that changes the
   policy without an `AcceptanceDeclaration` is refused, and an accepted change
   emits a change row naming both the old and new policy.
