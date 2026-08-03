@@ -20,8 +20,9 @@ falsified 6/6 — M25 measures F-14 rather than arguing it).
 `pass`, 71 assertions, 0 red, + falsified 4/4; F-P05-41/42/43 and D-P05-20..23
 out of it). **EX-10, EX-11, VA-2 and VA-3 are discharged.** **T7 DONE** (six EVD
 records — EVD-006..011 linked to QUE-200/QUE-201; **EX-13 and VA-5 discharged**;
-F-P05-44/45 and ISS-306 out of it). Next unit is **T8** (evidence artefacts —
-and it is what rescues the only copy of the scored results), then T9.
+F-P05-44/45 and ISS-306 out of it). **T8 DONE** (RFC-025 evidence artefacts —
+**EX-14 discharged**; the scored results are now IN THE REPO; F-P05-46 out of
+it). Next and last unit is **T9** (close).
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
@@ -387,6 +388,41 @@ Lifted here so the ids survive the sheet:
     cost; the one measured asymmetry runs against the bundle. And the gap that
     must ride with it — QUE-200's `upload-pack`-in-hostile-context worry was
     **never exercised** and stays argument, not evidence.
+
+- **T8 — THE RFC-025 EVIDENCE ARTEFACTS DONE** (`d730ee50`). **EX-14
+  discharged.** 28 files under `.doctrine/rfc/025/evidence/` — SL-241's declared
+  design-target selector.
+  - **THE SCORED RESULTS ARE NOW IN THE REPO.** `results-c3.tsv` (98 rows) and
+    `results-guards.tsv` were the **only** copies and lived outside git under
+    `~/capsules`. A wiped capsule root meant re-running every probe. That is
+    over; this was the durability step, not a write-up.
+  - **Three summaries, citational-plus** — `README.md` (the verdict, plus
+    **seven things the evidence does NOT establish**, led by the untested
+    `upload-pack` claim), `matrix.md` (the sixteen rows per-mechanism),
+    `guards.md` (five guards + the conflict sub-probe).
+  - **Raw logs → `.doctrine/state/rfc-025/raw/`** (80 files, 488K): runtime
+    tier, gitignored by the existing `.doctrine/state/` entry, **no new
+    `.gitignore` entry** — § 5.3 as amended, since the v0 entry broke
+    `every_runtime_gitignore_glob_is_classified`. Verified with `git
+    check-ignore -v`, not assumed.
+  - **The phase sheets are archived, copied straight** (`phase-sheets/`, with a
+    README framing them as frozen exhibits and naming what is authoritative
+    instead). **Operator ruling**, and the reasoning is durable: a citational
+    summary is only worth anything while its citations resolve, distilling
+    spends context on reasoning that may never be read, and the loss is
+    irreversible where the cost is not — cf. **F-P05-39**, which is this exact
+    failure already paid for once.
+  - **`drivers/` committed too** (T5's/T6's falsification + diagnostic vehicles)
+    — beyond the brief, on that same F-P05-39 precedent. The copy is free; the
+    loss is not.
+  - **F-P05-46** — the falsification round is recorded **in-band**, so four
+    `outcome=fail` rows in `results-c3.tsv` are four *successes*, discriminated
+    only by a `MUTATED=` stamp on the **preceding preamble line**. A naive count
+    of fails misreports a matrix that has none. Documented in both places a
+    reader arrives from rather than repaired (rewriting scored evidence
+    post-hoc is worse). **The generalisation: a discriminator a reader must
+    *notice* is weaker than a separation they cannot miss** — the guards got the
+    separation (D-P05-20), the sub-probe's mutants did not.
 
 ### PHASE-01 decisions (durable)
 
