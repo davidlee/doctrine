@@ -18,7 +18,11 @@ confidence   = "high"           # low | medium | high
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
 contradicts = []
-notes       = []
+notes       = [
+  "CORRECTED IN SL-241 PHASE-06 (F-P06-11). This record previously stated that `upload-pack` running in the capsule repo's context was never exercised. It was: H6's plant sets `uploadpack.packObjectsHook` deliberately (instantiations.sh:640) and a plain-path `git fetch` spawns `git-upload-pack` in the source repo (verified in-jail under GIT_TRACE, git 2.54.0). The scored outcome in `datum` is unaffected.",
+  "The two planted non-hook keys did NOT hold for the same reason. `uploadpack.packObjectsHook` is protected-config only and git's defence was OBSERVED holding — that is real evidence on QUE-200's named worry. `core.fsmonitor` IS honoured from repo-level config and did not fire only because no trusted-side git command in the M-A harvest path refreshes an index (measured: `git status` fires it, `rev-parse` does not).",
+  "The residual, stated correctly: the surface was SAMPLED at two keys, not cleared. QUE-200's universal — 'git's protected-config rules cover everything a hostile repo config can do to upload-pack' — is not discharged, and `core.fsmonitor`'s silence is a property of harvest-fetch.sh's command choice rather than of git. Adding an index-touching git command against the capsule clone would turn this passing plant into trusted-side execution; H6 re-run would catch it.",
+]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)

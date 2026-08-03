@@ -114,13 +114,50 @@ neither mechanism failed anything that would reopen it.
 
 **The shape of the result.** On the axes that were expected to separate the
 candidates — config/hooks, resource bounds, forensic retention, cost — they are
-equal. The one measured asymmetry runs *against* the leading trust argument for
-the bundle: M-B takes on a trusted-side read of capsule-authored bytes that M-A
-never performs. Two open costs sit on the M-B side (EVD-007's two-site
-`harvest/fsck-failed` token; EVD-009's quiesce obligation), and one flagged
-worry remains untested on the M-A side: `upload-pack` running in the capsule
-repo's context was never exercised, so this question's own caveat about git's
-protected-config rules is still argument, not evidence.
+equal. Three asymmetries were measured and all three sit on the M-B side:
+EVD-010's four-leg trusted-side file boundary, EVD-007's defective two-site
+`harvest/fsck-failed` token, and EVD-009's quiesce obligation. **All three are
+costs — an extra boundary to write, a token to split, a provisioning step to
+run.**
+
+## The EX-9 ruling: the evidence does NOT suffice (SL-241 PHASE-06 T8, D-P06-9)
+
+The question stays **`open`**. It settles in the post-spike REV, not here.
+
+**Candidate 3 is excluded** on grounds this question already accepts — EVD-008:
+tree materialization forfeits the forensic-history invariant by construction, and
+neither rigged mechanism failed anything that would reopen it.
+
+**Candidates 1 and 2 cannot be separated on the evidence, because each carries
+exactly one trusted-side surface the other lacks and only one of the two was
+measured:**
+
+| | M-A (fetch) | M-B (bundle) |
+|---|---|---|
+| the surface it alone carries | **run git inside a capsule-authored repository** — three touches in `harvest-fetch.sh` (`rev-parse` at `:57`/`:66`, the `fetch` at `:73`, which spawns `upload-pack` there) | **parse a capsule-authored file** trusted-side |
+| how well it is measured | **sampled at two config keys**, and the sample's own result shows the surface is not uniformly defended — F-P06-11 | **enumerated and tested** — EVD-010's four legs, all `pass` on both fixtures |
+
+EVD-010 proposed the right comparison — *"the two arms should be compared on
+total trusted-side surface"* — and that is precisely the axis where the
+measurement is uneven. **The three asymmetries favouring M-A are cost
+asymmetries; the one favouring M-B is a safety asymmetry**, and this question
+asks for the minimal **safe** mechanism. Settling on M-A now would adopt the
+candidate whose own named hazard is the less-measured one, on the strength of
+evidence that mostly shows the *other* candidate carries friction. *"M-B has
+costs"* is not *"M-A is safe."*
+
+**What would close it** — bound or eliminate M-A's trusted-side git surface in
+the capsule repo, rather than sample it further. The residual is a universal over
+git's config space (*"protected-config rules cover everything a hostile repo
+config can do to upload-pack"*) which no probe can exhaustively discharge; the
+tractable form of the question is whether the parent needs to run git in that
+repository **at all**. Carried into the go/no-go's outstanding work.
+
+**Not a gap the spike failed to fill.** F-P06-11 makes the residual smaller and
+more precise than PHASE-05 recorded it — the vector *was* entered, and git's
+documented defence *was* observed holding for `uploadpack.packObjectsHook`. What
+changed is that the second planted key, `core.fsmonitor`, turns out to be
+honoured from repo config and to have stayed silent for a contingent reason.
 
 Scored data: `probes/c3/results.tsv`; committed summaries under
 `.doctrine/rfc/025/evidence/` (SL-241 PHASE-05 T8).

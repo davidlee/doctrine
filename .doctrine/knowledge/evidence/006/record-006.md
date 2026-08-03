@@ -23,12 +23,50 @@ clone; the plant is live, not vacuous — a reference-transaction hook was
 config and hooks are **repo-local, never objects**, and both mechanisms
 transfer objects. Neither `git fetch` nor `git bundle` carries them.
 
-That matters for the specific worry QUE-200 records against candidate 1: *"git's
+## What this row does and does not say about QUE-200's `upload-pack` worry
+
+**Corrected in SL-241 PHASE-06 (F-P06-11).** This section previously read
+*"`upload-pack` running in the capsule's context remains untested here."* That
+was wrong, and the row's own plant is what disproves it.
+
+QUE-200 records a trust-bearing claim against candidate 1: *"git's
 protected-config rules cover everything a hostile repo config can do to
-upload-pack"* is a trust-bearing claim to test, not assume. This row does **not**
-discharge that claim — it shows the hazard class does not reach the parent under
-either mechanism, which is a different and weaker statement. `upload-pack`
-running in the capsule's context remains untested here.
+upload-pack"* — to test, not assume. **The row tests it, deliberately.** Beyond
+`core.hooksPath`, `H6_mutate` plants two config-borne execution triggers that are
+not hooks (`instantiations.sh:640–641`):
+
+| key | honoured from repo-level config? | why it did not fire trusted-side |
+|---|---|---|
+| `uploadpack.packObjectsHook` | **no** — protected config only | **git defended it.** `upload-pack` runs this instead of `pack-objects` when serving a fetch, i.e. as a child of the trusted side's own `git fetch`. The defence is *observed*, not taken from the documentation |
+| `core.fsmonitor` | **yes** | **nothing triggered it.** Firing needs an index refresh; `rev-parse` does not perform one, `git status` does |
+
+`upload-pack` therefore ran in the capsule repo's context on **every M-A cell** —
+verified in-jail rather than inferred, `GIT_TRACE=1` on a plain-path fetch
+spawning `git-upload-pack '<path>'` (git 2.54.0).
+
+**What is untested is narrower and sharper.** One key was defended and one was
+merely not reached, so the row samples the surface without clearing it:
+
+- The **universal** QUE-200 states is not discharged by two keys, one of which
+  turns out not to be protected at all. It is bound to git 2.54.0 besides.
+- `core.fsmonitor`'s silence is a property of **which commands the M-A harvester
+  runs**, not of git. `harvest-fetch.sh` touches the capsule's clone exactly
+  three times — `rev-parse` (`:57`, `:66`) and the `fetch` (`:73`). A `status`,
+  `diff`, `add` or `checkout` added there would turn this same passing plant into
+  trusted-side arbitrary execution. **This row is the regression detector for
+  that** — `c3_assert_never_ran_in` reads the execution log — but it detects it
+  only when re-run.
+
+**And the dissolution's stated reasoning is sound but incomplete.** *"Config and
+hooks are repo-local, never objects"* covers what **travels**; it is silent on the
+trusted side **going to** the hostile config. On M-A the parent runs git three
+times with the capsule's `.git/config` on its effective cascade. On M-B it runs
+git in the capsule repo **zero** times — `harvest-bundle.sh` reads a flat file.
+That asymmetry is M-A's, and it is the mirror of EVD-010's.
+
+**"Fetch is proven safe against hostile config" is still not what this matrix
+says** — but the reason is that the surface was *sampled*, not that it was
+*never entered*.
 
 **H7 refuses at `harvest/resource-cap` on both**, same stage, same token.
 

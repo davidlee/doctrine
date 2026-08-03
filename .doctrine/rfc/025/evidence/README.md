@@ -50,13 +50,31 @@ Two further costs sit on the M-B side, neither a security failure:
 
 Read these before citing anything above.
 
-1. **QUE-200's `upload-pack` worry is untested.** The question flags a
-   trust-bearing claim against candidate 1 — *"git's protected-config rules cover
-   everything a hostile repo config can do to upload-pack"*. H6 shows the
-   config/hooks *hazard class* does not reach the parent under either mechanism,
-   which is weaker and different: `upload-pack` running in the capsule repo's
-   context was never exercised. **"Fetch is proven safe against hostile config"
-   is not what this matrix says.**
+1. **QUE-200's `upload-pack` surface is SAMPLED, not cleared.** *(Restated in
+   PHASE-06 — F-P06-11. This limit previously said the vector "was never
+   exercised", which the rig's own plant disproves.)* `upload-pack` **did** run
+   in the capsule repo's context on every M-A cell — a plain-path `git fetch`
+   spawns `git-upload-pack '<path>'` (verified in-jail, git 2.54.0) — and H6
+   plants `uploadpack.packObjectsHook` there deliberately, observing git's
+   protected-config defence hold rather than trusting the documentation for it.
+   What is **not** established:
+   - QUE-200's claim is a **universal** — *"git's protected-config rules cover
+     everything a hostile repo config can do to upload-pack"*. Two keys do not
+     discharge it, and the result is bound to git 2.54.0.
+   - **One of the two keys was not defended at all.** `core.fsmonitor` *is*
+     honoured from repo-level config; it stayed silent because nothing in the
+     M-A harvest path refreshes an index (`git status` fires it, `rev-parse`
+     does not). That safety is a property of which commands
+     `harvest-fetch.sh` runs — `rev-parse` at `:57`/`:66` and the `fetch` at
+     `:73`, three touches of the capsule's clone — not a property of git.
+   - The dissolution's reasoning, *"config and hooks are repo-local, never
+     objects"*, covers what **travels** and is silent on the trusted side
+     **going to** the hostile config. M-B runs git in the capsule repo **zero**
+     times; M-A runs it three.
+
+   **"Fetch is proven safe against hostile config" is still not what this matrix
+   says** — the reason is that the surface was sampled, not that it was never
+   entered.
 2. **Candidate 3 (tree materialization) was never rigged**, on QUE-200's own
    recommendation. There is no measurement for or against it here beyond the
    structural argument that it forfeits forensic history.

@@ -1076,10 +1076,15 @@ only where the lesson generalises past SL-241.
   2.55s), because `git clone --no-hardlinks` of a 169 MB fixture reflinks in
   0.2s. R-B is answered and the heavy column stays.
 - **What was NOT observed, and must ride with all of the above**: QUE-200's
-  `upload-pack`-in-hostile-context worry was never exercised. H6 shows the
-  hazard class does not reach the parent under either mechanism — weaker and
-  different. **"Fetch is proven safe against hostile config" is not what this
-  matrix says.**
+  `upload-pack`-in-hostile-context surface is **sampled, not cleared**
+  (*corrected in PHASE-06 — F-P06-11; this bullet previously said the vector was
+  never exercised, which H6's own plant disproves*). `upload-pack` ran on every
+  M-A cell and `uploadpack.packObjectsHook` was planted deliberately to observe
+  git's protected-config defence. But two keys do not discharge QUE-200's
+  universal, and the second of them — `core.fsmonitor` — **is** honoured from
+  repo config and stayed silent only because nothing in the M-A harvest path
+  refreshes an index. **"Fetch is proven safe against hostile config" is not what
+  this matrix says.**
 
 ### PHASE-06 — IN FLIGHT, lifted early because the phase found something
 
@@ -1645,8 +1650,10 @@ mid-phase would convert a legible structural finding into a silent pass.
   **The result is that the mechanism axis barely matters** and the one measured
   asymmetry runs against the bundle — F-P05-45. **Do not read the matrix as
   "fetch is proven safe against hostile config"**: QUE-200's own `upload-pack`
-  worry is untested and stays argument. The question remains `open` — it settles
-  in the post-spike REV, not here.
+  surface is **sampled, not cleared** (F-P06-11 — corrected from "untested"; the
+  vector *was* exercised, but at two keys, one of which git does not protect).
+  The question remains `open`, and **PHASE-06 T8 ruled that the EVD does not
+  suffice to settle it — D-P06-9.** It settles in the post-spike REV, not here.
 - QUE-201 — declaration home; now ergonomics-only. **Its evidence input is
   OBSERVED as of T6** (guard (e), three legs): a capsule that rewrites its own
   in-repo declaration leaves trusted-side behaviour byte-identical, worktree-side
