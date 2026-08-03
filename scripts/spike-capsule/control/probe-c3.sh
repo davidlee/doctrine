@@ -45,6 +45,12 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=pipeline.sh
 . "${RIG_DIR}/control/pipeline.sh"
+# The fixture table (T6 lift). Needs `rig_die` from common.sh, which pipeline.sh
+# has already sourced; it defines only functions and reads `RIG_ROOT` at CALL
+# time, so it is inert until `rig_enter` has published one.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/fixtures.sh
+. "${RIG_DIR}/lib/fixtures.sh"
 # `lib/matrix.sh` needs `token_legal`, which pipeline.sh authors — sourced after.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../lib/matrix.sh
@@ -71,65 +77,6 @@ SPIKE_C3_MUTANT="${SPIKE_C3_MUTANT:-}"
 # my own payload actually land".
 ROWS_OUTCOME_FIELD=10
 ROWS_OBSERVABLE_FIELD=9
-
-# ── the fixture table (EX-8: a rig PARAMETER, never a hardcoded path) ───────
-#
-# Four facts per fixture, and three of them are JOINS rather than paths:
-#
-#   slice   conform leg 2 folds the result range against THIS slice's
-#           design-target selectors, so it must name a slice the fixture's own
-#           `.doctrine/` carries — 001 in the `ledger` fixture, 241 in the heavy
-#           clone of this repository.
-#   stub    where the stub worker writes. A control-plane choice because it is
-#           a join with those same selectors: a stub landing outside them makes
-#           every cell refuse at conform leg 2 for a reason about the rig
-#           rather than about the model (capsule/worker-stub.sh).
-#
-# `light` is F1 (TypeScript, `ledger`); `heavy` is F4 (this repository, Rust).
-# The altitude vocabulary reads off that split: `unproven-beyond-rust` is
-# literally "heavy only".
-fixture_repo() { printf '%s' "${RIG_ROOT}/fixtures/$1/repo"; }
-fixture_declaration() { printf '%s' "${RIG_ROOT}/fixtures/$1/interpretation-surface.txt"; }
-
-fixture_slice() {
-  case "$1" in
-    light) printf '001' ;;
-    heavy) printf '241' ;;
-    *) rig_die "no slice join for fixture: $1" ;;
-  esac
-}
-
-fixture_stub() {
-  case "$1" in
-    light) printf 'src/capsule-stub.ts' ;;
-    heavy) printf 'scripts/spike-capsule/capsule-stub.txt' ;;
-    *) rig_die "no stub path for fixture: $1" ;;
-  esac
-}
-
-# The VERIFY capsule's two bounds, per fixture (D-P05-7). Both defaults were
-# sized by the LIGHT fixture, and a Rust workspace overruns both — measured at
-# 352s and 4.4G, against 300s and 256 MiB. An unnamed overrun does not read as
-# "the bound was wrong": the disk leg lands on `verify/resource-cap` and the
-# clock leg on `verify/verify-timeout`, and the SECOND of those is a LEGAL
-# token, so `assert_outcome` would accept an honest run as a refusal without
-# ever announcing itself (F-P05-15). Sized with headroom over the measurement,
-# not to it — a cold registry fetch is not a fixed cost.
-fixture_verify_timeout() {
-  case "$1" in
-    light) printf '300' ;;
-    heavy) printf '900' ;;
-    *) rig_die "no verify timeout for fixture: $1" ;;
-  esac
-}
-
-fixture_verify_disk_cap() {
-  case "$1" in
-    light) printf '%s' $((256 * 1024 * 1024)) ;;
-    heavy) printf '%s' $((8 * 1024 * 1024 * 1024)) ;;
-    *) rig_die "no verify disk cap for fixture: $1" ;;
-  esac
-}
 
 # ── scoring: expected boundary vs observed boundary (S2) ────────────────────
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # rig — entry point for the SL-241 capsule spike rig (RFC-025 programme).
 #
-#   rig <c1a|smoke|c2|c3|c1b|selftest> [rows…] [--stub|--agent]
+#   rig <c1a|smoke|c2|c3|guards|c1b|selftest> [rows…] [--stub|--agent]
 #
 # Disposable scaffolding. The deliverable is evidence, not product.
 #
@@ -30,6 +30,7 @@ probes
   smoke     A2 — network reachability, then authenticated `claude -p`
   c2        P-C2 — the confinement matrix
   c3        P-C3 — the hostile matrix, M-A and M-B side by side
+  guards    the five guard probes — each guard observed refusing (a…e)
   c1b       P-C1b — real agent executing a real red→green phase
   selftest  the rig's own red/green
 
@@ -144,6 +145,9 @@ case "${probe}" in
   smoke) rig_enter && rig_dispatch probe-smoke.sh PHASE-02 "${RIG_ROOT}" "${rows[@]+"${rows[@]}"}" ;;
   c2) rig_enter && rig_dispatch probe-c2.sh PHASE-04 "${RIG_ROOT}" "${rows[@]+"${rows[@]}"}" ;;
   c3) rig_enter && rig_dispatch probe-c3.sh PHASE-05 "${RIG_ROOT}" "${rows[@]+"${rows[@]}"}" ;;
+  # `rows` carries the guard selectors here (a…e). One positional list, and the
+  # dispatcher does not care what the probe calls them.
+  guards) rig_enter && rig_dispatch probe-guards.sh PHASE-05 "${RIG_ROOT}" "${rows[@]+"${rows[@]}"}" ;;
   c1b) rig_enter && rig_dispatch probe-c1b.sh PHASE-06 "${RIG_ROOT}" "${rows[@]+"${rows[@]}"}" ;;
   selftest)
     rig_enter
