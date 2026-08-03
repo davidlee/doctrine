@@ -1,0 +1,260 @@
+id    = 343
+slug  = "sl-241-close-out-audit-capsule-spike-rig"
+title = "SL-241 close-out audit — capsule spike rig"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-241"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "design § 9 measurement row 2's before-side parenthetical is factually wrong: expected an enumeration a reader can count, observed a list containing a file and mixing per-phase with per-slice refs"
+detail = """
+design.md:957 gives row 2's incumbent source as "static — coord branch, projected refs, candidate branch, `candidates.toml`, trunk".
+
+Two defects, both confirmed against `evidence/measurements.md` § 2:
+1. `candidates.toml` is a FILE, not a ref. It cannot appear in a count of "mutable refs written per accepted phase".
+2. The list conflates per-phase with per-slice writes. `dispatch/<N>`, the worker fork branch and `phase/<N>-NN` are attributable to one accepted phase; `review/<N>`, `candidate/<N>/<label>`, trunk and `edge` amortise over the slice's k phases. Quoting the list publishes a number with no fixed meaning — 3 vs 7 depending on how k falls.
+
+measurements.md § 2 does not inherit the error: it enumerates from REQ-311 (SPEC-022 FR-001) and checks against the write sites, reporting "3 attributable per phase, + a share of 3-4 slice-level refs". The evidence is right; the design's text is wrong.
+
+Raised in-phase as F-P06-10 and deliberately not edited in-phase per the operator's for-reconciliation convention. The general lesson the sheet drew: a design's parenthetical enumeration is a starting point, not a count — the error is invisible until someone tries to turn the list into a number."""
+disposition = "verified"
+response = """
+Confirmed against measurements.md § 2 and the write sites it cites. The design's text is the defect; the evidence already carries the corrected enumeration.
+
+Delegated to /reconcile — see the Reconciliation Brief, Per-slice (direct edit): design.md § 9's measurement table, row 2's "before (incumbent) source" cell."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "design § 9 measurement row 5 names the wrong axis: expected a contrast that discriminates the two models, observed a git-operation COUNT that hides the hazard class"
+detail = """
+design.md:960 defines row 5 as "git operations between doorbell and accepted-ref advance", incumbent source "static enumeration", capsule source "static enumeration + P-C1a" — i.e. a count on both sides.
+
+The count is not the discriminating fact. Per F-P06-10 and measurements.md § 5, the honest contrast is the KIND of git operation: the incumbent materialises a tree and stages into a shared index (ISS-234's hazard class); the capsule model never materialises a tree at all — it moves objects and one ref. A row reporting "4 vs 2" and stopping there describes an axis on which the two models are nearly equal, while the axis that actually separates them goes unreported.
+
+measurements.md § 5 reports the kind-contrast and additionally discloses that the incumbent count is the SUBPROCESS arm and the claude arm differs — a caveat a bare count would also have hidden.
+
+Same in-phase provenance as F-1 (F-P06-10, recorded for reconciliation, not edited in-phase)."""
+disposition = "verified"
+response = """
+Confirmed against measurements.md § 5. The row's metric name and both source cells describe a count; the discriminating fact is the kind of operation, and the evidence reports it correctly.
+
+Delegated to /reconcile — see the Reconciliation Brief, Per-slice (direct edit): design.md § 9's measurement table, row 5."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "design § 9's scope bullet over-claims OS portability: expected a fixture-altitude claim, observed wording that reads as fifteen rows proven on macOS when nothing in the spike measured a single row off Linux"
+detail = """
+design.md:981 states the scope as "model-level rows proven portable, env-conditional rows outstanding for macOS".
+
+Pairing "model-level" against "macOS" makes the altitude read as a PLATFORM claim. It is not one. Per design § 5.4 / A-3 and evidence/README.md limit 5, `model-level` means the row held on BOTH FIXTURES — a claim about client-project shape, not host platform. Fifteen rows are `model-level`, so read literally § 9 asserts fifteen rows proven portable to macOS.
+
+Observed: every probe in the spike ran in-jail on Linux under bwrap on a NixOS host with git 2.54.0. Nothing measured a single row off Linux. go-no-go.md § 1 states the narrow reading and carries its own FOR RECONCILIATION note pointing here; measurements.md's closing section repeats it ("Nothing here is portable to macOS without re-measurement").
+
+Severity is major rather than minor because of WHERE it sits: the over-claim is inside the section whose stated purpose is stopping the downstream REV from over-claiming. § 9's closing line is "Writing the scope in is what stops the REV over-claiming" — and the scope as written is the over-claim.
+
+Raised in-phase as F-P06-12."""
+disposition = "verified"
+response = """
+Confirmed. The altitude vocabulary is defined at design § 5.4 / A-3 and grades fixtures; § 9's scope bullet pairs it against an operating system. Cross-checked against matrix.md's row-level altitude column — fifteen rows `model-level`, H12 `unproven-beyond-rust` — and against go-no-go.md § 1, which already states the narrow reading and flags this exact wording for reconciliation.
+
+Delegated to /reconcile — see the Reconciliation Brief, Per-slice (direct edit): design.md § 9's "Scoped means, precisely" list, bullet 2. The replacement must not simply soften the wording: the altitude and the OS axis are independent, and the honest form states both — model-level grades fixtures, and every row is unmeasured off Linux."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "design § 9's ASM-007 closure bullet asserts a state the corpus contradicts: expected 'recorded strengthened, not discharged', observed ASM-007 invalidated since PHASE-04 step 0"
+detail = """
+design.md:987 reads "ASM-007 is recorded **strengthened, not discharged**, whatever step 0 returns."
+
+Observed: `doctrine knowledge inspect ASM-007` renders `assumption · invalidated`. PHASE-04 step 0 ran the independent enumeration ASM-007's own validation plan specified — 96 npm/TypeScript triggers enumerated with CPT-001 unread (beb4b665), classified append-only afterwards (61ea9f08, 0 deletions) — and the residue R1-R4 (terminal escape sequences, prototype pollution) falsified it. The claim's SHAPE failed, not merely its truth value: adding a sixth class and re-asserting exhaustiveness would re-run the same error (F-P04-3). ASM-008 replaced it and is `held`; ASM-008 is the record that is strengthened-not-discharged.
+
+So § 9's bullet has been false since PHASE-04 step 0 landed, and it was false when PHASE-06 opened. The bullet's "whatever step 0 returns" is the specific defect — it forecloses the one outcome step 0 was built to be able to produce.
+
+go-no-go.md § 3.3 records the divergence rather than smoothing it, and VA-3's cross-check passes: `doctrine knowledge show ASM-007` and the go/no-go agree that ASM-007 is `invalidated`. It is design § 9 alone that disagrees.
+
+Raised in-phase as D-P06-1."""
+disposition = "verified"
+response = """
+Confirmed. `doctrine knowledge inspect ASM-007` renders `invalidated`; ASM-008 is `held`. Both tiers agree, and go-no-go.md § 3.3 states the same. design § 9 is the sole dissenting artefact.
+
+Delegated to /reconcile — see the Reconciliation Brief, Per-slice (direct edit): design.md § 9's "Scoped means, precisely" list, final bullet."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "PHASE-06 EX-8's letter is unmet and the plan does not say so: expected the authoritative criterion to carry its operator ruling as the same file's own precedent does, observed the ruling recorded only outside plan.toml"
+detail = """
+plan.toml:244 (PHASE-06 EX-8) reads "ASM-007 is recorded STRENGTHENED, NOT DISCHARGED, whatever step 0 returned." It was discharged by INTENT, not by letter, on an operator ruling (D-P06-1): writing the literal claim would plant a falsehood in the one document whose whole purpose is preventing over-claim. That is the right call — see F-4.
+
+The finding is not the ruling; it is where the ruling lives. It is recorded in go-no-go.md § 3.3, notes.md § PHASE-06 close, and the archived sheet — none of which a reader meets when they read the criterion. plan.toml is authoritative for EX/VT/VA/VH (the handover says so explicitly, and the archived sheets are non-authoritative by their own README), so the authoritative surface is the one place the divergence is invisible.
+
+The same file already carries the remedy as an established convention: PHASE-01 EX-7 and EX-8 each end with a parenthetical recording what the criterion previously required and that it was withdrawn on an operator ruling, with the reason. PHASE-06 EX-8 did not receive that treatment.
+
+Consequence if left: a later reader — or a future criterion-checking pass — reads EX-8 against a corpus where ASM-007 is `invalidated` and gets a false red, then either re-litigates a settled ruling or, worse, "fixes" the corpus to match the criterion."""
+disposition = "tolerated"
+response = """
+Observation confirmed; drift accepted, with the rationale on the record.
+
+The ruling itself is right and is not in question: writing EX-8's letter would have planted a false claim in the one document written to prevent over-claim. It is durably recorded in three committed places — D-P06-1 in the archived PHASE-06 sheet, go-no-go.md § 3.3, and notes.md § PHASE-06 close — and VA-3's cross-check passes.
+
+Tolerated rather than briefed because plan criteria are off the reconcile write surface. `PHASE-NN` and `EN-/EX-/VT-` ids are immutable-append (boot rule), and /reconcile writes exactly two surfaces: per-slice artefacts by direct edit and governance/spec by REV. plan.toml is neither. Briefing a plan.toml edit would stall at reconcile, which is worse than recording the divergence here.
+
+What reduces the residual risk is already in the brief: F-4 corrects design § 9's mirror of the same claim, which is the copy a downstream REV would actually read and over-claim from. After that edit the stale assertion survives in exactly one place, next to a criterion whose phase is closed.
+
+Noted for the operator rather than actioned: this file's own convention would absorb it cleanly — PHASE-01 EX-7 and EX-8 each carry a trailing parenthetical recording what was withdrawn and why, on an operator ruling. Appending the same to PHASE-06 EX-8 is a one-sentence edit and would close this out properly. That is the operator's call at /close, not audit's to take unilaterally against the immutability rule."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Twenty-seven sheet decisions have no durable home outside prose: expected DEC records for D-P05-6..23 and D-P06-1..9 at close, observed none minted and the sheets they cite already archived"
+detail = """
+notes.md states the obligation twice — "DEC records are OWED at close for D-P05-6..23" and "DEC records are owed at close for D-P06-1..9, alongside PHASE-05's D-P05-6..23. Sheet convention is to lift at close; that obligation falls to /reconcile or /close, not to PHASE-06."
+
+Observed: no DEC record for any of them. DEC-111 through DEC-127 (the ids minted since SL-241 opened) all belong to other slices — anchor report, condition contracts, design-run gate. The last SL-241-adjacent decisions in the corpus are DEC-099/107/108/109/110, all pre-dating PHASE-05.
+
+Today those 27 decisions are citable only as `D-P0n-nn` — doc-local ids that resolve by grepping `## Decisions` in an archived phase sheet. The sheets are committed, so nothing is lost; but a doc-local id means nothing outside the artefact holding it, and several of these decisions bind work OUTSIDE SL-241, where a doc-local citation is exactly the wrong currency. The notes name three such:
+- D-P06-9 / F-P06-11 — QUE-200's residual is architectural, not another probe. A future agent reading "sampled, not cleared" as an invitation to plant a third config key has misread it.
+- D-P05-17 — the allowlist / QUE-204 work is one lever, placed as a follow-on slice. The largest piece of forward work the spike created, and it is currently unsliced.
+- D-P06-6 — `--dangerously-skip-permissions` inside the worker is ENDORSED because the OS boundary IS the boundary. A downstream design that weakened the sandbox to compensate for a harness setting would be inverting this.
+Add D-P06-5/D-P06-8 (the agent-home posture and the EROFS-not-EACCES constraint) which the go/no-go § 5 item 4 follow-up points straight at.
+
+Minting all 27 is not obviously the right answer — this is a spike whose scaffolding is disposable, and the notes index plus the archived sheets already give every id a resolvable home. Recommendation carried into the reconciliation brief: mint the outward-binding subset, and record the remainder as indexed-in-notes with that reason stated, rather than leaving a standing "owed at close" that no later reader can tell was decided rather than dropped."""
+disposition = "verified"
+response = """
+Confirmed: no DEC record exists for any of D-P05-6..23 or D-P06-1..9. DEC-111..127 were checked individually and all belong to other slices.
+
+Delegated to /reconcile — see the Reconciliation Brief, Knowledge corpus. The brief carries a scoped recommendation rather than "mint 27", because the count is a real judgement and minting all of them is not obviously right: this is a spike whose scaffolding is disposable, the notes index resolves every id, and the sheets are committed. What is not acceptable is leaving a standing "owed at close" that a later reader cannot distinguish from dropped work."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "The named deliverable is undeclared to conformance: expected go-no-go.md covered by a design-target selector, observed .doctrine/rfc/025/** registered scope-relevant only"
+detail = """
+`doctrine slice selector list 241` returns four selectors: `scripts/spike-capsule/**` (design-target), `.doctrine/rfc/025/evidence/**` (design-target), `.doctrine/rfc/025/**` (scope-relevant), `.doctrine/knowledge/**` (scope-relevant).
+
+`.doctrine/rfc/025/go-no-go.md` is therefore matched only by a scope-relevant selector, and `doctrine slice conformance 241` reports it under `undeclared` (line 497 of the report). It is the slice's headline deliverable: PHASE-06 EX-5 requires "a SCOPED go/no-go lands in `.doctrine/rfc/025/`", design § 9 Closure requires the same, PHASE-06 VT-1 verifies the file by path, and the slice scope doc names it in its closure intent. The one file the whole slice exists to produce is the one file conformance cannot confirm was delivered.
+
+design § 9.1's code-impact table has the same gap — it lists `.doctrine/rfc/025/evidence/**` as "new — committed probe summaries + measurement table" and never names the go/no-go, even though § 9's own Closure paragraph three lines earlier does.
+
+Load-bearing fix is the SELECTOR REGISTRY (`slice-241.toml`), which is what `slice conformance` reads: `doctrine slice selector add`. A prose-only edit to § 9.1 leaves conformance red.
+
+Scoping note: widen to the file, not to `.doctrine/rfc/025/**` as design-target. RFC-025 prose edits are an explicit slice non-goal (they are CHR-053's job), so promoting the whole directory to design-target would declare intent the slice deliberately did not have.
+
+Separately and NOT part of this finding: `.doctrine/slice/241/**` also reports undeclared. That is slice-own process artefacts, a known tooling gap already lodged as IMP-282 — see F-8."""
+disposition = "verified"
+response = """
+Confirmed against `doctrine slice selector list 241` and the conformance report.
+
+Delegated to /reconcile — see the Reconciliation Brief. Two entries, deliberately: the selector-registry add is load-bearing (it is what `slice conformance` reads), and the design § 9.1 table row is its human mirror. A prose-only fix leaves conformance red."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Conformance's 662 undeclared paths are structurally unattributable: expected a per-slice drift signal, observed a shared-tree commit range dominated by other slices' work"
+detail = """
+`doctrine slice conformance 241` reports undeclared 662, undelivered 0, conformant 67. Raised so the number is dispositioned on the record rather than left to be rediscovered and misread as scope creep by whoever reads the report next.
+
+The recorded source-delta ranges span the shared `edge` tree, which carried other slices' work throughout (SL-244 was active for the whole of PHASE-06). Per the per-phase boundary sections in notes.md: PHASE-05's range alone holds 111 foreign commits plus two interior merges; PHASE-04 step 0 is 8 of 15 foreign; PHASE-04 steps 1-4 carry 2 foreign, both INTERIOR, which `record-delta --commit` cannot excise; PHASE-03 has one foreign interior commit. `start..end` must not be read as all ours.
+
+The undeclared list bears this out directly: it is dominated by `.doctrine/backlog/**`, `.doctrine/knowledge/decision/1xx`, `.doctrine/adr/**`, `.claude-plugin/marketplace.json`, `Cargo.toml`, `justfile` — none of it SL-241's.
+
+Not a slice defect, and the tooling gap is already lodged: IMP-292 (audit-time conformance signal degradation) and IMP-282 (exclude slice-own process artefacts from undeclared leads) are both open. ISS-307 covers the narrower end-boundary defect. No new backlog item is warranted.
+
+The two genuine signals inside the noise are extracted as F-7 (the deliverable is undeclared) and F-9 (flake.nix), each confirmed against the artefact rather than read off the report."""
+disposition = "aligned"
+response = """
+No change needed. The number is an artefact of recording source-deltas over a shared tree, not of anything the slice did, and the per-phase boundary sections in notes.md already document each range's foreign content in detail — including the two interior merges in PHASE-05's range and the two interior foreign commits in PHASE-04's, neither of which `record-delta --commit` can excise.
+
+The underlying tooling gaps are already lodged and need no new item: IMP-292 (audit-time conformance signal degradation) and IMP-282 (exclude slice-own process artefacts from undeclared leads), both open. ISS-307 covers the narrower end-boundary defect and stays as filed — F-P06-13 withdrew F-P06-4's proposal to widen it to the start boundary, because an exclusive start boundary naming whatever HEAD was is correct by construction and `e43572d4` really is `de0d49a9^`.
+
+Disposed `aligned` rather than left unraised so that the next reader of the conformance report meets a ruling instead of a 662-line list."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "design § 9.1's code-impact table omits a file the slice changed: expected every touched path enumerated, observed flake.nix modified in PHASE-01 and absent from the table"
+detail = """
+design.md:993-1001 (§ 9.1 Code impact) enumerates five paths: `scripts/spike-capsule/**`, `.doctrine/rfc/025/evidence/**`, `.doctrine/knowledge/**`, `.doctrine/slice/241/**`, `.doctrine/state/rfc-025/raw/`, and closes "No `src/` changes (see R2)."
+
+Observed: commit 29d842dc `build(SL-241): add shellcheck to the jail` modifies `flake.nix`. notes.md § Produced records it — "`flake.nix` — shellcheck added to the jail (D-P01-4)". `flake.nix` appears in the conformance report's undeclared list and is matched by no selector.
+
+The change is small and correct — shellcheck is the rig's own lint gate and the jail had to grow it — but it is the slice's only change to the repository's build/environment definition, and § 9.1 is where a reader looks to learn the slice's blast radius. "No `src/` changes" is true and reads as "and nothing else structural either", which is not.
+
+Same two-surface fix as F-7: `doctrine slice selector add` is load-bearing (it is what conformance reads); the § 9.1 table row is the human mirror."""
+disposition = "verified"
+response = """
+Confirmed: 29d842dc modifies flake.nix under the SL-241 scope, notes.md § Produced records it, and neither design § 9.1 nor any selector accounts for it.
+
+Delegated to /reconcile alongside F-7 — same two surfaces, one selector-registry call and one § 9.1 table row."""
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "nit"
+title = "The evidence corpus's manifest omits its own required reading: expected measurements.md listed in README's 'What is here', observed it absent while go-no-go.md tells the reader to read it first"
+detail = """
+`.doctrine/rfc/025/evidence/README.md` § What is here tabulates README.md, matrix.md, guards.md, results-c3.tsv, results-guards.tsv, phase-sheets/, drivers/, and the gitignored raw-log path. `measurements.md` is not in the table.
+
+go-no-go.md's opening instruction is "Read `evidence/README.md`'s seven limits and `evidence/measurements.md`'s closing section first. They bound everything below." So the deliverable routes the reader through README to a file README does not acknowledge exists.
+
+Every other listed path resolves — all eight are present on disk and tracked in git. This is the manifest's only gap, and it matters slightly more than a normal typo because the README explicitly claims to be the durable index once the runtime sheets are gone."""
+disposition = "fix-now"
+response = """
+Fixed in audit. `evidence/README.md`'s "What is here" table gains a `measurements.md` row naming it as required reading for the go/no-go. Doc-only, inside audit scope, no spec or governance surface touched.
+
+Folded together with F-11's manifest rows in one edit, since both are the same table."""
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "major"
+title = "Half the verdict has no committed scored table: expected P-C2's confinement rows in the evidence corpus alongside results-c3.tsv, observed them only in a disposable capsule root outside the repository"
+detail = """
+The verdict is "GO ... for the ingestion AND CONFINEMENT halves of the model." The ingestion half has committed authority: `results-c3.tsv` (the scored matrix, verbatim) and `results-guards.tsv`, with README stating "results-c3.tsv is the authority ... where they disagree, it wins."
+
+The confinement half has none. P-C2's seven scored rows exist in exactly three places:
+1. `$SPIKE_CAPSULE_ROOT/probes/c2/results.tsv` — i.e. `~/capsules/probes/c2/results.tsv`. OUTSIDE the repository, in the disposable capsule root, not even in the gitignored runtime tier at `.doctrine/state/rfc-025/raw/`. Verified present (12,927 bytes, 41 lines, five appended `p-c2:` run preambles).
+2. `evidence/phase-sheets/phase-06.md` prose — a frozen exhibit the corpus explicitly declares non-authoritative ("Nothing in `phase-sheets/` is authoritative for slice state").
+3. go-no-go.md § 2's summary sentence.
+
+Same gap for `probes/smoke/results.tsv` — the A2 legs including F-P06-6's new capability leg, which the go/no-go's outstanding-work item 8 argues should be permanent.
+
+Verified against the source: the final scored run `p-c2: 2026-08-03T04:36:53Z in-jail` carries all seven rows — write-floor, canonical, git-creds, api-cred, env, escape-git, resource — each `pass`, each with its observable and its positive control in the detail column. The go/no-go's § 2 paragraph is an accurate summary of it. The data is right; it is only the durable home that is missing.
+
+Why this matters beyond bookkeeping: go-no-go § 1 identifies "the whole of P-C2's confinement set" as the environment-conditional rows outstanding for macOS. Those are precisely the rows a future re-measurement compares against, and they are the ones with no committed baseline. Design § 5.3 / PHASE-05 EX-14 states the rule the ingestion half followed: committed text summaries under `.doctrine/rfc/025/evidence/`, raw logs out of the corpus.
+
+Time-sensitive: the source file is one `rm -rf ~/capsules` from gone, and the capsule root is scratch by construction (`guard_not_real_repo` exists to keep it that way)."""
+disposition = "fix-now"
+response = """
+Fixed in audit, and taken now rather than briefed because the source is disposable — the capsule root is scratch by construction and the file was one `rm -rf ~/capsules` from gone. Deferring a copy of an irreproducible-in-place artefact to a later stage is how the evidence is lost; F-P05-39 is this slice's own standing lesson about exactly that (the T4a-T4e falsification drivers were never tracked and are gone).
+
+Landed:
+- `.doctrine/rfc/025/evidence/results-c2.tsv` — verbatim copy of `~/capsules/probes/c2/results.tsv`, unedited, all five appended runs preserved.
+- `.doctrine/rfc/025/evidence/results-smoke.tsv` — verbatim copy of `~/capsules/probes/smoke/results.tsv`; three legs, network / credential / capability.
+- `evidence/README.md` manifest gains both, and the authority sentence now names `results-c2.tsv` for the confinement half alongside `results-c3.tsv` for the ingestion half.
+- A reading note on the append-only shape, because a bare grep of `results-c2.tsv` returns `api-cred` rows from superseded profiles — the very rows F-P06-8 found asserting on a proxy. Only the block under the last `p-c2:` preamble is scored. The earlier runs are kept, not pruned: the realignment is only legible against what it replaced.
+
+Copied verbatim rather than summarised on purpose — the corpus's own rule is that the TSV is the authority and the prose cites it, so a hand-written summary would have reproduced the gap in a new form."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

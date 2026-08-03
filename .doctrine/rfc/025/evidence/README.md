@@ -103,14 +103,24 @@ Read these before citing anything above.
 | `README.md` | committed | this file — the verdict and its limits |
 | `matrix.md` | committed | the sixteen hazard rows, per-mechanism |
 | `guards.md` | committed | the five guard probes and the conflict sub-probe |
+| `measurements.md` | committed | the § 9 measurement table, nine rows, each naming both sources or saying which is absent — **required reading for the go/no-go**, whose opening sends you to its closing section |
 | `results-c3.tsv` | committed | **the generated measurement table** — the scored matrix, verbatim |
 | `results-guards.tsv` | committed | the guard probes' scored table, verbatim |
+| `results-c2.tsv` | committed | **P-C2's confinement rows, verbatim** — five appended runs; the last (`p-c2: 2026-08-03T04:36:53Z`) is the scored one, after the D-P06-5 profile change. Archived at audit (RV-343 F-11) from `$SPIKE_CAPSULE_ROOT/probes/c2/results.tsv`, which is outside the repository and disposable |
+| `results-smoke.tsv` | committed | the A2 legs — network, credential, and F-P06-6's capability leg. Same provenance and same reason as `results-c2.tsv` |
 | `phase-sheets/` | committed | **archived runtime phase sheets** — see below |
 | `drivers/` | committed | the falsification and diagnostic drivers, re-runnable |
 | `.doctrine/state/rfc-025/raw/` | runtime, gitignored | raw run logs — the exhibit, not the evidence (design § 5.3 as amended) |
 
-`results-c3.tsv` is the authority. The summaries here cite it; where they
-disagree, it wins.
+`results-c3.tsv` is the authority for the ingestion half; `results-c2.tsv` is
+the authority for the confinement half. The summaries here cite them; where
+they disagree, the TSV wins.
+
+**Reading `results-c2.tsv`:** it is append-only across five runs, so a bare grep
+returns rows from superseded profiles. Only the block under the last `p-c2:`
+preamble is scored. The earlier `api-cred` rows are the ones F-P06-8 found
+asserting on a proxy — they are kept because the realignment is only legible
+against what it replaced, not because they still stand.
 
 ## Citations — how to resolve them
 

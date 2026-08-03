@@ -6,30 +6,68 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · lifecycle **`audit`** · phases **6/6 `completed`** ·
-head `cf444109` (verify before citing — other agents commit to `edge`).
+fresh-as-of: 2026-08-03 · lifecycle **`audit`**, ledger closed · phases
+**6/6 `completed`** (verify head before citing — other agents commit to `edge`).
 
-**The spike is finished and the slice is at the `/audit` stage.** The divergence
-warning `doctrine slice status 241` prints is expected and stays until
-`/audit` → `/reconcile` → `/close` run.
+**The spike is finished and the audit is done.** The divergence warning
+`doctrine slice status 241` prints stays until `/reconcile` → `/close` run.
 
 **PHASE-06 closed the spike.** The scoped verdict is
 `.doctrine/rfc/025/go-no-go.md` — **GO on Linux/bwrap** for the ingestion and
 confinement halves, operator-accepted **with its scope** (VH-1). Every EX and
-every VA/VT criterion across the six phases is discharged.
+every VA/VT criterion across the six phases is discharged; `verify-vt` green
+across all six; `doctrine check gate` clean.
 
-Carried forward, pointer-only:
+**RV-343 is the close-out audit ledger — read it, do not re-survey.** Eleven
+findings, all terminal, **no blockers**. Its `## Reconciliation Brief` is what
+`/reconcile` consumes; its `## Synthesis` carries the closure story and the
+standing risks. The audit found **no defect in the evidence** — every claim
+spot-checked against its source held. What it found is canon lagging the work.
 
-- **FOR RECONCILIATION — design § 9, three items.** Row 2's parenthetical and
+### Produced
+
+- RV-343 — close-out audit, `reconciliation` facet, 11 findings, `done ·
+  await=none`. Two `fix-now` (landed), one `aligned`, one `tolerated`, seven
+  delegated to `/reconcile`.
+- `evidence/results-c2.tsv` + `evidence/results-smoke.tsv` — committed in audit
+  (RV-343 F-11). The confinement half of the verdict had **no committed scored
+  table**; P-C2's seven rows lived only in `~/capsules/probes/c2/results.tsv`,
+  outside the repo in the disposable capsule root. Copied verbatim before the
+  root could be cleaned. `evidence/README.md`'s manifest and authority sentence
+  updated with them, and with `measurements.md`, which it had also omitted.
+
+### Learned
+
+- `mem.pattern.handover.cite-artifacts-by-tier-not-just-path` — amended with the
+  F-11 instance. Its original body assumed *"the scored `results.tsv` survived,
+  so the evidence was whole"*; that held for the ingestion half and not for the
+  confinement half. The rule now reaches the results file, not only the drivers.
+
+### Open — carried forward, pointer-only
+
+- **FOR RECONCILIATION — design § 9, four items** (RV-343 F-1..F-4, exact
+  wording and replacement guidance in the brief). Row 2's parenthetical and
   row 5's axis (F-P06-10); *"model-level rows proven portable"* reading as
   OS-portability when the altitude grades fixtures (F-P06-12); and the ASM-007
   closure bullet, false since PHASE-04 step 0 (D-P06-1).
-- **DEC records owed at close** — D-P05-6..23 and D-P06-1..9.
+- **Selector registry, load-bearing** (RV-343 F-7, F-9) — `go-no-go.md` and
+  `flake.nix` are undeclared to conformance. `doctrine slice selector add` is
+  the fix; design § 9.1's table rows are the mirror, not the fix.
+- **DEC records owed** — D-P05-6..23 and D-P06-1..9. RV-343 F-6 recommends
+  minting the **outward-binding subset** (D-P06-9, D-P05-17, D-P06-6, D-P06-5,
+  D-P06-8) and recording the remainder as indexed-in-notes, rather than all 27.
+  Operator may prefer a different cut; leaving it silent is the one bad outcome.
+- **PHASE-06 EX-8's letter is unmet** (RV-343 F-5, `tolerated`) — discharged by
+  intent on an operator ruling (D-P06-1). `plan.toml` is off reconcile's write
+  surface; the one-sentence amendment following PHASE-01 EX-7/EX-8's own
+  precedent is the operator's call at `/close`.
 - **ISS-307 stays as filed** — the **end** boundary is the defect (PHASE-06's
   flip captured SL-244's commit; corrected by `record-delta`). F-P06-4's
   "widen it to the start boundary too" is **withdrawn** — F-P06-13: an
   *exclusive* start boundary naming a foreign commit is correct by construction,
   and `e43572d4` really is `de0d49a9^`.
+- **Conformance's 662 undeclared is not a defect** (RV-343 F-8, `aligned`) —
+  shared-tree noise; IMP-292 and IMP-282 already lodge the tooling gap.
 - **Open questions, all `open`, all settling in the post-spike REV** — QUE-200
   (T8/D-P06-9 ruled the EVD insufficient), QUE-201, QUE-202, QUE-204.
 - **Follow-on work lodged** — CHR-053, CHR-054; and D-P05-17's allowlist /

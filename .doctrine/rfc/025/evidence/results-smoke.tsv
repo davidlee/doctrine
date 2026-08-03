@@ -1,0 +1,4 @@
+assertion	mechanism	outcome	detail
+network	unauthenticated	pass	npm ping reached the registry
+credential	authenticated	pass	claude -p answered: OK
+execute	capability	pass	the agent ran a command — the proof file carries 7.1.3
