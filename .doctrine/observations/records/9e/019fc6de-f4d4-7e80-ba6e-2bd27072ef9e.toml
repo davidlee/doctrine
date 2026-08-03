@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc6de-f4d4-7e80-ba6e-2bd27072ef9e"
+recorded_at = "2026-08-03T09:05:28.276602568Z"
+kind = "friction"
+summary = "/close: piping `doctrine check gate` masks its exit code — a red gate reads as exit 0"
+detail = "The close ritual (CLAUDE.md) says run `doctrine check gate` at close. Run as `doctrine check gate 2>&1 | tail -40` to bound output, the pipe swallows the recipe's exit 101 and the harness reported 'exit code 0'. Only reading the tail itself revealed 'test result: FAILED ... recipe test-all failed with exit code 101'. An agent that trusted the reported status — or that tailed too few lines to catch the failure block — would close a slice on a red gate believing it green. Bit during SL-241 close. Mitigation is either PIPESTATUS, or gate emitting a terminal verdict line that survives any tail depth."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
