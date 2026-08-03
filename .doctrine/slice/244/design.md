@@ -211,8 +211,9 @@ pub(crate) struct AttestationRule {
 
 pub(crate) struct ActRequirement {
     pub(crate) act: ActKind,
-    /// Who must have authored it. NOT optional.
-    pub(crate) actor: ActorClass,
+    /// Who must have authored it. NOT optional — though one requirement names
+    /// the actor indirectly; see `RequiredActor` below.
+    pub(crate) actor: RequiredActor,
 }
 
 pub(crate) enum ActorClass { User, Agent, Adversarial }
@@ -247,26 +248,42 @@ hierarchical-state-machine error `DEC-065` rejects. What it does require is that
 `section-attestations-current`, because that condition's rule must name a
 required actor and today's derivation names none. See `ISS-310`.
 
-**One row's requirement is quantified, and `ActRequirement` cannot hold it.**
+**One row's required actor is run data, and the actor slot must say so.**
 `section-attestations-current` is the only row whose coverage is `EverySection`,
-and the only row whose required actor is undecided. That is one fact, not two:
-its requirement is quantified over sections rather than fixed by its rule, so the
-`…` in its classification row below stands for a *rule*, not for an unfilled
-`ActorClass`. This matters because `acts` is a conjunction — two `ActRequirement`
-entries mean *both*, never *either* — so of `ISS-310`'s three candidate answers
-only the first is expressible as drawn:
+and the only row whose required actor is not a constant of this table. That is
+one fact, not two: its requirement is quantified over sections, and *which*
+reviewer lanes each section needs is declared per run under `DEC-073`'s review
+policy rather than fixed here.
 
-- **human** — fits `ActRequirement` exactly, as one required actor;
+`ISS-310` is answered in the attested-acts section. What belongs here is the type
+each candidate answer costs, because `acts` is a conjunction — two
+`ActRequirement` entries mean *both*, never *either*:
+
+- **human**, a fixed actor — fits `ActRequirement` exactly;
 - **either** — needs the actor slot to admit a disjunction, which the conjunctive
   `acts` slice deliberately does not;
-- **human plus adversarial where the section opted in** — is not a typing gap at
-  all. The requirement varies per section, from run data, so it cannot live in a
-  `&'static` table however the actor slot is shaped.
+- **per section, where the section opted in** — is not a typing gap at all. The
+  requirement would vary per *section* from run data, so no shape of the actor
+  slot puts it in a `&'static` table;
+- **per run, from `DEC-073`'s policy** — the answer taken, and expressible
+  statically, because the table names *where the actor comes from* rather than
+  naming the actor:
 
-`ActRequirement` stays as drawn, because it is correct for the eight rows that
-name one subject and one required actor. What is recorded here is that the open
-question carries a type cost that differs by answer, so `ISS-310` is decided in
-the attested-acts section with that cost visible rather than discovered.
+```rust
+pub(crate) enum RequiredActor {
+    /// Fixed by the rule. Seven of the eight requirements.
+    Fixed(ActorClass),
+    /// Read from the run's review policy (DEC-073). Exactly one requirement.
+    RunPolicy,
+}
+```
+
+The table stays `&'static` and stays total; resolution moves into `satisfied`,
+which already receives the whole snapshot rather than a parameter per fact class,
+so the policy arrives with no signature change. What makes this work where the
+per-section candidate fails is *what varies*: a per-run policy is one value an
+evaluation reads once, where a per-section rule would need the table to hold a
+different actor per subject.
 
 **Conjuncts must be current together, and currency is not yet ordering.** A
 conjunction of independent acts is satisfiable by acts that never met: an old
@@ -298,16 +315,68 @@ pub(crate) enum Coverage {
     Artefact,
     /// Every section's current digest.
     EverySection,
-    /// Every inquiry node's current digest.
+    /// Every inquiry node's current canonical material.
     InquiryMap,
 }
 ```
 
 `EverySection` is the incumbent pattern generalised, not a new idea:
 `ContentCoverage` already stores the subject→fingerprint map an acceptance was
-made over and compares it with the current one (`attestation.rs:200-214`).
-`InquiryMap` is the same shape over the other run-owned subject set, and it
+made over and compares it with the current one (`attestation.rs:200-214`). It
 exists because two rows need it — see the reach arguments below.
+
+`InquiryMap` is the same *comparison* over the other run-owned subject set, but
+**not** over digests, and the difference is forced rather than chosen. A section
+carries its own fingerprint because the shell digests a declared body. An inquiry
+node does not, and cannot cheaply be given one: nodes are mutated by pure code —
+disposed, re-parented, `needs` edited — with no shell round-trip to re-digest,
+and `DerivedInput` is built *before* `apply` runs the batch, so a shell-supplied
+node digest map would be a pre-batch answer to a post-batch question.
+
+`ContentCoverage`'s own doc already makes this argument in its own case —
+*"Deliberately not a composite digest. The pure layer never hashes … Comparing
+the map is pure, needs no new injection, and cannot bind to a stale value"*
+(`attestation.rs:192-195`). `InquiryMap` takes that route one step further and
+compares the **material** rather than a digest of it. So the incumbent type
+generalises over what it covers:
+
+```rust
+pub(crate) struct ContentCoverage<T> {
+    covered: BTreeMap<DesignId, T>,
+}
+
+impl<T: Eq> ContentCoverage<T> {
+    /// Whether every covered subject still carries what it was covered at —
+    /// and nothing has joined or left.
+    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, T>) -> bool {
+        &self.covered == current
+    }
+}
+```
+
+`ContentCoverage<Fingerprint>` is today's type with today's behaviour: whole-map
+equality, so a subject joining or leaving still invalidates.
+`ContentCoverage<NodeMaterial>` is the inquiry map. One comparison, two
+instantiations, and a refusal can name *which node* moved rather than reporting
+that the map did.
+
+**What `NodeMaterial` holds, and what it deliberately omits.** `InquiryNode`
+(`inquiry.rs:204-222`) carries `id`, `question`, `provenance`, `lifecycle`,
+`disposition`, `parent`, `needs` and `seq`. The material is all of them except
+`lifecycle` and `disposition`.
+
+What the user reviewed under `DEC-121` is *the set of questions and how they
+relate* — the graph they steered. A question later being answered is progress
+through that graph, not a change to it. Admit disposition and
+`user-accepts-sufficiency` expires on the next disposal, permanently, because
+disposal is precisely what the following stage does. The exclusion is not a
+convenience: disposition is already guarded by
+`blocking-inquiries-dispositioned`, so admitting it here would double-guard one
+fact while destabilising two conditions.
+
+Re-wording a node, re-parenting one, adding one or removing one all change the
+material and expire the review — which is the property `DEC-121` asks for, since
+steering the graph's shape is what the user is doing.
 
 **Binding is conjunctive, and the empty case is why.** An earlier draft made
 these alternatives — an attestation bound to its artefact *or* to an observed
@@ -525,16 +594,17 @@ It is a vocabulary addition, not bookkeeping, and is recorded as one.
 and is not a row — it warns, per the subsection above.
 
 **Corrected:** `user-acceptance-attested`'s coverage is `EverySection`, not
-`Artefact`. `AcceptedDesign` already carries `ContentCoverage`, whose
+`Artefact`. `LockAcceptance` already carries `ContentCoverage`, whose
 `is_current` compares the covered map against every current section
 (`attestation.rs:212`), and `DEC-120` names acceptance-covers-current-content as
 the incumbent template. Self-binding would have let a design edit leave the
 acceptance apparently current, deleting a guarantee that already ships.
 
-`section-attestations-current`'s required actor is deliberately left as `…`: it
-is `ISS-310`'s open decision, and — per the attestation subsection above — it is
-a quantified rule rather than a value, so naming it here would be exactly the
-buried assumption this section is supposed to refuse.
+`section-attestations-current`'s required actor is `RequiredActor::RunPolicy`
+rather than a constant. `ISS-310` is decided in the attested-acts section: the
+required lanes are the run's, declared under `DEC-073`. Naming a fixed actor here
+would be the buried assumption this section is supposed to refuse — and would
+delete a capability `DEC-073` already grants.
 
 ### Why each row reaches as far as it does
 
@@ -595,7 +665,8 @@ variant has no boundary, no contract and no prose.
 So these enumerations are not written twice and tested for agreement. **One
 declarative macro takes the condition list once — grouped by the edge each row
 guards, carrying variant, kebab token and contract — and emits the `Condition`
-enum, `Condition::ALL`, `CONTRACTS`, and `boundary_conditions`' match arms.**
+enum, `Condition::ALL`, `CONTRACTS`, and the match arms of **both**
+`boundary_conditions` and `can_advance`.**
 
 Grouping the source by edge is what closes the last hole rather than moving it.
 Generating the vocabulary and the contracts alone would still leave
@@ -605,11 +676,26 @@ rendered, and invisible to a set-equality test over the three sets that *were*
 generated. With the edge as the source's outer key, a condition that guards
 nothing cannot be written down.
 
+**Keying by an edge is not the same as keying by a *legal* edge**, and stopping
+at `boundary_conditions` would leave that gap open. `can_advance`
+(`gate.rs:150-158`) and `boundary_conditions` (`gate.rs:162`) are today two
+hand-written matches over the same four stage pairs. Generate only the second and
+a source row keyed `(Exploring, Locked)` still compiles, joins every generated
+set, and is never evaluated — because `advance` refuses that pair before any
+condition is read. A condition guarding an edge that does not exist is the same
+defect as one guarding no edge, and is invisible to exactly the same tests.
+
+So the source generates `can_advance` too. The four legal pairs become the
+source's outer keys and nothing else, and the stage graph has one home rather
+than two. The alternative — four fixed macro arms — closes the same hole but
+re-homes the graph in the macro's own syntax, which is the duplication this
+section spent its argument eliminating.
+
 That leaves exactly one enumeration outside Rust, and one test:
 
-- **generated** — `Condition`, `ALL`, `CONTRACTS` and `boundary_conditions`, from
-  one list. Equal by construction; no test can fail because no disagreement is
-  expressible.
+- **generated** — `Condition`, `ALL`, `CONTRACTS`, `boundary_conditions` and
+  `can_advance`, from one list. Equal by construction; no test can fail because
+  no disagreement is expressible.
 - **tested** — the prose asset corpus: every generated key has an asset, and the
   corpus has no key the vocabulary does not.
 
@@ -623,8 +709,9 @@ generator emits and what the asset test iterates.
    Vocabulary, const rows and boundary membership come from one source and cannot
    disagree. The prose corpus is set-equal by test. A missing match arm fails the
    build.
-2. **Every condition guards an edge.** Unrepresentable otherwise: the generator's
-   source is keyed by edge.
+2. **Every condition guards a *legal* edge.** Unrepresentable otherwise: the
+   generator's source is keyed by edge, and `can_advance` is generated from those
+   same keys — so there is no pair a row can name that `advance` refuses.
 3. **No Claimed tier.** `ConditionKind` has two variants and is a projection of
    `DerivationRule`, so the defect tier is unrepresentable rather than merely
    unused.
@@ -667,9 +754,15 @@ generator emits and what the asset test iterates.
 - **A stale conjunct does not satisfy** — a graph review made over a superseded
   inquiry map, paired with a current blocking-set declaration, is unmet. The
   acts-from-different-eras case.
-- **Coverage invalidates** — an inquiry-map edit unmakes `user-accepts-sufficiency`;
-  a section edit unmakes `user-acceptance-attested`. Both against the incumbent
-  `ContentCoverage` behaviour.
+- **Coverage invalidates** — a node edit unmakes `user-accepts-sufficiency`; a
+  section edit unmakes `user-acceptance-attested`. Both against the incumbent
+  `ContentCoverage` behaviour, at its two instantiations.
+- **Progress does not invalidate** — disposing an inquiry leaves
+  `user-accepts-sufficiency` satisfied, where re-wording or re-parenting the same
+  node unmakes it. The material/progress line, tested from both sides.
+- **An illegal edge is not writable** — a source row naming a stage pair
+  `advance` refuses fails to compile, because those same keys generate
+  `can_advance`. A build-time property, so there is no runtime test to write.
 - **Stale observed fact invalidates** — the governance edge set moving after the
   attestation leaves the condition unmet; an unobservable fact reads as changed.
 - **An empty observed set still binds its artefact** — a governance sweep that
@@ -694,10 +787,10 @@ generator emits and what the asset test iterates.
 - **`GovernanceEdges`' projection and encoding** — which relation rows, in what
   canonical order, under what encoding. Specified with the artefact it is
   compared against, in the attested-acts section.
-- `ISS-310` is decided in the attested-acts section, with the type cost of each
-  candidate answer now stated. It also warns that if this slice ships without
-  repairing `review_standing`, the defect survives the slice that named it —
-  a scope question for that section.
+- `ISS-310` is decided in the attested-acts section: the required lanes come from
+  `DEC-073`'s per-run review policy, which this slice builds. The repair reaches
+  `review_standing` and the envelope's `review_outstanding`, and deliberately not
+  `live_reviews` — that section says why.
 - **`review-disposition-attested`'s cumulative reach is not yet enforceable.**
   Binding it to the finding set requires `DEC-125`'s `RV`-backed model
   (`IMP-392`); until then its `Artefact` coverage means only its own record
@@ -721,8 +814,10 @@ and the three things `sec-3` deferred here: the actor for
 `section-attestations-current`, conjunct ordering, and `GovernanceEdges`'
 projection.
 
-The result is mostly **ratification**. Six of the eight acts already have a home
-in the tree, one type covers all three coverages, and exactly one shape is new.
+The result is **less ratification than it first looks**. Two of the eight acts
+have a home a gate can read, four have one it cannot, and two have none at all.
+One comparison still covers all three coverages, but only after it is generalised
+over what it covers.
 
 ### One contract, bespoke storage
 
@@ -736,52 +831,112 @@ seam, keep storage bespoke. Collapsing three incumbent records into one would be
 a parallel implementation of shipped, argued types, and would buy nothing the
 view does not already give.
 
-### The acts, and where each already lives
+### The acts, and where each lives
 
-| act | actor | stored as | basis |
+| act | actor | stored as | binding |
 |---|---|---|---|
-| `GovernanceConfirmed` | User | `cp-` acceptance | digest + `[GovernanceEdges]` |
-| `GraphReviewed` | User | `cp-` acceptance | inquiry-map coverage |
+| `GovernanceConfirmed` | User | **new** — checkpoint act | artefact + `[GovernanceEdges]` |
+| `GraphReviewed` | User | **new** — checkpoint act | inquiry-map coverage |
 | `BlockingSetDeclared` | Agent | **new** — agent declaration | inquiry-map coverage |
-| `SufficiencyAccepted` | User | `cp-` acceptance | digest |
+| `SufficiencyAccepted` | User | **new** — checkpoint act | inquiry-map coverage |
 | `DraftingReady` | Agent | **new** — agent declaration | artefact |
-| `SectionReviewed` | User | `att-` attestation | subject fingerprint |
-| `ReviewDisposed` | User | `cp-` acceptance | artefact |
-| `DesignAccepted` | User | run-level `AcceptedDesign` | every-section coverage |
+| `SectionReviewed` | per run policy | `att-` attestation | subject fingerprint |
+| `ReviewDisposed` | User | **new** — checkpoint act | artefact |
+| `DesignAccepted` | User | run-level `LockAcceptance` | every-section coverage |
 
-Three incumbent homes carry six of them:
+Two incumbent homes carry two of them:
 
-- **`Attestation`** (`attestation.rs:36`) — `subject`, `fingerprint`, `reviewer`.
-  Declared with an `att-` subject. Content-bound to one section, which is exactly
-  `SectionReviewed`.
-- **`AcceptanceAttestation`** (`attestation.rs:116`) — `authority`, `basis`,
-  `turn`, `digest`, declared against a `cp-` checkpoint. Its digest already
-  *"covers the checkpoint payload fingerprint, the inquiry disposition, and the
-  run revision current when the acceptance was given"*, so it is the right home
-  for every user judgement given at a checkpoint.
-- **`AcceptedDesign`** — `AcceptanceAttestation` plus `ContentCoverage`, for the
-  one act that is about the whole document.
+- **`Attestation`** (`attestation.rs:36-41`) — `id`, `subject`, `fingerprint`,
+  `reviewer`. Declared with an `att-` subject, content-bound to one section,
+  which is exactly `SectionReviewed`.
+- **`LockAcceptance`** (`attestation.rs:260`) — `AcceptanceAttestation` plus
+  `ContentCoverage`, for the one act that is about the whole document.
+
+### Why the checkpoint acceptance is not a home for the other four
+
+An earlier draft assigned `GovernanceConfirmed`, `GraphReviewed`,
+`SufficiencyAccepted` and `ReviewDisposed` to the generic `cp-` acceptance,
+reading its digest doc as covering everything a checkpoint judgement needs. It
+does not work, for three reasons that compound.
+
+**The type carries no act identity.** `AcceptanceAttestation`
+(`attestation.rs:116-122`) is `authority`, `basis`, `turn`, `digest`. No
+`ActKind`, no coverage, no observed fingerprint. Four acceptances of four
+different acts are four values of one shape, and nothing in them says which act
+each discharges — so a rule naming `GraphReviewed` cannot find its act, let alone
+check its binding.
+
+**The digest is opaque and its preimage is discarded.** Its doc says the digest
+*"covers the checkpoint payload fingerprint, the inquiry disposition, and the run
+revision current when the acceptance was given"*. But the payload it was derived
+from is not kept, so at evaluation time there is no material to recompute the
+comparison against. A digest whose preimage is gone can detect nothing; it can
+only be carried.
+
+**It never reaches the snapshot.** A checkpoint's acceptance rides a
+`CheckpointPlan` and is journalled. `ReviewGroup` (`snapshot.rs:322-334`) holds
+exactly `attestations`, `findings`, `integrated` and `acceptance: LockAcceptance`.
+A gate whose signature is `DesignSnapshot` plus `DerivedInput` cannot see a
+checkpoint acceptance at all.
+
+So the four get a persisted, snapshot-admitted record:
+
+```rust
+/// A user act given at a checkpoint, in the form the gate reads it (DEC-121).
+pub(crate) struct CheckpointAct {
+    id: DesignId,
+    act: ActKind,
+    /// The acceptance itself. Embedded, not widened — its constructor still
+    /// sets `AcceptanceAuthority::User`, so DEC-088's guarantee is carried.
+    acceptance: AcceptanceAttestation,
+    /// What it was given over. `None` is `Coverage::Artefact`.
+    covered: Option<CoveredSet>,
+    /// Each observed fact as it stood when the act was given.
+    observed: BTreeMap<ObservedFact, Fingerprint>,
+    /// The agent declaration this act confirms, where its rule names one.
+    confirms: Option<Fingerprint>,
+}
+
+/// A covered map in the shape the act's `Coverage` selector names.
+pub(crate) enum CoveredSet {
+    Sections(ContentCoverage<Fingerprint>),
+    Nodes(ContentCoverage<NodeMaterial>),
+}
+```
+
+`CoveredSet` is a sum rather than one map type because `sec-3` generalised
+`ContentCoverage` over what it covers, and a *persisted* coverage must name which
+instantiation it is. The alternative — one map keyed by a stringly-typed value —
+would put the selector back in the data where the type can no longer check it.
+
+These land in their own snapshot group, for the reason `delegation` and `runbook`
+have theirs: a checkpoint act is its own state model, and `ReviewGroup`'s four
+members are all about review.
 
 ### Coverage is a selector, not a mechanism
 
-`sec-3`'s three `Coverage` variants need no new type. `ContentCoverage` is a
-`BTreeMap<DesignId, Fingerprint>` with `is_current(current)`
-(`attestation.rs:200-214`), and run-local ids are one space — `sec-`, `inq-`,
-`cp-`, `att-`, `fnd-` are all `DesignId`. So the variant selects *which current
-map is handed to the same comparison*:
+`sec-3`'s three `Coverage` variants need no new comparison. `ContentCoverage<T>`
+holds a `BTreeMap<DesignId, T>` and answers `is_current(current)` by whole-map
+equality (`attestation.rs:200-214`), and run-local ids are one space — `sec-`,
+`inq-`, `cp-`, `att-`, `fnd-` are all `DesignId`. So the variant selects *which
+current map is handed to the same comparison*:
 
-- `EverySection` — the section digest map. The incumbent use.
-- `InquiryMap` — the node digest map. Same type, different subject set.
-- `Artefact` — no map. The attestation's own recorded content is its binding, so
-  there is nothing to compare against; represented as an absent coverage rather
-  than an empty one, because an empty map is *not* the same claim as no claim.
+- `EverySection` — the section digest map, `ContentCoverage<Fingerprint>`. The
+  incumbent use, unchanged.
+- `InquiryMap` — the node material map, `ContentCoverage<NodeMaterial>`. Same
+  comparison, different covered type, for the reason `sec-3` gives: nodes carry
+  no fingerprint and cannot be given a trustworthy one, because they are mutated
+  by pure code after any shell digest would have been taken.
+- `Artefact` — no map. The record's own content is its binding, so there is
+  nothing to compare against; represented as an absent coverage rather than an
+  empty one, because an empty map is *not* the same claim as no claim.
 
-`ContentCoverage`'s own doc argues for this: *"One type, two users — the
+`ContentCoverage`'s own doc argues for the reuse: *"One type, two users — the
 integrated review and the lock acceptance — so whole-run currency has a single
 owner rather than a spelling in each."* A third user rides the seam as its author
-intended.
+intended. Generifying is what lets it; `is_current`'s body does not change.
 
-### The one new shape: agent declarations
+### The other new shape: agent declarations
 
 `BlockingSetDeclared` and `DraftingReady` have no home, and `AcceptanceAttestation`
 must not become one. Its constructor *sets* `AcceptanceAuthority::User` rather
@@ -790,95 +945,189 @@ it always carries user authority"* — and its single-member authority enum is t
 claim being made. Widening that enum to admit an agent would delete the
 guarantee, which is `DEC-088`'s and not this slice's to spend.
 
-So the agent acts get their own record: the same triple **minus** the authority
-claim.
+So the agent acts get their own record, with their own closed vocabulary.
 
 ```rust
+/// The acts an agent may declare. Closed, and deliberately NOT `ActKind`:
+/// an agent-authored `DesignAccepted` is the value that must not exist.
+pub(crate) enum AgentActKind {
+    BlockingSetDeclared,
+    DraftingReady,
+}
+
 /// An agent's declaration about the state of its own work (DEC-121).
 ///
 /// Deliberately NOT an `AcceptanceAttestation`: nothing here is accepted truth,
 /// and the authority enum's single membership is the point of that type.
 pub(crate) struct AgentDeclaration {
-    act: ActKind,
+    id: DesignId,
+    act: AgentActKind,
     /// The stated basis, as an acceptance carries one.
     basis: String,
+    /// The harness turn it was declared in, when the caller knew it.
+    turn: Option<String>,
     /// What it was declared over. `None` is `Coverage::Artefact` — the
     /// declaration's own content is its binding.
-    covered: Option<ContentCoverage>,
+    covered: Option<CoveredSet>,
+    /// This declaration's own content digest, shell-computed at declare time.
+    /// A confirming `CheckpointAct` names it; see the ordering subsection.
+    fingerprint: Fingerprint,
 }
+
+impl From<AgentActKind> for ActKind { /* widen, never narrow */ }
 ```
+
+**A closed sub-enum, not a validating constructor.** `act: ActKind` would admit
+an agent-authored `DesignAccepted` and rely on a check to refuse it. That is the
+shape this section already rejected for `AcceptanceAuthority` and `sec-3`
+rejected for `Claimed`: the illegal value should be unrepresentable rather than
+rejected. `impl From<AgentActKind> for ActKind` is the one direction needed — a
+requirement names an `ActKind`, and the view answers it by widening the
+declaration's kind, never by narrowing a requirement's.
+
+It is also **not** "the same triple minus the authority claim": it drops nothing
+and adds `id`, `act`, `covered` and `fingerprint`. `turn` is kept for the reason
+an acceptance keeps it, and `basis` because a declaration owes its reader one.
+
+**Replacement is by act, not by id.** At most one live declaration per
+`AgentActKind`; a new one replaces the prior, the way `run.rs:1062` retains-then-
+pushes an attestation. Two live `BlockingSetDeclared`s would make *which one did
+the user confirm* ambiguous, and removing that ambiguity is what the confirmation
+link below exists for. Its wire shape is a run-level field on `ApplyRequest`,
+joining `WRITER_ACTS` (`submission.rs:664`) — the array whose own doc says a new
+act that can change state and does not join the list **is** the gap.
 
 `DEC-121` is the reason this exists at all: *"an agent marks its whole graph
 blocking by fiat, and the difference between eight round-trips and four is
 invisible."* An agent declaration that is recorded, bound, and expirable is what
 makes that difference visible.
 
-### `section-attestations-current` requires a human
+### `section-attestations-current` takes the run's review policy
 
-`ISS-310`, decided: the required actor is **`User`** — a human section review.
-An adversarial attestation is recorded and does not satisfy the condition.
+`ISS-310`, decided: the required reviewer lanes are **the run's**, read from the
+review policy. `sec-3`'s `RequiredActor::RunPolicy` is the const table's way of
+saying so.
 
-Four reasons, in the order they weigh:
+**This is not a new decision — it is an unbuilt one.** `DEC-073` already settled
+it:
 
-1. **It is the only direction that stays additive.** `human → either` widens a
-   gate and is backward-compatible; `either → human` breaks every run that
-   cleared under the loose rule. Start strict; admit laxity if it is needed.
-2. **It restores meaning to a distinction the tree already draws.** `Reviewer`
-   has had two members since `DEC-073` and the incumbent derivation ignores them
-   — which is the whole of `ISS-310`. Requiring one of them makes the field load
-   bearing rather than decorative.
-3. **Adversarial coverage is separately guaranteed.** `DEC-074` makes the
-   integrated adversarial pass mandatory. Requiring a human at *section* level
-   means the two reviewer classes do different jobs rather than substituting for
-   each other; letting either satisfy would make an all-adversarial run lawful,
-   with no human having read a section.
-4. **It costs nothing to express.** `human` fits `ActRequirement` as drawn.
-   The other two answers cost the actor slot a disjunction, or leave the const
-   table altogether.
+> Each run has a small review policy declaring the required reviewer lanes and,
+> when both lanes are required, their intended order. This directly supports
+> human-only review, adversarial-only review acting as a human proxy, and both
+> human and adversarial review in either order.
+
+That is the same shape `DEC-121` found on the exploring edge: an interaction
+`SL-233` specified and never built, whose residue is a condition that looks
+enforced and is not. `ISS-310` is what this particular absence looks like from
+the gate's side — `Reviewer` is recorded on every attestation and read by
+nothing, which the tree states about itself at `attestation.rs:77-80`: *"read
+surface with no reader — the gate derives review standing from coverage, not from
+who reviewed."*
+
+**The shape.** One ordered, duplicate-free, non-empty list:
+
+```rust
+/// The reviewer lanes a run requires, in the order it intends them (DEC-073).
+///
+/// Ordered and non-empty. Membership is what the gate checks; the order is
+/// DECLARED, not enforced.
+pub(crate) struct ReviewPolicy(Vec<Reviewer>);
+```
+
+Both of `DEC-073`'s facts in one field rather than a set beside an order that
+could disagree with it. The default is `[Human]` — `DEC-074`'s default posture —
+and it is `#[serde(default)]`, so an existing snapshot parses and an existing run
+behaves exactly as it does today.
+
+**Order is declared and rendered, never enforced.** Three reasons.
+`Attestation` (`attestation.rs:36-41`) is `id`, `subject`, `fingerprint`,
+`reviewer` — no turn, no sequence, no timestamp — so lane order is not derivable
+from what is stored, and enforcing it would mean new state `DEC-073` never asked
+for. `DEC-073` says *intended* order and `DEC-074` says *"in either order"*; both
+read as the user choosing, not the engine policing. And prompting a sequence is
+the runbook's job under the split `DEC-121` drew — the step prompts the
+interaction, the condition holds the artefact.
+
+**Where the policy is read, and where it is not.** Three call sites read the
+attestation set. Two take the policy; one must not.
+
+| site | the question it answers | takes the policy |
+|---|---|---|
+| `snapshot.rs:428` `review_standing` | is the condition met? | yes — this is `ISS-310` |
+| `envelope.rs:799` `review_outstanding` | does the envelope call this section settled? | yes |
+| `run.rs:1495` `live_reviews` | which attestations stopped being live this apply? | **no** |
+
+Repairing only the first would leave a gate that refuses a section the envelope
+simultaneously renders as reviewed — the same defect one surface further out. The
+third is excluded on a stated ground rather than by oversight: it feeds
+`invalidation_rows`, which reports the *death of a recorded act*. An adversarial
+attestation going stale is a fact whatever the policy requires, and filtering it
+would silently stop reporting it. **A sweep for "readers of `attestations`" gets
+this wrong**, which is why the exclusion is written down here rather than left to
+the implementer.
+
+**What the integrated pass covers, and what it does not.** `DEC-073`'s last
+paragraph: *"The integrated adversarial review required by `DEC-066` remains a
+closure-grade authored RV review; section attestations do not silently satisfy or
+replace it."* Adversarial coverage of the whole document is separately
+guaranteed, by `DEC-066` — which is what makes an adversarial-only *section*
+policy a lawful choice rather than a hole. An earlier draft cited `DEC-074` for
+this. That was wrong twice over: `DEC-074` is about section posture, and far from
+mandating the integrated pass it explicitly grants the adversarial-only run this
+policy implements.
 
 `Reviewer` maps into `ActorClass` — `Human → User`, `Adversarial → Adversarial` —
 as an `impl From`, not a merge. `sec-3` refused to unify the three actor-ish
 vocabularies and that refusal stands; this is the one direction it required.
 
-Opt-in adversarial section review survives unchanged and stays **supplementary**:
-recorded, rendered, and not a substitute for the human attestation.
+**Cost, stated.** `SL-243` is the one live run and attested its sections
+adversarially. Under the policy it is repaired by declaring its policy
+`[Adversarial]` — a command against runtime state rather than a hand-edit of it.
+The escape hatch the one live run needs turns out to be the one the product
+already wanted, which is some evidence the shape is right.
 
-**Cost, stated.** `SL-243` is the one live run and will not clear this gate on
-sections it attested adversarially. It sits in the gitignored runtime tier and
-will need manual repair, which `sec-2` already carries as a bounded, accepted
-cost of this slice.
+### `ActorClass::Adversarial` is reachable, but no static row names it
 
-### `ActorClass::Adversarial` has acts but no requirements
+With the required lanes coming from run data, `Adversarial` is reachable as a
+*resolved* requirement while no `&'static` row names it: the table holds
+`RequiredActor::RunPolicy` for the one row whose lane varies, and resolution can
+yield `Adversarial`.
 
-With currency out of the vocabulary and `ISS-310` answered `human`, **no**
-`ActRequirement` names `Adversarial`. That is not the empty tier `sec-3`
-refused for `Claimed`, and the difference is worth stating before someone
-applies the same argument here.
+Worth stating, because `sec-3` refused an empty `Claimed` tier and someone will
+ask whether this is the same case. It is not, and less so than under any other
+`ISS-310` answer. `ActorClass` classifies *recorded acts*; adversarial section
+reviews are recorded, rendered, read — and now requirable. `Claimed` differed in
+kind: it had no legitimate members among the acts themselves, which is why it was
+made unrepresentable rather than merely unused.
 
-`ActorClass` classifies *recorded acts*, and adversarial section reviews are
-recorded, rendered, and read. What has no member is the set of *requirements*
-naming that actor. `Claimed` was different in kind: it had no legitimate
-members among the acts themselves, which is why it was made unrepresentable
-rather than merely unused.
-
-### Ordering: a confirmation covers the declaration it confirms
+### Ordering: the confirmation names the declaration
 
 `sec-3` deferred this, having shown that coverage gives simultaneity but not
 order: an old `GraphReviewed` and a later `BlockingSetDeclared` could both be
 current against the same map while the interaction `DEC-121` specifies — the
-agent declares, the user confirms — never happened.
+agent declares, the user confirms — never happened. It also named the fix, that
+*the confirming act's artefact covers the declaring act's digest*. That is an
+artefact-shape requirement, and it needs a field.
 
-No new mechanism is needed, only a **placement rule**.
-`AcceptanceAttestation`'s digest covers the checkpoint payload, so:
+An earlier draft tried to obtain it for free by **co-location** — recording
+`BlockingSetDeclared` into the checkpoint payload that `GraphReviewed` is given
+over, so the acceptance digest would cover the declaration by construction. It
+does not work, and it fails for the reason that sank the checkpoint acceptance as
+a home: the payload is discarded and the digest is opaque, so at evaluation time
+there is nothing to recompute the comparison against. Hashing at submission is
+insufficient when the comparable material does not survive submission.
 
-> `BlockingSetDeclared` is recorded **into the checkpoint payload** that
-> `GraphReviewed` is given over.
+So the link is explicit and persisted. `AgentDeclaration` carries its own
+`fingerprint`; `CheckpointAct::confirms` holds the fingerprint of the declaration
+the user was shown. The conjunct is met when the named declaration is present
+**and** still carries that fingerprint.
 
-The user's confirmation digest then covers the agent's declaration by
-construction. A declaration recorded *after* the confirmation is not in the
-payload the digest was derived from, so the digest cannot match and the
-conjunction is unmet — which is the ordering property, obtained from a binding
-that already exists rather than from a new field nobody can forget to set.
+The ordering property follows. A declaration made or edited after the
+confirmation carries a different fingerprint, so `confirms` names content that no
+longer exists and the conjunction is unmet. Unlike the co-location scheme this is
+a comparison of two stored values, so a refusal can say *which* declaration the
+confirmation was given over and that it has since moved — where the digest scheme
+could only report that something did not match.
 
 ### The governance edge projection
 
@@ -886,26 +1135,39 @@ that already exists rather than from a new field nobody can forget to set.
 observed fact owes a typed projection and a deterministic encoding or the
 comparison means nothing. This is that definition.
 
-**What is included.** The slice's **outbound `governed_by` edges**. `ADR-004`
-stores relations outbound-only and derives reciprocity, so the set is readable
-from the slice's own record with no traversal and no second source that could
-disagree.
+**What is included.** The slice's outbound `governed_by` edges **and** its
+`references` edges carrying `--role concerns`. That is `DEC-121`'s own
+definition — *"The artefact is the resulting **edge set** (`governed_by`,
+`references --role concerns`)"* — stated in both its prose and its `choice`
+facet. `ADR-004` stores relations outbound-only and derives reciprocity, so both
+classes are readable from the slice's own record with no traversal and no second
+source that could disagree.
 
-**What is excluded, and why it matters.** `references` edges — including
-`--role concerns` — are *not* governance bindings. They are topical, and
-admitting them would let an unrelated topical link, added months later, expire a
-governance confirmation the user gave correctly. The projection is narrow on
-purpose: an observed fact that expires for reasons its user cannot predict
-trains the user to re-confirm without reading, which is worse than not observing
-it at all.
+**What an earlier draft excluded, and why the exclusion was wrong.** It admitted
+only `governed_by`, arguing that `references` edges are topical and that
+admitting them would let an unrelated link added months later expire a governance
+confirmation the user gave correctly. The argument is sound against the set it
+imagined and irrelevant to the one `DEC-121` names: `--role concerns` is not an
+incidental topical link but a deliberate assertion that the target is a concern
+of this slice. **The role filter is what does the work the exclusion was reaching
+for**, and it does it without contradicting a settled decision. An unrelated
+`references` edge in any other role stays out, so the failure mode the draft
+feared is closed by the filter rather than by the narrower set.
 
-**Encoding.** Each edge as `target_id`, sorted ascending by that id, one per
-line, LF-terminated, UTF-8, hashed with the same sha256 the rest of the run uses
-for content digests. Sorting is what makes the fingerprint a fact about the
-*set* rather than about insertion order — two runs that added the same edges in
-different orders must agree, or the fact expires for no reason. The label is not
-in the encoding because the projection is already label-filtered; including it
-would be a constant in every line.
+**Encoding.** Each edge as `kind`, `role`, `target_id` — single-space separated,
+`-` where a relation carries no role — one per line, LF-terminated, UTF-8, the
+**whole lines** sorted ascending, hashed with the same sha256 the rest of the run
+uses for content digests. Sorting whole lines is what makes the fingerprint a
+fact about the *set* rather than about insertion order: two runs that added the
+same edges in different orders must agree, or the fact expires for no reason.
+
+**Kind and role are load-bearing, and were not before.** The earlier draft
+omitted them because a single-class projection made the label a constant in every
+line. With two classes admitted that reasoning is false, and omitting them is a
+defect rather than a simplification: `governed_by ADR-004` and
+`references(concerns) ADR-004` would encode identically, so swapping one for the
+other would not move the fingerprint — the projection would be blind to exactly
+the kind of change it exists to observe.
 
 **Absence.** A slice record that cannot be read is an unobservable fact, which
 `sec-3` fixes reads as **changed**. The gate stays shut rather than opening on a
@@ -913,22 +1175,39 @@ missing answer.
 
 ### Verification impact
 
-- **Wrong actor does not satisfy** — a section carrying only an adversarial
-  attestation leaves `section-attestations-current` unmet, and the refusal says
-  a human review is required.
-- **Adversarial review is still recorded** — the same section renders its
-  adversarial attestation, so the act is visible without being sufficient.
-- **A late declaration does not satisfy** — `BlockingSetDeclared` recorded after
-  the `GraphReviewed` acceptance leaves `initial-concerns-recorded` unmet,
-  because the confirmation digest does not cover it.
-- **Inquiry-map coverage invalidates** — editing a node unmakes `GraphReviewed`
-  and `user-accepts-sufficiency`, through `ContentCoverage::is_current` against
-  the node map, with no new comparison code.
+- **The policy decides the actor** — a section carrying only an adversarial
+  attestation leaves `section-attestations-current` unmet under a `[Human]`
+  policy and satisfies it under `[Adversarial]`. The refusal names the missing
+  lane, not a fixed one.
+- **Gate and envelope agree** — the same section under the same policy is
+  reported unsettled by `review_outstanding` exactly when the condition is unmet.
+  Asserted against both surfaces, because their disagreeing was the finding.
+- **Invalidation is not policy-filtered** — an adversarial attestation going
+  stale under a `[Human]` policy still emits its invalidation row.
+- **Order is not enforced** — a run whose policy is `[Human, Adversarial]` clears
+  with the adversarial attestation recorded first. The order is rendered; the
+  gate does not read it.
+- **Adversarial review is still recorded** — under a `[Human]` policy the section
+  renders its adversarial attestation, so the act is visible without being
+  sufficient.
+- **A late declaration does not satisfy** — editing `BlockingSetDeclared` after
+  the `GraphReviewed` act leaves `initial-concerns-recorded` unmet, because
+  `confirms` names a fingerprint the declaration no longer carries, *and the
+  refusal names that declaration*.
+- **Node material invalidates; progress does not** — re-wording or re-parenting a
+  node unmakes `GraphReviewed` and `user-accepts-sufficiency`; disposing one
+  leaves both satisfied.
+- **An agent cannot declare a user act** — `AgentActKind` has two members, so an
+  agent-authored `DesignAccepted` does not compile. A build-time property, so
+  there is no runtime test to write.
 - **The projection is order-independent** — two edge sets with the same members
   added in different orders fingerprint equal.
-- **A topical edge does not expire governance** — adding a `references` edge
-  leaves `governing-context-recorded` satisfied; adding a `governed_by` edge
-  unmakes it.
+- **Kind and role are observed** — replacing `governed_by ADR-004` with
+  `references(concerns) ADR-004` unmakes `governing-context-recorded`. The case
+  a target-only encoding could not see.
+- **A concerns edge expires governance; another role does not** — adding
+  `references --role concerns` unmakes `governing-context-recorded`; adding a
+  `references` edge in any other role leaves it satisfied.
 - **`Artefact` is absent coverage, not empty coverage** — a `DraftingReady`
   declaration stays current across section edits, where an empty
   `ContentCoverage` would read as stale the moment any section existed.
@@ -938,12 +1217,15 @@ missing answer.
 - **`ActKind` is closed at eight.** A ninth act is a decision, not a
   declaration — it would mean a condition acquired a discharging act nobody
   specified.
-- **The `ISS-310` answer wants a decision record.** It is a judgement with
-  alternatives considered and a stated cost, made by the user, and it is
-  currently recorded only in this prose.
-- **`SL-243` needs manual repair** before it can cross `reviewing → locked`
-  under the human-attestation rule.
-- **`AgentDeclaration`'s snapshot group** is a shape change to the design-run
-  snapshot, which `sec-2` names as costing the one live run. It is the only such
-  change this section adds.
+- **`AgentActKind` is closed at two**, and is the narrower vocabulary. A third
+  agent act would mean an agent acquired a discharging role nobody specified.
+- **`DEC-073`'s policy is built here, not decided here.** No superseding record
+  is owed. What this slice adds is the binding from the policy to
+  `section-attestations-current`, and the two derivations that read it.
+- **`SL-243` is repaired by policy**, not by hand: declaring its policy
+  `[Adversarial]` clears it.
+- **The snapshot grows by three shapes, not one** — `ReviewPolicy` on the run
+  header, a checkpoint-act group, and an agent-declaration group. `sec-2` records
+  one shape change as this slice's cost to the one live run; that passage is now
+  understated and must be revisited before planning.
 

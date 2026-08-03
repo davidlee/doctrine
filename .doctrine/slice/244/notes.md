@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 01587eef
+fresh-as-of: 2026-08-03 · design/drafting (run rev 44) · a163391c
 
 ### Produced
 
@@ -150,7 +150,8 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 01587eef
   (`cp-15`, `cp-14`).
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395` — backlog.
 - Design run sections `sec-1`, `sec-2`, `sec-3`, `sec-4` — materialised, watermark
-  current (rev 43). `sec-3` is v4 (two review rounds integrated); `sec-4` is v1.
+  current (rev 44). `sec-3` is v5 and `sec-4` is v2; the joint review's seven
+  findings are all ruled and integrated.
 - Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
@@ -168,6 +169,33 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 01587eef
   requiring human at the gate **removes a capability**, it does not harden a
   default; and it supplies a fourth `ISS-310` candidate nobody had — per-run
   policy, which keeps `DEC-074` intact and puts the actor in run data.
+- **`DEC-073` already *specifies* that policy, and it was never built** — "Each
+  run has a small review policy declaring the required reviewer lanes and, when
+  both lanes are required, their intended order … human-only, adversarial-only
+  acting as a human proxy, and both lanes in either order." So `ISS-310` is an
+  unbuilt decision, not an open question: `SL-244` builds it, nothing is
+  superseded, and **no decision record is owed**. Same shape `DEC-121` found on
+  the exploring edge — a specified interaction whose residue looks enforced.
+- **`DEC-066`, not `DEC-074`, mandates the integrated adversarial pass**
+  (`DEC-073`'s last paragraph). That is what makes an adversarial-only *section*
+  policy lawful rather than a hole.
+- **`DerivedInput` is built before `apply` runs the batch**
+  (`attestation.rs:192-195`), so a shell-derived inquiry-node digest map is a
+  pre-batch answer to a post-batch question. Node coverage must compare
+  **material**, not digests — which is the route `ContentCoverage`'s own doc
+  already took for the section map.
+- **Three readers of the attestation set, and one must NOT be repaired.**
+  `review_standing` (`snapshot.rs:428`) and `review_outstanding`
+  (`envelope.rs:799`) take the policy; `live_reviews` (`run.rs:1495`) must not —
+  it feeds `invalidation_rows`, which reports the *death of a recorded act*, true
+  whatever the policy requires. A sweep for "readers of `attestations`" gets this
+  wrong.
+- **`Attestation` has no turn, sequence or timestamp** (`attestation.rs:36-41`),
+  so lane *order* is not derivable from stored state — enforcing it would need
+  new state `DEC-073` never asked for. Declared and rendered, not enforced.
+- **`can_advance` (`gate.rs:150-158`) and `boundary_conditions` (`gate.rs:162`)
+  are two hand-written matches over the same four stage pairs.** Generating only
+  the second leaves a row keyed to an illegal edge compiling and never evaluated.
 - **Checkpoint acceptances do not reach the snapshot.** The review group holds
   exactly `attestations` / `integrated` / `acceptance: LockAcceptance`
   (`snapshot.rs:320-333`); a checkpoint's `AcceptanceAttestation`
@@ -186,34 +214,24 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 01587eef
 - **`review-disposition-attested`'s cumulative reach is not enforceable** until
   `IMP-392` gives it the `RV`-backed finding set to bind to. Recorded in `sec-3`
   as a gap, deliberately not asserted as a guarantee.
-- **Seven findings from the joint `sec-3` v4 + `sec-4` review await the user's
-  ruling.** Nothing integrated. Two blockers — the `GovernanceEdges` projection
-  wrongly excludes `references --role concerns`, and four acts have no snapshot
-  home. Five majors — the human rule unreconciled across render surfaces,
-  co-location is not ordering, `InquiryMap` unbuildable, the macro still admits
-  an illegal edge pair, `AgentDeclaration` underspecified. Codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain.
-- **`ISS-310` is reopened by its premise**, not by its ruling — see `DEC-074`
-  under Learned. The user ruled `human` believing it additive; it is not.
-- **The `ISS-310` answer wants a decision record.** Decided by the user with
-  alternatives weighed and a cost accepted; currently recorded only in `sec-4`'s
-  prose. No open inquiry node to bind it to, so it needs a route.
+- **`sec-2`'s cost model is now understated.** It records one snapshot shape
+  change as this slice's cost to the one live run; `sec-4` v2 adds three —
+  `ReviewPolicy` on the run header, a checkpoint-act group, an agent-declaration
+  group. Must be revisited before planning.
+- **`sec-3` v5 / `sec-4` v2 have not been re-reviewed.** The seven findings are
+  integrated but the integration itself is unreviewed. Codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain and is the cheap
+  next pass.
 - Next section after `sec-4` clears: the contract's two channels
   (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
 
-**`ISS-310` was ruled `human`** — `section-attestations-current` requires a human
-section review, on a start-strict argument (`human → either` widens compatibly;
-`either → human` breaks runs that cleared loose). `SL-243` needs manual repair
-either way. **The ruling now needs re-confirming**, because one of its three
-supports was false: `DEC-074` does not make the integrated pass mandatory (it is
-about section posture) and it explicitly permits an adversarial-only run policy.
-So `human` deletes a granted capability rather than hardening a default, and a
-fourth candidate — per-run policy — exists and is already the shipped model.
-
-**The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
-unchanged and still `const`; both filters land in `cumulative_conditions`, which
-was already non-`const`. The three-option passage was deleted rather than
-decided.
+**`ISS-310` is settled: the required reviewer lanes come from the run's review
+policy**, which `DEC-073` specifies and nobody built. Four candidates were
+weighed (`human` / `either` / per-section / per-run); per-run was taken because
+it keeps `DEC-073` and `DEC-074` whole, makes `Reviewer` load-bearing, and
+repairs `SL-243` by declaring `[Adversarial]` rather than by hand-editing runtime
+state. Expressed as `RequiredActor::{Fixed, RunPolicy}` so the const table
+survives. Order between lanes is declared and rendered, never enforced.
 
 **The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
 unchanged and still `const`; both filters land in `cumulative_conditions`, which
