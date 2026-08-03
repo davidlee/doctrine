@@ -1320,6 +1320,17 @@ it derives exactly as it does today. Said here because `sec-3` calls the lamp a
 channel over an existing derivation, which is true now and stops being true on
 that migration.
 
+`Evidence` (`facts.rs:23-27`) fails the test, and is the incumbent it was never
+applied to. It is a condition, a subject and a fingerprint — a `CheckpointAct`
+with `covered: Some(Sections(…))` and no act identity, which is
+`LockAcceptance`'s subsumption one field weaker. It also has nothing left to say
+it to: its sole consumer is `DerivedDesignFacts::satisfies` (`facts.rs:95-99`),
+the existential scan `sec-3` dissolves, and none of the eight acts is stored as
+one. So `Evidence`, `EvidenceDeclaration` (`submission.rs:486`) and the
+`evidence` wire field retire. It is named here rather than left implied because
+two surfaces read it and would otherwise be found by whoever deleted the type;
+`sec-5` carries what the retirement costs the envelope and the change log.
+
 That leaves **three** record shapes for eight acts, where an earlier draft
 carried four: `CheckpointAct` for the five user acts given at a checkpoint,
 `AgentDeclaration` for the two agent acts, and `Attestation` for the one act that
@@ -1564,8 +1575,9 @@ implementations diverge, so:
 - **Declared** as a run-level field on `ApplyRequest`, joining `WRITER_ACTS`
   (`submission.rs:664`) — the array whose own doc says a new *field* that can
   change state and did not join the list **is** the gap. This slice adds three
-  such fields: this one, the agent declaration, and the review policy. So the
-  array goes from `[WriterAct; 7]` to `[WriterAct; 10]`, each new row pairing a
+  such fields — this one, the agent declaration, and the review policy — and
+  retires one, `evidence`, with the record it declares against. So the
+  array goes from `[WriterAct; 7]` to `[WriterAct; 9]`, each new row pairing a
   `WRITER_ACT_*` key constant (`STD-001`) with the predicate that detects it —
   the pairing being what that doc calls authoritative rather than merely
   parallel. It carries an `AcceptanceDeclaration`,
@@ -2110,16 +2122,17 @@ missing answer.
   `section-attestations-current`, and the two derivations that read it.
 - **`SL-243` needs no policy repair.** It holds no section attestations, so the
   lane question never arises for it. Its actual cost is `sec-2`'s to record.
-- **The snapshot changes in four ways, not one** — `ReviewPolicy` on the run
-  header, a checkpoint-act group, an agent-declaration group, and
-  `LockAcceptance` retiring into `CheckpointAct`. The last is a migration rather
-  than an addition, and is the only one that touches data an existing run already
-  holds. `sec-2` carries the cost, read off `SL-243` rather than inferred.
+- **The snapshot changes in five ways, not one** — `ReviewPolicy` on the run
+  header, a checkpoint-act group, an agent-declaration group, `LockAcceptance`
+  retiring into `CheckpointAct`, and the gate group's evidence rows retiring with
+  the record. The last two are migrations rather than additions, and are the only
+  ones that touch data an existing run already holds. `sec-2` carries both costs,
+  read off `SL-243` rather than inferred — it is the same run's
+  `user-accepts-sufficiency` evidence row that section already prices.
 - **The policy is not a security boundary**, and the design says so. If a later
   slice wants it to be one, the missing piece is not a stricter gate but a way to
   distinguish a user's payload from an agent's — which is `DEC-088`'s standing
   limitation, not this slice's to close.
-
 <!-- doctrine:section sec-5 -->
 ## The contract channels
 
@@ -2464,6 +2477,11 @@ an uncapped neighbour. That holds — `sec-3`'s currency lamp and severity summa
 are derived state that warns, not contract prose, and the lamp is a scalar chosen
 against exactly this budget.
 
+Both losses below follow from one retirement that is `sec-4`'s, not this
+section's: `Evidence` fails that section's shape rule, so the record, the
+`evidence` wire field and its `WRITER_ACTS` member all go. What lands here is
+what that costs the two surfaces which read it.
+
 What the envelope loses is that uncapped neighbour. `SectionRow::clearances`
 (`envelope.rs:194`) is built by `clearances_for` (`envelope.rs:809-822`) from
 `gate.live_evidence()` filtered to the row's subject — which is the claimed arm's
@@ -2488,17 +2506,6 @@ renamed to match, since a name outliving its source is how a reader is misled fo
 free; the change log is bounded and evicted and the snapshot is gitignored
 runtime state, so the rename costs one live run nothing. `live_reviews`' sibling
 feed is untouched, on `sec-4`'s stated ground.
-
-**The record retires because `sec-4`'s rule retires it.** *Add a shape only where
-an act has no readable home; keep an incumbent shape only where it says something
-a general one cannot.* `Evidence` (`facts.rs:23-27`) is a fourth incumbent that
-rule was never applied to: it is a condition, a subject and a fingerprint, which
-is a `CheckpointAct` with `covered: Some(Sections(…))` and no act identity — the
-same subsumption `LockAcceptance` fails on, one field weaker. Its sole consumer
-is `DerivedDesignFacts::satisfies` (`facts.rs:95-99`), the existential scan
-`sec-3` dissolves. So `Evidence`, `EvidenceDeclaration` (`submission.rs:486`) and
-the `evidence` wire field go, and `WRITER_ACTS` (`submission.rs:664`) loses a
-member while gaining `sec-4`'s three.
 
 ### Verification impact
 
@@ -2560,8 +2567,6 @@ member while gaining `sec-4`'s three.
 - **`DesignSnapshot::fragments` is dead state** — one reader, no writer, so
   `fragment_lines` reports every declared fragment as not held. Out of scope, and
   written down because it is the wrong register to build on.
-- **`WRITER_ACTS` arithmetic is `sec-4`'s to carry**, and this section moves it:
-  three additions less the evidence retirement.
 - **Whether the contract corpus ever becomes project-authorable** is `DEC-122`'s
   deferral and `IMP-372`'s seam, and the `fixed` declaration is what keeps this
   design from promising it early. `IDE-047`'s structured extraction reads the
