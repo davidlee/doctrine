@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · design/drafting (run rev 64) · d784b808
+fresh-as-of: 2026-08-04 · design/drafting (run rev 76) · 3e0ef4b5
 
 ### Produced
 
@@ -256,14 +256,38 @@ New this session, all read off the tree:
   `F7` repair contained a surviving sibling **of its own class**, one record
   shape over.
 
-### Open
+### Round 5 (2026-08-04) — sections 5 and 6 written, codex round run and closed
 
-- **`sec-5` is unwritten** — `DEC-124`'s two channels (refusal remedy,
-  edge-grained stage-entry receipt on the `Fragment` register,
-  `design.rs:1832-1851`), where `DEC-123`'s injection rule is built. `sec-3` and
-  `sec-4` reference all three of `DEC-122`/`123`/`124` but specify no channel.
-  **Order ruled 2026-08-04 by the user**: `sec-5` is written *before* the codex
-  round, so that round sees the whole document and is the last one.
+- **`sec-5` written** — the contract channels. `DEC-124`'s refusal remedy and
+  stage-entry receipt, where `DEC-123`'s injection rule is built.
+- **`sec-6` written** — the published stage-machine diagram, `DEC-127`'s
+  objective 6, which had a decision and no section. Raised by codex as `F-2`.
+- **Codex round 5 run and closed.** Thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965`, whole document, 14 findings
+  (2 blocker, 11 major, 1 minor). **All 14 ruled in by the user**, integrated in
+  dependency order across five commits, then swept by class — one surviving
+  sibling (sec-4's snapshot-change count, invalidated by the `ReviewPass` repair).
+- **`ReviewPass` is the round's keystone**: `F-1` (a disposition bound to no
+  pass) and `F-11` (warnings with no derivable input) both wanted the same
+  missing record. It also retires `IntegratedReview` with this slice rather than
+  with `IMP-392`.
+- **Two findings had a right observation on a wrong ground**, and both were ruled
+  that way rather than wholesale: `F-8` cited `DEC-125` for an admission rule
+  that record does not carry (the real precedent is
+  `Refusal::AcceptanceBasisMissing`), and `F-14` named `RunbookNotDischarged` as
+  the multiline-`Display` precedent when it is `VerifierFailed`.
+- **One finding codex missed**, raised by me and integrated with the batch:
+  `DEC-124` says `IMP-390`'s gate-condition face is discharged by the refusal
+  leg, and `sec-5` built that leg without naming it.
+- **`CHR-049` is now priced from the corpus** — four sessions, halfway through
+  one run, ten `cluster:design-run` items minted 2026-08-01/02 inside the
+  exercise window. The document's one unfalsifiable claim is falsifiable.
+- Section digests at run rev 76: `sec-1` `8384bae959cb`, `sec-2` `c2dc33a4012a`,
+  `sec-3` `223a192e4df1`, `sec-4` `4ffc3681008f`, `sec-5` `db3366a01496`,
+  `sec-6` `0d739cd3f4cb`. Commits `2e05ac8f`, `87336de9`, `f596e797`,
+  `c29da1e9`, `d4d8d80b`, `3e0ef4b5`.
+
+### Open
 - **Four clearances are stale** — the run cannot cross `drafting → reviewing`
   until they are re-recorded. `governing-context-recorded`,
   `initial-concerns-recorded` and `user-accepts-sufficiency` are **user acts**,
@@ -272,12 +296,13 @@ New this session, all read off the tree:
   defect this slice exists to close. `blocking-inquiries-dispositioned` is the
   fourth and is mechanical (16 nodes, 0 open) — left in the same batch rather
   than split on an agent's judgement of its own entitlement.
-- **The codex round is not run.** Thread `019fc628-0f72-73e0-bd25-3d99c05d0965`
-  holds four rounds and last saw `sec-3` v4 / `sec-4` v1. All four sections have
-  since moved; `sec-1` and `sec-2` have never been externally reviewed at all.
+- **No external round has seen the repairs.** Round 5 reviewed rev 68/70 bytes;
+  every section except `sec-1` has moved since, and `sec-6` was written after the
+  round and has never been reviewed by anyone. Whether that warrants a round 6 is
+  the user's call — the round-5 integration was large and self-consistent, but
+  five of six sections are unreviewed at their current bytes.
 - **`ObservedFact`'s single member** — the seam has no enforced consumer this
   slice, since `GovernanceEdges` is named only by a `Pending` row. Stated
   honestly in `sec-3`'s carried-forward; left open rather than forced.
-- **`CHR-049` is one moderated run** — `sec-2` asserts it; the chore is open and
-  the claim is a judgement, so it stands unverified rather than verified. The
-  only unchecked claim left in the design.
+- **`CHR-049` is settled** — priced from the corpus this session (see round 5
+  above), so the design carries no unverified claim of its own.
