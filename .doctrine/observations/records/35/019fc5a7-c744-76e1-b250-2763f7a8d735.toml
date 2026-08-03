@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc5a7-c744-76e1-b250-2763f7a8d735"
+recorded_at = "2026-08-03T03:25:34.916120135Z"
+kind = "friction"
+summary = "P-C1b: the A2 smoke proved credential+egress but not that an agent can WORK — the read-only agent home blocks the harness's Bash tool entirely"
+detail = "SL-241 PHASE-06, /execute. The capsule profile ro-binds the agent home (sandbox.sh:225-228, HOME=/agent, --ro-bind ~/.claude /agent/.claude). The A2 smoke (probe-smoke.sh) validated this with 'claude -p print OK' — a prompt needing NO tools — and recorded credential/authenticated pass. P-C1b is the first run where an agent needed to DO something, and every shell path failed at: EROFS: read-only file system, mkdir '/agent/.claude/session-env/<session-id>'. The harness creates a per-session working dir under its home before any Bash tool call can run. Consequence: the agent could Write a file but could not run npm test, npm run lint, or git commit. It one-shot the implementation by reading the tests and reasoning, and it happened to be correct, so the suite went green and EX-1's assertion passed — for a reason unrelated to what EX-1 means. The generalisable friction: a smoke test that exercises a dependency's happy path WITHOUT exercising the capability the real workload needs will certify a configuration that cannot carry the workload, and the failure surfaces at the most expensive possible moment. probe-smoke.sh already split credential from network on exactly this reasoning (A8: 'distinct failure modes and a single test conflates them'); the same argument extends one step further to 'can it work', and was not taken."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
