@@ -813,6 +813,7 @@ field:
 /// states: a fact about what an asset says is one Doctrine derives, never one
 /// it takes on a caller's word.
 pub(crate) struct ObservedReview {
+    /// `sec-4`'s type, declared with the disposition that names one.
     pub(crate) reference: ReviewRef,
     /// Whether the ledger carries `sec-4`'s concluded-pass marker.
     pub(crate) concluded: bool,
@@ -832,6 +833,14 @@ be re-derived at every crossing rather than a fact about the moment the act was
 written. `ActRequirement::disposes_review` is what tells both which acts need
 the resolution — the slot is already there for the correspondence check, and
 this is the second thing it buys.
+
+**Which `RV` the shell resolves** is worth fixing here, because an implementer
+would otherwise have to invent it. There is at most one: acts replace by act, so
+a run holds one live `ReviewDisposed`. The shell resolves the review the
+*payload* names where the batch carries a disposition, and the one the stored act
+names otherwise — which covers the case `run.rs` already allows, a disposition
+recorded and a stage taken in one submission, where the incoming act is the one
+the crossing must be judged against.
 
 **Absence is refusal, not satisfaction.** An `ObservedReview` the shell could
 not produce — an unreadable `RV`, or an act naming none — leaves admission
@@ -1501,24 +1510,31 @@ an unenforceable requirement rather than a refused act.
   `DraftingReady` are admitted under the same check. `SectionReviewed` is the
   degenerate case already argued: `PerSection` is carried by no act, so an act of
   any shape whose rule names it is refused.
-- **The other three rows are user-only by rule, not by record shape.** A
-  requirement whose actor is `Fixed(ActorClass::Agent)` may name no confirmation,
-  no disposition and no observed fact, and the generated table is where that
-  holds — so `AgentDeclaration` lacks those slots because no rule can ask for
-  them, not because it was given fewer.
+- **The other three rows reach `CheckpointAct` alone, by rule rather than by
+  record shape.** Only a requirement whose act is one of the five given at a
+  checkpoint may name a confirmation, a disposition or an observed fact, and the
+  generated table is where that holds. So neither `AgentDeclaration` nor
+  `Attestation` carries those slots — not because either was given fewer, but
+  because no rule can ask them for one. Keying the restriction on
+  `ActorClass::Agent` instead would have covered the two agent acts and left
+  `SectionReviewed` — whose actor is a reviewer lane, not an agent — free to name
+  a confirmation with nowhere to put it.
 
 Each of the three earns the restriction separately, and only the third is a
-decision rather than a consequence. `confirms` runs one way: `DEC-121`'s
-interaction is *the agent declares, the user confirms*, so an agent act
-confirming another is an interaction nobody specified. `disposition` is
-`DEC-138`'s, and both of its arms are user acts carrying an
-`AcceptanceDeclaration` — an agent-authored disposition is exactly the value
-`AgentActKind` exists to make unrepresentable. `observed` is not intrinsic: an
-agent declaration *could* be bound to canonical state outside the run. It is
-refused because that state is governance, confirming governance is
-`GovernanceConfirmed`'s job, and that is a user act under `DEC-121`. If a later
-act wants the pairing it is a decision, and the slot arrives with it — which is
-this section's rule for shapes, applied to a slot.
+decision rather than a consequence. `confirms` runs one way — `DEC-121`'s
+interaction is *the agent declares, the user confirms* — so the confirming act is
+always a user act at a checkpoint; an agent act confirming another, or a section
+review confirming anything, is an interaction nobody has specified. `disposition`
+is `DEC-138`'s, and both of its arms are user acts carrying an
+`AcceptanceDeclaration`, so an agent-authored disposition is exactly the value
+`AgentActKind` exists to make unrepresentable and a per-section one has no
+subject to dispose. `observed` is not intrinsic: a declaration or a section
+review *could* be bound to canonical state outside the run. It is refused because
+that state is governance, confirming governance is `GovernanceConfirmed`'s job,
+and that is a user act under `DEC-121`. If a later act wants the pairing it is a
+decision, and the slot arrives with it — which is this section's rule for shapes,
+applied to a slot. Being a property of the generated table, it needs no runtime
+test: a rule that asked would not compile against a record that cannot hold it.
 
 Two consequences worth naming. An act whose `observed` map is simply **absent**
 where its rule names a fact is refused rather than treated as an empty
@@ -1677,8 +1693,8 @@ pub(crate) struct AgentDeclaration {
     /// declaration's own content is its binding.
     covered: Option<CoveredSet>,
     /// The digest of this declaration's CLAIM — `act` and `basis`, and nothing
-    /// else. Shell-computed at declare time; a confirming `CheckpointAct` names
-    /// it. See below for why `covered` is excluded.
+    /// else. Shell-computed and arriving on `DerivedInput`; a confirming
+    /// `CheckpointAct` names it. See below for why `covered` is excluded.
     fingerprint: Fingerprint,
 }
 
@@ -1714,7 +1730,14 @@ joining `WRITER_ACTS` as the second of this slice's three new writers.
 LF-terminated, UTF-8, sha256 — the same hash the rest of the run uses. `id` is
 excluded because the engine allocates it and it is not content; `turn` because it
 is a harness detail rather than part of the claim; and `covered` because its
-currency is already the coverage mechanism's job. Folding the covered map into
+currency is already the coverage mechanism's job.
+
+**And it is computed where every other digest is.** The pure layer never hashes
+— *"it is handed the digest as a derived fact"* (`ids.rs:177-178`) — so this
+arrives on `DerivedInput` beside `section_digests`, on the same channel and for
+the same reason: a digest the caller supplied would be a claim about content
+rather than a fact about it. Left unsaid, this is the one slot in the new shapes
+with no route to a value. Folding the covered map into
 the digest would mean specifying a canonical encoding for `NodeMaterial` *and*
 would conflate two questions the conjunct wants answered separately: **is this
 the claim the user was shown** (the fingerprint) and **has the material moved
