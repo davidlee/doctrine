@@ -262,8 +262,8 @@ New this session, all read off the tree:
   edge-grained stage-entry receipt on the `Fragment` register,
   `design.rs:1832-1851`), where `DEC-123`'s injection rule is built. `sec-3` and
   `sec-4` reference all three of `DEC-122`/`123`/`124` but specify no channel.
-  **Order not yet ruled**: before the codex round (so one round closes the
-  document) or after (leaving `sec-5` unreviewed).
+  **Order ruled 2026-08-04 by the user**: `sec-5` is written *before* the codex
+  round, so that round sees the whole document and is the last one.
 - **Four clearances are stale** — the run cannot cross `drafting → reviewing`
   until they are re-recorded. `governing-context-recorded`,
   `initial-concerns-recorded` and `user-accepts-sufficiency` are **user acts**,
