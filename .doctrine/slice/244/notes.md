@@ -142,138 +142,112 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 50) · dd68af2a
+fresh-as-of: 2026-08-04 · design/drafting (run rev 58) · 7df32e57
 
 ### Produced
 
-- `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
-  (`cp-15`, `cp-14`).
+- `DEC-127`, `EVD-012` — knowledge, bound into the run (`cp-15`, `cp-14`).
+- `DEC-138` — **new**, via `inq-16` / `cp-16`. Refines `DEC-125`'s two arms,
+  supersedes nothing. Amended twice after minting: once against `src/review.rs`,
+  once when the amendment's own claim proved wrong.
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-048` — backlog.
 - Design run sections `sec-1`..`sec-4` — materialised, watermark current at run
-  rev 50. `sec-3` v11, `sec-4` v8; `sec-1`/`sec-2` untouched since rev 45.
-  Commits `4ab80ca5`, `d47a022b`, `3161d25f`, `50b14080`, `dd68af2a` — a
-  nine-finding self-review ruled one at a time, plus the waiver-semantics ruling.
-- `IMP-392` body extended — it now names the two `SL-244` requirements that
-  cannot be enforced until it lands.
-- Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
+  rev 58. `sec-1` `ec82d845c010` (untouched since rev 45), `sec-2`
+  `a8b38b1c19ee`, `sec-3` `ad7e18144a24`, `sec-4` `f62c19e67ad9`.
+- Commits `dac3cb46`, `bff92556`, `58b428df`, `78378a08`, `1d7d264d`,
+  `cbb0a7a5`, `7df32e57`.
+- `IMP-392` body rewritten — it carried the pre-`DEC-138` waiver semantics, and
+  now names the concluded-pass marker as the one thing `SL-244` asks it to *add*
+  rather than merely expose.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
 ### Learned
 
-- `EVD-012` — gate evidence binds only to `design.md` sections.
-- `ISS-309` — shipped assets cite repo-private ids; per-repo sequential ids make
-  this resolve wrongly rather than dangle.
-- `ISS-310` — `sections_attested` ignores `Reviewer`. **Wider than the issue
-  says:** `review_outstanding` (`render/envelope.rs:799-806`) matches subject +
-  fingerprint only, so the envelope reports a section reviewed on an adversarial
-  attestation. Fixing `satisfied` alone yields a gate and a render that disagree.
-- **`DEC-074` grants an adversarial-only *run policy*** — "the user may change
-  the run policy to adversarial-only or require both lanes in either order". So
-  requiring human at the gate **removes a capability**, it does not harden a
-  default; and it supplies a fourth `ISS-310` candidate nobody had — per-run
-  policy, which keeps `DEC-074` intact and puts the actor in run data.
-- **`DEC-073` already *specifies* that policy, and it was never built** — "Each
-  run has a small review policy declaring the required reviewer lanes and, when
-  both lanes are required, their intended order … human-only, adversarial-only
-  acting as a human proxy, and both lanes in either order." So `ISS-310` is an
-  unbuilt decision, not an open question: `SL-244` builds it, nothing is
-  superseded, and **no decision record is owed**. Same shape `DEC-121` found on
-  the exploring edge — a specified interaction whose residue looks enforced.
-- **`DEC-066`, not `DEC-074`, mandates the integrated adversarial pass**
-  (`DEC-073`'s last paragraph). That is what makes an adversarial-only *section*
-  policy lawful rather than a hole.
-- **`DerivedInput` is built before `apply` runs the batch**
-  (`attestation.rs:192-195`), so a shell-derived inquiry-node digest map is a
-  pre-batch answer to a post-batch question. Node coverage must compare
-  **material**, not digests — which is the route `ContentCoverage`'s own doc
-  already took for the section map.
-- **Three readers of the attestation set, and one must NOT be repaired.**
-  `review_standing` (`snapshot.rs:428`) and `review_outstanding`
-  (`envelope.rs:799`) take the policy; `live_reviews` (`run.rs:1495`) must not —
-  it feeds `invalidation_rows`, which reports the *death of a recorded act*, true
-  whatever the policy requires. A sweep for "readers of `attestations`" gets this
-  wrong.
-- **`Attestation` has no turn, sequence or timestamp** (`attestation.rs:36-41`),
-  so lane *order* is not derivable from stored state — enforcing it would need
-  new state `DEC-073` never asked for. Declared and rendered, not enforced.
-- **`can_advance` (`gate.rs:150-158`) and `boundary_conditions` (`gate.rs:162`)
-  are two hand-written matches over the same four stage pairs.** Generating only
-  the second leaves a row keyed to an illegal edge compiling and never evaluated.
-  Settled by a closed `Advance` type, not by generating `can_advance` — that
-  would have made the condition table authoritative for the state machine.
-- **The run has TWO transition relations, differing in kind.** Forward: a closed
-  set of four, each carrying a guard contract. Backward: *"the backward and
-  non-adjacent pairs"* (`gate.rs:199`), barred by a missing reason rather than by
-  a condition (`gate.rs:367`, `DEC-067`). Nothing closed to enumerate on that
-  side, so the asymmetry is honest modelling — but must be stated or it reads as
-  a gap. A backward move invalidates nothing, because acts bind to content and
-  never to a stage.
-- **`LockAcceptance` is subsumed by the new `CheckpointAct`**, not merely similar
-  — it is `AcceptanceAttestation` + `ContentCoverage`, i.e. `CheckpointAct` with
-  `act: DesignAccepted`, `observed: {}`, `confirms: None`.
-- **The review policy cannot be a security boundary**, and the design says so.
-  The agent drives the CLI, so any rule expressible in the payload is one an
-  agent can satisfy; the fence is user authority (`AcceptanceDeclaration`), the
-  change log, and the envelope render — not prohibition. Closing this needs a way
-  to distinguish a user's payload from an agent's, which is `DEC-088`'s standing
-  limitation.
-- `mem.pattern.review.observation-right-prescription-wrong` — four instances this
-  slice; recorded as a memory rather than carried here.
-- `mem.pattern.feedback.rule-findings-in-dependency-order` — a batch is not a flat
-  list; an earlier ruling moves a later one's fix site or reverses it.
-- **`review_standing` (`snapshot.rs:419-433`) holds two structurally different
-  currency derivations ten lines apart** — `acceptance_current` is whole-map
-  equality against a map stored on the act; `sections_attested` is a `∀∃` with no
-  stored map, plus a non-empty guard. Spelling them one `Coverage` variant would
-  delete both the departure asymmetry and the empty-draft guard.
-- **`DEC-125` mints an `RV` on entry to `reviewing`**, so re-entering `reviewing`
-  after a regression mints a *second* `RV` — which is what makes a waiver
-  non-terminal without any unwind mechanism.
-- **Checkpoint acceptances do not reach the snapshot.** The review group holds
-  exactly `attestations` / `integrated` / `acceptance: LockAcceptance`
-  (`snapshot.rs:320-333`); a checkpoint's `AcceptanceAttestation`
-  (`commands/design.rs:847`) rides a `CheckpointPlan` and is journalled. Four of
-  `sec-4`'s eight acts therefore have no home a `DesignSnapshot`-reading gate
-  can see.
-- `InquiryNode` carries no fingerprint (`inquiry.rs:204-222`) and `DerivedInput`
-  no node digest map — so `sec-3`'s `Coverage::InquiryMap` names a map that
-  cannot presently be built.
-- The in-tree type is **`LockAcceptance`**, not `AcceptedDesign` — mis-named in
-  both `sec-3` and `sec-4`.
+Carried forward from the prior harvest and still standing: `EVD-012` binds gate
+evidence to `design.md` sections only; `ISS-309` id-collision; `ISS-310` is an
+unbuilt `DEC-073`, so no decision record is owed; `DEC-066` (not `DEC-074`)
+mandates the integrated pass; `DerivedInput` is built before `apply`, so node
+coverage compares material; three readers of the attestation set and
+`live_reviews` must NOT be repaired; `Attestation` has no turn/sequence, so lane
+order is declared not enforced; `can_advance` and `boundary_conditions` are two
+hand-written matches, settled by a closed `Advance`; the run has two transition
+relations differing in kind; `LockAcceptance` is subsumed by `CheckpointAct`;
+the review policy cannot be a security boundary; `review_standing` holds two
+structurally different currency derivations ten lines apart; checkpoint
+acceptances do not reach the snapshot; `InquiryNode` carries no fingerprint.
+
+New this session, all read off the tree rather than reasoned:
+
+- **`run.rs:334-347` writes `review.acceptance` from ANY run-level
+  `AcceptanceDeclaration`, at any stage, last-write-wins.** So `LockAcceptance`
+  is not the lock's acceptance — it is the run's single unnamed acceptance slot.
+  `SL-243` sits at `drafting`, never locked, holding one whose basis is its own
+  `inquiring → drafting` settle-and-advance. This **corrects** the prior
+  harvest's "checkpoint acceptances do not reach the snapshot": the `cp-`-scoped
+  one does not, the run-level declaration does.
+- **`SL-243` holds `[review] attestation = []`** — zero section attestations.
+  `sec-4`'s claim that it attested adversarially and is repaired by declaring
+  `AdversarialOnly` was false in three places, now corrected. Its real cost is a
+  re-given acceptance, and `user-accepts-sufficiency` is what will bar it.
+- **`derived_status` (`review.rs:1009-1022`) is severity-blind** — it reads
+  `status`, never `severity`, so `await == Responder` fires on an open `nit`.
+  Its own doc calls it a priority summary, *"never an exclusive gate"*. Anything
+  binding a gate to `await` is wrong by construction.
+- **The `answered` state is the whole of `DEC-138`.** `contest` moves
+  `answered → contested` (`review.rs:2354`), so contest DOES re-block —
+  the property is that the responder always holds a *clearing* act, not that
+  contest is harmless. D-C9b's `doc_unresolved_blockers` (`review.rs:1490`) is
+  the same filter minus the state restriction, so it counts `answered` and
+  leaves the responder with no act that opens the gate.
+- **A clean pass is structurally identical to one never run** — `findings: []`,
+  `status: Done`, `await: None` either way. The `## Synthesis` section
+  distinguishes them at the *artefact* tier, which is why the marker had to be
+  new structured state rather than a test over what exists.
+- **`--as` is cooperative role assertion, not a security boundary**
+  (`review.rs:2813`, `ADR-007`), and an `AcceptanceDeclaration` cannot
+  distinguish a user's payload from an agent's (`DEC-088`). Any claim that an
+  agent *cannot* author an act is stronger than this system delivers; the
+  achievable property is *in the user's name, and leaving a change row*.
+- **Design-run record minting**: a record rides an inquiry node's disposition via
+  a `cp-` subject (`disposes` + `dispose: {form: create, …}`). Declaring the node
+  and disposing it **cannot** share one batch — the disposition refuses with
+  `unknown node`. Two applies. `provenance` is internally tagged:
+  `{"provenance": "user-directed"}`.
+- **Knowledge facets are hand-edited.** `knowledge new` and the run's `create`
+  disposition both seed facets empty; there is no `knowledge edit` verb. Status
+  arrives `accepted` when the disposition carried an `AcceptanceDeclaration`.
+- **Editing `sec-2` invalidated its two clearances** (`initial-concerns-recorded`,
+  `user-accepts-sufficiency`) — `EVD-012` biting live, since clearance binds to a
+  `design.md` section and those conditions are about the inquiry graph.
+- `mem.pattern.review.observation-right-prescription-wrong` and
+  `mem.pattern.feedback.rule-findings-in-dependency-order` — both earned again
+  this session; `DEC-138` reversed a finding integrated two revisions earlier.
 
 ### Open
 
-- Whether `ObservedFact` justifies its seam with one member — sharpened: its one
-  member's only row is `Pending`, so nothing compares it until `IMP-392`.
-- **Self-review #4, unruled** — `CheckpointAct::confirms` has no rule-side home;
-  `ActRequirement` is `{act, actor}` and cannot say which agent act a user act
-  confirms. Recommendation: add `confirms: Option<AgentActKind>`, and write the
-  properly-refused alternative (co-location in the *persisted* act, which `sec-4`
-  never tried — it refused only the discarded-payload form).
-- **Self-review #6, unruled** — recommendation *reversed* mid-session: keep
-  `ActKind` whole and let #5's admission correspondence refuse a non-user act,
-  rather than minting a `UserActKind`. The vocabulary does not partition two ways
-  (5 user + 2 agent + `SectionReviewed`), and the mirror hole is untidiness, not
-  a `DEC-088` breach. Standing regardless: `ActKind` is closed at eight and never
-  written as a type anywhere in the design.
-- **A `DEC` is probably owed** for the `Waived` admissibility precondition — it
-  refines `DEC-125`'s arm with a condition that decision does not carry. Not
-  created.
-- **`sec-2`'s snapshot-versioning bullet needs one clause qualified.** It states
-  the cost to `SL-243` "is not recoverable"; under the per-run `ReviewPolicy`
-  the review-attestation half now *is* — declare `AdversarialOnly`. The
-  checkpoint-act and agent-declaration groups remain unrecoverable, so the
-  clause wants qualifying, not deleting. (The bullet states a concern, not a
-  tally, so it is not understated — the "only such change" claim was `sec-4`'s
-  and is already corrected there.)
-- **`sec-2` has never been adversarially reviewed** — round 1 covered `sec-1`,
-  rounds 2-3 `sec-3`, round 4 `sec-3` + `sec-4`. Its first pass and the clause
-  above are one piece of work, best done against a stabilised `sec-4`.
-- **`sec-3` v11 / `sec-4` v8 have not been externally reviewed**, and have moved
-  a long way since round 4 saw v4/v1. The codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds all four prior rounds; resuming it
-  is much cheaper than starting fresh. **Run the self-review first each time** —
-  it has twice cost one turn and found blockers, including a thesis paragraph
-  left contradicting its own section.
-- Next section after `sec-4` clears: the contract's two channels
-  (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
+- **Handed over for a coherence pass** — see the continuation. Four reversals
+  landed this session and cross-references are the known casualty (one was
+  already caught: `sec-4` pointed at a `sec-3` rule that no longer existed).
+- **Missing type declarations** — `ActKind` was used as a field type in two
+  structs and never declared until this session. `ReviewRef` and the concluded
+  marker are named in `sec-4` and not defined. A sweep is owed.
+- **`sec-5` is unwritten** — `DEC-124`'s two channels (refusal remedy,
+  edge-grained stage-entry receipt on the `Fragment` register,
+  `design.rs:1832-1851`), where `DEC-123`'s injection rule is built. `sec-3` and
+  `sec-4` reference all three of `DEC-122`/`123`/`124` but specify no channel.
+  **Order not yet ruled**: before the codex round (so one round closes the
+  document) or after (leaving `sec-5` unreviewed).
+- **`sec-2`'s two clearances are stale** — the run cannot cross
+  `drafting → reviewing` until they are re-recorded. Deliberately not
+  re-recorded by an agent: under the incumbent's claimed arm it could be, and an
+  agent asserting *the user accepts sufficiency* is the defect this slice exists
+  to close.
+- **The codex round is not run.** Thread `019fc628-0f72-73e0-bd25-3d99c05d0965`
+  holds four rounds and last saw `sec-3` v4 / `sec-4` v1 — now v13 / v11.
+  `sec-2` has never been externally reviewed and is now correct enough to be.
+- **`ObservedFact`'s single member** — the seam has no enforced consumer this
+  slice, since `GovernanceEdges` is named only by a `Pending` row. Stated
+  honestly in `sec-3`'s carried-forward; left open rather than forced.
+- **`DEC-138` has been amended twice and not re-checked against code since.**
+  The per-finding predicate, the `answered` distinction and the concluded marker
+  are all as-specified, not as-verified.
