@@ -36,3 +36,32 @@ failure is silent and arrives a session later, when the tree has been cleaned.
 Rides the storage rule ([[mem.fact.doctrine.storage-tiers]]): authored,
 runtime, derived. The gap here is that the rule governs where you *write*, and
 says nothing about how you *cite*.
+
+## The rule reaches the results file too (SL-241 close-out audit, RV-343 F-11)
+
+The paragraph above says *"the scored `results.tsv` survived, so the evidence
+was whole."* That held for one half of the spike and not the other.
+
+The go/no-go's verdict was GO for the ingestion **and confinement** halves. The
+ingestion half had committed authority — `results-c3.tsv`, with the corpus
+README declaring it wins over any prose. The confinement half had none: P-C2's
+seven scored rows lived only at `$SPIKE_CAPSULE_ROOT/probes/c2/results.tsv`,
+outside the repository, in a scratch root the rig's own guard exists to keep
+disposable. Not gitignored runtime state — **not in the repo at all**. Caught at
+audit and copied in with hours to spare, by luck of timing rather than design.
+
+The blind spot is specific and worth naming: attention goes to the artefact the
+corpus points at, and the half nobody wrote a summary page for is the half whose
+raw table nobody noticed was missing.
+
+- **Check per claim, not per corpus.** If a verdict has *n* independently-scored
+  parts, run `git ls-files` on the table behind each one. A corpus that names a
+  TSV as "the authority" needs one for every claim it makes, not for the part
+  that happened to get a write-up.
+- **A scratch root is worse than gitignored runtime state, not equivalent.**
+  Runtime state at least sits inside the tree and is named by a tier rule.
+  Something under a scratch root has no rule pointing at it and no sweep that
+  would find it.
+- **Copy verbatim, do not summarise.** A hand-written summary reproduces the gap
+  in a new form — the whole point of the TSV-is-authority convention is that the
+  prose can be wrong and the table cannot.
