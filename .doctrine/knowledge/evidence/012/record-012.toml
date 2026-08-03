@@ -45,3 +45,7 @@ label = "references"
 role = "concerns"
 descriptor = "in-tree support for what the gate should check"
 target = "DEC-126"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
