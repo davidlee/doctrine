@@ -1,0 +1,68 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 123
+slug = "contract-structure-rides-a-const-table-not-the-prose-asset"
+title = "Contract structure rides a const table, not the prose asset"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-122 puts a condition's contract in prose. A contract has two readers: the agent needs narrative, the engine needs which DEC-120 kind, which act discharges it, and what a refusal cites. Whether the machine-relevant part is parsed out of the asset or held separately was left open."
+choice       = "Structure stays in Rust as a static table beside `boundary_conditions` and `boundary_runbook`; the asset stays purely narrative; the closed Condition vocabulary keys both. No parser, no second loader."
+alternatives = [
+  "All prose, engine keeps a `kind()` match. Rejected: the kind is then stated twice with nothing keeping them honest — the drift hazard thread 3 called irreducible, incurred for no gain.",
+  "Front-matter in the asset, parsed at load. Rejected: single source of truth, but it buys a parser and a validation domain — which is how runbooks became a third loader, and DEC-101 had to argue for that one. It IS the right shape if a client project ever authors contracts for its own conditions, which DEC-122 deferred.",
+  "A `verify` argv address on the condition (raised on its extensibility merits). Not rejected on principle and NOT blocked by DEC-101 — a verifier result is a derived fact by that record's own consequences, and a condition-keyed verifier narrows nothing. It is simply orthogonal: it evaluates a condition rather than describing one.",
+]
+rationale    = "Adding a third static table beside two existing ones is unremarkable; adding a third loader needs the argument DEC-101 had to make, and nothing here forces it. The const table is also the one place where adding structure later is free — compile-time data, never serialised or persisted, no wire version and no override seam — so no hook needs pre-building."
+consequences = [
+  "Totality strengthens beyond DEC-122: set-equality runs over THREE enumerations, so a condition missing either its const row or its prose fails.",
+  "The renderer INJECTS kind and discharging act from the const into the rendered contract, so the prose never restates them and cannot contradict them.",
+  "Residual named, not claimed away: prose contradicting the const beyond the injected fields is not mechanically detectable. Craft under review, per thread 3.",
+  "A per-condition `doctrine verify <key>` is a strong candidate for inq-6's fetchable channel — the family has ONE member today and DEC-101 left its membership open at phase-plan.",
+  "Project extensibility on this edge stays with the runbook step, where DEC-101 already designed step ids as API so a project may substitute a verifier once IMP-372 lands.",
+  "Constraint carried forward (DEC-101): no subprocess inside apply's admit→persist span, so a condition verifier can never run inside `advance` — shell-side, entering as derived input.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract structure vs prose"
+target = "DEC-122"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract structure vs prose"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract structure vs prose"
+target = "DEC-121"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract structure vs prose"
+target = "DEC-101"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
