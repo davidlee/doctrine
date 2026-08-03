@@ -214,10 +214,16 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 44) · a163391c
 - **`review-disposition-attested`'s cumulative reach is not enforceable** until
   `IMP-392` gives it the `RV`-backed finding set to bind to. Recorded in `sec-3`
   as a gap, deliberately not asserted as a guarantee.
-- **`sec-2`'s cost model is now understated.** It records one snapshot shape
-  change as this slice's cost to the one live run; `sec-4` v2 adds three —
-  `ReviewPolicy` on the run header, a checkpoint-act group, an agent-declaration
-  group. Must be revisited before planning.
+- **`sec-2`'s snapshot-versioning bullet needs one clause qualified.** It states
+  the cost to `SL-243` "is not recoverable"; under the per-run `ReviewPolicy`
+  the review-attestation half now *is* — declare `[Adversarial]`. The
+  checkpoint-act and agent-declaration groups remain unrecoverable, so the
+  clause wants qualifying, not deleting. (The bullet states a concern, not a
+  tally, so it is not understated — the "only such change" claim was `sec-4`'s
+  and is already corrected there.)
+- **`sec-2` has never been adversarially reviewed** — round 1 covered `sec-1`,
+  rounds 2-3 `sec-3`, round 4 `sec-3` + `sec-4`. Its first pass and the clause
+  above are one piece of work, best done against a stabilised `sec-4`.
 - **`sec-3` v5 / `sec-4` v2 have not been re-reviewed.** The seven findings are
   integrated but the integration itself is unreviewed. Codex thread
   `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain and is the cheap
