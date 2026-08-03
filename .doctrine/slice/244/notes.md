@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 8e23952c
+fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 01587eef
 
 ### Produced
 
