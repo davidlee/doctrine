@@ -1,0 +1,47 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 135
+slug = "bundle-ingestion-removes-trusted-git-execution-from-capsule-repositories"
+title = "Bundle ingestion removes trusted Git execution from capsule repositories"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["capsule", "implementation", "ingestion", "rfc-025"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "records RFC-025's v0 bundle-ingestion choice and implementation handoff"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "answers the safe capsule ingestion mechanism question"
+target = "QUE-200"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "decision input for the capsule target-state revision"
+target = "REV-046"

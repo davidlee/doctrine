@@ -10,8 +10,10 @@ What is the minimal safe parent-side mechanism for ingesting a phase result
 from a potentially hostile capsule git repository?
 
 Lifted from RFC-025 (next design question 1) and sharpened during discussion.
-To be answered empirically by the C3 ingestion probe of the capsule spike —
-not by argument.
+It was initially framed for empirical selection by the capsule spike's C3
+ingestion probe. `SL-241` narrowed the choice but did not settle it; `DEC-128`
+then established that the remaining issue was architectural rather than a call
+for more sampling. The answer is recorded below and in `DEC-135`.
 
 ## Why it is trust-bearing
 
@@ -49,12 +51,13 @@ context.
    the canonical object db unvetted.
 
 2. **Bundle.** The worker runs `git bundle create result.bundle base..HEAD`
-   before ringing the doorbell. A bundle is a single flat file — pure data, no
-   config, no hooks — so the control-plane boundary is `git bundle verify` +
-   fsck'd fetch *from the file*. Cleanest trust story, and the bundle doubles
-   verbatim as the forensic archive artifact. Worker dishonesty in creating it
-   (wrong base, omitted commits) is caught downstream by the ancestry check,
-   so trusting the worker to run the command is acceptable.
+   before ringing the doorbell. A bundle is a single flat file rather than a
+   Git repository context, so the control-plane boundary is a bounded snapshot
+   followed by `git bundle verify` and an integrity-checked import in a fresh
+   quarantine repository. The bytes remain hostile and the file boundary has
+   its own refusal obligations. The bundle may also serve as the forensic
+   archive artifact. Worker dishonesty in creating it (wrong base or omitted
+   commits) is caught downstream by trusted ancestry and conformance checks.
 
 3. **Tree materialization.** Ignore worker git entirely: copy the working
    tree out, diff against the contracted base, control plane constructs the
@@ -75,11 +78,10 @@ Whichever mechanism wins, the admission pipeline is the same:
 - **Selector conformance** — the declared/changed algebra over the actual
   set; forbidden-path rejection (`.doctrine/`, `.claude/`, workflow config)
   as admission policy, the second layer behind the sandbox.
-- **Verification against the exact tree** — check the candidate out into a
-  clean control-plane workspace and run VTs there. Checkout of a hostile tree
-  is itself a small surface (in-tree symlinks, `.gitattributes`), but
-  smudge/clean filters only fire if *config* defines drivers, which a fresh
-  workspace does not; symlinks are inert until followed.
+- **Verification against the exact tree** — check the candidate out inside a
+  separate verification capsule and run the declared verification there. The
+  runner is supplied read-only from outside mutable capsule state, and the
+  sandbox process's exit status is the verdict.
 - **Normalization** — the control plane authors the canonical single phase
   commit itself (own committer identity, message convention, exact tree).
   Worker commits become archived evidence, never ancestry.
@@ -120,9 +122,9 @@ EVD-010's four-leg trusted-side file boundary, EVD-007's defective two-site
 costs — an extra boundary to write, a token to split, a provisioning step to
 run.**
 
-## The EX-9 ruling: the evidence does NOT suffice (SL-241 PHASE-06 T8, D-P06-9)
+## The prior EX-9 ruling: the evidence did NOT suffice (SL-241 PHASE-06 T8, D-P06-9)
 
-The question stays **`open`**. It settles in the post-spike REV, not here.
+At `SL-241` closure the question stayed **`open`** for the post-spike decision.
 
 **Candidate 3 is excluded** on grounds this question already accepts — EVD-008:
 tree materialization forfeits the forensic-history invariant by construction, and
@@ -161,3 +163,40 @@ honoured from repo config and to have stayed silent for a contingent reason.
 
 Scored data: `probes/c3/results.tsv`; committed summaries under
 `.doctrine/rfc/025/evidence/` (SL-241 PHASE-05 T8).
+
+## Answer and implementation handoff (2026-08-03)
+
+The v0 mechanism is **Git bundle ingestion**, governed by a structural rule:
+trusted control-plane code never runs Git with a capsule-authored repository as
+its repository or working context. This answers the tractable architectural
+question identified above instead of claiming that further config-key samples
+could prove fetch safe.
+
+The worker creates the bundle at a fixed control-plane-selected location and
+rings the doorbell only after publication. The parent treats the artifact as
+hostile bytes, snapshots it once into parent-owned storage under no-symlink and
+resource bounds, and lets Git read only that snapshot from a fresh disposable
+quarantine repository. The downstream pipeline then:
+
+1. verifies and imports the bundle, runs object-integrity checks and pins the
+   result object identity;
+2. checks contracted-base ancestry, merge policy, actual paths, declared scope,
+   forbidden paths and tree modes against quarantine objects;
+3. runs declared verification against the pinned result in a separate
+   verification capsule;
+4. rechecks that the accepted ref is still at the contracted base, transfers
+   the pinned objects and performs one expected-old-object compare-and-swap;
+5. writes the durable admission journal and disposes quarantine, while the
+   bundle follows `DEC-133`'s separately-owned forensic-exhibit lifecycle.
+
+This is an implementation path, not merely a transport preference. Existing
+Git ancestry, compare-and-swap, strict slice-conformance, candidate identity and
+admission seams are to be reused. `QUE-202` still owns decoupling conflict and
+staleness recovery from the incumbent dispatch journal; it blocks complete
+cutover design, not bundle ingestion itself. `SL-241`'s hostile matrix and stage
+assertions should become production acceptance tests, while its disposable
+shell rig remains evidence rather than migrated product code.
+
+`DEC-135` records the decision and its consequences. It is an input to
+`REV-046`, which will promote this scoped answer into binding architecture and
+specification.
