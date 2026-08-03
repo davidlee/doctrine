@@ -6,7 +6,20 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · **PHASE-04 complete (4/6), PHASE-05 in flight —
+fresh-as-of: 2026-08-03 · **PHASE-05 `completed` (5/6). PHASE-06 IN FLIGHT** —
+T1–T4, T7 done; **T5 VOID as a phase measurement and disclosed as a prior
+attempt** (F-P06-7 — the agent had no shell); **T5b DONE** (the capability leg
+written red-first, the `--tmpfs` agent home, P-C2 re-run and its `api-cred` row
+realigned, P-C1b **re-run scored and REAL** — F-P06-8/9, D-P06-5..8);
+**T6 DONE** (`measurements.md`, all nine rows — and counting rows 2 and 5
+**corrected design § 9**, F-P06-10, FOR RECONCILIATION).
+**EX-1, EX-2, EX-3, EX-4 discharged.** Remaining: **T8** (EX-9 — rule whether
+the EVD suffices to settle QUE-200; "does not suffice" is permitted, record
+don't force), **T9** (`go-no-go.md`, EX-5/6/7/8 — the substantial one),
+**T10** (VT-1), **T11** (EX-10 backlog lodging), **T12** (VH-1 — operator
+accepts verdict AND scope as ONE ask), **T13** (close).
+Prior-phase detail below, retained:
+**PHASE-04 complete (4/6), PHASE-05 —
 T0–T3 done, T4a DONE (five rows), T4b DONE (scored 330/0 + falsified 6/6),
 **T4c DONE** (H13 110/0 + 4/4; H14 88/0 + 5/5; **H7 100/0 + falsified 6/6**),
 T4d **DONE** (H8 scored 100/0 + falsified 3/3; **H11 scored 80/0 + falsified 9
@@ -25,7 +38,7 @@ F-P05-44/45 and ISS-306 out of it). **T8 DONE** (RFC-025 evidence artefacts —
 it). **T9 DONE — PHASE-05 IS `completed` (5/6 phases).** All fifteen EX and all
 five VA criteria discharged; VT-1 flipped UNATTRIBUTABLE → PASS on the
 completion, as F-P04-11 predicted. **F-P05-47 and ISS-307 out of the close
-itself.** Next is **PHASE-06** (`go-no-go.md`).
+itself.**
 · last SL-241 commit — verify before citing (`git log --oneline -1`)
 (tree head moves under us — other agents commit to `edge` mid-session; verify a
 hash before citing it)
