@@ -2984,3 +2984,190 @@ feed is untouched, on `sec-4`'s stated ground.
   deferral and `IMP-372`'s seam, and the `fixed` declaration is what keeps this
   design from promising it early. `IDE-047`'s structured extraction reads the
   same const the injection does, so it costs nothing here either.
+<!-- doctrine:section sec-6 -->
+## The published stage-machine diagram
+
+Objective 6, and the one deliverable the four sections above do not touch.
+`DEC-127` settles where it ships and how it stays true; what it does not settle
+is what the artefact contains, what renders it, and what a *shipped* generated
+file says about itself — the third being net-new, since no asset in the shipped
+corpus is generated today.
+
+### What is missing, and who is missing it
+
+An agent standing at a gate can currently reach three things: the process
+fragment for its stage, the runbook for its edge, and — after `sec-5` — the
+contracts for the conditions that edge enforces. Each is local. None of them
+shows the machine: four stages, four forward edges, which conditions guard which,
+what a backward move costs, or why a condition it satisfied two stages ago is
+being re-derived now. `sec-3`'s cumulative reach is precisely the thing that is
+inexplicable from any single edge's view, and it is the most common way for a run
+to be refused at the top edge for something it did at the bottom.
+
+The audience is the same one `DEC-122` names for the contracts, and the same
+argument applies one artefact out: the reader is usually an agent in an
+*installed client project*, which has no `src/`, no `.doctrine/spec/`, and no
+access to this repository at all.
+
+### The artefact
+
+**One file, embedded and published.**
+
+| | |
+|---|---|
+| backing | `install/design-run-stages.md` |
+| address | `reference/design-run-stages.md` |
+| kind | `reference` |
+| customization | `fixed` |
+| reached by | `doctrine library show reference/design-run-stages.md` |
+
+`install/` is already grafted into `srcWithDist`, so no `flake.nix` change is
+owed — `DEC-127`'s stated reason for putting the source there rather than beside
+the spec. The address takes the `reference/` prefix rather than
+`design-prompts/`, and the two are not interchangeable: `design-prompts/` is the
+store `Fragment` and `RunbookKey` address by *key*, where a member is selected
+and delivered by the machine. This is a document a reader asks for by name, which
+is what `reference/` means — the same shelf as `glossary.md` and
+`using-doctrine.md`, cited bare the way every reference doc is.
+
+**Contents, in the order a reader needs them.** Everything except the fixed prose
+is derived:
+
+1. **The stage machine** — a mermaid `stateDiagram-v2` over `Advance`'s four
+   values, one node per `Stage`, one edge per `Advance`, each edge labelled with
+   the count of conditions it enforces.
+2. **The edges** — a table, one row per `Advance`: the edge, its runbook key, its
+   own boundary conditions, and the full enforced set including what it inherits.
+   The inherited column is the point of the table; it is the fact no local view
+   carries.
+3. **The conditions** — a table, one row per `Condition`: token, kind, the act
+   that discharges it and who must author it, reach, and activation. Every column
+   is a projection of the `CONTRACTS` row, so this table and `sec-5`'s injected
+   contract header cannot disagree.
+4. **Backward moves** — fixed prose, because there is nothing to derive:
+   `sec-3` establishes that the backward relation is not enumerable and that a
+   regression is guarded by a stated reason rather than by conditions.
+
+Not included: the contract narratives. They are addressable per condition and
+delivered per edge, and inlining nine of them here would make one document that
+is never read instead of nine that are delivered when they apply.
+
+### What renders it, and what pins it
+
+```rust
+// src/design_run/artifact.rs — leaf tier, out-degree into `gate` only.
+
+/// The embedded backing this renders. The published address is the manifest's.
+pub(crate) const ARTIFACT_PATH: &str = "install/design-run-stages.md";
+
+/// Render the artefact from `Advance::ALL`, `boundary_conditions` and
+/// `CONTRACTS`. Fixed prose plus derived tables and edges — so a vocabulary
+/// change that is not re-rendered fails the golden test.
+pub(crate) fn render_artifact() -> String;
+```
+
+A sibling module rather than more of `gate.rs`, which is about gating; and the
+`funnel_machine.rs` shape exactly (`ARTIFACT_PATH` + `render_artifact`, fixed
+prose consts, derived rows), because that is the one in-tree precedent and it
+transfers whole. Rendering a string is pure, so `ADR-001`'s layering is
+untouched.
+
+**The golden test compares the rendered string to the embedded bytes.** A
+vocabulary addition, a reach change, an activation flip or a new edge all move
+the render and fail the test until the file is re-rendered, which is what makes
+`DEC-127`'s *ensured up to date* structural rather than a promise.
+
+**What it is pinned to has moved, and the citation still holds.** `DEC-127` says
+golden-pinned to *"the gate table in `src/design_run/gate.rs`"*. `sec-3` makes
+those tables macro-generated from one list. The renderer therefore reads the
+macro's *output* — `Condition::ALL`, `CONTRACTS`, `boundary_conditions` — which
+is still gate.rs and still the single source, and is now a stronger pin than
+`DEC-127` could assume: a condition cannot exist without a row in this diagram,
+because it cannot exist without a `CONTRACTS` entry and a lawful edge.
+
+Two tests, not one, and the second is already written: the golden pins the bytes
+to the code, and `assert_unprojected_install_assets_are_published`
+(`asset_source.rs:126-148`) refuses an `install/` asset with no manifest entry.
+Shipping the file without publishing it is a failure today.
+
+### A generated file that ships is not a generated file that stays home
+
+`funnel-machine.md`'s banner says *"To change it, change the table and
+re-render."* That is correct advice in this repository and useless in a client
+project, where there is no table and the file is a read-only artefact of an
+installed binary. This is the net-new policy question `DEC-127` flags, and the
+answer is that a shipped generated asset states its provenance rather than its
+edit procedure:
+
+```
+<!-- GENERATED — rendered from Doctrine's design-run gate tables and pinned to
+     them by test. Not hand-editable, and not overridable: this file describes
+     the machine your installed `doctrine` binary actually enforces, so an edited
+     copy would describe a machine that does not exist. -->
+```
+
+`customization = "fixed"` is the machine-readable half of the same statement, and
+its reason differs from every other `fixed` entry in the manifest. The process
+fragments and runbooks are `fixed` because the override seam does not exist yet
+(`IMP-372`); this one would be `fixed` even after that seam lands, because
+overriding a derived description does not change what is derived — it only makes
+the description wrong. Worth recording rather than folding into the existing
+rationale, since `IMP-372` will otherwise sweep the `fixed` entries and find one
+that must not move.
+
+### Where the citation points
+
+`SPEC-029` owns the gate table and is revised by this slice regardless. Under
+`DEC-127` it **cites the published address** rather than holding a copy, which
+inverts the direction research thread 4 proposed: the spec is the repo-private
+artefact here and the diagram is the reachable one, so the private document
+points at the public one and not the reverse.
+
+This is `DEC-127`'s general rule in its first application — *no shipped asset may
+cite a repo-private artefact* — and it is worth naming that this section obeys it
+in one direction only. The diagram cites no `DEC-`, `SL-` or `ISS-` id, because
+those are per-repo sequential and resolve to different records in a client
+project; that is `ISS-309`, which records the corpus already violating the rule
+and is not this slice's to sweep.
+
+### Verification impact
+
+- **The golden holds** — `render_artifact()` equals the embedded bytes. The one
+  test that makes every claim below mechanical.
+- **A vocabulary change breaks it** — adding a condition to the macro's source
+  fails the golden until the file is re-rendered. Asserted by construction rather
+  than by a separate test: the condition tables are derived, so there is no path
+  where the vocabulary moves and the artefact does not.
+- **Every condition appears exactly once** — the rendered condition table's token
+  set equals `Condition::ALL`. The same set-equality `sec-5` runs over the prose
+  corpus, one artefact out.
+- **Every edge appears exactly once** — the rendered edge table's key set equals
+  `Advance`'s four values, and the diagram carries one labelled transition per
+  row.
+- **The inherited column is the enforced set** — for each edge, the row's
+  inherited conditions equal `cumulative_conditions` minus that edge's own
+  boundary rows. Asserted because that column is the artefact's reason to exist
+  and is the one a hand-render would get wrong.
+- **The diagram and the contract headers agree** — for each condition, the kind,
+  discharging act, reach and activation rendered here equal what `sec-5`'s
+  receipt injects. Two renderings of one `CONTRACTS` row, asserted equal.
+- **It is published** — the existing disk-source reachability gate covers this,
+  so the manifest entry is not optional.
+- **It is reachable by address** — `doctrine library show
+  reference/design-run-stages.md` returns the artefact. The client-repo
+  reachability that is `DEC-127`'s whole reason for refusing the spec sibling,
+  asserted at the surface a client would use.
+
+### Carried forward
+
+- **This is the first generated asset in the shipped corpus**, and the banner
+  above is the policy it sets. A second one should reuse the wording rather than
+  invent a variant.
+- **`IMP-372` must not make this entry customizable.** Its `fixed` is structural,
+  not provisional — recorded here because every other `fixed` entry in the
+  manifest is provisional and a sweep would assume this one is too.
+- **`ISS-309` is the corpus-wide sweep** for shipped assets citing repo-private
+  ids. This section avoids the defect; it does not fix the existing instances.
+- **The diagram does not carry the contract narratives**, and if a reader ever
+  wants one document that does, that is the pull verb `sec-5` carries forward
+  rather than a second artefact.
