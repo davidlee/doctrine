@@ -618,17 +618,76 @@ decision rather than bar it. The general rule, so the next such fact is not
 re-argued from scratch: **a derived fact whose own repair invalidates it cannot
 be a guard.**
 
-**The mechanism is a lamp on the turn envelope.** `ReviewStanding::integrated_current`
-already computes *"an integrated adversarial pass covers current content"*, so
-the fact needs no new derivation **today** — only a channel. That is dated
-rather than permanent: `integrated_current` reads `ReviewGroup.integrated`,
-whose `IntegratedReview.id` is a `DesignId`, and `DEC-125` makes the integrated
-pass an `RV`. `sec-4` rules on that record and names the migration, which is the
-same one the `Conducted` arm waits on. It renders as a scalar flag on
-`TurnEnvelope`, following `cursor_stale`, which is the same shape already in the
-tree: a derived staleness marker rendered inline only when true
-(`render/envelope.rs:983`). Three properties follow, and they are the reason this
-is a lamp rather than a section of its own:
+**Both warnings derive over the run's current review pass**, which is a record
+this design has to add rather than a derivation it can borrow. `DEC-125` mints an
+`RV` on entry to `reviewing` — *"the review is a first-class artefact from the
+start"* — so a pass exists from that moment, before any disposition and whether
+or not one ever arrives. Nothing in the run holds it:
+
+```rust
+/// The review pass the run is currently on. Minted on entry to `reviewing`
+/// (DEC-125), and REPLACED — never reopened — on a later entry.
+///
+/// Deliberately independent of `review-disposition-attested`: it exists before
+/// that row is answered and under BOTH arms of the answer, which is what lets
+/// the warnings below derive on a waived run and what gives a disposition
+/// something to bind to.
+pub(crate) struct ReviewPass {
+    /// The `RV` minted for this pass. `sec-4`'s `ReviewRef`.
+    pub(crate) review: ReviewRef,
+    /// The section digests the pass was opened over.
+    pub(crate) covered: ContentCoverage<Fingerprint>,
+}
+```
+
+`IntegratedReview` (`attestation.rs:224`) is the shape this **replaces**, not one
+it rides. That record is `id` plus a `ContentCoverage` — `ReviewPass` with a
+`DesignId` where a `ReviewRef` belongs, which is exactly the defect `DEC-125`
+names when it says the run *"cannot hold or resolve an `RV`"*. An earlier draft
+had the lamp riding `ReviewStanding::integrated_current` unchanged and migrating
+later; that deferred the one field that makes the record usable. `sec-4` rules on
+the retirement.
+
+The two warnings are then derived, never stored:
+
+- **currency** — `pass.covered.is_current(current_section_digests)`. The same
+  comparison `integrated_current` performs today (`snapshot.rs:419-433`), over a
+  record that can name an `RV`.
+- **outstanding findings by severity** — a count over the pass's findings,
+  filtered to the states that are still live:
+
+```rust
+/// Outstanding findings on the current pass. A fixed record rather than a map:
+/// the ledger's severity vocabulary is closed at four (`review.rs:548-553`), so
+/// an absent key and a zero count would be one fact with two spellings.
+pub(crate) struct OutstandingBySeverity {
+    pub(crate) blocker: u32,
+    pub(crate) major: u32,
+    pub(crate) minor: u32,
+    pub(crate) nit: u32,
+}
+```
+
+**Outstanding means not terminal — `status ∉ {verified, withdrawn}`** — which is
+D-C9b's `doc_unresolved_blockers` filter (`review.rs:1490`) with the severity
+restriction lifted. That is deliberately **wider** than `DEC-138`'s gating
+predicate, which blocks on `open` and `contested` only. A warning should report
+everything still live, including findings sitting answered in the raiser's court;
+a gate should bar only on what the responder has not answered. The two filters
+differ by the `answered` state, they differ on purpose, and the difference is the
+whole of `DEC-138` — so spelling them with one shared filter would silently pick
+a side.
+
+Both arrive shell-read on `DerivedInput`, beside `ObservedReview` below and for
+the reason that field states: the ledger is an asset outside the run, and a fact
+about what an asset says is one Doctrine derives rather than takes on a caller's
+word. Currency needs no shell input beyond the pass itself, the section digests
+already being there.
+
+It renders as a scalar flag on `TurnEnvelope`, following `cursor_stale`, which is
+the same shape already in the tree: a derived staleness marker rendered inline
+only when true (`render/envelope.rs:983`). Three properties follow, and they are
+the reason this is a lamp rather than a section of its own:
 
 - **no passive cost** — nothing renders while the pass is current, unlike
   `frontier` and `blockers`, whose headings render unconditionally;
@@ -640,7 +699,9 @@ is a lamp rather than a section of its own:
 
 The severity summary rides the same channel for a different reason: it is a
 count by severity, with no satisfied/unsatisfied reading at all, so it could not
-have been a guard whatever its force.
+have been a guard whatever its force. It renders as one line of four counts,
+omitted entirely when every count is zero — the same render-only-when-it-says-
+something rule the currency flag follows, so neither warning has a passive cost.
 
 ### Activation: the model this slice can turn on
 
@@ -681,16 +742,46 @@ is provisional. Nor is `Conducted` the *stricter* arm in any general sense — i
 is the only one that can be unmet, but it is also satisfiable over an empty
 ledger. `DEC-138` below fixes what each arm actually requires.
 
-**A waiver disposes of one pass, not of the run's capacity to be reviewed.** Two
-mechanisms already give this and neither says so, so a reader assembles it from
-three places or assumes the opposite. Acts replace **by act**, so a later
-`Conducted` disposition displaces a `Waived` one and the row reads the new
-answer. And `DEC-125` mints an RV on entry to `reviewing` — *"the review is a
-first-class artefact from the start"* — so a run that regresses to `drafting`
-and advances again mints a *second* RV rather than reopening the waived one.
-Waiving is therefore never terminal: a design waived through to `plan` that
-comes back for another cycle can be reviewed properly on the next pass, with no
-unwind and no special case.
+**A disposition disposes of one pass, and the act has to say which.** An earlier
+draft claimed this property from two mechanisms that do not deliver it. Acts
+replace by act, so a later `Conducted` displaces a `Waived` — true, and it says
+nothing about a pass that arrives *after* the waiver. `DEC-125` mints a second
+`RV` on re-entry to `reviewing` — also true, and with `Artefact` coverage and no
+recorded pass identity the old waiver is still live, still the run's one
+`ReviewDisposed`, and still clearing an edge over a pass nobody has looked at.
+The claim was right and unsupported, which is worse than wrong.
+
+So the binding is explicit, on both arms:
+
+```rust
+pub(crate) enum ReviewDisposition {
+    Conducted { review: ReviewRef },
+    Waived { reason: String },
+}
+```
+
+— and the act carries, beside it, the `ReviewRef` of the pass it disposed. The
+row is satisfied only while that reference equals the run's current
+`ReviewPass::review`. Three properties fall out, none needing a mechanism of its
+own:
+
+- **A foreign `RV` cannot answer the row.** `Conducted` naming a review that is
+  not this run's current pass is refused at admission, not merely unmet — the
+  same *refuse the false claim on write* move `DEC-138` makes for an unconcluded
+  pass. A syntactically valid `ReviewRef` pointing at another slice's ledger was
+  otherwise a satisfying answer.
+- **Re-entry stales the prior disposition.** Minting a new `ReviewPass` moves
+  `current`, so the stored act's reference no longer matches and the row is unmet
+  until the user disposes *this* pass. That is what makes waiving non-terminal in
+  fact rather than in prose.
+- **`Waived` binds too, and that is not symmetry for its own sake.** A waiver
+  that recorded no pass identity would carry forward across every future entry to
+  `reviewing`, which is precisely the hole. Declining *this* pass is the claim
+  being made; declining every pass the run will ever have is not one the user was
+  asked for.
+
+The reference is on the act rather than inside `Conducted` because both arms need
+it and only one names an `RV` for its own purposes. `sec-4` gives it a slot.
 
 **What the user is bound to is responding, not agreeing** — `DEC-138`, and it
 fixes both arms at once.
@@ -720,13 +811,27 @@ by this slice: D-C9b's `doc_unresolved_blockers` (`review.rs:1490`) is
 minus the state restriction — it counts `answered`, and that one difference is
 what this row turns on.
 
-`Waived { reason }` is satisfied **unconditionally** — before a review, or over
-live findings. An earlier draft made it inadmissible while findings were
-outstanding, on the reasoning that an unconditioned waiver is a synonym for
-dismissing them. It is not, and the ledger is what keeps them different: a waiver
-leaves every finding standing on the `RV`, undisposed and legible, beside a
-stated reason in the change log. *I have read these and I am proceeding* is a
-different claim from *these findings do not exist*.
+`Waived { reason }` is satisfied **unconditionally with respect to the review** —
+before a pass has run, and over live findings. An earlier draft made it
+inadmissible while findings were outstanding, on the reasoning that an
+unconditioned waiver is a synonym for dismissing them. It is not, and the ledger
+is what keeps them different: a waiver leaves every finding standing on the `RV`,
+undisposed and legible, beside a stated reason in the change log. *I have read
+these and I am proceeding* is a different claim from *these findings do not
+exist*.
+
+**The reason itself is checked, and "unconditionally" does not reach it.**
+`reason: String` prevents an omitted field and not an empty one, and a blank
+waiver is the exact claim this arm is supposed to make impossible: the whole
+defensibility of clearing an edge over live blockers is that the record says
+*why*. So a `Waived` whose reason is empty or whitespace is refused at admission.
+That is not a new rule — the run already holds it one field over, and in the same
+words: `Refusal::AcceptanceBasisMissing` refuses an acceptance with no basis
+because *"an auditable claim with nothing stated is not one"* (`run.rs:331-333`).
+A waiver is an auditable claim with an audience of one, and it earns the same
+guard. The distinction to keep is that the check is on the **reason**, never on
+the review: no count of findings, no pass state, nothing the arm exists to be
+free of.
 
 **Neither half works alone, which is why they are one decision.** Block without
 exit and a contesting raiser owns the user's progression, with no termination
@@ -858,10 +963,17 @@ from a distance.
 
 Severity is the ledger's own `blocker` rather than a notion this design invents;
 `DEC-125` brings it, and it is already the only severity that gates anything.
-Both arms need that `RV`-backed finding set, and neither is buildable until
-`IMP-392` — so the interim is the same on both arms, not a strict path and a lax
-one. That is the footing `DEC-125` sets: *"SL-244 specifies its conditions
-against the RV-backed model; the migration is its own item."*
+**Only `Conducted` consumes any of this.** It is the arm that needs the
+`RV`-backed finding set and the concluded marker, and it is the arm that waits on
+`IMP-392`; `Waived` reads no `ObservedReview` at all, needing nothing but a
+non-blank reason and the current pass's identity. `DEC-138` says so in as many
+words — *"The `Waived` arm needs nothing from it"* — and an earlier draft of this
+paragraph claimed the opposite, which would have disabled the deliberately
+available exit for exactly as long as the interim lasts. What is the same on both
+arms is that neither is a degraded path: `Waived` is permanent, not a stand-in
+for `Conducted` until the migration lands. That is the footing `DEC-125` sets:
+*"SL-244 specifies its conditions against the RV-backed model; the migration is
+its own item."*
 
 Activation is a column on the one classification table rather than a second table
 to drift against the first, and the enforced set is that table filtered:
@@ -1198,9 +1310,15 @@ generator emits and what the asset test iterates.
   the findings are still on the `RV`, still undisposed, with the reason in the
   change log. Both halves asserted, because the arm is only defensible if the
   second is true.
-- **Neither arm is authorable by an agent** — a disposition payload of either
-  arm without an `AcceptanceDeclaration` is refused. `DEC-138`'s load-bearing
-  invariant, and the only part of this row a gate can actually enforce.
+- **Neither arm is takeable except in the user's name, and neither is silent** —
+  a disposition payload of either arm without an `AcceptanceDeclaration` is
+  refused, an accepted one carries `AcceptanceAuthority::User`, and it emits a
+  change row. Asserted as those three facts and **not** as *an agent cannot
+  author it*: `--as` is cooperative role assertion and explicitly not a security
+  boundary (`ADR-007`, `review.rs:2813`), and an `AcceptanceDeclaration` cannot
+  distinguish a user's payload from an agent's (`DEC-088`). The stronger test
+  would assert a property this system does not deliver, which is the defect this
+  row exists to describe rather than to commit.
 - **A waiver is not terminal** — a run waived to `locked`, regressed to
   `drafting` and re-advanced mints a second `RV`, and a later `Conducted`
   disposition displaces the waiver by act replacement. Both halves asserted: the
@@ -1232,9 +1350,11 @@ generator emits and what the asset test iterates.
   admissibility:* the concluded-pass marker does not exist, so until it does the
   arm can name a review that never ran. That marker is the one thing this slice
   asks `IMP-392` to add rather than merely to expose; `sec-4` gives it a shape
-  and says why findings and prose cannot supply it. `DEC-138`'s waiver arm needs
-  nothing from `IMP-392`, so the interim is the same on both arms, not a strict
-  path and a lax one.
+  and says why findings and prose cannot supply it. Both are `Conducted`'s.
+  `DEC-138`'s waiver arm needs nothing from `IMP-392` — it reads no
+  `ObservedReview` at all — so the row stays satisfiable throughout the interim.
+  What is the same on both arms is that neither is degraded: `Waived` is a
+  permanent arm, not the interim's stand-in for `Conducted`.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
   It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
@@ -1251,7 +1371,6 @@ generator emits and what the asset test iterates.
 - Research currency is the third instance of the reach question and is **not** in
   this vocabulary. It is a warning-shaped fact by the same convergence argument,
   it lives outside the design run today, and settling it is outside `SL-244`.
-
 <!-- doctrine:section sec-4 -->
 ## The attested acts
 
@@ -1302,23 +1421,24 @@ migrate as, and a migration that assumed `DesignAccepted` would mislabel one.
 With a single live run that has never been materialised, that is a hand repair
 rather than a mechanism — recorded so nobody writes the assuming migration.
 
-`IntegratedReview` (`attestation.rs:224`) passes the test that `Attestation`
-passes, and is a third incumbent rather than an omission from a pair.
-`ReviewGroup` holds it beside them (`snapshot.rs:330`); it is `id` plus a
-`ContentCoverage`; and it records no act by any actor in `ActKind` — it records
-that a *pass* happened, which no shape here generalises. Its condition retires,
-since `integrated-review-present` folds into `review-disposition-attested`, but
-its reader does not: `ReviewStanding::integrated_current` is the sole source of
-`sec-3`'s currency lamp, so retiring the record here would delete a warning this
-design has just argued for.
+`IntegratedReview` (`attestation.rs:224`) fails it, and an earlier draft had it
+passing. `ReviewGroup` holds it beside the other two (`snapshot.rs:330`); it is
+`id` plus a `ContentCoverage`; and it records no act by any actor in `ActKind` —
+it records that a *pass* happened. That was read as saying something no general
+shape could. It is not: `sec-3`'s `ReviewPass` says exactly that and one thing
+more, a `ReviewRef` where this record has a `DesignId`, which is the difference
+`DEC-125` names when it says the run *"cannot hold or resolve an `RV`"*. A shape
+that is another shape minus the field that makes it usable is subsumed, not
+distinct — `LockAcceptance`'s case again.
 
-**It retires with `IMP-392`, not with this slice.** `DEC-125` makes the
-integrated pass an `RV`, and its own consequence names why this record cannot
-hold one — `IntegratedReview.id` is a `DesignId`. So the lamp migrates on the
-same item as the `Conducted` arm and onto the same `ReviewRef`, and until then
-it derives exactly as it does today. Said here because `sec-3` calls the lamp a
-channel over an existing derivation, which is true now and stops being true on
-that migration.
+**It retires with this slice, not with `IMP-392`.** The earlier draft deferred it
+so the currency lamp could keep riding `ReviewStanding::integrated_current`
+unchanged, which read as conservatism and was really a warning left derived over
+a record that cannot name the artefact it is warning about. `ReviewPass` is
+minted on entry to `reviewing` whatever `IMP-392` has landed, so the lamp's
+input exists now; what waits on that item is the *finding set* the severity
+summary counts, not the pass. Its condition retires with it, since
+`integrated-review-present` folds into `review-disposition-attested`.
 
 `Evidence` (`facts.rs:23-27`) fails the test, and is the incumbent it was never
 applied to. It is a condition, a subject and a fingerprint — a `CheckpointAct`
@@ -1427,9 +1547,20 @@ pub(crate) struct CheckpointAct {
     observed: BTreeMap<ObservedFact, Fingerprint>,
     /// The agent declaration this act confirms, where its rule names one.
     confirms: Option<Fingerprint>,
-    /// How the act disposes of a review, where its rule names a disposition.
-    /// `Some` on `ReviewDisposed` alone.
-    disposition: Option<ReviewDisposition>,
+    /// How the act disposes of a review, where its rule names a disposition,
+    /// and WHICH pass it disposed. `Some` on `ReviewDisposed` alone.
+    disposition: Option<DisposedPass>,
+}
+
+/// A disposition and the pass it was given over (`sec-3`).
+///
+/// The pass reference sits BESIDE the arm rather than inside `Conducted`,
+/// because both arms bind to it and only one names an `RV` for its own reasons.
+/// The row is satisfied only while `pass` equals the run's current
+/// `ReviewPass::review`, which is what makes a waiver dispose of one pass.
+pub(crate) struct DisposedPass {
+    pub(crate) pass: ReviewRef,
+    pub(crate) disposition: ReviewDisposition,
 }
 
 /// A covered map in the shape the act's `Coverage` selector names.
@@ -1440,11 +1571,16 @@ pub(crate) enum CoveredSet {
 
 /// `DEC-125`'s two arms, given a home. Admissibility is `DEC-138`'s.
 pub(crate) enum ReviewDisposition {
-    /// A pass was run and is being disposed of. Admission refuses a reference
-    /// whose `RV` carries no concluded marker; the gate then reads its
-    /// undisposed blockers. Both through `sec-3`'s `ObservedReview`.
+    /// A pass was run and is being disposed of. Admission refuses a `review`
+    /// that is not the current pass, and one whose `RV` carries no concluded
+    /// marker; the gate then reads its undisposed blockers. Both through
+    /// `sec-3`'s `ObservedReview`. The field is retained beside `DisposedPass`
+    /// rather than folded into it because the two can only differ by being
+    /// refused, and a value that says the same thing twice is checkable.
     Conducted { review: ReviewRef },
-    /// The user declines a pass, on the record. Always admissible.
+    /// The user declines a pass, on the record. Admissible over any review
+    /// state; the reason must be non-blank (`sec-3`), which is the only thing
+    /// admission checks here.
     Waived { reason: String },
 }
 
@@ -1544,8 +1680,30 @@ review *could* be bound to canonical state outside the run. It is refused becaus
 that state is governance, confirming governance is `GovernanceConfirmed`'s job,
 and that is a user act under `DEC-121`. If a later act wants the pairing it is a
 decision, and the slot arrives with it — which is this section's rule for shapes,
-applied to a slot. Being a property of the generated table, it needs no runtime
-test: a rule that asked would not compile against a record that cannot hold it.
+applied to a slot.
+
+**How the restriction is actually held, because the type does not hold it.** An
+earlier draft closed this by saying *a rule that asked would not compile against
+a record that cannot hold it*. That is false, and the reason is worth keeping:
+`ActRequirement`'s four fields are independent, so
+`{ act: BlockingSetDeclared, actor: Fixed(Agent), confirms: Some(…) }` is a
+perfectly well-typed row. It compiles, it joins every generated set, and every
+`AgentDeclaration` written against it is then refused at admission for lacking a
+slot no agent record has — an **active condition that nothing can satisfy**,
+which is precisely the state `Activation` exists to keep out of the table.
+Claiming unrepresentability where only rejection is delivered is the same
+overclaim this section corrects for `AgentActKind` two subsections down.
+
+So the check is generated, not typed: the macro that emits `CONTRACTS` also emits
+a compile-time assertion per row that a requirement naming `confirms`, a
+disposition or an observed fact has an act in the checkpoint five. It is a
+`const` predicate over data the macro already has, so the failure is a build
+error at the offending row rather than a test somewhere else — which is the same
+standard the `Advance` keying meets, and the honest version of what this
+paragraph used to claim. Coupling `ActRequirement` into per-family variants would
+also work and costs a type split across four rows to prevent a mistake one
+assertion catches; the assertion is the cheaper answer, and it is the one that
+keeps the table flat enough to read.
 
 Two consequences worth naming. An act whose `observed` map is simply **absent**
 where its rule names a fact is refused rather than treated as an empty
@@ -1601,6 +1759,71 @@ means concretely: its wire type is already `AcceptanceDeclaration`
 (`submission.rs:627`), so the run-level acceptance field keeps its shape and
 changes where it lands.
 
+### The wire types, and the order the records are built in
+
+Naming the fields is not enough, because the persisted records above hold
+engine-authored material — an allocated `id`, a covered map, observed
+fingerprints, a declaration digest — and a caller cannot be trusted with any of
+it. So the wire types are strictly the *claim*, and the engine builds the record:
+
+```rust
+/// A user act at a checkpoint. `covered`, `observed` and `confirms` are
+/// ABSENT — the engine supplies each from state the caller cannot assert.
+pub(crate) struct CheckpointActDeclaration {
+    pub(crate) act: ActKind,
+    pub(crate) acceptance: AcceptanceDeclaration,
+    /// Present exactly on `ReviewDisposed`, per the correspondence.
+    pub(crate) disposition: Option<ReviewDisposition>,
+}
+
+/// An agent declaration. Carries its payload and its basis, and nothing else.
+pub(crate) struct AgentActDeclaration {
+    pub(crate) act: AgentActKind,
+    pub(crate) basis: String,
+    pub(crate) turn: Option<String>,
+}
+
+/// A policy change, which is a user act like any other.
+pub(crate) struct ReviewPolicyDeclaration {
+    pub(crate) policy: ReviewPolicy,
+    pub(crate) acceptance: AcceptanceDeclaration,
+}
+```
+
+The three join `ApplyRequest` as `checkpoint_act`, `agent_declaration` and
+`review_policy` — `Option` each, since `Batch` refuses to carry an order
+(`DEC-063`) and two acts of one kind in one submission would need one.
+
+**The order is load-bearing and the incumbent already fixes most of it.**
+`DerivedInput` is built *before* `apply` runs the batch (`design.rs:1270`), and
+the run re-observes section fingerprints *after* the declaration loop and before
+the stage move (`run.rs:318`). A coverage captured from pre-batch state would
+record what the act was *not* given over. So:
+
+1. **Admit.** Every refusable thing, including each act's correspondence against
+   its rule, while the authored tier is untouched.
+2. **Mutate.** Declarations, dispositions, traversal — the batch's own effects.
+3. **Re-observe.** Section digests and node material, so what follows covers what
+   this batch left behind. The incumbent's step, one subject wider.
+4. **Construct.** The engine allocates each record's `id`, fills `covered` from
+   step 3 in the shape the rule's `Coverage` names, fills `observed` from
+   `DerivedInput`, and fills `confirms` from the declaration the rule names.
+5. **Evaluate.** The stage move, against records that already exist.
+
+Step 4 is what lets a declaration and its confirmation arrive in **one**
+submission: the `AgentDeclaration` is constructed and fingerprinted before the
+`CheckpointAct` that confirms it, in one fixed order rather than by the caller
+naming a digest it would have had to compute. That case is not hypothetical —
+`run.rs` already allows a disposition recorded and a stage taken together, and
+`DEC-121`'s interaction is two acts about one graph.
+
+**The record ids stay**, and they are `DesignId`s on the run's existing prefixes
+— `cpa-` for checkpoint acts, `agd-` for agent declarations. They are not
+addressable by a caller and no rule reads them, so the case for dropping them is
+real; they are kept because `invalidation_rows` reports the death of a recorded
+act *by subject*, and an act with no id has nothing to name itself with in a
+change row.
+
 ### The concluded-pass marker
 
 `sec-3` fixes that `Conducted` is admissible only over a pass that concluded,
@@ -1609,9 +1832,39 @@ findings or its prose. This is what that state is, because a description is not
 something `IMP-392` can build.
 
 **Shape.** One key in the `RV`'s `[review]` table — `concluded`, a boolean,
-absent by default — set by the verb that ends a pass and never by an edit to a
-finding. `IMP-392` is already opening this record to give findings a section
-reference, which is why the marker rides that item rather than one of its own.
+absent by default — never set by an edit to a finding. `IMP-392` is already
+opening this record to give findings a section reference, which is why the marker
+rides that item rather than one of its own.
+
+**The writer is a new verb, `doctrine review conclude <RV>`, and naming it is
+half the finding.** An earlier draft said the marker was *"set by the verb that
+ends a pass"* without checking whether one exists. None does: the review surface
+is `new`, `raise`, `dispose`, `verify`, `contest`, `withdraw`, `list`, `show`,
+`status`, `prime`, `unlock`, `paths` — every finding verb moves one finding, and
+`status` is derived and writes nothing. Since the marker is deliberately *not* a
+function of the finding set, no existing verb can set it as a side effect without
+acquiring a second meaning, and `dispose` is the worst candidate of them: it is
+per-finding and the responder's, where concluding is per-pass and the raiser's.
+
+Its shape, so `IMP-392` has something to build:
+
+- **Authority — the raiser's**, on the `review.rs` axis that already separates
+  `raise`/`verify`/`withdraw` from `dispose`. Concluding is the reviewer saying
+  *I have finished reading*, which is exactly the claim the design run's
+  `Conducted` arm is repeating one layer out.
+- **Idempotent.** Concluding a concluded pass is a no-op, not a refusal. The
+  marker is a latch, and the verb's job is to set it.
+- **Open findings are allowed, and this is the normal case.** A pass that found
+  things concludes with them outstanding; disposing them is the responder's work
+  afterwards, and `DEC-138` is precisely the rule for advancing while some are
+  still live. Requiring a clean ledger would make the marker a second, stricter
+  spelling of the gate it feeds.
+- **No unset.** A concluded pass cannot be un-concluded — it happened. A run that
+  wants another pass gets a new `RV`, which is what `sec-3`'s `ReviewPass`
+  replacement already does on re-entry to `reviewing`.
+- **It takes the same per-review lock** every mutating review verb takes, so a
+  concurrent `raise` cannot interleave with it; `review unlock` remains the
+  escape hatch it already is.
 
 **Why an authored field is lawful here, where a status field is not.** The `RV`
 carries an explicit refusal of exactly this shape, in a comment at the top of
@@ -1683,10 +1936,19 @@ guarantee, which is `DEC-088`'s and not this slice's to spend.
 So the agent acts get their own record, with their own closed vocabulary.
 
 ```rust
-/// The acts an agent may declare. Closed, and deliberately NOT `ActKind`:
-/// an agent-authored `DesignAccepted` is the value that must not exist.
+/// The acts an agent may declare, each carrying what it declares. Closed, and
+/// deliberately NOT `ActKind`: an agent-authored `DesignAccepted` is the value
+/// that must not exist.
+///
+/// Tagged with its payload rather than paired with an optional field beside it,
+/// so `DraftingReady` cannot carry a blocking set and `BlockingSetDeclared`
+/// cannot omit one.
 pub(crate) enum AgentActKind {
-    BlockingSetDeclared,
+    /// The inquiries the agent considers blocking — `DEC-121`'s artefact, and
+    /// the thing the user's `GraphReviewed` confirms. Every id must be a node
+    /// of the covered map; an id outside it is refused at admission.
+    BlockingSetDeclared { blocking: BTreeSet<DesignId> },
+    /// The agent's judgement that drafting may begin. Its basis is the claim.
     DraftingReady,
 }
 
@@ -1738,11 +2000,22 @@ ambiguous, and removing that ambiguity is what the confirmation link below exist
 for. Its wire shape is a run-level field on `ApplyRequest`,
 joining `WRITER_ACTS` as the second of this slice's three new writers.
 
-**What the fingerprint is taken over.** `act` and `basis`, each on its own line,
-LF-terminated, UTF-8, sha256 — the same hash the rest of the run uses. `id` is
-excluded because the engine allocates it and it is not content; `turn` because it
-is a harness detail rather than part of the claim; and `covered` because its
-currency is already the coverage mechanism's job.
+**What the fingerprint is taken over.** `act` and `basis` — where `act` is its
+kebab name followed, for `BlockingSetDeclared`, by its node ids ascending, one
+term per line. Every line LF-terminated, UTF-8, sha256, the same hash the rest of
+the run uses. `id` is excluded because the engine allocates it and it is not
+content; `turn` because it is a harness detail rather than part of the claim; and
+`covered` because its currency is already the coverage mechanism's job.
+
+**The blocking set is inside the fingerprint, and that is the point of the
+confirmation.** `DEC-121`'s interaction is *the agent declares which questions it
+considers blocking, the user confirms* — so what the user confirmed must be the
+set, not merely that a declaration existed. Ids ascending, because a set has no
+order and two declarations of the same questions must agree; this is the same
+whole-line-sort discipline the governance edge projection uses below, and for the
+same reason. An earlier draft hashed `act` and `basis` alone while the set lived
+nowhere at all, so a re-declaration with different questions carried the same
+fingerprint and `confirms` still matched.
 
 **And it is computed where every other digest is.** The pure layer never hashes
 — *"it is handed the digest as a derived fact"* (`ids.rs:177-178`) — so this
@@ -1836,9 +2109,10 @@ So the fence is authority and visibility, not prohibition:
   `ApplyRequest` and the third of this slice's `WRITER_ACTS` additions, and it
   rides an `AcceptanceDeclaration`, so `AcceptanceAttestation::bind` is the only
   route and the change carries `AcceptanceAuthority::User` exactly as an
-  acceptance does. An agent cannot
-  relax the rules as housekeeping; it must present the change as the user's, in
-  the same shape as every other user judgement in the run.
+  acceptance does. An agent cannot relax the rules as *housekeeping*; it must
+  present the change as the user's, in the same shape as every other user
+  judgement in the run. It can still present it — that is what the subsection
+  below means by declaration of intent rather than security boundary.
 - **Every change lands in the change log**, so the sequence *conditions unmet →
   policy loosened → conditions met* is legible after the fact rather than
   inferable from a final state that looks clean.
@@ -2044,9 +2318,12 @@ missing answer.
 - **Node material invalidates; progress does not** — re-wording or re-parenting a
   node unmakes `GraphReviewed` and `user-accepts-sufficiency`; disposing one
   leaves both satisfied.
-- **An agent cannot declare a user act** — `AgentActKind` has two members, so an
-  agent-authored `DesignAccepted` does not compile. A build-time property, so
-  there is no runtime test to write.
+- **The agent-declaration channel cannot encode a user act** — `AgentActKind` has
+  two members, so `AgentDeclaration { act: DesignAccepted }` does not compile.
+  A build-time property of *that shape*, so there is no runtime test to write —
+  and deliberately not the claim that an agent cannot author a user act, which
+  `--as` and `DEC-088` make false. What narrows here is one channel, not the
+  caller.
 - **A mismatched coverage is refused on write** — a `CheckpointAct` whose
   `CoveredSet` is `Sections` where its rule's `Coverage` names `InquiryMap` is
   refused at admission, so no stored act can violate the correspondence.
