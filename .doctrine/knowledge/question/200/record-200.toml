@@ -18,9 +18,18 @@ answered_by = ""
 answered_on = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
-supports    = []
-contradicts = []
-notes       = []
+supports    = [
+  "EVD-006 — hostile git config, hooks and disk-cap hazards behave identically on fetch and bundle",
+  "EVD-007 — every scored refusal token is computed trusted-side, downstream of the mechanism",
+  "EVD-008 — both mechanisms preserve the worker's commit identity into quarantine",
+  "EVD-009 — wall-clock cost is equal; bundle's larger transfer trips git auto-maintenance",
+]
+contradicts = [
+  "EVD-010 — bundle adds a trusted-side file-ingestion boundary that fetch does not carry, disputing candidate 2's 'cleanest trust story'",
+]
+notes       = [
+  "All five inputs are SL-241 PHASE-05 C3-probe results; scored data in probes/c3/results.tsv, summarised under .doctrine/rfc/025/evidence/ (SL-241 T8).",
+]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)

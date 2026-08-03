@@ -18,9 +18,13 @@ answered_by = ""
 answered_on = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
-supports    = []
+supports    = [
+  "EVD-011 — a capsule rewriting its own in-repo declaration leaves trusted-side behaviour byte-identical",
+]
 contradicts = []
-notes       = []
+notes       = [
+  "EVD-011 is this question's only probe-evidence input (SL-241 PHASE-05 guard probe (e), three legs). Its third leg's refusal token is fixture-specific — F-P05-43 — and must not be generalised.",
+]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)

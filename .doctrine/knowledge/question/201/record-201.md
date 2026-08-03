@@ -43,8 +43,29 @@ form — and a capsule that rewrites it. Trusted-side behaviour must be
 byte-identical to the run that did not. Without that row this question would
 have settled post-spike on argument alone.
 
+## Evidence input (SL-241 PHASE-05)
+
+That row ran, and its result is recorded as **EVD-011**, linked `supports` — the
+only probe-evidence input this question has.
+
+Guard probe (e), three legs, all `pass`. Against **F2 (`light-inrepo`)**, the
+fixture variant carrying a declaration copy inside the cloned repository, a
+capsule that rewrites its own declaration leaves trusted-side behaviour
+**byte-identical** to the F1 baseline that had nothing to rewrite — worktree-side
+and committed alike. DEC-099 Amendment 2's ruling is therefore observed rather
+than argued, and candidates 1 and 2 are confirmed safe on the axis that would
+otherwise have decided this silently.
+
+**One thing not to carry across.** The committed-rewrite leg refuses
+`conform/undeclared-path`, and *where* it refuses is fixture-specific (F-P05-43):
+F2 keeps its declaration at the repository root, which SL-001 declares no
+selector for, so conform leg 2 refuses it before anything later ever looks. A
+project that declared its own declaration path would get past that leg. The
+generalisable claim is the byte-identity, not the token.
+
 ## Related
 
+- EVD-011 — the probe-evidence input above.
 - [[interpretation-surface-ownership]] — the decision that opens this.
 - [[interpretation-surface]] — what is being declared.
 - ADR-019 — asset-policy lens for where artifacts live.

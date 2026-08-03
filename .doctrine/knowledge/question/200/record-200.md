@@ -96,3 +96,31 @@ Probe recommendation from discussion: rig fetch-into-quarantine and bundle
 side by side (they share ~90% of the rig; the difference is a few lines at
 the boundary) and let probe results pick. Skip materialization unless both
 fail something, since it forfeits the forensic-history invariant.
+
+## Evidence inputs (SL-241 PHASE-05)
+
+The probe ran. Five verdict inputs are recorded as EVD records, each linked to
+this question — four `supports`, one `disputes`. Candidate 3 (tree
+materialization) was not rigged, on this question's own recommendation, and
+neither mechanism failed anything that would reopen it.
+
+| input | record | what it says |
+|---|---|---|
+| per-mechanism H6/H7 behaviour | **EVD-006** `supports` | hostile `.git/config` + hooks (H6) and oversized objects (H7) score identically on both mechanisms — 8 cells, all pass at `model-level`. Neither hazard discriminates the candidates |
+| trust-bearing lines at the boundary | **EVD-007** `supports` | every scored refusal token is computed trusted-side by the *mechanism-independent* downstream pipeline. The mechanism decides the transfer, not the admission boundary |
+| forensic completeness | **EVD-008** `supports` | both mechanisms carry the worker's commit into quarantine as a first-class object. The forensic invariant does not discriminate candidates 1 and 2 |
+| operational friction | **EVD-009** `supports` | cost is equal (~2.5s a heavy cell either way). The asymmetry is fragility: M-B's larger transfer trips git's auto-maintenance in the quarantine, which M-A did not |
+| M-B's trusted-side file-ingestion boundary | **EVD-010** `disputes` | H13 exists on M-B only — four refusal legs for a capsule-authored file. On M-A the row is structurally `n/a`. The bundle **moves** the surface rather than removing it, which is counter-evidence to candidate 2's "cleanest trust story" above |
+
+**The shape of the result.** On the axes that were expected to separate the
+candidates — config/hooks, resource bounds, forensic retention, cost — they are
+equal. The one measured asymmetry runs *against* the leading trust argument for
+the bundle: M-B takes on a trusted-side read of capsule-authored bytes that M-A
+never performs. Two open costs sit on the M-B side (EVD-007's two-site
+`harvest/fsck-failed` token; EVD-009's quiesce obligation), and one flagged
+worry remains untested on the M-A side: `upload-pack` running in the capsule
+repo's context was never exercised, so this question's own caveat about git's
+protected-config rules is still argument, not evidence.
+
+Scored data: `probes/c3/results.tsv`; committed summaries under
+`.doctrine/rfc/025/evidence/` (SL-241 PHASE-05 T8).

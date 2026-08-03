@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 9
+slug = "wall-clock-cost-is-equal-between-mechanisms-bundles-larger-transfer-trips-git-auto-maintenance"
+title = "Wall-clock cost is equal between mechanisms; bundle's larger transfer trips git auto-maintenance"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "A heavy cell costs ~2.5s on both mechanisms (M-A 2.50s, M-B 2.55s), so cost is not a discriminator. M-B's 27MB pack transfer tripped git auto-maintenance in the quarantine and produced a spurious harvest/fsck-failed that M-A did not; N=1, caused by the fixture's inherited commit-graph."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "medium"     # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "supports"
+target = "QUE-200"

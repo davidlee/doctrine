@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 6
+slug = "hostile-git-config-hooks-and-disk-cap-hazards-behave-identically-on-fetch-and-bundle"
+title = "Hostile git config, hooks and disk-cap hazards behave identically on fetch and bundle"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "H6 (hostile git config + hooks) dissolves and H7 (oversize blob / deep tree) refuses at harvest/resource-cap, identically on both ingestion mechanisms — 8 scored cells, all pass at model-level. Neither hazard discriminates fetch from bundle."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "high"           # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "supports"
+target = "QUE-200"

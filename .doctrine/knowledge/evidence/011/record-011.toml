@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 11
+slug = "a-capsule-rewriting-its-own-in-repo-declaration-leaves-trusted-side-behaviour-byte-identical"
+title = "A capsule rewriting its own in-repo declaration leaves trusted-side behaviour byte-identical"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "Guard probe (e), three legs, all pass: against a fixture variant carrying an in-repo declaration, a capsule that rewrites its own declaration leaves trusted-side behaviour byte-identical to the run that had nothing to rewrite. Where the committed rewrite refuses is fixture-specific and not generalisable."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "high"       # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "supports"
+target = "QUE-201"

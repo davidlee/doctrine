@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 10
+slug = "bundle-adds-a-trusted-side-file-ingestion-boundary-that-fetch-does-not-carry"
+title = "Bundle adds a trusted-side file-ingestion boundary that fetch does not carry"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "H13 exists on M-B only: four trusted-side bundle-ingestion refusal legs (bundle-absent, bundle-invalid, bundle-unsafe-path, resource-cap), all pass on both fixtures. On M-A the row is structurally n/a because no trusted-side artifact is read. The bundle moves the surface rather than removing it."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "high"       # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "disputes"
+target = "QUE-200"

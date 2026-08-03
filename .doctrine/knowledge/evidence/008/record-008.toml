@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 8
+slug = "both-ingestion-mechanisms-preserve-the-workers-commit-identity-into-quarantine"
+title = "Both ingestion mechanisms preserve the worker's commit identity into quarantine"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "No row scores forensic retention, but both mechanisms demonstrably transfer the worker's commit as a first-class object: every ancestry refusal cites a trusted-side-computed S, and the quarantine's packs verify clean. Forensic completeness does not discriminate fetch from bundle."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "medium"     # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "supports"
+target = "QUE-200"
