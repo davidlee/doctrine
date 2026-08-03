@@ -1,0 +1,73 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 124
+slug = "contracts-ride-the-refusal-and-a-stage-entry-receipt"
+title = "Contracts ride the refusal and a stage-entry receipt"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-122/DEC-123 settle what a contract is and where it lives. Three channels could carry it — the refusal (no byte budget), the turn envelope (24576-byte ceiling with `clearances` already riding it uncapped), and the amortised `Fragment`-style receipt — plus a fourth, pull, via the `doctrine verify` family."
+choice       = "The refusal carries the remedy for each unmet condition. A stage-entry receipt carries the contracts for that stage's outbound edge, edge-grained, delivered once, with NO digest. The envelope gets nothing new. Pull is named as a phase-plan candidate, not committed."
+alternatives = [
+  "Envelope delivery. Rejected: contract prose competes with everything else the turn carries, against a hard ceiling with an uncapped neighbour.",
+  "A digested receipt on the `Fragment` model. Rejected as machinery for a scenario that does not exist — see rationale.",
+  "Per-condition delivery. Rejected on tool-call tax once addressing and delivery were separated; addressing stays per-condition, delivery does not need to.",
+]
+rationale      = "A contract is a pure function of the binary — DEC-122's prose asset plus DEC-123's const row, composed by DEC-123's injection rule without touching run state. All ten were walked; none is parameterised by the run. What varies per run is the complaint and the state, both of which already belong to the refusal. So there is no change to detect and no digest to keep."
+consequences = [
+  "Per-condition ADDRESSING is forced by DEC-067, not chosen: `cumulative_conditions` accumulates every edge below the target (gate.rs:212-226), so at reviewing→locked the set is all ten and an agent can fail at the last edge on the first edge's condition. Edge-blob-only addressing would leave it unable to reach that contract.",
+  "Delivery grain is then free to be edge-grained — one receipt at stage entry rather than one per condition.",
+  "Addressing grain and delivery grain are separate questions; conflating them was what made the choice look like a tradeoff.",
+  "IMP-390's gate-condition face is discharged by the refusal leg.",
+  "If a real contract-change case emerges, `Fragment`'s digest mechanism is there to borrow; nothing here forecloses it.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract delivery channels"
+target = "DEC-122"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract delivery channels"
+target = "DEC-123"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract delivery channels"
+target = "DEC-120"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract delivery channels"
+target = "DEC-121"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "refusal leg discharges the gate-condition face"
+target = "IMP-390"
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
