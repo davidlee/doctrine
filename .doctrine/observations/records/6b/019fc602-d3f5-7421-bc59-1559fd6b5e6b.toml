@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc602-d3f5-7421-bc59-1559fd6b5e6b"
+recorded_at = "2026-08-03T05:05:01.941210855Z"
+kind = "friction"
+summary = "design: exploring gate evidence can only bind to a design.md section, so a fresh run must mint a section to leave exploring"
+detail = "SL-244, /design. The exploring->inquiring edge requires evidence for governing-context-recorded and initial-concerns-recorded. EvidenceDeclaration carries {condition, subject}, and run.rs:1471 current_fingerprint() resolves subject against next.sections ONLY (Refusal::UnknownNode otherwise). A run at stage exploring normally has zero sections — sections are a drafting artefact — so the edge is unpassable until the caller creates one. e2e_design_state.rs:834+856 shows the intended path: declare sec-1, then bind both conditions to sec-1. Declarations are not stage-gated, so this is legal, but it means the cheapest way to satisfy a semantically-named condition is to mint an arbitrary subject for it to point at. Direct mechanical evidence for DEC-126 (what the gate should check) and DEC-120 (kinds of condition)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

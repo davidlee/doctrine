@@ -1,0 +1,47 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 12
+slug = "exploring-gate-forces-canonical-content-into-design-prose"
+title = "Exploring gate forces canonical content into design prose"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["design-run", "gate", "storage-rule", "governance-tension"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "The exploring -> inquiring gate resolves evidence subjects against design.md sections only, so a run must mint a prose section restating canonical entities before it can record that governing context was captured."
+provenance   = "inspection"     # inspection | experiment | reproduction | citation
+confidence   = "high"           # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "src/design_run/run.rs:1471-1478 — current_fingerprint resolves subject against next.sections only; Refusal::UnknownNode otherwise",
+  "src/design_run/gate.rs:162-167 — boundary_conditions for Exploring -> Inquiring",
+  "src/design_run/submission.rs:486-489 — EvidenceDeclaration carries only { condition, subject }",
+  "tests/e2e_design_state.rs:834,856 — the fixture declares sec-1, then binds both exploring conditions to it",
+  "SL-244 run dr-019fc4dd-e049-7db0-8cea-9af8ff970810 rev 25 — 0 sections, attestation unrecordable",
+]
+contradicts = []
+notes       = [
+  "Assessed by the user as a violation of the single-source-of-truth rule (no duplication of canonical TOML content in prose), and as poorly conceived independent of that.",
+  "Bears on DEC-126 (what the gate should check) and DEC-120 (derived / attested / claimed).",
+  "Revives the subject-rule question carried as OQ-5 / ISS-286.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "mechanical evidence that the exploring gate's evidence binding has no subject rule"
+target = "SL-244"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "in-tree support for what the gate should check"
+target = "DEC-126"
