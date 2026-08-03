@@ -241,7 +241,10 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-013 — Requirement Reconciliation](.doctrine/spec/product/013/spec-013.md) — `active`
 - [PRD-014 — Estimation & Value](.doctrine/spec/product/014/spec-014.md) — `active`
 - [PRD-015 — Dispatch & worktree](.doctrine/spec/product/015/spec-015.md) — `active`
-- [PRD-016 — Graph exploration](.doctrine/spec/product/016/spec-016.md) — `draft`
+- [PRD-016 — Graph exploration](.doctrine/spec/product/016/spec-016.md) — `active`
+- [PRD-017 — Library & search](.doctrine/spec/product/017/spec-017.md) — `active`
+- [PRD-018 — Observations](.doctrine/spec/product/018/spec-018.md) — `active`
+- [PRD-019 — Managed design workflow](.doctrine/spec/product/019/spec-019.md) — `active`
 
 ### Technical Specifications
 
@@ -268,17 +271,22 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-021 — Dispatch orchestrator process](.doctrine/spec/tech/021/spec-021.md) — `active`
 - [SPEC-022 — Git interaction model](.doctrine/spec/tech/022/spec-022.md) — `active`
 - [SPEC-023 — Prompt cascade](.doctrine/spec/tech/023/spec-023.md) — `active`
-- [SPEC-024 — Comparison engine](.doctrine/spec/tech/024/spec-024.md) — `draft`
-- [SPEC-025 — Web explorer](.doctrine/spec/tech/025/spec-025.md) — `draft`
+- [SPEC-024 — Comparison engine](.doctrine/spec/tech/024/spec-024.md) — `active`
+- [SPEC-025 — Web explorer](.doctrine/spec/tech/025/spec-025.md) — `active`
+- [SPEC-026 — Publication & library](.doctrine/spec/tech/026/spec-026.md) — `active`
+- [SPEC-027 — Graph projection and CLI emitter](.doctrine/spec/tech/027/spec-027.md) — `active`
+- [SPEC-028 — Observation ledger](.doctrine/spec/tech/028/spec-028.md) — `active`
+- [SPEC-029 — Design run engine](.doctrine/spec/tech/029/spec-029.md) — `active`
+- [SPEC-030 — Dispatch execution capsules](.doctrine/spec/tech/030/spec-030.md) — `active`
 
 ### Request for Comments
 
 - [RFC-001 — Thesis: graph value is gated on consumption surfaces](.doctrine/rfc/001/rfc-001.md) — `open`
 - [RFC-002 — Consumption surfaces program: estimate, value, and scoring outward pipeline](.doctrine/rfc/002/rfc-002.md) — `open`
 - [RFC-003 — Relation model: durable structural shape vs contextual role-intent](.doctrine/rfc/003/rfc-003.md) — `resolved`
-- [RFC-004 — Path-intent selector: role-stamped selector+intent primitive](.doctrine/rfc/004/rfc-004.md) — `open`
+- [RFC-004 — Path-intent selector: role-stamped selector+intent primitive](.doctrine/rfc/004/rfc-004.md) — `resolved`
 - [RFC-005 — Dispatch funnel integrity: hazard survey and correctness posture](.doctrine/rfc/005/rfc-005.md) — `open`
-- [RFC-006 — Auto-merge non-FF trunk at integrate: reversing the FF-only posture](.doctrine/rfc/006/rfc-006.md) — `open`
+- [RFC-006 — Auto-merge non-FF trunk at integrate: reversing the FF-only posture](.doctrine/rfc/006/rfc-006.md) — `resolved`
 - [RFC-007 — Actionability: legibility and correctness](.doctrine/rfc/007/rfc-007.md) — `open`
 - [RFC-008 — Actionability gating: association vs graph-effect](.doctrine/rfc/008/rfc-008.md) — `resolved`
 - [RFC-009 — Epistemic records as the human-facing relational substrate for design ambiguity](.doctrine/rfc/009/rfc-009.md) — `open`
@@ -294,6 +302,13 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-019 — Comparison-based value elicitation](.doctrine/rfc/019/rfc-019.md) — `open`
 - [RFC-020 — Ledgered facet claims](.doctrine/rfc/020/rfc-020.md) — `open`
 - [RFC-021 — Dynamic behaviours and minimal projection](.doctrine/rfc/021/rfc-021.md) — `resolved`
+- [RFC-022 — Agent trust model without human attestation](.doctrine/rfc/022/rfc-022.md) — `open`
+- [RFC-023 — Executable plan gates and adversarial TDD](.doctrine/rfc/023/rfc-023.md) — `open`
+- [RFC-024 — Product altitude taxonomy and the Scenario entity](.doctrine/rfc/024/rfc-024.md) — `open`
+- [RFC-025 — Discrete dispatch execution capsules](.doctrine/rfc/025/rfc-025.md) — `open`
+- [RFC-026 — Design review response effectiveness](.doctrine/rfc/026/rfc-026.md) — `open`
+- [RFC-027 — Progressive discovery and proof-bearing plans](.doctrine/rfc/027/rfc-027.md) — `open`
+- [RFC-028 — Blockchain but for AI (verifiable human authorization)](.doctrine/rfc/028/rfc-028.md) — `open`
 
 ### Architecture Decision Records
 
@@ -315,4 +330,5 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-016 — Relation intent as a closed role dimension](.doctrine/adr/016/adr-016.md) — `accepted`
 - [ADR-017 — Actionability gating via inbound needs on unsettled records](.doctrine/adr/017/adr-017.md) — `accepted`
 - [ADR-018 — Finish Axis B: neutral originates_from provenance, fulfils label with completion degree, value-burndown](.doctrine/adr/018/adr-018.md) — `accepted`
-- [ADR-019 — Embedding, publication, and projection are independent asset policies](.doctrine/adr/019/adr-019.md) — `proposed`
+- [ADR-019 — Embedding, publication, and projection are independent asset policies](.doctrine/adr/019/adr-019.md) — `accepted`
+- [ADR-020 — Adopt execution capsules as the dispatch authority boundary](.doctrine/adr/020/adr-020.md) — `accepted`
