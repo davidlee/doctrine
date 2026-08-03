@@ -1104,6 +1104,47 @@ result that gets quietly smoothed away by a later green.
   model's claim is that the OS boundary IS the boundary**, and a harness inside
   it need not re-litigate confinement per tool.
 
+**The fix landed, and the re-run is a real phase** (`e4aac673`, `1a1383b0`).
+Three more that survive the sheet:
+
+- **The capability leg was written FIRST and shown RED.** `probe-smoke.sh` gains
+  a third assertion: the agent runs `uname -r > /capsule/exec-proof` and the
+  assertion is trusted-side on the file's **content**, never on the agent's
+  account of itself (I5). The kernel release specifically — a leg a
+  file-writing tool could satisfy would pass in exactly the case that produced
+  this whole detour. Red against the old profile (the agent's own reply named
+  the fix), green against the new one, same leg, one profile change between.
+  **That ordering is the point**: a capability leg added after the fix would
+  prove only that the fix works, never that the leg can detect its absence.
+- **Re-running P-C2 answered the handover's open question with a RED, and the
+  prediction was wrong.** The handover reasoned the tmpfs "touches none of
+  P-C2's confinement subjects". Right about the *subjects*, wrong about the
+  *observables*: `api-cred` claimed *"the capsule cannot rewrite the
+  credential"* but asserted a write to a **different file in the credential's
+  directory**. Those coincided only while the whole of `~/.claude` was ro-bound.
+  **The proxy was never sound in the direction that mattered** — a read-only
+  directory with the secret bind-mounted rw over it passes the old leg while the
+  secret is writable. Operator ruled (a): realign the observable onto the file
+  (refused on append, truncate **and unlink**, credential shown readable first,
+  against a **positive control writing successfully beside it**, because the
+  home is writable by design and a refusal proves nothing against a broken write
+  mechanism). All seven rows pass; P-C2's results are **re-taken, not carried
+  with a caveat**. Generalised into
+  `mem.pattern.review.guard-test-asserts-property-not-proxy`. **The rule this
+  pays for: a probe whose subject is the mount posture is re-run when the mount
+  posture changes, not reasoned about.**
+- **A degraded agent is not a cheap one — it cost roughly DOUBLE.** The void
+  attempt burned 8 131 output tokens / 388 449 cache reads / \$0.657 across 18
+  turns of failing tool calls and 142 s, for a phase it never executed. The run
+  that actually did the work: 3 415 / 195 816 / **\$0.335** in 51 s, with
+  `agent-committed=yes tree-dirty=no` and the agent's own commit
+  (`9872a712`, `src/split.ts` +25, `Co-Authored-By` trailer — not the worker's
+  residue-sweep wording). Worth carrying into the go/no-go, because it points
+  against the intuition that a blocked agent gives up early. And note the
+  circularity that closes the loop: **`git commit` IS shell execution**, so the
+  fact discharging EX-1's ritual clause is the same fact the new smoke leg
+  tests for — at a fraction of the cost.
+
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
 Written 2026-08-03, mid-phase and deliberately so: this range is the most
