@@ -142,10 +142,31 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-08-03 · design/drafting (run rev 38) · 1cc373ff
 
 ### Produced
 
+- `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
+  (`cp-15`, `cp-14`).
+- `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395` — backlog.
+- Design run sections `sec-1`, `sec-2`, `sec-3` (rev 38, undeclared to disk —
+  `design materialise` has not run; watermark absent).
+- Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
+- One friction observation, `.doctrine/observations/records/6b/`.
+
 ### Learned
 
+- `EVD-012` — gate evidence binds only to `design.md` sections.
+- `ISS-309` — shipped assets cite repo-private ids; per-repo sequential ids make
+  this resolve wrongly rather than dangle.
+- `ISS-310` — `sections_attested` ignores `Reviewer`.
+
 ### Open
+
+- `ISS-310`'s actor decision — blocks `section-attestations-current`'s row in
+  `sec-3`'s classification table (left as `…` deliberately).
+- `sec-3`'s `const`-ness tradeoff on `boundary_conditions` — three options stated,
+  option 3 preferred, **not decided**.
+- Whether `ObservedFact` justifies its seam with one member.
+- **`sec-3` v2 has NOT been adversarially reviewed.** v1 was; the six findings
+  were integrated; the rewrite introduced new type shapes no reviewer has seen.
