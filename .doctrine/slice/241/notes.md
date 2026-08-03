@@ -1439,6 +1439,45 @@ mid-phase would convert a legible structural finding into a silent pass.
 
 ### Open
 
+- **The agent home's write scope is coarser than it wants to be — FOLLOW-UP,
+  deliberately not a backlog item yet.** Operator, 2026-08-03, on seeing the
+  posture PHASE-06 landed: *"probably some things to tune in future here but
+  nothing showstopping … not in this slice."* Deliberately **not** lodged via
+  `backlog new`: the whole capsule model is pre-go/no-go, and a standalone
+  improvement would presume it ships. It rides the slice until the verdict
+  decides whether there is anything to improve.
+  - **What shipped (D-P06-5):** a blanket `--tmpfs /agent/.claude`, empty, plus
+    the credential and `~/.claude.json` ro-bound in. Writable-but-blank, and
+    everything the harness writes there dies with the capsule unobserved.
+  - **Where it wants to go**, all three worth carrying into the go/no-go's
+    outstanding-work section rather than losing:
+    1. **Scope the writes**, rather than granting the whole directory — the
+       session folder and `~/.claude.json`, not a blanket tmpfs. Note the
+       tension already recorded: `session-env` is an **undocumented harness
+       internal** that will move (D-P06-8 rejected pinning to it for exactly
+       this reason), so scoping needs a stable seam or a harness-version canary,
+       not a hardcoded path.
+    2. **Populate from fixtures in a known state** — `~/.claude.json`
+       especially. Today it is the control plane's live 90 KB file, ro-bound;
+       a fixture makes the capsule's starting state declared and reproducible
+       instead of inherited, which is the same argument the pinned fixtures
+       already won elsewhere in this rig.
+    3. **Salvage it for forensics, attached to the run.** A tmpfs that dies with
+       the capsule discards exactly the evidence that would have diagnosed
+       F-P06-7 in seconds — the harness's own session state. Harvesting it to
+       the run directory alongside `worker-stdout` is the shape.
+  - **Constraint any design must keep:** the refusal is `EROFS` from the **mount
+    flag**, not `EACCES` from mode bits. The capsule runs as `uid=1000` and
+    *owns* `.credentials.json` (`-rw-------`), so permission bits would not stop
+    it — only the read-only mount does, and `--unshare-all` denies the
+    `CAP_SYS_ADMIN` needed to remount. A narrower scheme that reintroduced the
+    secret on a writable mount would be a real weakening however tight its mode
+    bits looked.
+  - **Live edge, not yet bitten:** `~/.claude.json` is ro and the harness
+    normally writes it (cost, project history). Non-fatal in the scored run. If
+    a later harness version needs to persist there it will present as a partial
+    failure, not an error — and `probe-smoke.sh`'s capability leg is what catches
+    it. Argument for that leg being permanent rather than a PHASE-06 one-off.
 - **QUE-204** — how a capsule obtains build inputs git cannot carry. The one open
   decision PHASE-05 carries and **not a rig edit**: heavy's web assets built on
   site per cell (current, measured poor — every stage-3 cell fetches from
