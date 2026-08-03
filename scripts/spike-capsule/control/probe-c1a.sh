@@ -4,15 +4,10 @@
 #   usage: probe-c1a.sh [--keep]           (dispatched by `rig c1a`)
 #   env:   SPIKE_CAPSULE_ROOT   capsule / fixture root (default: ~/capsules)
 #
-# ── absolutes, never deltas (VA-2) ───────────────────────────────────────────
-#
-# Design § 9 records wall-clock and disk per accepted phase as **not measured**
-# on the incumbent side: no instrumented incumbent run is in scope. So there is
-# no before column to subtract from, and this probe banks ABSOLUTES. Inventing a
-# delta here would manufacture the very comparison § 9 declines to make — and it
-# would read in the go/no-go as evidence rather than as arithmetic over one
-# measured side and one guess. The results file carries no incumbent column and
-# no delta column, and that is ASSERTED below rather than left to a future edit.
+# The measurement terms — `step_start`, `record`, `peak_worker`, `rig_state`,
+# `REPORT_COLUMNS` and the VA-2 shape assertion — live in `lib/measure.sh`,
+# extracted when P-C1b needed every one of them (PHASE-06). Their rationale
+# (absolutes never deltas; measurements taken trusted-side) is stated there.
 #
 # ── the step list is never SHORTENED (EX-4) ──────────────────────────────────
 #
@@ -52,6 +47,9 @@ RIG_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=pipeline.sh
 . "${RIG_DIR}/control/pipeline.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../lib/measure.sh
+. "${RIG_DIR}/lib/measure.sh"
 
 keep=0
 while [ $# -gt 0 ]; do
@@ -76,65 +74,6 @@ REPORT="${RIG_ROOT}/probes/c1a/results.tsv"
 
 [ -d "${FIXTURE}" ] || rig_die "light fixture not built (F1): ${FIXTURE} — run control/fixture-light.sh"
 [ -f "${DECLARATION}" ] || rig_die "light declaration missing: ${DECLARATION}"
-
-# ── measurement primitives ───────────────────────────────────────────────────
-#
-# Wall clock is taken TRUSTED-SIDE, around each invocation, and never read out
-# of anything the capsule wrote. That is not I5 pedantry applied to a number:
-# the capsule's stdout is untrusted text, and a measurement parsed from it would
-# be the one place in the rig where capsule content decides a recorded value.
-
-# Nanoseconds. `%N` is a GNU extension and a non-GNU `date` emits it literally,
-# which would silently produce garbage arithmetic — so it is probed once.
-case "$(date +%N)" in
-  *[!0-9]* | '') rig_die "date +%N is not nanoseconds here — cannot measure wall clock" ;;
-esac
-
-STEP_T0=0
-step_start() { STEP_T0=$(date +%s%N); }
-
-# Milliseconds elapsed since `step_start`, as seconds to 3dp. Integer maths on
-# nanoseconds, formatted at the end: shell has no floats, and rounding at the
-# division would lose the sub-second steps entirely.
-step_elapsed() {
-  local ms=$((($(date +%s%N) - STEP_T0) / 1000000))
-  printf '%d.%03d' $((ms / 1000)) $((ms % 1000))
-}
-
-# Peak disk is a MAXIMUM over the run, not the final size: `npm run clean` and
-# the pipeline's own teardown would otherwise hide the high-water mark. Absolute
-# bytes (VA-2), per capsule.
-capsule_disk() { du -s -B1 -- "$1" 2>/dev/null | cut -f1; }
-
-PEAK_WORKER=0
-peak_worker() {
-  local now
-  now=$(capsule_disk "$1")
-  [ "${now:-0}" -gt "${PEAK_WORKER}" ] && PEAK_WORKER=${now}
-  return 0
-}
-
-# ── the recorded rows ────────────────────────────────────────────────────────
-#
-# Built in memory first so the step-list assertions below run against what is
-# about to be written, not against a file another run also appended to.
-
-REPORT_COLUMNS=$'step\toutcome\tvalue\tunit\tdetail'
-ROWS=()
-
-record() {
-  ROWS+=("$1"$'\t'"$2"$'\t'"$3"$'\t'"$4"$'\t'"$5")
-  printf '  %-9s %-8s %8s %-4s %s\n' "$1" "$2" "$3" "$4" "$5"
-}
-
-row_field() {
-  local step=$1 field=$2 row
-  for row in ${ROWS[@]+"${ROWS[@]}"}; do
-    case "${row}" in
-      "${step}"$'\t'*) printf '%s' "${row}" | cut -f"${field}" ;;
-    esac
-  done
-}
 
 printf '\nP-C1a — deterministic cost baseline, stub worker (EX-4, VA-2)\n'
 
@@ -255,25 +194,9 @@ rig_assert "EX-4: the composite provision row carries its reason" \
 
 # VA-2 stated as a property of the file: five columns, none of them an incumbent
 # or a delta. A future edit that adds one has to fail this to land.
-rig_assert_eq 'VA-2: the results header is absolutes-only (no before/delta column)' \
-  "${REPORT_COLUMNS}" "$(printf '%s' "${REPORT_COLUMNS}" |
-    tr '\t' '\n' | grep -viE '^(before|incumbent|delta|baseline)$' | paste -sd'\t' -)"
+assert_absolutes_only
 
 # ── write it out ─────────────────────────────────────────────────────────────
-
-# The banner names the RIG STATE, not just the clock. This file is appended to
-# across runs (R5 — it is the only thing the driving session reads), so a run
-# taken before a rig fix and one taken after it sit in the same file looking
-# alike. P-C1a has already had one such boundary: F-P04-7's capsule-identity fix
-# moved the headline number by more than an order of magnitude, and a reader
-# quoting the earlier rows would be quoting a resolver timeout.
-rig_state() {
-  local repo oid
-  repo=$(rig_repo_root) || { printf 'unknown'; return 0; }
-  oid=$(git -C "${repo}" rev-parse --short HEAD 2>/dev/null) || { printf 'unknown'; return 0; }
-  [ -z "$(git -C "${repo}" status --porcelain -- "${RIG_DIR}")" ] || oid="${oid}+dirty"
-  printf '%s' "${oid}"
-}
 
 mkdir -p -- "$(dirname -- "${REPORT}")"
 [ -s "${REPORT}" ] || printf '%s\n' "${REPORT_COLUMNS}" >"${REPORT}"

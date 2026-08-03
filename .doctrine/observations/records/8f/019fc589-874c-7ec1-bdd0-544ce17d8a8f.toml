@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc589-874c-7ec1-bdd0-544ce17d8a8f"
+recorded_at = "2026-08-03T02:52:32.460184429Z"
+kind = "friction"
+summary = "phase-plan: the authored plan entry and the handover both described PHASE-06 as a write-up phase; two rig files it needs do not exist"
+detail = "SL-241 PHASE-06. plan.toml's objective ('run the one probe, fill the table, land a go/no-go') and handover.md ('one probe plus a piece of careful writing') both read as a writing phase. In fact control/probe-c1b.sh — which rig:151 already dispatches — and capsule/worker-agent.sh, named in design 9.1's tree, are both absent. Discovering this cost a directory listing plus a grep that would have been free if either artefact had named the build work. Neither surface is wrong per se: the plan states outcomes and the handover was written by the agent that closed PHASE-05, not one that had inspected PHASE-06's inputs. The generalisable friction is that a phase's effort SHAPE (build vs write) is nowhere carried, so every phase-plan re-derives it from the filesystem."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
