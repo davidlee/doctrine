@@ -6,7 +6,7 @@ status = "active"
 title = "Probe the design-run parser through adoption, never by re-implementing it"
 summary = "adopt_authored accepts iff the caller's digests match what Doctrine parsed — so a successful adoption IS the statement of what the parser read"
 created = "2026-07-29"
-updated = "2026-07-29"
+updated = "2026-08-03"
 
 [scope]
 paths = ["src/commands/design.rs", "src/design_run/run.rs"]

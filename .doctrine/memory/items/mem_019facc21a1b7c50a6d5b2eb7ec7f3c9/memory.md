@@ -30,3 +30,30 @@ Two corollaries worth keeping:
   for the sibling trap on the assertion side.
 
 Related: [[mem.pattern.design.locate-incumbent-before-specifying]].
+
+## What `body` is, exactly (SL-244)
+
+Step 4 above says `sha256(expected_body)` without defining `body`, and getting
+it wrong reads as a parser disagreement rather than as your own arithmetic.
+
+Framing (`document.rs` module doc): each block is **the marker line, a newline,
+the body verbatim, then ONE newline**, and blocks concatenate with no separator.
+So:
+
+    body = <everything after the marker line> minus exactly ONE trailing newline
+
+Interior sections and the **last** section follow the same rule — the trap is
+that the file's final newline is that section's framing newline, not part of its
+body. A naive line-split leaves it attached and only the last section's digest
+disagrees, which looks like an EOF-handling bug in Doctrine and is not.
+
+Two more, cheap to know:
+
+- `git::sha256` is plain hex sha256 of the bytes; the document digest is over
+  the whole file, unframed.
+- `design show` **truncates fingerprints to 12 hex chars**. Compute the full
+  digest yourself; never paste the displayed value into `adopt_authored`.
+
+Positive control before trusting any of it: recompute an *unchanged* section's
+digest and check it equals what `design show` displays. If the untouched ones
+match and only the edited one differs, the parse is right.
