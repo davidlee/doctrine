@@ -25,10 +25,13 @@
 # argv guard, not the floor.
 #
 #   rw      the capsule dir, at /capsule — the ONLY --bind
-#   ro      /nix/store (the whole toolchain), DNS + TLS trust, the agent home
-#           carrying the API credential at /agent, and the runners at /rig
+#           the agent home at /agent, a tmpfs that dies with the capsule: a
+#           harness cannot work without a home it can write (F-P06-6)
+#   ro      /nix/store (the whole toolchain), DNS + TLS trust, the API
+#           credential ALONE inside that home, and the runners at /rig
 #   ABSENT  the canonical repo · other capsules · ~/.ssh · ~/.gitconfig ·
-#           credential helpers · everything else
+#           credential helpers · the rest of the control plane's ~/.claude ·
+#           everything else
 #
 # ── I4a: the runners are ro-bound from OUTSIDE the writable root ─────────────
 #
@@ -220,10 +223,36 @@ if [ -n "${source_dir}" ]; then
   mounts+=(--ro-bind "${source_dir}" "${SANDBOX_SOURCE}")
 fi
 
-# The agent home carrying the API credential (EX-1). Bound at /agent, so the
-# host's home — with ~/.ssh and ~/.gitconfig in it — is never a mountpoint.
-[ -d "${HOME}/.claude" ] &&
-  mounts+=(--ro-bind "${HOME}/.claude" "${SANDBOX_HOME}/.claude")
+# ── the agent home: WRITABLE, with the credential ro-bound INSIDE it ─────────
+#
+# Bound at /agent, so the host's home — with ~/.ssh and ~/.gitconfig in it — is
+# never a mountpoint. A harness needs a home it can WRITE: it creates a
+# per-session working directory under $HOME before the first tool call runs, so
+# a read-only agent home leaves an agent that authenticates, answers, and can
+# execute nothing (F-P06-6, F-P06-7). The tmpfs is what gives it one, and it
+# dies with the capsule.
+#
+# NOT A WEAKENING, and the direction is worth stating precisely: the credential
+# is ro-bound INSIDE the tmpfs, so it stays unwritable and a capsule still
+# cannot modify the trusted-side credential store. Everything else the profile
+# denies — the canonical repo, other capsules, ~/.ssh, ~/.gitconfig — is
+# untouched. On VISIBILITY the change is strictly NARROWER than what it
+# replaces: the old leg ro-bound the whole of ~/.claude, which carries the
+# control plane's own prompt history, hooks and settings into the capsule. Now
+# one file crosses.
+#
+# In the SHARED array, deliberately (EX-2). Both capsule kinds get the same
+# posture and `--print-mounts` is what makes that checkable; a home the worker
+# gets and the verify capsule does not would be a second profile wearing one
+# profile's name.
+mounts+=(--tmpfs "${SANDBOX_HOME}/.claude")
+[ -f "${HOME}/.claude/.credentials.json" ] &&
+  mounts+=(--ro-bind "${HOME}/.claude/.credentials.json" "${SANDBOX_HOME}/.claude/.credentials.json")
+# The sibling config, still READ-ONLY. The harness updates it trusted-side
+# between runs (cost, project history) and a capsule has no business writing
+# either. Kept ro rather than tmpfs'd because ro is what the smoke's capability
+# leg is asserted against — if it ever needs to be writable, that leg is what
+# will say so, rather than a guess made here.
 [ -f "${HOME}/.claude.json" ] &&
   mounts+=(--ro-bind "${HOME}/.claude.json" "${SANDBOX_HOME}/.claude.json")
 
