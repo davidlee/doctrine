@@ -2120,3 +2120,449 @@ missing answer.
   distinguish a user's payload from an agent's — which is `DEC-088`'s standing
   limitation, not this slice's to close.
 
+<!-- doctrine:section sec-5 -->
+## The contract channels
+
+`sec-3` fixed the model and `sec-4` fixed the acts. Both wrote promises this
+section has to keep: nine separate places say *the refusal names* something — the
+missing act, the missing lane, the node that moved, the declaration that changed,
+the finding that blocks — and no section has yet said where any of that rides.
+Both cite `DEC-122`, `DEC-123` and `DEC-124` without naming a channel. This is
+that section.
+
+`DEC-124` gives two channels and denies a third: the refusal carries the remedy
+for each unmet condition; a stage-entry receipt carries the contracts for that
+stage's outbound edge; the turn envelope gets nothing new. Taken in that order,
+plus what the envelope and the change log lose when the claimed arm dissolves.
+
+### What a contract is, and why it stays a pure function of the binary
+
+A contract has two halves in two homes. `DEC-122` puts the narrative in a prose
+asset keyed by the condition's kebab token; `DEC-123` keeps the structure in the
+`CONTRACTS` const and forbids the prose from restating it — *"the renderer
+injects the kind and the discharging act from the const into the rendered
+contract, so the prose never restates them and cannot contradict them."* The
+rendered contract is those two composed, and the composition happens at emission
+rather than being authored anywhere.
+
+What is injected is every field `sec-3`'s `Contract` holds except the prose key
+itself: the derivation's kind, the acts it names with their required actors, the
+binding, the reach, and the activation. Reach and activation are injected for the
+same reason as the kind — they are exactly the properties a prose author would
+restate and get wrong, and `Pending` in particular must render *marked
+not-yet-enforced* rather than being described as enforced by prose written before
+`IMP-391` lands.
+
+**`DEC-124`'s no-digest rationale survives `sec-4`, and one shape is why.** That
+record rejects a digested receipt because *"a contract is a pure function of the
+binary … All ten were walked; none is parameterised by the run."* One row now
+looks like a counterexample: `section-attestations-current` takes
+`RequiredActor::RunPolicy`, and the lanes it resolves to are run data. The
+contract is unaffected, because the table names *where the actor comes from*
+rather than naming the actor — so the injected line reads `actor: the lanes this
+run's review policy requires`, which is a constant string in a `&'static` table.
+The resolved lanes are state, and state belongs to the complaint, not to the
+contract. This is the same property `sec-3` relied on to keep the table
+`&'static` and total; it pays twice, and had the per-section candidate won
+instead, both payments would have been lost together.
+
+**One arithmetic correction to `DEC-124`, which changes nothing it decided.** Its
+addressing consequence reads *"at reviewing→locked the set is all ten"*. The
+citation resolves — `cumulative_conditions` is `gate.rs:212-226` and does
+accumulate every edge below the target — but the vocabulary is nine now, and the
+enforced set at that edge is **six**: `governing-context-recorded` and
+`initial-concerns-recorded` are filtered by activation, `drafting-readiness-attested`
+by reach. Three of the six are inherited from edges below. The consequence the
+number was supporting — an agent can fail at the last edge on an earlier edge's
+condition, so addressing must be per-condition — is untouched, and is what the
+rest of this section builds against.
+
+### The refusal carries a const remedy and a run-shaped complaint
+
+These are two different things and a refusal that conflates them is the one this
+slice is replacing.
+
+**The remedy is a total function of the condition.** `Contract::remedy()` renders
+it from the `DerivationRule` — `sec-3`'s invariant 4, one discharge source, so
+the refusal text and the injected contract line cannot disagree because they are
+the same value formatted twice. It reads nothing outside the const table, which
+is what keeps the whole of this leg inside tier `leaf`: no asset, no shell, no
+`DerivedInput`.
+
+That is worth stating rather than assuming, because `sec-1`'s structural fact is
+the opposite case. `RunbookNotDischarged` exists *because* `GateNotCleared`'s
+`Vec<Condition>` had *"nowhere for a step identity to ride"*
+(`refusal.rs:166-170`) — a step's obligation text is not recoverable from the
+step's identity, so it had to be carried. A condition's remedy **is** recoverable
+from the condition's identity, once the contract table exists. So the remedy
+needs no new refusal field at all, and `Condition` keeps the fieldless
+`Copy`/`Ord`/serde shape `DEC-122` promised it would.
+
+**The complaint is not a function of the condition**, and that is what has to
+ride. Nine promises across the two prior sections need it:
+
+| promise | source |
+|---|---|
+| which conjunct act is missing | `sec-3`, `DEC-121`'s stated reason for two acts |
+| which *lane* is missing, not merely which act | `sec-3`, resolution fixes the arity |
+| which node moved, rather than that the map did | `sec-3`, the reason coverage stores material |
+| which section lost its own review | `sec-3`, `PerSection` |
+| that the document holds no sections at all | `sec-3`, the degenerate guard |
+| which observed fact moved or is unobservable | `sec-3` |
+| which declaration a confirmation no longer names | `sec-4`, three facts not one |
+| which findings hold the edge | `sec-3`, `DEC-138`'s predicate |
+| that the waiver arm is available and why | `sec-3`, *"the refusal text says so"* |
+
+So the refusal's payload changes shape:
+
+```rust
+GateNotCleared {
+    from: Stage,
+    to: Stage,
+    /// Every condition the edge required and did not get, each with every way
+    /// it failed. Replaces `missing: Vec<Condition>`.
+    unmet: Vec<Unmet>,
+},
+```
+
+```rust
+pub(crate) struct Unmet {
+    pub(crate) condition: Condition,
+    /// EVERY way this condition is unmet, not the first. A conjunction that
+    /// fails on both halves says both — which is `DEC-121`'s own reason for
+    /// refusing the fold into `user-accepts-sufficiency`.
+    pub(crate) causes: Vec<Cause>,
+}
+
+/// One way a condition failed. A variant per failure mode rather than a message,
+/// for the reason `ReviewStanding`'s four booleans are four: each is repaired by
+/// a different act, and collapsing them reports one outstanding thing where
+/// several are.
+pub(crate) enum Cause {
+    /// No live act of the required kind. `lanes` is the lanes with no act —
+    /// one entry under `Fixed`, up to two once `RunPolicy` resolves.
+    ActMissing { act: ActKind, lanes: Vec<ActorClass> },
+    /// `PerSection`: these sections have no live act for the named lane.
+    SectionsUnreviewed { subjects: Vec<(DesignId, ActorClass)> },
+    /// A per-section requirement over a run holding no sections. Distinct from
+    /// an empty `SectionsUnreviewed`, which cannot occur.
+    NoSections,
+    /// The act is live and what it was given over has moved.
+    CoverageStale { act: ActKind, moved: Vec<DesignId> },
+    /// A fact the rule names has moved, or could not be observed at all.
+    ObservedStale { act: ActKind, fact: ObservedFact },
+    /// The act names a declaration that has since changed.
+    ConfirmationStale { act: ActKind, declaration: AgentActKind },
+    /// The named `RV` carries blockers in `open` or `contested`, by `F-n` id.
+    BlockersUndisposed { findings: Vec<String> },
+    /// Engine rows, which fail for their own reasons and name their own state.
+    InquiriesOpen { nodes: Vec<DesignId> },
+    MaterialisationStale,
+}
+```
+
+`causes` is non-empty in fact and not in type. The evaluator is its sole
+producer and returns satisfied where it pushed nothing, so an empty `Unmet`
+cannot be constructed by any path that exists — but nothing in the type says so,
+and this design does not introduce a non-empty-vector type to make it say so.
+Stated rather than claimed as an invariant.
+
+**`satisfied` returns the diagnosis, and this changes `sec-3`'s sketch.** That
+section fixed the *inputs* — one derivation, no branch on kind, the whole
+`DerivedInput` rather than a parameter per fact class — and wrote the return as
+`bool`. A `bool` cannot carry any row of the table above. So:
+
+```rust
+fn satisfied(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput)
+    -> Result<(), Vec<Cause>>
+```
+
+One function, not a predicate plus an explainer. Two functions would be two
+derivations that can disagree — a gate that refuses while the explanation says
+nothing is wrong is worse than either alone, and it is the drift class this
+design has closed everywhere else by construction. `advance`'s filter
+(`gate.rs:325-333`) collects `Unmet` instead of `Condition` and is otherwise
+unchanged.
+
+**`ContentCoverage` owes a diff, not just a verdict.** `CoverageStale::moved`
+needs the subjects, and `is_current` returns `bool` (`attestation.rs:212`). So
+the generic type `sec-3` introduced gains `diff(&current) -> Vec<DesignId>` —
+keys present on one side only, plus keys whose value differs — and `is_current`
+becomes `diff(current).is_empty()`. Still one comparison with one home. This is
+the payoff `sec-3` named when it chose material over a digest: *"a refusal can
+name which node moved rather than reporting that the map did."* With a composite
+digest there would be nothing to diff.
+
+**Rendering, and the discipline it bends.** `Refusal`'s `Display` doc calls
+itself *"a terse, single-line rendering"* and says *"the data is the contract —
+tests assert on the variant, never on this text"* (`refusal.rs:267-272`). The
+second half stands untouched and is what makes the first half negotiable: the
+shell's only crossing is `anyhow!("{refused}")` (`design.rs:1419-1422`), so a
+refusal that does not say a thing in `Display` does not say it to any caller.
+`GateNotCleared` therefore renders one line per unmet condition — token, causes,
+remedy — and the module doc's single-line claim is amended for that variant and
+for `RunbookNotDischarged`, which already breaks it. `DEC-124` gives this path no
+byte budget, which is the whole reason the remedy rides here rather than in the
+envelope.
+
+A structured error channel was the alternative: `refusal()` returning something
+richer than an `anyhow::Error` so the shell could lay the causes out. Rejected
+as a second output contract built for one variant. If the CLI ever grows a
+machine-readable error envelope this leg joins it with no change to the data,
+which is precisely because the data is already the contract.
+
+**The refusal cites the contract by token**, which is the per-condition
+addressing `DEC-124` forces. That address is a real one — it is the asset key's
+stem, below — so an agent that fails at `reviewing → locked` on
+`user-accepts-sufficiency` is told the token, the cause and the remedy, and can
+name the contract even though no receipt for that stage delivered it. What it
+cannot do today is *fetch* the narrative: the pull verb is `DEC-124`'s deferred
+candidate, and this section does not build it. The residual is that the narrative
+half of an inherited condition's contract is unreachable in-session. It is
+carried forward, and it is small precisely because the remedy is const-derived
+and always present.
+
+### The stage-entry receipt
+
+**The register.** `fragment_section` (`design.rs:1832-1851`) is the live one: the
+caller declares what it holds with `--known-fragment name@digest`, the run emits
+the identity line unconditionally and the body only when the declaration does not
+match. Its persisted sibling is **not** a register at all —
+`DesignSnapshot::fragments` has exactly one reader (`design.rs:1863-1864`) and no
+writer anywhere in the tree, so `fragment_lines` reports *NOT held by this run*
+for every name a caller declares. Reading that group as the receipt store is the
+mistake available here, and it is not this slice's to repair; the contract
+receipt rides the per-invocation declaration, which works.
+
+**Emission.** Beside the fragment and the runbook step, in `design resume`, and
+selected the same way. `forward_runbook` (`design.rs:1811`) currently finds the
+stage's single outbound forward edge by walking `Stage::ALL` and asking
+`can_advance` — a walk whose own doc explains it is re-deriving the table rather
+than re-stating it. `sec-3`'s closed `Advance` retires that: the edge is
+`Advance::from_stage(stage)`, and both the runbook selector and the contract
+block take it. A locked run emits neither, which is the same real answer
+`Fragment::for_stage` and `boundary_runbook` already give at that stage — no
+outbound edge, nothing to guard, nothing to deliver.
+
+**Which contracts the receipt carries: the ones the edge will judge by.** This is
+a reading of `DEC-124`'s *"the contracts for that stage's outbound edge"*, and it
+is the wider of the two available: the enforced set at that edge, which is
+`boundary_conditions` accumulated over every edge at or below it under the reach
+filter — not that edge's own rows alone. The narrow reading would hand an agent
+standing at `reviewing` a receipt covering three conditions while the edge it is
+about to cross judges six, and the three it omitted are exactly the ones an agent
+is least likely to have seen. Cost is small and bounded by the vocabulary: at
+most six contracts, at one stage, delivered once.
+
+Two things follow that should not be read as costs of this choice.
+`DEC-124`'s per-condition **addressing** consequence was argued against the narrow
+reading, and it survives over-satisfaction: the refusal cites one condition at a
+time whatever the receipt carried, and a future pull verb needs the address
+whether or not the receipt happened to include it. And activation is *annotated*,
+not filtered: a `Pending` row inside the enforced set renders marked
+not-yet-enforced, which is the renderer behaviour `sec-3` already committed
+`boundary_conditions` to supporting by returning its rows unfiltered.
+
+That needs the reach walk to have one home rather than two. `cumulative_conditions`
+keeps its signature and its behaviour; what changes is that its accumulation is
+factored out, so the renderer takes the reach-filtered set and applies no
+activation filter while `cumulative_conditions` applies both. Writing the reach
+rule a second time in the renderer is the drift this avoids, and it would drift
+in the direction of a receipt that disagrees with the gate about what the edge
+requires.
+
+**Where the prose lives.** `design-prompts/conditions/<token>.md` — the store
+`DEC-122` names, in a subdirectory of it.
+
+```rust
+impl Condition {
+    /// The embedded asset key the shell resolves. One condition, one file;
+    /// leaf tier names the key and never reads it, exactly as `Fragment` does.
+    pub(crate) fn contract_asset_key(self) -> String {
+        format!("{STORE}/conditions/{}.md", self.as_str())
+    }
+}
+```
+
+The subdirectory earns itself. `STORE` already holds two families keyed by two
+vocabularies — four `Fragment` stems as `.md`, four `RunbookKey` stems as
+`.toml` — and a third family of nine `.md` files keyed by a third vocabulary
+would share an extension with the first and avoid collision only by luck. More
+usefully, the corpus half of `sec-3`'s set-equality test needs to *enumerate* the
+contract assets; under a prefix that is a filter, and flat it is a filter minus a
+hand-maintained exclusion list for the four fragment stems, which is the shape
+`STD-001` exists to refuse.
+
+**Publication.** Nine `[[entry]]` rows in `publication/manifest.toml`, `kind =
+"guidance"`, `customization = "fixed"` — `DEC-122`'s ruling, and the same reason
+in the same words the manifest header already gives for the obligation runbooks:
+*"not that a project may not disagree with it, but that the override seam does
+not exist yet (DEC-102 ruling (b); IMP-372 carries the resolution)."* This is a
+precedent being followed, not a policy being set.
+
+It also means the asset corpus is bounded twice by two independent tests, one of
+which already exists. `assert_unprojected_install_assets_are_published`
+(`asset_source.rs:126-148`) reads both manifests from disk and fails if an
+`install/` asset is neither a projection base backing nor published — so a
+contract asset that shipped without its entry fails today's suite. `sec-3`'s
+set-equality test is the other side: every generated key has an asset, and the
+corpus holds no key the vocabulary does not.
+
+**The receipt token is bare, and that is `DEC-124`'s no-digest ruling reaching
+the wire.** `--known-contracts <edge>`, repeatable, where `<edge>` is
+`Advance`'s kebab name. Plural because one declaration names a whole edge's
+block: that *is* what edge-grained delivery means, and a singular flag would
+imply a per-condition receipt the design deliberately does not have.
+
+The shape is worth defending, because `Fragment` refuses exactly it. A bare name
+is not a fragment receipt — *"a receipt that binds no bytes is not a receipt"*
+(`prompt.rs:188-195`) — since fragment bytes move independently of the name. A
+contract has no such freedom: `DEC-124` walked every condition and found none
+parameterised by the run, and the subsection above shows the one row that came
+closest still is not. So there is nothing for a digest to detect within a run's
+life.
+
+The residual is a binary upgrade mid-session, which moves both halves of every
+contract while a declared receipt still names the edge. It is named rather than
+closed: the run has no way to know, the window is a caller that keeps its context
+across an upgrade, and the repair if it ever bites is the one `DEC-124` already
+left on the shelf — *"if a real contract-change case emerges, `Fragment`'s digest
+mechanism is there to borrow."*
+
+**And it is not folded into the fragment receipt**, which was the tempting
+economy: one stage, one emission, one token. It fails on the change models. A
+fragment binds bytes by digest and a contract deliberately does not, so folding
+forces one of them to change — either the fragment loses a guarantee it has, or
+the contract acquires machinery `DEC-124` refused. Two tokens on one emission is
+the cheaper answer.
+
+**The rendered block.** The field set is the commitment; the punctuation is the
+renderer's.
+
+```
+contracts drafting-reviewing
+contract materialisation-current derived engine(materialisation) cumulative active
+  discharge: materialise the run's declared sections
+  <narrative asset body>
+contract drafting-readiness-attested attested edge-local active
+  discharge: the agent declares DraftingReady
+  <narrative asset body>
+contract user-accepts-sufficiency attested inquiry-map cumulative active
+  discharge: the user accepts sufficiency (SufficiencyAccepted)
+  <narrative asset body>
+```
+
+Declared held, the header lines still ride and the bodies do not — the same rule
+`fragment_section` follows, and for the reason its doc gives: *"a caller that
+declared a stale receipt, or lost the bytes it claimed, must still be able to
+tell what it is missing."*
+
+### The envelope gets nothing new, and loses one thing
+
+`DEC-124` denies the envelope any contract content, against a hard ceiling with
+an uncapped neighbour. That holds — `sec-3`'s currency lamp and severity summary
+are derived state that warns, not contract prose, and the lamp is a scalar chosen
+against exactly this budget.
+
+What the envelope loses is that uncapped neighbour. `SectionRow::clearances`
+(`envelope.rs:194`) is built by `clearances_for` (`envelope.rs:809-822`) from
+`gate.live_evidence()` filtered to the row's subject — which is the claimed arm's
+evidence store, and every condition becoming derived leaves it with no source.
+The field is **not** rebuilt from the new acts. Of the nine conditions exactly one
+is per-section, and `review_outstanding` on the same row already reports it —
+repaired by `sec-4` to read the run's policy, which is the repair that makes it
+sufficient. A second per-section list would restate one bit beside itself.
+
+So `sec-2`'s envelope-budget concern is partly retired rather than merely
+survived: the uncapped list it names as the competitor for bytes goes away, and
+what this design adds to the envelope is two scalars. Recorded here because the
+concern was stated as live and a reader should not have to infer that it moved.
+
+**The change log's evidence feed re-sources.** `invalidation_rows`
+(`run.rs:1520-1536`) diffs the live evidence set across an apply and emits an
+`EvidenceInvalidated` row naming the condition and the subject fingerprint. The
+row's *meaning* — this clearance stopped being live, here is what it was bound to
+— is exactly what a reader of the new model needs, so the feed survives with its
+input changed from the evidence set to the act set. Its vocabulary member is
+renamed to match, since a name outliving its source is how a reader is misled for
+free; the change log is bounded and evicted and the snapshot is gitignored
+runtime state, so the rename costs one live run nothing. `live_reviews`' sibling
+feed is untouched, on `sec-4`'s stated ground.
+
+**The record retires because `sec-4`'s rule retires it.** *Add a shape only where
+an act has no readable home; keep an incumbent shape only where it says something
+a general one cannot.* `Evidence` (`facts.rs:23-27`) is a fourth incumbent that
+rule was never applied to: it is a condition, a subject and a fingerprint, which
+is a `CheckpointAct` with `covered: Some(Sections(…))` and no act identity — the
+same subsumption `LockAcceptance` fails on, one field weaker. Its sole consumer
+is `DerivedDesignFacts::satisfies` (`facts.rs:95-99`), the existential scan
+`sec-3` dissolves. So `Evidence`, `EvidenceDeclaration` (`submission.rs:486`) and
+the `evidence` wire field go, and `WRITER_ACTS` (`submission.rs:664`) loses a
+member while gaining `sec-4`'s three.
+
+### Verification impact
+
+- **A refusal names the missing act and the missing lane** — a run under
+  `HumanThenAdversarial` with only a human attestation refuses with
+  `SectionsUnreviewed` naming the section and the adversarial lane. The nested
+  quantification, asserted at the refusal rather than only at the gate.
+- **A conjunction that fails twice says both** — `initial-concerns-recorded` with
+  neither act recorded yields two `ActMissing` causes in one `Unmet`, not one.
+- **A stale conjunct is a different cause from a missing one** —
+  `CoverageStale` where the act exists and the map moved, `ActMissing` where it
+  does not, and the two are asserted on the same condition.
+- **The diff names the node** — re-parenting one inquiry node yields
+  `CoverageStale { moved }` holding that node's id and no other. The property the
+  material-over-digest choice was made for.
+- **An empty document is `NoSections`, not an empty `SectionsUnreviewed`** — the
+  degenerate guard reaching the refusal, so the two are distinguishable by a
+  caller and not only by the gate.
+- **The remedy is the contract's** — the refusal's remedy text for a condition
+  equals the `discharge` line the receipt injects for the same condition.
+  Asserted as equality between two renderings of one value, which is what makes
+  invariant 4 testable rather than merely stated.
+- **A refusal reads no asset** — the gate leg is exercised with no embedded
+  corpus available and still renders every remedy. The tier boundary, asserted
+  rather than trusted.
+- **The receipt covers what the edge judges by** — at `reviewing` the block
+  carries six contracts, three of them from edges below, and every token in it
+  appears in `cumulative_conditions` for that edge or is marked
+  not-yet-enforced.
+- **A `Pending` row renders marked** — `governing-context-recorded` appears in
+  the `exploring` receipt annotated not-yet-enforced, and does not appear in the
+  refusal for that edge.
+- **A declared receipt elides bodies and keeps identity** — `--known-contracts
+  drafting-reviewing` suppresses every narrative body and no header line.
+- **An unknown or mismatched edge token elides nothing** — the bodies ride, on
+  the fail-open-to-delivery rule the fragment register already follows.
+- **A locked run emits no contract block** — the same real answer as its empty
+  fragment and absent runbook, asserted so that `None` is not read as a gap.
+- **Every condition has an asset and the corpus has no orphan** — set equality
+  over the generated vocabulary and the `design-prompts/conditions/` prefix.
+- **Every contract asset is published** — the existing disk-source reachability
+  gate, which needs no new test and is named here because it is what makes the
+  manifest entries non-optional.
+- **The envelope carries no contract prose** — the rendered envelope for a run at
+  any stage contains no contract body and no remedy, so the byte-budget ruling is
+  asserted rather than assumed.
+
+### Carried forward
+
+- **The narrative half of an inherited condition is unreachable in-session.** An
+  agent refused at `reviewing → locked` on a lower edge's condition gets the
+  token, the cause and the remedy, and — if it entered at `reviewing` — the
+  contract too, because the receipt carries the enforced set. It is a caller that
+  entered at an earlier stage and kept its context that can hold an address it
+  cannot resolve. The pull verb `DEC-124` names as a phase-plan candidate is the
+  close; this slice does not build it.
+- **The digest residual is a binary upgrade mid-session**, and the borrowable
+  mechanism is `Fragment`'s. Named by `DEC-124`, unchanged by this section.
+- **`DesignSnapshot::fragments` is dead state** — one reader, no writer, so
+  `fragment_lines` reports every declared fragment as not held. Out of scope, and
+  written down because it is the wrong register to build on.
+- **`WRITER_ACTS` arithmetic is `sec-4`'s to carry**, and this section moves it:
+  three additions less the evidence retirement.
+- **Whether the contract corpus ever becomes project-authorable** is `DEC-122`'s
+  deferral and `IMP-372`'s seam, and the `fixed` declaration is what keeps this
+  design from promising it early. `IDE-047`'s structured extraction reads the
+  same const the injection does, so it costs nothing here either.
