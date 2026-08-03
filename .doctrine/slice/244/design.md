@@ -930,7 +930,14 @@ generator emits and what the asset test iterates.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
   is enough to justify the seam — the alternative is a special case in `satisfied`
   for exactly one condition — but a second member would test whether the
-  refresh/compare/absence semantics generalise.
+  refresh/compare/absence semantics generalise. **And the one member has no
+  enforced consumer in this slice**: `GovernanceEdges` is named only by
+  `governing-context-recorded`, which is `Pending` on `IMP-391`, so it is
+  filtered out of the enforced set and nothing compares it until that work
+  lands. The seam is specified alongside the act it serves, which is the right
+  place to specify it; but the argument above is weaker than it reads, because
+  the alternative this slice actually faces is not one special case — it is
+  none.
 - Research currency is the third instance of the reach question and is **not** in
   this vocabulary. It is a warning-shaped fact by the same convergence argument,
   it lives outside the design run today, and settling it is outside `SL-244`.
@@ -1071,17 +1078,34 @@ So the two variants cover every case a `CheckpointAct` can lawfully be in, and
 a `CheckpointAct` whose rule named `PerSection` is a value admission refuses —
 one more instance of the pairing check below.
 
-**The rule's `Coverage` and the record's `CoveredSet` are not two spellings of
-one fact**, and the apparent duplication resolves rather than needing removal.
-`Coverage` in the const rule is a *requirement* — what an act of this kind must
-have been given over. `CoveredSet` in the record is *evidence* — what this act
-was actually given over. Two things that must agree, not one thing written twice.
+**The rule's slots and the record's slots are not two spellings of one fact**,
+and the apparent duplication resolves rather than needing removal. The rule is a
+*requirement* — what an act of this kind must have been given over. The record is
+*evidence* — what this act was actually given over. Two things that must agree,
+not one thing written twice.
 
-What was missing is who checks the agreement. **Admission does.** A
-`CheckpointAct` whose `CoveredSet` does not match the shape its rule's `Coverage`
-names is refused on write. Every stored act therefore satisfies the invariant by
-construction, and the gate never re-checks it — the same move `sec-3` makes for
-the generated tables, one layer out.
+The pairing is not one slot but a **correspondence between two structures**, and
+stating it per slot would leave the next slot to be found the way this one was:
+
+| rule slot | record slot | what agreement means |
+|---|---|---|
+| `Binding::coverage` | `CheckpointAct::covered` | the `CoveredSet` variant is the one the `Coverage` names, and `Artefact` pairs with `None` |
+| `Binding::observed` | `CheckpointAct::observed` | the map's key set is exactly the rule's `ObservedFact` list — no missing fact, no extra one |
+
+What was missing is who checks the correspondence. **Admission does**, over the
+record as a whole rather than slot by slot: a `CheckpointAct` that does not
+correspond to its rule is refused on write. Every stored act therefore satisfies
+the invariant by construction, and the gate never re-checks it — the same move
+`sec-3` makes for the generated tables, one layer out.
+
+Two consequences worth naming. An act whose `observed` map is simply **absent**
+where its rule names a fact is refused rather than treated as an empty
+observation, so the strict-path argument `sec-3` makes for conjunctive binding
+cannot be evaded by omitting the field. And because the rule is `&'static` and
+the check is total, a *new* `ObservedFact` on an existing rule invalidates every
+stored act of that kind at admission-time semantics rather than silently
+admitting acts that never observed it — which is the correct reading, since such
+an act was given over less than the rule now requires.
 
 **Wire, replacement, and snapshot home.** Left unstated, these are where the
 implementations diverge, so:
@@ -1483,7 +1507,12 @@ missing answer.
   there is no runtime test to write.
 - **A mismatched coverage is refused on write** — a `CheckpointAct` whose
   `CoveredSet` is `Sections` where its rule's `Coverage` names `InquiryMap` is
-  refused at admission, so no stored act can violate the pairing.
+  refused at admission, so no stored act can violate the correspondence.
+- **A mismatched observed set is refused on write too** — a `GovernanceConfirmed`
+  act carrying no `observed` entry, or one keyed by a fact its rule does not
+  name, is refused at the same point. Asserted separately from the coverage case
+  because the correspondence is over the whole record, and testing only the slot
+  that was found first is what left this one unchecked.
 - **A policy change is a user act and is logged** — a payload that changes the
   policy without an `AcceptanceDeclaration` is refused, and an accepted change
   emits a change row naming both the old and new policy.
