@@ -551,17 +551,19 @@ an admission-checked reason, and the refusal text says so.
 Activation is a column on the one classification table rather than a second table
 to drift against the first, and the enforced set is that table filtered:
 
-- `boundary_conditions(from, to) -> &'static [Condition]` is **unchanged** —
-  still `const`, still the full target row set for the edge. It is what the
-  `DEC-124` stage-entry renderer reads, which is how `Pending` rows are shown to
-  the agent marked not-yet-enforced.
+- `boundary_conditions` returns the **unfiltered** target row set for the edge —
+  still `const`, still total. Its parameter changes from `(Stage, Stage)` to the
+  closed `Advance` type introduced below; what it returns does not. It is what
+  the `DEC-124` stage-entry renderer reads, which is how `Pending` rows are shown
+  to the agent marked not-yet-enforced — so that renderer resolves
+  `Advance::between` first, as `advance` itself will.
 - `cumulative_conditions(to)` — already non-`const` and already `Vec`-returning —
   applies both filters, reach and activation, as it accumulates.
 
-There is no signature change and no `const` to trade away. `boundary_conditions`
-has exactly one caller today (`gate.rs`, inside `cumulative_conditions`), and it
-is the enforcement path where the filter belongs, so the two sets never had to
-share a name.
+Neither filter costs a `const`: a `const fn` matching on `Advance` is still one.
+`boundary_conditions` has exactly one caller today (`gate.rs:223`, inside
+`cumulative_conditions`), and it is the enforcement path where the filter
+belongs, so the two sets never had to share a name.
 
 ### The classification
 
@@ -1015,8 +1017,13 @@ the generated tables, one layer out.
 implementations diverge, so:
 
 - **Declared** as a run-level field on `ApplyRequest`, joining `WRITER_ACTS`
-  (`submission.rs:664`) — the array whose own doc says a state-changing act that
-  does not join the list **is** the gap. It carries an `AcceptanceDeclaration`,
+  (`submission.rs:664`) — the array whose own doc says a new *field* that can
+  change state and did not join the list **is** the gap. This slice adds three
+  such fields: this one, the agent declaration, and the review policy. So the
+  array goes from `[WriterAct; 7]` to `[WriterAct; 10]`, each new row pairing a
+  `WRITER_ACT_*` key constant (`STD-001`) with the predicate that detects it —
+  the pairing being what that doc calls authoritative rather than merely
+  parallel. It carries an `AcceptanceDeclaration`,
   so `AcceptanceAttestation::bind` stays the only route to user authority and
   `DEC-088` is untouched.
 - **Replaced by act**, not by id: at most one live `CheckpointAct` per `ActKind`,
@@ -1121,8 +1128,7 @@ an acceptance keeps it, and `basis` because a declaration owes its reader one.
 pushes an attestation. Two live `BlockingSetDeclared`s would make *which one did
 the user confirm* ambiguous, and removing that ambiguity is what the confirmation
 link below exists for. Its wire shape is a run-level field on `ApplyRequest`,
-joining `WRITER_ACTS` (`submission.rs:664`) — the array whose own doc says a new
-act that can change state and does not join the list **is** the gap.
+joining `WRITER_ACTS` as the second of this slice's three new writers.
 
 **What the fingerprint is taken over.** `act` and `basis`, each on its own line,
 LF-terminated, UTF-8, sha256 — the same hash the rest of the run uses. `id` is
@@ -1211,9 +1217,11 @@ any rule expressible in the payload is one an agent can satisfy.
 
 So the fence is authority and visibility, not prohibition:
 
-- **Changing the policy is a user act.** It rides an `AcceptanceDeclaration`, so
-  `AcceptanceAttestation::bind` is the only route and the change carries
-  `AcceptanceAuthority::User` exactly as an acceptance does. An agent cannot
+- **Changing the policy is a user act.** It is a run-level field on
+  `ApplyRequest` and the third of this slice's `WRITER_ACTS` additions, and it
+  rides an `AcceptanceDeclaration`, so `AcceptanceAttestation::bind` is the only
+  route and the change carries `AcceptanceAuthority::User` exactly as an
+  acceptance does. An agent cannot
   relax the rules as housekeeping; it must present the change as the user's, in
   the same shape as every other user judgement in the run.
 - **Every change lands in the change log**, so the sequence *conditions unmet →
@@ -1270,7 +1278,8 @@ vocabularies and that refusal stands; this is the one direction it required.
 
 **Cost, stated.** `SL-243` is the one live run and attested its sections
 adversarially. Under the policy it is repaired by declaring its policy
-`[Adversarial]` — a command against runtime state rather than a hand-edit of it.
+`AdversarialOnly` — a command against runtime state rather than a hand-edit of
+it.
 The escape hatch the one live run needs turns out to be the one the product
 already wanted, which is some evidence the shape is right.
 
@@ -1367,18 +1376,18 @@ missing answer.
 ### Verification impact
 
 - **The policy decides the actor** — a section carrying only an adversarial
-  attestation leaves `section-attestations-current` unmet under a `[Human]`
-  policy and satisfies it under `[Adversarial]`. The refusal names the missing
-  lane, not a fixed one.
+  attestation leaves `section-attestations-current` unmet under `HumanOnly` and
+  satisfies it under `AdversarialOnly`. The refusal names the missing lane, not
+  a fixed one.
 - **Gate and envelope agree** — the same section under the same policy is
   reported unsettled by `review_outstanding` exactly when the condition is unmet.
   Asserted against both surfaces, because their disagreeing was the finding.
 - **Invalidation is not policy-filtered** — an adversarial attestation going
-  stale under a `[Human]` policy still emits its invalidation row.
-- **Order is not enforced** — a run whose policy is `[Human, Adversarial]` clears
-  with the adversarial attestation recorded first. The order is rendered; the
-  gate does not read it.
-- **Adversarial review is still recorded** — under a `[Human]` policy the section
+  stale under `HumanOnly` still emits its invalidation row.
+- **Order is not enforced** — a run whose policy is `HumanThenAdversarial`
+  clears with the adversarial attestation recorded first. The order is rendered;
+  the gate does not read it.
+- **Adversarial review is still recorded** — under `HumanOnly` the section
   renders its adversarial attestation, so the act is visible without being
   sufficient.
 - **A late declaration does not satisfy** — editing `BlockingSetDeclared` after
