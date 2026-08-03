@@ -70,8 +70,14 @@ remembered one. Each is a live risk to this design, not a general caution.
 - **`is_derived()` asymmetry.** Six conditions claimed, four derived. This is
   `IMP-361`'s known deferred gap, already stated in `gate.rs`'s own doc comment —
   a carried debt, not a discovery of this slice.
-- **`CHR-049` is one moderated run.** Adequate to inform `ISS-285`'s deferred
-  choice; not adequate to settle it alone.
+- **`CHR-049` is one moderated run, and an incomplete one.** Four sessions
+  reached roughly the halfway point of a single design run. Its yield is on the
+  record rather than recalled — the ten backlog items tagged
+  `cluster:design-run`, all minted 2026-08-01/02, inside the exercise window of a
+  chore opened 2026-07-27 and still open. So the exercise is well evidenced and
+  the sample is still one run, stopped halfway. That is exactly enough to inform
+  `ISS-285`'s deferred choice and not enough to settle it alone, and the reason
+  is the sample rather than the rigour.
 
 **Assumption the design carries.** `DEC-102`'s override seam does not exist. The
 available move is embedded-and-`fixed`-with-a-citation — the pattern runbooks
@@ -82,7 +88,6 @@ constraint it need not have accepted.
 `exploring → inquiring` passes on the runbook alone until `IMP-391` builds the
 attested checkpoints; the `Conducted { review }` arm and the severity summary are
 unbuildable until `IMP-392` migrates findings onto `RV`.
-
 <!-- doctrine:section sec-3 -->
 ## The condition model
 
@@ -2545,11 +2550,30 @@ pub(crate) enum Cause {
     ConfirmationStale { act: ActKind, declaration: AgentActKind },
     /// The named `RV` carries blockers in `open` or `contested`, by `F-n` id.
     BlockersUndisposed { findings: Vec<String> },
+    /// The disposition was given over a pass that is no longer the run's
+    /// current one — `sec-3`'s re-entry rule. Names both, because the repair is
+    /// to dispose the new pass and the reader has to know there is one.
+    PassSuperseded { disposed: ReviewRef, current: ReviewRef },
+    /// The act is live and names an `RV` the shell could not read at all.
+    /// Distinct from `BlockersUndisposed`, which reports a ledger that WAS
+    /// read; reporting an unreadable one as carrying blockers would name
+    /// findings nobody has seen.
+    ReviewUnavailable { review: ReviewRef },
     /// Engine rows, which fail for their own reasons and name their own state.
     InquiriesOpen { nodes: Vec<DesignId> },
     MaterialisationStale,
 }
 ```
+
+`ReviewUnavailable` is what makes the evaluator total over `sec-3`'s absence
+rule. A stored `Conducted` act can name an `RV` that later becomes unreadable —
+the act is present, its correspondence was checked when it was written, and
+admission cannot reach back. `sec-3` says the gate must then be unmet, and
+without this variant there was no truthful value to be unmet *with*: the act is
+not missing, its coverage has not moved, `ObservedReview` is deliberately not an
+`ObservedFact` so no observed-fact variant applies, and `BlockersUndisposed`
+would assert a finding set that was never read. A `Result` with no true error
+value for a branch the design specifies is not a total function.
 
 `causes` is non-empty in fact and not in type. The evaluator is its sole
 producer and returns satisfied where it pushed nothing, so an empty `Unmet`
@@ -2591,7 +2615,11 @@ shell's only crossing is `anyhow!("{refused}")` (`design.rs:1419-1422`), so a
 refusal that does not say a thing in `Display` does not say it to any caller.
 `GateNotCleared` therefore renders one line per unmet condition — token, causes,
 remedy — and the module doc's single-line claim is amended for that variant and
-for `RunbookNotDischarged`, which already breaks it. `DEC-124` gives this path no
+for `VerifierFailed`, which already breaks it — that variant embeds a newline
+before the verifier's own output (`refusal.rs:338`). An earlier draft named
+`RunbookNotDischarged` as the precedent and was wrong: both of its branches stay
+on one line, the `regressed` clause appending to the first rather than following
+it. `DEC-124` gives this path no
 byte budget, which is the whole reason the remedy rides here rather than in the
 envelope.
 
@@ -2611,6 +2639,77 @@ candidate, and this section does not build it. The residual is that the narrativ
 half of an inherited condition's contract is unreachable in-session. It is
 carried forward, and it is small precisely because the remedy is const-derived
 and always present.
+
+**`IMP-390`'s gate-condition face is discharged here.** That item is *envelope
+reports state, not what to do next*; `DEC-124` names the refusal leg as its
+answer for gate conditions specifically. What closes it is the remedy, not the
+complaint: a caller told six conditions are outstanding has state, and a caller
+told which act discharges each has a next step. The item itself is wider than
+this slice and stays open — the envelope's other surfaces are not `SL-244`'s —
+but the condition face is answered rather than deferred, and nothing else in this
+design was going to answer it.
+
+### The other refusal: admission
+
+`sec-4` promises, in six places, that a malformed act is *"refused at
+admission"* — a `CoveredSet` whose variant its rule does not name, an `observed`
+map keyed by a fact its rule does not name, a missing or gratuitous confirmation,
+a disposition present where no rule names one, a `Conducted` over an unconcluded
+or foreign pass, a blank waiver reason, a blocking set naming a node outside its
+coverage. Every one is a real rule and none had a refusal to be raised as. The
+`Refusal` enum is closed (`refusal.rs:19`) and holds nothing that fits: these are
+not gate failures, so `GateNotCleared` is wrong twice over — wrong stage in the
+lifecycle, and wrong data, since there is no condition to name.
+
+One variant covers all of them, because they are one fact:
+
+```rust
+/// A recorded act does not correspond to the rule it is written against
+/// (`sec-4`). Raised on WRITE, before anything is persisted — so every stored
+/// act satisfies the correspondence by construction and the gate never
+/// re-checks it.
+ActAdmissionInvalid {
+    act: ActKind,
+    /// Non-empty. Every way this act failed its rule, not the first.
+    causes: Vec<ActFault>,
+},
+```
+
+```rust
+pub(crate) enum ActFault {
+    /// The rule names this coverage; the act carries that one (or none).
+    CoverageMismatch { required: Coverage, carried: Option<Coverage> },
+    /// The observed map's key set is not the rule's `ObservedFact` list.
+    ObservedKeys { missing: Vec<ObservedFact>, extra: Vec<ObservedFact> },
+    /// A confirmation is present where the rule names none, or absent where it
+    /// names one. Presence-exactly-when, so one variant with a direction.
+    Confirmation { expected: Option<AgentActKind>, carried: bool },
+    /// Likewise for a disposition.
+    Disposition { expected: bool, carried: bool },
+    /// `Conducted` naming a review that is not the run's current pass.
+    ForeignPass { named: ReviewRef, current: ReviewRef },
+    /// `Conducted` over a pass whose ledger carries no concluded marker.
+    PassNotConcluded { review: ReviewRef },
+    /// A `Waived` whose reason is empty or whitespace.
+    WaiverReasonMissing,
+    /// A blocking set naming nodes outside the map it was declared over.
+    BlockingSetUnknownNodes { nodes: Vec<DesignId> },
+}
+```
+
+**One variant, not eight refusals**, on `RunbookNotDischarged`'s own precedent
+and its stated reason: *"the fact refused is one fact … `EX-8` budgets exactly
+one gate refusal. What differs is the repair"*. Here the fact refused is *this
+act does not correspond to its rule*, and what differs is which slot — so the
+slot rides a field, exactly as `outstanding` and `regressed` do there.
+
+The parallel with `Unmet`/`Cause` is deliberate and the two must not be merged.
+They answer different questions at different times: `ActFault` is *this record is
+malformed against its rule*, raised once on write; `Cause` is *this condition is
+not met by the records that exist*, re-derived at every crossing. Folding them
+would give the gate variants it can never raise and admission variants it can
+never check, which is the drift `sec-4` closes by making admission the sole owner
+of the correspondence.
 
 ### The stage-entry receipt
 
@@ -2634,32 +2733,44 @@ block take it. A locked run emits neither, which is the same real answer
 `Fragment::for_stage` and `boundary_runbook` already give at that stage — no
 outbound edge, nothing to guard, nothing to deliver.
 
-**Which contracts the receipt carries: the ones the edge will judge by.** This is
-a reading of `DEC-124`'s *"the contracts for that stage's outbound edge"*, and it
-is the wider of the two available: the enforced set at that edge, which is
-`boundary_conditions` accumulated over every edge at or below it under the reach
-filter — not that edge's own rows alone. The narrow reading would hand an agent
+**Which contracts the receipt carries.** Exactly two things, unioned:
+
+> the **enforced set** at the edge — `cumulative_conditions` after both filters —
+> **plus** the `Pending` rows on that edge's own boundary, marked not-yet-enforced.
+
+The first half is a reading of `DEC-124`'s *"the contracts for that stage's
+outbound edge"*, and it is the wider of the two available: what the edge judges
+by, not the edge's own rows alone. The narrow reading would hand an agent
 standing at `reviewing` a receipt covering three conditions while the edge it is
 about to cross judges six, and the three it omitted are exactly the ones an agent
-is least likely to have seen. Cost is small and bounded by the vocabulary: at
-most six contracts, at one stage, delivered once.
+is least likely to have seen — they were inherited from stages it may never have
+stood at.
 
-Two things follow that should not be read as costs of this choice.
+The second half is what stops that from over-delivering. `Pending` rows are
+`Cumulative` too, so a rule of *reach-filtered, activation-annotated* would carry
+`governing-context-recorded` and `initial-concerns-recorded` into every later
+edge's receipt — eight contracts at `reviewing → locked`, two of them describing
+work that will not be asked for there and, once `IMP-391` lands, will already
+have been done two stages earlier. Restricting the annotated rows to the current
+boundary shows a `Pending` row exactly where an agent can act on it, which is the
+edge it guards.
+
+So the counts are: **four** at `drafting → reviewing`, **six** at
+`reviewing → locked`, and **two** at `exploring → inquiring` — both of them
+`Pending`, which is the honest picture of an edge that today passes on the
+runbook alone. Small, bounded by the vocabulary, delivered once.
+
 `DEC-124`'s per-condition **addressing** consequence was argued against the narrow
 reading, and it survives over-satisfaction: the refusal cites one condition at a
 time whatever the receipt carried, and a future pull verb needs the address
-whether or not the receipt happened to include it. And activation is *annotated*,
-not filtered: a `Pending` row inside the enforced set renders marked
-not-yet-enforced, which is the renderer behaviour `sec-3` already committed
-`boundary_conditions` to supporting by returning its rows unfiltered.
+whether or not the receipt happened to include it.
 
-That needs the reach walk to have one home rather than two. `cumulative_conditions`
-keeps its signature and its behaviour; what changes is that its accumulation is
-factored out, so the renderer takes the reach-filtered set and applies no
-activation filter while `cumulative_conditions` applies both. Writing the reach
-rule a second time in the renderer is the drift this avoids, and it would drift
-in the direction of a receipt that disagrees with the gate about what the edge
-requires.
+Neither half needs a third accumulator. The enforced set *is*
+`cumulative_conditions`, unchanged in signature and behaviour; the pending rows
+are `boundary_conditions` for the one edge, filtered to `Pending` — which is what
+`sec-3` already committed that function to supporting by returning its rows
+unfiltered. The renderer composes two functions it does not reimplement, so
+there is no second copy of the reach rule to drift from the gate's.
 
 **Where the prose lives.** `design-prompts/conditions/<token>.md` — the store
 `DEC-122` names, in a subdirectory of it.
@@ -2731,16 +2842,24 @@ renderer's.
 
 ```
 contracts drafting-reviewing
+contract blocking-inquiries-dispositioned derived engine(dispositions) cumulative active
+  discharge: dispose every blocking inquiry on the map
+  <narrative asset body>
+contract user-accepts-sufficiency attested inquiry-map cumulative active
+  discharge: the user accepts sufficiency (SufficiencyAccepted)
+  <narrative asset body>
 contract materialisation-current derived engine(materialisation) cumulative active
   discharge: materialise the run's declared sections
   <narrative asset body>
 contract drafting-readiness-attested attested edge-local active
   discharge: the agent declares DraftingReady
   <narrative asset body>
-contract user-accepts-sufficiency attested inquiry-map cumulative active
-  discharge: the user accepts sufficiency (SufficiencyAccepted)
-  <narrative asset body>
 ```
+
+Four, not the edge's own two — the first two are inherited from
+`inquiring → drafting`, which is the whole reason the receipt is the enforced set.
+No `Pending` row appears here, because both of them sit on `exploring → inquiring`
+and this is not that boundary.
 
 Declared held, the header lines still ride and the bodies do not — the same rule
 `fragment_section` follows, and for the reason its doc gives: *"a caller that
@@ -2808,13 +2927,30 @@ feed is untouched, on `sec-4`'s stated ground.
 - **A refusal reads no asset** — the gate leg is exercised with no embedded
   corpus available and still renders every remedy. The tier boundary, asserted
   rather than trusted.
+- **An unreadable ledger is `ReviewUnavailable`, not `BlockersUndisposed`** — a
+  stored `Conducted` act whose `RV` the shell cannot read leaves the row unmet
+  naming the review, and names no findings. Both halves, because reporting
+  findings nobody read is the failure mode this variant exists to prevent.
+- **A superseded pass is named as one** — a run waived at `reviewing`, regressed
+  to `drafting` and re-advanced yields `PassSuperseded` carrying both the
+  disposed reference and the current one, rather than reading as satisfied.
+- **Every `sec-4` admission promise raises `ActAdmissionInvalid`** — one test per
+  `ActFault` variant, each asserting the variant and its payload, since the
+  section states eight distinct malformations and a single "is refused" assertion
+  would pass on the wrong one.
+- **An act failing twice reports twice** — a `GovernanceConfirmed` with both a
+  mismatched coverage and a missing observed key yields two `ActFault`s in one
+  refusal, the same not-just-the-first rule `causes` follows.
 - **The receipt covers what the edge judges by** — at `reviewing` the block
-  carries six contracts, three of them from edges below, and every token in it
-  appears in `cumulative_conditions` for that edge or is marked
-  not-yet-enforced.
-- **A `Pending` row renders marked** — `governing-context-recorded` appears in
-  the `exploring` receipt annotated not-yet-enforced, and does not appear in the
-  refusal for that edge.
+  carries six contracts, three of them from edges below, and at `drafting` four,
+  two of them from below. Asserted as set equality against
+  `cumulative_conditions` for that edge, not as a count, so the test does not
+  pass on the right number of wrong rows.
+- **A `Pending` row renders marked, on its own boundary and nowhere else** —
+  `governing-context-recorded` appears in the `exploring` receipt annotated
+  not-yet-enforced, does not appear in the refusal for that edge, and does not
+  appear in the `reviewing` receipt at all. The third clause is what distinguishes
+  this rule from reach-filtered-and-annotated, which would carry it everywhere.
 - **A declared receipt elides bodies and keeps identity** — `--known-contracts
   drafting-reviewing` suppresses every narrative body and no header line.
 - **An unknown or mismatched edge token elides nothing** — the bodies ride, on
