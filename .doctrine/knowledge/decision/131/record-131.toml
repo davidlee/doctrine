@@ -1,0 +1,63 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 131
+slug = "writable-agent-home-ro-credential"
+title = "Writable agent home, unwritable credential"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["rfc-025", "confinement", "credentials", "sandbox", "sl-241"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+SL-241 PHASE-06's first real-agent run failed because the capsule's `$HOME` was \
+read-only and the harness could not create its per-session working directory. \
+This tripped STOP-5 (a change touching the confinement profile is a finding and \
+a consult, never a quiet rig edit).\
+"""
+choice       = """
+Ruled a SETUP OVERSIGHT, not a weakening: fix the profile and re-run. The \
+capsule gets a writable `$HOME` — `--tmpfs /agent/.claude` with \
+`~/.claude/.credentials.json` ro-bound INSIDE it. The first run is disclosed as \
+a prior attempt with its usage, never discarded.\
+"""
+alternatives = [
+  "Leave `$HOME` read-only and abandon the real-agent leg — rejected: the leg is the only direct evidence a phase reaches green inside a capsule",
+  "Narrow to a tmpfs at `/agent/.claude/session-env` so the original probe row passed unchanged — rejected under D-P06-8: pins the rig to an undocumented harness internal that will move, and buys nothing the capsule-scoped tmpfs does not already give",
+  "Discard the failed first run — rejected: D-P06-2 requires prior attempts be disclosed with their usage",
+]
+rationale    = """
+The property that matters is not "the agent home is read-only" — that was only \
+ever a proxy. It is "a capsule cannot modify the trusted-side credential store", \
+and that property is preserved EXACTLY by the tmpfs-with-ro-bind-inside shape. \
+Canonical, other capsules, `~/.ssh` and `~/.gitconfig` all stay absent from the \
+capsule's mount profile. Writability of the surrounding directory is orthogonal \
+to the integrity of the file inside it, PROVIDED the refusal is a mount \
+property — see DEC-132.\
+"""
+consequences = [
+  "The confinement claim is now about the CREDENTIAL, not about the directory — any restatement that reverts to 'the agent home is read-only' has substituted the proxy back for the property",
+  "A capsule-scoped tmpfs is preferred over any narrowing that depends on harness-internal paths, which move without notice",
+  "D-P06-8's realignment of the `api-cred` probe row follows directly: with a writable home, a refusal proves nothing without a positive control writing successfully beside it",
+  "The superseded first run is retained in evidence/results-c1b.tsv as the first of two blocks — the correction is only legible against what it replaced",
+]
+decided_by   = "operator ruling"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "evidence/results-c2.tsv — the scored confinement run after the profile change, seven rows all pass",
+  "evidence/results-c1b.tsv — both agent runs; the ritual leg differs between them",
+]
+contradicts = []
+notes       = [
+  "Originates as D-P06-5, SL-241 PHASE-06; sheet archived at .doctrine/rfc/025/evidence/phase-sheets/phase-06.md",
+  "STOP-5 held: this reached the operator as a finding rather than being patched into the rig",
+  "go-no-go.md § 5 item 4 — the agent home's write scope is named as outstanding work",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

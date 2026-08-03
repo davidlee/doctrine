@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc699-fb65-7de3-84de-77406cf94363"
+recorded_at = "2026-08-03T07:50:07.973904747Z"
+kind = "friction"
+summary = "reconcile: mem.signpost.doctrine.knowledge states a DEC status vocab the corpus does not use"
+detail = "Minting DEC records during /reconcile for SL-241. The knowledge signpost memory (mem_019ed2791edc70e2a2a1caeb2521aad0, trust=medium, verification_state=unverified) documents decision status as 'pending | active | superseded | withdrawn'. The actual corpus is 212 'accepted', 36 'proposed', 6 'superseded', 2 'rejected' — 'active' appears zero times and 'accepted' is absent from the memory. 'doctrine knowledge status --help' does not enumerate valid states, so the CLI cannot arbitrate; I had to survey the corpus with grep to find the real vocab. Two costs: the memory would have led to an invalid status write, and the CLI's help omits the enum that would have settled it in one call. The same memory's ASM/QUE/CON/EVD/HYP vocabs are unverified by the same token."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

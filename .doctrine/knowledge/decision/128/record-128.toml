@@ -1,0 +1,64 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 128
+slug = "que-200-residual-architectural"
+title = "QUE-200's residual is architectural, not evidential"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["rfc-025", "que-200", "ingestion", "sl-241"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+SL-241 PHASE-06 T8 asked whether the C3 ingestion evidence discharges QUE-200 — \
+what the minimal safe parent-side mechanism is for ingesting a phase result from \
+a potentially hostile capsule git repository. PHASE-06 EX-9 explicitly permits \
+the answer "no".\
+"""
+choice       = """
+Ruled: the evidence does NOT suffice. QUE-200 stays `open`, and the four \
+mis-stating corpus records were corrected in place rather than deferred to \
+/reconcile.\
+"""
+alternatives = [
+  "Leave all four corpus corrections for /reconcile, with T9 carrying a forward reference — rejected: T9 would then cite a source it knows to be wrong",
+  "Rewrite EVD-006's datum — rejected: the scored outcome is unaffected, 8 cells still pass",
+  "Flip QUE-200 to a settled status on the strength of the sampled result — rejected, see rationale",
+]
+rationale    = """
+Candidate 3 (tree materialization) is excluded on the question's own grounds \
+(EVD-008). Candidates 1 and 2 each carry exactly one trusted-side surface the \
+other lacks, and only one of the two was measured: M-B's *parse a \
+capsule-authored file* is enumerated and tested (EVD-010, four refusal legs); \
+M-A's *run git inside a capsule-authored repository* is sampled at two config \
+keys, and the sample shows it is not uniformly defended. The three measured \
+asymmetries all sit on M-B and are all COSTS; the one on M-A is a SAFETY \
+asymmetry — and the question asks for the minimal *safe* mechanism. \
+"M-B has costs" is not "M-A is safe."\
+"""
+consequences = [
+  "`open` is the ANSWER here, not a deferral — do not reopen QUE-200 to 'finish' it",
+  "The residual is a universal over git's whole config space; no probe can discharge it, so more sampling cannot close it",
+  "What WOULD close it is architectural: does the parent need to run git in the untrusted repo at all? M-B runs git in the capsule repo zero times, M-A runs it three",
+  "Guards against a future agent planting a third config key, observing it defended, and declaring the surface cleared",
+]
+decided_by   = "operator ruling"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "EVD-010 — the only `disputes` edge in the set: M-B's trust surface is moved, not removed",
+  "EVD-008 — forensic retention; the ground on which candidate 3 is excluded",
+]
+contradicts = []
+notes       = [
+  "Originates as D-P06-9, SL-241 PHASE-06; sheet archived at .doctrine/rfc/025/evidence/phase-sheets/phase-06.md",
+  "F-P06-11 — the answer matched what PHASE-05 expected; the REASON did not, and the reason is the part that had to be right",
+  "evidence/README.md limit 1 states the sampled-not-cleared boundary",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

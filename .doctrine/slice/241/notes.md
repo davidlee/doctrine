@@ -77,10 +77,14 @@ spot-checked against its source held. What it found is canon lagging the work.
 - **Selector registry, load-bearing** (RV-343 F-7, F-9) — `go-no-go.md` and
   `flake.nix` are undeclared to conformance. `doctrine slice selector add` is
   the fix; design § 9.1's table rows are the mirror, not the fix.
-- **DEC records owed** — D-P05-6..23 and D-P06-1..9. RV-343 F-6 recommends
-  minting the **outward-binding subset** (D-P06-9, D-P05-17, D-P06-6, D-P06-5,
-  D-P06-8) and recording the remainder as indexed-in-notes, rather than all 27.
-  Operator may prefer a different cut; leaving it silent is the one bad outcome.
+- **~~DEC records owed~~ SETTLED at reconcile** (RV-343 F-6, operator ruling
+  2026-08-03) — the outward-binding subset is minted: **DEC-128** (D-P06-9,
+  QUE-200's residual is architectural) · **DEC-129** (D-P05-17, egress allowlist
+  → follow-on slice) · **DEC-130** (D-P06-6, the OS boundary is the boundary) ·
+  **DEC-131** (D-P06-5, writable agent home / unwritable credential) ·
+  **DEC-132** (D-P06-8, the `EROFS` credential refusal). The remaining **22**
+  are **indexed in DEC-132's prose body**, one line each, resolving into the
+  archived sheets. Nothing is owed at close.
 - **PHASE-06 EX-8's letter is unmet** (RV-343 F-5, `tolerated`) — discharged by
   intent on an operator ruling (D-P06-1). `plan.toml` is off reconcile's write
   surface; the one-sentence amendment following PHASE-01 EX-7/EX-8's own
@@ -1057,9 +1061,9 @@ the reasoning is intact.
   not a matrix row. F-P05-46 is what it costs when a discriminator rides a
   preamble instead of a separation.
 
-**DEC records are owed at close for D-P05-6..23.** Sheet convention is to lift at
-close and they were deliberately not minted mid-phase. That obligation now falls
-to `/reconcile` or `/close`, not to PHASE-05.
+**DEC records for D-P05-6..23 — SETTLED at reconcile** (RV-343 F-6). D-P05-17
+was lifted to **DEC-129**; the other seventeen are indexed one line each in
+**DEC-132**'s prose body and resolve into the archived sheet. Nothing is owed.
 
 ### PHASE-05 findings (durable) — INDEX, same reason
 
@@ -1380,9 +1384,12 @@ or `## Findings` in that file; findings are newest-first.
   failure surfaces at the most expensive possible moment. Generalised as
   `mem.pattern.tests.smoke-the-capability-not-the-dependency`.
 
-**DEC records are owed at close for D-P06-1..9**, alongside PHASE-05's
-D-P05-6..23. Sheet convention is to lift at close; that obligation falls to
-`/reconcile` or `/close`, not to PHASE-06.
+**DEC records for D-P06-1..9 — SETTLED at reconcile** (RV-343 F-6). Four were
+lifted: D-P06-9 → **DEC-128**, D-P06-6 → **DEC-130**, D-P06-5 → **DEC-131**,
+D-P06-8 → **DEC-132**. The other five (D-P06-1..4, D-P06-7) are indexed in
+DEC-132's prose body. **D-P06-1 has a live tail** — it is the ruling behind
+RV-343 F-5, PHASE-06 EX-8's unmet letter, which is the operator's call at
+`/close`.
 
 ### PHASE-05 boundary — 111 FOREIGN COMMITS, and two interior merges
 
@@ -1827,12 +1834,14 @@ mid-phase would convert a legible structural finding into a silent pass.
   carried the refs-only clause that `cas-lost` legitimately carries, that defect
   would have scored GREEN, and H10/H16 are the only place in the matrix where it
   shows. Worth citing at close wherever F-14 is defended.
-- **DEC records are OWED at close for D-P05-6..23** — the sheet's convention is
-  "lift to notes.md at close", so they were deliberately not minted mid-phase.
-  The range has extended repeatedly: D-P05-16 (H7's 20G bound), D-P05-17
-  (allowlist work → follow-on slice), D-P05-18/19 (T4c/T4e), and **T6 added
-  D-P05-20..23** (guard-probe placement · guard (a) as citation · guard (e)'s
-  three legs and its OID-excluding observable · the `fx_case` lift).
+- **~~DEC records are OWED at close for D-P05-6..23~~ SETTLED at reconcile**
+  (RV-343 F-6). They were deliberately not minted mid-phase per the sheet's
+  "lift at close" convention, and the range extended repeatedly: D-P05-16 (H7's
+  20G bound), D-P05-17 (allowlist work → follow-on slice), D-P05-18/19
+  (T4c/T4e), and **T6 added D-P05-20..23** (guard-probe placement · guard (a) as
+  citation · guard (e)'s three legs and its OID-excluding observable · the
+  `fx_case` lift). Outcome: **D-P05-17 → DEC-129**; the rest indexed in
+  **DEC-132**.
 - **the DQ-4 exemption is CONDITIONAL and PHASE-05 holds the condition** —
   F-P04-9. A payload-bearing fixture variant reusing `fixture-light.sh`'s
   trusted-side `npm` build loop breaks DQ-4 for real, and the audit cannot see

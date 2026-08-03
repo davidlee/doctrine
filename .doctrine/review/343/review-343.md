@@ -305,3 +305,88 @@ slice's non-goals held: no RFC-025 prose edits (CHR-053), no census REV scoping
 - **F-10, F-11** (`fix-now`) — landed in audit: `results-c2.tsv` and
   `results-smoke.tsv` committed to the evidence corpus, README manifest and
   authority sentence updated.
+
+## Reconciliation Outcome
+
+Reconcile pass complete, 2026-08-03. Every brief item is resolved. **No REV was
+authored** — the brief's governance/spec section was empty and nothing found
+touched an ADR, policy, standard, spec or requirement.
+
+### Direct edits applied — `design.md`
+
+- **§ 9 measurement table, row 2 before-cell** (RV-343 F-1) — the false
+  parenthetical replaced with the counted enumeration: 3 attributable per phase
+  (`dispatch/<N>`, the worker's fork branch, `phase/<N>-NN`) plus a share of 3–4
+  slice-level refs amortised over *k*. `candidates.toml` is gone from a count of
+  refs; the per-phase / per-slice split is now visible. Mirrors
+  `measurements.md` § 2 and its REQ-311 derivation.
+- **§ 9 measurement table, row 5** (F-2) — the metric now names the **kind** of
+  git operation as load-bearing, not the count: the incumbent materialises a
+  tree and stages into a shared index (ISS-234's hazard class); the capsule
+  model moves objects and one ref. The before-cell now discloses that the count
+  is the **subprocess arm**.
+- **§ 9 "Scoped means, precisely", bullet 2** (F-3) — replaced with both axes
+  stated independently: `model-level` grades *fixtures* (client-project shape,
+  § 5.4 / A-3), and separately **nothing was measured off Linux at any
+  altitude**. Points at `go-no-go.md` § 1's two-class table.
+- **§ 9 "Scoped means, precisely", final bullet** (F-4) — now states that
+  ASM-007 was **falsified and is `invalidated`**, and that **ASM-008** is the
+  record that is strengthened-not-discharged. *"whatever step 0 returns"* is
+  deleted: foreclosing step 0's outcome was the defect, not merely the stale
+  state.
+- **§ 9.1 code-impact table** (F-7, F-9) — two rows added
+  (`.doctrine/rfc/025/go-no-go.md`, `flake.nix`), and the closing *"No `src/`
+  changes"* qualified so it no longer reads as *"and nothing else structural
+  either"*.
+
+### Selector registry — the load-bearing half of F-7 / F-9
+
+- `doctrine slice selector add 241 .doctrine/rfc/025/go-no-go.md --intent design-target`
+- `doctrine slice selector add 241 flake.nix --intent design-target`
+
+Both file-scoped, **not** `.doctrine/rfc/025/**` — promoting the directory would
+declare intent the slice deliberately did not have (RFC-025 prose edits are
+CHR-053's). **Verified, not assumed:** `doctrine slice conformance 241` moved
+662 → **660 undeclared**, both paths now appear under `conformant` against their
+new selectors, undelivered stays 0. The residual 660 is F-8's shared-tree noise.
+
+### Knowledge corpus — F-6, on an operator ruling
+
+Ruling 2026-08-03: **mint the outward-binding five, index the remainder in the
+fifth.**
+
+| record | lifts | what it binds outside SL-241 |
+|---|---|---|
+| **DEC-128** | D-P06-9 | QUE-200's residual is architectural — `open` is the answer, not a deferral |
+| **DEC-129** | D-P05-17 | egress allowlist + QUE-204 → follow-on slice; largest forward work, still unsliced |
+| **DEC-130** | D-P06-6 | the OS boundary **is** the confinement boundary; names the inversion risk |
+| **DEC-131** | D-P06-5 | writable agent home, unwritable credential — the property, not the proxy |
+| **DEC-132** | D-P06-8 | the `EROFS`-not-`EACCES` refusal, **and the index of the remaining 22** |
+
+All five `accepted`, both tiers populated (typed `[facet]` in TOML, reasoning in
+prose). The remaining **22** sheet decisions are indexed one line each in
+DEC-132's prose body, resolving into the archived phase sheets. `notes.md`'s
+four standing *"DEC records owed at close"* markers are struck through and
+restated as settled, so nothing reads as outstanding into `/close`.
+
+### Carried to `/close` — not reconcile's to write
+
+- **F-5** — PHASE-06 EX-8's unmet letter. `plan.toml` is off the reconcile write
+  surface and stayed untouched. DEC-132's index flags D-P06-1 as the live tail.
+- **New, out of brief — `design.md` § 9 row 2's *after*-cell** reads `static —
+  one, asserted by I1`, but `measurements.md` § 2 states the after-side is
+  **measured**, not static (the `assert_outcome` leg passed in both P-C1a and
+  P-C1b). F-1 scoped itself to the before-cell, so under D9 this was **not**
+  fixed here. It is a one-word accuracy nit, raised for a ruling at `/close`
+  rather than silently absorbed.
+
+### Withdrawn / tolerated / already landed
+
+- **F-8** (`aligned`) — no write needed; IMP-292 / IMP-282 / ISS-307 stand.
+- **F-10, F-11** (`fix-now`) — landed during audit. A follow-on pre-disposal
+  sweep found F-11 was one instance of a class and archived four further scored
+  tables and two proof objects (`results-c1a`, `results-c1b`, `results-r2`,
+  `results-selftest`, `exec-proof-smoke`, `run-c1b/`); recorded in `notes.md`
+  § Harvest, outside this brief.
+
+Reconcile pass complete — handoff to `/close`.

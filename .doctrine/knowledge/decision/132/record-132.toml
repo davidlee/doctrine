@@ -1,0 +1,59 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 132
+slug = "credential-refusal-erofs"
+title = "Capsule credential refusal asserts on the file, via EROFS"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["rfc-025", "confinement", "credentials", "sandbox", "sl-241", "sheet-index"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+DEC-131 gave the capsule a writable `$HOME`. That invalidated P-C2's `api-cred` \
+probe row, which had been asserting on a read-only DIRECTORY — a proxy for the \
+property, not the property. F-P06-8 raised it and it was consulted per STOP-2 \
+(a failed probe is a finding, never a quiet rig edit).\
+"""
+choice       = """
+The row is realigned onto its claim: it now names the FILE, and asserts refusal \
+on append, truncate AND unlink, with the credential shown readable first and a \
+POSITIVE CONTROL writing successfully beside it. All seven P-C2 rows pass.\
+"""
+alternatives = [
+  "Narrow the profile to a tmpfs at `/agent/.claude/session-env` so the old row passed unchanged — rejected: pins the rig to an undocumented harness internal that will move, and buys nothing the capsule-scoped tmpfs does not already give",
+  "Carry `api-cred` into the go/no-go as a changed result — rejected: leaves a sound property unasserted and a red row explained in prose",
+]
+rationale    = """
+The agent home is writable BY DESIGN, so a refusal proves nothing unless a \
+successful write is demonstrated beside it — otherwise a broken write mechanism \
+reads identically to an enforced boundary. The unlink leg is new and is the one \
+a writable directory actually requires: without it, replacement-by-removal was \
+unasserted. The realigned row is STRICTLY STRONGER than the one it replaces — \
+the old leg could pass while the credential was writable.\
+"""
+consequences = [
+  "LOAD-BEARING: the refusal is EROFS from the read-only mount flag, NOT EACCES from mode bits. The capsule runs as uid=1000 and OWNS the file — it could chmod it. Only the mount makes the refusal real",
+  "Therefore any narrowing that puts the secret back on a writable mount is a REAL WEAKENING however tight its permissions look, and go-no-go.md § 5 item 4's follow-up points straight at that direction",
+  "A probe asserting on a proxy can pass while the property it stands for is false — prefer asserting on the property, and pair every refusal with a positive control",
+  "The superseded `api-cred` rows are retained in evidence/results-c2.tsv rather than pruned",
+]
+decided_by   = "operator ruling"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "evidence/results-c2.tsv — the scored block under the last `p-c2:` preamble, seven rows all pass",
+]
+contradicts = []
+notes       = [
+  "Originates as D-P06-8, SL-241 PHASE-06; sheet archived at .doctrine/rfc/025/evidence/phase-sheets/phase-06.md",
+  "STOP-2 held: F-P06-8 was raised and consulted, not patched",
+  "This record also carries the SL-241 sheet-decision index — see its prose body",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

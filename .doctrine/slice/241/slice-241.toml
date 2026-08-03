@@ -26,6 +26,16 @@ intent = "scope-relevant"
 selector = ".doctrine/rfc/025/evidence/**"
 intent = "design-target"
 
+[[selector]]
+selector = ".doctrine/rfc/025/go-no-go.md"
+intent = "design-target"
+note = "the named deliverable (RV-343 F-7); file-scoped — RFC-025 prose edits are a slice non-goal (CHR-053)"
+
+[[selector]]
+selector = "flake.nix"
+intent = "design-target"
+note = "shellcheck into the jail, PHASE-01 29d842dc / D-P01-4 (RV-343 F-9)"
+
 [[relation]]
 label = "related"
 target = "RFC-025"

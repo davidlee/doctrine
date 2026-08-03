@@ -1,0 +1,60 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 130
+slug = "os-boundary-is-the-boundary"
+title = "The OS boundary is the confinement boundary"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["rfc-025", "confinement", "sandbox", "sl-241", "stated-property"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+SL-241 PHASE-06 ran a real agent inside a capsule. `worker-agent.sh` passes \
+`--dangerously-skip-permissions` to the harness. This was disclosed rather than \
+discovered — the reasoning offered was that it is a harness-level flag inside an \
+already-confined capsule, not a change to the bwrap boundary, and that STOP-5 as \
+written arguably covered it.\
+"""
+choice       = """
+The flag is ENDORSED and stands. The capsule model's confinement claim is \
+therefore explicitly that THE OS BOUNDARY IS THE BOUNDARY: a harness running \
+inside the capsule need not re-litigate confinement per tool.\
+"""
+alternatives = [
+  "Remove the flag and rely on the harness's own permission prompts — rejected: it would make the confinement claim depend on a harness setting the capsule does not control",
+  "Treat it as a STOP-5 violation and halt — rejected: the operator ruled the disclosed reasoning sound",
+]
+rationale    = """
+Confinement that must be re-asserted at every layer is confinement nobody can \
+audit. Locating the boundary at the OS — mount namespaces, `--unshare-all`, \
+`ulimit` — makes the claim checkable in one place, by inspecting the bwrap \
+profile, rather than distributed across every tool a harness might invoke. A \
+per-tool permission prompt inside an already-confined capsule adds a second, \
+weaker boundary whose failure modes are invisible to the profile.\
+"""
+consequences = [
+  "This belongs in the go/no-go as a STATED PROPERTY of the model, not as an implementation detail — it is a claim a reader must be able to disagree with",
+  "INVERSION RISK: a downstream design that weakens the sandbox to compensate for a harness setting has the relationship backwards. The sandbox is the invariant; the harness setting is the variable",
+  "The confinement claim is only as good as the bwrap profile, which is why P-C2 asserts on it every run rather than trusting it",
+  "Portability caveat: this locates the boundary at a Linux mechanism. macOS has no bwrap, so the whole claim is outstanding there",
+]
+decided_by   = "operator ruling"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "P-C2's seven confinement rows, all pass — evidence/results-c2.tsv",
+]
+contradicts = []
+notes       = [
+  "Originates as D-P06-6, SL-241 PHASE-06; sheet archived at .doctrine/rfc/025/evidence/phase-sheets/phase-06.md",
+  "go-no-go.md § 4 'Stated properties of the model'",
+  "Disclosed by the implementing agent rather than found in review — the disclosure is why the ruling could be made at all",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

@@ -1,0 +1,56 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 129
+slug = "egress-allowlist-follow-on"
+title = "Egress allowlist and QUE-204 land in a follow-on slice"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["rfc-025", "que-204", "egress", "sl-241", "forward-work"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = """
+D-P05-14 settled WHAT capsule egress becomes — allowlisted rather than binary, \
+content per capsule kind, agent hosts absent when no agent runs — and explicitly \
+did not place the work. QUE-204 (how a capsule obtains build inputs git cannot \
+carry) is the same lever seen from the other end: today `heavy`'s web assets are \
+built on site per cell, every stage-3 cell reaching `registry.npmjs.org`.\
+"""
+choice       = """
+The allowlist work lands in a FOLLOW-ON SLICE, not in SL-241, and is settled \
+together with QUE-204 because the two are one lever. SL-241 builds none of it.\
+"""
+alternatives = [
+  "Build the allowlist inside SL-241 — rejected: the spike's job is the go/no-go, and this is implementation of a model not yet accepted",
+  "Place the egress work and QUE-204 separately — rejected: they are the same lever, and splitting them would have each re-derive the other's reasoning",
+]
+rationale    = """
+The feasibility question was answered and that is the extent of the result: \
+`tinyproxy` and `iproute2` were installed during the feasibility work, `socat` \
+and `python3` were already present, and all four are DQ-4-clean. Nothing was \
+built and nothing in SL-241's remaining tasks depended on it. Carrying \
+implementation into a spike would have made the spike's own scope the thing \
+that shipped.\
+"""
+consequences = [
+  "This is the largest single piece of forward work SL-241 identified, and as of slice close it is NOT YET SLICED",
+  "The follow-on inherits D-P05-14's reasoning and the F-P05-32 finding trail — do NOT re-derive them there",
+  "Until it lands, an npm-registry outage lands as `verify/suite-failed` with nothing to distinguish it from a real verdict — a client whose build needs inputs the capsule cannot fetch is outside the measured shape",
+]
+decided_by   = "operator ruling"
+decided_on   = "2026-08-03"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = [
+  "Originates as D-P05-17, SL-241 PHASE-05; sheet archived at .doctrine/rfc/025/evidence/phase-sheets/phase-05.md",
+  "Closes the placement half that D-P05-14 left open",
+  "go-no-go.md § 1 'What client shape this build shape means', and § 5 outstanding work",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

@@ -954,10 +954,10 @@ runtime rows either name an incumbent source or are recorded as after-side-only.
 | metric | before (incumbent) source | after (capsule) source |
 |---|---|---|
 | trust-bearing lifecycle states | static — `mechanism-census.md` + the dispatch state machine | static — the four stages (§ 5.1) |
-| mutable refs written per accepted phase | static — coord branch, projected refs, candidate branch, `candidates.toml`, trunk | static — one, asserted by I1 |
+| mutable refs written per accepted phase | static — **3 attributable per phase** (`dispatch/<N>`, the worker's fork branch, `phase/<N>-NN`) **+ a share of 3–4 slice-level refs** amortised over *k* phases (`review/<N>`, `candidate/<N>/<label>`, trunk, optionally `edge`). Enumerated from REQ-311 (SPEC-022 FR-001) — `measurements.md` § 2 | static — one, asserted by I1 |
 | security-significant hooks (target 0) | static grep of the shipped hook set | `audit-nohooks` |
 | role-detection rules (target 0) | static grep — `worker_mode`, marker | `audit-nohooks` |
-| git operations between **doorbell and accepted-ref advance** | static enumeration | static enumeration + P-C1a |
+| git operations between **doorbell and accepted-ref advance** — and, load-bearing, **their kind**: the incumbent materialises a tree and stages into a shared index (ISS-234's hazard class); the capsule model never materialises a tree, it moves objects and one ref | static enumeration — **subprocess arm**; the claude arm self-commits and its import leg differs | static enumeration + P-C1a |
 | ~~git ops between worker-done and candidate-create~~ | **retired** — there is no `candidate create` on the after side (D8), so the metric has no endpoint. Re-endpointed by the row above | — |
 | wall-clock and disk per accepted phase | **not measured** — no instrumented incumbent run is in scope | P-C1a; recorded as an absolute, not a delta |
 | tokens per accepted phase | **not measured** | P-C1b, **n = 1** — a point estimate of one phase by a non-deterministic agent (DEC-109). It can support "a phase reaches green in a capsule at roughly this cost"; it cannot support a comparison |
@@ -978,13 +978,24 @@ lands in `.doctrine/rfc/025/`.
 Scoped means, precisely:
 
 - go on Linux/bwrap, for a client of this build shape;
-- model-level rows proven portable, env-conditional rows outstanding for macOS;
+- **altitude and OS are independent axes, and the scope needs both.** `model-level`
+  grades *fixtures* — the row held on both, a claim about client-project **shape**
+  (§ 5.4 / A-3) — and says nothing about host platform. Separately: **nothing was
+  measured off Linux, at any altitude.** Admission-boundary rows are portable in
+  reasoning but unmeasured; environment-conditional rows (P-C2's confinement set,
+  `harvest/resource-cap`, H9's verify-stage leg, H12's env-file surfaces) are
+  outstanding for macOS, whose boundary would be a different mechanism entirely.
+  `go-no-go.md` § 1 carries the two-class table;
 - **H10/H16's sub-probe legs are scaffolded incumbent-layer regression checks and
   count toward nothing** (F-9). The honest table reads *sixteen rows with a
   capsule-model boundary or a recorded dissolution, plus two regression legs* —
   never "16/16" unqualified;
 - **conflict/staleness resolution is out of evidence, not proven** — QUE-202;
-- ASM-007 is recorded **strengthened, not discharged**, whatever step 0 returns.
+- **ASM-007 was FALSIFIED and is `invalidated`** — PHASE-04 step 0's independent
+  enumeration produced the R1–R4 residue, and the claim's *shape* failed, not
+  merely its truth value. **ASM-008 replaced it** (the universal / language-bound
+  responsibility split), and **ASM-008 is what is strengthened, not discharged**.
+  `go-no-go.md` § 3.3 carries the reasoning.
 
 Writing the scope in is what stops the REV over-claiming.
 
@@ -997,8 +1008,12 @@ Writing the scope in is what stops the REV over-claiming.
 | `.doctrine/knowledge/**` | EVD records (CPT-001, DEC-099/107/108/109/110, ASM-007, QUE-201, CON-004/005 already landed) |
 | `.doctrine/slice/241/**` | design, plan, notes |
 | `.doctrine/state/rfc-025/raw/` | raw run logs — runtime tier, gitignored by `.doctrine/state/`, no new `.gitignore` entry (§ 5.3 amendment) |
+| `.doctrine/rfc/025/go-no-go.md` | new — the scoped go/no-go the Closure paragraph above requires |
+| `flake.nix` | modified — shellcheck into the jail (PHASE-01, `29d842dc`, D-P01-4) |
 
-No `src/` changes (see R2).
+**No `src/` changes** (see R2) — the rig is standalone shell; the spike never
+touched the engine. That is a claim about `src/` alone: `flake.nix` above is a
+build-environment change, and it is the only path outside those listed here.
 
 ```
 scripts/spike-capsule/
