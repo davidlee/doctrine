@@ -112,13 +112,18 @@ not a second decision procedure.
 So the fork above **dissolves**. There is one derivation:
 
 ```rust
-fn satisfied(condition: Condition, run: &DesignSnapshot, observed: &ObservedFacts) -> bool
+fn satisfied(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput) -> bool
 ```
 
-`ObservedFacts` is not decoration and is derived in the next subsection but one;
-the short version is that some conditions bind to canonical state the snapshot
-does not contain, and a signature that cannot see it would recreate the
-existential scan under a new name.
+Two inputs, and the second is deliberately the *whole* derived-input record
+rather than a parameter per fact class. A condition derives over run-owned state,
+over what the shell read out of the authored document, or over canonical state
+outside the run — and which of those it needs is a property of the rule, not of
+the signature. An earlier draft passed a narrow `&ObservedFacts` instead, and
+`Engine(Materialisation)` immediately became underivable: the watermark
+comparison needs `authored_fingerprint`, which lives on `DerivedInput` and was no
+longer in scope. One derived-input parameter is also what lets a new observed
+fact arrive without touching every call site.
 
 `ConditionKind` remains `DEC-120`'s vocabulary, but it is **not a field and not a
 dispatch key**. It is a projection of the derivation rule:
@@ -137,8 +142,8 @@ leaving it constructible invites a new member.
 
 ### Conditions are edge guards
 
-The governing reading, stated here because four later choices follow from it and
-were previously asserted without it: **a condition guards a transition, not a
+The governing reading, stated here because several later choices follow from it
+and were previously asserted without it: **a condition guards a transition, not a
 progression.** It is a guard on one edge of the stage machine, and what it means
 is fixed by the edge it sits on.
 
@@ -158,6 +163,11 @@ forward cannot inherit clearance it no longer earns. That is why `advance`
 re-derives from current content rather than reading a flag. It is the right
 mechanism for most rows and it is not automatically right for all of them, and
 this section now says which rows take it and why.
+
+**A guard bars a move.** A derived fact that must *not* bar a move is therefore
+not a condition at all, whatever else it resembles. Where those facts go, and why
+they are excluded rather than softened, is the last subsection before the
+classification.
 
 ### The derivation rule
 
@@ -258,6 +268,20 @@ name one subject and one required actor. What is recorded here is that the open
 question carries a type cost that differs by answer, so `ISS-310` is decided in
 the attested-acts section with that cost visible rather than discovered.
 
+**Conjuncts must be current together, and currency is not yet ordering.** A
+conjunction of independent acts is satisfiable by acts that never met: an old
+user `GraphReviewed` and a later agent `BlockingSetDeclared` would both be
+*present*, and `DEC-121`'s interaction — the agent declares, the user confirms —
+would not have happened. Coverage closes most of this by construction: where the
+rule's binding covers a run-owned subject set, every conjunct must be current
+against the *same present* state, so a review made over a superseded inquiry map
+is not live and the pair cannot be assembled from different eras. What coverage
+does **not** give is order — that the user's confirmation came after, and over,
+the agent's declaration. That requires the confirming act's artefact to cover the
+declaring act's digest, which is a statement about artefact shape rather than
+about this rule, and it is specified in the attested-acts section. Recorded here
+so it is a deferral and not an omission.
+
 ```rust
 pub(crate) struct Binding {
     /// What the attestation's own recorded content covers.
@@ -267,13 +291,23 @@ pub(crate) struct Binding {
     pub(crate) observed: &'static [ObservedFact],
 }
 
+/// The run-owned subject set an attestation is current against. `Artefact` is
+/// the degenerate case: it covers nothing but itself.
 pub(crate) enum Coverage {
-    /// The attested artefact's own recorded content.
+    /// The attested artefact's own recorded content, and nothing else.
     Artefact,
-    /// Every section's current digest — the coverage rule.
+    /// Every section's current digest.
     EverySection,
+    /// Every inquiry node's current digest.
+    InquiryMap,
 }
 ```
+
+`EverySection` is the incumbent pattern generalised, not a new idea:
+`ContentCoverage` already stores the subject→fingerprint map an acceptance was
+made over and compares it with the current one (`attestation.rs:200-214`).
+`InquiryMap` is the same shape over the other run-owned subject set, and it
+exists because two rows need it — see the reach arguments below.
 
 **Binding is conjunctive, and the empty case is why.** An earlier draft made
 these alternatives — an attestation bound to its artefact *or* to an observed
@@ -307,7 +341,7 @@ The repair rides an existing seam rather than inventing one:
 ```rust
 /// Canonical state the shell observed this invocation, for conditions whose
 /// binding names one. Transient — never persisted, and never a mirror of
-/// canonical state the run does not own.
+/// canonical state the run does not own. Arrives as a field on `DerivedInput`.
 pub(crate) struct ObservedFacts {
     pub(crate) facts: BTreeMap<ObservedFact, Fingerprint>,
 }
@@ -335,11 +369,18 @@ Semantics, stated so they are not assumed:
   gate stays shut on a missing answer, the rule `ReviewStanding::holds` already
   follows.
 
-### Reach and force
+**Every observed fact owes a typed projection and a deterministic encoding.** A
+fingerprint over an unspecified projection is not a comparison — attestation-time
+and evaluation-time code can hash semantically identical state differently, or
+omit a row one of them considered irrelevant, and the condition then expires or
+survives for no reason anybody can name. So each member of `ObservedFact` must
+define which rows it includes and how they are canonically ordered and encoded
+before hashing, and that definition is part of the member, not of the call site.
+`GovernanceEdges`' projection is specified in the attested-acts section alongside
+the artefact it is compared against; this section fixes that the obligation
+exists and applies to every future member.
 
-Two independent axes, and the earlier draft's single `Scope` enum collapsed them.
-**Reach** is how far a guard is re-derived; **force** is whether failing it bars
-the move.
+### Reach: how far a guard is re-derived
 
 ```rust
 pub(crate) enum Reach {
@@ -348,53 +389,67 @@ pub(crate) enum Reach {
     /// Evaluated only on the edge that names it.
     EdgeLocal,
 }
-
-pub(crate) enum Force {
-    /// Failure refuses the move and appears in `GateNotCleared::missing`.
-    Blocking,
-    /// Failure is evaluated, rendered, and never bars the move.
-    Advisory,
-}
 ```
-
-The split is paid for by a real row rather than by symmetry. `DEC-126` makes
-integrated-pass currency **derived state that warns rather than blocks** — it
-calls this the second non-cumulative element in the machine, on `DEC-101`'s
-stale-discharge precedent — and the reason is termination, not taste: dispose a
-finding, integrate it, and the sections move, so whole-map currency invalidates
-the pass that found it. Blocking on that enforces review-to-fixpoint, which
-`RFC-026` E3 refutes and `DEC-126` explicitly rejected. But the fact is still
-**cumulative** in reach: it is whole-map currency, re-derived like any other. A
-single enum cannot spell cumulative-and-advisory; it forces an advisory row to
-surrender its reach.
-
-Three of the four cells are occupied, which is the test the split had to pass:
-
-|                | blocking                | advisory                 |
-|----------------|-------------------------|--------------------------|
-| **cumulative** | seven rows              | `integrated-pass-current` |
-| **edge-local** | `drafting-readiness-attested` | — |
 
 `cumulative_conditions` accumulates the `Cumulative` rows from every edge below
 the target and the `EdgeLocal` rows from the final window only — the edge being
-crossed. `Advisory` rows are evaluated and reported and never appear in
-`GateNotCleared::missing`.
+crossed.
 
-**The discriminator for force is repair cost, not binding.**
-`section-attestations-current` and `integrated-pass-current` share the
-`EverySection` coverage and take opposite force, which looks contradictory until
-the artefacts are compared. Per-section attestations invalidate individually, so
-an edit costs re-attesting the sections it touched: bounded, so the row can
-block. The integrated pass is one artefact covering everything, so any edit kills
-all of it: unbounded, so the row must warn. `Coverage::EverySection` is therefore
-doing one job, and the force column carries what looked like its second.
+**Reach and coverage are independent, and conflating them is a live error.**
+Reach says *when* a guard is re-derived; coverage says *what can make it fail*.
+A row with `Cumulative` reach and `Artefact` coverage is re-derived on every
+forward move and can still only fail if its own artefact changes — which is
+coherent, and much weaker than "cumulative" sounds. An earlier draft of the
+per-row arguments below claimed three rows were invalidated by state their
+coverage did not see, and every one of those claims was false. Each argument now
+names only what its coverage can observe.
 
-**The severity summary is not a row.** `DEC-126` pairs it with integrated-pass
-currency as derived state that warns, and the two have different shapes: currency
-is a predicate and can be a guard, whereas an outstanding-findings count by
-severity has no satisfied/unsatisfied reading at all. It is envelope and receipt
-content — rendered at the boundary to inform the user's decision to run another
-round — and it is not in this vocabulary.
+**Reach is observable only below the top edge.** `cumulative_conditions(to)`
+walks the edges beneath the target, so for a row sitting on the *last* window —
+`reviewing → locked` — cumulative and edge-local coincide: there is no higher
+edge at which the distinction could show. Those rows are marked `Cumulative`
+because that is what they mean, not because a test at that edge could tell.
+The distinction is observable exactly where it was argued: `drafting → reviewing`
+rows, evaluated while crossing `reviewing → locked`.
+
+### What warns instead of guarding
+
+`DEC-126` makes integrated-pass currency and an outstanding-findings summary by
+severity **derived state that warns rather than blocks**. Neither is a condition,
+and the count stays at nine: a guard bars a move, so a fact that must never bar
+one does not belong in the vocabulary.
+
+**Why currency must not block, precisely.** Not repair cost — a whole-document
+re-review is finite, and expense alone has never made a guard optional. The
+reason is convergence. Dispose a finding, integrate it, and the sections move, so
+whole-map currency invalidates the very pass that found it. A guard on that
+demands a fixpoint the process cannot reach, which is `RFC-026` E3's termination
+result and `DEC-126`'s stated reason for rejecting it: *"that enforces
+review-to-fixpoint, a termination rule `RFC-026` E3 provably refutes."* Review
+terminates when the user declines another round, so staleness must inform that
+decision rather than bar it. The general rule, so the next such fact is not
+re-argued from scratch: **a derived fact whose own repair invalidates it cannot
+be a guard.**
+
+**The mechanism is a lamp on the turn envelope.** `ReviewStanding::integrated_current`
+already computes *"an integrated adversarial pass covers current content"*, so
+the fact needs no new derivation — only a channel. It renders as a scalar flag on
+`TurnEnvelope`, following `cursor_stale`, which is the same shape already in the
+tree: a derived staleness marker rendered inline only when true
+(`render/envelope.rs:983`). Three properties follow, and they are the reason this
+is a lamp rather than a section of its own:
+
+- **no passive cost** — nothing renders while the pass is current, unlike
+  `frontier` and `blockers`, whose headings render unconditionally;
+- **not evictable** — the byte-budget ladder in `evict_one` holds lists, not
+  scalars, so a warning cannot be dropped in favour of the material it is warning
+  about;
+- **no rung to choose** — and therefore no repeat of the partial-overflow bug
+  that doc comment records against excluding the active path.
+
+The severity summary rides the same channel for a different reason: it is a
+count by severity, with no satisfied/unsatisfied reading at all, so it could not
+have been a guard whatever its force.
 
 ### Activation: the model this slice can turn on
 
@@ -441,21 +496,20 @@ share a name.
 
 ### The classification
 
-`DEC-126`, restated only as far as this section's vocabulary needs. Ten in, ten
-out: **two Derived, eight Attested, zero Claimed.**
+`DEC-126`, restated only as far as this section's vocabulary needs. Ten in, nine
+out: **two Derived, seven Attested, zero Claimed.**
 
-| condition | derivation | coverage | observed | reach | force | activation |
-|---|---|---|---|---|---|---|
-| `blocking-inquiries-dispositioned` | `Engine(Dispositions)` | — | — | cumulative | blocking | active |
-| `materialisation-current` | `Engine(Materialisation)` | — | — | cumulative | blocking | active |
-| `governing-context-recorded` | `Attested([{GovernanceConfirmed, User}])` | artefact | `[GovernanceEdges]` | cumulative | blocking | pending `IMP-391` |
-| `initial-concerns-recorded` | `Attested([{GraphReviewed, User}, {BlockingSetDeclared, Agent}])` | artefact | — | cumulative | blocking | pending `IMP-391` |
-| `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | artefact | — | cumulative | blocking | active |
-| `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local | blocking | active |
-| `section-attestations-current` | `Attested([{SectionReviewed, …}])` | every section | — | cumulative | blocking | active |
-| `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative | blocking | active |
-| `integrated-pass-current` | `Attested([{IntegratedPassConducted, Adversarial}])` | every section | — | cumulative | **advisory** | active |
-| `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative | blocking | active |
+| condition | derivation | coverage | observed | reach | activation |
+|---|---|---|---|---|---|
+| `blocking-inquiries-dispositioned` | `Engine(Dispositions)` | — | — | cumulative | active |
+| `materialisation-current` | `Engine(Materialisation)` | — | — | cumulative | active |
+| `governing-context-recorded` | `Attested([{GovernanceConfirmed, User}])` | artefact | `[GovernanceEdges]` | cumulative | pending `IMP-391` |
+| `initial-concerns-recorded` | `Attested([{GraphReviewed, User}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative | pending `IMP-391` |
+| `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | inquiry map | — | cumulative | active |
+| `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local | active |
+| `section-attestations-current` | `Attested([{SectionReviewed, …}])` | every section | — | cumulative | active |
+| `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative | active |
+| `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative | active |
 
 **Retired:** `required-sections-exist` — no implementation to extend, and a
 mandatory section list is craft under `DEC-102`.
@@ -466,16 +520,9 @@ Retiring outright would leave `drafting → reviewing` guarded by
 `materialisation-current` alone, which is trivially true of an empty document."*
 It is a vocabulary addition, not bookkeeping, and is recorded as one.
 
-**Folded, and split:** `integrated-review-present` and `blocking-findings-disposed`
-become `review-disposition-attested`, per `DEC-126`. The *currency* half of
-`integrated-review-present` does not fold — it becomes `integrated-pass-current`,
-advisory, deriving over the same attestation as `review-disposition-attested`'s
-`Conducted` arm with different coverage and different force. Two conditions over
-one act is not duplication: they ask different questions, and the model exists to
-let them differ. Its derivation is already in the tree as
-`ReviewStanding::integrated_current` — *"an integrated adversarial pass covers
-current content"* — so the row costs no new machinery, only a reclassification
-from blocking to warning.
+**Folded:** `integrated-review-present` and `blocking-findings-disposed` become
+`review-disposition-attested`, per `DEC-126`. The pass's *currency* is not folded
+and is not a row — it warns, per the subsection above.
 
 **Corrected:** `user-acceptance-attested`'s coverage is `EverySection`, not
 `Artefact`. `AcceptedDesign` already carries `ContentCoverage`, whose
@@ -491,35 +538,37 @@ buried assumption this section is supposed to refuse.
 
 ### Why each row reaches as far as it does
 
-Reach and force are per-row commitments, so each owes an argument rather than a
-default.
+Reach is a per-row commitment, so each owes an argument — and the argument may
+name only what the row's coverage can observe.
 
-- `blocking-inquiries-dispositioned`, `materialisation-current` — **cumulative,
-  blocking.** Both derive over state that keeps moving after their edge: a
-  regression can re-open nodes, and sections change at every later stage. Locking
-  a design whose bytes nobody materialised locks prose that was never written.
-- `governing-context-recorded` — **cumulative, blocking.** The governance edge
-  set is canonical state outside the run and can change at any point; `DEC-121`
-  exists precisely so the design is not built on unconfirmed governance.
-- `initial-concerns-recorded` — **cumulative, blocking.** The inquiry graph keeps
-  moving, and the artefact binds to its own content, so re-derivation is cheap
-  and catches a graph re-seeded after the acceptance.
-- `user-accepts-sufficiency` — **cumulative, blocking.** The acceptance is over
-  the inquiry map; if the map moves, the acceptance no longer covers it.
-- `drafting-readiness-attested` — **edge-local, blocking.** It is a judgement
-  that drafting may *begin*. Once drafting has happened, re-asserting it at a
-  later edge asks a question with no meaning; the content drift it might have
-  caught is `materialisation-current`'s job, and that row is cumulative. Blocking
-  because `DEC-126` retired the alternative guard on this edge.
-- `section-attestations-current` — **cumulative, blocking.** `DEC-066` on section
-  digests, and repair is bounded: re-attest what moved.
-- `review-disposition-attested` — **cumulative, blocking.** A regression re-opens
-  the design, so disposition must be re-earned; it cannot deadlock, because
-  `Waived` is always available.
-- `integrated-pass-current` — **cumulative, advisory.** Whole-map currency, and
-  unbounded repair. Argued above.
-- `user-acceptance-attested` — **cumulative, blocking.** `EverySection` coverage
-  is the whole point of the row.
+- `blocking-inquiries-dispositioned`, `materialisation-current` —
+  **cumulative.** Engine rows: recomputed from the map and from the watermark
+  against current digests on every evaluation, so they are live by construction.
+- `governing-context-recorded` — **cumulative.** The observed edge set is
+  refreshed each evaluation, so governance changing after the crossing unmakes
+  the confirmation. This is the row's `observed` conjunct doing the work; its
+  artefact coverage holds the dismissals and search evidence.
+- `initial-concerns-recorded`, `user-accepts-sufficiency` — **cumulative**, and
+  this is why both carry `InquiryMap` coverage. A re-seeded or materially changed
+  graph moves the map, so a review or an acceptance made over the old one is no
+  longer current. With `Artefact` coverage the cumulative label would have been
+  inert, which is precisely the error the previous draft made.
+- `drafting-readiness-attested` — **edge-local.** It is a judgement that drafting
+  may *begin*; once drafting has happened, re-asserting it at a later edge asks a
+  question with no meaning, and the content drift it might be imagined to catch
+  is `materialisation-current`'s job, which is cumulative. Its coverage is
+  `Artefact`, so cumulative reach would add nothing observable in any case —
+  edge-local is the honest label, not merely the chosen one.
+- `section-attestations-current`, `user-acceptance-attested` — **cumulative**,
+  on `EverySection` coverage: `DEC-066` over section digests, which is the whole
+  point of both rows.
+- `review-disposition-attested` — **cumulative**, and today the label outruns
+  what its coverage can enforce. `Artefact` coverage means only the disposition
+  record's own content invalidates it; binding it to the finding set — so that
+  new findings unmake a prior disposition — needs the `RV`-backed model
+  `DEC-125` specifies and `IMP-392` builds. Recorded as a gap rather than
+  asserted as a guarantee. Note also that this row sits on the last window, so
+  the reach label is not observable at its own edge either way.
 
 ### The contract table
 
@@ -527,7 +576,6 @@ default.
 pub(crate) struct Contract {
     pub(crate) derivation: DerivationRule,
     pub(crate) reach: Reach,
-    pub(crate) force: Force,
     pub(crate) activation: Activation,
     /// Key of the narrative prose asset — the condition's existing kebab token.
     pub(crate) prose: &'static str,
@@ -544,42 +592,61 @@ specific: a walk over `Condition::ALL` plus a count assertion proves facts about
 `ALL`, `CONTRACTS` and the corpus, and every assertion still passes while the
 variant has no boundary, no contract and no prose.
 
-So the vocabulary and the const rows come from **one generating source** rather
-than being written twice and tested for agreement. A declarative macro takes the
-condition list once — variant, kebab token, contract — and emits the `Condition`
-enum, `Condition::ALL`, and `CONTRACTS` from it. Two of the three sets are then
-equal by construction and cannot be made to disagree, and the third, the prose
-asset corpus, is the only one a test has to check, because it lives outside Rust:
+So these enumerations are not written twice and tested for agreement. **One
+declarative macro takes the condition list once — grouped by the edge each row
+guards, carrying variant, kebab token and contract — and emits the `Condition`
+enum, `Condition::ALL`, `CONTRACTS`, and `boundary_conditions`' match arms.**
 
-- **generated** — `Condition`, `ALL` and `CONTRACTS` from one list;
-- **tested** — every generated key has a prose asset, and the corpus has no key
-  the vocabulary does not.
+Grouping the source by edge is what closes the last hole rather than moving it.
+Generating the vocabulary and the contracts alone would still leave
+`boundary_conditions` hand-written, so a generated condition could hold a
+contract and prose and sit on no boundary at all — never evaluated, never
+rendered, and invisible to a set-equality test over the three sets that *were*
+generated. With the edge as the source's outer key, a condition that guards
+nothing cannot be written down.
 
-This is the same move `STD-001` asks for and the reason `CONTRACTS` is an
+That leaves exactly one enumeration outside Rust, and one test:
+
+- **generated** — `Condition`, `ALL`, `CONTRACTS` and `boundary_conditions`, from
+  one list. Equal by construction; no test can fail because no disagreement is
+  expressible.
+- **tested** — the prose asset corpus: every generated key has an asset, and the
+  corpus has no key the vocabulary does not.
+
+This is the same move `STD-001` asks for, and the reason `CONTRACTS` is an
 enumerable array rather than only a `const fn` match: the array is what the
 generator emits and what the asset test iterates.
 
 ### Invariants
 
-1. **Totality is two-way generated and one-way tested.** Vocabulary, const rows —
-   one source, equal by construction. Prose assets — set-equal by test. A missing
-   match arm fails the build.
-2. **No Claimed tier.** `ConditionKind` has two variants and is a projection of
+1. **Totality is generated, not tested, except at the Rust boundary.**
+   Vocabulary, const rows and boundary membership come from one source and cannot
+   disagree. The prose corpus is set-equal by test. A missing match arm fails the
+   build.
+2. **Every condition guards an edge.** Unrepresentable otherwise: the generator's
+   source is keyed by edge.
+3. **No Claimed tier.** `ConditionKind` has two variants and is a projection of
    `DerivationRule`, so the defect tier is unrepresentable rather than merely
    unused.
-3. **One discharge source.** The discharging act is stated once, in the
+4. **One discharge source.** The discharging act is stated once, in the
    derivation rule. Refusal remedy and rendered prose are both injected from it.
-4. **Derivation is uniform.** `satisfied` has no branch on kind.
-5. **Reach and force are independent.** Neither is derivable from the other, and
-   every row states both. `Advisory` never appears in `GateNotCleared::missing`.
-6. **A guard is evaluated on its own edge and, if `Cumulative`, on every edge
+5. **Derivation is uniform.** `satisfied` has no branch on kind, and takes the
+   whole derived input rather than a parameter per fact class.
+6. **A guard bars a move.** Every condition is blocking; a derived fact that must
+   not bar a move is envelope content, not a row.
+7. **Reach and coverage are independent.** Reach fixes when a guard is
+   re-derived, coverage fixes what can make it fail, and a row's stated argument
+   may name only what its coverage observes.
+8. **A guard is evaluated on its own edge and, if `Cumulative`, on every edge
    above it.** `EdgeLocal` rows are admitted from the crossing edge only.
-7. **Binding is conjunctive.** An attestation covers its own content; every named
-   observed fact must also still match.
-8. **Observed facts are never persisted.** They are transient input; the run
-   stores only the fingerprint an attestation was made over.
-9. **`DEC-101` holds.** The closed `Condition` set remains the key; no
-   satisfaction is sourced from runbook steps or any other open vocabulary.
+9. **Binding is conjunctive.** An attestation covers its own content; every named
+   observed fact must also still match; and every conjunct act must be current
+   against the same covered state.
+10. **Observed facts are never persisted**, and each defines its own projection
+    and encoding. They are transient input; the run stores only the fingerprint an
+    attestation was made over.
+11. **`DEC-101` holds.** The closed `Condition` set remains the key; no
+    satisfaction is sourced from runbook steps or any other open vocabulary.
 
 ### Verification impact
 
@@ -590,42 +657,58 @@ generator emits and what the asset test iterates.
   `sec-1`. Those change legitimately; each change is an argued edit, not a
   green-chase.
 - **Prose coverage** — every generated condition key has a prose asset and the
-  corpus carries no orphan. The vocabulary/`CONTRACTS` equality needs no test: it
-  is generated from one source.
+  corpus carries no orphan. The vocabulary / `CONTRACTS` / boundary equalities
+  need no test: they are generated from one source.
 - **Wrong actor does not satisfy** — an attestation by the wrong `ActorClass`
   leaves the condition unmet. The property the existential scan could not express.
 - **Missing conjunct does not satisfy** — `initial-concerns-recorded` with the
   user's graph review but no agent blocking-set declaration is unmet, *and the
   refusal names which act is missing*.
+- **A stale conjunct does not satisfy** — a graph review made over a superseded
+  inquiry map, paired with a current blocking-set declaration, is unmet. The
+  acts-from-different-eras case.
+- **Coverage invalidates** — an inquiry-map edit unmakes `user-accepts-sufficiency`;
+  a section edit unmakes `user-acceptance-attested`. Both against the incumbent
+  `ContentCoverage` behaviour.
 - **Stale observed fact invalidates** — the governance edge set moving after the
   attestation leaves the condition unmet; an unobservable fact reads as changed.
 - **An empty observed set still binds its artefact** — a governance sweep that
   found nothing, whose search evidence is then edited, is unmet. The strict-path
   case, and the reason `Binding` is conjunctive.
-- **Advisory never blocks** — `integrated-pass-current` failing is reported and
-  absent from `GateNotCleared::missing`, and the move succeeds.
 - **Edge-local is not accumulated** — `drafting-readiness-attested` is required
   crossing `drafting → reviewing` and absent from the enforced set crossing
   `reviewing → locked`.
 - **`Pending` rows are not enforced** — and are still returned by
   `boundary_conditions` for the renderer.
+- **The currency lamp is rendered and never refuses** — a stale integrated pass
+  sets the envelope flag and `reviewing → locked` still succeeds. Tested at the
+  render surface, not the gate, because it is not a condition.
 
 ### Carried forward
 
 - `ActKind`'s full membership is fixed by the sections specifying each act. This
   section fixes that it is closed and that `ActRequirement` pairs it with an actor.
+- **Conjunct ordering** — that a confirming act's artefact covers the declaring
+  act's digest is an artefact-shape requirement, specified in the attested-acts
+  section. Coverage gives simultaneity; only the artefact can give order.
+- **`GovernanceEdges`' projection and encoding** — which relation rows, in what
+  canonical order, under what encoding. Specified with the artefact it is
+  compared against, in the attested-acts section.
 - `ISS-310` is decided in the attested-acts section, with the type cost of each
   candidate answer now stated. It also warns that if this slice ships without
   repairing `review_standing`, the defect survives the slice that named it —
   a scope question for that section.
-- `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`
-  (`DEC-125`). It is an unbuilt variant, not a pending row.
+- **`review-disposition-attested`'s cumulative reach is not yet enforceable.**
+  Binding it to the finding set requires `DEC-125`'s `RV`-backed model
+  (`IMP-392`); until then its `Artefact` coverage means only its own record
+  invalidates it.
+- `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
+  It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
   is enough to justify the seam — the alternative is a special case in `satisfied`
   for exactly one condition — but a second member would test whether the
   refresh/compare/absence semantics generalise.
 - Research currency is the third instance of the reach question and is **not** in
-  this vocabulary. If it ever became a guard it would be advisory on the same
-  termination argument, but it lives outside the design run today and settling it
-  is outside `SL-244`.
+  this vocabulary. It is a warning-shaped fact by the same convergence argument,
+  it lives outside the design run today, and settling it is outside `SL-244`.
 
