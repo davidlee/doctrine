@@ -5,8 +5,8 @@ id = 54
 slug = "scope-a-rev-for-the-mechanism-census-delete-rows"
 title = "Scope a REV for the mechanism-census DELETE rows"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-08-03"
 updated = "2026-08-03"
 tags = ["area:dispatch", "area:governance", "cluster:capsule-spike"]
@@ -25,3 +25,9 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-241"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "scopes this target-state governance revision"
+target = "REV-046"

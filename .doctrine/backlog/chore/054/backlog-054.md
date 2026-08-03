@@ -46,6 +46,33 @@ Almost certainly wants **CHR-053** (the RFC-025 cleanup pass) done first — the
 census's own B1 note is one of that item's four pieces, and scoping a REV against
 a document known to be stale is wasted work.
 
+## Outcome
+
+Scoped as **REV-046 — Adopt dispatch execution capsules at implementation
+cutover**. The Revision is deliberately proposed, unapproved, and unapplied:
+present-tense incumbent governance remains authoritative until a capsule
+implementation reaches an explicit cutover.
+
+The boundary is one product capability with two mechanism containers:
+
+- revise PRD-015 because its product requirements still promise worktree-shaped
+  isolation;
+- add a new capsule mechanism container under SPEC-003, descending from PRD-015;
+- retain and narrow SPEC-012 to solo worktrees plus incumbent dispatch until
+  cutover;
+- revise and move SPEC-021 beneath the capsule container while preserving its
+  lifecycle/state-machine obligations;
+- preserve SPEC-022's OID/candidate/journal/CAS substrate and revise only its
+  topology-dependent population and provenance clauses; and
+- amend ADR-006, ADR-008, ADR-011, and ADR-012 with an explicit target/incumbent
+  boundary, superseding ADR-011 for dispatch only at cutover.
+
+REV-046 needs QUE-200, QUE-201, and QUE-202. It excludes macOS backend selection,
+IMP-397/QUE-204 egress and build-input work, retention/quota configuration,
+solo-worktree migration, and implementation/optimisation. The provisional spec
+coverage map that established this split lives in runtime state at
+`.doctrine/state/chr-054/spec-coverage-map.md`.
+
 ## Related
 
 - **SL-241** — the capsule spike; `.doctrine/rfc/025/go-no-go.md` § 1 is the
