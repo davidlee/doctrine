@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 456
+slug = "a-stale-result-enters-the-existing-object-only-candidate-engine-through-explicit-capsule-provenance"
+title = "A stale result enters the existing object-only candidate engine through explicit capsule provenance; clean and conflicted outcomes are durable, and every clean, hand-resolved, or fix-on-top candidate is freshly verified before immutable-commit admission."
+status = "pending"
+kind = "functional"
+description = "Stale capsule results reuse candidate semantics through explicit capsule provenance and require fresh verification before admission."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "candidate", "staleness", "conflict", "admission"]
+acceptance_criteria = [
+  "The candidate engine receives current accepted commit, pinned source commit, contracted base, and verification attestation without consulting an incumbent coordination journal.",
+  "A clean object-only three-way records Created; a content conflict records Conflicted and halts admission even if classification itself succeeded.",
+  "Clean, hand-resolved, and fix-on-top candidates are verified at their exact immutable commit before admission.",
+  "A second accepted-tip movement records explicit supersession and repeats candidate construction against the new base.",
+]

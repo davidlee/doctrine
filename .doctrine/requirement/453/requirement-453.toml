@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 453
+slug = "trusted-conformance-pins-exactly-one-result-identity-and-checks-contracted-base-ancestry-merge"
+title = "Trusted conformance pins exactly one result identity and checks contracted-base ancestry, merge policy, actual changed paths, declared scope, forbidden paths, modes, submodules, and interpretation obligations from Git objects."
+status = "pending"
+kind = "functional"
+description = "Trusted conformance derives and checks the actual pinned Git-object delta against the immutable work contract."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "conformance", "git", "scope"]
+acceptance_criteria = [
+  "Harvest resolves exactly one result identity and rejects disallowed ancestry, merge shape, refs, modes, gitlinks, submodules, forbidden paths, or undeclared changes.",
+  "Path checks are byte-safe and cannot be evaded by rename representation, quoting, non-ASCII names, symlinks, or lexical traversal.",
+  "A conformance refusal records a stable stage and reason and performs no canonical mutation.",
+]

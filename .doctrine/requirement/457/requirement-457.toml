@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 457
+slug = "repair-is-a-new-transaction-from-the-current-accepted-commit-with-the-frozen-result-as-input"
+title = "Repair is a new transaction from the current accepted commit with the frozen result as input; cleanup requires mechanically recorded incorporation, successful integration and formal closure, or explicit operator abandonment."
+status = "pending"
+kind = "functional"
+description = "Repair uses a fresh transaction and cleanup requires proven incorporation or explicit operator disposition."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "repair", "recovery", "cleanup"]
+acceptance_criteria = [
+  "Repair provisions from the current accepted commit and supplies the frozen result as an input without resuming the source capsule.",
+  "Repair output follows the same conformance, fresh verification, journal, and compare-and-swap path as ordinary candidates.",
+  "Tree similarity alone cannot authorize source cleanup; the journal records mechanical lineage to an integrated result or explicit abandonment.",
+]

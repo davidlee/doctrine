@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 451
+slug = "a-worker-publishes-one-git-bundle-at-a-control-plane-selected-location-before-minimal-notification"
+title = "A worker publishes one Git bundle at a control-plane-selected location before minimal notification; the control plane snapshots hostile bytes once under path, symlink, quiescence, time, byte, and object bounds."
+status = "pending"
+kind = "functional"
+description = "Result publication produces one bounded immutable control-plane-owned bundle snapshot before trusted inspection."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "bundle", "snapshot", "ingestion"]
+acceptance_criteria = [
+  "Missing, symlinked, path-escaping, non-quiescent, oversized, over-time, or over-object-limit results refuse before Git interprets them.",
+  "The result-ready notification carries only transaction identity and readiness, not an authoritative result or verdict.",
+  "Mutation of the capsule publication path after snapshot cannot change the bytes inspected by trusted Git.",
+]

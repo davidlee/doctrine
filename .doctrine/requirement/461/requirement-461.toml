@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 461
+slug = "v0-capacity-handling-emits-a-conspicuous-warning-against-a-configurable-expected-capsule-size-and"
+title = "V0 capacity handling emits a conspicuous warning against a configurable expected capsule size and stops for manual intervention on exhaustion; it performs no pre-reservation, throughput backpressure, automatic eviction, or rescue-archive construction."
+status = "pending"
+kind = "quality"
+description = "V0 capacity handling warns early and fails visibly for manual intervention without automated reservation, backpressure, eviction, or rescue storage."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "capacity", "disk", "v0"]
+acceptance_criteria = [
+  "Provisioning compares available space with a configurable expected capsule size and emits a conspicuous structured warning below the configured threshold.",
+  "An initial default may warn below twice the expected capsule size without reserving that space.",
+  "Capacity exhaustion halts the operation for manual intervention and never triggers automated deletion of a capsule or result.",
+]

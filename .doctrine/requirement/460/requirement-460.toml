@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 460
+slug = "no-failure-staleness-replay-or-cleanup-path-force-updates-canonical-state-auto-resolves-content"
+title = "No failure, staleness, replay, or cleanup path force-updates canonical state, auto-resolves content, resumes a frozen capsule, or automatically destroys unresolved work."
+status = "pending"
+kind = "quality"
+description = "Failure and recovery are non-destructive: no force, silent resolution, capsule resumption, or automated loss of unresolved work."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "non-destructive", "recovery", "safety"]
+acceptance_criteria = [
+  "Adversarial tests cover failed verification, malformed result, stale base, candidate conflict, repeated ref movement, crash replay, and low capacity.",
+  "Every case preserves the last accepted canonical state and all unresolved source work while reporting a stable actionable state.",
+  "No path force-updates a ref, auto-resolves content, resumes harvested mutable state, or deletes unresolved work.",
+]

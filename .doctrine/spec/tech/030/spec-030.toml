@@ -1,0 +1,30 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 30
+slug = "dispatch-execution-capsules"
+title = "Dispatch execution capsules"
+status = "active"
+kind = "tech"
+tags = ["dispatch", "capsule", "isolation", "control-plane", "admission", "verification", "recovery"]
+responsibilities = [
+  "Define the persistent trusted-control-plane and fresh phase-capsule authority split: capsule workers may mutate local state and commits but hold no canonical repository, credential, shared-object-store, or control-plane mutation authority.",
+  "Own the capsule transaction lifecycle: resolve contract, provision, launch, notify, snapshot, harvest and freeze, conform, verify in a separate capsule, normalize, admit or integrate, close, and explicit cleanup.",
+  "Own contracted-base and interpretation-policy provenance: resolve the required project declaration from the accepted base, bind it immutably to the transaction, and allow phase contracts only monotonic restriction.",
+  "Specify hostile result ingestion through one bounded parent-owned Git-bundle snapshot and a fresh quarantine repository, with no trusted Git execution in capsule-authored repositories.",
+  "Specify exact-candidate verification, durable admission journaling, expected-tip compare-and-swap, idempotent recovery, and report-and-halt failure semantics.",
+  "Adapt the existing candidate engine to capsule provenance for stale and conflicted results while preserving immutable-commit admission and fresh-capsule repair.",
+  "Own the live-work, durable-journal, and forensic-exhibit lifecycle: unresolved source capsules remain frozen and non-evictable; post-close exhibits may follow separately-owned retention policy.",
+  "Define a platform-backend contract by equivalent authority and confinement properties, naming Linux/bubblewrap only as the measured initial backend."
+]
+
+category = "dispatch"
+c4_level = "container"
+descends_from = "PRD-015"
+parent = "SPEC-003"
+
+# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
+#   [[source]]
+#   language = "rust"
+#   identifier = "doctrine/cli"
+#   module = "doctrine::cli"   # optional

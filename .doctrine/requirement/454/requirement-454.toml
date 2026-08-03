@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 454
+slug = "the-exact-normalized-candidate-that-may-be-admitted-is-verified-in-a-separate-fresh-capsule-under"
+title = "The exact normalized candidate that may be admitted is verified in a separate fresh capsule under the bound policy; the verifier process result and trusted evidence capture, not capsule prose, determine the verdict."
+status = "pending"
+kind = "functional"
+description = "A separate fresh capsule verifies the exact normalized candidate that admission would name."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "verification", "normalization", "identity"]
+acceptance_criteria = [
+  "The verification capsule receives the candidate immutable identity, bound policy, declared verification sequence, and no authority over canonical state.",
+  "All declared verification rows run in order without trusted-side shell evaluation of candidate content, and all must succeed.",
+  "The journaled verified identity equals the later admitted identity; worker-authored logs or claims cannot substitute for the trusted verdict.",
+]

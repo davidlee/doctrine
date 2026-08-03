@@ -68,3 +68,13 @@ primary = false
 target = "ADR-012"
 action = "modify"
 primary = false
+
+[[change]]
+target = "ADR-020"
+action = "modify"
+primary = false
+
+[[change]]
+target = "SPEC-030"
+action = "modify"
+primary = false

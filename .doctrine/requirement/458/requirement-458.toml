@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 458
+slug = "the-durable-admission-journal-records-identities-policy-verdicts-transitions-and-exhibit-lifecycle"
+title = "The durable admission journal records identities, policy, verdicts, transitions, and exhibit lifecycle; unresolved source capsules remain frozen live work while post-close forensic exhibits may follow separately-owned retention policy."
+status = "pending"
+kind = "functional"
+description = "Admission truth is durable; unresolved capsules are retained live work and only post-close artifacts enter the forensic-retention lifecycle."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "journal", "retention", "forensics", "lifecycle"]
+acceptance_criteria = [
+  "The admission journal retains identities, policy hash, verdicts, transitions, and exhibit disposition independently of richer artifacts.",
+  "No automated cleanup, expiry, eviction, or supersession event removes a capsule whose result is unresolved.",
+  "After successful incorporation, integration, and formal closure, forensic exhibits may expire without deleting or rewriting journal truth.",
+]

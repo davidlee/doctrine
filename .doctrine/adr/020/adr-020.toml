@@ -1,0 +1,32 @@
+schema = "doctrine.adr"
+version = 1
+
+id = 20
+slug = "adopt-execution-capsules-as-the-dispatch-authority-boundary"
+title = "Adopt execution capsules as the dispatch authority boundary"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = ["dispatch", "capsule", "isolation", "authority", "admission", "recovery"]
+
+[relationships]
+# `supersedes` stays typed — author with `doctrine supersede ADR-NNN <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-NNN related <target>`.
+supersedes    = []
+superseded_by = []   # set on the old ADR by F1; reverse link is derived
+
+[[relation]]
+label = "related"
+target = "ADR-006"
+
+[[relation]]
+label = "related"
+target = "ADR-008"
+
+[[relation]]
+label = "related"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "ADR-012"

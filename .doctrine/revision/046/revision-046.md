@@ -52,6 +52,16 @@ unmeasured admission claim.
 
 ## Governance boundary
 
+### Target capsule ADR — ADR-020 (`modify`)
+
+ADR-020 now records the project-wide target architecture: a persistent trusted
+control plane, fresh headless phase and verification capsules, bundle-snapshot
+ingestion, durable journaled admission, capsule-provenance candidate recovery,
+and frozen-source/fresh-repair lifecycle. It is accepted as forward intent, not
+as a claim that capsule dispatch has shipped. ADR-011 and the incumbent dispatch
+architecture remain present-tense authority until this Revision's cutover gates
+clear; an eventual supersession/status change belongs to that cutover.
+
 ### Product altitude — PRD-015 (primary, `modify`)
 
 PRD-015 already owns the correct capability: concurrent work in isolated units,
@@ -95,9 +105,9 @@ closed; formal repair always uses a fresh capsule. Capacity handling begins
 with a conspicuous configurable free-space warning and manual intervention,
 not a new archive, pre-reservation, backpressure, or eviction subsystem.
 
-The new container and its requirements are not created by this scoping chore.
-They are authored when QUE-200–202 are settled and then added to this Revision's
-touched set before approval.
+SPEC-030 now authors this container and its pending requirements from the settled
+QUE-200–202 decisions. ADR-020 and SPEC-030 are both in this Revision's touched
+set so later approval and apply cannot bypass the target contract they establish.
 
 ### SPEC-012 — retain and narrow (`modify`)
 
@@ -196,8 +206,9 @@ Before this Revision may be approved or applied:
 
 1. QUE-200, QUE-201, and QUE-202 are settled and their decisions are reflected
    in the target ADR/spec and requirement statements.
-2. The new capsule ADR and technical container exist and are included in the
-   Revision's touched set.
+2. ADR-020 and SPEC-030 remain included in the Revision's touched set, and any
+   later implementation design conforms to their authority, recovery, and
+   lifecycle contracts.
 3. A planned implementation proves uniform headless worker launch, explicit
    contracted bases, Linux/bwrap confinement, trusted-side ingestion,
    separate-capsule verification, normalization, durable admission journaling,

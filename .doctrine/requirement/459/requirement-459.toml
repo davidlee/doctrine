@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 459
+slug = "every-platform-backend-enforces-equivalent-freshness-filesystem-process-credential-network-resource"
+title = "Every platform backend enforces equivalent freshness, filesystem, process, credential, network, resource, and canonical-authority properties; Linux/bubblewrap is the only measured initial backend and macOS remains unselected."
+status = "pending"
+kind = "functional"
+description = "Platform backends prove one property-equivalent capsule contract; only independently measured backends are supported."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "backend", "confinement", "platform"]
+acceptance_criteria = [
+  "A shared conformance suite proves fresh mutable state, explicit inputs, bounded filesystem and network reach, process-tree teardown, resource observation, and denial of canonical state and credentials.",
+  "Linux/bubblewrap may become the initial supported backend from SL-241 evidence and production acceptance tests.",
+  "No macOS or other backend claims support until its mechanism passes the same property suite independently.",
+]

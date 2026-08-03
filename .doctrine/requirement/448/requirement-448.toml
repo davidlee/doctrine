@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 448
+slug = "the-trusted-control-plane-is-the-sole-canonical-mutation-authority-a-capsule-worker-may-mutate"
+title = "The trusted control plane is the sole canonical mutation authority; a capsule worker may mutate local state and commits but cannot mutate canonical repositories, refs, credentials, shared object storage, or control-plane state."
+status = "pending"
+kind = "functional"
+description = "The trusted control plane is the sole canonical mutation authority; capsule authority ends at its local transaction boundary."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "authority", "control-plane"]
+acceptance_criteria = [
+  "A worker can modify its capsule checkout and create local commits while writes to canonical refs, shared object storage, control-plane state, and credential locations are denied by the backend.",
+  "Only a trusted control-plane transition can change the accepted canonical identity.",
+  "Worker output, exit status, branch names, and prose are treated as evidence and never as admission authority.",
+]

@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 450
+slug = "every-phase-worker-and-every-verifier-launches-headlessly-in-fresh-mutable-capsule-state-from"
+title = "Every phase worker and every verifier launches headlessly in fresh mutable capsule state from explicit immutable inputs; harvested capsules never resume formal execution."
+status = "pending"
+kind = "functional"
+description = "Phase execution and verification use separate fresh mutable capsules created from explicit immutable inputs."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "freshness", "verification"]
+acceptance_criteria = [
+  "Two phase transactions do not share mutable checkout, repository, runtime, process, or temporary state.",
+  "Verification runs in a capsule distinct from the source capsule and is pinned to the candidate identity.",
+  "After harvest the source capsule cannot re-enter a formal running state; repair provisions a new transaction.",
+]

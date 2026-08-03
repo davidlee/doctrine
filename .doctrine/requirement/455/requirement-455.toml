@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 455
+slug = "admission-journals-intent-before-canonical-mutation-prechecks-the-expected-accepted-tip-before"
+title = "Admission journals intent before canonical mutation, prechecks the expected accepted tip before object transfer, and advances once by expected-old-object compare-and-swap with idempotent replay classification."
+status = "pending"
+kind = "functional"
+description = "Admission is journal-before-mutation, prechecked before transfer, expected-tip compare-and-swap, and idempotently replayable."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "admission", "journal", "cas", "recovery"]
+acceptance_criteria = [
+  "The durable journal records contracted, pinned, normalized, verified, expected-old, and planned-new identities before canonical mutation.",
+  "A stale accepted tip detected before transfer imports no objects into the canonical repository.",
+  "A race after transfer cannot advance an unexpected ref and leaves at most unreachable objects available to ordinary garbage collection.",
+  "Replay classifies already-applied, still-applicable, and diverged states without force, duplicate mutation, or automatic resolution.",
+]

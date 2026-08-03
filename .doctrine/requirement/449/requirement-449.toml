@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 449
+slug = "each-transaction-binds-an-immutable-accepted-base-and-a-required-interpretation-policy-resolved"
+title = "Each transaction binds an immutable accepted base and a required interpretation policy resolved from that base; a phase work contract may only restrict permissions and strengthen verification."
+status = "pending"
+kind = "functional"
+description = "Each capsule transaction binds the accepted-base interpretation policy, and phase contracts can only narrow it."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "contract", "interpretation", "provenance"]
+acceptance_criteria = [
+  "Capsule provisioning refuses a missing block, missing required key, unknown key, unsupported schema version, invalid normalized value, or empty verification sequence.",
+  "The parser accepts the SPEC-030 v1 typed schema and produces one canonical hash while preserving verification and argument order and sorting set-valued lists after duplicate rejection.",
+  "Rewriting `.doctrine/doctrine.toml` in a capsule or harvested result cannot change the bound policy or verification sequence.",
+  "A phase contract may add forbidden entries and append verification rows but cannot remove or reorder project checks or widen any permission.",
+]

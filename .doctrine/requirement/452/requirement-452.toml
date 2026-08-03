@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 452
+slug = "trusted-git-reads-only-the-parent-owned-bundle-snapshot-through-a-fresh-quarantine-repository-and"
+title = "Trusted Git reads only the parent-owned bundle snapshot through a fresh quarantine repository and never uses a capsule-authored repository as repository or working context."
+status = "pending"
+kind = "functional"
+description = "Trusted Git ingests only the owned snapshot in a fresh quarantine repository, never the capsule repository itself."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["capsule", "git", "quarantine", "ingestion"]
+acceptance_criteria = [
+  "Every trusted Git invocation during harvest has a control-plane-created quarantine repository and working context.",
+  "Capsule-authored local config, hooks, alternates, environment files, and repository metadata cannot affect trusted-side behaviour.",
+  "Fetch from a capsule-authored repository is absent as both primary path and fallback, and quarantine is disposable after pinning.",
+]
