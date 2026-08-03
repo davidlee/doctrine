@@ -41,18 +41,43 @@ FX_ROOT="${SPIKE_CAPSULE_ROOT:-${HOME}/capsules-shake}"
 
 FX_OUT=''
 
-# fx_run <mutant-file> <row> [fixture…]
+# Which probe a sweep perturbs, and which variable carries its overlay. Two
+# defaults rather than two parameters: P-C3 is the only probe through T5, so
+# every existing call site stays byte-identical, and a driver for another probe
+# states the pair once at the top instead of threading it through every run.
 #
-# One `rig c3 <row>` run under the overlay, output captured. Never piped: a pipe
-# reports the READER'S exit status, and the whole point here is the run's own.
+# The overlay names are per-probe on purpose. They are recorded in each results
+# file's preamble as `MUTATED=`, so one shared name would let a mutated P-C3 run
+# and a mutated guards run stamp the same marker into two files that mean
+# different things by it.
+FX_PROBE=c3
+FX_MUTANT_ENV=SPIKE_C3_MUTANT
+
+# fx_run <mutant-file> <subject> [more…]
+#
+# One `rig ${FX_PROBE} <subject>` run under the overlay, output captured. Never
+# piped: a pipe reports the READER'S exit status, and the whole point here is
+# the run's own.
 fx_run() {
-  local mutant=$1 row=$2 log
+  local mutant=$1 subject=$2 log
   shift 2
   log=$(mktemp)
-  SPIKE_C3_MUTANT="${mutant}" SPIKE_CAPSULE_ROOT="${FX_ROOT}" \
-    "${FX_RIG}/rig" c3 "${row}" >"${log}" 2>&1 || true
+  env "${FX_MUTANT_ENV}=${mutant}" SPIKE_CAPSULE_ROOT="${FX_ROOT}" \
+    "${FX_RIG}/rig" "${FX_PROBE}" "${subject}" >"${log}" 2>&1 || true
   FX_OUT=$(cat "${log}")
   rm -f -- "${log}"
+}
+
+# fx_case <label> <mutant-file> <subject> — header, then one run under the
+# overlay, for a sweep that asserts FREELY over the capture afterwards.
+#
+# The three shapes below each bake in the red pattern they expect, which suits a
+# matrix cell and does not suit a probe whose clauses have no common shape. T5
+# kept this local on the "one caller does not earn a library entry" rule; T6 is
+# the second caller, so it is lifted here as that note said it would be.
+fx_case() {
+  printf '\n───── %s ─────\n' "$1"
+  fx_run "$2" "$3"
 }
 
 # fx_reds — how many assertions failed in the captured run.

@@ -31,21 +31,13 @@ export SPIKE_C3_LEGS=conflict
 
 M="${FX_HERE}/mutants"
 
-# t5_run <n> <mutant> <row> — header, then one run under the overlay.
-#
-# Local rather than a fifth shape in `falsify-lib.sh`: the three shapes there
-# each bake in the red pattern they expect, and this round asserts freely over
-# the capture instead. One caller does not earn a library entry — if T6 wants
-# the same, it is lifted then.
-t5_run() {
-  printf '\n───── %s ─────\n' "$1"
-  fx_run "$2" "$3"
-}
-
+# `fx_case` was `t5_run`, local here, on the "one caller does not earn a library
+# entry" rule. T6 became the second caller and it moved to `falsify-lib.sh`
+# exactly as that note said it would — same body, same behaviour.
 printf 'falsify T5 — four mutants, root %s\n' "${FX_ROOT}"
 
 # ── M32 — canonical's half is not from B ────────────────────────────────────
-t5_run m32 "${M}/m32-peer-not-from-b.sh" H10
+fx_case m32 "${M}/m32-peer-not-from-b.sh" H10
 fx_show 12
 fx_red_on 'm32: the parentage clause REDS — the peer is no longer a child of B' \
   'child of B'
@@ -58,7 +50,7 @@ fx_held 'm32 isolation: … so the conflict itself was never what the clause was
 #
 # The classification clause's only chance to be wrong: this is the run where the
 # row is legitimately `created` rather than `conflicted`.
-t5_run m33 "${M}/m33-halves-agree.sh" H10
+fx_case m33 "${M}/m33-halves-agree.sh" H10
 fx_show 12
 fx_red_on 'm33: the classification REDS — the ledger says created, not conflicted' \
   'records the Conflicted classification'
@@ -70,7 +62,7 @@ fx_held 'm33 isolation: … and F3 still cleared the phase-completion gate' \
   'phase-completion gate'
 
 # ── M34 — trunk never moves ─────────────────────────────────────────────────
-t5_run m34 "${M}/m34-trunk-never-moves.sh" H16
+fx_case m34 "${M}/m34-trunk-never-moves.sh" H16
 fx_show 14
 fx_red_on 'm34: the staleness control REDS — nothing advanced past the pinned base' \
   'canonical moved to a CHILD'
@@ -85,7 +77,7 @@ fx_held 'm34 isolation: BOTH admissions still hold — admission never noticed e
 # the trunk really did advance, on the same disjoint path — so the planted
 # control holds while the refusal reds. A leg asserting only "it moved and
 # integrate refused" would score this green.
-t5_run m35 "${M}/m35-move-before-pinning.sh" H16
+fx_case m35 "${M}/m35-move-before-pinning.sh" H16
 fx_show 14
 fx_red_on 'm35: the refusal REDS — a candidate minted on the moved base fast-forwards' \
   'integrate refuses a close target'

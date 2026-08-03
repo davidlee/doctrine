@@ -652,14 +652,37 @@ guards_expected() {
 
 expected=$(guards_expected "${guards[@]}")
 
+# ── the falsifiability overlay (F-P05-31's middle beat) ─────────────────────
+#
+# An OPTIONAL file of rebinds, the same affordance `SPIKE_C3_MUTANT` gives P-C3
+# and for the same reason: a clause shown to red against a REAL perturbation is
+# worth more than one hand-waved against a hypothetical. A mutant WRAPS a named
+# seam and calls through — it never owns a copy of the body — so its red is
+# evidence about the function this probe actually runs.
+#
+# LOADED HERE, and the position is load-bearing twice over. It is after every
+# definition, so a mutant can see the probe's own seams and not merely the four
+# libraries. And it is after `guards_positive_control`, which has therefore
+# already run UNMUTATED — a mutant must not be able to quiet the check that
+# proves the observables work.
+#
+# Inert when unset, so a scored run is byte-identical to one without it.
+if [ -n "${SPIKE_GUARDS_MUTANT:-}" ]; then
+  [ -r "${SPIKE_GUARDS_MUTANT}" ] || rig_die "no such mutant overlay: ${SPIKE_GUARDS_MUTANT}"
+  rig_warn "FALSIFY MODE: overlay ${SPIKE_GUARDS_MUTANT} — this run is NOT evidence"
+  # shellcheck source=/dev/null
+  . "${SPIKE_GUARDS_MUTANT}"
+fi
+
 for guard_id in "${guards[@]}"; do "guard_${guard_id}"; done
 
 printf '\n'
 rows_assert_complete 'VA-2' "${expected}"
 
 rows_write "${REPORT}" "${GUARDS_COLUMNS}" \
-  "$(printf 'guards: %s\tin-jail\tguards=%s' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${guards[*]}")"
+  "$(printf 'guards: %s\tin-jail\tguards=%s%s' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${guards[*]}" \
+    "${SPIKE_GUARDS_MUTANT:+$(printf '\tMUTATED=%s' "${SPIKE_GUARDS_MUTANT##*/}")}")"
 
 printf '\nresults: %s\n' "${REPORT}"
 printf '%s\n' "${ROWS_RECORDED[@]}" | cut -f1,2,3,4,5 | sed 's/^/  /'
