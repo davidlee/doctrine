@@ -43,8 +43,17 @@ Stated at the outset so later sections argue against a fixed list rather than a
 remembered one. Each is a live risk to this design, not a general caution.
 
 - **Snapshot versioning.** A shape change to the design-run snapshot costs the
-  one live run there is — `SL-243`'s. It sits in the gitignored runtime tier, so
-  the cost is bounded, but it is not zero and it is not recoverable.
+  live runs there are. The snapshot is gitignored runtime state, so the cost is
+  bounded; today it is also *known*, having been read off the one such run rather
+  than inferred. `SL-243` holds no section attestations, so the review policy
+  costs it nothing and the two new act groups start empty. It holds one value in
+  the acceptance slot that retires into `CheckpointAct`, carrying no act to
+  migrate as. And it clears `user-accepts-sufficiency` through an evidence row
+  this design replaces with an act that cannot be reconstructed from what is
+  stored — an active, cumulative row, so it bars the next forward move. `SL-243`
+  has not been drafted, so re-giving one acceptance is the whole repair. The
+  concern is retained because the next live run need not be this cheap, not
+  because this one is expensive.
 - **Envelope byte budget.** The refusal path has no byte budget; the envelope has
   a hard one, and `clearances` already rides it uncapped. Anything this design
   adds to the envelope competes with that.
@@ -1112,6 +1121,12 @@ plus `ContentCoverage` — which is exactly `CheckpointAct` (below) with
 duplication it inherited. `DesignAccepted` becomes a `CheckpointAct` and
 `LockAcceptance` retires into it.
 
+The subsumption is of the **type**, not of whatever the slot currently holds.
+Because any run-level acceptance writes it, a stored value carries no act to
+migrate as, and a migration that assumed `DesignAccepted` would mislabel one.
+With a single live run that has not been drafted, that is a hand repair rather
+than a mechanism — recorded so nobody writes the assuming migration.
+
 That leaves **three** record shapes for eight acts, where an earlier draft
 carried four: `CheckpointAct` for the five user acts given at a checkpoint,
 `AgentDeclaration` for the two agent acts, and `Attestation` for the one act that
@@ -1177,11 +1192,16 @@ from is not kept, so at evaluation time there is no material to recompute the
 comparison against. A digest whose preimage is gone can detect nothing; it can
 only be carried.
 
-**It never reaches the snapshot.** A checkpoint's acceptance rides a
-`CheckpointPlan` and is journalled. `ReviewGroup` (`snapshot.rs:322-334`) holds
-exactly `attestations`, `findings`, `integrated` and `acceptance: LockAcceptance`.
-A gate whose signature is `DesignSnapshot` plus `DerivedInput` cannot see a
-checkpoint acceptance at all.
+**What reaches the snapshot reaches a slot with no act identity.** A checkpoint's
+own `cp-`-scoped acceptance rides a `CheckpointPlan` and is journalled, so a gate
+reading `DesignSnapshot` plus `DerivedInput` never sees it. The *run-level*
+`AcceptanceDeclaration` does reach the snapshot — into `ReviewGroup`'s single
+`acceptance` slot (`snapshot.rs:322-334`), which `run.rs:334-347` overwrites on
+every accepted declaration at any stage, last-write-wins. `SL-243` is the
+demonstration: at `drafting`, never locked, holding one acceptance whose basis is
+its own `inquiring → drafting` settle-and-advance. So the incumbent offers one
+unnamed acceptance where this design needs five named ones — the first reason
+again at run scope, and the reason `CheckpointAct` is replaced *by act*.
 
 So they get a persisted, snapshot-admitted record — the four above, and
 `DesignAccepted` joining them per the subsection on record shapes:
@@ -1562,12 +1582,12 @@ whole of what it is for.
 as an `impl From`, not a merge. `sec-3` refused to unify the three actor-ish
 vocabularies and that refusal stands; this is the one direction it required.
 
-**Cost, stated.** `SL-243` is the one live run and attested its sections
-adversarially. Under the policy it is repaired by declaring its policy
-`AdversarialOnly` — a command against runtime state rather than a hand-edit of
-it.
-The escape hatch the one live run needs turns out to be the one the product
-already wanted, which is some evidence the shape is right.
+**Cost, stated — and it is not this policy's.** `SL-243` is the one live run and
+it holds no section attestations at all (`[review] attestation = []`), so
+`HumanOnly` costs it nothing and `AdversarialOnly` would buy it nothing. An
+earlier draft claimed it had attested adversarially and offered the policy as its
+repair; that was reasoned from this design instead of read off the run. What the
+run does lose is `sec-2`'s to record, and none of it is a policy question.
 
 ### `ActorClass::Adversarial` is reachable, but no static row names it
 
@@ -1755,14 +1775,13 @@ missing answer.
 - **`DEC-073`'s policy is built here, not decided here.** No superseding record
   is owed. What this slice adds is the binding from the policy to
   `section-attestations-current`, and the two derivations that read it.
-- **`SL-243` is repaired by policy**, not by hand: declaring `AdversarialOnly`
-  clears it.
+- **`SL-243` needs no policy repair.** It holds no section attestations, so the
+  lane question never arises for it. Its actual cost is `sec-2`'s to record.
 - **The snapshot changes in four ways, not one** — `ReviewPolicy` on the run
   header, a checkpoint-act group, an agent-declaration group, and
   `LockAcceptance` retiring into `CheckpointAct`. The last is a migration rather
   than an addition, and is the only one that touches data an existing run already
-  holds. `sec-2` records one shape change as this slice's cost to the one live
-  run; that passage must be revisited before planning.
+  holds. `sec-2` carries the cost, read off `SL-243` rather than inferred.
 - **The policy is not a security boundary**, and the design says so. If a later
   slice wants it to be one, the missing piece is not a stricter gate but a way to
   distinguish a user's payload from an agent's — which is `DEC-088`'s standing
