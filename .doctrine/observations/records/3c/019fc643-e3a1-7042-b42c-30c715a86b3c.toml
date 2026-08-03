@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc643-e3a1-7042-b42c-30c715a86b3c"
+recorded_at = "2026-08-03T06:16:05.79306067Z"
+kind = "friction"
+summary = "phase sheet named a writer verb as the read surface (/execute, SL-241 T8)"
+detail = "PHASE-06's sheet instructed 'doctrine knowledge status is the surface' for surveying QUE-200's evidence before ruling on EX-9. `knowledge status` is a WRITER — 'Set a knowledge record's status', usage 'knowledge status <ID> <STATE>' — so it errored on missing args. The read surfaces are `knowledge show` (both tiers) and `knowledge inspect` (metadata only). Costs one wasted call plus the --help round trip to recover. Root cause is a plausible-sounding verb name doing double duty across the corpus: several kinds expose `status` as a lifecycle WRITER while readers habitually expect `status` to mean 'survey' (cf. `doctrine status`, `review status`, `rfc status`, which ARE surveys). The kind-level `<kind> status` verbs are not uniform in direction, and nothing at the call site signals which sense applies."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

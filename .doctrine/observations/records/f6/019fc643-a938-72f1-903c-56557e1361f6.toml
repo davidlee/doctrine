@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc643-a938-72f1-903c-56557e1361f6"
+recorded_at = "2026-08-03T06:15:50.840339859Z"
+kind = "friction"
+summary = "doctrine link surfaces one constraint per rejection (/execute, SL-241 T11)"
+detail = "Linking a new backlog item to RFC-025 took three attempts because each rejection revealed exactly one constraint and nothing about the next. (1) 'doctrine link CHR-053 references RFC-025' → '`references` requires a role — author it with --role <originates_from|concerns>'. (2) adding --role originates_from → '`references` target must be one of [ISS, IMP, CHR, RSK, IDE, SL], got a RFC'. The second constraint was knowable at parse time from the first invocation and would have saved a round trip. Both messages are individually good — the cost is that they are serialised. A validator that reported all violated constraints for the attempted (source, label, target, role) tuple at once would collapse three calls into one. Cheap to hit repeatedly: any skill lodging follow-ups links entities it did not create."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

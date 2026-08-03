@@ -1,9 +1,9 @@
 id = 241
 slug = "capsule-spike-rig"
 title = "Capsule spike rig"
-status = "started"
+status = "audit"
 created = "2026-08-01"
-updated = "2026-08-01"
+updated = "2026-08-03"
 tags = []
 
 [relationships]
