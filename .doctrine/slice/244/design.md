@@ -643,8 +643,10 @@ because both are wanted: a review conducted, or a review declined for a stated
 reason. The gate's job is to make the choice deliberate and legible, not to
 extract a toll — a user who decides this design does not need another
 adversarial pass says so, and the run advances carrying the reason. What
-`IMP-392` unblocks is the `Conducted` arm, which is the *stricter* path; nothing
-about the waiver is provisional.
+`IMP-392` unblocks is the `Conducted` arm's predicate; nothing about the waiver
+is provisional. Nor is `Conducted` the *stricter* arm in any general sense — it
+is the only one that can be unmet, but it is also satisfiable over an empty
+ledger. `DEC-138` below fixes what each arm actually requires.
 
 **A waiver disposes of one pass, not of the run's capacity to be reviewed.** Two
 mechanisms already give this and neither says so, so a reader assembles it from
@@ -660,13 +662,30 @@ unwind and no special case.
 **What the user is bound to is responding, not agreeing** — `DEC-138`, and it
 fixes both arms at once.
 
-`Conducted { review }` is satisfied while the minted `RV` is **not awaiting the
-responder** on a `blocker`. Naming an `RV` is not itself the discharge: findings
-raised and sitting in the responder's court hold the edge. But the raiser's
-assent is not required either, and that is the sharp half. `contest` hands a
-finding back for re-disposition, so a rule wanting *terminal* resolution would
-let a contesting raiser own the responder's progression indefinitely. Disposal is
-something the responder can always perform; assent is not theirs to give.
+`Conducted { review }` is satisfied while the minted `RV` carries no finding that
+is both `blocker`-severity **and** in `open` or `contested` state. Findings
+sitting in the responder's court hold the edge; the raiser's assent is not
+required, and that is the sharp half.
+
+**The property is not that contest cannot re-block — it can — but that the
+responder always holds an act that clears.** `contest` moves a finding
+`answered → contested` (`review.rs:2354`), which is blocking again, and the
+responder's re-disposal clears it again. Compare terminal resolution, which
+blocks on `{open, answered, contested}`: there, disposing moves `open → answered`
+and the edge stays shut, so **no act available to the responder opens it** — only
+the raiser's `verify` or `withdraw` does. That is the whole difference between an
+obligation to respond and a wait on someone else's assent, and it is one state
+wide.
+
+**The predicate is per-finding, and deliberately not the review-level `await`.**
+`derived_status` (`review.rs:1009-1022`) reads `status` and never `severity`, so
+`await == Responder` fires on an open `nit` — binding to it would hold this edge
+for a typo. Its own doc says as much: *"a priority summary … never an exclusive
+gate — the turn gate is per-finding `can`."* The filter this row needs is written
+by this slice: D-C9b's `doc_unresolved_blockers` (`review.rs:1490`) is
+`severity == Blocker && status ∉ {verified, withdrawn}`, which is the same test
+minus the state restriction — it counts `answered`, and that one difference is
+what this row turns on.
 
 `Waived { reason }` is satisfied **unconditionally** — before a review, or over
 live findings. An earlier draft made it inadmissible while findings were
@@ -688,22 +707,43 @@ retraction of the whole review is worse than letting them say what they mean —
 and it is the shape this design refuses everywhere else. The fence is the one
 `sec-4` argues for the review policy: **authority and visibility, not
 prohibition.** Both arms are user acts carrying an `AcceptanceDeclaration`, so
-`AcceptanceAttestation::bind` is the only route and `DEC-088`'s guarantee is
-carried; both land in the change log. A stricter gate would be theatre, because
-the agent drives the CLI. Whatever an implementation calls this mechanism, the
-property it must preserve is that **an agent cannot author either arm.**
+`AcceptanceAttestation::bind` is the only route; both land in the change log.
+
+**And no more than that.** It is presentation and trace, not prevention: `--as` is
+cooperative role assertion and explicitly not a security boundary (`ADR-007`,
+`review.rs:2813`), and an `AcceptanceDeclaration` cannot distinguish a user's
+payload from an agent's — `DEC-088`'s standing limitation, which this slice does
+not close. So the achievable property, and the one an implementation must keep, is
+that **either arm must be taken in the user's name and must leave a change row.**
+An agent that wants past this gate can take it; what it cannot do is take it
+quietly, or as its own.
 
 **Why this does not reintroduce the fixpoint**, stated because it is the row that
-motivated making currency a lamp. The binding is to **whose turn it is**, and
-responding is monotone — the responder can always dispose, and disposing passes
-the baton, so the requirement terminates. Binding to the raiser's assent does not
-terminate, for the contest reason above. Binding to **content currency** does not
-either, because integrating a finding moves the sections the pass covered, which
-is `RFC-026` E3 and `DEC-126`'s stated reason for refusing it. One row, three
-candidate bindings, one of them terminating.
+motivated making currency a lamp — and stated carefully, because the obvious
+claim here is too strong. Disposal is always available to the responder, so they
+are never stuck. But finding state is **not** monotone: `contest` cycles
+`answered` back to `contested`, so the block alone bounds nothing. **Termination
+comes from the waiver**, which is the second reason that arm cannot carry a
+precondition. What the alternatives lack is not a weaker version of this — binding
+to the raiser's assent has no exit at all, and binding to **content currency**
+diverges outright, because integrating a finding moves the sections the pass
+covered (`RFC-026` E3, and `DEC-126`'s stated reason for refusing it).
+
+**`Conducted` over an empty ledger is satisfiable, and that is accepted.**
+`DEC-125` mints the `RV` on *entry* to `reviewing`, and an empty finding list
+reads as `(Done, None)` — so the arm can name a review that has not happened.
+This is not the empty-draft defect this section refuses for `PerSection`: there,
+an `EverySection` spelling would report the row satisfied with **no act performed
+at all**, vacuous truth straight out of the engine. Here the row is always
+discharged by a user disposition carrying an acceptance, so a user naming
+`Conducted` over an unreviewed `RV` has made a false statement in a durable
+record rather than slipped past a gate. The two cases differ in whether anybody
+acted. Demanding evidence that a review *occurred* is the toll `DEC-138` refuses,
+and it would misfire anyway: a clean review that finds nothing is
+indistinguishable from one never run, by construction.
 
 **Two gates read this `RV` under different rules, deliberately.** This row gates
-the design run's `reviewing → locked` on *not awaiting the responder*; the `RV`
+the design run's `reviewing → locked` on *undisposed blockers*; the `RV`
 close-gate (D-C9b) gates the **slice's** `audit → reconcile` and
 `reconcile → done` on every `blocker` being terminal — verified or withdrawn.
 Different subjects at different altitudes: advancing a design run is not closing
@@ -1038,10 +1078,12 @@ generator emits and what the asset test iterates.
   naming an `RV` that awaits the responder on a `blocker` leaves
   `review-disposition-attested` unmet, and the refusal names the finding. Needs
   `IMP-392`'s finding set, so it is specified here and lands with that item.
-- **A contested finding does not hold it again** — the responder disposes, the
-  raiser contests, and the edge still clears. `DEC-138`'s sharp half, and the
-  case that separates *responding* from *agreeing*; without it a contesting
-  raiser owns the responder's progression.
+- **A contested finding holds it again, and one disposal clears it again** — the
+  responder disposes and the edge clears; the raiser contests and it is unmet;
+  the responder re-disposes and it clears. Asserted as the three-step cycle
+  rather than as a single edit, because the property is not *contest cannot
+  re-block* — it can — but that **the responder always holds an act that
+  clears**. Under terminal resolution there is no such act.
 - **A waiver clears over live findings, and dismisses none of them** — a
   `Waived { reason }` disposition with blockers undisposed clears the edge, and
   the findings are still on the `RV`, still undisposed, with the reason in the
