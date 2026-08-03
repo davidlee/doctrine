@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # control/probe-c1b.sh — P-C1b, the REAL AGENT executing a real red→green phase.
 #
-#   usage: probe-c1b.sh <phase> <root> [rows…] [--keep]   (dispatched by `rig c1b`)
+#   usage: probe-c1b.sh [--keep]           (dispatched by `rig c1b --agent`)
 #   env:   SPIKE_CAPSULE_ROOT   capsule / fixture root (default: ~/capsules)
+#          SPIKE_WORKER_MODE    stub | agent — this probe REQUIRES agent
 #
 # The one probe that needs an LLM (design § 5.4 step 5, DEC-109). Everything in
 # P-C2 and P-C3 is scripted by DQ-2 mandate; this is where the model's claim
@@ -65,12 +66,11 @@ C1B_WORKER_TIMEOUT=1800
 C1B_TASK=task.md
 
 keep=0
-# `rig_dispatch` passes <phase> <root> ahead of the caller's own arguments; both
-# are already in the environment by the time this runs, so they are consumed and
-# dropped rather than re-derived. Rows are accepted and ignored: P-C1b has one
-# row by construction, and refusing them would make `rig c1b H3` a usage error
-# where "there is only one row" is the more useful thing to say.
-[ $# -ge 2 ] && shift 2
+# `rig_dispatch` consumes <script> <owner> <root> and forwards only the caller's
+# own arguments, so this sees the rows and flags and nothing else. Rows are
+# accepted and ignored: P-C1b has one row by construction, and refusing them
+# would make `rig c1b H3` a usage error where "there is only one row" is the
+# more useful thing to say.
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) keep=1 ;;
@@ -86,6 +86,14 @@ done
 # I6 — FIRST, as a STATEMENT. Inside `$( … )` the refusal would end only the
 # substitution's subshell (F-P01-1).
 rig_enter
+
+# DEC-109, ENFORCED rather than documented. `--stub` is the rig default and
+# `--agent` is explicit opt-in, on the reasoning that reaching a model must be a
+# thing you asked for. This probe has no stub mode — running it IS reaching one
+# — so a bare `rig c1b` must refuse rather than quietly spend tokens. An opt-in
+# that only the help text mentions is not an opt-in.
+[ "${SPIKE_WORKER_MODE:-stub}" = agent ] ||
+  rig_die "P-C1b runs a REAL AGENT — pass --agent explicitly (DEC-109): rig c1b --agent"
 
 FIXTURE="${RIG_ROOT}/fixtures/light/repo"
 DECLARATION="${RIG_ROOT}/fixtures/light/interpretation-surface.txt"

@@ -18,9 +18,17 @@ answered_by = ""
 answered_on = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
-supports    = []
+supports    = [
+  "SL-241 PHASE-05 T4e — H10/H16 scored, 8/8 cells model-level: the capsule model's refusal of a second result from one base is SAFE and TOTAL (stage-4 CAS). Refusal is the part that IS evidenced.",
+  "SL-241 PHASE-05 T4e — the refusal is CONTENT-BLIND: stage 4 compares two OIDs and never reads a tree, so a genuine conflicting pair and a trunk advance a three-way merge would take without a murmur are the same token (advance/stale-base). Any admission design must supply that discrimination itself.",
+  "SL-241 PHASE-05 T5 — the incumbent's recovery path measured, as the shape of what an admission design would have to replace: it DOES discriminate (a genuine conflicting pair is classified Conflicted and parked for hand-resolution), admission never reads trunk (the fast-forward CAS at integrate is the sole staleness gate), and the two refusal paths disagree on signalling (conflict exits ZERO with the verdict in candidates.toml, staleness exits non-zero — F-P05-40, ISS-305).",
+]
 contradicts = []
-notes       = []
+notes       = [
+  "The T5 sub-probe leg is a scaffolded INCUMBENT-LAYER regression check and COUNTS TOWARD NOTHING at model level (RV-340 F-9, design 5.6). It informs this question; it is excluded from every capsule-model coverage number.",
+  "ADMISSION IS NOT EVIDENCED. The spike proves refusal, never admission — the resolution path is out of evidence, not disproven. SL-241 PHASE-06 EX-7 requires the go/no-go to say exactly this, and the question OUTLIVES the slice: it settles in the post-spike REV, not here.",
+  "A design that reuses conflict semantics per DEC-110 inherits the signalling disagreement above unless it is named — a scripted caller reading exit status alone cannot see a conflict at all.",
+]
 
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
