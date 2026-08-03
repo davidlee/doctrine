@@ -3,9 +3,21 @@
 **Question.** In shipped doctrine, where does a client project's
 interpretation-surface declaration live?
 
+## Answer
+
+Answered by `DEC-136`: the project-owned declaration is a required
+`[interpretation]` block in `.doctrine/doctrine.toml`, resolved from the
+contracted base commit. A phase work contract may make the resolved policy more
+restrictive, but cannot author it, widen permitted execution, weaken required
+verification, replace it, or make absence acceptable.
+
+This uses the existing canonical project-configuration surface without adding
+a second projected manifest. `DEC-099`'s phrase “default-deny manifest” names
+the declaration's semantics, not a requirement for a separate file.
+
 [[interpretation-surface-ownership]] settles *that* the client declares classes
-1–3 and that absence is refused. It deliberately does not settle *where* the
-declaration sits.
+1–3 and that absence is refused. It originally left *where* the declaration
+sits to this question; `DEC-136` now settles that remaining choice.
 
 ## Candidates
 
@@ -29,12 +41,14 @@ harvested result, which makes all three candidates equally sound. What remains
 is genuinely an ergonomics question — which is what it was always supposed to
 be.
 
-## What settles it
+## Settlement basis
 
-Not argument. The SL-241 rig implements a rig-local per-fixture file and runs
-it against both a Rust and a TypeScript fixture; whichever friction that
-surfaces (sync burden, discoverability, per-phase variance actually wanted or
-not) is the input. Settles during the post-spike REV, not in SL-241.
+The SL-241 rig implemented a rig-local per-fixture file and ran it against both
+a Rust and a TypeScript fixture. It established that the policy must be read
+from the contracted base, leaving sync burden, discoverability, and whether
+per-phase variance is actually wanted as the placement inputs. `DEC-136`
+settles those ergonomics in the post-spike governance work rather than
+pretending the spike selected a production file layout.
 
 It also gains a **probe-evidence input it previously lacked**: the rig now
 carries a fixture variant that places a declaration copy *inside* the fixture
@@ -65,6 +79,7 @@ generalisable claim is the byte-identity, not the token.
 
 ## Related
 
+- DEC-136 — the settled home and implementation handoff.
 - EVD-011 — the probe-evidence input above.
 - [[interpretation-surface-ownership]] — the decision that opens this.
 - [[interpretation-surface]] — what is being declared.

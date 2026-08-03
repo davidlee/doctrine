@@ -5,9 +5,9 @@ id = 201
 slug = "interpretation-surface-declaration-home"
 title = "Interpretation-surface declaration home"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-08-01"
-updated = "2026-08-01"
+updated = "2026-08-03"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)

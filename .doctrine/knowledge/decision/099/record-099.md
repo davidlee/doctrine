@@ -29,6 +29,10 @@ one says what may enter a capsule, the other what may never be interpreted
 outside one. Riding that existing seam rather than inventing a second manifest
 idiom.
 
+`DEC-136` subsequently fixes the shipped encoding as an `[interpretation]`
+block in `.doctrine/doctrine.toml`. “Manifest” here describes the declaration's
+default-deny semantics; it does not require a second physical file.
+
 ## Amendment (SL-241 internal adversarial pass, finding A5)
 
 The original wording implied the declaration *enforces* all three language-bound
@@ -75,19 +79,20 @@ future consumer of DEC-099, including the shipped form chosen by
 
 ## Status of the shipped form
 
-Where the declaration lives — a `doctrine.toml` block, a dedicated manifest, or
-a field on the work contract — is **not decided here**; see
-[[interpretation-surface-declaration-home]]. SL-241 implements it as a
-rig-local per-fixture file. The shipped form is post-spike REV work, fenced out
-by the slice's non-goals.
+The shipped home is settled by `DEC-136`: a required `[interpretation]` block in
+`.doctrine/doctrine.toml`. The work contract consumes the base-resolved policy
+and may only make a phase more restrictive; it is not an alternate policy
+author. SL-241's rig-local per-fixture file remains evidence scaffolding, not
+the production file layout.
 
-Amendment 2 makes that question *safe to defer*. Two of its three candidates
-live inside the repository a capsule clones, so without the read-from-`B`
-invariant the choice of home would silently decide a security property; with it,
-all three are sound and the choice turns on ergonomics as intended.
+Amendment 2 made that question safe to settle on ownership and ergonomics. Two
+of its three candidates live inside the repository a capsule clones, so without
+the read-from-`B` invariant the choice of home would silently decide a security
+property; with it, all three were sound on that axis.
 
 ## Related
 
 - [[interpretation-surface]] — the taxonomy and the five classes.
+- DEC-136 — the shipped home and work-contract refinement rule.
 - [[two-spike-fixtures]] — the Rust/TypeScript pair that tests this split.
 - POL-002 — the governing policy.

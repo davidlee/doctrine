@@ -34,18 +34,21 @@ The scope comes from RFC-025's go/no-go, not from a flat reading of the census:
   shapes; it is not a macOS result;
 - conflict/staleness **refusal** is evidenced, but resolution and admission are
   not (QUE-202);
-- safe ingestion remains undecided between quarantine fetch and bundle
-  (QUE-200);
-- the client interpretation-policy declaration home remains an ergonomics
-  decision (QUE-201);
+- bundle ingestion is settled by DEC-135, with hostile bytes snapshotted into
+  owned storage and imported through a fresh quarantine repository (QUE-200);
+- the client interpretation policy is settled by DEC-136 as a required
+  `[interpretation]` block in `.doctrine/doctrine.toml`, resolved from the
+  contracted base and only restrictable by phase contracts (QUE-201);
 - the evidence is sixteen hazard rows with a capsule-model boundary or recorded
   dissolution plus two incumbent regression legs — never “16/16”; and
 - the real-agent capsule phase is one measured run, not a performance comparison
   or production-readiness assessment.
 
-The Revision has hard `needs` edges to QUE-200, QUE-201, and QUE-202. Their
-answers belong in the authored target contract before approval; this scope does
-not manufacture answers from incomplete evidence.
+The Revision retains its hard `needs` edges to QUE-200, QUE-201, and QUE-202.
+The first two are now terminal and supply DEC-135 and DEC-136 respectively;
+QUE-202 remains unsettled. All three answers belong in the authored target
+contract before approval; this scope does not manufacture answers from
+incomplete evidence.
 
 ## Governance boundary
 
@@ -78,7 +81,10 @@ normalize → admit/integrate → gc`.
 
 It also owns the control-plane/capsule authority split, fresh phase transaction
 lifecycle, contracted base and interpretation policy, admission-journal versus
-forensic-exhibit boundary (DEC-133), and the platform-backend contract. The
+forensic-exhibit boundary (DEC-133), and the platform-backend contract. Per
+DEC-136 it extends the shared `.doctrine/doctrine.toml` parser with a required
+`[interpretation]` block for capsule dispatch, resolves it once from the
+contracted base, and permits work contracts only monotonic restriction. The
 Linux backend may name bwrap as measured. The cross-platform contract states
 equivalent properties, not an unmeasured macOS mechanism.
 
@@ -211,5 +217,7 @@ Before this Revision may be approved or applied:
 - RFC-025 and its mechanism census, go/no-go, red-team, and probe evidence;
 - DEC-133 (durable admission journal versus expiring forensic exhibit);
 - DEC-134 (persistent control-plane orchestration, fresh headless phase worker);
+- DEC-135 (bundle ingestion and its parent-side protocol);
+- DEC-136 (`doctrine.toml` interpretation policy and contract refinement);
 - DEC-129 and IMP-397 for the explicit egress/build-input exclusion; and
 - the settled outputs of QUE-200, QUE-201, and QUE-202.
