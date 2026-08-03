@@ -47,6 +47,24 @@ generalises. It covers exactly one of four edges today.
 
 ### 1. A condition states its own contract
 
+> **Settled 2026-08-03 — `DEC-122`, `DEC-123`.** The fork below is closed. The
+> contract ships as **embedded prose**, `customization = "fixed"` — the prose
+> direction, sealed rather than overridable, which is what keeps `IMP-372`'s
+> override seam out of this slice's path. **Structure rides a const table**
+> beside `boundary_conditions`; the prose stays narrative rather than being
+> parsed back into fields. So both candidates land, on the axis each is good
+> for: the table carries what the program must reach, the prose carries what an
+> agent must read. `IDE-047` holds the further idea of extracting structure
+> *from* the contract prose; it is not this slice.
+>
+> The **working hypothesis below is refuted**, not deferred. Research thread 1
+> found the seal/craft line coinciding with `is_derived()` for all ten members —
+> but the coincidence is analytic, not empirical: the reasoning classifies as
+> *craft* exactly those conditions with no engine enforcement, and "no
+> enforcement" is `is_derived() == false` restated in `DEC-102` vocabulary. It
+> confirms nothing. `DEC-120` replaced the boolean outright, so the hypothesis
+> has no subject left.
+
 Make what a condition requires, what subject kind it binds, and how it is
 discharged into something the program can reach and render. What scope fixes is
 that the nine words at `design.md:268` stop being prose in a design document, in
@@ -76,12 +94,39 @@ vocabulary, the asset policy, and `ISS-285`'s fork together.
 
 ### 2. Derive what is derivable
 
+> **Amended 2026-08-03 — `DEC-126`.** Two of the three named below derive:
+> `materialisation-current` and `blocking-inquiries-dispositioned`.
+> **`required-sections-exist` retires** rather than deriving — it has no
+> implementation to extend (grep returns the enum variant, the
+> `boundary_conditions` row, the kebab token, and tests that record a *claim*),
+> and which sections a design must have is craft under `DEC-102`, not
+> Doctrine's to mandate. It is replaced by `drafting-readiness-attested`, since
+> retiring it outright would leave `drafting → reviewing` guarded by
+> `materialisation-current` alone, which is trivially true of an empty document.
+>
+> The objective is also narrower than its title now reads: the final count is
+> **two Derived, seven Attested, zero Claimed**. Deriving is the minority
+> outcome, not the default one.
+
 Extend the `ReviewStanding` pattern leftward to the conditions the snapshot can
 already answer — `RequiredSectionsExist`, `MaterialisationCurrent`, and
 `BlockingInquiriesDispositioned` are framework-owned run state and derivable
 without crossing any vocabulary boundary.
 
 ### 3. Attest what cannot be derived
+
+> **Settled 2026-08-03 — `DEC-120`, `DEC-126`.** A distinct kind, and the
+> load-bearing one. `DEC-120` gives three kinds — Derived (every input
+> engine-authored), Attested (some input can only be authored by a human act,
+> and the engine derives over the recorded artefact), Claimed (no artefact, only
+> an existential scan — the defect class). `DEC-126` applies it: the design-run
+> gate is **an attestation ledger, not a checker**, and the discriminator is not
+> *is it a judgement* — nearly all are — but *does the actor's identity matter*.
+>
+> `user-accepts-sufficiency` and `user-acceptance-attested` are the same kind of
+> act, as this objective suspected; they sit on opposite sides of `is_derived()`
+> today only because that boolean tracked implementation coverage rather than the
+> nature of the condition.
 
 `UserAcceptsSufficiency` is a human act and must not be computed. Establish
 whether it is the same kind of thing as a derived condition or a distinct kind,
@@ -104,7 +149,35 @@ derive them from framework-owned run state, or retire them and let the runbook
 guard the edge alone. Deciding is `/design`'s work; this slice owns the decision
 and its consequences, including `ISS-286`'s subject-rule half.
 
+> **`ISS-286`'s subject-rule half is answered — 2026-08-03, `EVD-012`.** Not by
+> a separate repair but as a consequence of `DEC-121`: an Attested condition
+> binds to the artefact the attested act produced — for
+> `governing-context-recorded`, the confirmed governance **edge set**. That is a
+> set of entity ids, so the subject stops being an arbitrary prose section and
+> stops carrying restated canonical content at all.
+>
+> `EVD-012` is the mechanical case, observed on this run. Passing this very edge
+> required minting a `design.md` section to point evidence at, because
+> `current_fingerprint` resolves subjects against sections only
+> (`run.rs:1471-1478`). Three defects fall out and all three dissolve under
+> `DEC-121`: the subject is unconstrained (any section clears any claimed
+> condition); the name asserts what the check cannot see; and the bootstrap is
+> inverted, a stage-1 boundary satisfiable only by a stage-3 artefact. The
+> forced restatement is also a **single-source-of-truth violation** — canonical
+> entity content duplicated into prose so that clearance has something to bind
+> to. Recorded rather than merely noted, because this slice's own design run
+> committed it under protest.
+
 ### 5. Make the requirement readable before it is violated
+
+> **Amended 2026-08-03 — `DEC-124`.** The split is by **channel**, and the
+> envelope is not the contract's home. The **refusal carries the remedy** — it
+> has no byte budget, and naming what would satisfy an unmet condition is what
+> `IMP-390` complains is missing. The **stage-entry receipt carries the
+> contract** — the `Fragment` register, delivered once and re-sent only when it
+> changes, which is the amortised answer to a budget the envelope cannot afford.
+> **No digest**: the receipt is the unit, and a per-condition digest buys
+> granularity nothing needs.
 
 Surface a stage's unmet conditions — and what would satisfy them — on the turn
 envelope and in the refusal, so an agent learns the contract without reading
@@ -121,6 +194,23 @@ This is a first-class deliverable, not a write-up. `SL-233`'s failure was
 attending to everything except the interaction design that was most of its point;
 the corrective is not more prose about mechanism but a stated, diagrammed account
 of the interactions themselves.
+
+> **Researched 2026-08-03 — research thread 4.** There is exactly **one** in-tree
+> precedent for a diagram documenting a machine, and it is **generated**:
+> `.doctrine/spec/tech/021/funnel-machine.md` is a `stateDiagram-v2` golden-pinned
+> byte-for-byte to the `const` transition table in `src/funnel_machine.rs`. No
+> mermaid, d2 or graphviz exists anywhere under `install/`. Since `SPEC-029` D1
+> specifies the gate as the same kind of `const fn` table, a hand-rolled diagram
+> is the avoidable mistake.
+>
+> Two remaining objectives-relevant facts. `SPEC-029`'s headings are exactly
+> Overview / Responsibilities / Concerns / Hypotheses / Decisions — no stage list,
+> no diagram, and an empty `interactions.toml`, so this is net-new material. And
+> `install/dispatch-mechanics.md` / `install/review-ledger.md` are the right
+> reader-facing template for a *who acts, what does the act produce* narrative,
+> but neither carries a diagram, so shipping one there is net-new too and needs
+> its own hand-edit-vs-generated policy. What remains open is the **audience** —
+> carried below as `OQ-9`.
 
 ## Non-Goals
 
@@ -151,6 +241,15 @@ of the interactions themselves.
   steps and the CLI rendering are the follow-on. Stated interim state: until
   `IMP-391` lands, `exploring → inquiring` passes on the runbook alone — no worse
   than the status quo it replaces, but a gap, not an oversight.
+- **Migrating design-run findings onto `RV`** (`IMP-392`, spawned by `DEC-125`).
+  `DEC-125` unifies findings on the `RV` review kind rather than the runtime
+  `Finding` model; this slice specifies the condition that reads them, the
+  follow-on does the migration. Stated interim state: `review-disposition-
+  attested`'s `Conducted { review }` arm and the outstanding-findings severity
+  summary are **unbuildable** until `IMP-392` lands. Named, not discovered later.
+- **Extracting contract structure from the contract prose** (`IDE-047`, spawned by
+  `DEC-123`). Structure rides a const table and the prose stays narrative; deriving
+  one from the other is a further idea with its own argument to make.
 
 ## Affected Surface
 
@@ -173,6 +272,24 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
 - `install/design-prompts/**` — if a condition's contract becomes readable, the
   shipped guidance that never named these conditions is where it lands.
 
+> **Added 2026-08-03 — decisions since scoping.** Still coarse; `/design` fixes
+> the touch-set.
+>
+> - `src/design_run/attestation.rs` — `DEC-120`'s Attested kind derives over
+>   recorded attestations, and `Reviewer` is where actor identity already lives.
+> - `src/commands/design.rs` — the `Fragment` stage-entry receipt is `DEC-124`'s
+>   contract channel (`:1832-1851`).
+> - the `RV` review surface — `DEC-125` unifies findings there; the read path this
+>   slice specifies lands against `RV`, not the runtime `Finding` (`IMP-392` does
+>   the migration).
+> - `.doctrine/spec/tech/029/` — beyond the spec revision already named, objective
+>   6's diagram lands here as a **generated sibling artefact** if thread 4's
+>   champion holds (`OQ-9`).
+> - `publication/manifest.toml` — only if `OQ-9` resolves towards a *published*
+>   surface. An embedded-but-undeclared asset is invisible; a declared asset with a
+>   stale backing is a gate failure. No `flake.nix` graft is needed for material
+>   under an existing embed root.
+
 ## Risks & Assumptions
 
 - **Snapshot versioning.** `DerivedDesignFacts` persists to the run snapshot. If a
@@ -192,6 +309,14 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
   `mem.pattern.design.classify-at-authoring-not-from-behaviour`, it can establish
   adherence but not a universal claim about what an obligation *is* — so it
   informs the retire/keep decision without settling it by itself.
+> **Resolved 2026-08-03 — `DEC-122`.** The override-seam risk below is retired
+> as a *risk* and kept as a *stated assumption*: the seam does not exist, and
+> this slice does not build it. Contracts ship embedded and `fixed`, with a
+> citation — the pattern runbooks already use — so nothing here claims
+> overridability and nothing inherits `IMP-372`. If the seam is built later, this
+> choice becomes a constraint this slice need not have accepted; that is the
+> honest cost of deferring, and it is the cheaper side.
+
 - **The override seam does not exist.** `DEC-102` identified and *deferred* it:
   `customization` is parsed and displayed with no execution consumer outside the
   library view, and design assets resolve straight from the embed
@@ -217,6 +342,32 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
 ## Open Questions
 
 Carried into `/design`, not answered here.
+
+> **Dispositioned 2026-08-03 — end of the inquiry stage.** All eight are closed.
+> The questions stay as written; this is the answer key, and the records hold the
+> reasoning.
+>
+> | | question | disposition |
+> |---|---|---|
+> | `OQ-1` | what a contract consists of, and where it lives | `DEC-122` (embedded prose, `fixed`) + `DEC-123` (structure in a const table) |
+> | `OQ-2` | is derived-vs-claimed the right partition | `DEC-120` — no; three kinds, and Claimed is the defect class |
+> | `OQ-3` | `ISS-285`'s specify / derive / retire fork | `DEC-121` — none of the three; both become Attested user checkpoints |
+> | `OQ-4` | where contract prose lives | `DEC-122` |
+> | `OQ-5` | does a contract-carrying condition subsume `ISS-286`'s subject rule | yes — `DEC-121` + `DEC-126`, corroborated by `EVD-012`. Not a separate repair |
+> | `OQ-6` | does `DEC-102`'s seal criterion coincide with `is_derived()` | **dropped, not answered.** Research thread 1 showed the coincidence is analytic; `DEC-120` removed the boolean. It sequences nothing |
+> | `OQ-7` | delivered vs fetchable | `DEC-124` — by channel: refusal takes the remedy, the stage-entry receipt takes the contract, no digest |
+> | `OQ-8` | how much of the override seam this slice delivers | `DEC-122` — none. Embedded and `fixed` defers it honestly |
+>
+> **New, and open** — the only one carried forward:
+>
+> - **`OQ-9`** — objective 6's **audience**. If the diagram is for the reviewer of
+>   this design, a generated sibling artefact to `SPEC-029` suffices — golden-pinned
+>   to `gate.rs`, no manifest entry, no embed change, no flake graft. If it is for
+>   the agent standing at the gate, it needs a *published* surface, and then the
+>   reference-doc template plus a `publication/manifest.toml` entry, plus a stated
+>   hand-edit-vs-generated policy that no shipped asset currently has. `ADR-005`'s
+>   PULL/EXPLAIN tiering is what decides it. Both may be right, with different
+>   content — as with `OQ-7`, that is a decision and not a default.
 
 - **OQ-1** — What does a condition's contract consist of, and where does it live —
   Rust-side data, or a correspondence to prompt prose? If prose: what must it
