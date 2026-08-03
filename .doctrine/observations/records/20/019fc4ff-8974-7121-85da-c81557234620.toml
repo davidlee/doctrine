@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc4ff-8974-7121-85da-c81557234620"
+recorded_at = "2026-08-03T00:21:49.044037896Z"
+kind = "friction"
+summary = "/execute SL-241 T6 — c3_commit's doc comment says 'deletions included', which is false for a git mv rename and cost a shakeout cycle"
+detail = """
+lib/instantiations.sh's c3_commit is documented as 'stage the named paths (deletions included) and commit them'. Guard probe (c) renames a file with git mv and passed BOTH legs to c3_commit, reading that comment as licence. It died: git mv has already staged both legs, so the source exists in neither the worktree nor the index and git add matches no pathspec.
+
+The correction was already written down — but at H5_mutate (instantiations.sh:501-507), inside a row body, not on the helper whose contract it qualifies. A reader who consults the helper's own doc comment before calling it is actively misled; only a reader who happens to read the one prior call site that met it is warned.
+
+Cost: one shakeout cycle plus the read to find the precedent. Cheap here because the helper dies loudly (an earlier session had it tolerated in a GREEN log, which is the expensive version).
+
+The general shape: when a helper's stated capability has an exception, the exception belongs in the helper's doc comment, not only at the call site that discovered it. A per-call-site fix leaves the next caller to rediscover it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
