@@ -84,3 +84,25 @@ H1. One divergence, not two.
 Found while closing SL-241 — the red was initially mistaken for SL-241's own,
 which it never was (SL-241's `design.md` imports clean; the sole refusal names
 `slice/244/design.md`).
+
+## Resolution — fixed as proposed
+
+`fix(ISS-311): partition the design corpus oracle by document class`.
+
+Routing is on the first **non-blank** line, not line 1, matching `parse`'s own
+blank-head carve-out — otherwise a formatter's leading newline would misclassify
+a managed document as legacy and re-open the same refusal by a different door.
+`CORPUS_FLOOR` moved to the union; `MANAGED_FLOOR` added as the new arm's
+positive control, and it does not rot in the opposite direction because a design
+becomes managed and stays managed.
+
+The test is renamed `every_authored_design_in_this_repo_reads_losslessly` — half
+of it round-trips rather than imports.
+
+Both floors were exercised as live controls rather than assumed. Raising
+`MANAGED_FLOOR` to 2 reds and reports the count, which confirmed the managed arm
+swept exactly one document (SL-244) rather than passing vacuously. That control
+run also exposed a defect in the assert's own message — it read "no managed
+design" while the count was 1 — since fixed to interpolate.
+
+Green: 68 passed / 0 failed on the binary, `doctrine check commit` exit 0.
