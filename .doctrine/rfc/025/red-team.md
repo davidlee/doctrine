@@ -65,7 +65,7 @@ evidence even if it passes.
 pipeline must produce a `Conflicted` candidate row / supersede guidance and
 halt; any auto-resolution is a probe failure.
 
-## RT-3 — The token-efficiency invariant needs a topology decision — **design-change / open**
+## RT-3 — The token-efficiency invariant needs a topology decision — **design-change / settled for v0**
 
 RFC-025 claims conversational context persists across phase transactions
 while capsules are rebuilt. Two topologies satisfy the words:
@@ -81,15 +81,16 @@ while capsules are rebuilt. Two topologies satisfy the words:
    caches, cwd invalidation — RFC-018's uneven-semantics territory). Unproven
    and not needed for v0.
 
-Choosing (1) also settles RT-3's dependents: **escalation** (a headless
+SL-241's locked design and DEC-134 adopt option 1 for v0. This also settles
+RT-3's dependents: **escalation** (a headless
 worker cannot take a mid-phase user turn; escalation = ring doorbell + halt,
 control plane either answers via session-resume (`claude -p --resume`-class
 mechanics, to be probed) or re-provisions with an amended contract) and
 **C11's "whence interactivity"** (the interactive surface is the control
 plane, full stop — a human who wants to pair *inside* a capsule is a later,
-separate design). The RFC's "dispatch-configured interactive Claude session"
-transitional step should be re-read under this ruling: it configures the
-*control-plane* session, not a capsule-resident one.
+separate design). CHR-053 rewrote the RFC's former capsule-resident interactive
+session direction accordingly: configuration for the persistent session belongs
+to the control plane, while the capsule receives a headless worker process.
 
 ## RT-4 — Coordination artifacts are parsed hostile input — **design-change**
 
@@ -148,15 +149,20 @@ answer; until then, claims for the capsule model must say "worker authority
 bounded by construction", never "agent authority bounded". RFC-022 remains
 open and is the governing artifact for the other half.
 
-## RT-9 — Forensic archive needs a storage-tier ruling — **design-change (small)**
+## RT-9 — Forensic archive needs a storage-tier ruling — **design-change / settled**
 
 Capsule bundles + worker history + logs are binary, per-phase, and sizeable.
 Committed under `.doctrine/` → repo bloat forever; runtime tier →
-`rm -rf`-able, i.e. not evidence. Neither default is right. Needs an explicit
-retention policy under the ADR-019 asset-policy lens (likely: a gitignored
-archive dir with a configured retention window, referenced by OID from the
-committed admission journal — the journal is the evidence, the archive is the
-exhibit). Flag for the RFC's provisioning-manifest / evidence sections.
+`rm -rf`-able, i.e. unsuitable as the only evidence. Neither default is right.
+DEC-133 settles the boundary: the trusted-side admission journal is durable;
+the large forensic material is a separately-lived exhibit that may expire.
+The journal retains identities, hashes, verdicts, archive references, and the
+exhibit's lifecycle state.
+
+The decision intentionally does not prescribe retention duration, quota, or a
+project-, slice-, or machine-level configuration hierarchy. A short horizon is
+the expected ordinary posture, while later policy controls remain unprecluded.
+ADR-019's asset-policy axes govern the eventual storage/publication mechanism.
 
 ## RT-10 — In-capsule doctrine writes get silently stripped — **design-change (small)**
 

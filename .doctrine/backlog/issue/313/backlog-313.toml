@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 53
-slug = "rfc-025-cleanup-pass-after-the-capsule-spike"
-title = "RFC-025 cleanup pass after the capsule spike"
-kind = "chore"
-status = "resolved"
-resolution = "done"
+id = 313
+slug = "published-glossary-has-stale-knowledge-status-vocabularies"
+title = "Published glossary has stale knowledge status vocabularies"
+kind = "issue"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-03"
 updated = "2026-08-03"
-tags = ["area:dispatch", "area:governance", "cluster:capsule-spike"]
+tags = ["area:cli", "area:correctness", "area:docs", "area:knowledge"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -17,15 +17,6 @@ tags = ["area:dispatch", "area:governance", "cluster:capsule-spike"]
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
-needs    = ["QUE-205"]                   # item→item hard prerequisite
+needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "SL-241"
-
-[[relation]]
-label = "related"
-target = "IMP-397"

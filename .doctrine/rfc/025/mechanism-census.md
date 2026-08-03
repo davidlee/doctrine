@@ -43,9 +43,9 @@ expanded in § Contentious rows.
 | B4 | `marker --clear --operator`, `worktree status --assert` / `describe_mode`, stale-marker remedies | operator recovery from marker states | self-brick; stale-marker confusion (incl. the coord-tree mis-stamp footgun, mem_019ef99b…) | no marker | **DELETE** |
 | B5 | SubagentStart stamp hook (`marker --stamp-subagent`, matcher-scoped, sync-blocking, fail-open) | marker present before worker's first command (claude arm) | unstamped claude worker | no in-session workers; worker identity = OS process in sandbox | **DELETE** — the entire hook-choreography class |
 | B6 | base-by-placement (cwd parked in coord tree, `baseRef='head'`) + post-spawn `verify-worker` ancestor check + opaque-Claude-chosen-base residual (IMP-043) | base==B on the claude arm | forking off `main`/wrong base (ISS-029 class); clean-applying-but-semantically-wrong import | No — base is explicit in the provisioning contract | **DELETE** → contracted base pinned at provision; admission ancestry check (QUE-200) is the stronger, exact replacement. IMP-043 is absorbed, not deferred |
-| B7 | nested bwrap OS floor (ADR-008 D-B3), codex/pi-only | OS-level write/net confinement | raw-tree escape beyond the worktree | Yes — confinement is still the point | **KEEP, promoted**: becomes the *uniform* mechanism (every worker, every harness), no longer one arm's altitude. Seatbelt is the macOS leg. New design point: admit the Claude API credential, exclude git credentials |
+| B7 | nested bwrap OS floor (ADR-008 D-B3), codex/pi-only | OS-level write/net confinement | raw-tree escape beyond the worktree | Yes — confinement is still the point | **KEEP, promoted**: an OS sandbox becomes the uniform property for every worker and harness. Linux/bwrap is measured; the macOS mechanism remains unselected and unmeasured. New design point: admit the Claude API credential, exclude git credentials |
 | B8 | confined-orchestrator tier (FR-007/REQ-335 pending): mediated write-funnel, reads-raw/writes-mediated wall, jailed coord tree with ro object store | orchestration without direct `.git` write authority | confined orchestrator composing canonical commits | The *goal* (bounded authority) is the capsule thesis itself; the *mechanism* (mediating writes to a shared store) loses its object — there is no shared store to mediate | **DELETE** as confinement mechanism. † see B8 note — the narrow-boundary idea survives as doorbell + harvest verbs |
-| B9 | `worker_commit` gated MCP tool + fork-gate `just validate` doctor/prompt-check skip (DEC-003, ISS-218) | gated worker self-commit; no stale-binary false-red in forks | ungated commits; fork false-reds | No — worker commits freely in-capsule and none of it is canonical; verification runs control-plane-side on the exact candidate | **DELETE** — both the gate and the fork-skip carve-out it needed |
+| B9 | `worker_commit` gated MCP tool + fork-gate `just validate` doctor/prompt-check skip (DEC-003, ISS-218) | gated worker self-commit; no stale-binary false-red in forks | ungated commits; fork false-reds | No — worker commits freely in-capsule and none of it is canonical; the control plane selects the exact candidate and launches isolated verification | **DELETE** — both the gate and the fork-skip carve-out it needed |
 | B10 | import `.doctrine/`/`.claude/` belt (`doctrine-touch`/`claude-touch`, REQ-249) | authored/config state cannot ride a worker delta | governance/config escape landing silently | Yes — a capsule can still *produce* such paths | **TRANSFORM** → forbidden-path admission policy in the harvest pipeline (QUE-200). Same predicate, relocated from patch-time belt to admission gate; force-add-injection subtlety dies with the tracked-diff transport |
 | B11 | raw-tree confinement deferral (ADR-006 D2b: hand-edit / bare `git commit` not CLI-stoppable) | — (an honestly-confessed gap) | — | The gap *closes*: OS sandbox bounds the tree a worker can touch; admission bounds what is believed | **resolved by B7 + C3-pipeline** — the deferred residual is the thing capsules actually fix |
 
@@ -100,12 +100,18 @@ expanded in § Contentious rows.
 ## Contentious rows (†)
 
 **B1 — does *anything* inside the capsule still need role discrimination?**
-The census says no: uniform workers, no marker. The one residual candidate is
-the RFC's own "capsule orchestrator vs subordinate subagents" section — if a
-capsule internally spawns subagents, is their subordination worth mechanism?
-Position taken here (per the sharpened thesis): no — the capsule boundary is
-the unit of trust; internal structure is the worker's business. If a future
-use case wants intra-capsule tiers, that is a new decision, not a migration.
+The **capsule target** says no: one uniform subprocess worker, no marker. The
+capsule boundary is the unit of trust and internal subprocess structure is the
+worker's business. If a future use case wants intra-capsule tiers, that is a
+new decision, not a migration.
+
+That target-state verdict does not describe the incumbent arms as already
+uniform. ADR-011's Claude arm remains an in-session `Agent` identified by the
+orchestrator-stamped disk marker, and ADR-008 N1 sanctions its bounded
+`worker_commit` path. The codex/pi arm is already a subprocess but still uses
+the marker as the harness-agnostic identity floor. B1 and B9 become DELETE only
+at capsule cutover, when OS process placement plus trusted-side admission
+replaces both marker identity and the gated commit path.
 
 **B8 — FR-007 (confined orchestrator) is pending investment that this
 deletes.** The mediated write-funnel exists to let an orchestrator work
@@ -154,8 +160,11 @@ them.
 
 ## Summary
 
-Counts (dispatch scope): **13 DELETE**, **12 TRANSFORM**, **14 KEEP** (3
-promoted to stronger positions), **2 SCOPED** to solo worktrees.
+Primary row verdicts (dispatch scope): **15 DELETE**, **13 TRANSFORM**, **17
+KEEP** (3 promoted to stronger positions), **1 SCOPED** to solo worktrees.
+B11 is stated separately as resolved by the promoted sandbox and admission
+pipeline; C4 is TRANSFORM for dispatch with an additional SCOPED solo-worktree
+residue. These two qualified rows are not double-counted in the primary totals.
 
 The deletions cluster exactly where the thesis predicted: identity and
 role-discrimination choreography (B1–B6, C10, C12), the mediation-for-shared-
@@ -175,5 +184,6 @@ What this feeds:
   (touching ADR-006, ADR-008, ADR-011, ADR-012, SPEC-012, SPEC-021; SPEC-022
   survives with edits); FR-007/REQ-335 and REQ-387 should be held pending
   meanwhile.
-- **RFC-025 #1 cleanup:** the "capsule subagents" section should be rewritten
-  to the uniform-subprocess model this census assumes (B1 note).
+- **RFC-025 cleanup:** describe the uniform-subprocess model as the capsule
+  target while preserving the incumbent marker/`worker_commit` posture until
+  cutover (B1 note).
