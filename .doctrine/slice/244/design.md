@@ -665,8 +665,7 @@ variant has no boundary, no contract and no prose.
 So these enumerations are not written twice and tested for agreement. **One
 declarative macro takes the condition list once — grouped by the edge each row
 guards, carrying variant, kebab token and contract — and emits the `Condition`
-enum, `Condition::ALL`, `CONTRACTS`, and the match arms of **both**
-`boundary_conditions` and `can_advance`.**
+enum, `Condition::ALL`, `CONTRACTS`, and `boundary_conditions`' match arms.**
 
 Grouping the source by edge is what closes the last hole rather than moving it.
 Generating the vocabulary and the contracts alone would still leave
@@ -676,26 +675,86 @@ rendered, and invisible to a set-equality test over the three sets that *were*
 generated. With the edge as the source's outer key, a condition that guards
 nothing cannot be written down.
 
-**Keying by an edge is not the same as keying by a *legal* edge**, and stopping
-at `boundary_conditions` would leave that gap open. `can_advance`
-(`gate.rs:150-158`) and `boundary_conditions` (`gate.rs:162`) are today two
-hand-written matches over the same four stage pairs. Generate only the second and
-a source row keyed `(Exploring, Locked)` still compiles, joins every generated
-set, and is never evaluated — because `advance` refuses that pair before any
-condition is read. A condition guarding an edge that does not exist is the same
-defect as one guarding no edge, and is invisible to exactly the same tests.
+**Keying by an edge is not the same as keying by a *lawful* edge.** The source's
+outer key is a `(Stage, Stage)` pair — a type with twenty-five values of which
+four are lawful. A row keyed `(Exploring, Locked)` therefore compiles, joins every
+generated set, and is never evaluated, because `advance` refuses that pair before
+any condition is read. A condition guarding a transition that does not exist is
+the same defect as one guarding no transition, and is invisible to exactly the
+same tests.
 
-So the source generates `can_advance` too. The four legal pairs become the
-source's outer keys and nothing else, and the stage graph has one home rather
-than two. The alternative — four fixed macro arms — closes the same hole but
-re-homes the graph in the macro's own syntax, which is the duplication this
-section spent its argument eliminating.
+The fix is to stop using a type that can say it. The four lawful forward
+transitions get a closed type:
+
+```rust
+/// The design run's four guarded forward transitions.
+pub(crate) enum Advance {
+    ExploringInquiring, InquiringDrafting, DraftingReviewing, ReviewingLocked,
+}
+
+impl Advance {
+    /// The forward graph, written once.
+    pub(crate) const fn between(from: Stage, to: Stage) -> Option<Self> { /* … */ }
+}
+```
+
+`boundary_conditions` takes an `Advance`, and the macro emits it as a match over
+that enum. Both directions then close by construction, with no assertion and no
+macro arithmetic:
+
+- **a condition cannot name an unlawful transition** — there is no such value to
+  name;
+- **a lawful transition cannot go unguarded** — the generated match is
+  non-exhaustive if the source omits one, which is a build failure.
+
+`can_advance(from, to)` becomes `Advance::between(from, to).is_some()`, so the
+graph has exactly one home, and `advance` resolves the transition once rather
+than testing a pair and re-matching it downstream.
+
+Two alternatives were weighed. **Generating `can_advance` from the condition
+source** closes the same hole, but makes that source authoritative for the state
+machine: appending a row would silently add a transition, putting the graph in a
+table that reads as a condition list — the weakest available home for it. **A
+compile-time legality assertion** keeps two enumerations and binds them by test,
+and needs two assertions rather than the obvious one, since without *every lawful
+transition has a row* you can add a transition and forget to guard it. The closed
+type needs neither, and is the move this design already makes for `Claimed` and
+for `AgentActKind`: render the illegal value unrepresentable rather than rejected.
+
+**`Advance` is the forward relation only, and the asymmetry is deliberate.** The
+run has two transition relations and they differ in kind. The forward one is a
+closed set of four, each carrying a guard contract. The backward one covers *"the
+backward and non-adjacent pairs"* (`gate.rs:199`) — every later-to-earlier pair,
+not merely adjacent ones — and is barred not by a condition but by a missing
+reason (`DEC-067`, `gate.rs:367`). Nothing is closed to enumerate on that side, so
+naming a counterpart type would assert a symmetry that does not exist.
+
+Three consequences follow, stated because a reader will otherwise assume their
+opposites.
+
+**The condition vocabulary governs the forward relation only.** A backward move's
+requirement is a *reason*, authored in the payload rather than derived from state.
+Keeping it out of the vocabulary is what keeps `satisfied` free of payload
+inspection — the same derived-versus-claimed line
+`Refusal::DerivedConditionClaimed` already polices.
+
+**A backward move invalidates nothing, and needs no mechanism to do so.** Every
+clearance is derived and never stored (`DEC-066`, `DEC-067`), and every act binds
+to *content* — section fingerprints, node material, artefact digests, observed
+facts — never to a stage. There is no cleanup on retreat because nothing stored
+would need cleaning.
+
+**Re-crossing re-earns the transition, with no special case.** A run that goes
+`reviewing → drafting → reviewing` re-derives every cumulative condition on the
+way back up. Sections edited during the excursion have invalidated their own
+attestations by fingerprint; untouched ones are still current. The excursion is
+handled nowhere, which is the point.
 
 That leaves exactly one enumeration outside Rust, and one test:
 
-- **generated** — `Condition`, `ALL`, `CONTRACTS`, `boundary_conditions` and
-  `can_advance`, from one list. Equal by construction; no test can fail because
-  no disagreement is expressible.
+- **generated** — `Condition`, `ALL`, `CONTRACTS` and `boundary_conditions`, from
+  one list keyed by `Advance`. Equal by construction; no test can fail because no
+  disagreement is expressible.
 - **tested** — the prose asset corpus: every generated key has an asset, and the
   corpus has no key the vocabulary does not.
 
@@ -709,9 +768,10 @@ generator emits and what the asset test iterates.
    Vocabulary, const rows and boundary membership come from one source and cannot
    disagree. The prose corpus is set-equal by test. A missing match arm fails the
    build.
-2. **Every condition guards a *legal* edge.** Unrepresentable otherwise: the
-   generator's source is keyed by edge, and `can_advance` is generated from those
-   same keys — so there is no pair a row can name that `advance` refuses.
+2. **Every condition guards a lawful *forward* transition, and every one of them
+   is guarded.** Unrepresentable otherwise: the source is keyed by `Advance`,
+   whose four values are the forward graph, so no row can name a fifth — and a
+   value the source omits makes the generated match non-exhaustive.
 3. **No Claimed tier.** `ConditionKind` has two variants and is a projection of
    `DerivationRule`, so the defect tier is unrepresentable rather than merely
    unused.
@@ -729,9 +789,10 @@ generator emits and what the asset test iterates.
 9. **Binding is conjunctive.** An attestation covers its own content; every named
    observed fact must also still match; and every conjunct act must be current
    against the same covered state.
-10. **Observed facts are never persisted**, and each defines its own projection
-    and encoding. They are transient input; the run stores only the fingerprint an
-    attestation was made over.
+10. **Observed facts are never persisted as facts**, and each defines its own
+    projection and encoding. They are transient input; what the run stores is the
+    fingerprint an attestation was made over, keyed by the fact it is of. The key
+    names which projection to recompute; it is not the fact.
 11. **`DEC-101` holds.** The closed `Condition` set remains the key; no
     satisfaction is sourced from runbook steps or any other open vocabulary.
 
@@ -760,9 +821,16 @@ generator emits and what the asset test iterates.
 - **Progress does not invalidate** — disposing an inquiry leaves
   `user-accepts-sufficiency` satisfied, where re-wording or re-parenting the same
   node unmakes it. The material/progress line, tested from both sides.
-- **An illegal edge is not writable** — a source row naming a stage pair
-  `advance` refuses fails to compile, because those same keys generate
-  `can_advance`. A build-time property, so there is no runtime test to write.
+- **An unlawful transition is not writable, and a lawful one cannot be
+  unguarded** — `Advance` has four values, so no source row can name a fifth, and
+  omitting one makes the generated match non-exhaustive. Both are build failures,
+  so there is no runtime test to write.
+- **A backward move clears nothing and breaks nothing** — retreating from
+  `reviewing` to `drafting` leaves every recorded act current, and re-advancing
+  without edits succeeds on the same evidence.
+- **A backward excursion re-earns only what moved** — editing one section during
+  the excursion leaves that section's attestation unmet on the way back up, and
+  every untouched section's still current.
 - **Stale observed fact invalidates** — the governance edge set moving after the
   attestation leaves the condition unmet; an unobservable fact reads as changed.
 - **An empty observed set still binds its artefact** — a governance sweep that
@@ -817,19 +885,42 @@ projection.
 The result is **less ratification than it first looks**. Two of the eight acts
 have a home a gate can read, four have one it cannot, and two have none at all.
 One comparison still covers all three coverages, but only after it is generalised
-over what it covers.
+over what it covers — and the eight acts settle into three record shapes.
 
-### One contract, bespoke storage
+### One contract, as few shapes as the acts need
 
 The gate needs one question answered — *is there a recorded act of this kind, by
 this actor, still current against this binding?* — and that is a question about a
-**view**, not about a struct. `ActKind` and `ActorClass` unify the contract; where
-each act is stored stays as it is.
+**view**, not about a struct. `ActKind` and `ActorClass` unify the contract.
 
-This is `ADR-010`'s shape applied a second time: unify the contract and the write
-seam, keep storage bespoke. Collapsing three incumbent records into one would be
-a parallel implementation of shipped, argued types, and would buy nothing the
-view does not already give.
+An earlier draft added *"where each act is stored stays as it is"*, on `ADR-010`'s
+shape: unify the contract and the write seam, keep storage bespoke. That reading
+does not survive the membership below. Six of the eight acts have no home a gate
+can read, so this section adds storage — and once it does, *keep what ships*
+stops being conservatism and becomes an argument for carrying more shapes than
+the acts need. The rule has to be narrower, and it cuts both ways:
+
+> Add a shape only where an act has no readable home; keep an incumbent shape
+> only where it says something a general one cannot.
+
+`Attestation` (`attestation.rs:36-41`) passes that test. It carries no
+acceptance, it holds a `reviewer` lane, and there is one per *section* rather
+than one per act. It is a different kind of record, not a special case of a
+general one.
+
+`LockAcceptance` (`attestation.rs:260`) fails it. It is `AcceptanceAttestation`
+plus `ContentCoverage` — which is exactly `CheckpointAct` (below) with
+`act: DesignAccepted`, `covered: Sections(…)`, `observed: {}` and
+`confirms: None`. It is *subsumed*, not merely similar, so keeping it beside
+`CheckpointAct` would be duplication this design introduced rather than
+duplication it inherited. `DesignAccepted` becomes a `CheckpointAct` and
+`LockAcceptance` retires into it.
+
+That leaves **three** record shapes for eight acts, where an earlier draft
+carried four: `CheckpointAct` for the five user acts given at a checkpoint,
+`AgentDeclaration` for the two agent acts, and `Attestation` for the one act that
+is per-section. `ADR-010`'s shape still holds; what changes is that *bespoke* now
+means justified rather than incumbent.
 
 ### The acts, and where each lives
 
@@ -840,19 +931,16 @@ view does not already give.
 | `BlockingSetDeclared` | Agent | **new** — agent declaration | inquiry-map coverage |
 | `SufficiencyAccepted` | User | **new** — checkpoint act | inquiry-map coverage |
 | `DraftingReady` | Agent | **new** — agent declaration | artefact |
-| `SectionReviewed` | per run policy | `att-` attestation | subject fingerprint |
+| `SectionReviewed` | `RequiredActor::RunPolicy` | `att-` attestation | subject fingerprint |
 | `ReviewDisposed` | User | **new** — checkpoint act | artefact |
-| `DesignAccepted` | User | run-level `LockAcceptance` | every-section coverage |
+| `DesignAccepted` | User | **new** — checkpoint act (run-level) | every-section coverage |
 
-Two incumbent homes carry two of them:
+One incumbent home survives: **`Attestation`** (`attestation.rs:36-41`) — `id`,
+`subject`, `fingerprint`, `reviewer`, declared with an `att-` subject and
+content-bound to one section, which is exactly `SectionReviewed`. The subsection
+above says why `LockAcceptance` does not survive beside `CheckpointAct`.
 
-- **`Attestation`** (`attestation.rs:36-41`) — `id`, `subject`, `fingerprint`,
-  `reviewer`. Declared with an `att-` subject, content-bound to one section,
-  which is exactly `SectionReviewed`.
-- **`LockAcceptance`** (`attestation.rs:260`) — `AcceptanceAttestation` plus
-  `ContentCoverage`, for the one act that is about the whole document.
-
-### Why the checkpoint acceptance is not a home for the other four
+### Why the checkpoint acceptance is not a home
 
 An earlier draft assigned `GovernanceConfirmed`, `GraphReviewed`,
 `SufficiencyAccepted` and `ReviewDisposed` to the generic `cp-` acceptance,
@@ -879,10 +967,12 @@ exactly `attestations`, `findings`, `integrated` and `acceptance: LockAcceptance
 A gate whose signature is `DesignSnapshot` plus `DerivedInput` cannot see a
 checkpoint acceptance at all.
 
-So the four get a persisted, snapshot-admitted record:
+So they get a persisted, snapshot-admitted record — the four above, and
+`DesignAccepted` joining them per the subsection on record shapes:
 
 ```rust
-/// A user act given at a checkpoint, in the form the gate reads it (DEC-121).
+/// A user act, in the form the gate reads it (DEC-121). Named for the four
+/// checkpoint acts; `DesignAccepted` is the run-level fifth.
 pub(crate) struct CheckpointAct {
     id: DesignId,
     act: ActKind,
@@ -909,9 +999,38 @@ pub(crate) enum CoveredSet {
 instantiation it is. The alternative — one map keyed by a stringly-typed value —
 would put the selector back in the data where the type can no longer check it.
 
-These land in their own snapshot group, for the reason `delegation` and `runbook`
-have theirs: a checkpoint act is its own state model, and `ReviewGroup`'s four
-members are all about review.
+**The rule's `Coverage` and the record's `CoveredSet` are not two spellings of
+one fact**, and the apparent duplication resolves rather than needing removal.
+`Coverage` in the const rule is a *requirement* — what an act of this kind must
+have been given over. `CoveredSet` in the record is *evidence* — what this act
+was actually given over. Two things that must agree, not one thing written twice.
+
+What was missing is who checks the agreement. **Admission does.** A
+`CheckpointAct` whose `CoveredSet` does not match the shape its rule's `Coverage`
+names is refused on write. Every stored act therefore satisfies the invariant by
+construction, and the gate never re-checks it — the same move `sec-3` makes for
+the generated tables, one layer out.
+
+**Wire, replacement, and snapshot home.** Left unstated, these are where the
+implementations diverge, so:
+
+- **Declared** as a run-level field on `ApplyRequest`, joining `WRITER_ACTS`
+  (`submission.rs:664`) — the array whose own doc says a state-changing act that
+  does not join the list **is** the gap. It carries an `AcceptanceDeclaration`,
+  so `AcceptanceAttestation::bind` stays the only route to user authority and
+  `DEC-088` is untouched.
+- **Replaced by act**, not by id: at most one live `CheckpointAct` per `ActKind`,
+  a new one superseding the prior, the way `run.rs:1062` retains-then-pushes an
+  attestation. Two live acts of one kind would make *which one is current*
+  ambiguous with no rule to break the tie.
+- **Stored** in its own snapshot group, for the reason `delegation` and `runbook`
+  have theirs: a recorded act is its own state model, and `ReviewGroup`'s members
+  are all about review.
+
+`DesignAccepted` rides the same three, which is what retiring `LockAcceptance`
+means concretely: its wire type is already `AcceptanceDeclaration`
+(`submission.rs:627`), so the run-level acceptance field keeps its shape and
+changes where it lands.
 
 ### Coverage is a selector, not a mechanism
 
@@ -935,6 +1054,13 @@ current map is handed to the same comparison*:
 integrated review and the lock acceptance — so whole-run currency has a single
 owner rather than a spelling in each."* A third user rides the seam as its author
 intended. Generifying is what lets it; `is_current`'s body does not change.
+
+**On size.** `ContentCoverage<NodeMaterial>` stores material rather than digests,
+and two acts cover the inquiry map, so a run holds roughly two copies of its
+question set. At fifteen nodes that is negligible, and it is gitignored runtime
+state rather than authored content. The trade is deliberate: material is what
+makes the comparison pure and the refusal specific, and a digest would buy
+compactness at the cost of both.
 
 ### The other new shape: agent declarations
 
@@ -969,8 +1095,9 @@ pub(crate) struct AgentDeclaration {
     /// What it was declared over. `None` is `Coverage::Artefact` — the
     /// declaration's own content is its binding.
     covered: Option<CoveredSet>,
-    /// This declaration's own content digest, shell-computed at declare time.
-    /// A confirming `CheckpointAct` names it; see the ordering subsection.
+    /// The digest of this declaration's CLAIM — `act` and `basis`, and nothing
+    /// else. Shell-computed at declare time; a confirming `CheckpointAct` names
+    /// it. See below for why `covered` is excluded.
     fingerprint: Fingerprint,
 }
 
@@ -996,6 +1123,18 @@ the user confirm* ambiguous, and removing that ambiguity is what the confirmatio
 link below exists for. Its wire shape is a run-level field on `ApplyRequest`,
 joining `WRITER_ACTS` (`submission.rs:664`) — the array whose own doc says a new
 act that can change state and does not join the list **is** the gap.
+
+**What the fingerprint is taken over.** `act` and `basis`, each on its own line,
+LF-terminated, UTF-8, sha256 — the same hash the rest of the run uses. `id` is
+excluded because the engine allocates it and it is not content; `turn` because it
+is a harness detail rather than part of the claim; and `covered` because its
+currency is already the coverage mechanism's job. Folding the covered map into
+the digest would mean specifying a canonical encoding for `NodeMaterial` *and*
+would conflate two questions the conjunct wants answered separately: **is this
+the claim the user was shown** (the fingerprint) and **has the material moved
+since** (`is_current`). Two checks, each on the mechanism suited to it. Stating
+this is not pedantry — leaving it to the implementer is the defect this section
+already fixed once, for `InquiryMap`.
 
 `DEC-121` is the reason this exists at all: *"an agent marks its whole graph
 blocking by fiat, and the difference between eight round-trips and four is
@@ -1024,20 +1163,69 @@ nothing, which the tree states about itself at `attestation.rs:77-80`: *"read
 surface with no reader — the gate derives review standing from coverage, not from
 who reviewed."*
 
-**The shape.** One ordered, duplicate-free, non-empty list:
+**The shape.** `Reviewer` is closed at two, so the lawful policies are exactly
+four values. Enumerate them:
 
 ```rust
-/// The reviewer lanes a run requires, in the order it intends them (DEC-073).
-///
-/// Ordered and non-empty. Membership is what the gate checks; the order is
-/// DECLARED, not enforced.
-pub(crate) struct ReviewPolicy(Vec<Reviewer>);
+/// The reviewer lanes a run requires, and the order it intends them in
+/// (DEC-073). Membership is what the gate checks; order is DECLARED, not
+/// enforced.
+#[derive(Default)]
+pub(crate) enum ReviewPolicy {
+    #[default]
+    HumanOnly,
+    AdversarialOnly,
+    HumanThenAdversarial,
+    AdversarialThenHuman,
+}
 ```
 
-Both of `DEC-073`'s facts in one field rather than a set beside an order that
-could disagree with it. The default is `[Human]` — `DEC-074`'s default posture —
-and it is `#[serde(default)]`, so an existing snapshot parses and an existing run
-behaves exactly as it does today.
+An earlier draft used `Vec<Reviewer>`, described as *ordered, non-empty,
+duplicate-free* — three properties that type does not have. `Vec` admits `[]` and
+`[Human, Human]`, so the prose claimed a guarantee nothing enforced: `ISS-310`'s
+own defect shape, reappearing inside its fix. The enum makes all three
+structural.
+
+**Two variants differ only in data the gate ignores**, which is intended rather
+than overlooked. `HumanThenAdversarial` and `AdversarialThenHuman` present the
+same membership to `satisfied`; the difference is read by the renderer and the
+runbook, which is where `DEC-073`'s *intended order* is meant to act. Said here
+because a reader who finds the gate discarding a distinction the type draws will
+otherwise read it as a bug.
+
+`HumanOnly` is the default — `DEC-074`'s posture — and the field is
+`#[serde(default)]`, so an existing snapshot parses and an existing run behaves
+exactly as it does today.
+
+**The policy is mutable, and that is a deliberate hole with a deliberate fence.**
+A run whose policy loosens from `HumanOnly` to `AdversarialOnly` clears
+`section-attestations-current` on adversarial attestations alone — `ISS-310`'s
+hole, re-entered through the front door. The design accepts it for three reasons.
+
+A user may legitimately change their mind, and a policy nobody can revise is one
+they will route around by hand-editing runtime state, which is strictly worse
+than revising it in the open. The `SL-243` repair depends on it: that repair is a
+lane *swap*, so a tighten-only rule would forbid the very case that argued for
+the policy. And a stricter gate would be theatre — the agent drives the CLI, so
+any rule expressible in the payload is one an agent can satisfy.
+
+So the fence is authority and visibility, not prohibition:
+
+- **Changing the policy is a user act.** It rides an `AcceptanceDeclaration`, so
+  `AcceptanceAttestation::bind` is the only route and the change carries
+  `AcceptanceAuthority::User` exactly as an acceptance does. An agent cannot
+  relax the rules as housekeeping; it must present the change as the user's, in
+  the same shape as every other user judgement in the run.
+- **Every change lands in the change log**, so the sequence *conditions unmet →
+  policy loosened → conditions met* is legible after the fact rather than
+  inferable from a final state that looks clean.
+- **The current policy renders in the envelope**, so no reader has to guess which
+  lanes a run requires.
+
+Stated plainly, because the design should not imply more than it delivers: **the
+review policy is a declaration of intent, not a security boundary.** What it buys
+is that hurrying a run along must be done in the user's name and leaves a trace,
+rather than being a silent shortcut.
 
 **Order is declared and rendered, never enforced.** Three reasons.
 `Attestation` (`attestation.rs:36-41`) is `id`, `subject`, `fingerprint`,
@@ -1119,15 +1307,18 @@ insufficient when the comparable material does not survive submission.
 
 So the link is explicit and persisted. `AgentDeclaration` carries its own
 `fingerprint`; `CheckpointAct::confirms` holds the fingerprint of the declaration
-the user was shown. The conjunct is met when the named declaration is present
-**and** still carries that fingerprint.
+the user was shown. **The lookup is by act, not by fingerprint** — the conjunct
+in the rule already names which agent act it requires, so the gate fetches that
+declaration and the fingerprint answers only *is it still the one confirmed*.
+`confirms` therefore needs no act tag of its own; it would be naming a fact the
+rule supplies.
 
 The ordering property follows. A declaration made or edited after the
-confirmation carries a different fingerprint, so `confirms` names content that no
-longer exists and the conjunction is unmet. Unlike the co-location scheme this is
-a comparison of two stored values, so a refusal can say *which* declaration the
-confirmation was given over and that it has since moved — where the digest scheme
-could only report that something did not match.
+confirmation carries a different fingerprint, so `confirms` no longer matches and
+the conjunction is unmet. Unlike the co-location scheme this compares two stored
+values, so a refusal can name the act, say that a confirmation exists, and say
+that the declaration it was given over has since changed — three facts, where the
+discarded-payload scheme could only report that a digest did not match.
 
 ### The governance edge projection
 
@@ -1200,6 +1391,20 @@ missing answer.
 - **An agent cannot declare a user act** — `AgentActKind` has two members, so an
   agent-authored `DesignAccepted` does not compile. A build-time property, so
   there is no runtime test to write.
+- **A mismatched coverage is refused on write** — a `CheckpointAct` whose
+  `CoveredSet` is `Sections` where its rule's `Coverage` names `InquiryMap` is
+  refused at admission, so no stored act can violate the pairing.
+- **A policy change is a user act and is logged** — a payload that changes the
+  policy without an `AcceptanceDeclaration` is refused, and an accepted change
+  emits a change row naming both the old and new policy.
+- **Loosening the policy does clear the gate** — the deliberate hole, asserted
+  rather than left implicit: `HumanOnly` unmet, changed to `AdversarialOnly`,
+  then met. The test exists so that removing the hole later is a visible break
+  rather than a silent tightening.
+- **A declaration's coverage does not move its fingerprint** — editing an inquiry
+  node leaves `BlockingSetDeclared`'s fingerprint unchanged, so `confirms` still
+  matches while `is_current` fails. The two checks answer different questions and
+  are asserted separately.
 - **The projection is order-independent** — two edge sets with the same members
   added in different orders fingerprint equal.
 - **Kind and role are observed** — replacing `governed_by ADR-004` with
@@ -1222,10 +1427,16 @@ missing answer.
 - **`DEC-073`'s policy is built here, not decided here.** No superseding record
   is owed. What this slice adds is the binding from the policy to
   `section-attestations-current`, and the two derivations that read it.
-- **`SL-243` is repaired by policy**, not by hand: declaring its policy
-  `[Adversarial]` clears it.
-- **The snapshot grows by three shapes, not one** — `ReviewPolicy` on the run
-  header, a checkpoint-act group, and an agent-declaration group. `sec-2` records
-  one shape change as this slice's cost to the one live run; that passage is now
-  understated and must be revisited before planning.
+- **`SL-243` is repaired by policy**, not by hand: declaring `AdversarialOnly`
+  clears it.
+- **The snapshot changes in four ways, not one** — `ReviewPolicy` on the run
+  header, a checkpoint-act group, an agent-declaration group, and
+  `LockAcceptance` retiring into `CheckpointAct`. The last is a migration rather
+  than an addition, and is the only one that touches data an existing run already
+  holds. `sec-2` records one shape change as this slice's cost to the one live
+  run; that passage must be revisited before planning.
+- **The policy is not a security boundary**, and the design says so. If a later
+  slice wants it to be one, the missing piece is not a stricter gate but a way to
+  distinguish a user's payload from an agent's — which is `DEC-088`'s standing
+  limitation, not this slice's to close.
 

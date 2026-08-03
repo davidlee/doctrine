@@ -142,16 +142,16 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 44) · a163391c
+fresh-as-of: 2026-08-03 · design/drafting (run rev 45) · 67b50bdf
 
 ### Produced
 
 - `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
   (`cp-15`, `cp-14`).
-- `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395` — backlog.
+- `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-048` — backlog.
 - Design run sections `sec-1`, `sec-2`, `sec-3`, `sec-4` — materialised, watermark
-  current (rev 44). `sec-3` is v5 and `sec-4` is v2; the joint review's seven
-  findings are all ruled and integrated.
+  current (rev 45). `sec-3` is v6 and `sec-4` is v3: the joint review's seven
+  findings and a ten-finding self-review are all ruled and integrated.
 - Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
@@ -196,6 +196,28 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 44) · a163391c
 - **`can_advance` (`gate.rs:150-158`) and `boundary_conditions` (`gate.rs:162`)
   are two hand-written matches over the same four stage pairs.** Generating only
   the second leaves a row keyed to an illegal edge compiling and never evaluated.
+  Settled by a closed `Advance` type, not by generating `can_advance` — that
+  would have made the condition table authoritative for the state machine.
+- **The run has TWO transition relations, differing in kind.** Forward: a closed
+  set of four, each carrying a guard contract. Backward: *"the backward and
+  non-adjacent pairs"* (`gate.rs:199`), barred by a missing reason rather than by
+  a condition (`gate.rs:367`, `DEC-067`). Nothing closed to enumerate on that
+  side, so the asymmetry is honest modelling — but must be stated or it reads as
+  a gap. A backward move invalidates nothing, because acts bind to content and
+  never to a stage.
+- **`LockAcceptance` is subsumed by the new `CheckpointAct`**, not merely similar
+  — it is `AcceptanceAttestation` + `ContentCoverage`, i.e. `CheckpointAct` with
+  `act: DesignAccepted`, `observed: {}`, `confirms: None`.
+- **The review policy cannot be a security boundary**, and the design says so.
+  The agent drives the CLI, so any rule expressible in the payload is one an
+  agent can satisfy; the fence is user authority (`AcceptanceDeclaration`), the
+  change log, and the envelope render — not prohibition. Closing this needs a way
+  to distinguish a user's payload from an agent's, which is `DEC-088`'s standing
+  limitation.
+- **A finding's observation can be right while its prescription is wrong** —
+  three times this slice (`ISS-310`'s ruling, review finding #5's
+  `DerivedInput` route, self-review #6's "remove one source"). Cheap to check
+  before integrating; expensive to discover after.
 - **Checkpoint acceptances do not reach the snapshot.** The review group holds
   exactly `attestations` / `integrated` / `acceptance: LockAcceptance`
   (`snapshot.rs:320-333`); a checkpoint's `AcceptanceAttestation`
@@ -224,10 +246,12 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 44) · a163391c
 - **`sec-2` has never been adversarially reviewed** — round 1 covered `sec-1`,
   rounds 2-3 `sec-3`, round 4 `sec-3` + `sec-4`. Its first pass and the clause
   above are one piece of work, best done against a stabilised `sec-4`.
-- **`sec-3` v5 / `sec-4` v2 have not been re-reviewed.** The seven findings are
-  integrated but the integration itself is unreviewed. Codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain and is the cheap
-  next pass.
+- **`sec-3` v6 / `sec-4` v3 have not been externally reviewed.** Seventeen
+  findings are integrated — seven from codex, ten from a self-review that caught
+  four defects the integration itself introduced. The codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain and is the next
+  pass. **Run the self-review first each time**: it cost one turn and found two
+  blockers, including a thesis paragraph left contradicting its own section.
 - Next section after `sec-4` clears: the contract's two channels
   (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
 
