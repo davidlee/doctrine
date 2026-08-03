@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc5ed-c907-7953-b1f8-05245cb7f51b"
+recorded_at = "2026-08-03T04:42:02.88758648Z"
+kind = "friction"
+summary = "/record-memory: memory search lists uid+title but not the mem.* key, and wikilinks are keyed by key"
+detail = "Appending a worked example to an existing memory (mem_019ebee3c678) meant writing two [[wikilinks]]. `doctrine memory search` returns columns uid | type | status | staleness | trust | severity | spec | title — no key column. I wrote both links from the titles and both were wrong (mem.pattern.review.negative-grep-needs-positive-control vs the real mem.pattern.harness.grep-negative-needs-positive-control; mem.pattern.testing.smoke-exercises-capability-not-dependency vs mem.pattern.tests.smoke-the-capability-not-the-dependency). Cost: an extra show-per-target round trip plus a full body rewrite to fix, because memory edit has no targeted string replace and --body-mode replace is wholesale. memory resolve-links caught it cleanly (2 resolved / 2 dangling), so the failure was visible and cheap to detect — but a key column in search output, or accepting a uid inside [[]], would have removed the round trip entirely. The near-miss: dangling wikilinks are tolerated by design, so an agent that did not run resolve-links would have committed both."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
