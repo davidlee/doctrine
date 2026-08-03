@@ -249,11 +249,13 @@ hierarchical-state-machine error `DEC-065` rejects. What it does require is that
 required actor and today's derivation names none. See `ISS-310`.
 
 **One row's required actor is run data, and the actor slot must say so.**
-`section-attestations-current` is the only row whose coverage is `EverySection`,
-and the only row whose required actor is not a constant of this table. That is
-one fact, not two: its requirement is quantified over sections, and *which*
-reviewer lanes each section needs is declared per run under `DEC-073`'s review
-policy rather than fixed here.
+`section-attestations-current` is the only row whose required actor is not a
+constant of this table: *which* reviewer lanes each section needs is declared
+per run under `DEC-073`'s review policy rather than fixed here. It is also the
+only row carrying `PerSection` coverage, but those are two facts and not one —
+coverage fixes the subject set a requirement ranges over, the actor slot fixes
+who must have authored the act, and the same discipline this section applies to
+reach and coverage applies here.
 
 `ISS-310` is answered in the attested-acts section. What belongs here is the type
 each candidate answer costs, because `acts` is a conjunction — two
@@ -313,17 +315,58 @@ pub(crate) struct Binding {
 pub(crate) enum Coverage {
     /// The attested artefact's own recorded content, and nothing else.
     Artefact,
-    /// Every section's current digest.
+    /// Each required act carries a covered map that must equal every section's
+    /// current digest.
     EverySection,
-    /// Every inquiry node's current canonical material.
+    /// Each required act carries a covered map that must equal every inquiry
+    /// node's current canonical material.
     InquiryMap,
+    /// Quantified over subjects instead of carried by the act: every current
+    /// section must have its OWN live act of the required kind and actor,
+    /// against that section's current digest.
+    PerSection,
 }
 ```
 
-`EverySection` is the incumbent pattern generalised, not a new idea:
+**`PerSection` is not `EverySection` with the acts spread out**, and the
+incumbent is where the difference is visible: `review_standing`
+(`snapshot.rs:419-433`) derives both, ten lines apart, in two different shapes.
+`acceptance_current` is `acceptance.is_current(&current)` — whole-map equality
+against a map *stored on the act*. `sections_attested` is a quantification with
+no stored map at all, assembling its covered set from the attestation set at
+evaluation time:
+
+```rust
+!current.is_empty()
+    && current.iter().all(|(id, fingerprint)| {
+        attestations.iter().any(|held| {
+            held.subject() == id && held.fingerprint() == fingerprint
+        })
+    })
+```
+
+Two properties follow that whole-map equality does not have, and both would be
+lost by spelling this row `EverySection`.
+
+**A departing section is not a failure.** The quantification ranges over the
+*current* sections, so removing one drops it from the requirement and the row
+still holds. `ContentCoverage::is_current` compares maps in both directions, so
+a departure invalidates. For a stored acceptance that is right — it was given
+over a document that no longer exists. For per-section review it is wrong: the
+reviews that remain are still good.
+
+**The empty case must be refused, and equality cannot refuse it.** The incumbent
+carries an explicit guard with its reason stated in-line — *"a run holding no
+sections cannot have current attestations for them, and reporting `true` would
+let an empty draft lock."* An empty stored `ContentCoverage` against an empty
+current map compares **equal**, so an `EverySection` spelling would report this
+row satisfied on a document with no sections. The guard is part of what
+`PerSection` means, not a check beside it.
+
+`EverySection` is otherwise the incumbent pattern generalised, not a new idea:
 `ContentCoverage` already stores the subject→fingerprint map an acceptance was
-made over and compares it with the current one (`attestation.rs:200-214`). It
-exists because two rows need it — see the reach arguments below.
+made over and compares it with the current one (`attestation.rs:200-214`). One
+row needs it — `user-acceptance-attested`.
 
 `InquiryMap` is the same *comparison* over the other run-owned subject set, but
 **not** over digests, and the difference is forced rather than chosen. A section
@@ -578,7 +621,7 @@ out: **two Derived, seven Attested, zero Claimed.**
 | `initial-concerns-recorded` | `Attested([{GraphReviewed, User}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative | pending `IMP-391` |
 | `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | inquiry map | — | cumulative | active |
 | `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local | active |
-| `section-attestations-current` | `Attested([{SectionReviewed, …}])` | every section | — | cumulative | active |
+| `section-attestations-current` | `Attested([{SectionReviewed, …}])` | per section | — | cumulative | active |
 | `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative | active |
 | `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative | active |
 
@@ -631,9 +674,14 @@ name only what the row's coverage can observe.
   is `materialisation-current`'s job, which is cumulative. Its coverage is
   `Artefact`, so cumulative reach would add nothing observable in any case —
   edge-local is the honest label, not merely the chosen one.
-- `section-attestations-current`, `user-acceptance-attested` — **cumulative**,
-  on `EverySection` coverage: `DEC-066` over section digests, which is the whole
-  point of both rows.
+- `user-acceptance-attested` — **cumulative**, on `EverySection` coverage:
+  `DEC-066` over section digests against the map the acceptance was given over,
+  which is the whole point of the row.
+- `section-attestations-current` — **cumulative**, on `PerSection` coverage. The
+  same `DEC-066` reading one quantifier out: a section whose digest moves loses
+  its own act, and the row is unmet until that section is reviewed again. Editing
+  one section does not unmake the others' reviews, which is the difference from
+  the row above.
 - `review-disposition-attested` — **cumulative**, and today the label outruns
   what its coverage can enforce. `Artefact` coverage means only the disposition
   record's own content invalidates it; binding it to the finding set — so that
@@ -820,6 +868,18 @@ generator emits and what the asset test iterates.
 - **Coverage invalidates** — a node edit unmakes `user-accepts-sufficiency`; a
   section edit unmakes `user-acceptance-attested`. Both against the incumbent
   `ContentCoverage` behaviour, at its two instantiations.
+- **Per-section coverage invalidates only its own subject** — editing one
+  section unmakes `section-attestations-current` until that section is reviewed
+  again, and leaves every other section's attestation live. The quantified
+  reading, distinguished from the whole-map one on the same edit.
+- **A departing section is not a failure** — removing a section leaves
+  `section-attestations-current` satisfied on the remaining reviews, while the
+  same removal unmakes `user-acceptance-attested`. The one case where the two
+  coverages give opposite answers, which is why they are two variants.
+- **An empty document does not satisfy per-section review** — a run holding no
+  sections leaves `section-attestations-current` unmet. The incumbent's
+  degenerate guard; whole-map equality would report it satisfied, so this test
+  is what stops the split from being cosmetic.
 - **Progress does not invalidate** — disposing an inquiry leaves
   `user-accepts-sufficiency` satisfied, where re-wording or re-parenting the same
   node unmakes it. The material/progress line, tested from both sides.
@@ -886,8 +946,9 @@ projection.
 
 The result is **less ratification than it first looks**. Two of the eight acts
 have a home a gate can read, four have one it cannot, and two have none at all.
-One comparison still covers all three coverages, but only after it is generalised
-over what it covers — and the eight acts settle into three record shapes.
+One comparison covers three of the four coverages, but only after it is
+generalised over what it covers; the fourth keeps the incumbent quantification
+rather than joining it — and the eight acts settle into three record shapes.
 
 ### One contract, as few shapes as the acts need
 
@@ -933,7 +994,7 @@ means justified rather than incumbent.
 | `BlockingSetDeclared` | Agent | **new** — agent declaration | inquiry-map coverage |
 | `SufficiencyAccepted` | User | **new** — checkpoint act | inquiry-map coverage |
 | `DraftingReady` | Agent | **new** — agent declaration | artefact |
-| `SectionReviewed` | `RequiredActor::RunPolicy` | `att-` attestation | subject fingerprint |
+| `SectionReviewed` | `RequiredActor::RunPolicy` | `att-` attestation | per-section coverage |
 | `ReviewDisposed` | User | **new** — checkpoint act | artefact |
 | `DesignAccepted` | User | **new** — checkpoint act (run-level) | every-section coverage |
 
@@ -1001,6 +1062,15 @@ pub(crate) enum CoveredSet {
 instantiation it is. The alternative — one map keyed by a stringly-typed value —
 would put the selector back in the data where the type can no longer check it.
 
+**Two variants against `Coverage`'s four, and the gap is not an omission.**
+`Artefact` is `covered: None`, as the field's own doc says. `PerSection` has no
+`CoveredSet` at all and cannot: it is the one coverage carried by no act, being
+a quantification the derivation performs over the section set, and its only row
+stores its acts as per-section `Attestation`s rather than as `CheckpointAct`s.
+So the two variants cover every case a `CheckpointAct` can lawfully be in, and
+a `CheckpointAct` whose rule named `PerSection` is a value admission refuses —
+one more instance of the pairing check below.
+
 **The rule's `Coverage` and the record's `CoveredSet` are not two spellings of
 one fact**, and the apparent duplication resolves rather than needing removal.
 `Coverage` in the const rule is a *requirement* — what an act of this kind must
@@ -1039,13 +1109,14 @@ means concretely: its wire type is already `AcceptanceDeclaration`
 (`submission.rs:627`), so the run-level acceptance field keeps its shape and
 changes where it lands.
 
-### Coverage is a selector, not a mechanism
+### Coverage is a selector three times and a mechanism once
 
-`sec-3`'s three `Coverage` variants need no new comparison. `ContentCoverage<T>`
-holds a `BTreeMap<DesignId, T>` and answers `is_current(current)` by whole-map
-equality (`attestation.rs:200-214`), and run-local ids are one space — `sec-`,
-`inq-`, `cp-`, `att-`, `fnd-` are all `DesignId`. So the variant selects *which
-current map is handed to the same comparison*:
+Three of `sec-3`'s four `Coverage` variants need no new comparison.
+`ContentCoverage<T>` holds a `BTreeMap<DesignId, T>` and answers
+`is_current(current)` by whole-map equality (`attestation.rs:200-214`), and
+run-local ids are one space — `sec-`, `inq-`, `cp-`, `att-`, `fnd-` are all
+`DesignId`. So for those three the variant selects *which current map is handed
+to the same comparison*:
 
 - `EverySection` — the section digest map, `ContentCoverage<Fingerprint>`. The
   incumbent use, unchanged.
@@ -1057,10 +1128,20 @@ current map is handed to the same comparison*:
   nothing to compare against; represented as an absent coverage rather than an
   empty one, because an empty map is *not* the same claim as no claim.
 
-`ContentCoverage`'s own doc argues for the reuse: *"One type, two users — the
-integrated review and the lock acceptance — so whole-run currency has a single
-owner rather than a spelling in each."* A third user rides the seam as its author
-intended. Generifying is what lets it; `is_current`'s body does not change.
+`PerSection` is the exception and is the reason this heading is not the one an
+earlier draft carried. It hands nothing to `is_current`, because the act it
+ranges over stores no covered map: `Attestation` is `id`, `subject`,
+`fingerprint`, `reviewer`. Its comparison is the quantification `sec-3` quotes
+from `review_standing` (`snapshot.rs:419-433`) — for every current section,
+some live attestation matches that section's id and digest, over a non-empty
+section set. That is an incumbent mechanism being *kept*, not a new one being
+added, so the count of comparisons in the tree does not change either way.
+
+`ContentCoverage`'s own doc argues for the reuse across the other three: *"One
+type, two users — the integrated review and the lock acceptance — so whole-run
+currency has a single owner rather than a spelling in each."* A third user rides
+the seam as its author intended. Generifying is what lets it; `is_current`'s
+body does not change.
 
 **On size.** `ContentCoverage<NodeMaterial>` stores material rather than digests,
 and two acts cover the inquiry map, so a run holds roughly two copies of its
