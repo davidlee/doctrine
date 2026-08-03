@@ -142,15 +142,15 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 40) · b5563f64
+fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 8e23952c
 
 ### Produced
 
 - `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
   (`cp-15`, `cp-14`).
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395` — backlog.
-- Design run sections `sec-1`, `sec-2`, `sec-3` — materialised and adopted
-  (rev 40, watermark current). `sec-3` is v3, post-review integration.
+- Design run sections `sec-1`, `sec-2`, `sec-3`, `sec-4` — materialised, watermark
+  current (rev 43). `sec-3` is v4 (two review rounds integrated); `sec-4` is v1.
 - Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
@@ -163,21 +163,33 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 40) · b5563f64
 
 ### Open
 
-- `ISS-310`'s actor decision — reframed by the v3 integration as a **quantified
-  rule, not a value**: `section-attestations-current` is the only `EverySection`
-  row and the only contested actor, and that is one fact. Each candidate answer
-  now carries a stated type cost (human fits; either needs a disjunction; opt-in
-  leaves the const table entirely). Decided in the attested-acts section.
 - Whether `ObservedFact` justifies its seam with one member.
-- **`sec-3` v3 has not been re-reviewed.** v2's eight findings were
-  dispositioned and integrated, but `#1`, `#2` and `#8` changed shape during
-  discussion rather than being transcribed from the reviewer's prescriptions —
-  the reviewer has not seen the result. Codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965` still holds the context.
-- Next section unpicked: the attested acts (`ActKind` membership and each act's
-  artefact shape) or the contract's two channels (`DEC-122`/`DEC-124`). The
-  first is recommended — `ISS-310`, the `…` cell, and `ActKind`'s closure all
-  resolve there.
+- **`review-disposition-attested`'s cumulative reach is not enforceable** until
+  `IMP-392` gives it the `RV`-backed finding set to bind to. Recorded in `sec-3`
+  as a gap, deliberately not asserted as a guarantee.
+- **`sec-3` v4 and `sec-4` are out for adversarial review** (codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965`, which holds the whole chain). Sent
+  together on the bet that v4's changes were subtractive enough not to be
+  structural, and because `sec-4` closes three of `sec-3`'s deferrals — the
+  actor, conjunct ordering, the projection — so the seam is only testable with
+  both in view.
+- **The `ISS-310` answer wants a decision record.** Decided by the user with
+  alternatives weighed and a cost accepted; currently recorded only in `sec-4`'s
+  prose. No open inquiry node to bind it to, so it needs a route.
+- Next section after `sec-4` clears: the contract's two channels
+  (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
+
+**`ISS-310` is DECIDED** — `section-attestations-current` requires a **human**
+section review. Start strict: `human → either` widens compatibly, `either →
+human` breaks runs that cleared under the loose rule. Adversarial section review
+stays recorded and supplementary; `DEC-074`'s integrated pass already guarantees
+adversarial coverage at document level. **`SL-243` will need manual repair** —
+it cannot clear the gate on sections it attested adversarially.
+
+**The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
+unchanged and still `const`; both filters land in `cumulative_conditions`, which
+was already non-`const`. The three-option passage was deleted rather than
+decided.
 
 **The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
 unchanged and still `const`; both filters land in `cumulative_conditions`, which
