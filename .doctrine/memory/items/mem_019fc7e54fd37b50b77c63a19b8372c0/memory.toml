@@ -1,0 +1,46 @@
+memory_uid = "mem_019fc7e54fd37b50b77c63a19b8372c0"
+memory_key = "mem.pattern.review.observation-right-prescription-wrong"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A finding's observation can be right while its prescription is wrong"
+summary = "Adjudicate the observation and the prescription separately — a correct diagnosis routinely arrives with the wrong repair, and integrating on the finding's authority ships it."
+created = "2026-08-03"
+updated = "2026-08-03"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "feedback"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c34ce77955abf1a04230524f1ab515a3a884c3b1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "dd22af476944124e53507071b294c7365a81e14bbc89fab787bbde808fb9e6d8"
+base_commit = "dd68af2a90f8a5a8ae379bdbe17157e6706ad79f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+

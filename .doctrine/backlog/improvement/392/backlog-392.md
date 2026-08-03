@@ -26,6 +26,22 @@ with a **document-section reference**, so one model serves both.
 - The derived outstanding-findings summary **by severity** that `DEC-126`'s
   `review-disposition-attested` is informed by.
 
+## Two things `SL-244` specified against this item and cannot enforce without it
+
+Both need the same missing input — the outstanding-finding set — so they land
+together or not at all. `SL-244`'s `sec-3` records them as one gap with two
+consequences; this is the delivering end of it.
+
+- **Cumulative reach.** `review-disposition-attested` is labelled cumulative
+  while its `Artefact` coverage means only the disposition record's own content
+  invalidates it. Binding it to the finding set is what makes the label true.
+- **The `Waived` arm's admissibility.** `SL-244` conditions `Waived { reason }`
+  on nothing being outstanding to dispose: once findings are raised the row
+  requires `Conducted`, releasing when the user disposes them, with `withdraw`
+  as the escape rather than a waiver. Unenforceable until the finding set is
+  readable — so until this item lands, a waiver clears the lock edge over live
+  findings. That is the sharper of the two.
+
 ## What this dissolves
 
 `SL-233`'s design promised *"Findings remain runtime data unless promoted to

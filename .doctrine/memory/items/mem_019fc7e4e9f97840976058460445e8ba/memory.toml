@@ -1,0 +1,46 @@
+memory_uid = "mem_019fc7e4e9f97840976058460445e8ba"
+memory_key = "mem.pattern.feedback.rule-findings-in-dependency-order"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Rule findings in dependency order — an earlier ruling can move a later one's fix site"
+summary = "Before disposing a finding batch, sort by which findings' fixes constrain others; ruling out of order gets fixes right for a design that the next ruling changes."
+created = "2026-08-03"
+updated = "2026-08-03"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "feedback", "design"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c34ce77955abf1a04230524f1ab515a3a884c3b1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "07eb14e6bb53d1e82a6f26878c090a89b77f1ddd2e01511f758946e38fe1d7ef"
+base_commit = "dd68af2a90f8a5a8ae379bdbe17157e6706ad79f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+

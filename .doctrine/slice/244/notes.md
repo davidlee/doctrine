@@ -142,16 +142,19 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 45) · ca6b6094
+fresh-as-of: 2026-08-03 · design/drafting (run rev 50) · dd68af2a
 
 ### Produced
 
 - `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
   (`cp-15`, `cp-14`).
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-048` — backlog.
-- Design run sections `sec-1`, `sec-2`, `sec-3`, `sec-4` — materialised, watermark
-  current (rev 45). `sec-3` is v6 and `sec-4` is v3: the joint review's seven
-  findings and a ten-finding self-review are all ruled and integrated.
+- Design run sections `sec-1`..`sec-4` — materialised, watermark current at run
+  rev 50. `sec-3` v11, `sec-4` v8; `sec-1`/`sec-2` untouched since rev 45.
+  Commits `4ab80ca5`, `d47a022b`, `3161d25f`, `50b14080`, `dd68af2a` — a
+  nine-finding self-review ruled one at a time, plus the waiver-semantics ruling.
+- `IMP-392` body extended — it now names the two `SL-244` requirements that
+  cannot be enforced until it lands.
 - Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
@@ -214,10 +217,18 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 45) · ca6b6094
   change log, and the envelope render — not prohibition. Closing this needs a way
   to distinguish a user's payload from an agent's, which is `DEC-088`'s standing
   limitation.
-- **A finding's observation can be right while its prescription is wrong** —
-  three times this slice (`ISS-310`'s ruling, review finding #5's
-  `DerivedInput` route, self-review #6's "remove one source"). Cheap to check
-  before integrating; expensive to discover after.
+- `mem.pattern.review.observation-right-prescription-wrong` — four instances this
+  slice; recorded as a memory rather than carried here.
+- `mem.pattern.feedback.rule-findings-in-dependency-order` — a batch is not a flat
+  list; an earlier ruling moves a later one's fix site or reverses it.
+- **`review_standing` (`snapshot.rs:419-433`) holds two structurally different
+  currency derivations ten lines apart** — `acceptance_current` is whole-map
+  equality against a map stored on the act; `sections_attested` is a `∀∃` with no
+  stored map, plus a non-empty guard. Spelling them one `Coverage` variant would
+  delete both the departure asymmetry and the empty-draft guard.
+- **`DEC-125` mints an `RV` on entry to `reviewing`**, so re-entering `reviewing`
+  after a regression mints a *second* `RV` — which is what makes a waiver
+  non-terminal without any unwind mechanism.
 - **Checkpoint acceptances do not reach the snapshot.** The review group holds
   exactly `attestations` / `integrated` / `acceptance: LockAcceptance`
   (`snapshot.rs:320-333`); a checkpoint's `AcceptanceAttestation`
@@ -232,13 +243,25 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 45) · ca6b6094
 
 ### Open
 
-- Whether `ObservedFact` justifies its seam with one member.
-- **`review-disposition-attested`'s cumulative reach is not enforceable** until
-  `IMP-392` gives it the `RV`-backed finding set to bind to. Recorded in `sec-3`
-  as a gap, deliberately not asserted as a guarantee.
+- Whether `ObservedFact` justifies its seam with one member — sharpened: its one
+  member's only row is `Pending`, so nothing compares it until `IMP-392`.
+- **Self-review #4, unruled** — `CheckpointAct::confirms` has no rule-side home;
+  `ActRequirement` is `{act, actor}` and cannot say which agent act a user act
+  confirms. Recommendation: add `confirms: Option<AgentActKind>`, and write the
+  properly-refused alternative (co-location in the *persisted* act, which `sec-4`
+  never tried — it refused only the discarded-payload form).
+- **Self-review #6, unruled** — recommendation *reversed* mid-session: keep
+  `ActKind` whole and let #5's admission correspondence refuse a non-user act,
+  rather than minting a `UserActKind`. The vocabulary does not partition two ways
+  (5 user + 2 agent + `SectionReviewed`), and the mirror hole is untidiness, not
+  a `DEC-088` breach. Standing regardless: `ActKind` is closed at eight and never
+  written as a type anywhere in the design.
+- **A `DEC` is probably owed** for the `Waived` admissibility precondition — it
+  refines `DEC-125`'s arm with a condition that decision does not carry. Not
+  created.
 - **`sec-2`'s snapshot-versioning bullet needs one clause qualified.** It states
   the cost to `SL-243` "is not recoverable"; under the per-run `ReviewPolicy`
-  the review-attestation half now *is* — declare `[Adversarial]`. The
+  the review-attestation half now *is* — declare `AdversarialOnly`. The
   checkpoint-act and agent-declaration groups remain unrecoverable, so the
   clause wants qualifying, not deleting. (The bullet states a concern, not a
   tally, so it is not understated — the "only such change" claim was `sec-4`'s
@@ -246,24 +269,11 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 45) · ca6b6094
 - **`sec-2` has never been adversarially reviewed** — round 1 covered `sec-1`,
   rounds 2-3 `sec-3`, round 4 `sec-3` + `sec-4`. Its first pass and the clause
   above are one piece of work, best done against a stabilised `sec-4`.
-- **`sec-3` v6 / `sec-4` v3 have not been externally reviewed.** Seventeen
-  findings are integrated — seven from codex, ten from a self-review that caught
-  four defects the integration itself introduced. The codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain and is the next
-  pass. **Run the self-review first each time**: it cost one turn and found two
-  blockers, including a thesis paragraph left contradicting its own section.
+- **`sec-3` v11 / `sec-4` v8 have not been externally reviewed**, and have moved
+  a long way since round 4 saw v4/v1. The codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds all four prior rounds; resuming it
+  is much cheaper than starting fresh. **Run the self-review first each time** —
+  it has twice cost one turn and found blockers, including a thesis paragraph
+  left contradicting its own section.
 - Next section after `sec-4` clears: the contract's two channels
   (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
-
-**`ISS-310` is settled: the required reviewer lanes come from the run's review
-policy**, which `DEC-073` specifies and nobody built. Four candidates were
-weighed (`human` / `either` / per-section / per-run); per-run was taken because
-it keeps `DEC-073` and `DEC-074` whole, makes `Reviewer` load-bearing, and
-repairs `SL-243` by declaring `[Adversarial]` rather than by hand-editing runtime
-state. Expressed as `RequiredActor::{Fixed, RunPolicy}` so the const table
-survives. Order between lanes is declared and rendered, never enforced.
-
-**The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
-unchanged and still `const`; both filters land in `cumulative_conditions`, which
-was already non-`const`. The three-option passage was deleted rather than
-decided.
