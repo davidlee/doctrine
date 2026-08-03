@@ -142,15 +142,15 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-03 · design/drafting (run rev 38) · 1cc373ff
+fresh-as-of: 2026-08-03 · design/drafting (run rev 40) · b5563f64
 
 ### Produced
 
 - `DEC-127`, `EVD-012` — knowledge, both accepted/captured and bound into the run
   (`cp-15`, `cp-14`).
 - `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395` — backlog.
-- Design run sections `sec-1`, `sec-2`, `sec-3` (rev 38, undeclared to disk —
-  `design materialise` has not run; watermark absent).
+- Design run sections `sec-1`, `sec-2`, `sec-3` — materialised and adopted
+  (rev 40, watermark current). `sec-3` is v3, post-review integration.
 - Research thread 4 + `research/raw/documentation.md`; baseline restamped twice.
 - One friction observation, `.doctrine/observations/records/6b/`.
 
@@ -163,10 +163,23 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 38) · 1cc373ff
 
 ### Open
 
-- `ISS-310`'s actor decision — blocks `section-attestations-current`'s row in
-  `sec-3`'s classification table (left as `…` deliberately).
-- `sec-3`'s `const`-ness tradeoff on `boundary_conditions` — three options stated,
-  option 3 preferred, **not decided**.
+- `ISS-310`'s actor decision — reframed by the v3 integration as a **quantified
+  rule, not a value**: `section-attestations-current` is the only `EverySection`
+  row and the only contested actor, and that is one fact. Each candidate answer
+  now carries a stated type cost (human fits; either needs a disjunction; opt-in
+  leaves the const table entirely). Decided in the attested-acts section.
 - Whether `ObservedFact` justifies its seam with one member.
-- **`sec-3` v2 has NOT been adversarially reviewed.** v1 was; the six findings
-  were integrated; the rewrite introduced new type shapes no reviewer has seen.
+- **`sec-3` v3 has not been re-reviewed.** v2's eight findings were
+  dispositioned and integrated, but `#1`, `#2` and `#8` changed shape during
+  discussion rather than being transcribed from the reviewer's prescriptions —
+  the reviewer has not seen the result. Codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965` still holds the context.
+- Next section unpicked: the attested acts (`ActKind` membership and each act's
+  artefact shape) or the contract's two channels (`DEC-122`/`DEC-124`). The
+  first is recommended — `ISS-310`, the `…` cell, and `ActKind`'s closure all
+  resolve there.
+
+**The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
+unchanged and still `const`; both filters land in `cumulative_conditions`, which
+was already non-`const`. The three-option passage was deleted rather than
+decided.
