@@ -25,8 +25,11 @@ provenance = "solo"
 [[boundary]]
 phase = "PHASE-05"
 code_start_oid = "8e962656b988dda5febdcd0293fffaa85c2bf385"
-# corrected by hand at T9 — the completion flip captured HEAD, which in this
-# shared tree was 5c78c892, another agent's SL-244 commit. The phase's real code
-# tip is fdebae1e (T6's falsification round); T7-T9 touched no source. F-P05-47.
 code_end_oid = "fdebae1e7530b006bfeaea124b3714497a9597c6"
+provenance = "solo"
+
+[[boundary]]
+phase = "PHASE-06"
+code_start_oid = "e43572d4ee4e88a19589aa9221e303b0d40bd9ce"
+code_end_oid = "43f168009c4cc7edd2998bbfcdfec69290cbf803"
 provenance = "solo"
