@@ -635,7 +635,7 @@ satisfiable, so it never bars the edge and needs no activation exception. It is
 `active`, and the missing arm is what it actually is — an unbuilt enum variant
 tracked by `IMP-392`. The workflow consequence is stated rather than hidden:
 until `IMP-392` lands, `reviewing → locked` is crossable by *waiving* review with
-an admission-checked reason, and the refusal text says so.
+a stated reason, and the refusal text says so.
 
 **`Waived` is a permanent arm, not an interim crutch**, and the sentence above
 would read as the opposite left on its own. `DEC-125` gives the row two arms
@@ -657,46 +657,66 @@ Waiving is therefore never terminal: a design waived through to `plan` that
 comes back for another cycle can be reviewed properly on the next pass, with no
 unwind and no special case.
 
-**But the waiver is over an absent review, never over a live one.** Unconditioned,
-`Waived { reason }` clears the edge with blocking findings sitting undisposed on
-the minted RV — which makes waive-with-a-reason a synonym for dismiss-the-
-findings, and spends the ledger `DEC-125` bought. So the arm carries an
-admissibility rule: **`Waived` is admissible while nothing is outstanding to
-dispose. Once findings are raised, the row requires `Conducted`, and the binding
-releases when the user disposes them.** Declaring the intent to review binds
-until the user's acceptance.
+**What the user is bound to is responding, not agreeing** — `DEC-138`, and it
+fixes both arms at once.
 
-**And `Conducted` is not the weaker arm**, which reading the arms as *review or
-excuse* would make it. This row is the fold of `integrated-review-present` and
-`blocking-findings-disposed`, so both halves live in it: `Conducted { review }`
-is satisfied when the named review exists **and** its blocking findings are
-disposed. Naming an `RV` is not itself the discharge. Stated because the
-admissibility rule above only constrains the waiver, and an arm that cleared the
-edge on a review with findings outstanding would clear it on exactly the evidence
-the waiver is refused for — inverting the two and silently dropping half the
-fold. Both arms therefore rest on the same input, the `RV`-backed outstanding
-set, which is why `IMP-392` gates them together rather than separately.
+`Conducted { review }` is satisfied while the minted `RV` is **not awaiting the
+responder** on a `blocker`. Naming an `RV` is not itself the discharge: findings
+raised and sitting in the responder's court hold the edge. But the raiser's
+assent is not required either, and that is the sharp half. `contest` hands a
+finding back for re-disposition, so a rule wanting *terminal* resolution would
+let a contesting raiser own the responder's progression indefinitely. Disposal is
+something the responder can always perform; assent is not theirs to give.
 
-The escape is not a waiver but **withdrawal** — `withdraw` is already one of the
-`RV` ledger's five verbs, it is a user act, and it leaves its own record. So
-abandoning a review that turned out to be misconceived stays possible and stays
-visible, which is the same fence this design puts around the review policy: the
-route out is authority plus a trace, never a silent one.
+`Waived { reason }` is satisfied **unconditionally** — before a review, or over
+live findings. An earlier draft made it inadmissible while findings were
+outstanding, on the reasoning that an unconditioned waiver is a synonym for
+dismissing them. It is not, and the ledger is what keeps them different: a waiver
+leaves every finding standing on the `RV`, undisposed and legible, beside a
+stated reason in the change log. *I have read these and I am proceeding* is a
+different claim from *these findings do not exist*.
+
+**Neither half works alone, which is why they are one decision.** Block without
+exit and a contesting raiser owns the user's progression, with no termination
+proof. Exit without block and waiving and disposing collapse into the same act,
+spending the ledger `DEC-125` bought.
+
+**Withdrawal is not the escape, and treating it as one was the error.** `withdraw`
+is a real `RV` verb and it stays available, but it means *raised in error*.
+Forcing a user who disagrees with a live finding to spell their decision as a
+retraction of the whole review is worse than letting them say what they mean —
+and it is the shape this design refuses everywhere else. The fence is the one
+`sec-4` argues for the review policy: **authority and visibility, not
+prohibition.** Both arms are user acts carrying an `AcceptanceDeclaration`, so
+`AcceptanceAttestation::bind` is the only route and `DEC-088`'s guarantee is
+carried; both land in the change log. A stricter gate would be theatre, because
+the agent drives the CLI. Whatever an implementation calls this mechanism, the
+property it must preserve is that **an agent cannot author either arm.**
 
 **Why this does not reintroduce the fixpoint**, stated because it is the row that
-motivated making currency a lamp. The binding here is to the **outstanding
-finding set**, and disposal is monotone — the user can always dispose, and
-disposing strictly reduces what is outstanding, so the requirement terminates.
-Binding instead to **content currency** does not terminate, because integrating a
-finding moves the sections the pass covered, which is `RFC-026` E3 and `DEC-126`'s
-stated reason for refusing it. One row, two candidate bindings, opposite
-termination properties. The design argues the second at length above and was
-silent on the first.
+motivated making currency a lamp. The binding is to **whose turn it is**, and
+responding is monotone — the responder can always dispose, and disposing passes
+the baton, so the requirement terminates. Binding to the raiser's assent does not
+terminate, for the contest reason above. Binding to **content currency** does not
+either, because integrating a finding moves the sections the pass covered, which
+is `RFC-026` E3 and `DEC-126`'s stated reason for refusing it. One row, three
+candidate bindings, one of them terminating.
 
-Both the admissibility rule and the row's cumulative reach need the same input —
-the `RV`-backed outstanding-finding set — and neither is buildable until
-`IMP-392`. That is the footing `DEC-125` sets for this slice: *"SL-244 specifies
-its conditions against the RV-backed model; the migration is its own item."*
+**Two gates read this `RV` under different rules, deliberately.** This row gates
+the design run's `reviewing → locked` on *not awaiting the responder*; the `RV`
+close-gate (D-C9b) gates the **slice's** `audit → reconcile` and
+`reconcile → done` on every `blocker` being terminal — verified or withdrawn.
+Different subjects at different altitudes: advancing a design run is not closing
+the work it designs, and closure may reasonably want the stricter thing. Stated
+because one rule implemented twice and inconsistently is what this looks like
+from a distance.
+
+Severity is the ledger's own `blocker` rather than a notion this design invents;
+`DEC-125` brings it, and it is already the only severity that gates anything.
+Both arms need that `RV`-backed finding set, and neither is buildable until
+`IMP-392` — so the interim is the same on both arms, not a strict path and a lax
+one. That is the footing `DEC-125` sets: *"SL-244 specifies its conditions
+against the RV-backed model; the migration is its own item."*
 
 Activation is a column on the one classification table rather than a second table
 to drift against the first, and the enforced set is that table filtered:
@@ -1014,18 +1034,22 @@ generator emits and what the asset test iterates.
 - **The currency lamp is rendered and never refuses** — a stale integrated pass
   sets the envelope flag and `reviewing → locked` still succeeds. Tested at the
   render surface, not the gate, because it is not a condition.
-- **A waiver does not dismiss findings** — a `Waived { reason }` disposition with
-  blocking findings outstanding leaves `review-disposition-attested` unmet, and
-  the refusal says they must be disposed or the review withdrawn. Needs
+- **An undisposed blocker holds the edge** — a `Conducted { review }` disposition
+  naming an `RV` that awaits the responder on a `blocker` leaves
+  `review-disposition-attested` unmet, and the refusal names the finding. Needs
   `IMP-392`'s finding set, so it is specified here and lands with that item.
-- **Neither does a conducted review** — a `Conducted { review }` disposition
-  naming a review whose blocking findings are outstanding leaves the row unmet
-  on the same edit. Asserted beside the waiver case rather than folded into it,
-  because testing only the waiver arm is what would let the stricter arm become
-  the laxer one.
-- **Withdrawal releases the binding** — withdrawing the review leaves nothing
-  outstanding, so `Waived` is admissible again and the edge clears. The stated
-  escape, asserted so a later change cannot close it quietly.
+- **A contested finding does not hold it again** — the responder disposes, the
+  raiser contests, and the edge still clears. `DEC-138`'s sharp half, and the
+  case that separates *responding* from *agreeing*; without it a contesting
+  raiser owns the responder's progression.
+- **A waiver clears over live findings, and dismisses none of them** — a
+  `Waived { reason }` disposition with blockers undisposed clears the edge, and
+  the findings are still on the `RV`, still undisposed, with the reason in the
+  change log. Both halves asserted, because the arm is only defensible if the
+  second is true.
+- **Neither arm is authorable by an agent** — a disposition payload of either
+  arm without an `AcceptanceDeclaration` is refused. `DEC-138`'s load-bearing
+  invariant, and the only part of this row a gate can actually enforce.
 - **A waiver is not terminal** — a run waived to `locked`, regressed to
   `drafting` and re-advanced mints a second `RV`, and a later `Conducted`
   disposition displaces the waiver by act replacement. Both halves asserted: the
@@ -1048,18 +1072,15 @@ generator emits and what the asset test iterates.
   `DEC-073`'s per-run review policy, which this slice builds. The repair reaches
   `review_standing` and the envelope's `review_outstanding`, and deliberately not
   `live_reviews` — that section says why.
-- **`review-disposition-attested` is owed three things by `IMP-392`, not one.**
-  All three need the same missing input — `DEC-125`'s `RV`-backed
-  outstanding-finding set — so they are one gap with three consequences rather
-  than three gaps. *Reach:* the cumulative label outruns what `Artefact`
-  coverage can enforce, so until then only the disposition's own record
-  invalidates it. *Waiver admissibility:* the `Waived` arm's precondition —
-  nothing outstanding to dispose — is unenforceable for the same reason, so
-  until `IMP-392` lands a waiver can clear the edge over live findings.
-  *`Conducted`'s second half:* the findings-disposed conjunct the fold absorbed
-  is unenforceable too, so until then a conducted review discharges the row on
-  its existence alone. The interim state is therefore the same on both arms,
-  which is the honest reading — not a strict path and a lax one.
+- **`review-disposition-attested` is owed two things by `IMP-392`, not one**, and
+  both need the same missing input — `DEC-125`'s `RV`-backed ledger — so they are
+  one gap with two consequences. *Reach:* the cumulative label outruns what
+  `Artefact` coverage can enforce, so until then only the disposition's own record
+  invalidates it. *`Conducted`'s turn test:* whether the `RV` awaits the responder
+  on a `blocker` is unreadable, so until then a conducted review discharges the
+  row on its existence alone. `DEC-138`'s waiver arm needs nothing from
+  `IMP-392` — it is unconditional — so the interim is the same on both arms, not
+  a strict path and a lax one.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
   It is an unbuilt variant, not a pending row.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
