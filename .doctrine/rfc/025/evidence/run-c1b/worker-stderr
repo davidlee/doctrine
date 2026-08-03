@@ -1,0 +1,2 @@
+worker-agent: claude exit 0
+rig: sandbox: kind=worker status=0 disk=757760/268435456B timeout=1800s

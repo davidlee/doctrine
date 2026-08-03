@@ -1,0 +1,7 @@
+base=7f43b8751234cc45a0b2fdee32a40538ca6a6a4b
+slice=001
+label=c1b
+mode=fresh
+accepted=refs/heads/mainline
+stub=src/capsule-stub.ts
+verify=npm test

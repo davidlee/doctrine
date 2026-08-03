@@ -35,6 +35,16 @@ spot-checked against its source held. What it found is canon lagging the work.
   outside the repo in the disposable capsule root. Copied verbatim before the
   root could be cleaned. `evidence/README.md`'s manifest and authority sentence
   updated with them, and with `measurements.md`, which it had also omitted.
+- **The pre-disposal sweep** — F-11 was one instance of a class, so the same
+  check ran per artefact over the whole scratch root before anything was
+  deleted. Four more scored tables and two proof objects were outside the repo:
+  `results-c1a.tsv`, `results-c1b.tsv` (the real-agent run), `results-r2.tsv`,
+  `results-selftest.tsv` (the rig's 513-leg falsification record, cited *by*
+  `results-c3.tsv`), `exec-proof-smoke`, and `run-c1b/` (the four-stage ledger,
+  contract, and agent transcript). Archived verbatim, 160K, byte-identity
+  verified. **`measurements.md` — the README's own "required reading for the
+  go/no-go" — cited P-C1a and P-C1b, whose tables were not in the repo.** With
+  this, every source a committed artefact cites is committed.
 
 ### Learned
 
@@ -42,6 +52,20 @@ spot-checked against its source held. What it found is canon lagging the work.
   F-11 instance. Its original body assumed *"the scored `results.tsv` survived,
   so the evidence was whole"*; that held for the ingestion half and not for the
   confinement half. The rule now reaches the results file, not only the drivers.
+- **One tier miss predicts more; sweep before you delete, not after.** The
+  amended memory's own new rule — *check per claim, not per corpus* — was
+  applied on its very next use and found four more. The corpus looked whole
+  both times, because the check that makes it look whole is the wrong check.
+  The cheap version of this is a pre-disposal sweep: for every scratch root
+  about to go, ask which committed sentence rests on a file inside it. It cost
+  two greps and 160K to answer here.
+- **Reconstitutable is not the same as disposable, and both need saying.** The
+  177M of fixtures were *not* archived — builder scripts are tracked and the
+  pin is recorded, so recipe + pin rebuilds them. The raw logs were not
+  archived either, but only after verifying the design § 5.3 ruling held:
+  **zero committed artefacts cite a raw log by name**. Both decisions are now
+  written down in `evidence/README.md` § "What was deliberately NOT archived",
+  because an unexplained absence reads identically to a loss.
 
 ### Open — carried forward, pointer-only
 

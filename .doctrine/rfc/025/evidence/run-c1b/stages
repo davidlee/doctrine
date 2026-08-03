@@ -1,0 +1,4 @@
+stage=harvest verdict=pass token=
+stage=conform verdict=pass token=
+stage=verify verdict=pass token=
+stage=advance verdict=pass token=

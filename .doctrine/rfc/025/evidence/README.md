@@ -1,8 +1,12 @@
-# RFC-025 · C3 ingestion probe — evidence
+# RFC-025 · capsule spike — evidence
 
-Produced by **SL-241 PHASE-05** (the C3 ingestion probe of the capsule spike),
-2026-08-01 … 2026-08-03. This directory is the durable record; everything else
-the phase produced lives in disposable runtime state and will not survive close.
+Produced by **SL-241**, 2026-08-01 … 2026-08-03. The bulk is PHASE-05's C3
+ingestion probe, whose verdict this file opens with; the cost, confinement,
+selector and rig-selftest tables from the other phases were archived alongside
+it at audit — same reason, same treatment (RV-343 F-11, and the disposal sweep
+that followed it). This directory is the durable record; everything else the
+spike produced lives in disposable scratch or runtime state and will not
+survive close.
 
 RFC-025's next-design-question 1 asks what the minimal safe parent-side mechanism
 is for ingesting a phase result from a potentially hostile capsule git
@@ -108,19 +112,71 @@ Read these before citing anything above.
 | `results-guards.tsv` | committed | the guard probes' scored table, verbatim |
 | `results-c2.tsv` | committed | **P-C2's confinement rows, verbatim** — five appended runs; the last (`p-c2: 2026-08-03T04:36:53Z`) is the scored one, after the D-P06-5 profile change. Archived at audit (RV-343 F-11) from `$SPIKE_CAPSULE_ROOT/probes/c2/results.tsv`, which is outside the repository and disposable |
 | `results-smoke.tsv` | committed | the A2 legs — network, credential, and F-P06-6's capability leg. Same provenance and same reason as `results-c2.tsv` |
+| `results-c1a.tsv` | committed | **P-C1a's cost rows, verbatim** — the stub-worker timings `measurements.md` cites. Five appended runs; the last (`p-c1a: 2026-08-03T04:17:39Z`) is the scored one |
+| `results-c1b.tsv` | committed | **P-C1b's cost rows, verbatim** — the *real-agent* run. Two appended runs; the last (`p-c1b: 2026-08-03T04:38:58Z`, rig `1a1383b0`) is the scored one. See the reading note below — the two blocks differ in a way that matters |
+| `results-selftest.tsv` | committed | **the rig's own falsification record** — 51 appended runs, 513 scored legs, none failing. This is what makes "the falsifiers actually falsify" measured rather than asserted; `results-c3.tsv` cites it |
+| `results-r2.tsv` | committed | the R2 selector/conformance probe — seven edges, one table, no preamble. Carries the R2b decisive row (a *declared* `.doctrine/` touch is conformant to `--strict`) |
+| `exec-proof-smoke` | committed | six bytes — the kernel string the capsule wrote from inside. `results-smoke.tsv` records that the capability leg passed; **this file is the artefact that was the pass** |
+| `run-c1b/` | committed | the one real-agent run's forensic tree — `contract`, `stages` (the four-stage ledger), `pinned-oid`, `worker-stdout`, `interpretation-surface.txt`. See below |
 | `phase-sheets/` | committed | **archived runtime phase sheets** — see below |
 | `drivers/` | committed | the falsification and diagnostic drivers, re-runnable |
 | `.doctrine/state/rfc-025/raw/` | runtime, gitignored | raw run logs — the exhibit, not the evidence (design § 5.3 as amended) |
 
 `results-c3.tsv` is the authority for the ingestion half; `results-c2.tsv` is
-the authority for the confinement half. The summaries here cite them; where
-they disagree, the TSV wins.
+the authority for the confinement half; `results-c1a.tsv` and `results-c1b.tsv`
+are the authority for the cost rows in `measurements.md`. The summaries here
+cite them; where they disagree, the TSV wins.
 
-**Reading `results-c2.tsv`:** it is append-only across five runs, so a bare grep
-returns rows from superseded profiles. Only the block under the last `p-c2:`
-preamble is scored. The earlier `api-cred` rows are the ones F-P06-8 found
-asserting on a proxy — they are kept because the realignment is only legible
-against what it replaced, not because they still stand.
+**The `results-*.tsv` are append-only.** Every one except `results-r2.tsv` (a
+single table, no preamble) accumulates run blocks, so **a bare grep returns rows
+from superseded profiles**. Only the block under the *last* preamble is scored.
+Superseded blocks are kept, not pruned — a correction is only legible against
+what it replaced.
+
+- **`results-c2.tsv`** — five `p-c2:` runs. The earlier `api-cred` rows are the
+  ones F-P06-8 found asserting on a proxy; they no longer stand.
+- **`results-c1a.tsv`** — five `p-c1a:` runs, the first three against an older
+  base (`169e7ac82c22`) and two of those against a dirty rig.
+- **`results-c1b.tsv`** — two `p-c1b:` runs, and **the difference between them is
+  the point**. The superseded first (`03:24:26Z`, phase 142.235s) ends
+  `agent-committed=no tree-dirty=yes`; the scored second (`04:38:58Z`, phase
+  51.130s) ends `agent-committed=yes tree-dirty=no`. That flip is the claude
+  arm's self-commit ritual arriving. **Cite 51.130s, not 142.235s** — and note
+  the `n = 1` caveat stamped on every token row: these support "a phase reaches
+  green at roughly this cost", never a comparison, and the token counts are
+  capsule-*reported* from inside the trust boundary (F-P06-5).
+- **`results-selftest.tsv`** — 51 `selftest:` runs, all green. **`fail` appears
+  75 times and never as an outcome**: 45 are the refusal token `suite-failed`,
+  29 the word `failure` in prose. Field-exact, it is 513 `pass` and zero `fail`.
+  Same trap as limit 7 above — count on the column, never on a substring.
+
+**Reading `run-c1b/`:** the forensic tree of the scored real-agent run.
+`stages` is the four-stage ledger (`harvest`/`conform`/`verify`/`advance`, all
+`pass`, no token) — RFC-025's central pipeline structure observed rather than
+argued. `contract` names the base, accepted ref and verify command;
+`pinned-oid` is what the capsule declared. `worker-stdout` (64K) is the agent's
+own transcript, and it is **inside** the trust boundary: read it as testimony,
+not as measurement. The run's git clones (`canonical/`, `quarantine/`,
+`capsule/`, `verify-capsule/`) were **not** archived — they are 2.8M of
+rebuildable object stores and nothing cites them.
+
+## What was deliberately NOT archived
+
+So that a later reader does not go looking for it, or assume it was lost:
+
+- **The fixtures (177M, `$SPIKE_CAPSULE_ROOT/fixtures/`).** Reconstitutable, not
+  lost: the builders `scripts/spike-capsule/control/fixture-{heavy,light}.sh`
+  are tracked, and heavy's pin `4fc9d32f0` is recorded here (phase-06.md, and
+  six `results-c3.tsv` rows). Recipe plus pin rebuilds them. A-P06-3's "do not
+  rebuild fixtures" was a *within-spike* freeze so measurements stayed
+  comparable — it never claimed they were irreplaceable.
+- **The raw run logs (`.doctrine/state/rfc-025/raw/`, ~60 files).** Design § 5.3
+  as amended rules them the exhibit, not the evidence. The ruling was checked
+  before they were let go rather than taken on faith: **no committed artefact
+  cites any raw log by name** (zero hits for the path pattern across
+  `.doctrine/`), so nothing here dangles without them.
+- **`probes/c1b/attempt-1/results.tsv`.** Verified a strict subset — byte-equal
+  to the first eighteen lines of `results-c1b.tsv`.
 
 ## Citations — how to resolve them
 

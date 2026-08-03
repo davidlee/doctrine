@@ -1,0 +1,56 @@
+step	outcome	value	unit	detail
+p-c1a: 2026-08-01T15:20:54Z	stub	in-jail	base=169e7ac82c22
+setup	measured	0.022	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration (outside probe-specs step list)
+clone	measured	7.736	s	in-capsule git clone from the ro-bound source, detached at 169e7ac82c22
+provision	composite	-	-	same runner invocation as clone (no separate manifest step: .envrc/direnv absent in this jail); carried without a number so the column cannot be double-counted
+nix-env-ready	n/a	-	-	nix and direnv are ABSENT in this jail; the toolchain reaches the capsule by ro-bind of /nix/store and a filtered PATH (PHASE-02 EX-8) — recorded, never dropped from the step list
+build	measured	0.340	s	npm run build (tsc) in the worker capsule, at B
+test	measured	0.243	s	npm test in the worker capsule, at B — the cold baseline green
+phase	measured	0.048	s	the stub worker (DEC-103): commit, result ref, bundle, doorbell
+harvest	measured	7.691	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	716800	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	667648	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+p-c1a: 2026-08-01T15:23:13Z	stub	in-jail	base=169e7ac82c22
+setup	measured	0.022	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration (outside probe-specs step list)
+clone	measured	0.047	s	in-capsule git clone from the ro-bound source, detached at 169e7ac82c22
+provision	composite	-	-	same runner invocation as clone (no separate manifest step: .envrc/direnv absent in this jail); carried without a number so the column cannot be double-counted
+nix-env-ready	n/a	-	-	nix and direnv are ABSENT in this jail; the toolchain reaches the capsule by ro-bind of /nix/store and a filtered PATH (PHASE-02 EX-8) — recorded, never dropped from the step list
+build	measured	0.319	s	npm run build (tsc) in the worker capsule, at B
+test	measured	0.248	s	npm test in the worker capsule, at B — the cold baseline green
+phase	measured	0.047	s	the stub worker (DEC-103): commit, result ref, bundle, doorbell
+harvest	measured	0.348	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	712704	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	667648	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+p-c1a: 2026-08-01T15:23:43Z	stub	in-jail	base=169e7ac82c22	rig=9d4f18959+dirty
+setup	measured	0.022	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration (outside probe-specs step list)
+clone	measured	0.047	s	in-capsule git clone from the ro-bound source, detached at 169e7ac82c22
+provision	composite	-	-	same runner invocation as clone (no separate manifest step: .envrc/direnv absent in this jail); carried without a number so the column cannot be double-counted
+nix-env-ready	n/a	-	-	nix and direnv are ABSENT in this jail; the toolchain reaches the capsule by ro-bind of /nix/store and a filtered PATH (PHASE-02 EX-8) — recorded, never dropped from the step list
+build	measured	0.325	s	npm run build (tsc) in the worker capsule, at B
+test	measured	0.245	s	npm test in the worker capsule, at B — the cold baseline green
+phase	measured	0.046	s	the stub worker (DEC-103): commit, result ref, bundle, doorbell
+harvest	measured	0.352	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	712704	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	667648	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+p-c1a: 2026-08-03T03:20:27Z	stub	in-jail	base=7f43b8751234	rig=e43572d4+dirty
+setup	measured	0.026	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration (outside probe-specs step list)
+clone	measured	0.048	s	in-capsule git clone from the ro-bound source, detached at 7f43b8751234
+provision	composite	-	-	same runner invocation as clone (no separate manifest step: .envrc/direnv absent in this jail); carried without a number so the column cannot be double-counted
+nix-env-ready	n/a	-	-	nix and direnv are ABSENT in this jail; the toolchain reaches the capsule by ro-bind of /nix/store and a filtered PATH (PHASE-02 EX-8) — recorded, never dropped from the step list
+build	measured	0.408	s	npm run build (tsc) in the worker capsule, at B
+test	measured	0.248	s	npm test in the worker capsule, at B — the cold baseline green
+phase	measured	0.049	s	the stub worker (DEC-109): commit, result ref, bundle, doorbell
+harvest	measured	0.345	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	704512	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	663552	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+p-c1a: 2026-08-03T04:17:39Z	stub	in-jail	base=7f43b8751234	rig=c5a2a449+dirty
+setup	measured	0.027	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration (outside probe-specs step list)
+clone	measured	0.052	s	in-capsule git clone from the ro-bound source, detached at 7f43b8751234
+provision	composite	-	-	same runner invocation as clone (no separate manifest step: .envrc/direnv absent in this jail); carried without a number so the column cannot be double-counted
+nix-env-ready	n/a	-	-	nix and direnv are ABSENT in this jail; the toolchain reaches the capsule by ro-bind of /nix/store and a filtered PATH (PHASE-02 EX-8) — recorded, never dropped from the step list
+build	measured	0.345	s	npm run build (tsc) in the worker capsule, at B
+test	measured	0.264	s	npm test in the worker capsule, at B — the cold baseline green
+phase	measured	0.051	s	the stub worker (DEC-109): commit, result ref, bundle, doorbell
+harvest	measured	0.365	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	708608	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	663552	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)

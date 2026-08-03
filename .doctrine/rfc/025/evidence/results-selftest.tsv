@@ -1,0 +1,563 @@
+selftest: 2026-08-01T12:52:09Z	happy
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+selftest: 2026-08-01T12:52:44Z	attribution
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+selftest: 2026-08-01T12:54:21Z	attribution
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+selftest: 2026-08-01T12:55:22Z	falsifiable
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T12:55:43Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T12:58:49Z	bundle
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+selftest: 2026-08-01T12:59:53Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T13:02:28Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T15:02:38Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T15:23:51Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T15:36:49Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T16:35:17Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T16:49:49Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T17:05:50Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T17:21:55Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T22:35:06Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-01T23:12:03Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T00:41:48Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T00:47:41Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T02:08:12Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T04:42:44Z	all
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T04:51:20Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T04:51:27Z	apparatus
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+selftest: 2026-08-02T04:52:21Z	apparatus
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+selftest: 2026-08-02T04:52:39Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T05:26:11Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T10:11:33Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T10:18:49Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T10:58:47Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T10:59:43Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T13:37:12Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T13:40:02Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T13:45:11Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T13:48:00Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T14:49:54Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T15:12:19Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T15:39:44Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T22:49:48Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T23:07:15Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T23:38:23Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-02T23:44:40Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T00:02:05Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T00:10:56Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T00:15:45Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T00:18:03Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T02:01:07Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T03:20:13Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T04:17:18Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T04:37:05Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind
+selftest: 2026-08-03T04:42:09Z	all
+-	apparatus	pass	the ladder proves runnability; leg 2 separates a refusal from a failure to invoke
+fetch	happy	pass	four stages, one canonical ref advanced
+bundle	happy	pass	four stages, one canonical ref advanced
+fetch	attribution	pass	conform/undeclared-path, harvest passed before it
+fetch	attribution	pass	verify/suite-failed
+fetch	attribution	pass	verify/verify-timeout — the PHASE-02 status mapped to its token
+fetch	attribution	pass	advance/stale-base — nothing transferred, strict clause holds
+bundle	hygiene	pass	bundle-unsafe-path
+bundle	hygiene	pass	bundle-absent
+bundle	hygiene	pass	bundle-invalid
+bundle	hygiene	pass	resource-cap
+fetch	falsifiable	pass	object-count clause red on the restored second hop; refs clause blind

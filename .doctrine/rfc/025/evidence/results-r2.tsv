@@ -1,0 +1,10 @@
+edge	slice	delta-paths	strict-exit	strict-undeclared	belt-prefix	verdict
+1	SL-001	docs/notes.md	1	docs/notes.md	prefix-legs-pass	path matching no selector — the scope leg's ordinary case
+2	SL-001	src/tax.ts	0	(none)	prefix-legs-pass	path matching a design-target selector
+3	SL-001	src/naïve.ts	0	(none)	prefix-legs-pass	NON-ASCII path under a declared selector — the quotePath hardening holds
+4	SL-001	docs/money.ts,src/money.ts	1	docs/money.ts	prefix-legs-pass	RENAME OUT of a declared selector — the source leg stays visible
+5	SL-002	.doctrine/probe/payload.md,src/payload.md	0	(none)	doctrine-touch	RENAME OUT of .doctrine/, both legs DECLARED — belt refuses, --strict does not
+6	SL-002	.doctrine/probe/kept.md	0	(none)	doctrine-touch	R2b DECISIVE — a DECLARED .doctrine/ touch is CONFORMANT to --strict
+7	SL-001	(none)	0	(none)	prefix-legs-pass	empty range A..A — clean, not an error
+8	SL-003	src/audit.ts	1	src/audit.ts	prefix-legs-pass	NO SELECTORS — --strict refuses where the belt's scope leg is a no-op
+8b	SL-001	src/audit.ts	0	(none)	prefix-legs-pass	edge 8's positive control — same delta, selectors present, --strict clean

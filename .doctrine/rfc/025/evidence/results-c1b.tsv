@@ -1,0 +1,35 @@
+step	outcome	value	unit	detail
+p-c1b: 2026-08-03T03:24:26Z	agent	in-jail	base=7f43b8751234	rig=cc90a63a
+setup	measured	0.026	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration
+provision	measured	0.049	s	in-capsule clone from the ro-bound source, detached at 7f43b8751234
+baseline	measured	0.252	s	npm test in the worker capsule, at B — green before the plant
+ex3	asserted	-	-	canonical absent from the mount profile, absent from inside, unwritable — with a positive control on the detector
+red	observed	-	-	the suite fails at 46df6c94ffb5 — the plant fired, so the green below is the agent's
+phase	measured	142.235	s	a real agent (claude -p) executing the red→green phase; worker exit 0
+green	observed	-	-	the suite passes at 97fe93a6e76a, 1 commit(s) beyond the plant
+ritual	observed	-	-	p-c1b-ritual: agent-committed=no tree-dirty=yes
+harvest	measured	0.356	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	753664	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	667648	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+input_tokens	capsule-reported	24	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+output_tokens	capsule-reported	8131	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+cache_creation_input_tokens	capsule-reported	25872	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+cache_read_input_tokens	capsule-reported	388449	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+total_cost_usd	capsule-reported	0.6571435	USD	the harness own cost figure for the same single run — same n = 1 and same capsule-reported caveat
+p-c1b: 2026-08-03T04:38:58Z	agent	in-jail	base=7f43b8751234	rig=1a1383b0
+setup	measured	0.033	s	control-plane run scaffolding — canonical + quarantine clones, contract, pinned declaration
+provision	measured	0.049	s	in-capsule clone from the ro-bound source, detached at 7f43b8751234
+baseline	measured	0.251	s	npm test in the worker capsule, at B — green before the plant
+ex3	asserted	-	-	canonical absent from the mount profile, absent from inside, unwritable — with a positive control on the detector
+red	observed	-	-	the suite fails at 1a3569d93966 — the plant fired, so the green below is the agent's
+phase	measured	51.130	s	a real agent (claude -p) executing the red→green phase; worker exit 0
+green	observed	-	-	the suite passes at 9872a712fab9, 1 commit(s) beyond the plant
+ritual	observed	-	-	p-c1b-ritual: agent-committed=yes tree-dirty=no
+harvest	measured	0.357	s	doorbell → accepted-ref advance: harvest, conform, verify (its own capsule and suite), advance
+peak-disk	measured	757760	B	worker capsule, high-water mark over the run — an ABSOLUTE (VA-2)
+peak-disk-verify	measured	667648	B	verify capsule, after the verify stage — an ABSOLUTE (VA-2)
+input_tokens	capsule-reported	15	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+output_tokens	capsule-reported	3415	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+cache_creation_input_tokens	capsule-reported	15079	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+cache_read_input_tokens	capsule-reported	195816	tok	n = 1, ONE attempt (D-P06-2) — supports "a phase reaches green at roughly this cost", NEVER a comparison. Source is INSIDE the trust boundary (F-P06-5): streamed over the worker stdout, recorded, never asserted
+total_cost_usd	capsule-reported	0.33495199999999997	USD	the harness own cost figure for the same single run — same n = 1 and same capsule-reported caveat
