@@ -1,0 +1,31 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fc660-df66-74c2-9563-4d50390e876a"
+recorded_at = "2026-08-03T06:47:45.254022704Z"
+kind = "friction"
+summary = "/audit: review show's table view hides the entire finding tier, pushing the reader to grep the toml the guardrails forbid"
+detail = """
+Driving RV-343 (SL-241 close-out audit) with the CLI. After `review raise`, the natural check is `doctrine review show RV-343` — and the boot guardrail is explicit: read entities via `show`, never raw files, because `show` synthesizes both tiers.
+
+For an RV it does not. The table view renders the header line, the `reviews` edge, a bare `findings: 11` count, and then the whole of the `.md` prose companion. No finding title, severity, detail, disposition or response appears. Its own `--help` says so plainly — "derived status, the `reviews` edge, and the brief" — but you only read that after the output has already surprised you.
+
+So the first thing I did to confirm a finding had landed intact was `grep -n ... review-343.toml`, which is exactly the move the guardrails exist to prevent. On a ledger whose whole point is that findings outlive the conversation, the structured tier is the tier you want back.
+
+The data is there: `review show RV-343 --json` returns `review.finding[]` with id/title/severity/detail/disposition/response/status, all 11. Nothing is missing from the model — only from the human view, and nothing in the table output hints that `--json` carries more. Cost was a wasted call, a grep against convention, and a stretch of uncertainty about whether backtick-bearing `--detail` text had survived the shell at all (it had).
+
+Worth noting the asymmetry: the prose tier prints in full, unconditionally, including a long Brief and Synthesis — so the output is not being kept short. It is long AND missing the part that is queryable.
+
+Smallest fix that would have helped: a findings table in the default view (id · severity · status · disposition · truncated title), or failing that, a footer line naming `--json` as where the finding bodies live.
+
+Second, smaller, same session: `doctrine slice selector 241` errors — the verb is `selector list 241`. The boot snapshot's SPINE lists `selector` among slice's sub-commands with no verbs indented under it, unlike `design` / `review` / `coverage`, so the shape reads as taking an id directly."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
