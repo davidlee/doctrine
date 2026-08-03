@@ -1,0 +1,46 @@
+memory_uid = "mem_019fc631c98a7e71b4828cb7d63dc4ff"
+memory_key = "mem.fact.git.protected-config-defence-is-per-key"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "git protected-config defence is per-key, not blanket"
+summary = "git's protected-config defence is per-key, not blanket: uploadpack.packObjectsHook is refused from repo config, core.fsmonitor is honoured from it"
+created = "2026-08-03"
+updated = "2026-08-03"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["git", "security", "footgun", "sandbox"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "1e54945febe55e84dea66d4547dec57a289035d6"
+tree = "e96eabf4901c34317bf67ce8fb49ceadee1b3375"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "1e54945febe55e84dea66d4547dec57a289035d6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-241"
+
