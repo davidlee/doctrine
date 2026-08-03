@@ -1730,8 +1730,8 @@ missing answer.
   `Waived { reason }` disposition with no integrated pass recorded and no
   findings raised, and the reason is rendered. Asserted so that a later slice
   tightening this is a visible break rather than a silent one, the same reason
-  the loosening test exists. The complementary case — findings outstanding — is
-  `sec-3`'s, with the admissibility rule it belongs to.
+  the loosening test exists. The findings-outstanding case is `sec-3`'s, with
+  `DEC-138` — and it clears there too, which is the point of that record.
 - **Adversarial review is still recorded** — under `HumanOnly` the section
   renders its adversarial attestation, so the act is visible without being
   sufficient.
