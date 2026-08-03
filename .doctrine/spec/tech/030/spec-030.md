@@ -85,10 +85,12 @@ The three fields are explicit and have no manufactured defaults:
   and documents build-system/toolchain auto-load surfaces; trusted-side safety does
   not depend on matching it because harvested trees are never materialized there.
 - Each `interpretation.verification` row contains one non-empty `argv` array of
-  non-empty UTF-8 strings. Rows run sequentially, without shell expansion, from the
-  verification capsule's repository root; all must succeed. Complex verification
-  lives behind an explicitly named executable/script and remains confined to the
-  verification capsule.
+  non-empty UTF-8 strings. Rows run sequentially, without **implicit** shell
+  interpretation, from the verification capsule's repository root; all must
+  succeed. A project may explicitly name a shell in `argv` when it needs shell
+  composition — that shell still runs inside the confined verification capsule,
+  never on the trusted control plane. Complex verification may instead live behind
+  an explicitly named executable or script.
 
 The block, all three keys, and at least one verification row are required. The two
 lists may be explicitly empty when the project genuinely has no such instances;
