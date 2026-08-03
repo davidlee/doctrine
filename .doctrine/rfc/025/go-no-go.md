@@ -218,7 +218,28 @@ The truth:
 > than smoothed away because `VA-3` checks that `doctrine knowledge show ASM-007`
 > and this document agree, and they do: both say `invalidated`.
 
-### 3.4 · Everything in `evidence/README.md`'s seven limits
+### 3.4 · QUE-201 is reduced to ergonomics, and stays open
+
+Where a client's interpretation-surface declaration lives is **no longer a
+security question**, and the spike is why that is now *observed* rather than
+argued. DEC-099 Amendment 2 (RV-340 F-5) ruled the declaration is read from the
+contracted base `B`, never from a harvested result; guard probe (e) confirmed it
+on a fixture variant built to manufacture the exposure — a capsule that rewrites
+its own in-repo declaration leaves trusted-side behaviour **byte-identical** to
+the run that had nothing to rewrite (EVD-011).
+
+**Do not generalise that probe's third leg.** *Where* a committed substitution
+refuses is fixture-specific: `light-inrepo` keeps its declaration copy at the
+repository root and SL-001 declares selectors for `src/**` and `.doctrine/**`
+only, so conform leg 2 refuses it as undeclared before anything later looks. A
+project that declared its own declaration path would get past that leg. **The
+generalisable claim is the byte-identity, not the token** (F-P05-43).
+
+**QUE-201 stays `open`** — the remaining choice between a `doctrine.toml` block,
+a dedicated manifest, and a work-contract field is ergonomics, and it settles in
+the post-spike REV.
+
+### 3.5 · Everything in `evidence/README.md`'s seven limits
 
 They apply unchanged and are not restated here. Limit 1 was **corrected** in
 PHASE-06 (§ 3.2 above); limits 2–7 stand as written.
@@ -323,6 +344,6 @@ verdict's own list).
 - **It does not establish that a second agent, a second client project, or a
   second host would behave the same.** n = 1 on the agent axis; two fixtures on
   the project axis; one OS.
-- **It settles no open question.** QUE-200, QUE-202 and QUE-204 all remain
-  `open` and settle in the post-spike REV. This document records what the
+- **It settles no open question.** QUE-200, **QUE-201**, QUE-202 and QUE-204 all
+  remain `open` and settle in the post-spike REV. This document records what the
   evidence does and does not support for each; it is not their answer.
