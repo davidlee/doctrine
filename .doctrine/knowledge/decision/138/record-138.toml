@@ -1,0 +1,43 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 138
+slug = "review-disposition-binds-the-responders-turn-not-the-raisers-assent"
+title = "Review disposition binds the responder's turn, not the raiser's assent"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-03"
+updated = "2026-08-03"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-125 gives `review-disposition-attested` two arms — `Conducted { review }` and `Waived { reason }` — and no admissibility rule for either. An SL-244 draft made `Waived` inadmissible over live blocking findings, requiring `Conducted`. That is the prohibition-shaped fence the same design refuses for the review policy, and it removes the user's exit exactly where it is wanted."
+choice       = "`Conducted { review }` satisfies the row while the minted RV is not awaiting the responder on a `blocker`-severity finding. `Waived { reason }` satisfies it unconditionally — before a review, or over live findings. Both are user acts carrying an `AcceptanceDeclaration`; neither is authorable by an agent. Waived findings stay on the RV, undisposed and visible, and the reason lands in the change log."
+alternatives = [
+  "`Waived` inadmissible while blocking findings are outstanding, forcing `Conducted`. Rejected: prohibition does not fence an agent that drives the CLI — this design's own argument for a mutable review policy — and it leaves `withdraw`, meaning raised in error, as the user's only exit. That is the dishonest spelling of 'I have read these and I am proceeding'.",
+  "Require terminal resolution (`verify` or `withdraw`), matching the RV close-gate D-C9b. Rejected: it makes progression depend on the raiser's assent, which the responder does not control. A contesting adversary hands the finding back for re-disposition, so the obligation does not terminate.",
+  "Bind to content currency rather than to the finding set. Already rejected by DEC-126: integrating a finding moves the sections the pass covered, which RFC-026 E3 refutes as a termination rule.",
+]
+rationale    = "The fence that works here is the one this design uses everywhere else — authority and visibility, not prohibition. The two halves are load-bearing together and neither survives alone: awaiting-responder is a safe block condition only because the waiver is an unconditional exit, and the waiver is safe only because it is a user act that leaves the findings standing and the reason logged. Without the exit, a contesting adversary owns the user's progression; without the block, waiving and disposing collapse into one act. Disposal is monotone and terminates; assent is not the responder's to give."
+consequences = [
+  "Severity is the ledger's own `blocker`, not a new notion — DEC-125 brings it for free, and it is already the only severity that gates anything (D-C9b).",
+  "Two gates read one RV under different rules: this row on awaiting-responder for the design run's `reviewing → locked`, and D-C9b's close-gate on the slice, which requires terminal resolution. Different subjects, so not duplication — but the asymmetry must be stated in the design or it reads as a bug.",
+  "The load-bearing invariant for any implementation: whatever the mechanism is named, an agent must not be able to author either arm.",
+  "Needs IMP-392's RV-backed finding set. Until it lands, neither arm's condition is enforceable, so the interim state is the same on both arms rather than one strict path and one lax one.",
+  "Reverses an SL-244 self-review finding already integrated at run revision 51. sec-3's admissibility passage, its `Conducted` paragraph and the matching verification bullets are rewritten against this record.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-04"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
