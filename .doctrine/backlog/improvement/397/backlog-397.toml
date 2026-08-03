@@ -1,10 +1,10 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 53
-slug = "rfc-025-cleanup-pass-after-the-capsule-spike"
-title = "RFC-025 cleanup pass after the capsule spike"
-kind = "chore"
+id = 397
+slug = "capsule-egress-allowlist-and-build-input-provisioning"
+title = "Capsule egress allowlist and build-input provisioning"
+kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-03"
@@ -28,4 +28,8 @@ target = "SL-241"
 
 [[relation]]
 label = "related"
-target = "IMP-397"
+target = "DEC-129"
+
+[[relation]]
+label = "related"
+target = "QUE-204"

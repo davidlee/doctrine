@@ -37,8 +37,12 @@ it current.
 
 ## What this is NOT
 
-- **Not** the allowlist / QUE-204 follow-on slice (D-P05-17). That is already
-  placed as a follow-on slice and is much larger.
+- **Not** the allowlist / QUE-204 follow-on work (D-P05-17) — that is
+  **IMP-397**, and it is much larger. (This bullet previously read *"already
+  placed as a follow-on slice"*. It was **decided** to be one by DEC-129, not
+  placed as one: no slice and no work item existed, so the largest piece of
+  forward work the spike found surfaced in no `backlog list` and no `doctrine
+  next`. Lodged as IMP-397 at SL-241 close, 2026-08-03.)
 - **Not** the REV scoping for the census DELETE rows — that is **CHR-054**.
 - **Not** a re-run of anything. The rig is complete and its results are banked;
   this is document work.
