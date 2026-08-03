@@ -159,7 +159,26 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 8e23952c
 - `EVD-012` — gate evidence binds only to `design.md` sections.
 - `ISS-309` — shipped assets cite repo-private ids; per-repo sequential ids make
   this resolve wrongly rather than dangle.
-- `ISS-310` — `sections_attested` ignores `Reviewer`.
+- `ISS-310` — `sections_attested` ignores `Reviewer`. **Wider than the issue
+  says:** `review_outstanding` (`render/envelope.rs:799-806`) matches subject +
+  fingerprint only, so the envelope reports a section reviewed on an adversarial
+  attestation. Fixing `satisfied` alone yields a gate and a render that disagree.
+- **`DEC-074` grants an adversarial-only *run policy*** — "the user may change
+  the run policy to adversarial-only or require both lanes in either order". So
+  requiring human at the gate **removes a capability**, it does not harden a
+  default; and it supplies a fourth `ISS-310` candidate nobody had — per-run
+  policy, which keeps `DEC-074` intact and puts the actor in run data.
+- **Checkpoint acceptances do not reach the snapshot.** The review group holds
+  exactly `attestations` / `integrated` / `acceptance: LockAcceptance`
+  (`snapshot.rs:320-333`); a checkpoint's `AcceptanceAttestation`
+  (`commands/design.rs:847`) rides a `CheckpointPlan` and is journalled. Four of
+  `sec-4`'s eight acts therefore have no home a `DesignSnapshot`-reading gate
+  can see.
+- `InquiryNode` carries no fingerprint (`inquiry.rs:204-222`) and `DerivedInput`
+  no node digest map — so `sec-3`'s `Coverage::InquiryMap` names a map that
+  cannot presently be built.
+- The in-tree type is **`LockAcceptance`**, not `AcceptedDesign` — mis-named in
+  both `sec-3` and `sec-4`.
 
 ### Open
 
@@ -167,24 +186,29 @@ fresh-as-of: 2026-08-03 · design/drafting (run rev 43) · 8e23952c
 - **`review-disposition-attested`'s cumulative reach is not enforceable** until
   `IMP-392` gives it the `RV`-backed finding set to bind to. Recorded in `sec-3`
   as a gap, deliberately not asserted as a guarantee.
-- **`sec-3` v4 and `sec-4` are out for adversarial review** (codex thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965`, which holds the whole chain). Sent
-  together on the bet that v4's changes were subtractive enough not to be
-  structural, and because `sec-4` closes three of `sec-3`'s deferrals — the
-  actor, conjunct ordering, the projection — so the seam is only testable with
-  both in view.
+- **Seven findings from the joint `sec-3` v4 + `sec-4` review await the user's
+  ruling.** Nothing integrated. Two blockers — the `GovernanceEdges` projection
+  wrongly excludes `references --role concerns`, and four acts have no snapshot
+  home. Five majors — the human rule unreconciled across render surfaces,
+  co-location is not ordering, `InquiryMap` unbuildable, the macro still admits
+  an illegal edge pair, `AgentDeclaration` underspecified. Codex thread
+  `019fc628-0f72-73e0-bd25-3d99c05d0965` holds the whole chain.
+- **`ISS-310` is reopened by its premise**, not by its ruling — see `DEC-074`
+  under Learned. The user ruled `human` believing it additive; it is not.
 - **The `ISS-310` answer wants a decision record.** Decided by the user with
   alternatives weighed and a cost accepted; currently recorded only in `sec-4`'s
   prose. No open inquiry node to bind it to, so it needs a route.
 - Next section after `sec-4` clears: the contract's two channels
   (`DEC-122`/`DEC-124`) — where `DEC-123`'s injection requirement is built.
 
-**`ISS-310` is DECIDED** — `section-attestations-current` requires a **human**
-section review. Start strict: `human → either` widens compatibly, `either →
-human` breaks runs that cleared under the loose rule. Adversarial section review
-stays recorded and supplementary; `DEC-074`'s integrated pass already guarantees
-adversarial coverage at document level. **`SL-243` will need manual repair** —
-it cannot clear the gate on sections it attested adversarially.
+**`ISS-310` was ruled `human`** — `section-attestations-current` requires a human
+section review, on a start-strict argument (`human → either` widens compatibly;
+`either → human` breaks runs that cleared loose). `SL-243` needs manual repair
+either way. **The ruling now needs re-confirming**, because one of its three
+supports was false: `DEC-074` does not make the integrated pass mandatory (it is
+about section posture) and it explicitly permits an adversarial-only run policy.
+So `human` deletes a granted capability rather than hardening a default, and a
+fourth candidate — per-run policy — exists and is already the shipped model.
 
 **The `const`-ness tradeoff is closed**, not open: `boundary_conditions` is
 unchanged and still `const`; both filters land in `cumulative_conditions`, which
