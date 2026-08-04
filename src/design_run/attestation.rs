@@ -489,9 +489,13 @@ const REVIEW_PASS_TOKEN: &str = "review-pass";
 ///
 /// String-coded on the wire, so the `Checkpoint` arm stays a bare `DesignId` and
 /// the pass rides a reserved token beside it — the shape a tagged table would
-/// only make heavier. The journal is per-submission runtime state under
-/// `.doctrine/state/`, cleared by `complete_journal`, so nothing here is owed a
-/// cross-version reading.
+/// only make heavier. The `Checkpoint` spelling is **pinned**, and the
+/// `RecoveryIntent` field keeps its pre-DEC-125 key as a serde alias: intents are
+/// serialised into the design-run **snapshot** (`[[checkpoint.intent]]` in
+/// `design.toml`), not only into the per-submission journal, and a snapshot
+/// outlives many binaries — a run spans weeks. Dropping the alias made
+/// `design show` fail outright on this repo's own live `SL-243`/`SL-244` runs
+/// (SL-244 PHASE-04, reverted the same day).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub(crate) enum IntentSubject {
@@ -543,7 +547,10 @@ impl TryFrom<String> for IntentSubject {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RecoveryIntent {
     submission: String,
-    /// What the intent is about.
+    /// What the intent is about. Read under its pre-DEC-125 key too, because the
+    /// snapshot holding these rows outlives the binary that wrote them — see
+    /// [`IntentSubject`].
+    #[serde(alias = "checkpoint")]
     subject: IntentSubject,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     reserved_record: Option<String>,

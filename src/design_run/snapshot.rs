@@ -670,6 +670,49 @@ mod tests {
         assert_eq!(parsed.run.revision, 4, "the rest of the header is unmoved");
     }
 
+    /// `IntentSubject`'s migration is **not** a no-op by construction, which is
+    /// why it gets a test where the policy's needed only an argument: DEC-125
+    /// re-keyed `RecoveryIntent.checkpoint` to `subject`, and these rows live in
+    /// the SNAPSHOT — a run spans weeks, so a snapshot routinely outlives the
+    /// binary that wrote it. Dropping the serde alias made `design show` fail
+    /// outright on this repo's own live `SL-243`/`SL-244` runs, which is the
+    /// failure this row pins. Asserted here rather than over `RecoveryIntent`
+    /// alone, because the tier that broke is the one that parses the whole file.
+    #[test]
+    fn a_snapshot_written_before_the_intent_subject_key_still_parses() {
+        let pre_subject = format!(
+            "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+             version = {DESIGN_SNAPSHOT_VERSION}\n\
+             \n\
+             [run]\n\
+             uid = \"dr-test\"\n\
+             slice = 244\n\
+             revision = 86\n\
+             stage = \"reviewing\"\n\
+             \n\
+             [[checkpoint.intent]]\n\
+             submission = \"sl244-cp1-condition-kinds\"\n\
+             checkpoint = \"cp-1\"\n\
+             reserved_record = \"DEC-120\"\n\
+             state = \"complete\"\n"
+        );
+
+        let parsed = parse(&pre_subject).expect("a pre-subject snapshot still parses");
+        let [intent] = parsed.checkpoint.intents.as_slice() else {
+            panic!("one intent: {:?}", parsed.checkpoint.intents);
+        };
+        assert_eq!(
+            intent.subject().checkpoint().map(DesignId::as_str),
+            Some("cp-1"),
+            "the old key still names the checkpoint it always did"
+        );
+        assert_eq!(
+            intent.reserved_record(),
+            Some("DEC-120"),
+            "and the rest of the row is unmoved"
+        );
+    }
+
     #[test]
     fn a_run_holding_no_sections_is_never_attested() {
         // The degenerate case `all()` gets wrong: vacuous truth over an empty
