@@ -390,6 +390,38 @@ New this session, all read off the tree:
   before use, because getting it wrong mismatches every section at once and looks
   exactly like a moved document.
 
+### PHASE-01 (2026-08-04, commit `3baaa564`) — two departures from the letter of `EX-2`
+
+Both are recorded here rather than left for `/audit` to discover in a diff.
+
+- **`can_advance` is deleted, not kept as a one-line alias.** `EX-2` states its
+  body becomes `Advance::between(from, to).is_some()`, and the clause's purpose
+  is *so the forward graph is written once*. It is written once — that
+  expression is now inlined at `advance`, its sole production caller. `VA-1`
+  enumerates the other two call sites and disposes of both (`forward_runbook`
+  under `EX-4`, the unit test under `VA-1` itself), so the function ends with no
+  caller at all. A zero-caller `pub(crate) fn` is dead code this repo's clippy
+  denies, and an `expect(dead_code)` would mark as *staged for a future reader* a
+  function no later phase reads. Restoring it is one line if `/audit` disagrees.
+
+- **`boundary_runbook` is re-keyed to `Advance` too, and drops its `Option`.**
+  `EX-2` names only `boundary_conditions`, but `EX-4` requires the selector to
+  choose the edge via `from_stage`, and the alternative is `Advance` growing
+  `from()`/`to()` accessors purely to reconstitute the pair the type exists to
+  replace. With the backward and non-adjacent pairs unrepresentable the
+  `_ => None` arm has no domain left, and `gate.rs` already recorded that every
+  forward edge carries a runbook (SL-233 PHASE-08). Behaviour-preserving:
+  `advance` reaches that call only past the legality check, so the `is_some`
+  guard it drops was provably always-true. This is what `design.md:2967` means by
+  *both the runbook selector and the contract block take it*. Two call sites —
+  `run.rs::stage_move` and `commands/design.rs::verifications` — genuinely need
+  the `Option`, because they ask the question of an arbitrary pair; both now
+  spell it `Advance::between(..).map(boundary_runbook)`, which puts the absence
+  where it belongs.
+
+`Advance::ALL` has no production reader until PHASE-06/08 and carries the
+tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
+
 ### Open
 
 - **`RV-344` pass 2 is specified in the ledger's `## Brief` and will not be run.**
