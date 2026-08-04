@@ -501,15 +501,34 @@ Re-wording a node, re-parenting one, adding one or removing one all change the
 material and expire the review — which is the property `DEC-121` asks for, since
 steering the graph's shape is what the user is doing.
 
-**Binding is conjunctive, and the empty case is why.** An earlier draft made
+**Binding is conjunctive, and the ordinary case is why.** An earlier draft made
 these alternatives — an attestation bound to its artefact *or* to an observed
-fact. `DEC-121` makes that unsafe on the row that needs it most: the confirmation
-artefact for `governing-context-recorded` carries dismissals, their reasons, and
-the search evidence, and *"the empty case becomes the strict path in both
+fact. Alternative binding is unsafe for the plain reason: a row whose observed
+fact has moved would still read current off its own unchanged artefact, so the
+whole point of observing an external fact is lost. Conjunction is what makes the
+observed conjunct load-bearing rather than advisory.
+
+**The empty case is guarded at admission, not by currency**, and an earlier draft
+got this wrong in a way worth recording, because the wrong version reads
+plausible. `DEC-121` requires *"the empty case becomes the strict path in both
 checkpoints: a governance sweep finding nothing … shown with what was searched
-and never skippable."* Bind only to the observed edge set and an empty sweep
-fingerprints a stable nothing: the condition holds forever while the entire
-substance of the strict path — what was searched — is bound to nothing at all.
+and never skippable."* That draft argued the artefact conjunct delivered it —
+that binding to the confirmation's own content kept the dismissals, their reasons
+and the search evidence honest. It cannot. `Coverage::Artefact` covers nothing
+but itself, and a `CheckpointAct` is immutable once admitted — replaced by act,
+never edited — so the artefact conjunct can never evaluate false and there is
+nothing for it to catch. Currency cannot police content that is incapable of
+drifting.
+
+What actually delivers *never skippable* is a rule this design does not have to
+add. `CheckpointAct` embeds an `AcceptanceAttestation`, which carries `basis`, and
+`Refusal::AcceptanceBasisMissing` already refuses an empty one — the same rule,
+in the same words, that the `Waived` arm's reason relies on. A `GovernanceConfirmed`
+recording a sweep that found nothing must still state what was searched, or it is
+not admitted. The strict path is an **admission** property, enforced once on
+write, and it is stronger than the currency reading it replaces: currency would
+have let an empty basis in and then failed to notice it.
+
 An attestation is always over its own recorded content; observed facts are an
 additional conjunct, never a substitute.
 
@@ -644,6 +663,43 @@ pub(crate) struct ReviewPass {
     pub(crate) covered: ContentCoverage<Fingerprint>,
 }
 ```
+
+**What mints it, and why that is not a new mechanism.** `DEC-125` says the `RV`
+arrives on entry to `reviewing` and does not say what puts it there; `IMP-392`'s
+own deliverable list claims the minting; and an earlier draft asserted the pass
+exists *"whatever `IMP-392` has landed"* without reconciling the two. **This slice
+mints it.** The seam is the one `DEC-125`'s rationale already cites as proof that
+the run crosses into authored state: *"checkpoints mint authored entities from
+inside `apply` via `DEC-086`'s journalled intent"* — the protocol `SL-233` shipped
+and `DEC-120`..`DEC-126` were themselves minted through.
+
+`DEC-086` fixes the shape: persist a submission-keyed intent, claim a fresh
+canonical id through the existing reservation backend, journal the claimed id,
+materialise, apply status and edges, then persist the snapshot and mark the
+journal complete. A crash before the third step leaves a stray reservation but
+never an unidentified record; from it, recovery resumes the first incomplete
+effect idempotently. It is live in `src/commands/design.rs` today
+(`journal_intent`, `journalled_intent`, `write_journal`).
+
+Two things this slice owes on top of the incumbent, both small and both stated
+here rather than discovered at implementation:
+
+- **The seam is kind-general, and today it is not exercised as such.** `DEC-086`
+  decomposes it as *"the shared entity engine owns reservation and materialisation
+  mechanics; `knowledge` owns record semantics; the design command owns the
+  cross-tier operation journal"*, and the only record semantics wired are
+  `DEC`/`QUE`/`ASM`. Minting an `RV` reuses the engine and journal halves and adds
+  the `RV` half. Nothing in the decomposition resists it; nobody has done it.
+- **`ADR-001` is untouched, and that is why this is worth naming.** The mint runs
+  in the **command** tier. `design_run` is `leaf`: it never mints, never resolves a
+  ref, and sees the result as `ReviewPass` arriving on `DerivedInput` beside
+  `ObservedReview`. This is `DEC-123`'s carried-forward constraint in its own
+  words — no subprocess inside `apply`'s admit→persist span; shell-side, entering
+  as derived input.
+
+`IMP-392` therefore loses that bullet. What it keeps is the finding set and the
+concluded marker — the two things `sec-3` records as one gap with two
+consequences, both of which need findings on the `RV` rather than the `RV` itself.
 
 `IntegratedReview` (`attestation.rs:224`) is the shape this **replaces**, not one
 it rides. That record is `id` plus a `ContentCoverage` — `ReviewPass` with a
@@ -873,19 +929,35 @@ diverges outright, because integrating a finding moves the sections the pass
 covered (`RFC-026` E3, and `DEC-126`'s stated reason for refusing it).
 
 **`Conducted` is admissible only over a concluded pass**, and that closes the one
-hole this row had. `DEC-125` mints the `RV` on *entry* to `reviewing`, and an
-empty finding list reads as `(Done, None)` — so without a rule the arm would be
-satisfied the moment the stage was entered, naming a review that had not
-happened. Nothing *defaults* to `Conducted`: until the user performs
-`ReviewDisposed` the act does not exist and the edge is barred. But a user or an
-agent reaching for a disposition sees two arms, and `Conducted` reads as the
-normal path, so the claim wants refusing rather than merely discouraging.
+hole this row had. `DEC-125` mints the `RV` on *entry* to `reviewing`, and
+`DEC-138`'s predicate is **universally quantified over the finding set** — the row
+is satisfied while the `RV` carries *no* finding that is both `blocker`-severity
+and in `open` or `contested` state. On an empty ledger that is **vacuously true**.
+So without a rule the arm would be satisfied the moment the stage was entered,
+naming a review that had not happened. Nothing *defaults* to `Conducted`: until
+the user performs `ReviewDisposed` the act does not exist and the edge is barred.
+But a user or an agent reaching for a disposition sees two arms, and `Conducted`
+reads as the normal path, so the claim wants refusing rather than merely
+discouraging.
+
+**The vacuity is in the quantifier, and deliberately not in `derived_status`.**
+An earlier draft argued this from the review-level status instead — *"an empty
+finding list reads as `(Done, None)`"* — and that is wrong twice. It is wrong as
+governance: `ADR-007` D-C8 fixes an empty ledger at `active` / `raiser` precisely
+*"so an implementation can never mistake 'no findings yet' for completion"*. It is
+wrong as an argument: `DEC-138` rejects binding to the review-level `await` on
+`ADR-007` D7's ground that it is a display summary and never a gate, so this row
+never reads that value and what it returns cannot be the hazard. `ISS-314` records
+that the incumbent `derived_status` does return `(Done, None)`, against the ADR —
+a real defect, and **not** this row's: repairing it leaves the vacuous
+satisfaction exactly where it is. `DEC-138` carries the same superseded sentence
+in its consequences and wants the same correction.
 
 **The evidence is a marker on the `RV`, not its findings and not its prose.**
 Findings cannot carry it: a clean pass that found nothing is structurally
-identical to one never run — `findings: []`, `status: Done`, `await: None`
-either way — so testing for findings would refuse exactly the review that went
-best. The `RV`'s `## Synthesis` section *does* distinguish them, and is refused
+identical to one never run — an empty finding set either way, satisfying the
+predicate either way — so testing for findings would refuse exactly the review
+that went best. The `RV`'s `## Synthesis` section *does* distinguish them, and is refused
 on a different ground: the gate would be parsing authored prose to answer a
 condition, which is the fourth prose loader `sec-2` names as a live risk, in its
 thinnest and most brittle form. So the signal is structured state on the `RV`,
@@ -1050,8 +1122,11 @@ name only what the row's coverage can observe.
   against current digests on every evaluation, so they are live by construction.
 - `governing-context-recorded` — **cumulative.** The observed edge set is
   refreshed each evaluation, so governance changing after the crossing unmakes
-  the confirmation. This is the row's `observed` conjunct doing the work; its
-  artefact coverage holds the dismissals and search evidence.
+  the confirmation. This is the row's `observed` conjunct doing **all** of the
+  work: its `Artefact` coverage is inert by construction, since the act's own
+  content cannot move. The dismissals and search evidence are *held* in the act's
+  basis and guaranteed at admission, not by this reach — holding is not binding,
+  and the subsection above says why that distinction was worth correcting.
 - `initial-concerns-recorded`, `user-accepts-sufficiency` — **cumulative**, and
   this is why both carry `InquiryMap` coverage. A re-seeded or materially changed
   graph moves the map, so a review or an acceptance made over the old one is no
@@ -1289,9 +1364,15 @@ generator emits and what the asset test iterates.
   every untouched section's still current.
 - **Stale observed fact invalidates** — the governance edge set moving after the
   attestation leaves the condition unmet; an unobservable fact reads as changed.
-- **An empty observed set still binds its artefact** — a governance sweep that
-  found nothing, whose search evidence is then edited, is unmet. The strict-path
-  case, and the reason `Binding` is conjunctive.
+- **An empty sweep must still say what it searched** — a `GovernanceConfirmed`
+  whose `acceptance.basis` is empty or whitespace is refused at admission, with
+  an empty `observed` edge set and without. The strict path, asserted where it
+  actually lives; there is deliberately no currency test here, because an
+  immutable act's own content cannot move.
+- **An empty observed set still expires when an edge appears** — a sweep that
+  found nothing, followed by adding one `governed_by` edge, is unmet. The
+  conjunct doing its ordinary work from the degenerate starting point, which is
+  the case a stable-nothing fingerprint would have missed.
 - **Edge-local is not accumulated** — `drafting-readiness-attested` is required
   crossing `drafting → reviewing` and absent from the enforced set crossing
   `reviewing → locked`.
@@ -1440,9 +1521,10 @@ distinct — `LockAcceptance`'s case again.
 so the currency lamp could keep riding `ReviewStanding::integrated_current`
 unchanged, which read as conservatism and was really a warning left derived over
 a record that cannot name the artefact it is warning about. `ReviewPass` is
-minted on entry to `reviewing` whatever `IMP-392` has landed, so the lamp's
-input exists now; what waits on that item is the *finding set* the severity
-summary counts, not the pass. Its condition retires with it, since
+minted on entry to `reviewing` **by this slice**, through `DEC-086`'s journalled
+intent — `sec-3` specifies the seam and reconciles the ownership with `IMP-392`.
+So the lamp's input exists now; what waits on that item is the *finding set* the
+severity summary counts, not the pass. Its condition retires with it, since
 `integrated-review-present` folds into `review-disposition-attested`.
 
 `Evidence` (`facts.rs:23-27`) fails the test, and is the incumbent it was never
@@ -1783,7 +1865,9 @@ pub(crate) struct CheckpointActDeclaration {
 
 /// An agent declaration. Carries its payload and its basis, and nothing else.
 pub(crate) struct AgentActDeclaration {
-    pub(crate) act: AgentActKind,
+    /// The act WITH its payload — `AgentAct`, not the discriminant. A wire that
+    /// carried only the kind could not deliver a blocking set.
+    pub(crate) act: AgentAct,
     pub(crate) basis: String,
     pub(crate) turn: Option<String>,
 }
@@ -1948,7 +2032,7 @@ So the agent acts get their own record, with their own closed vocabulary.
 /// Tagged with its payload rather than paired with an optional field beside it,
 /// so `DraftingReady` cannot carry a blocking set and `BlockingSetDeclared`
 /// cannot omit one.
-pub(crate) enum AgentActKind {
+pub(crate) enum AgentAct {
     /// The inquiries the agent considers blocking — `DEC-121`'s artefact, and
     /// the thing the user's `GraphReviewed` confirms. Every id must be a node
     /// of the covered map; an id outside it is refused at admission.
@@ -1957,13 +2041,34 @@ pub(crate) enum AgentActKind {
     DraftingReady,
 }
 
+/// `AgentAct`'s discriminant, fieldless — the half a rule can name.
+///
+/// The two are separate types for the reason `ActKind` and `CheckpointAct` are:
+/// a rule names a KIND of act and a record carries ONE act's content. Folding
+/// them would put a `BTreeSet` in a `&'static` table, which is not
+/// const-constructible and would be wrong even if it were — `ActRequirement`
+/// says *this act must confirm a blocking-set declaration*, not *must confirm
+/// this particular blocking set*. `Copy`/`Ord`/serde, exactly as `ActKind` and
+/// `Condition` are, and for the same four sites: `ActRequirement::confirms`,
+/// `Cause::ConfirmationStale`, `ActFault::Confirmation`, and replacement.
+pub(crate) enum AgentActKind {
+    BlockingSetDeclared,
+    DraftingReady,
+}
+
+impl AgentAct {
+    /// Widen to the discriminant. The only direction needed.
+    pub(crate) const fn kind(&self) -> AgentActKind { /* … */ }
+}
+
 /// An agent's declaration about the state of its own work (DEC-121).
 ///
 /// Deliberately NOT an `AcceptanceAttestation`: nothing here is accepted truth,
 /// and the authority enum's single membership is the point of that type.
 pub(crate) struct AgentDeclaration {
     id: DesignId,
-    act: AgentActKind,
+    /// The act with its payload. `act.kind()` is what rules and refusals name.
+    act: AgentAct,
     /// The stated basis, as an acceptance carries one.
     basis: String,
     /// The harness turn it was declared in, when the caller knew it.
@@ -1986,7 +2091,19 @@ shape this section already rejected for `AcceptanceAuthority` and `sec-3`
 rejected for `Claimed`: the illegal value should be unrepresentable rather than
 rejected. `impl From<AgentActKind> for ActKind` is the one direction needed — a
 requirement names an `ActKind`, and the view answers it by widening the
-declaration's kind, never by narrowing a requirement's.
+declaration's kind (`act.kind()`, then `From`), never by narrowing a
+requirement's.
+
+**And the sub-enum is split in two, which an earlier draft did not do.** That
+draft gave `AgentActKind` the blocking-set payload and then used the same type in
+four places that need a bare discriminant: `ActRequirement::confirms` in the
+`&'static` `CONTRACTS` table, `Cause::ConfirmationStale`,
+`ActFault::Confirmation`, and the replacement key below. A `BTreeSet` cannot ride
+a const table, and even if it could the rule means *confirms a blocking-set
+declaration*, not *confirms this blocking set*. `AgentAct` carries content and
+`AgentActKind` names it — the same split `CheckpointAct`/`ActKind` already has,
+and the unrepresentability argument is unaffected because both enums are closed
+at the same two members.
 
 It is also **not** "the same triple minus the authority claim": it drops nothing
 and adds `id`, `act`, `covered` and `fingerprint`. `turn` is kept for the reason
@@ -1998,7 +2115,8 @@ requirement whose actor is an agent may name any of the three, so there is
 nothing for those slots to hold.
 
 **Replacement is by act, not by id.** At most one live declaration per
-`AgentActKind`; a new one replaces the prior, on the same retain-then-push
+`AgentActKind` — the discriminant, so a second `BlockingSetDeclared` displaces
+the first however its blocking set differs; a new one replaces the prior, on the same retain-then-push
 mechanism and with the same key difference from `Attestation` noted above. Two
 live `BlockingSetDeclared`s would make *which one did the user confirm*
 ambiguous, and removing that ambiguity is what the confirmation link below exists
@@ -2323,7 +2441,7 @@ missing answer.
 - **Node material invalidates; progress does not** — re-wording or re-parenting a
   node unmakes `GraphReviewed` and `user-accepts-sufficiency`; disposing one
   leaves both satisfied.
-- **The agent-declaration channel cannot encode a user act** — `AgentActKind` has
+- **The agent-declaration channel cannot encode a user act** — `AgentAct` has
   two members, so `AgentDeclaration { act: DesignAccepted }` does not compile.
   A build-time property of *that shape*, so there is no runtime test to write —
   and deliberately not the claim that an agent cannot author a user act, which
@@ -2397,8 +2515,10 @@ missing answer.
 - **`ActKind` is closed at eight.** A ninth act is a decision, not a
   declaration — it would mean a condition acquired a discharging act nobody
   specified.
-- **`AgentActKind` is closed at two**, and is the narrower vocabulary. A third
-  agent act would mean an agent acquired a discharging role nobody specified.
+- **`AgentAct` and `AgentActKind` are closed at the same two members**, and are
+  the narrower vocabulary. A third agent act would mean an agent acquired a
+  discharging role nobody specified — and it would have to be added to both, which
+  is the cost of the split and is cheaper than a `BTreeSet` in a const table.
 - **`DEC-073`'s policy is built here, not decided here.** No superseding record
   is owed. What this slice adds is the binding from the policy to
   `section-attestations-current`, and the two derivations that read it.
