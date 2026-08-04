@@ -305,6 +305,11 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   exclusion it embodies — invalidation is never policy-filtered — is stated at
   the function and at the call site, and a positive control confirmed the test
   fails when the predicted sweep is applied (sheet F3).
+- **PHASE-03's conformance reads 2 undeclared, both this slice's own authored
+  files.** `notes.md` and `slice-244.toml` rode a commit inside the phase's code
+  boundary instead of a post-flip harvest commit, which is what PHASE-01 and
+  PHASE-02 did. Cosmetic; the ordering is the lesson (sheet F4). Re-recording the
+  delta to exclude them would also exclude a real code change.
 - **`RV-344` pass 2 is specified in the ledger's `## Brief` and will not be run.**
   The user's call (2026-08-04): not because there is nothing left to find, but
   because it comes out cheaper against real code than against prose. Its four
