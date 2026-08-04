@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcbc5-fa74-7c70-b073-e67199d2cc42"
+recorded_at = "2026-08-04T07:56:17.396193789Z"
+kind = "friction"
+summary = "Agent-tool subagent cannot run Bash in this repo: worktree-jail PreToolUse hook rejects /workspace/doctrine as cwd-not-a-worktree"
+detail = "RV-344 pass 1 (Opus subagent spawned via the Agent tool for a design review). The subagent reported every Bash call refused by a 'worktree-jail: cwd-not-a-worktree' PreToolUse hook on /workspace/doctrine, despite the primary tree being a normal git worktree on edge. It completed the pass by reading entity files off disk directly and using the Monitor tool as a shell substitute, plus the doctrine MCP review tools for the ledger. Costs: entities read raw instead of via 'doctrine <kind> show' (the guardrail the boot snapshot mandates), a tool-substitution detour, and pass 2 of the same review needs grep over src/ so it will hit this harder. Skill in use: doctrine:design (reviewing stage), review driven on RV-344."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
