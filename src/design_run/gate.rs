@@ -673,6 +673,103 @@ const fn widest_condition(rest: &[Condition]) -> usize {
 /// rendered-row arithmetic. The witness survives the nine-row vocabulary.
 const _: () = assert!(widest_condition(&Condition::ALL) <= DESIGN_ID_BYTES);
 
+impl Contract {
+    /// How to discharge this condition — **a total function of the const table**
+    /// (design `sec-6`, `sec-3` invariant 4).
+    ///
+    /// Rendered from the [`DerivationRule`] rather than carried beside it, which
+    /// is why there is no `remedy: &'static str` field: the refusal text and the
+    /// contract line injected into the rendered prose are the same value
+    /// formatted twice, so they cannot disagree. It reads nothing outside this
+    /// table — no asset, no shell, no `DerivedInput` — which is what keeps the
+    /// whole leg inside tier `leaf`.
+    ///
+    /// Contrast [`Refusal::RunbookNotDischarged`], which exists *because* a
+    /// step's obligation text is not recoverable from the step's identity and so
+    /// had to be carried. A condition's remedy **is** recoverable, once the table
+    /// exists — so this needs no new refusal field, and `Condition` keeps the
+    /// fieldless `Copy`/`Ord`/serde shape DEC-122 promised.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-05 T10 renders this in a refusal")
+    )]
+    pub(crate) fn remedy(&self) -> String {
+        match self.derivation {
+            DerivationRule::Engine(source) => source.remedy().to_owned(),
+            DerivationRule::Attested(rule) => rule
+                .acts
+                .iter()
+                .copied()
+                .map(ActRequirement::remedy)
+                .collect::<Vec<_>>()
+                .join("; "),
+        }
+    }
+}
+
+impl EngineSource {
+    /// What a caller must *do*. The two engine rows name no act, so their remedy
+    /// describes work rather than an actor and a token.
+    const fn remedy(self) -> &'static str {
+        match self {
+            EngineSource::Dispositions => "dispose every blocking inquiry on the map",
+            EngineSource::Materialisation => {
+                "materialise the design, so every section's stored digest matches the document"
+            }
+        }
+    }
+}
+
+impl ActRequirement {
+    /// One act's discharge line — **or three, on the one row that has two ways
+    /// through.**
+    ///
+    /// Eight of the nine rows have exactly one way through, which is not the same
+    /// as one act by one actor: `initial-concerns-recorded` names two acts by two
+    /// actors and still renders one line, because they are conjunct rather than
+    /// alternative. `review-disposition-attested` differs in kind — DEC-125 gives
+    /// it two arms, and a remedy saying only *the user performs `review-disposed`*
+    /// would name the obligation while hiding the only arm that is crossable
+    /// through the whole `IMP-392` interim.
+    ///
+    /// The branch needs no new field: [`ActRequirement::disposes_review`] is
+    /// already on the rule for the correspondence check, and this is the second
+    /// thing it buys.
+    fn remedy(self) -> String {
+        let actor = self.actor.remedy();
+        if self.disposes_review {
+            return format!(
+                "{actor} disposes this review pass:\n  \
+                 conducted: name the RV whose pass has concluded; blockers still open or \
+                 contested hold the edge\n  \
+                 waived:    state a reason; the findings stay on the RV, undisposed"
+            );
+        }
+        let act = self.act.as_str();
+        match self.confirms {
+            Some(declaration) => format!(
+                "{actor} performs `{act}`, naming the current `{}`",
+                ActKind::from(declaration).as_str()
+            ),
+            None => format!("{actor} performs `{act}`"),
+        }
+    }
+}
+
+impl RequiredActor {
+    /// Who a remedy tells to act. `RunPolicy` names the resolution rather than a
+    /// lane, because which lanes are required is the run's to say (DEC-073) and a
+    /// const remedy cannot know it.
+    const fn remedy(self) -> &'static str {
+        match self {
+            RequiredActor::Fixed(ActorClass::User) => "the user",
+            RequiredActor::Fixed(ActorClass::Agent) => "the agent",
+            RequiredActor::Fixed(ActorClass::Adversarial) => "an adversarial reviewer",
+            RequiredActor::RunPolicy => "every lane the run's review policy requires",
+        }
+    }
+}
+
 /// The design run's four guarded forward transitions (SL-244 sec-3).
 ///
 /// The forward graph's single home. Every edge-keyed table below takes one of

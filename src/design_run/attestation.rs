@@ -77,6 +77,25 @@ pub(crate) enum AgentActKind {
     DraftingReady,
 }
 
+impl ActKind {
+    /// The kebab token this act is spelled with everywhere — the stored value,
+    /// the rendered remedy, the refusal text (STD-001). It agrees with the serde
+    /// rename by construction of the test that compares them, which is
+    /// [`ReviewPolicy::as_str`]'s arrangement.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ActKind::GovernanceConfirmed => "governance-confirmed",
+            ActKind::GraphReviewed => "graph-reviewed",
+            ActKind::BlockingSetDeclared => "blocking-set-declared",
+            ActKind::SufficiencyAccepted => "sufficiency-accepted",
+            ActKind::DraftingReady => "drafting-ready",
+            ActKind::SectionReviewed => "section-reviewed",
+            ActKind::ReviewDisposed => "review-disposed",
+            ActKind::DesignAccepted => "design-accepted",
+        }
+    }
+}
+
 impl From<AgentActKind> for ActKind {
     fn from(agent: AgentActKind) -> Self {
         match agent {

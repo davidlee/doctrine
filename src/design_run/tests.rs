@@ -1267,6 +1267,84 @@ fn the_contract_table_classifies_every_condition_as_the_design_says() {
     assert_eq!(concerns.binding.coverage, Coverage::InquiryMap);
 }
 
+/// The remedy is rendered from the rule, and the one row with two ways through
+/// renders both (`EX-2`, design `sec-6`).
+///
+/// The two-arm row is the point. A remedy saying only *the user performs
+/// `review-disposed`* would name the obligation while hiding the waiver — the
+/// only arm crossable through the whole `IMP-392` interim — and PHASE-06's
+/// `VT-2` quantifies over every row, so it would pass on the easy eight and
+/// never reach this one.
+#[test]
+fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
+    let remedy = |wanted: Condition| {
+        CONTRACTS
+            .iter()
+            .find(|(condition, _)| *condition == wanted)
+            .map(|(_, contract)| contract.remedy())
+            .expect("every condition has a contract")
+    };
+
+    // An engine row names no act, so its remedy describes work.
+    assert_eq!(
+        remedy(Condition::BlockingInquiriesDispositioned),
+        "dispose every blocking inquiry on the map"
+    );
+
+    // A one-act row names the actor and the act's own token.
+    assert_eq!(
+        remedy(Condition::UserAcceptsSufficiency),
+        "the user performs `sufficiency-accepted`"
+    );
+
+    // Two acts by two actors, still one way through — and the confirmation is
+    // rendered, because the ordering is part of what must be done.
+    let concerns = remedy(Condition::InitialConcernsRecorded);
+    assert!(
+        concerns.contains("naming the current `blocking-set-declared`"),
+        "the confirmation rides the remedy: {concerns}"
+    );
+    assert!(concerns.contains("the agent performs `blocking-set-declared`"));
+
+    // The lane-resolved row does not pretend to know the lanes.
+    assert!(
+        remedy(Condition::SectionAttestationsCurrent)
+            .starts_with("every lane the run's review policy requires performs")
+    );
+
+    // The ninth row: two doors, and the remedy says so.
+    let disposition = remedy(Condition::ReviewDispositionAttested);
+    assert!(disposition.contains("conducted:"), "{disposition}");
+    assert!(disposition.contains("waived:"), "{disposition}");
+    assert_eq!(
+        disposition.lines().count(),
+        3,
+        "the one multi-line discharge: {disposition}"
+    );
+
+    // Every remedy is non-empty, so no row can be added with nothing to say.
+    for (condition, contract) in CONTRACTS {
+        assert!(
+            !contract.remedy().trim().is_empty(),
+            "{} renders a remedy",
+            condition.as_str()
+        );
+    }
+
+    // One spelling, not two: an act's rendered token is the token it stores
+    // (STD-001), quantified over the acts the table actually names — which is
+    // all eight, so a hand-listed array would only be a weaker version of this.
+    for (_, contract) in CONTRACTS {
+        let DerivationRule::Attested(rule) = contract.derivation else {
+            continue;
+        };
+        for required in rule.acts {
+            let stored = serde_json::to_string(&required.act).expect("an act serialises");
+            assert_eq!(stored, format!("\"{}\"", required.act.as_str()));
+        }
+    }
+}
+
 /// The act wire types carry the **claim** and nothing the engine authors
 /// (`EX-7b`).
 ///
