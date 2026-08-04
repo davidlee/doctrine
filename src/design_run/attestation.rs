@@ -146,13 +146,11 @@ impl Attestation {
         &self.fingerprint
     }
 
-    /// Who reviewed.
-    #[expect(
-        dead_code,
-        reason = "SL-233: read surface with no reader — the gate derives review standing from \
-                  coverage, not from who reviewed. PHASE-10 narrowed the module-wide gate to \
-                  per-item; removal is filed rather than taken inside another phase's work"
-    )]
+    /// Who reviewed — read by [`DesignSnapshot::missing_lanes`], which is what
+    /// closes ISS-310: the gate now derives review standing from the lane an
+    /// attestation was given in and not from coverage alone.
+    ///
+    /// [`DesignSnapshot::missing_lanes`]: super::snapshot::DesignSnapshot::missing_lanes
     pub(crate) const fn reviewer(&self) -> Reviewer {
         self.reviewer
     }

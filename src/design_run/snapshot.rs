@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    Attestation, IntegratedReview, LockAcceptance, RecoveryIntent, ReviewPolicy,
+    ActorClass, Attestation, IntegratedReview, LockAcceptance, RecoveryIntent, ReviewPolicy,
 };
 use super::bounds::CHANGE_LOG_REVISIONS;
 use super::change_log::ChangeLog;
@@ -431,14 +431,10 @@ impl DesignSnapshot {
         // Coverage, not presence: a run with three sections and two live
         // attestations has not been reviewed. `is_empty` is the degenerate case —
         // a run holding no sections cannot have current attestations for them,
-        // and reporting `true` would let an empty draft lock.
-        let sections_attested = !current.is_empty()
-            && current.iter().all(|(id, fingerprint)| {
-                self.review
-                    .attestations
-                    .iter()
-                    .any(|held| held.subject() == id && held.fingerprint() == fingerprint)
-            });
+        // and reporting `true` would let an empty draft lock. It CANNOT be folded
+        // into the emptiness of the unreviewed list: a run with no sections owes
+        // no lanes, so that list is empty and would read as satisfied.
+        let sections_attested = !current.is_empty() && self.sections_unreviewed().is_empty();
         ReviewStanding {
             sections_attested,
             integrated_current: self
@@ -457,6 +453,56 @@ impl DesignSnapshot {
                 .as_ref()
                 .is_some_and(|accepted| accepted.is_current(&current)),
         }
+    }
+
+    /// The lanes `subject` still owes at `fingerprint` — the lanes this run's
+    /// policy requires with no live attestation naming them (ISS-310).
+    ///
+    /// Content-bound through `fingerprint`: an attestation given over other bytes
+    /// is not an attestation of these, which is DEC-066's rule and not a second
+    /// mechanism.
+    pub(crate) fn missing_lanes(
+        &self,
+        subject: &DesignId,
+        fingerprint: &Fingerprint,
+    ) -> Vec<ActorClass> {
+        self.run
+            .review_policy
+            .lanes()
+            .iter()
+            .copied()
+            .filter(|lane| {
+                !self.review.attestations.iter().any(|held| {
+                    held.subject() == subject
+                        && held.fingerprint() == fingerprint
+                        && ActorClass::from(held.reviewer()) == *lane
+                })
+            })
+            .collect()
+    }
+
+    /// Every (section, lane) pair the run still owes over current content —
+    /// id-ordered, so a refusal naming them renders deterministically.
+    ///
+    /// The nested quantification `section-attestations-current` means, in one
+    /// home. [`DesignSnapshot::review_standing`]'s `sections_attested` is defined
+    /// *through* it, exactly as [`ContentCoverage::is_current`] is defined through
+    /// [`ContentCoverage::diff`]: the verdict and the explanation cannot disagree
+    /// because there is only one of them.
+    ///
+    /// [`ContentCoverage`]: super::attestation::ContentCoverage
+    /// [`ContentCoverage::diff`]: super::attestation::ContentCoverage::diff
+    /// [`ContentCoverage::is_current`]: super::attestation::ContentCoverage::is_current
+    pub(crate) fn sections_unreviewed(&self) -> Vec<(DesignId, ActorClass)> {
+        self.sections
+            .fingerprints()
+            .into_iter()
+            .flat_map(|(subject, fingerprint)| {
+                self.missing_lanes(&subject, &fingerprint)
+                    .into_iter()
+                    .map(move |lane| (subject.clone(), lane))
+            })
+            .collect()
     }
 
     /// A fresh run at revision 1, stage `exploring`.
@@ -535,33 +581,8 @@ mod tests {
     use super::super::attestation::{
         AcceptanceAttestation, ContentCoverage, ReviewPolicy, Reviewer,
     };
+    use super::super::fixture::{attest, id, run_holding, section};
     use super::*;
-
-    /// A well-formed id, or a failure naming the bad literal.
-    fn id(raw: &str) -> DesignId {
-        DesignId::parse(raw).expect("test fixture id must be well-formed")
-    }
-
-    /// A section at a stated fingerprint.
-    fn section(raw: &str, digest: &str) -> Section {
-        Section {
-            id: id(raw),
-            title: raw.to_owned(),
-            body: format!("## {raw}\n"),
-            fingerprint: Fingerprint::new(digest),
-            seq: 0,
-            source_line: None,
-        }
-    }
-
-    /// A run in `reviewing` holding `sections`, reviewed by nothing.
-    fn run_holding(sections: &[(&str, &str)]) -> DesignSnapshot {
-        let mut snapshot = DesignSnapshot::new("dr-test", 233, None);
-        for (raw, digest) in sections {
-            snapshot.sections.upsert(section(raw, digest));
-        }
-        snapshot
-    }
 
     /// Raise one finding against `sec-a`.
     fn raise(snapshot: &mut DesignSnapshot, raw: &str, blocking: bool, resolution: Option<&str>) {
@@ -574,16 +595,17 @@ mod tests {
         });
     }
 
-    /// Attest every section the run currently holds.
+    /// Attest every section the run currently holds, in the default lane.
     fn attest_all(snapshot: &mut DesignSnapshot) {
-        for (subject, fingerprint) in snapshot.sections.fingerprints() {
-            let attestation = id(&format!("att-{}", subject.as_str().replace("sec-", "")));
-            snapshot.review.attestations.push(Attestation::bind(
-                attestation,
-                subject,
-                fingerprint,
-                Reviewer::Human,
-            ));
+        let subjects: Vec<String> = snapshot
+            .sections
+            .fingerprints()
+            .keys()
+            .map(|subject| subject.as_str().to_owned())
+            .collect();
+        for subject in subjects {
+            let attestation = format!("att-{}", subject.replace("sec-", ""));
+            attest(snapshot, &attestation, &subject, Reviewer::Human);
         }
     }
 

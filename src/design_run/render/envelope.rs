@@ -795,15 +795,17 @@ fn sections(run: &DesignSnapshot, detail: Detail) -> (Vec<SectionRow>, usize) {
     (rows, omitted)
 }
 
-/// Whether a section has no live attestation bound to its current content.
+/// Whether a section still owes a reviewer lane under the run's policy.
+///
+/// The same derivation the gate reads ([`DesignSnapshot::missing_lanes`]), not a
+/// second spelling of it: this is the surface that would otherwise render as
+/// settled a section the gate refuses, which is ISS-310's defect one step further
+/// out. Sharing the home makes the two agree by construction.
 fn review_outstanding(run: &DesignSnapshot, id: &DesignId) -> bool {
     let Some(section) = run.sections.find(id) else {
         return true;
     };
-    !run.review
-        .attestations
-        .iter()
-        .any(|held| held.subject() == id && held.fingerprint() == &section.fingerprint)
+    !run.missing_lanes(id, &section.fingerprint).is_empty()
 }
 
 /// The gate conditions currently cleared against this subject's live content —
@@ -1218,7 +1220,9 @@ fn more(omitted: usize) -> String {
     reason = "test code — the repo's panic-avoidance denials target production paths"
 )]
 mod tests {
-    use super::{Detail, ENVELOPE_NORMAL_BUDGET_BYTES, project_within, rendered_bytes};
+    use super::{Detail, ENVELOPE_NORMAL_BUDGET_BYTES, project, project_within, rendered_bytes};
+    use crate::design_run::attestation::{ReviewPolicy, Reviewer};
+    use crate::design_run::fixture::{attest, run_holding};
     use crate::design_run::ids::DesignId;
     use crate::design_run::inquiry::{InquiryNode, Provenance};
     use crate::design_run::refusal::Refusal;
@@ -1253,6 +1257,49 @@ mod tests {
             crate::design_run::traversal::Authority::UserPinned,
         );
         run
+    }
+
+    /// The gate and the envelope answer *is this section reviewed* from the same
+    /// derivation, so they cannot disagree by construction rather than by two
+    /// edits that happen to match.
+    ///
+    /// Repairing only the gate would leave it refusing a section the envelope
+    /// simultaneously renders as settled — ISS-310's defect one surface further
+    /// out. The adversarial attestation is held and stays held throughout: under
+    /// `HumanOnly` it is visible without being sufficient, and loosening the
+    /// policy settles the row without a single new attestation.
+    #[test]
+    fn gate_and_envelope_agree_under_one_policy() {
+        let mut run = run_holding(&[("sec-a", "sha256:a")]);
+        attest(&mut run, "att-a", "sec-a", Reviewer::Adversarial);
+
+        let settled = |run: &DesignSnapshot| {
+            let envelope = project(run, 0, Detail::Normal).expect("the fixture run projects");
+            let row = envelope
+                .sections
+                .iter()
+                .find(|row| row.id == "sec-a")
+                .expect("the envelope renders the section it holds")
+                .clone();
+            !row.review_outstanding
+        };
+
+        assert_eq!(run.run.review_policy, ReviewPolicy::HumanOnly);
+        assert!(!run.review_standing().sections_attested, "the gate refuses");
+        assert!(!settled(&run), "and the envelope agrees it is outstanding");
+
+        run.run.review_policy = ReviewPolicy::AdversarialOnly;
+        assert!(
+            run.review_standing().sections_attested,
+            "the gate is satisfied by the attestation already recorded"
+        );
+        assert!(
+            settled(&run),
+            "and the envelope agrees, on the same reading"
+        );
+
+        // The attestation was never touched: what moved is the requirement.
+        assert_eq!(run.review.attestations.len(), 1);
     }
 
     /// The ladder fires and the counts are exact: against a ceiling too small for

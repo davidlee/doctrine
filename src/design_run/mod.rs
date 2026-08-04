@@ -96,6 +96,8 @@ pub(crate) mod submission;
 pub(crate) mod traversal;
 
 #[cfg(test)]
+mod fixture;
+#[cfg(test)]
 mod tests;
 
 /// The canonical read model, re-exported **by name** (EX-2).

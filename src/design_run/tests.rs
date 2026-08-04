@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use super::Stage;
 use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, Reviewer};
 use super::facts::DerivedDesignFacts;
+use super::fixture::{attest, id, run_holding};
 use super::gate::{
     Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
 };
@@ -26,11 +27,6 @@ use super::inquiry::{
 use super::refusal::Refusal;
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::submission::{Batch, Declaration, Sparse};
-
-/// A validated run-local id, or a test failure naming the bad literal.
-fn id(raw: &str) -> DesignId {
-    DesignId::parse(raw).expect("test fixture id must be well-formed")
-}
 
 /// Facts in which every *claimed* cumulative condition up to `stage` holds, each
 /// cleared against a distinct subject at a known fingerprint.
@@ -679,4 +675,82 @@ fn ordered_policies_present_identical_membership() {
         ActorClass::from(Reviewer::Adversarial),
         ActorClass::Adversarial
     );
+}
+
+/// ISS-310, at the surface it was reported from: the required lane is the
+/// **run's**, not a constant. The same attestation is insufficient under one
+/// policy and sufficient under another, and the run says which lane is missing
+/// rather than leaving the caller to infer it from a bare `false`.
+#[test]
+fn policy_decides_the_required_lane() {
+    let mut run = run_holding(&[("sec-a", "sha256:a")]);
+    attest(&mut run, "att-a", "sec-a", Reviewer::Adversarial);
+
+    assert_eq!(run.run.review_policy, ReviewPolicy::HumanOnly);
+    assert!(
+        !run.review_standing().sections_attested,
+        "an adversarial review does not satisfy a human lane"
+    );
+    assert_eq!(
+        run.sections_unreviewed(),
+        vec![(id("sec-a"), ActorClass::User)],
+        "the missing lane is named"
+    );
+
+    run.run.review_policy = ReviewPolicy::AdversarialOnly;
+    assert!(
+        run.review_standing().sections_attested,
+        "the same attestation satisfies the lane the run now requires"
+    );
+    assert!(run.sections_unreviewed().is_empty());
+}
+
+/// The quantification is nested — every section, every lane the policy resolves
+/// to — which is where a single-lane policy cannot reach: a run may be complete
+/// in one lane and owe the other on one section only.
+#[test]
+fn both_lanes_required_per_section() {
+    let mut run = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
+    run.run.review_policy = ReviewPolicy::HumanThenAdversarial;
+    attest(&mut run, "att-a1", "sec-a", Reviewer::Human);
+    attest(&mut run, "att-b1", "sec-b", Reviewer::Human);
+    attest(&mut run, "att-b2", "sec-b", Reviewer::Adversarial);
+
+    assert_eq!(
+        run.sections_unreviewed(),
+        vec![(id("sec-a"), ActorClass::Adversarial)],
+        "one section owes one lane; the other owes nothing"
+    );
+    assert!(!run.review_standing().sections_attested);
+
+    attest(&mut run, "att-a2", "sec-a", Reviewer::Adversarial);
+    assert!(run.review_standing().sections_attested);
+}
+
+/// DEC-073 says *intended* order, and `Attestation` carries no turn, sequence or
+/// timestamp — so order is not derivable from what is stored and the gate does
+/// not police it. Recording the lanes in the order the policy does **not** intend
+/// clears the condition exactly as the intended order would.
+#[test]
+fn order_is_declared_not_enforced() {
+    let mut run = run_holding(&[("sec-a", "sha256:a")]);
+    run.run.review_policy = ReviewPolicy::HumanThenAdversarial;
+
+    attest(&mut run, "att-a2", "sec-a", Reviewer::Adversarial);
+    assert_eq!(
+        run.sections_unreviewed(),
+        vec![(id("sec-a"), ActorClass::User)],
+        "the lane recorded second by intent is recorded first, and the other is owed"
+    );
+
+    attest(&mut run, "att-a1", "sec-a", Reviewer::Human);
+    assert!(
+        run.review_standing().sections_attested,
+        "both lanes are present, and the order they arrived in is not a fact the gate holds"
+    );
+
+    // The sibling variant differs only in declared order, so it demands the same
+    // pair of the same run.
+    run.run.review_policy = ReviewPolicy::AdversarialThenHuman;
+    assert!(run.review_standing().sections_attested);
 }
