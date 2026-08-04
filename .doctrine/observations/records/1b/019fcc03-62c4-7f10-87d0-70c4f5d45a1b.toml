@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcc03-62c4-7f10-87d0-70c4f5d45a1b"
+recorded_at = "2026-08-04T09:03:21.79638744Z"
+kind = "friction"
+summary = "/design: adopt_authored requires hand-reimplementing design.md section parsing to compute per-section digests"
+detail = "Resuming SL-244's design run after hand-editing design.md, the only lawful crossing is an adopt_authored payload naming the whole-file fingerprint plus every section's fingerprint. Doctrine computes exactly these values on every apply (DerivedInput.authored_sections), but exposes none of them: design show prints 12-char prefixes, and AdoptionMarkersInvalid names mismatched ids without the observed digests. So the caller must read src/design_run/document.rs::parse to learn the body-extraction rule (region after the marker line, minus one trailing newline, unescaped) and src/commands/design.rs::authored_sections to learn the hash, then reimplement both. Cost this session: reading two source files plus a script, and a positive control against a known-good commit to prove the reimplementation correct. A verb emitting the observed map — or the refusal carrying observed digests beside the mismatched ids — would make this a copy-paste. Note the failure mode if you get it wrong is silent-looking: every digest mismatches at once, which is indistinguishable from the document having genuinely moved."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
