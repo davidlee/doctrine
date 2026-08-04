@@ -174,6 +174,25 @@ written to build the predicate either way; what the phase must not do is inherit
 the wider claim without testing it. This is `RV-344` pass 2's
 unbuilt-versus-misread line, landed on the phase that touches the surface.
 
+**Settled, 2026-08-04 (`PHASE-04` `EX-7`).** The read is right: the finding set is
+readable today. `FindingStatus` already carries `Open` and `Contested`
+(`src/review.rs`), `parse_finding_status` and `Severity::parse` are both live, and
+the predicate needs nothing else. `IMP-392` is therefore narrower than the design
+states — the **concluded-pass marker alone**. `PHASE-05`'s `VA-3` clause fires:
+its second and third deferred assertions land live in `PHASE-05` rather than
+waiting on `IMP-392`; only the first (`Conducted` over an unconcluded `RV` refused
+at admission) stays deferred.
+
+**One criterion amended at the same time.** `PHASE-04`'s `VT-4` originally also
+required *the gate reads that as unmet*, which presumes a condition reading
+`ObservedReview`. That condition is `review-disposition-attested` and it lands in
+`PHASE-05`, together with the act that names a review at all — so no reader exists
+in `PHASE-04` and the clause could only have been satisfied hollowly. `PHASE-05`'s
+`VT-9` already carries it verbatim (*a stored act naming an unreadable RV is
+`ReviewUnavailable` and names no findings*), so the clause is dropped rather than
+duplicated, and `VT-4`'s `test_file` moves to `src/review.rs` — the tier where an
+unreadable ref can actually exist. The row now tracks where its evidence lives.
+
 ### Three risks the phases carry, named rather than absorbed
 
 **`PHASE-04` extends a journal vocabulary, not just a call site.** Minting an
