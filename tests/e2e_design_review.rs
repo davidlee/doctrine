@@ -43,6 +43,7 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
+use design_run::attestation::ReviewPolicy;
 use design_run::change_log::ChangeEvent;
 use design_run::gate::Condition;
 use design_run::snapshot::{self, DesignSnapshot};
@@ -498,5 +499,112 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
 
     // With the integrated pass recorded, the same mixed section review locks.
     fixture.apply(&fixture.lock_payload("lock", None));
+    assert_eq!(fixture.stage(), Stage::Locked);
+}
+
+// ── ISS-310: the required lanes are the run's, and the policy is mutable ──
+
+/// The deliberate hole, end to end: sections reviewed only adversarially do not
+/// clear the gate under `human-only`, and loosening the run's policy clears it
+/// **without a single new attestation**.
+///
+/// Asserted rather than left implicit precisely because it is a hole by choice —
+/// the fence is authority and visibility, not prohibition — so closing it later
+/// is a visible break rather than a silent tightening. Both halves of that fence
+/// are here: the change is refused unless it is presented as the user's, and an
+/// accepted change names its old and new value in the log.
+///
+/// The lock attempts OMIT the attestations rather than re-declaring them, which
+/// is the condition that makes this test about the lane: `lock_payload`'s default
+/// reviewer is human, so a re-declaration would quietly repair the very state
+/// under test.
+#[test]
+fn loosening_the_policy_clears_the_gate() {
+    let fixture = Fixture::reviewing();
+
+    // Every section reviewed — adversarially, and nothing else outstanding.
+    let adversarial: Vec<Value> = ATTESTED
+        .into_iter()
+        .map(|(attestation, section)| {
+            json!({"subject": attestation, "attests": section, "reviewer": "adversarial"})
+        })
+        .collect();
+    fixture.apply(&fixture.payload("attest", &json!({"declare": adversarial})));
+
+    let token = Condition::SectionAttestationsCurrent.as_str();
+    let stderr = fixture
+        .refuse(&fixture.lock_payload("lock-under-human-only", Some(Component::Attestations)));
+    assert!(
+        stderr.contains(token),
+        "a review in the wrong lane leaves `{token}` outstanding, got: {stderr}"
+    );
+
+    // Changing the policy is a user act. Without an acceptance it is refused, and
+    // a refused change moves nothing — an agent cannot relax the rules as
+    // housekeeping.
+    let unaccepted = fixture.payload(
+        "policy-unaccepted",
+        &json!({"review_policy": {"policy": "adversarial-only"}}),
+    );
+    let stderr = fixture.refuse(&unaccepted);
+    assert!(
+        stderr.contains("acceptance"),
+        "the refusal must name the missing acceptance, got: {stderr}"
+    );
+    assert_eq!(
+        fixture.read().run.review_policy,
+        ReviewPolicy::HumanOnly,
+        "a refused change leaves the policy where it was"
+    );
+
+    // Presented as the user's, it lands — and it is legible after the fact.
+    fixture.apply(&fixture.payload(
+        "policy",
+        &json!({"review_policy": {
+            "policy": "adversarial-only",
+            "acceptance": {"basis": "the adversarial reviewer reads for us on this run"},
+        }}),
+    ));
+    assert_eq!(
+        fixture.read().run.review_policy,
+        ReviewPolicy::AdversarialOnly
+    );
+    let logged: Vec<String> = fixture
+        .read()
+        .change_log
+        .since(0)
+        .into_iter()
+        .filter(|row| row.event == ChangeEvent::ReviewPolicyChanged)
+        .flat_map(|row| row.terms.iter().map(|term| term.value().to_owned()))
+        .collect();
+    assert_eq!(
+        logged,
+        vec![
+            ReviewPolicy::HumanOnly.as_str(),
+            ReviewPolicy::AdversarialOnly.as_str()
+        ],
+        "one row, naming what the policy was and what it became"
+    );
+
+    // Re-declaring the policy already in force is not a change, and the log does
+    // not report an act that did not happen.
+    fixture.apply(&fixture.payload(
+        "policy-again",
+        &json!({"review_policy": {
+            "policy": "adversarial-only",
+            "acceptance": {"basis": "restating what is already true"},
+        }}),
+    ));
+    let rows = fixture
+        .read()
+        .change_log
+        .since(0)
+        .into_iter()
+        .filter(|row| row.event == ChangeEvent::ReviewPolicyChanged)
+        .count();
+    assert_eq!(rows, 1, "a no-op re-declaration emits no row");
+
+    // And the attestations recorded before any of this now clear the gate.
+    fixture.apply(&fixture.lock_payload("lock", Some(Component::Attestations)));
     assert_eq!(fixture.stage(), Stage::Locked);
 }
