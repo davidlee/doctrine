@@ -110,6 +110,10 @@ pub(crate) struct RunLine {
     pub(crate) slice: u32,
     pub(crate) revision: u64,
     pub(crate) stage: &'static str,
+    /// The reviewer lanes this run requires (DEC-073). Rendered so no reader has
+    /// to fetch the snapshot to learn which lanes a section owes — the visibility
+    /// half of the fence around a policy that is deliberately mutable.
+    pub(crate) review_policy: &'static str,
     pub(crate) watermark: Option<String>,
     pub(crate) materialised: bool,
     pub(crate) change_log_floor: u64,
@@ -391,6 +395,7 @@ fn assemble(run: &DesignSnapshot, known_revision: u64, detail: Detail) -> TurnEn
             slice: run.run.slice,
             revision: run.run.revision,
             stage: run.run.stage.as_str(),
+            review_policy: run.run.review_policy.as_str(),
             watermark: run
                 .authored
                 .watermark
@@ -1281,6 +1286,10 @@ mod tests {
                 .find(|row| row.id == "sec-a")
                 .expect("the envelope renders the section it holds")
                 .clone();
+            // The policy in force rides the run line, so a reader who sees an
+            // outstanding row can tell WHICH lane is owed without fetching the
+            // snapshot — visibility is the fence around a mutable policy.
+            assert_eq!(envelope.run.review_policy, run.run.review_policy.as_str());
             !row.review_outstanding
         };
 

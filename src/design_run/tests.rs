@@ -669,6 +669,13 @@ fn ordered_policies_present_identical_membership() {
     // The default is DEC-074's posture, and it is what an existing run reads.
     assert_eq!(ReviewPolicy::default(), ReviewPolicy::HumanOnly);
 
+    // One spelling, not two: the token a row renders is the token the snapshot
+    // stores, so a rename cannot drift them apart silently (STD-001).
+    for policy in ReviewPolicy::ALL {
+        let stored = serde_json::to_string(&policy).expect("a policy serialises");
+        assert_eq!(stored, format!("\"{}\"", policy.as_str()));
+    }
+
     // A mapping, not a merge: `Reviewer` stays its own vocabulary and gains one
     // direction into the actor axis (design sec-3).
     assert_eq!(ActorClass::from(Reviewer::Human), ActorClass::User);

@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Stage;
-use super::attestation::Reviewer;
+use super::attestation::{ReviewPolicy, Reviewer};
 use super::gate::Condition;
 use super::ids::DesignId;
 use super::inquiry::{DispositionForm, InquiryLifecycle, Provenance};
@@ -550,6 +550,30 @@ const WRITER_ACT_TRAVERSAL: &str = "traversal";
 /// an asset *definition*, not run content, so borrowing either word would give
 /// two different bindings one name.
 const WRITER_ACT_DISCHARGE: &str = "discharge";
+/// The eighth act (SL-244 PHASE-03, DEC-073). Changing which reviewer lanes a
+/// run requires is a user judgement, not housekeeping, so it is its own act
+/// rather than a field an agent can move in passing.
+const WRITER_ACT_REVIEW_POLICY: &str = "review_policy";
+
+/// A change to the run's review policy, which is a user act like any other
+/// (DEC-073, ISS-310).
+///
+/// The acceptance is **required rather than optional**, and that is the whole
+/// fence: the policy is mutable on purpose — a user may legitimately change their
+/// mind, and a rule nobody can revise is one they route around by hand-editing
+/// runtime state — so what the design buys is not prohibition but authority and
+/// visibility. Loosening the policy must be done in the user's name, through
+/// [`AcceptanceAttestation::bind`]'s single route, and it leaves a change row.
+///
+/// Stated plainly because the design should not imply more than it delivers: the
+/// review policy is a declaration of intent, not a security boundary.
+///
+/// [`AcceptanceAttestation::bind`]: super::attestation::AcceptanceAttestation::bind
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ReviewPolicyDeclaration {
+    pub(crate) policy: ReviewPolicy,
+    pub(crate) acceptance: AcceptanceDeclaration,
+}
 
 /// One delegation act (DEC-068).
 ///
@@ -639,6 +663,10 @@ pub(crate) struct ApplyRequest {
     /// refuses to carry (DEC-063).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) discharge: Option<DischargeDeclaration>,
+    /// One review-policy change (DEC-073). Run-level, like the acceptance: the
+    /// policy is a property of the run and not of any declaration subject.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) review_policy: Option<ReviewPolicyDeclaration>,
 }
 
 /// One writer act: the wire key a refusal names it by, and the test for whether a
@@ -661,7 +689,7 @@ impl ApplyRequest {
     /// A bare list of keys beside a hand-written branch chain would let a seventh
     /// branch widen the class silently, which is the shape `RV-324` F-6 found in
     /// the e2e table.
-    pub(crate) const WRITER_ACTS: [WriterAct; 7] = [
+    pub(crate) const WRITER_ACTS: [WriterAct; 8] = [
         (WRITER_ACT_STAGE, |request| request.stage.is_some()),
         (WRITER_ACT_DECLARE, |request| !request.declare.is_empty()),
         (WRITER_ACT_EVIDENCE, |request| !request.evidence.is_empty()),
@@ -675,6 +703,9 @@ impl ApplyRequest {
             !request.traversal.is_empty()
         }),
         (WRITER_ACT_DISCHARGE, |request| request.discharge.is_some()),
+        (WRITER_ACT_REVIEW_POLICY, |request| {
+            request.review_policy.is_some()
+        }),
     ];
 
     /// The first writer act this payload carries, if any (`EX-2`).

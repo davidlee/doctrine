@@ -69,6 +69,7 @@ pub(crate) enum ChangeEvent {
     FindingRaised,
     FindingDisposed,
     AcceptanceAttested,
+    ReviewPolicyChanged,
     CheckpointDisposed,
     ObligationDelegated,
     ProposalRecorded,
@@ -82,7 +83,7 @@ impl ChangeEvent {
     /// Every event, in the sketch's declaration order — the closed vocabulary,
     /// single-sourced so an exhaustive table test cannot silently miss a variant
     /// (STD-001).
-    pub(crate) const ALL: [ChangeEvent; 21] = [
+    pub(crate) const ALL: [ChangeEvent; 22] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
@@ -98,6 +99,7 @@ impl ChangeEvent {
         ChangeEvent::FindingRaised,
         ChangeEvent::FindingDisposed,
         ChangeEvent::AcceptanceAttested,
+        ChangeEvent::ReviewPolicyChanged,
         ChangeEvent::CheckpointDisposed,
         ChangeEvent::ObligationDelegated,
         ChangeEvent::ProposalRecorded,
@@ -127,6 +129,7 @@ impl ChangeEvent {
             ChangeEvent::FindingRaised => "finding_raised",
             ChangeEvent::FindingDisposed => "finding_disposed",
             ChangeEvent::AcceptanceAttested => "acceptance_attested",
+            ChangeEvent::ReviewPolicyChanged => "review_policy_changed",
             ChangeEvent::CheckpointDisposed => "checkpoint_disposed",
             ChangeEvent::ObligationDelegated => "obligation_delegated",
             ChangeEvent::ProposalRecorded => "proposal_recorded",
@@ -186,6 +189,13 @@ impl ChangeEvent {
             // own subject id, and an acceptance has no run-local id at all — its
             // basis and authority are snapshot state, not delta.
             ChangeEvent::IntegratedReviewRecorded | ChangeEvent::AcceptanceAttested => &[],
+            // Both policies are closed tokens rendered by name, so the row reads
+            // as the change it is — `human-only → adversarial-only` — rather than
+            // requiring the reader to fetch the run to learn what moved.
+            ChangeEvent::ReviewPolicyChanged => &[
+                (PayloadKey::Old, ValueKind::Label),
+                (PayloadKey::New, ValueKind::Label),
+            ],
             ChangeEvent::CheckpointDisposed => &[
                 (PayloadKey::Node, ValueKind::Token),
                 (PayloadKey::Record, ValueKind::Token),

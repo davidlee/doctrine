@@ -354,6 +354,32 @@ pub(crate) fn apply(
         ));
     }
 
+    // Beside the acceptance and in the same shape, because it is the same kind of
+    // act: a user judgement about the run as a whole. The policy is mutable on
+    // purpose — see `ReviewPolicyDeclaration` — so the fence here is authority and
+    // visibility rather than prohibition: the basis is required, the acceptance is
+    // bound through the one route that carries `AcceptanceAuthority::User`, and
+    // the change is logged.
+    if let Some(declared) = request.review_policy.as_ref() {
+        if declared.acceptance.basis.trim().is_empty() {
+            return Err(Refusal::AcceptanceBasisMissing);
+        }
+        let previous = next.run.review_policy;
+        // Only when the value actually moves: a payload re-declaring the policy
+        // already in force has changed nothing, and a row saying otherwise would
+        // make the log report acts that did not happen.
+        if previous != declared.policy {
+            next.run.review_policy = declared.policy;
+            pending.push(Pending::run_wide(
+                ChangeEvent::ReviewPolicyChanged,
+                vec![
+                    PayloadTerm::label(PayloadKey::Old, previous.as_str())?,
+                    PayloadTerm::label(PayloadKey::New, declared.policy.as_str())?,
+                ],
+            ));
+        }
+    }
+
     pending.extend(invalidation_rows(
         &live_evidence_before,
         &live_evidence(&next.gate),
@@ -1659,6 +1685,7 @@ mod tests {
             declare: Vec::new(),
             delegation: None,
             discharge: None,
+            review_policy: None,
         }
     }
 

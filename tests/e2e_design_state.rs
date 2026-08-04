@@ -898,6 +898,19 @@ fn every_event_fixture() -> Fixture {
             "acceptance": { "basis": "the user accepted it" },
         }),
     ));
+    // The SL-244 review-policy act: `review_policy_changed`. It rides an
+    // acceptance because changing which reviewer lanes a run requires is a user
+    // judgement, and it names a policy the run does NOT hold — re-declaring the
+    // one in force changes nothing and emits no row, so a fixture that declared
+    // the default would leave this member of the vocabulary unexercised while
+    // looking as though it covered it.
+    fixture.apply(&fixture.payload(
+        "review-policy",
+        &json!({ "review_policy": {
+            "policy": "adversarial-only",
+            "acceptance": { "basis": "the adversarial reviewer reads for us here" },
+        } }),
+    ));
     // The PHASE-10 delegation vocabulary: obligation_delegated, proposal_recorded,
     // proposal_accepted, proposal_refused. Two assignments, because accepted and
     // refused are alternative dispositions of one proposal and no assignment can

@@ -100,6 +100,27 @@ impl ReviewPolicy {
             }
         }
     }
+
+    /// The kebab token this policy is spelled with everywhere — the stored value,
+    /// the change row's terms, the rendered label (STD-001). It agrees with the
+    /// serde rename by construction of the test that compares them.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ReviewPolicy::HumanOnly => "human-only",
+            ReviewPolicy::AdversarialOnly => "adversarial-only",
+            ReviewPolicy::HumanThenAdversarial => "human-then-adversarial",
+            ReviewPolicy::AdversarialThenHuman => "adversarial-then-human",
+        }
+    }
+
+    /// Every policy, in declaration order — the closed vocabulary, single-sourced
+    /// so an exhaustive test cannot silently miss a member (STD-001).
+    pub(crate) const ALL: [ReviewPolicy; 4] = [
+        ReviewPolicy::HumanOnly,
+        ReviewPolicy::AdversarialOnly,
+        ReviewPolicy::HumanThenAdversarial,
+        ReviewPolicy::AdversarialThenHuman,
+    ];
 }
 
 /// A content-bound review attestation (DEC-073).
