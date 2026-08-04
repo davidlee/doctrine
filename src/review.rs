@@ -1631,14 +1631,6 @@ pub(crate) struct PassFacts {
 /// edge an unreadable review must hold. The two failures are one answer on
 /// purpose: the caller's question is *can Doctrine see this pass*, and it cannot,
 /// either way.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05: the disposition act that names a review — and the \
-                  review-disposition-attested row that reads this — land there"
-    )
-)]
 pub(crate) fn observe_pass(root: &Path, reference: &str) -> Option<PassFacts> {
     let id = parse_ref(reference).ok()?;
     let doc = read_review(&root.join(REVIEW_DIR), id).ok()?;

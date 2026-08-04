@@ -53,12 +53,13 @@ use crate::design_run;
 use crate::design_run::Stage;
 use crate::design_run::TurnEnvelope;
 use crate::design_run::attestation::{
-    AcceptanceAttestation, IntentState, IntentSubject, RecoveryIntent, ReviewRef,
+    AcceptanceAttestation, ActKind, IntentState, IntentSubject, RecoveryIntent, ReviewDisposition,
+    ReviewRef,
 };
 use crate::design_run::delegation::Delegation;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::render::envelope::{self, Detail};
-use crate::design_run::run::{Admission, DerivedInput, Resolution};
+use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
     ApplyRequest, Declaration, DelegationAct, DischargeClaim, Dispose,
@@ -1370,12 +1371,7 @@ fn apply(
         authored_fingerprint: observed.clone(),
         verifications: verifications(root, slice, &prior, &request, runbook.as_ref()),
         runbook,
-        // SL-244 PHASE-04: nothing names a review yet. The act that does —
-        // `ReviewDisposed`, carrying `DisposedPass` — lands in PHASE-05, and so
-        // does the row that reads the result. Resolving here would be resolving a
-        // ref no payload can carry, so the input is `None` until there is one to
-        // resolve; `review::observe_pass` is the resolver waiting for it.
-        observed_review: None,
+        observed_review: observed_review(&prior, &request, root),
     };
 
     // Everything refusable, refused while the authored tier is untouched. Pass 1
@@ -1786,6 +1782,51 @@ fn runbook_section(run: &DesignSnapshot) -> Result<Vec<String>> {
 /// A stage whose outbound edge carries no runbook yields `None`, which is a real
 /// answer rather than a missing case — the shape [`design_run::prompt::Fragment::for_stage`]
 /// already uses for a locked run.
+/// The `RV` this invocation must resolve, because an act names one (SL-244
+/// `sec-3`) — read off the ledger, never taken on the caller's word.
+///
+/// **Which `RV`.** There is at most one: acts replace by act, so a run holds one
+/// live `ReviewDisposed`. The *payload's* disposition wins where the batch
+/// carries one, and the stored act's answers otherwise — which is what covers
+/// the case [`design_run::run::apply`] already allows, a disposition recorded
+/// and a stage taken in one submission, where the incoming act is the one the
+/// crossing must be judged against.
+///
+/// **Only a `Conducted` arm names one.** A waiver disposes of the pass without
+/// reading a ledger at all, so `None` is the whole answer there rather than a
+/// failure to observe.
+///
+/// **Absence is refusal, not satisfaction.** An unreadable `RV` yields `None`
+/// too, and the pure layer treats that as refusing rather than as nothing to
+/// check — which is why the two are not distinguished here.
+fn observed_review(
+    prior: &DesignSnapshot,
+    request: &ApplyRequest,
+    root: &Path,
+) -> Option<ObservedReview> {
+    let declared = request
+        .checkpoint_act
+        .as_ref()
+        .and_then(|act| act.disposition.as_ref());
+    let stored = prior
+        .acts
+        .acts
+        .iter()
+        .find(|act| act.act == ActKind::ReviewDisposed)
+        .and_then(|act| act.disposition.as_ref())
+        .map(|disposed| &disposed.disposition);
+    let reference = match declared.or(stored)? {
+        ReviewDisposition::Conducted { review } => review,
+        ReviewDisposition::Waived { .. } => return None,
+    };
+    let facts = crate::review::observe_pass(root, reference.as_str())?;
+    Some(ObservedReview {
+        reference: reference.clone(),
+        concluded: facts.concluded,
+        undisposed_blockers: facts.undisposed_blockers,
+    })
+}
+
 fn runbook_facts(stage: Stage) -> Result<Option<design_run::run::RunbookFacts>> {
     let Some(key) = forward_runbook(stage) else {
         return Ok(None);

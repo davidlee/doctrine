@@ -143,14 +143,6 @@ pub(crate) struct DerivedInput {
 /// re-derived at every crossing rather than a fact about the moment the act was
 /// written.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05: `review-disposition-attested` and the act that names a \
-                  review land there; PHASE-04 puts the input in place ahead of its readers"
-    )
-)]
 pub(crate) struct ObservedReview {
     /// The review the act named. `sec-4`'s type.
     pub(crate) reference: ReviewRef,
