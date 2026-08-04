@@ -117,6 +117,11 @@ selector = "install/design-prompts/conditions/**"
 intent = "design-target"
 note = "sec-5 / DEC-122: nine per-condition contract narratives keyed by kebab token, in a subdirectory so the corpus set-equality test is a prefix filter rather than an exclusion list (STD-001)."
 
+[[selector]]
+selector = "src/design_run/runbook.rs"
+intent = "design-target"
+note = "PHASE-01: RunbookKey doc names the forward relation, so it re-points from can_advance to Advance::from_stage when the closed type retires the walk. Doc-only; the runbook model itself is untouched by this slice."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
