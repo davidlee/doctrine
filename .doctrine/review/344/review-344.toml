@@ -12,5 +12,218 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-244"
 
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "Expected `Waived` to clear `reviewing → locked` throughout the IMP-392 interim; observed both arms bind to a `ReviewPass` nothing in this slice mints, so the edge is barred outright"
+detail = """
+SL-244 design.md `sec-3` ("The condition model") and `sec-4` ("The attested acts").
+
+`sec-3`:768-786 makes BOTH disposition arms bind to pass identity: "the act carries, beside it, the `ReviewRef` of the pass it disposed. The row is satisfied only while that reference equals the run's current `ReviewPass::review`" — and explicitly "`Waived` binds too". `sec-4`:1566-1569 gives it a slot (`DisposedPass { pass: ReviewRef, disposition: ReviewDisposition }`), and `sec-5`:2560-2562 gives the failure a cause (`PassSuperseded { disposed, current }`).
+
+`ReviewPass` (`sec-3`:640-645) is "Minted on entry to `reviewing` (DEC-125)". Nothing in the design specifies a producer for its `review: ReviewRef` field:
+- it is not a wire field — `sec-4`:1735-1765 and :1798-1800 enumerate exactly three new `ApplyRequest`/`WRITER_ACTS` members (`checkpoint_act`, `agent_declaration`, `review_policy`) and `WRITER_ACTS` goes 7 → 9, with no minting act;
+- it is not on `DerivedInput` — the only review-shaped field there is `ObservedReview` (`sec-3`:925-935), which resolves "the review the *payload* names ... and the one the stored act names otherwise" (`sec-3`:947-953), i.e. it can only resolve an RV an act already references;
+- the five-step build order (`sec-4`:1808-1816: admit / mutate / re-observe / construct / evaluate) has no minting step;
+- DEC-125's own named mechanism for minting authored entities from inside `apply` (DEC-086's journalled intent, reservation, recovery-from-first-incomplete-effect) is cited nowhere in the design.
+
+Meanwhile IMP-392 § "What is here" lists "**Minting an `RV` on entry to `reviewing`, so the review is a first-class artefact from the start**" as IMP-392's own deliverable. `sec-4`:1439-1444 nevertheless moves the dependent record forward — "It retires with this slice, not with `IMP-392`. ... `ReviewPass` is minted on entry to `reviewing` whatever `IMP-392` has landed, so the lamp's input exists now" — without stating what does the minting in SL-244, and without noting that this reassigns an IMP-392 bullet.
+
+Consequence if implemented as written: during the stated interim there is no current `ReviewPass`, so `DisposedPass::pass` has nothing to equal. `Conducted` is inadmissible (no concluded marker until IMP-392 — `sec-3`:875-893). `Waived` cannot satisfy the row either, because the pass-identity conjunct cannot hold. `reviewing → locked` is therefore uncrossable by any act.
+
+That inverts DEC-138 in terms — "`Waived { reason }` satisfies it unconditionally"; "The `Waived` arm needs nothing from it. Until IMP-392 lands the interim is the same on both arms, not one strict path and one lax one" — and inverts the design's own repeated claim (`sec-3`:971-981 "`Waived` reads no `ObservedReview` at all"; `sec-3`:1359-1362 "the row stays satisfiable throughout the interim"; `sec-4`:2310-2315 "Waiving is not a degraded path — `reviewing → locked` clears on a `Waived { reason }` disposition with no integrated pass recorded"). The `sec-2` snapshot-cost analysis also assumes SL-243 can be repaired by two acts, which this would not permit at the reviewing edge.
+
+The gap is a missing producer, not a wrong decision — but it must be specified before implementation, because the mechanism (an authored-entity mint from inside `apply`) is exactly the kind of thing DEC-101's no-subprocess-in-admit→persist constraint and DEC-086's journalled-intent protocol govern."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Expected `AgentActKind` to be a discriminant usable in a `&'static` rule table; observed `sec-4` gives it a payload, so `sec-3`'s `confirms` slot and two later types cannot hold it"
+detail = """
+SL-244 design.md, `sec-3` ("The condition model") against `sec-4` ("The attested acts") and `sec-5` ("The contract channels"). This is the internal-coherence class the brief names: `sec-3` fixed a slot's type before `sec-4` fixed the type's shape, and the earlier commitment was not revisited.
+
+`sec-3`:242 declares on `ActRequirement`:
+```
+pub(crate) confirms: Option<AgentActKind>,
+```
+inside a table `sec-3`:1097 declares as `const CONTRACTS: [(Condition, Contract); 9]`, with the whole design leaning on it being `&'static` (`sec-3`:302-320 "The table stays `&'static` and stays total"; `sec-5`:2457-2468 "a constant string in a `&'static` table").
+
+`sec-4`:1943-1958 then defines it payload-tagged, deliberately:
+```
+pub(crate) enum AgentActKind {
+    BlockingSetDeclared { blocking: BTreeSet<DesignId> },
+    DraftingReady,
+}
+```
+with the stated reason "Tagged with its payload rather than paired with an optional field beside it, so `DraftingReady` cannot carry a blocking set and `BlockingSetDeclared` cannot omit one."
+
+The two cannot both stand. `sec-4`:2226 writes the rule half as "`Some(BlockingSetDeclared)` on the `GraphReviewed` requirement", and `sec-3`:1010's classification row spells it `{GraphReviewed, User, confirms BlockingSetDeclared}` — neither is a writable value: a `&'static` const row would have to supply a `BTreeSet<DesignId>`, and any value it supplied would be a lie about which nodes the rule requires. The rule wants the *kind*; the type is the *act*.
+
+Three further sites inherit the same conflation:
+- `sec-5`:2556 `Cause::ConfirmationStale { act: ActKind, declaration: AgentActKind }` — a refusal reporting "the declaration has since changed" would carry a whole blocking set where a name is wanted;
+- `sec-5`:2692 `ActFault::Confirmation { expected: Option<AgentActKind>, carried: bool }` — `expected` is read off the rule, so it inherits the const problem directly;
+- `sec-4`:2000-2004 "Replacement is by act, not by id. At most one live declaration per `AgentActKind`" — keyed on the enum *value*, two `BlockingSetDeclared`s over different node sets are distinct values and both survive, which is precisely the "which one did the user confirm" ambiguity that subsection exists to remove.
+
+`sec-4`:2231-2239 states the intended semantics correctly — "The lookup is by act, not by fingerprint. The rule names which declaration must be confirmed" — which is the discriminant reading, not the value reading. The repair is small (a discriminant type, or `mem::discriminant`-style keying) but it is a modelling decision the design has to make, not an implementation detail: `sec-4`:1983-1989 argues the closed sub-enum on unrepresentability grounds, and that argument has to survive the split."""
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = 'Expected `Activation::Pending` to mean "no act exists to attest"; observed `sec-4` wires all eight acts in this slice, so the two exploring rows are pending on a reason the design itself falsifies'
+detail = """
+SL-244 design.md, `sec-3` ("The condition model") against `sec-4` ("The attested acts"), and against `SL-244`'s scope objective 4 plus its `IMP-391` non-goal.
+
+`sec-3`:711-727 defines `Activation` for one job — "stop a row that **cannot be satisfied** from barring the edge forever" — and marks `governing-context-recorded` and `initial-concerns-recorded` `Pending { blocked_on: IMP-391 }` "because until the checkpoints exist **there is no act to attest** and the rows would bar `exploring → inquiring` permanently."
+
+`sec-4` builds those acts. `sec-4`:1467-1476's table assigns `GovernanceConfirmed` and `GraphReviewed` to `CheckpointAct` and `BlockingSetDeclared` to `AgentDeclaration`; `sec-4`:1738-1748 puts `CheckpointActDeclaration` on `ApplyRequest` as a `WRITER_ACTS` member covering all five user acts; `sec-4`:2005-2006 does the same for `AgentActDeclaration` covering both agent acts; `sec-4`:1758-1760 gives each its own snapshot group. So after this slice every one of the eight acts is declarable, admissible and persisted. The premise "there is no act to attest" is false as stated.
+
+The asymmetry is visible inside the design. `drafting-readiness-attested` is `active` (`sec-3`:1012) and its act `DraftingReady` is equally new, equally unprompted by any runbook step, and rides the identical wire field — and `sec-2`:59-63 relies on that, pricing SL-243's repair as "the user re-gives the acceptance as `SufficiencyAccepted`, and the agent declares `DraftingReady`". `initial-concerns-recorded` needs nothing this slice does not ship (its coverage is `InquiryMap`, its conjuncts are two acts both wired here) and is nonetheless `Pending`. What is genuinely absent for the exploring pair is the runbook prompting and CLI rendering — not the act.
+
+Two consequences, neither declared:
+1. The stated rationale for the interim is wrong, so the choice reads as forced when it is a choice. `sec-2`:87-90 and `sec-3`:724-727 both present it as a necessity.
+2. It sits across the scope's own boundary. `slice-244.md` § Non-Goals lists under `IMP-391`: "the **wire acts**, the **artefact storage**, the runbook steps and the CLI rendering are the follow-on", and `IMP-391` § What is here opens with "The two checkpoint acts on the wire" and "The artefact each produces as structured state". `sec-4` ships both halves for those acts while leaving the rows unenforced — so the slice does the follow-on's work and still does not get the objective-4 guard, and no section reconciles the split.
+
+Either the two rows are enforceable on this slice's own mechanism (and `Pending` should go, with `IMP-391` narrowed to prompting), or they are not (and `sec-4` owes the reason a `GovernanceConfirmed` cannot be submitted through the field it just declared). As written the design asserts both."""
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "major"
+title = "Expected conjunctive binding to keep an empty governance sweep honest via the artefact conjunct; observed `Artefact` coverage can never fail, so the argument and its verification bullet describe a mechanism that does not exist"
+detail = """
+SL-244 design.md `sec-3` ("The condition model"), the subsections "Attestation: acts, actors, and what invalidates them" and "Verification impact".
+
+`sec-3`:504-514 argues binding must be conjunctive rather than alternative, and rests the argument entirely on the empty-sweep case: "Bind only to the observed edge set and an empty sweep fingerprints a stable nothing: the condition holds forever while the entire substance of the strict path — what was searched — is bound to nothing at all. An attestation is always over its own recorded content; observed facts are an additional conjunct, never a substitute."
+
+But `Coverage::Artefact` — the coverage `governing-context-recorded` carries (`sec-3`:1009) — is defined as "The attested artefact's own recorded content, and nothing else" (`sec-3`:377-379), i.e. `covered: None` (`sec-4`:1550, :1614-1615: "`Artefact` is `covered: None`"). A `CheckpointAct` is immutable once admitted: it is replaced by act (`sec-4`:1749-1757), never edited. So nothing can move its own recorded content, and the artefact conjunct can never evaluate false.
+
+The design states this property itself, twice, about other rows:
+- `sec-3`:592-594 — "A row with `Cumulative` reach and `Artefact` coverage is re-derived on every forward move and can still only fail if its own artefact changes — which is coherent, and much weaker than 'cumulative' sounds."
+- `sec-3`:1060-1065 — for `drafting-readiness-attested`, "Its coverage is `Artefact`, so cumulative reach would add nothing observable in any case."
+- `sec-4`:2391-2393 — "`Artefact` is absent coverage, not empty coverage — a `DraftingReady` declaration stays current across section edits."
+
+Two things follow that the design does not concede:
+
+1. **The empty-sweep argument does not hold.** With an empty `GovernanceEdges` set the observed conjunct fingerprints a stable nothing (as the passage says), and the artefact conjunct is inert — so the condition holds forever exactly as the alternative-binding version would. Conjunctive binding is defensible on other grounds (a non-empty edge set moving does unmake it), but not on the one ground `sec-3` gives it.
+
+2. **The verification bullet at `sec-3`:1292-1294 is unwritable.** "**An empty observed set still binds its artefact** — a governance sweep that found nothing, whose search evidence is then edited, is unmet. The strict-path case, and the reason `Binding` is conjunctive." There is no mechanism by which "search evidence is then edited" reaches a stored `CheckpointAct`: the search evidence lives in the act's `acceptance.basis`, which is not covered by anything and is not editable in place. Written as specified, this test can only be made to pass by asserting something else.
+
+This also bears on DEC-121's consequence — "The empty case becomes the strict path in both checkpoints: a governance sweep finding nothing ... shown with what was searched and **never skippable**" — which `sec-3`:1052-1054 currently claims is satisfied by the observed conjunct doing the work while "its artefact coverage holds the dismissals and search evidence". Holding is not binding; nothing derives over the held content."""
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "major"
+title = "Expected `sec-5` to keep all nine promises it tabulates; observed the ninth — that the refusal says the waiver arm is available and why — has no `Cause` variant, no remedy content and no test"
+detail = """
+SL-244 design.md `sec-5` ("The contract channels"). This is the forward-promise class the brief asks to track.
+
+`sec-5`:2503-2516 opens by naming the debt precisely — "The complaint is not a function of the condition, and that is what has to ride. Nine promises across the two prior sections need it" — and tabulates them. The ninth row is:
+
+| that the waiver arm is available and why | `sec-3`, *"the refusal text says so"* |
+
+sourced from `sec-3`:735-737: "The workflow consequence is stated rather than hidden: until `IMP-392` lands, `reviewing → locked` is crossable by *waiving* review with a stated reason, and **the refusal text says so**."
+
+Eight of the nine land in `Cause` (`sec-5`:2542-2571): `ActMissing { act, lanes }`, `SectionsUnreviewed`, `NoSections`, `CoverageStale { moved }`, `ObservedStale`, `ConfirmationStale { declaration }`, `BlockersUndisposed { findings }`, plus `PassSuperseded` / `ReviewUnavailable`. The ninth lands nowhere:
+
+- **Not in the complaint.** No `Cause` variant carries arm availability, and none could be inferred — the variants are per-failure-mode, and "the exit exists" is not a failure mode.
+- **Not in the remedy.** `sec-5`:2486-2492 fixes the remedy as "a total function of the condition ... rendered from the `DerivationRule` — `sec-3`'s invariant 4, one discharge source". The rule for this row is `Attested([{ReviewDisposed, User}])` (`sec-3`:1014); it names an act and an actor and knows nothing of `DEC-125`'s two arms, which live on `CheckpointAct::disposition` (`sec-4`:1556-1557), not on the rule. The sample render at `sec-5`:2849-2862 confirms the shape — one `discharge:` line naming an act.
+- **Not in the receipt.** The narrative asset could carry it, but the receipt is delivered on stage entry and `sec-5`:2977-2983 records as a carried-forward residual that an agent refused at `reviewing → locked` having entered at an earlier stage cannot reach the narrative at all.
+- **Not tested.** `sec-5`:2912-2973's verification impact has a bullet for every other promise in the table (the missing lane, the two-cause conjunction, the named node, `NoSections`, remedy equality, `ReviewUnavailable`, `PassSuperseded`) and none for this one.
+
+This is the promise with the most operational weight of the nine: it is the one that tells an agent blocked at the last edge, during the whole `IMP-392` interim, how to proceed. It is also the promise most at risk of being silently dropped, because unlike the other eight nothing in the type system notices its absence."""
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "minor"
+title = 'Expected "exactly one enumeration outside Rust, and one test"; observed `sec-5` adds nine hand-written `publication/manifest.toml` rows keyed by the same vocabulary'
+detail = """
+SL-244 design.md `sec-3` ("The condition model") against `sec-5` ("The contract channels"), against `STD-001`.
+
+`sec-3`:1196-1206 closes the contract-table subsection with a totality claim: "That leaves **exactly one enumeration outside Rust, and one test**: — **generated** — `Condition`, `ALL`, `CONTRACTS` and `boundary_conditions` ... — **tested** — the prose asset corpus: every generated key has an asset, and the corpus has no key the vocabulary does not. This is the same move `STD-001` asks for."
+
+`sec-5`:2803-2808 then adds a second: "**Publication.** Nine `[[entry]]` rows in `publication/manifest.toml`, `kind = "guidance"`, `customization = "fixed"`." Each row's `address`/`backing` embeds a condition's kebab token (the asset key built at `sec-5`:2784-2791 as `{STORE}/conditions/{token}.md`). That is a hand-maintained, per-condition enumeration of the closed vocabulary living outside Rust — the exact shape `sec-3`'s sentence says does not exist after generation, and the exact shape `STD-001` names ("a literal value with meaning — a path, key, ref prefix ... is named once and referenced by that name everywhere").
+
+`sec-5` is aware of one direction of the guard but not the other: :2810-2816 says "the asset corpus is bounded twice by two independent tests" — `assert_unprojected_install_assets_are_published` catches an `install/` asset with no manifest entry, and `sec-3`'s set-equality catches vocabulary↔corpus divergence. Neither catches a manifest entry naming a token the vocabulary has retired, and `sec-6`:3094-3097 repeats the same two-test framing for its own single entry.
+
+Small in consequence (nine rows, and a retired condition's asset would be deleted with it), but the design's own claim is stronger than what it ships, and `sec-3`'s sentence is the one a later reader will rely on when adding a tenth condition."""
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "minor"
+title = """Expected `sec-6`'s "every other `fixed` entry is provisional" to hold; observed DEC-102 seals five of them permanently on the false-not-different criterion"""
+detail = """
+SL-244 design.md `sec-6` ("The published stage-machine diagram"), subsection "A generated file that ships is not a generated file that stays home", and its Carried-forward.
+
+`sec-6`:3115-3122 asserts: "`customization = "fixed"` is the machine-readable half of the same statement, and its reason differs from **every other** `fixed` entry in the manifest. **The process fragments and runbooks are `fixed` because the override seam does not exist yet** (`IMP-372`); this one would be `fixed` even after that seam lands ... Worth recording rather than folding into the existing rationale, since `IMP-372` will otherwise sweep the `fixed` entries and find one that must not move." `sec-6`:3172-3174 repeats it: "recorded here because **every other `fixed` entry in the manifest is provisional** and a sweep would assume this one is too."
+
+DEC-102 says the opposite for the incumbents. Its `context` records that "`hymns/stage/design.md` and the four `design-prompts/*` fragments are the ONLY `customization = "fixed"` entries in publication/manifest.toml", and its `choice` rules: "**The five existing fixed entries state what the engine enforces, so they stay fixed**; the craft moving out of skill prose into obligation runbooks (DEC-101) belongs on the overridable side of that line." Its body § The line: "`install/hymns/stage/design.md` says 'every mutation compare-and-swaps against the run's revision' ... A project that edits those sentences has not changed its workflow ... It has only made its own documentation lie." Its consequences: "no manifest entry is reversed; the five fixed entries and the `[hymns].seal` membership stand."
+
+So five of the manifest's `fixed` entries are sealed on the same permanent criterion `sec-6` claims is unique to its diagram — an override would make the content *false*, not merely different. It is the **runbooks** alone that ship `fixed` provisionally pending `IMP-372`, which is exactly what `sec-5`:2803-2808 gets right when it quotes the manifest header's runbook rationale verbatim. `sec-6` over-generalises that rationale to "the process fragments and runbooks" and then to "every other entry".
+
+Consequence is small but real and is the one `sec-6` itself names: the note is written to steer `IMP-372`'s sweep, and it mis-describes what that sweep will find — three classes (permanently sealed, provisionally fixed, structurally fixed), not two."""
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "minor"
+title = "Expected the empty-ledger reading to match ADR-007 D-C8 (`active` / `raiser`); observed the design asserts `(Done, None)`, the reading D-C8 exists to forbid"
+detail = """
+SL-244 design.md `sec-3` ("The condition model"), subsection "`Conducted` is admissible only over a concluded pass".
+
+`sec-3`:875-879: "`DEC-125` mints the `RV` on *entry* to `reviewing`, and **an empty finding list reads as `(Done, None)`** — so without a rule the arm would be satisfied the moment the stage was entered, naming a review that had not happened."
+`sec-3`:884-887: "a clean pass that found nothing is structurally identical to one never run — **`findings: []`, `status: Done`, `await: None` either way**."
+
+ADR-007 D-C8 ("Derived status function") fixes the opposite, and says why:
+
+```
+empty ledger                  → status = active, await = raiser   (raiser goes first)
+any open/answered/contested   → status = active, await = derived role
+all verified/withdrawn        → status = done,   await = none
+```
+"**The empty ledger is `active` (not vacuously `done`), so an implementation can never mistake 'no findings yet' for completion.**" ADR-007 § Verification requires this to be covered by test "including the empty-ledger and all-terminal cases".
+
+The design's conclusion survives — a clean pass and an unrun pass are indistinguishable from the finding set either way, so the concluded marker is still needed — but the premise as written contradicts an accepted ADR that is one of this pass's named pins, and it does so undeclared. Note the design cites `derived_status` correctly two paragraphs earlier (`sec-3`:809-813, "reads `status` and never `severity`"), so the divergence is local to this passage rather than a considered reading.
+
+Two ways this bites. If `derived_status` really does return `(Done, None)` on an empty ledger, that is an ADR-007 D-C8 violation in the incumbent and the design should raise it rather than build on it. If it does not, the design (and DEC-138, which carries the same sentence) is asserting a fact about the ledger it specifies against that is simply wrong, in the one passage where the ledger's own semantics are load-bearing. Either way the design should say which. (Confirming which is a pass-2 question; the governance contradiction is not.)"""
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "minor"
+title = 'Expected the design to state what the "certain" SPEC-029 revision consists of; observed only the sec-6 citation, while the contract receipt narrows a SPEC-029 responsibility unnamed'
+detail = """
+SL-244 design.md `sec-1` ("Governing context") against `sec-5` ("The contract channels") and `sec-6` ("The published stage-machine diagram"), against SPEC-029.
+
+`sec-1`:19-20 lists SPEC-029 as "owns the gate table and describes evidence as payload-claimed. **The certain revision candidate of this slice.**" `slice-244.md` § Affected Surface says the same ("moving conditions off that footing is a spec change"). The only revision content any section then states is `sec-6`:3124-3130 — the spec cites the published diagram address rather than holding a copy — and `sec-4`:2402-2404 explicitly disclaims one governance edit ("`DEC-073`'s policy is built here, not decided here. No superseding record is owed").
+
+SPEC-029's structured `responsibilities` carry at least three claims this design moves, none named as owed revisions:
+- "a **const-fn forward-boundary gate table**" — `sec-3`:1132-1155 changes its parameter from `(Stage, Stage)` to the new closed `Advance`, and moves the forward graph itself (`can_advance`) into that type;
+- "Own the design prompt pack: a closed, design-specific fragment store **addressed by stable identity with content binding**" — `sec-5`:2818-2837 adds a third family to that store addressed by a **bare** token with deliberately no digest, and argues the point at length against `Fragment`'s own refusal (`prompt.rs:188-195`, "a receipt that binds no bytes is not a receipt"). That is a real narrowing of a stated spec responsibility, argued in the design and absent from any revision inventory;
+- the snapshot responsibility, against `sec-4`:2407-2419's "The snapshot changes in six ways, not one".
+
+The design is not obliged to author the revision — `/reconcile` owns that, routed through a REV under ADR-013. It is obliged not to leave "certain revision candidate" as the whole of the statement when the same document has itself found that undocumented spec/design divergence is this subsystem's recurring failure (DEC-125's "fourth instance in this subsystem of a design bullet specifying something never built"). A reader picking this up at `/plan` or `/reconcile` has no list to work from."""
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "minor"
+title = "Expected `sec-5`'s envelope accounting to cover everything the design adds there; observed it counts two scalars and omits `sec-4`'s third addition, the rendered review policy"
+detail = """
+SL-244 design.md `sec-5` ("The contract channels"), subsection "The envelope gets nothing new, and loses one thing", against `sec-2` and `sec-4`.
+
+`sec-2`:65-67 records the envelope byte budget as a live concern: "The refusal path has no byte budget; the envelope has a hard one, and `clearances` already rides it uncapped. Anything this design adds to the envelope competes with that."
+
+`sec-5`:2875-2899 is where the design settles that concern. It reconciles two additions — "`sec-3`'s currency lamp and severity summary are derived state that warns" — subtracts one (`SectionRow::clearances`, which loses its source when `Evidence` retires), and concludes: "So `sec-2`'s envelope-budget concern is **partly retired** rather than merely survived: the uncapped list it names as the competitor for bytes goes away, and **what this design adds to the envelope is two scalars**. Recorded here because the concern was stated as live and a reader should not have to infer that it moved."
+
+`sec-4`:2124-2126 adds a third, in the fence that makes the mutable review policy defensible: "**The current policy renders in the envelope**, so no reader has to guess which lanes a run requires." `sec-4`:2294-2300's verification impact leans on the same surface (`review_outstanding` at `render/envelope.rs:799` repaired to read the policy). Neither appears in `sec-5`'s inventory, and the section heading — "The envelope gets nothing new" — is the assertion `sec-5`:2434-2437 attributes to DEC-124 and then does not hold.
+
+The byte cost is trivially small (one enum name). The finding is that this is the one subsection whose job is to close a stated concern with a complete inventory, and it closes it against an incomplete one — so a later reader auditing the budget against `sec-2` will not find the policy line accounted for anywhere. It also weakens `sec-4`'s own argument: the policy render is one of the three things standing in for prohibition ("authority and visibility, not prohibition", `sec-4`:2111-2130), and it is easier to drop under budget pressure if no section has recorded that it rides there."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
