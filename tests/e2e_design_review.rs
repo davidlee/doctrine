@@ -43,15 +43,29 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
-use design_run::attestation::{ReviewPolicy, ReviewRef};
+use design_run::attestation::{
+    IntentState, IntentSubject, RecoveryIntent, ReviewPolicy, ReviewRef,
+};
 use design_run::change_log::ChangeEvent;
 use design_run::gate::Condition;
-use design_run::snapshot::{self, DesignSnapshot};
+use design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 
 /// The slice every fixture designs.
 const SLICE: &str = "SL-233";
 /// Its zero-padded directory name.
 const SLICE_NUMBER: &str = "233";
+/// The `RV` ledger's file stem, mirroring `review.rs`'s own — one copy here
+/// because a binary-only crate gives an integration test no route to the const.
+const LEDGER_STEM: &str = "review";
+/// The canonical `RV` prefix, mirrored for the same reason.
+const REVIEW_PREFIX: &str = "RV";
+/// The env var naming the DEC-086 step to crash before, mirroring
+/// `commands/design.rs`'s `ENV_DESIGN_FAULT`. Debug builds only, which is what
+/// every `cargo test` run is.
+const DESIGN_FAULT_ENV: &str = "DOCTRINE_DESIGN_FAULT";
+/// The mint journal's file name, beside the snapshot — the same derivation
+/// `state::design_journal_path` performs.
+const JOURNAL_FILE: &str = "design-journal.toml";
 
 // ── the run under test ────────────────────────────────────────────────────
 
@@ -139,6 +153,29 @@ impl Fixture {
     /// and one **undisposed blocking finding** — the state every lock test
     /// starts from.
     fn reviewing() -> Fixture {
+        let (fixture, entry) = Fixture::at_the_reviewing_edge();
+        fixture.apply(&entry);
+        // The lock edge's own runbook, discharged here for the same reason the
+        // other two are: this suite's subject is which of the FOUR lock
+        // components a refusal names. An outstanding runbook refuses first and
+        // would mask every one of those assertions with the same message.
+        for step in runbook_fixture::REVIEWING_STEPS {
+            fixture.apply(&fixture.payload(
+                &runbook_fixture::discharge_label(step),
+                &runbook_fixture::discharge_body(step),
+            ));
+        }
+        fixture
+    }
+
+    /// The same run one submission short of `reviewing`, with the entry payload
+    /// **returned rather than applied**.
+    ///
+    /// Split out of [`Fixture::reviewing`] so a test can interrupt the very
+    /// submission that mints the pass (`VA-1`). The payload pins the revision it
+    /// was built at, which is exactly what a resumed submission re-presents: a
+    /// crashed apply never persisted a snapshot, so the run is still there.
+    fn at_the_reviewing_edge() -> (Fixture, String) {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
         std::fs::create_dir_all(root.join(common::SLICE_DIR).join(SLICE_NUMBER)).unwrap();
@@ -197,7 +234,7 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
-        fixture.apply(&fixture.payload(
+        let entry = fixture.payload(
             "to-reviewing",
             &json!({
                 "declare": [{
@@ -208,18 +245,8 @@ impl Fixture {
                 }],
                 "stage": {"to": Stage::Reviewing.as_str()},
             }),
-        ));
-        // The lock edge's own runbook, discharged here for the same reason the
-        // other two are: this suite's subject is which of the FOUR lock
-        // components a refusal names. An outstanding runbook refuses first and
-        // would mask every one of those assertions with the same message.
-        for step in runbook_fixture::REVIEWING_STEPS {
-            fixture.apply(&fixture.payload(
-                &runbook_fixture::discharge_label(step),
-                &runbook_fixture::discharge_body(step),
-            ));
-        }
-        fixture
+        );
+        (fixture, entry)
     }
 
     /// The lock submission carrying every component **except** `omit`.
@@ -301,6 +328,43 @@ impl Fixture {
         found
     }
 
+    /// The `RV`s that carry an authored ledger — the subset of
+    /// [`Fixture::minted_reviews`] that is a **record** rather than a claimed
+    /// directory.
+    ///
+    /// The two differ exactly across DEC-086's tolerated window: a crash between
+    /// the id claim and the id journal leaves a claimed, empty directory that no
+    /// journal names and no ledger fills. "How many RVs exist" is a question
+    /// about ledgers, so it is asked here rather than of the directory listing.
+    fn authored_reviews(&self) -> Vec<String> {
+        self.minted_reviews()
+            .into_iter()
+            .filter(|name| {
+                self.root
+                    .join(common::REVIEW_DIR)
+                    .join(name)
+                    .join(format!("{LEDGER_STEM}-{name}.toml"))
+                    .is_file()
+            })
+            .collect()
+    }
+
+    /// The one journalled mint intent, which every recovery test expects to exist.
+    fn intent(&self) -> RecoveryIntent {
+        let journal: CheckpointGroup =
+            match std::fs::read_to_string(self.snapshot.with_file_name(JOURNAL_FILE)) {
+                Ok(text) => toml::from_str(&text).expect("the journal parses"),
+                Err(_) => CheckpointGroup::default(),
+            };
+        assert_eq!(
+            journal.intents.len(),
+            1,
+            "exactly one mint intent is journalled: {:?}",
+            journal.intents
+        );
+        journal.intents.into_iter().next().expect("one intent")
+    }
+
     /// The parsed snapshot.
     fn read(&self) -> DesignSnapshot {
         snapshot::parse(&std::fs::read_to_string(&self.snapshot).unwrap()).unwrap()
@@ -356,6 +420,26 @@ impl Fixture {
             &self.root,
             &["design", "apply", SLICE, "-p", ".", "--input", body],
         )
+    }
+
+    /// Apply a payload with a fault injected before DEC-086's `step`, expecting
+    /// the process to die there.
+    ///
+    /// Out of process on purpose: a **crash** is only observable across a process
+    /// boundary. An injected `Err` would unwind, run cleanup, and exercise the
+    /// paths that already work — the checkpoint suite makes that argument at
+    /// length, and this is the review arm of the same seam.
+    fn crash_at(&self, body: &str, step: &str) {
+        let out = common::doctrine_cmd(&self.root)
+            .args(["design", "apply", SLICE, "-p", ".", "--input", body])
+            .env(DESIGN_FAULT_ENV, step)
+            .output()
+            .expect("spawn doctrine");
+        assert!(
+            !out.status.success(),
+            "the injected fault at `{step}` did not stop the run: {}",
+            String::from_utf8_lossy(&out.stdout)
+        );
     }
 }
 
@@ -630,6 +714,149 @@ fn re_entry_replaces_the_review_pass() {
         "opened over the edited content"
     );
     assert!(second.is_current(&fixture.read().sections.fingerprints()));
+}
+
+// ── VA-1: the mint is idempotent under interruption ────────────────────────
+//
+// Two crash points, mirroring the pair the checkpoint suite already runs over
+// the knowledge arm — because the two windows make different promises. Before
+// the id journal, DEC-086 promises only that no unnamed record exists; from the
+// id journal onward it promises the exact reserved id. One test cannot carry
+// both, and the second is the one that pins `review::materialise_review_at`.
+//
+// These live here rather than in `e2e_design_checkpoint.rs` (where the phase
+// sheet put them) because the ladder to `reviewing` is this fixture's: minting
+// there would have meant a second copy of it. The fault seam is two lines of
+// env, so the cheap half moved instead of the expensive half — and the
+// checkpoint suite stays byte-unchanged, which is the control that PHASE-04's
+// journal rewrite did not move the wire form.
+
+/// `VA-1` (a) — interrupted **between the id claim and the id journal**, the
+/// resumed submission authors exactly one pass.
+///
+/// The tolerated window is asserted rather than skirted: a hard exit runs no
+/// cleanup, so the dead claim's empty directory survives. That is exactly
+/// DEC-086's "empty or partial reservation", and it is why the observation here
+/// is the **ledger** and not the directory listing — what may never exist is an
+/// authored RV nothing can name.
+#[test]
+fn a_mint_interrupted_before_its_id_journal_authors_one_pass() {
+    let (fixture, entry) = Fixture::at_the_reviewing_edge();
+
+    fixture.crash_at(&entry, "id-journal");
+
+    let intent = fixture.intent();
+    assert_eq!(
+        intent.subject(),
+        &IntentSubject::ReviewPass,
+        "the journalled intent is the run's pass, not a checkpoint"
+    );
+    assert_eq!(
+        intent.state(),
+        IntentState::Journalled,
+        "step 1 landed and step 3 did not"
+    );
+    assert_eq!(
+        intent.reserved_record(),
+        None,
+        "no canonical id is journalled, so none was promised"
+    );
+    assert!(
+        fixture.authored_reviews().is_empty(),
+        "and no ledger exists that nothing can name: {:?}",
+        fixture.authored_reviews()
+    );
+
+    // The retry resumes the same submission.
+    fixture.apply(&entry);
+
+    let authored = fixture.authored_reviews();
+    assert_eq!(
+        authored.len(),
+        1,
+        "exactly one RV is authored — the resumed mint did not author a second: {authored:?}"
+    );
+    assert_eq!(
+        fixture.minted_reviews().len(),
+        2,
+        "the dead claim's directory outlives the crash, which is the tolerated \
+         reservation and precisely why the ledger is the observation: {:?}",
+        fixture.minted_reviews()
+    );
+    let pass = fixture
+        .read()
+        .review
+        .pass
+        .expect("the resumed mint recorded the pass");
+    assert_eq!(
+        pass.review,
+        ReviewRef::new(format!("{REVIEW_PREFIX}-{}", authored[0])),
+        "and the run names the RV that exists"
+    );
+    assert_eq!(
+        fixture.intent().state(),
+        IntentState::Complete,
+        "with the journal closed out"
+    );
+}
+
+/// `VA-1` (b) — interrupted **after** the id journal, the resume runs against the
+/// exact reserved id: one RV, one reservation consumed.
+///
+/// This is the half that exercises `review::materialise_review_at` on the tree —
+/// the resumed mint claims nothing and writes into the reservation the journal
+/// names. The expected id is read back out of the journal FILE rather than
+/// recomputed here: "an RV exists" and "the RV the crash promised exists" are
+/// different claims, and only the second one is idempotency.
+#[test]
+fn a_mint_interrupted_after_its_id_journal_resumes_the_reserved_pass() {
+    let (fixture, entry) = Fixture::at_the_reviewing_edge();
+
+    fixture.crash_at(&entry, "record-materialise");
+
+    let reserved = fixture
+        .intent()
+        .reserved_record()
+        .expect("step 3 journalled the claimed canonical id")
+        .to_owned();
+    assert_eq!(
+        fixture.intent().state(),
+        IntentState::Reserved,
+        "step 3 landed and step 4 did not"
+    );
+    assert!(
+        fixture.authored_reviews().is_empty(),
+        "no authored bytes yet: {:?}",
+        fixture.authored_reviews()
+    );
+
+    fixture.apply(&entry);
+
+    assert_eq!(
+        fixture.minted_reviews(),
+        vec!["001".to_owned()],
+        "one reservation consumed — a fresh claim would have made a second"
+    );
+    assert_eq!(
+        fixture.authored_reviews(),
+        vec!["001".to_owned()],
+        "and exactly one RV is authored, in it"
+    );
+    let pass = fixture
+        .read()
+        .review
+        .pass
+        .expect("the resumed mint recorded the pass");
+    assert_eq!(
+        pass.review,
+        ReviewRef::new(reserved.clone()),
+        "the run names the RESERVED id {reserved}, not a fresh one"
+    );
+    assert_eq!(
+        fixture.intent().state(),
+        IntentState::Complete,
+        "with the journal closed out"
+    );
 }
 
 // ── ISS-310: the required lanes are the run's, and the policy is mutable ──
