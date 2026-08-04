@@ -174,6 +174,37 @@ written to build the predicate either way; what the phase must not do is inherit
 the wider claim without testing it. This is `RV-344` pass 2's
 unbuilt-versus-misread line, landed on the phase that touches the surface.
 
+### Three risks the phases carry, named rather than absorbed
+
+**`PHASE-04` extends a journal vocabulary, not just a call site.** Minting an
+`RV` through `DEC-086`'s seam means the recovery intent has to be able to say
+*this submission is claiming an `RV`*, and today it says `DEC`, `QUE` or `ASM`.
+That is a change to the intent's own vocabulary and to the journal format a
+half-finished submission is resumed from. The design's argument that nothing in
+`DEC-086`'s decomposition resists it is sound, and it is an argument about
+whether the seam *admits* a fourth kind, not about whether adding one is free.
+The phase's agent check is written to exercise the recovery path under
+interruption rather than reason about it, because that is where a journal-format
+change actually bites.
+
+**`PHASE-03` and `PHASE-04` both edit a type `PHASE-05` retires.**
+`ReviewStanding`'s four booleans become derivation rules, so the struct does not
+survive the model. This is churn and it is worth being explicit that it is the
+carrier being replaced and not the work: the nested lane quantification
+`PHASE-03` writes is the body of `PerSection`'s derivation, and the currency
+comparison `PHASE-04` re-sources onto `ReviewPass` is the body of the lamp. The
+tests written against both survive unchanged. Ordering the policy after the model
+instead would mean writing `RequiredActor::RunPolicy` against a policy that does
+not exist yet, which trades real churn for a real fiction.
+
+**The research advisory reports drift, and it is benign.** The baseline moved
+because this slice's own `design.md` landed and its scope was amended by
+`DEC-139` — not because the tree moved under the research. It is left standing
+rather than restamped, because restamping without refreshing the threads would
+attest a currency nobody established. `/phase-plan` should read it as what it
+is: a record that the artefact predates the design it fed, not a signal to
+re-run research.
+
 ### The interim states these phases knowingly pass through
 
 Between `PHASE-04` and `PHASE-05` the run holds a review pass nothing derives
@@ -184,3 +215,18 @@ implementations of one question coexist. Where a phase leaves new state with no
 reader, it is marked with the tree's existing slice-tagged `expect(dead_code)`
 idiom naming the phase that will read it, so an unused warning is never silenced
 without an address.
+
+The snapshot is the one place where "coherent and incomplete" has a cost outside
+the tree, and it is confined to a single phase on purpose. `PHASE-02` through
+`PHASE-04` add serde-defaulted fields and remove one key an existing snapshot can
+carry unread, so a live run parses throughout; `PHASE-05` is where the shape
+moves and `SL-243`'s five-act hand repair falls due. Breaking it once,
+deliberately, is cheaper than three partial migrations of a gitignored tier.
+
+### Per-phase completion
+
+Every phase ends on the project's own bar rather than on its criteria alone:
+`doctrine check gate` green with zero clippy warnings, `cargo fmt` clean, the
+phase's notes current, and the phase flipped in the state tree. That is not
+restated per phase in `plan.toml` — it is the standing convention, and a phase
+that meets its exit criteria on a red gate has not finished.
