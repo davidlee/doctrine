@@ -1502,6 +1502,48 @@ fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
         .collect()
 }
 
+/// Pure check (SL-244 DEC-138): the findings on this RV that hold a design run's
+/// `reviewing → locked` edge — `severity == Blocker` **and** `status ∈ {open,
+/// contested}`, carried as the ledger's own `F-n` ids.
+///
+/// **Spelled separately from [`doc_unresolved_blockers`], and deliberately not by
+/// copying it and restricting the state.** Two things follow from that, and the
+/// second is the one worth writing down:
+///
+/// - The two predicates differ by the `answered` state, on purpose. D-C9b asks
+///   *is this review finished* — a disposed-but-unverified blocker is not, so it
+///   gates a slice's closure. This asks *has this pass been disposed of* — and an
+///   answered blocker has been. One shared filter would silently pick a side.
+/// - The review-level `derived_status` guard is **not** inherited. Doing so would
+///   bind a per-finding fact to a display summary that ADR-007 D7 says is never a
+///   gate. It happens to be unobservable here — any `open` or `contested` finding
+///   forces `Active`, so the guard could not fire while this returns anything (the
+///   `the_predicate_does_not_read_review_level_status` test pins that implication)
+///   — which is precisely why the argument is about coupling and not about a wrong
+///   answer today.
+///
+/// No I/O: operates on already-read data, like its neighbour.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-04: the predicate lands before ObservedReview's resolver reads it (T9)"
+    )
+)]
+fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
+    doc.finding
+        .iter()
+        .filter(|f| Severity::parse(&f.severity) == Ok(Severity::Blocker))
+        .filter(|f| {
+            matches!(
+                parse_finding_status(&f.status),
+                FindingStatus::Open | FindingStatus::Contested
+            )
+        })
+        .map(|f| f.id.clone())
+        .collect()
+}
+
 /// The reverse close-gate scan (design §7, D8/D-C9b) — a **standalone scoped scan**
 /// over `.doctrine/review/*`, NOT the spec `Registry` (wrong cohesion) and NOT a
 /// general reverse index (scope non-goal). Returns every unresolved blocker
@@ -4212,6 +4254,114 @@ mod tests {
         let blockers = unresolved_blockers_for(root, "SL-001").unwrap();
         assert_eq!(blockers.len(), 1);
         assert_eq!(blockers[0].finding, "F-1");
+    }
+
+    // ---- SL-244 PHASE-04: the design run's own blocker predicate (DEC-138) ----
+
+    /// SL-244 `VT-3`: the deliberate mirror of
+    /// [`vt1_answered_blocker_keeps_the_review_active_and_gating`] directly above.
+    ///
+    /// D-C9b's close-gate carries an `answered` blocker because a slice is not
+    /// closed until every finding is terminal. The design run's edge asks a
+    /// different question — *has this pass been disposed of* — and an answered
+    /// blocker HAS been. The two predicates differ by exactly this state, on
+    /// purpose (`EX-6`), which is why the same ledger is asserted through both
+    /// here rather than each in isolation.
+    #[test]
+    fn answered_blocker_is_not_undisposed() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+
+        // The close-gate still gates on it...
+        assert_eq!(unresolved_blockers_for(root, "SL-001").unwrap().len(), 1);
+        // ...and the design run's edge does not.
+        assert!(undisposed_blockers(&read_doc(root, 1)).is_empty());
+    }
+
+    /// SL-244 `VT-3`: `open` and `contested` are both carried, by the ledger's own
+    /// `F-n` id — they identify rows on the RV, not subjects in the run.
+    ///
+    /// Both states in one ledger rather than two tests, because the predicate is a
+    /// set membership and a per-state test cannot see a filter that drops one of
+    /// them. The non-blocker severity rides along as the negative control.
+    #[test]
+    fn open_and_contested_blockers_are_carried_by_finding_id() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        for (severity, title) in [
+            (Severity::Blocker, "F-1 stays open"),
+            (Severity::Blocker, "F-2 is contested"),
+            (Severity::Major, "F-3 never gates"),
+        ] {
+            run_raise(
+                Some(root.to_path_buf()),
+                &raise_args("RV-001", severity, title),
+                Role::Raiser,
+            )
+            .unwrap();
+        }
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-2"),
+            Role::Responder,
+        )
+        .unwrap();
+        run_contest(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-2",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+
+        assert_eq!(
+            undisposed_blockers(&read_doc(root, 1)),
+            vec!["F-1".to_owned(), "F-2".to_owned()]
+        );
+    }
+
+    /// SL-244 `EX-6b`: the predicate reads `severity` and `status` per finding and
+    /// nothing else — in particular it does NOT inherit
+    /// [`doc_unresolved_blockers`]'s review-level `derived_status` guard.
+    ///
+    /// The guard is currently **unobservable** for this predicate's own answers:
+    /// any finding in `{open, contested}` forces `derived_status` to `Active`, so
+    /// the early return can never fire while there is something to report. That is
+    /// worth asserting rather than assuming, because it is the reason `EX-6b`
+    /// argues from coupling (DEC-138 on ADR-007 D7's ground — the review-level
+    /// status is a display summary and never a gate) rather than from a wrong
+    /// answer, and a future status rule that broke the implication would make the
+    /// inherited guard start dropping live blockers silently.
+    #[test]
+    fn the_predicate_does_not_read_review_level_status() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        let doc = read_doc(root, 1);
+        assert_eq!(
+            doc.derived().0,
+            ReviewStatus::Active,
+            "an open blocker forces Active — the implication this test pins"
+        );
+        assert_eq!(undisposed_blockers(&doc), vec!["F-1".to_owned()]);
     }
 
     /// VT-3: with no `.doctrine/review/` tree at all, the scan is a clean empty —
