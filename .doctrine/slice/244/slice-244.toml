@@ -17,7 +17,7 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/commands/design.rs"
 intent = "design-target"
-note = "sec-5 shell: contract-block emission in `design resume` beside the fragment and runbook step, the repeatable --known-contracts <edge> token, forward edge via Advance::from_stage retiring the can_advance walk, and DerivedInput gaining ObservedReview and the run's review policy."
+note = "sec-5 shell: contract-block emission in `design resume` beside the fragment and runbook step, the repeatable --known-contracts <edge> token, forward edge via Advance::from_stage retiring the can_advance walk, and DerivedInput gaining ObservedReview and the run policy. sec-3: this slice MINTS the ReviewPass RV on entry to reviewing, through DEC-086 journalled intent already live here (journal_intent / journalled_intent / write_journal) — command tier, so ADR-001 is untouched."
 
 [[selector]]
 selector = ".doctrine/spec/tech/029/**"
@@ -45,7 +45,7 @@ note = "Ten new [[entry]] rows — nine contract narratives (kind=guidance) plus
 [[selector]]
 selector = "src/design_run/gate.rs"
 intent = "design-target"
-note = "sec-3 core: Condition/Contract/CONTRACTS macro-generated from one list, closed Advance with from_stage, DerivationRule + ActRequirement + ActorClass, reach/activation filters, satisfied() signature change, Condition::contract_asset_key."
+note = "sec-3 core: Condition/Contract/CONTRACTS macro-generated from one list, closed Advance with from_stage, DerivationRule + ActRequirement + ActorClass, the reach filter on cumulative_conditions (no activation axis — DEC-139 retires it), satisfied() signature change, Condition::contract_asset_key, and Contract::remedy rendering review-disposition-attested as two arms."
 
 [[selector]]
 selector = "src/design_run/attestation.rs"
@@ -100,7 +100,7 @@ note = "sec-6: NEW leaf-tier module — ARTIFACT_PATH + render_artifact(), on fu
 [[selector]]
 selector = "src/design_run/tests.rs"
 intent = "design-target"
-note = "Unit tests for the new vocabulary, act admission, reach/activation and the golden artefact; the existing gate.rs tests are the behaviour-preservation proof."
+note = "Unit tests for the new vocabulary, act admission, reach and the golden artefact; the bottom edge enforcing two conditions (DEC-139); remedy/discharge equality quantified over every row. The existing gate.rs tests are the behaviour-preservation proof."
 
 [[selector]]
 selector = "src/review.rs"
