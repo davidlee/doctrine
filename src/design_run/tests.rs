@@ -837,15 +837,14 @@ fn review_pass_covers_the_sections_it_opened_over() {
     assert!(!pass.is_current(&widened.sections.fingerprints()));
 }
 
-/// D3's wire compat: a journal written by the *previous* binary keys its intent
-/// with a bare `checkpoint = "<DesignId>"` string, and it must still parse — the
-/// journal is precisely what a crash from that binary is resumed from, so a
-/// format break there loses the recoverability DEC-086 exists for. The run-level
-/// review pass rides the same slot under a reserved token no id can take.
+/// The intent subject is one string-coded slot, and the two arms cannot collide
+/// in it: a checkpoint keys on its bare `DesignId`, and the run-level pass keys
+/// on a reserved token no id can spell. Asserted over the wire bytes rather than
+/// the enum, because the collision this rules out is a *parsing* one.
 #[test]
-fn a_pre_subject_journal_parses_and_the_review_pass_rides_the_same_slot() {
+fn the_review_pass_token_cannot_be_spelled_by_a_checkpoint_id() {
     let held: RecoveryIntent =
-        toml::from_str("submission = \"sub-1\"\ncheckpoint = \"cp-1\"\n").unwrap();
+        toml::from_str("submission = \"sub-1\"\nsubject = \"cp-1\"\n").unwrap();
     assert_eq!(held.subject().checkpoint(), Some(&id("cp-1")));
 
     let pass = RecoveryIntent::journalled("sub-2", IntentSubject::ReviewPass);

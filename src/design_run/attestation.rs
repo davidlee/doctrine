@@ -487,11 +487,11 @@ const REVIEW_PASS_TOKEN: &str = "review-pass";
 
 /// What a journalled intent is *about* (DEC-086, widened by DEC-125).
 ///
-/// String-coded on the wire, and the `Checkpoint` arm keeps the bare `DesignId`
-/// spelling it has always had. That is not cosmetic: the journal is precisely what
-/// a crash from the **previous** binary is resumed from, so a format break there
-/// loses the recoverability DEC-086 exists for. The `RecoveryIntent` field keeps
-/// its old key as a serde alias for the same reason.
+/// String-coded on the wire, so the `Checkpoint` arm stays a bare `DesignId` and
+/// the pass rides a reserved token beside it — the shape a tagged table would
+/// only make heavier. The journal is per-submission runtime state under
+/// `.doctrine/state/`, cleared by `complete_journal`, so nothing here is owed a
+/// cross-version reading.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub(crate) enum IntentSubject {
@@ -543,9 +543,7 @@ impl TryFrom<String> for IntentSubject {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RecoveryIntent {
     submission: String,
-    /// What the intent is about. Read under its pre-DEC-125 key too, so a journal
-    /// the previous binary wrote still resumes.
-    #[serde(alias = "checkpoint")]
+    /// What the intent is about.
     subject: IntentSubject,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     reserved_record: Option<String>,
