@@ -44,6 +44,7 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
+use design_run::attestation::ReviewPolicy;
 use design_run::delegation::{Delegation, DelegationState};
 use design_run::gate::Condition;
 use design_run::snapshot::{self, DesignSnapshot};
@@ -98,7 +99,7 @@ const CLEARED: [Condition; 4] = [
 ///
 /// The bodies need only be well-formed enough to deserialize: the guard fires on a
 /// field's *presence*, ahead of anything that would validate it.
-const WRITER_ACTS: [(&str, fn() -> Value); 7] = [
+const WRITER_ACTS: [(&str, fn() -> Value); 8] = [
     ("stage", || json!({"to": Stage::Drafting.as_str()})),
     (
         "evidence",
@@ -118,6 +119,12 @@ const WRITER_ACTS: [(&str, fn() -> Value); 7] = [
         "discharge",
         || json!({"step": "explore.scope", "outcome": "attested"}),
     ),
+    ("review_policy", || {
+        json!({
+            "policy": ReviewPolicy::AdversarialOnly.as_str(),
+            "acceptance": {"basis": "the delegate says the lanes should change"},
+        })
+    }),
 ];
 
 // ── fixture ───────────────────────────────────────────────────────────────

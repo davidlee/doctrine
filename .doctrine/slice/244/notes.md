@@ -249,11 +249,16 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   `slice/243` carrying the stored `[review.acceptance.covered.covered]` the
   criterion protects. `/audit` either accepts that record or re-runs the harness;
   it cannot read the proof off the diff.
-- **PHASE-01's recorded e2e baseline does not reproduce.** Its sheet lists
-  `74/4/74/74/106` for the five design e2e binaries; at `37fcf657` they measure
-  `108/76/4/76/76`, all green, and PHASE-02 measured its own baseline rather than
-  inheriting one. No test fails at either commit — recorded so it is not read as
-  a regression.
+- ~~**PHASE-01's recorded e2e baseline does not reproduce.**~~ **RESOLVED in
+  PHASE-03 (sheet F1).** The four `e2e_design_*` binaries `#[path]`-include
+  `src/design_run/mod.rs`, and therefore its `#[cfg(test)] mod tests`. So each
+  binary's count is *its own `#[test]`s + 2 (`common::test_support`) + the whole
+  design-run unit suite*, and **adding one unit test moves four e2e counts by one
+  each**. The tuples were correct when taken and drift by the unit-suite delta;
+  they were also recorded from a multi-`--test` invocation, which does not report
+  in flag order, which scrambled which number belonged to which binary. An e2e
+  count is a derived number, not an independent control — measure per binary, and
+  compare green to green.
 - **`NodeMaterial` and `InquiryMap::materials()` have no production reader until
   PHASE-05**, and carry the slice-tagged `cfg_attr(not(test), expect(dead_code, …))`
   naming it — the same class as `Advance::ALL`, expected to go live rather than be
@@ -277,6 +282,29 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 - **`Advance::ALL` has no production reader until PHASE-06/08** and carries the
   tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
   Expected to become live, not to be silenced further.
+- **PHASE-03 departed from the letter of two criteria, and `/audit` adjudicates
+  both.** (a) `VT-1` says *the standing names the missing lane*; `ReviewStanding`
+  is `Copy` and passed by value into `satisfied` and `advance`, so carrying a
+  `Vec` there breaks both signatures — signatures PHASE-05 rewrites regardless.
+  Instead `DesignSnapshot::sections_unreviewed() -> Vec<(DesignId, ActorClass)>`
+  is the derivation and `sections_attested` is defined *through* it, exactly as
+  `ContentCoverage::is_current` is defined through `diff`. PHASE-05's
+  `Refusal::SectionsUnreviewed { subjects }` reads it directly. Confirmed by the
+  user before execution (sheet D1). (b) `EX-5` says the change rides *the
+  attestation via `AcceptanceAttestation::bind`*; no call is made, because
+  nothing can hold what it returns until PHASE-05's act groups arrive, and the
+  one existing home — `review.acceptance` — would make a policy change satisfy
+  `user-acceptance-attested`. What is delivered is what the criterion is
+  observably for: the `AcceptanceDeclaration` is a REQUIRED field (a payload
+  omitting it is refused at the wire), an empty basis is refused through the
+  incumbent `AcceptanceBasisMissing`, and the change is logged. `/audit` should
+  decide whether PHASE-05's act record adopts the attestation (sheet D2).
+- **`live_reviews` (`run.rs`) is `pub(super)` for its test, not for a caller.**
+  `VT-4` names it; it has no production caller outside `apply`. Widening
+  `invalidation_rows` instead would have meant widening `Pending` too. The
+  exclusion it embodies — invalidation is never policy-filtered — is stated at
+  the function and at the call site, and a positive control confirmed the test
+  fails when the predicted sweep is applied (sheet F3).
 - **`RV-344` pass 2 is specified in the ledger's `## Brief` and will not be run.**
   The user's call (2026-08-04): not because there is nothing left to find, but
   because it comes out cheaper against real code than against prose. Its four

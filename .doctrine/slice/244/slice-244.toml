@@ -127,6 +127,11 @@ selector = "src/design_run/inquiry.rs"
 intent = "design-target"
 note = "PHASE-02 / EX-2, EX-3: NodeMaterial projects an InquiryNode at question, provenance, parent, needs and seq — deliberately not lifecycle or disposition — and InquiryMap::materials() derives the current map purely, beside SectionGroup::fingerprints. The node model itself is unchanged."
 
+[[selector]]
+selector = "src/design_run/fixture.rs"
+intent = "design-target"
+note = "PHASE-03: NEW cfg(test) module — one home for the run-holding/attesting fixtures the pure-engine and storage suites both need, extracted rather than copied a fourth time. Fixtures only; no assertions, unreachable outside cfg(test)."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
