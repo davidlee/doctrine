@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcef1-9faa-79f2-9369-d76a19d89e83"
+recorded_at = "2026-08-04T22:42:49.386395463Z"
+kind = "friction"
+summary = "/plan pins a VT test_file before the code's home is known — second instance on SL-244 PHASE-05"
+detail = "SL-244 PHASE-05 T7: VT-4's test_file was authored as src/design_run/tests.rs, but the governance-edge projection provably cannot live in design_run — that module is an ADR-001 leaf with crate out-degree zero, and both halves of the projection (the RelationLabel/Role filter and the RelationLabel::name()/Role::name() encoding) are spelled in crate::relation's vocabulary. Putting it there means breaking the out-degree rule or re-spelling four closed-vocabulary tokens as literals (STD-001 drift). So the tests live in src/commands/design.rs and the criterion needs a third test_file amendment on this slice. Same class as F3 (VT-8/VT-10 moved to e2e_design_review.rs) and PHASE-04's own VT-4 move. The recurrence is the signal: /plan fixes a test_file at a stage where neither the code's module nor the layering it must obey is decided, and nothing checks the path against either. Cost each time: a mid-task stop, a consult, and an authored-plan edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
