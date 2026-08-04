@@ -142,288 +142,113 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · design/reviewing (run rev 85) · 9d54a8f8
+fresh-as-of: 2026-08-04 · PHASE-01 · 5b4ecedf
 
 ### Produced
 
-- `DEC-127`, `EVD-012` — knowledge, bound into the run (`cp-15`, `cp-14`).
-- `DEC-138` — **new**, via `inq-16` / `cp-16`. Refines `DEC-125`'s two arms,
-  supersedes nothing. Amended twice after minting: once against `src/review.rs`,
-  once when the amendment's own claim proved wrong.
-- `ISS-309`, `ISS-310`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-048` — backlog.
-- Design run sections `sec-1`..`sec-4` — materialised, watermark current at run
-  rev 64. `sec-1` `8384bae959cb`, `sec-2` `919384dd4d0d`, `sec-3` `148796c1274c`,
-  `sec-4` `c6f65176c9bf`. All four moved this session; none is externally
-  reviewed at its current bytes.
-- Coherence pass `F1`..`F11` — raised as prose, ruled in by the user, integrated,
-  then swept for siblings per
-  `mem.pattern.review.sweep-defect-class-not-instance`; three siblings found and
-  fixed. Design-only session, no code touched, so no `check gate` beat is owed.
-- Commits `dac3cb46`, `bff92556`, `58b428df`, `78378a08`, `1d7d264d`,
-  `cbb0a7a5`, `7df32e57`, `91a00746`, `35c1e161`, `d784b808`. All `.doctrine`
-  committed promptly and path-limited (`SL-241` holds `rfc/026` dirty).
-- `IMP-392` body rewritten — it carried the pre-`DEC-138` waiver semantics, and
-  now names the concluded-pass marker as the one thing `SL-244` asks it to *add*
-  rather than merely expose.
-- One friction observation, `.doctrine/observations/records/6b/`.
+- **PHASE-01 done** — `Advance` closes the forward relation; `boundary_conditions`
+  and `boundary_runbook` are edge-keyed and total, `can_advance` retires, and
+  `forward_runbook` stops re-deriving the table. Behaviour-preserving: no file
+  under `tests/` touched, unit suite 65 → 67, `doctrine check gate` exit 0,
+  `verify-vt` `VT-1`/`VT-2` PASS. Commits `3baaa564` (code), `e454e5f2` (notes),
+  `5b4ecedf` (selector). Two departures from the letter of `EX-2` — see Open.
+- **Design locked** at run rev 89, six sections, `RV-344` pass 1 `done` (ten of
+  ten findings verified). `DEC-139` minted and swept through all six sections;
+  `IMP-391` narrowed, `IMP-392` reduced to the concluded marker plus the
+  finding-set migration. Plan authored, repaired against a code-surface sweep,
+  and approved.
+- Minted across the design stage: `DEC-127`, `DEC-138`, `DEC-139`, `EVD-012`;
+  `ISS-309`, `ISS-310`, `ISS-314`, `IMP-393`, `IMP-394`, `IMP-395`, `IDE-047`,
+  `IDE-048`.
+- Three friction observations — `.doctrine/observations/records/{6b,42,1b}/`.
+  `42` (an `Agent`-tool subagent cannot run `Bash` under the worktree-jail hook)
+  is the one that bites again if pass 2 is ever run through a subagent.
+- All `.doctrine` committed promptly and path-limited throughout. `SL-241` holds
+  `rfc/026` dirty; `IMP-398`'s backlog dir is untracked and belongs to the user.
 
 ### Learned
 
-Carried forward from the prior harvest and still standing: `EVD-012` binds gate
-evidence to `design.md` sections only; `ISS-309` id-collision; `ISS-310` is an
-unbuilt `DEC-073`, so no decision record is owed; `DEC-066` (not `DEC-074`)
-mandates the integrated pass; `DerivedInput` is built before `apply`, so node
-coverage compares material; three readers of the attestation set and
-`live_reviews` must NOT be repaired; `Attestation` has no turn/sequence, so lane
-order is declared not enforced; `can_advance` and `boundary_conditions` are two
-hand-written matches, settled by a closed `Advance`; the run has two transition
-relations differing in kind; `LockAcceptance` is subsumed by `CheckpointAct`;
-the review policy cannot be a security boundary; `review_standing` holds two
-structurally different currency derivations ten lines apart; checkpoint
-acceptances do not reach the snapshot; `InquiryNode` carries no fingerprint.
+Tree facts read off the source, still load-bearing for the phases that consume
+them. Cited by phase so a reader knows why each is here.
 
-New this session, all read off the tree rather than reasoned:
+**PHASE-02** — `InquiryNode` carries no fingerprint, and `DerivedInput` is built
+before `apply`, so node coverage must compare *material* rather than a shell
+digest.
 
-- **`run.rs:334-347` writes `review.acceptance` from ANY run-level
-  `AcceptanceDeclaration`, at any stage, last-write-wins.** So `LockAcceptance`
-  is not the lock's acceptance — it is the run's single unnamed acceptance slot.
-  `SL-243` sits at `drafting`, never locked, holding one whose basis is its own
-  `inquiring → drafting` settle-and-advance. This **corrects** the prior
-  harvest's "checkpoint acceptances do not reach the snapshot": the `cp-`-scoped
-  one does not, the run-level declaration does.
-- **`SL-243` holds `[review] attestation = []`** — zero section attestations.
-  `sec-4`'s claim that it attested adversarially and is repaired by declaring
-  `AdversarialOnly` was false in three places, now corrected. Its real cost is a
-  re-given acceptance, and `user-accepts-sufficiency` is what will bar it.
-- **`derived_status` (`review.rs:1009-1022`) is severity-blind** — it reads
-  `status`, never `severity`, so `await == Responder` fires on an open `nit`.
-  Its own doc calls it a priority summary, *"never an exclusive gate"*. Anything
-  binding a gate to `await` is wrong by construction.
-- **The `answered` state is the whole of `DEC-138`.** `contest` moves
-  `answered → contested` (`review.rs:2354`), so contest DOES re-block —
-  the property is that the responder always holds a *clearing* act, not that
-  contest is harmless. D-C9b's `doc_unresolved_blockers` (`review.rs:1490`) is
-  the same filter minus the state restriction, so it counts `answered` and
-  leaves the responder with no act that opens the gate.
-- **A clean pass is structurally identical to one never run** — `findings: []`,
-  `status: Done`, `await: None` either way. The `## Synthesis` section
-  distinguishes them at the *artefact* tier, which is why the marker had to be
-  new structured state rather than a test over what exists.
-- **`--as` is cooperative role assertion, not a security boundary**
-  (`review.rs:2813`, `ADR-007`), and an `AcceptanceDeclaration` cannot
-  distinguish a user's payload from an agent's (`DEC-088`). Any claim that an
-  agent *cannot* author an act is stronger than this system delivers; the
-  achievable property is *in the user's name, and leaving a change row*.
-- **Design-run record minting**: a record rides an inquiry node's disposition via
-  a `cp-` subject (`disposes` + `dispose: {form: create, …}`). Declaring the node
-  and disposing it **cannot** share one batch — the disposition refuses with
-  `unknown node`. Two applies. `provenance` is internally tagged:
-  `{"provenance": "user-directed"}`.
-- **Knowledge facets are hand-edited.** `knowledge new` and the run's `create`
-  disposition both seed facets empty; there is no `knowledge edit` verb. Status
-  arrives `accepted` when the disposition carried an `AcceptanceDeclaration`.
-- **Editing `sec-2` invalidated its two clearances** (`initial-concerns-recorded`,
-  `user-accepts-sufficiency`) — `EVD-012` biting live, since clearance binds to a
-  `design.md` section and those conditions are about the inquiry graph.
-- `mem.pattern.review.observation-right-prescription-wrong` and
-  `mem.pattern.feedback.rule-findings-in-dependency-order` — both earned again
-  in the prior session; `DEC-138` reversed a finding integrated two revisions
-  earlier.
+**PHASE-03** — `review_standing` holds two structurally different currency
+derivations ten lines apart. `Attestation` carries no turn, sequence or
+timestamp, so lane order is declared and never enforced. `run.rs:1062` replaces
+an `Attestation` by its own `id`, not by act or subject — load-bearing, since two
+lanes reviewing one section must coexist. The attestation set has exactly three
+readers and `live_reviews` must **not** be repaired with them.
 
-New this session, all read off the tree:
+**PHASE-04** — `IntegratedReview` is a third incumbent in `ReviewGroup`
+(`snapshot.rs:330`) and the sole input to `integrated_current`. The `RV` TOML
+carries an explicit no-status-because-derived refusal, so the concluded-pass
+marker had to be argued as an event rather than as a function of the finding
+set. `derived_status` (`review.rs:1009-1022`) is severity-blind — it reads
+`status`, never `severity` — and its own doc calls it *"never an exclusive
+gate"*; anything binding a gate to `await` is wrong by construction. The
+`answered` state is the whole of `DEC-138`: `contest` moves
+`answered → contested` (`review.rs:2354`), so contest does re-block, and
+`doc_unresolved_blockers` (`review.rs:1490`) counts `answered`, leaving the
+responder with no clearing act.
 
-- **`apply` takes `DerivedInput` as a parameter** and threads it into the
-  declaration handlers (`run.rs:224-230`). So an admission-time check reads
-  shell-observed state without the pure layer touching disk — which is what let
-  `DEC-138`'s *admissible* stand verbatim instead of being moved to the gate.
-  **Memory candidate**, not yet recorded.
-- **`ObservedFact` is a currency mechanism, not a general external-input
-  channel.** It compares a stored fingerprint against a refreshed one; a fact
-  evaluated *fresh* needs a `DerivedInput` field instead. Getting that backwards
-  is what made the first `F1` recommendation wrong.
-- **`run.rs:1062` replaces an `Attestation` by its own `id`**, not by act or
-  subject — load-bearing, since two lanes reviewing one section must coexist
-  under a both-lanes policy.
-- **The `RV` TOML carries an explicit no-status-because-derived refusal**, so the
-  concluded-pass marker has to be argued against it (an event, not a function of
-  the finding set) rather than merely specified.
-- **`IntegratedReview` is a third incumbent in `ReviewGroup`**
-  (`snapshot.rs:330`), and the sole input to `integrated_current` — the currency
-  lamp.
-- **`SL-243` holds three declared sections and has never been materialised** — no
-  `design.md` on disk, `attestation = []`, one acceptance covering all three.
-- `mem.pattern.review.sweep-defect-class-not-instance` earned itself sharply: the
-  `F7` repair contained a surviving sibling **of its own class**, one record
-  shape over.
+**PHASE-05** — `apply` takes `DerivedInput` as a parameter and threads it into
+the declaration handlers (`run.rs:224-230`), which is what lets an
+admission-time check read shell-observed state without the pure layer touching
+disk. `ObservedFact` is a *currency* mechanism, not a general external-input
+channel — a fact evaluated fresh needs a `DerivedInput` field instead, and
+getting that backwards is what made the first `F1` recommendation wrong.
+`LockAcceptance` is subsumed by `CheckpointAct`. `--as` is cooperative role
+assertion (`review.rs:2813`, `ADR-007`) and an `AcceptanceDeclaration` cannot
+distinguish a user's payload from an agent's (`DEC-088`), so *an agent cannot
+author this act* is stronger than the system delivers; the achievable property
+is *in the user's name, and leaving a change row*. `DEC-138`'s predicate is
+universally quantified over the finding set and never reads `status`, so it is
+**vacuously true on an empty ledger** and the `ISS-314` fix leaves that hazard
+untouched — a clean pass is structurally identical to one never run, and only
+the `## Synthesis` section distinguishes them at the artefact tier.
 
-### Round 5 (2026-08-04) — sections 5 and 6 written, codex round run and closed
+**Operating the run** (owed by `SL-243`'s hand repair, not by a phase) —
+`run.rs:334-347` writes `review.acceptance` from ANY run-level
+`AcceptanceDeclaration`, at any stage, last-write-wins, so `LockAcceptance` is
+the run's single unnamed acceptance slot rather than the lock's. `SL-243` sits
+at `drafting` holding three declared sections, never materialised, with
+`attestation = []`. A record rides an inquiry node's disposition via a `cp-`
+subject; declaring the node and disposing it cannot share one batch. Knowledge
+facets are hand-edited — there is no `knowledge edit` verb.
 
-- **`sec-5` written** — the contract channels. `DEC-124`'s refusal remedy and
-  stage-entry receipt, where `DEC-123`'s injection rule is built.
-- **`sec-6` written** — the published stage-machine diagram, `DEC-127`'s
-  objective 6, which had a decision and no section. Raised by codex as `F-2`.
-- **Codex round 5 run and closed.** Thread
-  `019fc628-0f72-73e0-bd25-3d99c05d0965`, whole document, 14 findings
-  (2 blocker, 11 major, 1 minor). **All 14 ruled in by the user**, integrated in
-  dependency order across five commits, then swept by class — one surviving
-  sibling (sec-4's snapshot-change count, invalidated by the `ReviewPass` repair).
-- **`ReviewPass` is the round's keystone**: `F-1` (a disposition bound to no
-  pass) and `F-11` (warnings with no derivable input) both wanted the same
-  missing record. It also retires `IntegratedReview` with this slice rather than
-  with `IMP-392`.
-- **Two findings had a right observation on a wrong ground**, and both were ruled
-  that way rather than wholesale: `F-8` cited `DEC-125` for an admission rule
-  that record does not carry (the real precedent is
-  `Refusal::AcceptanceBasisMissing`), and `F-14` named `RunbookNotDischarged` as
-  the multiline-`Display` precedent when it is `VerifierFailed`.
-- **One finding codex missed**, raised by me and integrated with the batch:
-  `DEC-124` says `IMP-390`'s gate-condition face is discharged by the refusal
-  leg, and `sec-5` built that leg without naming it.
-- **`CHR-049` is now priced from the corpus** — four sessions, halfway through
-  one run, ten `cluster:design-run` items minted 2026-08-01/02 inside the
-  exercise window. The document's one unfalsifiable claim is falsifiable.
-- Section digests at run rev 76: `sec-1` `8384bae959cb`, `sec-2` `c2dc33a4012a`,
-  `sec-3` `223a192e4df1`, `sec-4` `4ffc3681008f`, `sec-5` `db3366a01496`,
-  `sec-6` `0d739cd3f4cb`. Commits `2e05ac8f`, `87336de9`, `f596e797`,
-  `c29da1e9`, `d4d8d80b`, `3e0ef4b5`.
-
-### Round 6 (2026-08-04) — RV-344 opened, nine of ten findings integrated
-
-- **`RV-344` opened** — design facet, target `SL-244`, raiser posture `holistic`,
-  primed from 60 selector paths. Deliberately **two passes on one ledger**, and
-  deliberately neither an inquisition nor per-section: codex has run that lens
-  over every section repeatedly. Pass 1 (architecture / internal coherence over
-  the document as one artefact plus its cited records) is **done**. Pass 2
-  (landing terrain — parallel-implementation risk, in-tree citation
-  verification, unbuilt-vs-misread dependencies, selector coverage) is
-  **specified in the ledger's `## Brief` and not yet run**; it is for after the
-  design nominally locks, and the user's stated preference is Sonnet for it.
-- **Ten findings raised, all ten independently verified by me before disposal** —
-  six checked at source (`F-1`, `F-2`, `F-3`, `F-4`, `F-7`, `F-8`), four against
-  the cited design lines. None spurious.
-- **Nine disposed `design-wrong` and verified.** `F-3` remains **open** — see
-  Open below.
-- **`ISS-314` raised** — `derived_status` (`review.rs:1010`) returns
-  `(Done, None)` on an empty ledger, against `ADR-007` D-C8 which fixes it at
-  `active`/`raiser` and states the reason. Two tests pin the violating value.
-  The user is driving it in parallel; its body carries an explicit table
-  separating it from `SL-244`'s premise so a fixer does not scope-creep.
-- **`F-8` sharpened past what the pass found.** The design argued vacuous
-  `Conducted` satisfaction from `derived_status`; the real source is that
-  `DEC-138`'s predicate is **universally quantified over the finding set** and
-  never reads `status`, so it is vacuously true on an empty ledger and the
-  `ISS-314` fix leaves the hazard untouched. **This supersedes the prior
-  harvest's Learned bullet** *"a clean pass is structurally identical to one never
-  run — `findings: []`, `status: Done`, `await: None`"*: the first clause stands,
-  the `(Done, None)` half is an incumbent defect, not a specification.
-- **`F-1`'s producer traced to `DEC-086`** via `DEC-125`'s rationale —
-  *"checkpoints mint authored entities from inside `apply` via `DEC-086`'s
-  journalled intent"*, live in `src/commands/design.rs` (`journal_intent`,
-  `journalled_intent`, `write_journal`). The design cited neither `DEC-083` nor
-  `DEC-086`. **`SL-244` mints the pass** (user, 2026-08-04); `IMP-392` loses that
-  bullet.
-- **`DEC-139` minted** — the exploring checkpoints are enforced on this slice.
-  Carries the cumulative-reach argument, the accepted hand-repair cost, and the
-  consequence that `Activation` retires with no members.
-- **Advancing the run is itself a specimen.** `drafting → reviewing` refused with
-  all six cumulative conditions outstanding; four had died because `sec-1` and
-  `sec-2`'s *prose* moved. **This supersedes the prior Open bullet** that the
-  three user acts were "deliberately not re-recorded by an agent": they were
-  re-bound this session to cross the edge, on the user's instruction to advance,
-  with the map unchanged. Under this design that invalidation does not occur at
-  all — `user-accepts-sufficiency` binds to `InquiryMap`, not to a section.
-- **Friction: a spawned `Agent`-tool subagent cannot run `Bash` here.** A
-  `worktree-jail: cwd-not-a-worktree` PreToolUse hook rejects
-  `/workspace/doctrine`. Pass 1 completed by reading entities raw and using
-  `Monitor` as a shell. **Pass 2 needs `grep` over `src/` and will hit this
-  harder.** Observation `.doctrine/observations/records/42/`.
-- Commits `6e012172`, `07de5711`, `05b894bc`, `e844b03b`, `ef78b50f`,
-  `b5293523`, `afa890a4`, `56502ed5`.
-
-### Round 7 (2026-08-04) — `F-3` integrated, `RV-344` pass 1 closed, design locked
-
-- **`F-3` integrated and the ripple swept.** `DEC-139` carried into all six
-  sections at `f0ecce6a`: `Activation` retired with no members, the classification
-  table and `Contract` lose the column and field, the enforced-set arithmetic
-  moves to 2 / 4 / 6 / 8, the stage-entry receipt loses its
-  not-yet-enforced second half, and the rendered block gains the two exploring
-  contracts. Disposed `design-wrong` and verified — **ten of ten findings
-  verified; `RV-344` is `done`.**
-- **Four governance edits at `62f8ff6f`**: `slice-244.md` Non-Goals amended,
-  `IMP-391` narrowed to the interaction with its first two bullets marked done,
-  `IMP-392` loses the `RV`-minting bullet, and `DEC-138` plus `IMP-392` both lose
-  the superseded `(Done, None)` argument.
-- **A coherence sweep over round 6's own integrations found four defects**
-  (`43582c96`), all in or beside `sec-5`'s new remedy subsection. *"For eight of
-  the nine rows the discharge is one act by one actor"* was false twice — two
-  `Engine` rows name no act and `initial-concerns-recorded` names two acts by two
-  actors. The complaint table claimed nine promises need the complaint while its
-  own last row says the remedy keeps one. The arms-bearing remedy silently broke
-  the stated remedy-equals-discharge equality, since that row now renders three
-  lines against the receipt's one. And post-`AgentAct`/`AgentActKind` split, two
-  places still attributed unrepresentability to the discriminant rather than to
-  the payload type. **The lesson is the sweep itself**: an integration round is a
-  writing round, and its own output wants the class-sweep it applied to the
-  findings.
-- **Two field-set changes went beyond `F-3`** and are recorded in `sec-5` rather
-  than folded in: the rendered contract block now injects a rule's observed facts,
-  and renders coverage on every attested row rather than eliding `Artefact`. Both
-  were invisible while `governing-context-recorded` was unenforced; the second was
-  an inconsistency the old block already carried.
-- **The gate crossed on the user's instruction** (2026-08-04, *"do the clearance
-  gate boogie"*) — six clearances re-recorded at rev 82, `drafting → reviewing` at
-  rev 83. This is the second time the six have been re-bound by an agent; unlike
-  round 6 it carries an explicit instruction rather than a standing acceptance.
-  Under this slice's own design that invalidation does not happen at all —
-  `user-accepts-sufficiency` binds to `InquiryMap`, not to a section.
-- **Scope and selectors reconciled for the reviewing runbook** (`8db053d9`,
-  `9d54a8f8`): objective 4 amended to delivered-not-deferred, the snapshot risk
-  repriced at five hand acts, the closure intent extended to bar a
-  specified-but-unenforced condition; three selector notes moved.
-- **Friction: `adopt_authored` makes the caller reimplement Doctrine's own
-  section parsing and hashing.** `design show` prints 12-char prefixes and
-  `AdoptionMarkersInvalid` names ids without digests, so re-adopting a
-  hand-edited `design.md` means reading `document.rs::parse` and
-  `commands/design.rs::authored_sections` and writing a script. Observation
-  `.doctrine/observations/records/1b/`. **Positive control matters here**: the
-  reimplementation was proved against a known-good commit's recorded digests
-  before use, because getting it wrong mismatches every section at once and looks
-  exactly like a moved document.
-
-### PHASE-01 (2026-08-04, commit `3baaa564`) — two departures from the letter of `EX-2`
-
-Both are recorded here rather than left for `/audit` to discover in a diff.
-
-- **`can_advance` is deleted, not kept as a one-line alias.** `EX-2` states its
-  body becomes `Advance::between(from, to).is_some()`, and the clause's purpose
-  is *so the forward graph is written once*. It is written once — that
-  expression is now inlined at `advance`, its sole production caller. `VA-1`
-  enumerates the other two call sites and disposes of both (`forward_runbook`
-  under `EX-4`, the unit test under `VA-1` itself), so the function ends with no
-  caller at all. A zero-caller `pub(crate) fn` is dead code this repo's clippy
-  denies, and an `expect(dead_code)` would mark as *staged for a future reader* a
-  function no later phase reads. Restoring it is one line if `/audit` disagrees.
-
-- **`boundary_runbook` is re-keyed to `Advance` too, and drops its `Option`.**
-  `EX-2` names only `boundary_conditions`, but `EX-4` requires the selector to
-  choose the edge via `from_stage`, and the alternative is `Advance` growing
-  `from()`/`to()` accessors purely to reconstitute the pair the type exists to
-  replace. With the backward and non-adjacent pairs unrepresentable the
-  `_ => None` arm has no domain left, and `gate.rs` already recorded that every
-  forward edge carries a runbook (SL-233 PHASE-08). Behaviour-preserving:
-  `advance` reaches that call only past the legality check, so the `is_some`
-  guard it drops was provably always-true. This is what `design.md:2967` means by
-  *both the runbook selector and the contract block take it*. Two call sites —
-  `run.rs::stage_move` and `commands/design.rs::verifications` — genuinely need
-  the `Option`, because they ask the question of an arbitrary pair; both now
-  spell it `Advance::between(..).map(boundary_runbook)`, which puts the absence
-  where it belongs.
-
-`Advance::ALL` has no production reader until PHASE-06/08 and carries the
-tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
+**Process, earned twice each**:
+`mem.pattern.review.sweep-defect-class-not-instance` (the `F7` repair contained
+a surviving sibling of its own class, and round 6's integrations wanted the
+class-sweep they had just applied to the findings — an integration round is a
+writing round), `mem.pattern.review.observation-right-prescription-wrong`, and
+`mem.pattern.feedback.rule-findings-in-dependency-order`. Both `verify-vt`
+UNATTRIBUTABLE-until-completed and conformance-undeclared already have
+memories; PHASE-01 confirmed them rather than teaching anything new.
 
 ### Open
 
+- **PHASE-01 departed from the letter of `EX-2` twice, and `/audit` adjudicates
+  both.** (a) `can_advance` is **deleted**, not kept as a one-line alias: the
+  clause's purpose is *so the forward graph is written once*, and it is —
+  `Advance::between(from, to).is_some()` is inlined at `advance`, its sole
+  production caller. `VA-1` enumerates the other two sites and this phase
+  disposes of both, so the function ends with no caller, and a zero-caller
+  `pub(crate) fn` is dead code clippy denies here. (b) `boundary_runbook` is
+  re-keyed to `Advance` too and **drops its `Option`**: `EX-4` needs the
+  selector to choose the edge via `from_stage`, and the alternative was
+  `Advance` growing `from()`/`to()` accessors purely to reconstitute the pair
+  the type exists to replace. Behaviour-preserving — `advance` reaches that call
+  only past the legality check, so the `is_some` guard it drops was provably
+  always-true; `design.md:2967` (*both the runbook selector and the contract
+  block take it*) is the design's own reading. Two callers genuinely need the
+  `Option` because they ask an arbitrary pair, and now spell it
+  `Advance::between(..).map(boundary_runbook)`. Either is a one-line reversion.
+- **`Advance::ALL` has no production reader until PHASE-06/08** and carries the
+  tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
+  Expected to become live, not to be silenced further.
 - **`RV-344` pass 2 is specified in the ledger's `## Brief` and will not be run.**
   The user's call (2026-08-04): not because there is nothing left to find, but
   because it comes out cheaper against real code than against prose. Its four
@@ -447,5 +272,3 @@ tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
 - **`ISS-314` is the user's, in parallel** — `derived_status` returning
   `(Done, None)` on an empty ledger against `ADR-007` D-C8. Separate from this
   slice's premise by construction; its body carries the table that says so.
-- **`CHR-049` is settled** — priced from the corpus in round 5, so the design
-  carries no unverified claim of its own.
