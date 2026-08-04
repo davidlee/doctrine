@@ -186,6 +186,14 @@ A review is **done** when **every finding is terminal** — verified or withdraw
 (D-C9a). `doctrine review status RV-NNN` then reports `done · await=none`. Done is
 about the *ledger*; closing the *subject* is the next, separate move.
 
+**The empty ledger is the carve-out, not an instance of the rule.** D-C9a is
+vacuously true of a review with no findings; D-C8 overrides it and fixes an
+empty ledger at `active · await=raiser`, "so an implementation can never mistake
+'no findings yet' for completion". Read D-C9a as the all-terminal rule for a
+*non-empty* ledger. (Reading §6 alone, without D-C8, is how `IMP-098` talked
+itself into vacuous-done; `ISS-314` tracks the incumbent `derived_status` still
+answering `done` here, against the ADR.)
+
 The **close-gate** (D-C9b): an unresolved `blocker` on an active RV refuses the
 target's closure transitions — resolve it (`verify` or `withdraw`) before the
 subject can advance. `major` / `minor` / `nit` never gate.

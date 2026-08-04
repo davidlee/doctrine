@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcc21-8eb1-76b1-963d-9c2ebe281ac7"
+recorded_at = "2026-08-04T09:36:19.121339669Z"
+kind = "friction"
+summary = "ISS-314 (via /route → lightweight fix) prescribes a change that silently reverts a closed issue's fix — the issue never cites it"
+detail = "ISS-314 asks to repair derived_status's empty-ledger case to ADR-007 D-C8 (empty => Active/Raiser). git blame shows SL-040 PHASE-01 shipped exactly that, and commit 20d43229 (2026-06-19) deliberately reverted it to (Done, None) closing IMP-098, reasoning from install/review-ledger.md §6 ('done when every finding is terminal' — vacuously true on empty) without consulting ADR-007. IMP-098 carries field evidence (RV-055/056/061/066) that a zero-finding review has no legal path to done and needed a token-nit-then-withdraw hack. ISS-314's blast-radius section names two consumers to check and neither is IMP-098; a fixer following the issue as written re-opens a closed issue with documented UX cost. Cost: ~6 extra tool calls to discover via a doc-sweep that was not prescribed. The generalisable gap: no backlog/ADR cross-check surfaces 'this issue proposes reverting commit X which closed issue Y'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

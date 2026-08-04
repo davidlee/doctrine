@@ -41,10 +41,13 @@ Inputs:
    Additionally:
    * Every per-slice direct-edit item is applied to `design.md` /
      `slice-NNN.md` and recorded in the `## Reconciliation Outcome`.
-   * The RV ledger is resolved (`done · await=none`). **Zero-finding reviews
-    may report `active` rather than `done` (known issue IMP-098); treat them as
-    terminal — the absence of unresolved blockers is what gates the transition,
-    not the derived status string.**
+   * The RV ledger is resolved (`done · await=none`). **A zero-finding review
+    is terminal for close purposes whatever its derived status string says —
+    the absence of unresolved blockers is what gates the transition (ADR-007
+    D-C9b), never the status string (D7: a display summary, never a gate).
+    The string itself is unsettled for the empty ledger — D-C8 fixes it at
+    `active`, the engine currently answers `done`, and `ISS-314` tracks the
+    gap. Do not raise a token finding to force it terminal.**
    * The reconcile outcome is recorded (REV rationale and/or RV
      `## Reconciliation Outcome`).
    No free-floating "rejected" disposition is permitted — every finding

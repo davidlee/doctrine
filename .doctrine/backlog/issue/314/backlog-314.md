@@ -101,3 +101,62 @@ Nothing is known to be broken by it today: `await` is a display summary and neve
 an exclusive gate (`ADR-007` D7 — the turn gate is per-finding `can`). The cost is
 that the invariant an accepted ADR states, and tests, is false — and a design has
 already load-borne on the false version.
+
+## This is a revert, and it needs IMP-392 first (added 2026-08-04)
+
+The two consumers above are now traced, and a third — unnamed here, and the one
+that matters — was found.
+
+**The close-gate question resolves to "no teeth".** `D-C9b` routes through
+`unresolved_blockers_for` (`slice.rs:1073`), which filters the finding list; an
+empty ledger yields no blockers whichever way `derived_status` answers. Nothing
+gates on *review-is-done*.
+
+**The teeth are in priority classification.** `derived_status_string` feeds
+`catalog/scan.rs:420` → `status_class`, where `active` is `Workable` and `done`
+is `Terminal`. So the fix moves every finding-free `RV` out of terminal and into
+the actionable surfaces (`next`, survey, blockers) — permanently, per the next
+paragraph.
+
+**The fix as written reverts a deliberate change.** `SL-040` `PHASE-01` shipped
+`(Active, Raiser)`, with a comment naming the ADR's own rationale ("empty ≠ done
+— the `SL-009`-divergence-proof case"). Commit `20d43229` (2026-06-19) reverted
+it to `(Done, None)` to close **`IMP-098`** ("Zero-finding review derives active
+instead of done — needs a token round to go terminal"). `IMP-098` reasoned from
+`review-ledger.md` §6 — "done when **every** finding is terminal", vacuously true
+on an empty ledger — and never consulted `ADR-007`. §6 carries `D-C9a` without
+`D-C8`'s empty-ledger carve-out, and the omission read as licence.
+
+**So the naive fix re-opens `IMP-098`, which has field evidence.** `derived_status`
+reads only the finding list — never the baton's `rounds`. Under `D-C8` alone a
+review that receives no findings can *never* reach `done`: `done` requires every
+finding terminal and there are none to terminalise. `IMP-098` records four clean
+zero-finding reconciliation audits (`RV-055`, `RV-056`, `RV-061`, `RV-066`) that
+each needed a token-nit-then-`withdraw` hack to go terminal. Landing this issue
+as originally written restores that hack as the only exit, and parks those `RV`s
+in `next` forever.
+
+**`IMP-392` supplies what closes the gap.** Its concluded-pass marker — added
+there for a different reason (admissibility of `DEC-138`'s `Conducted` arm) — is
+the structured state that distinguishes *not yet conducted* from *conducted,
+found nothing*. The finding list cannot express that difference, which is why
+both `ADR-007` `D-C8` and `IMP-098` are right about different things.
+
+**Revised fix, once `IMP-392` has landed** (this issue now `needs` it):
+
+```text
+empty ledger, not concluded  → (Active, Raiser)   -- D-C8 honoured
+empty ledger, concluded      → (Done,   None)     -- IMP-098 honoured
+```
+
+plus the doc comment at `review.rs:1002`, the `doc_unresolved_blockers` comment
+at `review.rs:1486`, and four tests — the two named above, `derived_status_empty_is_done_none`
+(`review.rs:2839`), and `run_new_creates_an_empty_ledger_rv_against_a_real_target`
+(`review.rs:3313`), whose own doc comment already claims "Active/Raiser" while its
+assertion says `Done/None`. `derived_status_total_over_enum` (`review.rs:2895`)
+tests singletons and pairs only, so its "Done ⇔ await=None" invariant is untouched.
+
+Two shipped surfaces were corrected ahead of the code, to stop the next agent
+repeating `IMP-098`'s reasoning: `review-ledger.md` §6 now carries the `D-C8`
+carve-out, and `.agents/skills/close/SKILL.md`'s zero-finding note no longer
+cites `IMP-098` as a live known-issue.
