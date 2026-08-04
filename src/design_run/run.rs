@@ -257,6 +257,10 @@ pub(crate) fn apply(
     next.run.revision = revision;
 
     let live_evidence_before = live_evidence(&prior.gate);
+    // Unfiltered by the run's review policy, on purpose: this pair feeds
+    // `invalidation_rows`, which reports the death of a recorded act. Whether an
+    // attestation satisfied a lane the run requires is a different question,
+    // asked at the gate — see `live_reviews`.
     let live_reviews_before = live_reviews(prior);
 
     let mut pending: Vec<Pending> = Vec::new();
@@ -1494,7 +1498,23 @@ fn live_evidence(facts: &DerivedDesignFacts) -> BTreeSet<(gate::Condition, Desig
 }
 
 /// Every attestation still bound to its section's current content.
-fn live_reviews(snapshot: &DesignSnapshot) -> BTreeSet<(DesignId, DesignId, Fingerprint)> {
+///
+/// **Deliberately not policy-filtered** (design § *Where the policy is read, and
+/// where it is not*). This is the third reader of the attestation set and the one
+/// that must not take the run's [`ReviewPolicy`]: it feeds [`invalidation_rows`],
+/// which reports the *death of a recorded act*. An adversarial attestation going
+/// stale is a fact whatever lanes the run currently requires, and filtering here
+/// would silently stop reporting it. A sweep for "readers of `attestations`" gets
+/// this one wrong, which is why the exclusion is written down rather than left to
+/// be re-derived.
+///
+/// `pub(super)` for the test that pins it — the sweep above is the failure mode,
+/// so the seam is asserted directly rather than only through a row it feeds.
+///
+/// [`ReviewPolicy`]: super::attestation::ReviewPolicy
+pub(super) fn live_reviews(
+    snapshot: &DesignSnapshot,
+) -> BTreeSet<(DesignId, DesignId, Fingerprint)> {
     snapshot
         .review
         .attestations

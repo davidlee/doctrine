@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use super::Stage;
 use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, Reviewer};
 use super::facts::DerivedDesignFacts;
-use super::fixture::{attest, id, run_holding};
+use super::fixture::{attest, id, run_holding, section};
 use super::gate::{
     Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
 };
@@ -25,6 +25,7 @@ use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
 use super::refusal::Refusal;
+use super::run::live_reviews;
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::submission::{Batch, Declaration, Sparse};
 
@@ -753,4 +754,44 @@ fn order_is_declared_not_enforced() {
     // pair of the same run.
     run.run.review_policy = ReviewPolicy::AdversarialThenHuman;
     assert!(run.review_standing().sections_attested);
+}
+
+/// The third reader of the attestation set, and the one the policy must **not**
+/// reach. `live_reviews` feeds the invalidation rows, which report the death of a
+/// recorded act — and an adversarial attestation going stale is a fact whatever
+/// lanes the run currently requires.
+///
+/// Asserted rather than trusted because the design predicts the mistake: a sweep
+/// for readers of `attestations`, applying the policy uniformly, gets this one
+/// wrong and the loss is silent. The two questions are asked side by side here so
+/// the difference between them is the test.
+#[test]
+fn invalidation_is_not_policy_filtered() {
+    let mut run = run_holding(&[("sec-a", "sha256:a")]);
+    attest(&mut run, "att-a", "sec-a", Reviewer::Adversarial);
+    assert_eq!(run.run.review_policy, ReviewPolicy::HumanOnly);
+
+    // The gate says this section owes a lane; the recorded act is live all the
+    // same. Insufficient is not the same fact as dead.
+    assert_eq!(
+        run.sections_unreviewed(),
+        vec![(id("sec-a"), ActorClass::User)]
+    );
+    let before = live_reviews(&run);
+    assert_eq!(
+        before.len(),
+        1,
+        "an attestation satisfying no required lane is still a live record"
+    );
+
+    // Editing the section is what kills it, and the difference these two sets
+    // report is the invalidation row.
+    run.sections.upsert(section("sec-a", "sha256:a-revised"));
+    let after = live_reviews(&run);
+    assert!(after.is_empty());
+    assert_eq!(
+        before.difference(&after).count(),
+        1,
+        "the death of the act is reported under a policy that never required it"
+    );
 }
