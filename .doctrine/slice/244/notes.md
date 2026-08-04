@@ -142,10 +142,17 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · PHASE-01 · 5b4ecedf
+fresh-as-of: 2026-08-04 · PHASE-02 · b2f86268
 
 ### Produced
 
+- **PHASE-02 done** — `ContentCoverage<T>` is generic and owns `diff`, with
+  `is_current` defined through it; `NodeMaterial` and `InquiryMap::materials()`
+  project the question graph beside `SectionGroup::fingerprints`. Both incumbents
+  spell `ContentCoverage<Fingerprint>`; nothing under `tests/` touched, unit
+  suite 67 → 69, `doctrine check gate` exit 0, `verify-vt` `VT-1`/`VT-2` PASS,
+  conformance 0 undeclared. Commits `847b2eec` (code), `b2f86268` (selector).
+  `VA-1` discharged against the two **real** runs in the tree — see Open.
 - **PHASE-01 done** — `Advance` closes the forward relation; `boundary_conditions`
   and `boundary_runbook` are edge-keyed and total, `can_advance` retires, and
   `forward_runbook` stops re-deriving the table. Behaviour-preserving: no file
@@ -171,9 +178,13 @@ fresh-as-of: 2026-08-04 · PHASE-01 · 5b4ecedf
 Tree facts read off the source, still load-bearing for the phases that consume
 them. Cited by phase so a reader knows why each is here.
 
-**PHASE-02** — `InquiryNode` carries no fingerprint, and `DerivedInput` is built
-before `apply`, so node coverage must compare *material* rather than a shell
-digest.
+**PHASE-04/05 (from PHASE-02)** — `ContentCoverage<T>` is generic and its
+`diff(&current) -> Vec<DesignId>` is id-ordered, so `CoverageStale::moved` reads
+straight off it; `is_current` is `diff(..).is_empty()`, so there is no second
+comparison to keep in step. `NodeMaterial` and `InquiryMap::materials()` exist
+and are gated `expect(dead_code, reason = "SL-244 PHASE-05")` — PHASE-05 is the
+declared first reader. `InquiryMap` has no `remove`, so a map that lost a node is
+expressed by construction, not by mutation.
 
 **PHASE-03** — `review_standing` holds two structurally different currency
 derivations ten lines apart. `Attestation` carries no turn, sequence or
@@ -230,6 +241,23 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 
 ### Open
 
+- **`VA-1`'s evidence is recorded, not reproducible from the tree.** It required
+  a *real* run rather than a fixture, and runs live in gitignored state, so the
+  harness that parsed and re-serialised `.doctrine/state/slice/{243,244}/design.toml`
+  before and after was a scratch test, run twice and deleted (phase sheet D2).
+  The finding stands in the sheet's Outcome: `diff -r before after` empty, with
+  `slice/243` carrying the stored `[review.acceptance.covered.covered]` the
+  criterion protects. `/audit` either accepts that record or re-runs the harness;
+  it cannot read the proof off the diff.
+- **PHASE-01's recorded e2e baseline does not reproduce.** Its sheet lists
+  `74/4/74/74/106` for the five design e2e binaries; at `37fcf657` they measure
+  `108/76/4/76/76`, all green, and PHASE-02 measured its own baseline rather than
+  inheriting one. No test fails at either commit — recorded so it is not read as
+  a regression.
+- **`NodeMaterial` and `InquiryMap::materials()` have no production reader until
+  PHASE-05**, and carry the slice-tagged `cfg_attr(not(test), expect(dead_code, …))`
+  naming it — the same class as `Advance::ALL`, expected to go live rather than be
+  silenced further.
 - **PHASE-01 departed from the letter of `EX-2` twice, and `/audit` adjudicates
   both.** (a) `can_advance` is **deleted**, not kept as a one-line alias: the
   clause's purpose is *so the forward graph is written once*, and it is —
