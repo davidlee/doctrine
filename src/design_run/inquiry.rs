@@ -299,6 +299,26 @@ impl InquiryNode {
         &self.needs
     }
 
+    /// What this node is made of, for coverage purposes — everything except the
+    /// two fields [`NodeMaterial`] excludes and the `id` the map keys on.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-244 PHASE-05: reached only through InquiryMap::materials, whose first \
+                      reader is the condition model"
+        )
+    )]
+    fn material(&self) -> NodeMaterial {
+        NodeMaterial {
+            question: self.question.clone(),
+            provenance: self.provenance.clone(),
+            parent: self.parent.clone(),
+            needs: self.needs.clone(),
+            seq: self.seq,
+        }
+    }
+
     /// Move to `resolved`, which is possible only with a semantic disposition
     /// (DEC-062). The disposition is an argument rather than a settable field,
     /// so resolution without one does not compile at the call site and is
@@ -323,6 +343,34 @@ impl InquiryNode {
         self.disposition = None;
         Ok(self)
     }
+}
+
+/// What an inquiry-map coverage compares, per node (DEC-121).
+///
+/// Persisted inside `ContentCoverage<NodeMaterial>`, so it is stored and compared
+/// by `Eq` — and carries no digest of its own, which is the whole point of the
+/// variant: nodes are mutated by pure code after any shell digest would have been
+/// taken, so material is the only trustworthy thing to compare.
+///
+/// **Deliberately not `lifecycle` and not `disposition`.** What the user reviewed
+/// is the set of questions and how they relate; a question later being answered
+/// is progress *through* that graph rather than a change *to* it. Admitting
+/// disposition here would expire the sufficiency acceptance on the next disposal
+/// — precisely what the following stage does — while double-guarding a fact
+/// `blocking-inquiries-dispositioned` already owns.
+///
+/// `id` is absent because it is the covered map's key, not part of what a node is
+/// compared at. Nothing here is new state: every field is [`InquiryNode`]'s own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct NodeMaterial {
+    question: String,
+    provenance: Provenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent: Option<DesignId>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    needs: BTreeSet<DesignId>,
+    #[serde(default)]
+    seq: u64,
 }
 
 /// The inquiry map: nodes plus the two acyclic edge relations over them.
@@ -359,6 +407,29 @@ impl InquiryMap {
     /// A node by id.
     pub(crate) fn get(&self, id: &DesignId) -> Option<&InquiryNode> {
         self.nodes.get(id)
+    }
+
+    /// What every node is currently *made of* — the observation an inquiry-map
+    /// coverage is evaluated against, and the sibling of
+    /// [`SectionGroup::fingerprints`](super::snapshot::SectionGroup::fingerprints)
+    /// on the section side.
+    ///
+    /// Pure, and it has to be: `DerivedInput` is built before `apply` runs the
+    /// batch, so a shell-supplied digest of this map would have been taken
+    /// *before* the very mutations it is meant to observe.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-244 PHASE-05: the condition model is the first reader — it owns \
+                      Coverage::InquiryMap and the CoverageStale refusal this feeds"
+        )
+    )]
+    pub(crate) fn materials(&self) -> BTreeMap<DesignId, NodeMaterial> {
+        self.nodes
+            .iter()
+            .map(|(id, node)| (id.clone(), node.material()))
+            .collect()
     }
 
     /// Node count.

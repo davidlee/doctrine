@@ -11,7 +11,7 @@
 //!
 //! [`Declaration`]: super::submission::Declaration
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -194,23 +194,52 @@ impl AcceptanceAttestation {
 /// `DerivedInput` is built before `apply` runs the batch. Comparing the map is
 /// pure, needs no new injection, and cannot bind to a stale value.
 ///
-/// One type, two users — the integrated review and the lock acceptance — so
-/// whole-run currency has a single owner rather than a spelling in each.
+/// One type, three users — the integrated review, the lock acceptance, and the
+/// inquiry-map coverage — so whole-run currency has a single owner rather than a
+/// spelling in each.
+///
+/// Generic over *what* is covered rather than over the map: a section is covered
+/// at its [`Fingerprint`], and an inquiry node at its
+/// [`NodeMaterial`](super::inquiry::NodeMaterial), because nodes carry no
+/// fingerprint and cannot be given a trustworthy one — they are mutated by pure
+/// code after any shell digest would have been taken. Same comparison, different
+/// covered type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct ContentCoverage {
-    covered: BTreeMap<DesignId, Fingerprint>,
+pub(crate) struct ContentCoverage<T> {
+    covered: BTreeMap<DesignId, T>,
 }
 
-impl ContentCoverage {
+impl<T: Eq> ContentCoverage<T> {
     /// Cover exactly what `current` holds now.
-    pub(crate) const fn of(current: BTreeMap<DesignId, Fingerprint>) -> Self {
+    pub(crate) const fn of(current: BTreeMap<DesignId, T>) -> Self {
         ContentCoverage { covered: current }
     }
 
-    /// Whether every covered subject still carries the fingerprint it was
-    /// covered at — and nothing has joined or left.
-    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
-        &self.covered == current
+    /// The subjects that have moved since this coverage was taken — present on
+    /// one side only, or carrying something other than what they were covered
+    /// at. Id-ordered, so a refusal naming them renders deterministically.
+    ///
+    /// One expression covers all three ways a map can move, because a joiner and
+    /// a leaver are just the cases where one side's lookup is `None`.
+    pub(crate) fn diff(&self, current: &BTreeMap<DesignId, T>) -> Vec<DesignId> {
+        self.covered
+            .keys()
+            .chain(current.keys())
+            .collect::<BTreeSet<&DesignId>>()
+            .into_iter()
+            .filter(|subject| self.covered.get(*subject) != current.get(*subject))
+            .cloned()
+            .collect()
+    }
+
+    /// Whether every covered subject still carries what it was covered at — and
+    /// nothing has joined or left.
+    ///
+    /// Defined *through* [`ContentCoverage::diff`] rather than beside it: one
+    /// comparison with one home, so the verdict and the explanation can never
+    /// disagree.
+    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, T>) -> bool {
+        self.diff(current).is_empty()
     }
 }
 
@@ -223,12 +252,12 @@ impl ContentCoverage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct IntegratedReview {
     id: DesignId,
-    covered: ContentCoverage,
+    covered: ContentCoverage<Fingerprint>,
 }
 
 impl IntegratedReview {
     /// Record an integrated pass over the content it reviewed.
-    pub(crate) const fn over(id: DesignId, covered: ContentCoverage) -> Self {
+    pub(crate) const fn over(id: DesignId, covered: ContentCoverage<Fingerprint>) -> Self {
         IntegratedReview { id, covered }
     }
 
@@ -259,12 +288,15 @@ impl IntegratedReview {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct LockAcceptance {
     attestation: AcceptanceAttestation,
-    covered: ContentCoverage,
+    covered: ContentCoverage<Fingerprint>,
 }
 
 impl LockAcceptance {
     /// Bind a user acceptance to the content it was given over.
-    pub(crate) const fn over(attestation: AcceptanceAttestation, covered: ContentCoverage) -> Self {
+    pub(crate) const fn over(
+        attestation: AcceptanceAttestation,
+        covered: ContentCoverage<Fingerprint>,
+    ) -> Self {
         LockAcceptance {
             attestation,
             covered,

@@ -11,13 +11,18 @@
     reason = "test code — the repo's panic-avoidance denials target production paths"
 )]
 
+use std::collections::BTreeMap;
+
 use super::Stage;
+use super::attestation::ContentCoverage;
 use super::facts::DerivedDesignFacts;
 use super::gate::{
     Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
 };
 use super::ids::{DesignId, Fingerprint};
-use super::inquiry::{Disposition, InquiryLifecycle, InquiryMap, InquiryNode, Provenance};
+use super::inquiry::{
+    Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
+};
 use super::refusal::Refusal;
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::submission::{Batch, Declaration, Sparse};
@@ -502,4 +507,141 @@ fn unordered_batch_refuses_duplicate_subjects() {
         forward.keys().collect::<Vec<&DesignId>>(),
         vec![&one, &two, &three]
     );
+}
+
+/// `diff` is the payoff for comparing material rather than a digest: a refusal
+/// can name the subjects that moved. All three ways a map can move — a subject
+/// leaving, one joining, one changing value — are the same comparison, so each
+/// must appear exactly once and in id order.
+#[test]
+fn content_coverage_diff_names_only_what_moved() {
+    let at = |raw: &str, mark: &str| (id(raw), Fingerprint::new(format!("sha256:{mark}")));
+    let covered: BTreeMap<DesignId, Fingerprint> =
+        [at("sec-1", "1"), at("sec-2", "2"), at("sec-3", "3")]
+            .into_iter()
+            .collect();
+    let coverage = ContentCoverage::of(covered.clone());
+
+    assert!(coverage.diff(&covered).is_empty());
+    assert!(coverage.is_current(&covered));
+
+    let mut moved = covered.clone();
+    moved.remove(&id("sec-1"));
+    let (joiner, joined_at) = at("sec-4", "4");
+    moved.insert(joiner, joined_at);
+    moved.insert(id("sec-2"), Fingerprint::new("sha256:edited"));
+
+    assert_eq!(
+        coverage.diff(&moved),
+        vec![id("sec-1"), id("sec-2"), id("sec-4")],
+        "a leaver, a changed value and a joiner, each once, in id order"
+    );
+    assert!(!coverage.is_current(&moved));
+}
+
+/// Every node in `nodes`, inserted in order, or a test failure — the fixtures
+/// here are all legal maps, so a refusal means the fixture is wrong.
+fn map_of(nodes: Vec<InquiryNode>) -> InquiryMap {
+    let mut map = InquiryMap::default();
+    for node in nodes {
+        map.insert(node)
+            .expect("fixture nodes must form a legal map");
+    }
+    map
+}
+
+/// What the user reviewed under DEC-121 is the set of questions and how they
+/// relate. A question later being answered is *progress through* that graph, not
+/// a change to it — so lifecycle and disposition are outside the material, and
+/// re-wording, re-parenting, arriving and departing are all inside it.
+///
+/// The contrast is one test because the claim is the contrast: a material that
+/// moved on nothing would pass the second half alone, and one that moved on
+/// everything would pass the first half alone.
+#[test]
+fn node_material_ignores_progress_and_observes_shape() {
+    let root = || {
+        InquiryNode::open(
+            id("inq-1"),
+            "does the gate need a contract?",
+            Provenance::UserDirected,
+        )
+        .sequenced(0)
+    };
+    let child = || {
+        InquiryNode::open(
+            id("inq-2"),
+            "what does a refusal owe its reader?",
+            Provenance::AgentProposed,
+        )
+        .sequenced(1)
+        .with_parent(id("inq-1"))
+    };
+    let sibling = || {
+        InquiryNode::open(
+            id("inq-3"),
+            "where does the material live?",
+            Provenance::AgentProposed,
+        )
+        .sequenced(2)
+    };
+
+    let coverage: ContentCoverage<NodeMaterial> =
+        ContentCoverage::of(map_of(vec![root(), child(), sibling()]).materials());
+
+    let progressed = map_of(vec![
+        root()
+            .transition(InquiryLifecycle::Deferred)
+            .expect("deferred is not resolved"),
+        child().resolve(Disposition::Created {
+            record: "DEC-140".to_owned(),
+        }),
+        sibling(),
+    ])
+    .materials();
+    assert!(
+        coverage.diff(&progressed).is_empty(),
+        "deferring and disposing are progress through the graph, not a change to it"
+    );
+    assert!(coverage.is_current(&progressed));
+
+    let reworded = map_of(vec![
+        root(),
+        InquiryNode::open(
+            id("inq-2"),
+            "what does a refusal owe its reader, exactly?",
+            Provenance::AgentProposed,
+        )
+        .sequenced(1)
+        .with_parent(id("inq-1")),
+        sibling(),
+    ])
+    .materials();
+    assert_eq!(coverage.diff(&reworded), vec![id("inq-2")], "re-worded");
+
+    let reparented = map_of(vec![
+        root(),
+        sibling(),
+        InquiryNode::open(
+            id("inq-2"),
+            "what does a refusal owe its reader?",
+            Provenance::AgentProposed,
+        )
+        .sequenced(1)
+        .with_parent(id("inq-3")),
+    ])
+    .materials();
+    assert_eq!(coverage.diff(&reparented), vec![id("inq-2")], "re-parented");
+
+    let joined = map_of(vec![
+        root(),
+        child(),
+        sibling(),
+        InquiryNode::open(id("inq-4"), "and who reads it?", Provenance::UserDirected).sequenced(3),
+    ])
+    .materials();
+    assert_eq!(coverage.diff(&joined), vec![id("inq-4")], "a node arrived");
+
+    let departed = map_of(vec![root(), child()]).materials();
+    assert_eq!(coverage.diff(&departed), vec![id("inq-3")], "a node left");
 }
