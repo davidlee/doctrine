@@ -1523,13 +1523,6 @@ fn doc_unresolved_blockers(doc: &ReviewDoc) -> Vec<BlockerRef> {
 ///   answer today.
 ///
 /// No I/O: operates on already-read data, like its neighbour.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-04: the predicate lands before ObservedReview's resolver reads it (T9)"
-    )
-)]
 fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
     doc.finding
         .iter()
@@ -1542,6 +1535,53 @@ fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
         })
         .map(|f| f.id.clone())
         .collect()
+}
+
+/// What a design run's gate needs to know about one named `RV` (SL-244 `sec-3`).
+///
+/// `review`'s half of the answer, without the reference the caller already holds:
+/// the command tier pairs the two into `design_run`'s `ObservedReview`, exactly as
+/// it pairs a runbook key with its parsed book into `RunbookFacts`. Keeping the
+/// reference out is what lets `review` answer this without importing `design_run`
+/// (ADR-001) — the dependency runs one way, `design`-shell → `review`-query, as
+/// [`unresolved_blockers_for`]'s does.
+pub(crate) struct PassFacts {
+    /// Whether the ledger carries the concluded-pass marker.
+    ///
+    /// **Always `false` today, and the read is still correct.** No verb sets the
+    /// marker and no field holds it — it lands with `IMP-392` — so no ledger
+    /// carries one, and "does this ledger carry it" is honestly answered `false`
+    /// for every ledger. The design accepts this interim in as many words: the
+    /// `Conducted` arm is the one that waits, and `Waived` is the deliberately
+    /// available exit meanwhile.
+    pub(crate) concluded: bool,
+    /// The findings holding the run's `reviewing → locked` edge, by `F-n` id.
+    pub(crate) undisposed_blockers: Vec<String>,
+}
+
+/// Read a named `RV` for a design run's gate — `None` if it cannot be read.
+///
+/// **Absence is refusal, not satisfaction** (SL-244 `sec-3`). An unparseable ref
+/// and a ref naming no ledger both yield `None` rather than an empty observation,
+/// because an empty observation reads as *no blockers* and would clear the very
+/// edge an unreadable review must hold. The two failures are one answer on
+/// purpose: the caller's question is *can Doctrine see this pass*, and it cannot,
+/// either way.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-05: the disposition act that names a review — and the \
+                  review-disposition-attested row that reads this — land there"
+    )
+)]
+pub(crate) fn observe_pass(root: &Path, reference: &str) -> Option<PassFacts> {
+    let id = parse_ref(reference).ok()?;
+    let doc = read_review(&root.join(REVIEW_DIR), id).ok()?;
+    Some(PassFacts {
+        concluded: false,
+        undisposed_blockers: undisposed_blockers(&doc),
+    })
 }
 
 /// The reverse close-gate scan (design §7, D8/D-C9b) — a **standalone scoped scan**
@@ -4362,6 +4402,47 @@ mod tests {
             "an open blocker forces Active — the implication this test pins"
         );
         assert_eq!(undisposed_blockers(&doc), vec!["F-1".to_owned()]);
+    }
+
+    /// SL-244 `VT-4`: absence is refusal, not satisfaction.
+    ///
+    /// The three cases are asserted together because they must give the *same*
+    /// answer for different reasons, and the failure being guarded is that one of
+    /// them quietly returns an empty observation instead of none. An empty
+    /// observation reads as *no blockers*, which clears the very edge an
+    /// unreadable review has to hold — so `None` and `Some(no blockers)` are
+    /// opposite verdicts wearing similar shapes, and only a test that names both
+    /// halves catches a resolver that conflates them.
+    #[test]
+    fn unreadable_review_reads_as_unmet() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+
+        // Not a ref at all, and a well-formed ref naming no ledger: both unreadable.
+        assert!(observe_pass(root, "not-a-ref").is_none());
+        assert!(observe_pass(root, "RV-999").is_none());
+
+        // A readable ledger with nothing outstanding is `Some` with an EMPTY
+        // blocker set — the positive control that distinguishes "cannot see it"
+        // from "saw it, nothing there".
+        let clean = observe_pass(root, "RV-001").expect("a readable ledger is observable");
+        assert!(clean.undisposed_blockers.is_empty());
+        assert!(
+            !clean.concluded,
+            "no verb sets the concluded marker until IMP-392, so no ledger carries one"
+        );
+
+        // And a readable ledger holding a live blocker carries it by F-n id.
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        assert_eq!(
+            observe_pass(root, "RV-001").unwrap().undisposed_blockers,
+            vec!["F-1".to_owned()]
+        );
     }
 
     /// VT-3: with no `.doctrine/review/` tree at all, the scan is a clean empty —

@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::Stage;
 use super::attestation::{
     AcceptanceAttestation, Attestation, ContentCoverage, IntegratedReview, IntentState,
-    LockAcceptance, RecoveryIntent, Reviewer,
+    LockAcceptance, RecoveryIntent, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
@@ -119,6 +119,48 @@ pub(crate) struct DerivedInput {
     /// carry both acts, so both sets of results ride one field and each seam
     /// takes the results that name its steps.
     pub(crate) verifications: Vec<StepVerification>,
+    /// The `RV` this invocation must resolve, because an act names one (SL-244
+    /// `sec-3`).
+    ///
+    /// Shell-read and never persisted, arriving where every other shell-derived
+    /// fact arrives and for the same reason `runbook` states: what a ledger says
+    /// is a fact Doctrine derives, never one it takes on a caller's word.
+    ///
+    /// `None` is **not** *nothing to check* — it is *nothing could be read*, and
+    /// the reader must treat it as refusal rather than satisfaction. An RV the
+    /// shell could not open and an act naming none are one answer here on purpose;
+    /// the shell distinguishes them at the point it can, and neither clears an
+    /// edge.
+    pub(crate) observed_review: Option<ObservedReview>,
+}
+
+/// One `RV` as the shell read it, for the acts that name one (SL-244 `sec-3`).
+///
+/// The two fields are read by different checks and that split is the whole of the
+/// admission/gate divide: **admission** reads `concluded`, because a `Conducted`
+/// arm naming a review that never ran is a false claim to refuse on write; the
+/// **gate** reads `undisposed_blockers`, because that is a live property to be
+/// re-derived at every crossing rather than a fact about the moment the act was
+/// written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-05: `review-disposition-attested` and the act that names a \
+                  review land there; PHASE-04 puts the input in place ahead of its readers"
+    )
+)]
+pub(crate) struct ObservedReview {
+    /// The review the act named. `sec-4`'s type.
+    pub(crate) reference: ReviewRef,
+    /// Whether the ledger carries the concluded-pass marker.
+    pub(crate) concluded: bool,
+    /// Findings that are `blocker`-severity AND `open` or `contested` — DEC-138's
+    /// predicate, deliberately not D-C9b's `doc_unresolved_blockers`. Carried as
+    /// the ledger's own `F-n` ids: they identify rows on the `RV`, not subjects in
+    /// the run, so they are not [`DesignId`]s.
+    pub(crate) undisposed_blockers: Vec<String>,
 }
 
 /// One runbook as the shell read it, with the digest of each step's definition

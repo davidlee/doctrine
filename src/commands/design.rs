@@ -1282,6 +1282,12 @@ fn apply(
         authored_fingerprint: observed.clone(),
         verifications: verifications(root, slice, &prior, &request, runbook.as_ref()),
         runbook,
+        // SL-244 PHASE-04: nothing names a review yet. The act that does —
+        // `ReviewDisposed`, carrying `DisposedPass` — lands in PHASE-05, and so
+        // does the row that reads the result. Resolving here would be resolving a
+        // ref no payload can carry, so the input is `None` until there is one to
+        // resolve; `review::observe_pass` is the resolver waiting for it.
+        observed_review: None,
     };
 
     // Everything refusable, refused while the authored tier is untouched.
