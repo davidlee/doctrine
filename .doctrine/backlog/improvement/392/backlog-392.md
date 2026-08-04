@@ -17,8 +17,13 @@ with a **document-section reference**, so one model serves both.
   raised against — the hard part. `DEC-066` invalidation is snapshot-internal and
   `RV` has no fingerprint concept; the `design materialise` authored-watermark
   pattern is the shape to follow.
-- Minting an `RV` on entry to `reviewing`, so the review is a first-class artefact
-  from the start.
+- ~~Minting an `RV` on entry to `reviewing`~~ — **done in `SL-244`** (user,
+  2026-08-04, on `RV-344` `F-1`). `DEC-125` says the `RV` arrives on entry to
+  `reviewing` and does not say what puts it there; this list used to claim it,
+  and `SL-244`'s `sec-3` needs the pass to exist in order to bind a disposition
+  to one. That slice mints it through `DEC-086`'s journalled intent — the seam
+  `DEC-125`'s own rationale cites — so the review is a first-class artefact from
+  the start without waiting on this item.
 - The design run resolving and deriving over an `RV` — it references none today
   (`IntegratedReview.id` is a `DesignId`, not a canonical ref).
 - Removing `Finding` and its `fnd-` declaration path, with the e2e suites that
@@ -48,8 +53,14 @@ reversed that — see below.
 - **`Conducted`'s admissibility — the one addition, not just an exposure.** The
   arm may only be claimed over an `RV` carrying a **concluded-pass marker**, and
   no such marker exists. Without it, `Conducted` is satisfied on entry to
-  `reviewing`, since this item mints the `RV` there and an empty ledger reads
-  `(Done, None)`. Findings cannot supply the signal — a clean pass is
+  `reviewing`, because `DEC-138`'s predicate is universally quantified over the
+  finding set and never reads `status`, so it is **vacuously true** on an empty
+  ledger. (Corrected 2026-08-04, `RV-344` `F-8`: this used to be argued from *an
+  empty ledger reads `(Done, None)`*. That reading is wrong — `ADR-007` D-C8
+  fixes an empty ledger at `active`/`raiser` so no implementation mistakes
+  no-findings-yet for completion, and `ISS-314` records the incumbent
+  `derived_status` violating it. Fixing `ISS-314` leaves this hazard exactly
+  where it is.) Findings cannot supply the signal — a clean pass is
   structurally identical to one never run — and the `## Synthesis` prose is
   refused because a gate parsing authored prose is `SL-244` `sec-2`'s
   fourth-prose-loader risk. So this item adds structured state saying a pass

@@ -248,6 +248,23 @@ of the interactions themselves.
   steps and the CLI rendering are the follow-on. Stated interim state: until
   `IMP-391` lands, `exploring → inquiring` passes on the runbook alone — no worse
   than the status quo it replaces, but a gap, not an oversight.
+
+  > **Amended 2026-08-04 — `DEC-139`.** The boundary above is wrong about where
+  > two of those four things landed, and `RV-344`'s `F-3` is what found it: the
+  > design ships the wire acts and the artefact storage for all three checkpoint
+  > acts — two of `IMP-391`'s five deliverables — so this slice was doing the
+  > follow-on's work and still declining the guard. Corrected: **the wire acts
+  > and the artefact storage are in this slice, and both exploring conditions are
+  > enforced from it.** `IMP-391` keeps the *interaction* — the runbook steps
+  > that prompt each checkpoint, the CLI rendering of each artefact, and the
+  > empty-case affordance — and its first two bullets arrive done. The interim
+  > state is correspondingly narrower: `exploring → inquiring` is guarded from
+  > this slice, and what is unfinished is interaction quality, since until
+  > `IMP-391` lands the user confirms an artefact the agent paraphrases.
+  > Objective 4 is therefore delivered rather than deferred. The cost accepted
+  > with it: both rows are cumulative, so no in-flight run can cross any forward
+  > edge without acts no run holds, and the repair is by hand — `SL-243` is the
+  > only live run owing one.
 - **Migrating design-run findings onto `RV`** (`IMP-392`, spawned by `DEC-125`).
   `DEC-125` unifies findings on the `RV` review kind rather than the runtime
   `Finding` model; this slice specifies the condition that reads them, the
