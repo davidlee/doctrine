@@ -132,6 +132,11 @@ selector = "src/design_run/fixture.rs"
 intent = "design-target"
 note = "PHASE-03: NEW cfg(test) module — one home for the run-holding/attesting fixtures the pure-engine and storage suites both need, extracted rather than copied a fourth time. Fixtures only; no assertions, unreachable outside cfg(test)."
 
+[[selector]]
+selector = "src/entity.rs"
+intent = "design-target"
+note = "PHASE-04 / D5: the DEC-086 id-claim midpoint reaches the prebuilt placement path — materialise_fresh_prebuilt_hooked (the base delegates via no_midpoint) plus materialise_prebuilt_at, create_in_existing minus the scaffold. Additive siblings on allocate_fresh_hooked's precedent; the unchanged entity suite is the behaviour-preservation control."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"

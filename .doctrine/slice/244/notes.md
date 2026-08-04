@@ -142,21 +142,27 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · PHASE-04 in_progress · 7d1df4ba
+fresh-as-of: 2026-08-04 · PHASE-04 in_progress · 4943333a
 
 ### Produced
 
-- **PHASE-04 in progress** — three of eleven planned tasks landed, out of the
-  order the sheet first proposed (sheet `F1`: the `int-` retirement cannot
-  precede the mint that replaces it, so `T2`/`T3`/`T7` become one movement).
-  Done: `T1` `ReviewRef` + `ReviewPass` in `attestation.rs` with `pass_over` in
-  the shared fixture (`b1907148`); `T8` `undisposed_blockers` beside
-  `doc_unresolved_blockers` in `review.rs` (`ce0885f2`); `T9`
-  `ObservedReview` on `DerivedInput` + `review::observe_pass` / `PassFacts`
-  (`7d1df4ba`). `EX-7` settled and `VT-4` amended (`eb408a0d`), with the
-  reasoning as `DEC-140` (`91d709a6`, `2056b36b`). Unit suite 76 → 77; `review`
-  83 → 84 (its own count, unaffected by the design-run embed). Clippy clean
-  throughout. Remaining: `T4`, `T5`, `T6`, `[T2+T3+T7]`, `T10`, `T11`.
+- **PHASE-04 in progress** — nine of eleven planned tasks landed, in `F1`'s
+  order rather than the sheet's listing order (the `int-` retirement cannot
+  precede the mint that replaces it, so `T2`/`T3`/`T7` are one movement). Done:
+  `T1` `ReviewRef` + `ReviewPass` with `pass_over` in the shared fixture
+  (`b1907148`); `T8` `undisposed_blockers` (`ce0885f2`); `T9` `ObservedReview` +
+  `review::observe_pass` (`7d1df4ba`); `T4` the DEC-086 id-claim midpoint on the
+  prebuilt placement path plus `materialise_prebuilt_at` (`510a966c`); `T5`
+  `mint_review` / `materialise_review_at` refactored out of `run_new`
+  (`4b5c9ad0`); `T6` the journal widened to `IntentSubject` + `MintKind` with the
+  D4 rename set (`6a62ba95`); and `[T2+T3+T7]` as one movement — the mint on
+  entry to `reviewing`, `IntegratedReview` retired whole, `integrated_current`
+  re-sourced onto `pass.covered` (`4943333a`). `EX-7` settled and `VT-4` amended
+  (`eb408a0d`), reasoning as `DEC-140` (`91d709a6`, `2056b36b`). Counts: entity
+  33 → 38, `review` 84 → 87, `design_run` unit 77 → 78, `e2e_design_review`
+  86 → 90, `e2e_design_checkpoint` 87 **unedited** (T6's control). All 102 test
+  binaries green; clippy clean at every commit. Remaining: `T10` (VA-1 fault
+  idempotency) and `T11` (close out).
 
 - **PHASE-03 done** — `ISS-310` closed. `ReviewPolicy` (four variants, serde-
   defaulted) sits on the run header; `ActorClass` gains one direction from
@@ -305,13 +311,32 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   So *not inheriting the guard* is a coupling decision (ADR-007 D7: the
   review-level status is a display summary, never a gate), not a wrong-answer
   fix. `/audit` should not expect a behavioural difference to be demonstrable.
-- **`Condition::IntegratedReviewPresent`'s unmet mode narrows to stale-only**
-  (sheet `F2`), and the e2e suite's `refuses_without(Component::Integrated)`
-  must be re-levered onto staleness. Once entry to `reviewing` always mints a
-  pass, presence is guaranteed by construction and currency is the live
-  question — `EX-8`'s *the currency lamp's input now exists*, arriving as an
-  argued behaviour change in `tests/e2e_design_review.rs` rather than a
-  weakening. Not yet done: it lands with `[T2+T3+T7]`.
+- **`Condition::IntegratedReviewPresent`'s unmet mode narrowed to stale-only**
+  (sheet `F2`), and the e2e suite is re-levered accordingly — **done**, in
+  `4943333a`. Entry to `reviewing` always mints a pass, so presence is
+  guaranteed by construction and only currency can falsify the condition.
+  `Component::Integrated` now declares nothing; `refuses_without` stales the
+  pass with a section edit in its own submission (the lock payload re-attests
+  afterwards, so the refusal still isolates one condition), and the
+  mandatory/opt-in test clears the condition again by **re-entering
+  `reviewing`** — now the only way to clear it. This is `EX-8`'s *the currency
+  lamp's input now exists* arriving as an argued behaviour change in
+  `tests/e2e_design_review.rs`, not a weakening.
+- **The journal's wire form is preserved by construction, and nothing tests it
+  from the previous binary's bytes.** `D3` required the `Checkpoint` arm to keep
+  its bare-`DesignId` spelling; `IntentSubject` codes through
+  `try_from`/`into = "String"` and the field keeps its old key as a
+  `serde(alias = "checkpoint")`. The control `T6` names — `e2e_design_checkpoint`
+  green **unedited** — proves the round trip through the *new* types, not
+  compat with an old file, so a unit test over the literal legacy TOML was added
+  beside it (`design_run::tests`). `/audit` should read the alias as the compat
+  mechanism and that test as its evidence.
+- **DEC-086's step 5 is not universal, and `MintKind` now says so.** A minted RV
+  has no status to set (ADR-007 D-C8 derives it from the ledger) and authors its
+  own `reviews` edge, so `MintKind::has_record_effects()` gates
+  `apply_record_effects`. The RV's facet (`design`) and target (`SL-NNN`) are
+  **derived, not declared** — one design run per slice — so no payload can name
+  a different subject for the pass.
 - **Two shell surfaces carry `expect(dead_code)` naming PHASE-05**, both
   expected to go live rather than be silenced further: `review::observe_pass`
   and `design_run::run::ObservedReview`. `undisposed_blockers`'s own `expect`
