@@ -142,10 +142,24 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · PHASE-02 · b2f86268
+fresh-as-of: 2026-08-04 · PHASE-03 · b7c97434
 
 ### Produced
 
+- **PHASE-03 done** — `ISS-310` closed. `ReviewPolicy` (four variants, serde-
+  defaulted) sits on the run header; `ActorClass` gains one direction from
+  `Reviewer` as an `impl From`; `ReviewPolicy::lanes` is the single home of
+  membership. `DesignSnapshot::missing_lanes` / `sections_unreviewed` are the one
+  derivation, and both the gate (`review_standing`) and the envelope
+  (`review_outstanding`) read it, so they cannot disagree by construction. The
+  policy change is the eighth writer act, riding an `AcceptanceDeclaration`, with
+  a `ReviewPolicyChanged` row naming both values and the policy rendered on
+  `RunLine`. `Attestation::reviewer`'s `expect(dead_code)` is deleted — the
+  phase's own proof the defect closed. Unit suite 69 → 76; `tests/` touched in
+  three files, each edit forced by an exhaustive table test or by `VT-5`.
+  `doctrine check gate` exit 0, all five `verify-vt` rows PASS. Commits
+  `bbcba0d3`, `cc6b48cb`, `1edc1377`, `a0a271ea`, `78a037a2`, `69a82423`,
+  `b7c97434`. Two departures and one conformance-ordering slip — see Open.
 - **PHASE-02 done** — `ContentCoverage<T>` is generic and owns `diff`, with
   `is_current` defined through it; `NodeMaterial` and `InquiryMap::materials()`
   project the question graph beside `SectionGroup::fingerprints`. Both incumbents
@@ -186,12 +200,25 @@ and are gated `expect(dead_code, reason = "SL-244 PHASE-05")` — PHASE-05 is th
 declared first reader. `InquiryMap` has no `remove`, so a map that lost a node is
 expressed by construction, not by mutation.
 
-**PHASE-03** — `review_standing` holds two structurally different currency
-derivations ten lines apart. `Attestation` carries no turn, sequence or
-timestamp, so lane order is declared and never enforced. `run.rs:1062` replaces
-an `Attestation` by its own `id`, not by act or subject — load-bearing, since two
-lanes reviewing one section must coexist. The attestation set has exactly three
-readers and `live_reviews` must **not** be repaired with them.
+**PHASE-05 (from PHASE-03)** — the data PHASE-05's contract table reads is
+built and live. `ActorClass { User, Agent, Adversarial }` and
+`ReviewPolicy::lanes()` exist in `attestation.rs`; `RequiredActor::RunPolicy`
+resolves through `lanes()`, and `Refusal::SectionsUnreviewed { subjects }` reads
+`DesignSnapshot::sections_unreviewed() -> Vec<(DesignId, ActorClass)>` directly —
+it is already id-ordered and already the gate's own answer, so the refusal and
+the verdict cannot drift. `ReviewStanding` is untouched and still four `Copy`
+booleans; PHASE-05 rewrites `satisfied` and `advance` anyway. No const table was
+built here (`RequiredActor`, `ActRequirement`, the rows) — that is PHASE-05's.
+`ActorClass::Agent` has no constructor yet and needs no `expect(dead_code)`:
+`derive(Deserialize)` counts as a construction site.
+
+**PHASE-03 (spent, kept for the readers it names)** — `Attestation` carries no
+turn, sequence or timestamp, so lane order is declared and never enforced.
+`run.rs:1062` replaces an `Attestation` by its own `id`, not by act or subject —
+load-bearing, since two lanes reviewing one section must coexist. The attestation
+set has exactly three readers; `live_reviews` is the one that must not be
+policy-filtered, and is now `pub(super)` with that exclusion stated at both the
+function and the call site.
 
 **PHASE-04** — `IntegratedReview` is a third incumbent in `ReviewGroup`
 (`snapshot.rs:330`) and the sole input to `integrated_current`. The `RV` TOML

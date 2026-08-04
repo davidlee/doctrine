@@ -1,0 +1,42 @@
+memory_uid = "mem_019fcc9b571e7fe18dfd8e7fbda6e802"
+memory_key = "mem.fact.design-run.e2e-counts-embed-the-unit-suite"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "e2e design binaries embed the design_run unit suite — their counts are derived"
+summary = "Each tests/e2e_design_*.rs binary #[path]-includes src/design_run/mod.rs, so its test count = own tests + 2 + the whole design_run unit suite; adding one unit test moves four e2e counts."
+created = "2026-08-04"
+updated = "2026-08-04"
+
+[scope]
+paths = ["tests/e2e_design_state.rs", "tests/e2e_design_review.rs", "src/design_run/mod.rs"]
+globs = []
+commands = []
+tags = ["testing", "baseline", "design-run"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "93bae1ab2ef7eda2da2396a19af3b63a35fb8e5e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b34883b1a0630c767b3eb2d802b3c640d5e2256c8f14fb70c66a5e4594bf17e4"
+base_commit = "b7c97434ec70d2a1885579523fc473743e07f515"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
