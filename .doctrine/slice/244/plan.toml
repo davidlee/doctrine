@@ -1,0 +1,303 @@
+# Implementation plan for SL-244 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-244"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ── Before the model (01–04) ────────────────────────────────────────────────
+# Each is separable, provable on its own terms, and a prerequisite of PHASE-05.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Close the forward relation"
+objective = """
+Replace the two independent hand-written stage-pair matches with one closed
+`Advance` type, so the forward graph has exactly one home, a condition can only
+ever name a lawful transition, and the runbook selector stops re-deriving the
+table it should be reading. Behaviour-preserving throughout — this phase buys
+the outer key every later table is grouped by, and nothing else.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-244's design is locked (run dr-019fc4dd, revision 89) and this plan is approved." },
+  { id = "EN-2", text = "`src/design_run/gate.rs` still carries `can_advance` and `boundary_conditions` as two independent `(Stage, Stage)` matches, and `src/commands/design.rs::forward_runbook` still finds the outbound edge by walking `Stage::ALL` against `can_advance`." },
+  { id = "EN-3", text = "The design-run suites are green on the phase's base commit — they are this phase's behaviour-preservation proof." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`Advance` is a closed four-variant enum in `gate.rs` — ExploringInquiring, InquiringDrafting, DraftingReviewing, ReviewingLocked — with `ALL`, `const fn between(Stage, Stage) -> Option<Self>` and `from_stage(Stage) -> Option<Self>`." },
+  { id = "EX-2", text = "`boundary_conditions` takes an `Advance` and is still `const` and total; `can_advance(from, to)` is `Advance::between(from, to).is_some()`, so the forward graph is written once." },
+  { id = "EX-3", text = "`cumulative_conditions(to)` resolves each window to an `Advance` as it accumulates rather than threading `(Stage, Stage)` pairs into the boundary table." },
+  { id = "EX-4", text = "`forward_runbook` selects the edge via `Advance::from_stage`, and the `Stage::ALL` × `can_advance` walk plus the doc comment explaining why it re-derives the table are deleted." },
+  { id = "EX-5", text = "No behaviour change: the condition vocabulary, every boundary set, every refusal variant and every rendered line are identical to the base commit." },
+]
+verification = [
+  { id = "VT-1", expects = "the gate table admits only the four lawful forward moves, asserted through `Advance` rather than a pair match, and `Advance::between` returns None for every self-move, skip and backward pair", test_file = "src/design_run/tests.rs", keywords = ["Advance", "stage_gate_table_admits_only_legal_forward_moves", "advance_between_refuses_every_unlawful_pair"], waived = false },
+  { id = "VT-2", expects = "`Advance::from_stage` yields the stage's single outbound forward edge and None at Locked, matching what `Fragment::for_stage` and `boundary_runbook` already answer there", test_file = "src/design_run/tests.rs", keywords = ["from_stage", "advance_from_stage_is_none_at_locked"], waived = false },
+  { id = "VA-1", expects = "behaviour preservation: the design-run e2e suites pass with no edit to any test file in this phase's diff. A changed test here is a defect in the refactor, not a licensed edit." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Generalise coverage, add node material"
+objective = """
+Make `ContentCoverage` generic over what it covers and give it a diff, and add
+the inquiry-map material projection, so a later act can bind to the question
+graph and a refusal can name the node that moved rather than reporting that the
+map did. Behaviour-preserving at both incumbent instantiations.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01's exit criteria are met." },
+  { id = "EN-2", text = "`ContentCoverage` is a concrete `BTreeMap<DesignId, Fingerprint>` whose `is_current` returns bool (attestation.rs:200-214), with two users — `IntegratedReview` and `LockAcceptance`." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ContentCoverage<T: Eq>` is generic over what it covers; `diff(&self, current) -> Vec<DesignId>` returns keys present on one side only plus keys whose value differs, and `is_current` is `diff(current).is_empty()` — one comparison with one home." },
+  { id = "EX-2", text = "`NodeMaterial` holds question, provenance, parent, needs and seq, and deliberately not lifecycle or disposition: progress through the graph is not a change to it, and disposition is already guarded by `blocking-inquiries-dispositioned`." },
+  { id = "EX-3", text = "The snapshot derives the current node-material map beside `sections.fingerprints()`, purely and with no shell round-trip — nodes are mutated by pure code after any shell digest would have been taken." },
+  { id = "EX-4", text = "Both incumbent users instantiate `ContentCoverage<Fingerprint>` with behaviour identical to the base commit, and the stored serde representation does not move." },
+]
+verification = [
+  { id = "VT-1", expects = "`diff` names exactly the subjects that moved — a joiner, a leaver and a changed value each appear once, and an unchanged map diffs empty", test_file = "src/design_run/tests.rs", keywords = ["ContentCoverage", "diff", "content_coverage_diff_names_only_what_moved"], waived = false },
+  { id = "VT-2", expects = "node material ignores progress and observes shape: disposing an inquiry leaves the material map equal, while re-wording, re-parenting, adding or removing a node moves it", test_file = "src/design_run/tests.rs", keywords = ["NodeMaterial", "node_material_ignores_progress_and_observes_shape"], waived = false },
+  { id = "VA-1", expects = "the generification is a type change, not a semantic one: an existing snapshot round-trips unchanged, checked against a real one rather than a constructed fixture" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The run's review policy (ISS-310)"
+objective = """
+Build DEC-073's per-run review policy — declared, never inferred — and bind
+`section-attestations-current`'s required reviewer lanes to it, closing ISS-310
+at both surfaces that answer *is this section reviewed* and deliberately not at
+the third. The policy is a declaration of intent, not a security boundary: the
+fence is authority and visibility, not prohibition.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02's exit criteria are met." },
+  { id = "EN-2", text = "`review_standing` derives `sections_attested` from subject and fingerprint only (snapshot.rs:425-431), and `Attestation::reviewer` is a recorded field with no reader (attestation.rs:77-80)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ReviewPolicy` is a four-variant enum — HumanOnly, AdversarialOnly, HumanThenAdversarial, AdversarialThenHuman — on the run header, serde-defaulted to HumanOnly, so an existing snapshot parses and an existing run behaves exactly as today. Not a Vec<Reviewer>: ordered, non-empty and duplicate-free are structural here, not prose." },
+  { id = "EX-2", text = "`ActorClass { User, Agent, Adversarial }` exists, with `impl From<Reviewer> for ActorClass` mapping Human→User and Adversarial→Adversarial. A mapping, not a merge: `Reviewer` and `traversal::Authority` stay distinct vocabularies." },
+  { id = "EX-3", text = "`review_standing` requires, for every current section, one live attestation per lane the policy resolves to — the nested quantification — and keeps the incumbent non-empty guard with its stated reason." },
+  { id = "EX-4", text = "`review_outstanding` (envelope.rs:799) reads the same policy, so the gate cannot refuse a section the envelope simultaneously renders as reviewed. `live_reviews` (run.rs:1495) is unchanged, and the reason it is excluded is written at the call site: it feeds `invalidation_rows`, which reports the death of a recorded act whatever the policy requires." },
+  { id = "EX-5", text = "`ReviewPolicyDeclaration` is a run-level `ApplyRequest` field carrying an `AcceptanceDeclaration`, so `AcceptanceAttestation::bind` is the only route and the change carries `AcceptanceAuthority::User`. It joins `WRITER_ACTS` (7 → 8) with a paired WRITER_ACT_* key constant (STD-001)." },
+  { id = "EX-6", text = "The current policy renders in the turn envelope, and a policy change emits a change row naming both the old and the new value. Order is declared and rendered, never enforced — `Attestation` carries no turn, sequence or timestamp, so lane order is not derivable from what is stored." },
+]
+verification = [
+  { id = "VT-1", expects = "the policy decides the actor: a section carrying only an adversarial attestation leaves `section-attestations-current` unmet under HumanOnly and satisfies it under AdversarialOnly, and the standing names the missing lane rather than a fixed one", test_file = "src/design_run/tests.rs", keywords = ["ReviewPolicy", "AdversarialOnly", "policy_decides_the_required_lane"], waived = false },
+  { id = "VT-2", expects = "both lanes are required per section under an ordered policy, and order is not enforced: HumanThenAdversarial leaves a human-only section unmet naming the adversarial lane, and clears with the adversarial attestation recorded first", test_file = "src/design_run/tests.rs", keywords = ["HumanThenAdversarial", "both_lanes_required_per_section", "order_is_declared_not_enforced"], waived = false },
+  { id = "VT-3", expects = "gate and envelope agree on the same section under the same policy, and adversarial review stays visible without being sufficient — under HumanOnly the section still renders its adversarial attestation", test_file = "src/design_run/render/envelope.rs", keywords = ["review_outstanding", "ReviewPolicy", "gate_and_envelope_agree_under_one_policy"], waived = false },
+  { id = "VT-4", expects = "invalidation is not policy-filtered: an adversarial attestation going stale under HumanOnly still emits its invalidation row. Asserted because a sweep for readers of the attestation set gets this one wrong.", test_file = "src/design_run/tests.rs", keywords = ["invalidation_is_not_policy_filtered", "live_reviews"], waived = false },
+  { id = "VT-5", expects = "loosening the policy does clear the gate — HumanOnly unmet, changed to AdversarialOnly, then met — and a change without an AcceptanceDeclaration is refused. The deliberate hole asserted, so removing it later is a visible break rather than a silent tightening.", test_file = "tests/e2e_design_review.rs", keywords = ["review_policy", "loosening_the_policy_clears_the_gate", "acceptance"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Mint the review pass"
+objective = """
+Give the run a first-class review pass — an RV minted on entry to `reviewing`
+through DEC-086's journalled intent — retire `IntegratedReview` into it, and
+resolve the named ledger as shell-observed input. The gate's behaviour is
+otherwise unchanged this phase: this is the record a disposition binds to and
+the warnings derive over, arriving before the model that needs it.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03's exit criteria are met." },
+  { id = "EN-2", text = "`ReviewGroup::integrated` holds an `IntegratedReview` — a DesignId plus a coverage — written from an `int-` declaration (run.rs:1094), so the run cannot hold or resolve an RV." },
+  { id = "EN-3", text = "DEC-086's journalled-intent seam is live in src/commands/design.rs (`journal_intent`, `journalled_intent`, `write_journal`, `execute_checkpoint`) and wired for DEC/QUE/ASM record semantics only." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ReviewRef` is a canonical RV id as the run records it — validated at the wire boundary, opaque to the pure layer, and deliberately not a DesignId, so `design_run` names a review without depending on the review module (ADR-001)." },
+  { id = "EX-2", text = "`ReviewPass { review: ReviewRef, covered: ContentCoverage<Fingerprint> }` replaces `ReviewGroup::integrated` in place — it is about review, which is the same test that sends the act groups elsewhere. `IntegratedReview` and the `int-` declaration path retire." },
+  { id = "EX-3", text = "Entering `reviewing` mints an RV through the existing journalled-intent seam, extended with the RV half of DEC-086's decomposition; the engine and journal halves are reused, not re-implemented. The mint runs in the command tier — `design_run` never mints, never resolves a ref, and sees the result as `ReviewPass` on the snapshot." },
+  { id = "EX-4", text = "A later entry to `reviewing` REPLACES the pass and never reopens it. A crash before the journal write leaves a stray reservation and never an unidentified record; recovery resumes the first incomplete effect idempotently, as the incumbent checkpoint path does." },
+  { id = "EX-5", text = "`ObservedReview { reference, concluded, undisposed_blockers }` arrives as a `DerivedInput` field beside `runbook`. The shell resolves the review the payload names where the batch carries a disposition, and the one the stored act names otherwise. An RV the shell could not read yields no `ObservedReview` — absence is refusal, not satisfaction." },
+  { id = "EX-6", text = "`undisposed_blockers` is severity==Blocker AND status in {open, contested}, carried as the ledger's own F-n ids. It is spelled separately from D-C9b's `doc_unresolved_blockers` (review.rs:1490) — the two differ by the `answered` state, they differ on purpose, and one shared filter would silently pick a side." },
+  { id = "EX-7", text = "Whether this predicate is buildable today, or genuinely waits on IMP-392, is SETTLED by evidence in this phase and recorded in the notes — not inherited from the design's wider claim. See plan.md § One dependency the plan flags rather than re-decides." },
+  { id = "EX-8", text = "`ReviewStanding::integrated_current` derives over `pass.covered`, so `reviewing → locked` behaves as it did on the base commit; the currency lamp's input now exists and is not yet rendered (PHASE-07)." },
+]
+verification = [
+  { id = "VT-1", expects = "entering `reviewing` mints exactly one RV and records it on the run; regressing to `drafting` and re-advancing replaces the pass with a fresh reference rather than reopening the first", test_file = "tests/e2e_design_review.rs", keywords = ["mints_a_review_pass_on_entry_to_reviewing", "re_entry_replaces_the_review_pass"], waived = false },
+  { id = "VT-2", expects = "`ReviewPass` and `ReviewRef` are pure-layer state the run holds and compares: a pass covers the section digests it was opened over, and is_current answers over them", test_file = "src/design_run/tests.rs", keywords = ["ReviewPass", "ReviewRef", "review_pass_covers_the_sections_it_opened_over"], waived = false },
+  { id = "VT-3", expects = "the blocker predicate is the design run's own and not D-C9b's: a ledger holding an `answered` blocker yields no undisposed blockers, while `open` and `contested` blockers are both carried, by F-n id", test_file = "src/review.rs", keywords = ["undisposed_blockers", "answered_blocker_is_not_undisposed"], waived = false },
+  { id = "VT-4", expects = "an RV the shell cannot read produces no `ObservedReview`, and the gate reads that as unmet rather than as satisfied", test_file = "src/design_run/tests.rs", keywords = ["ObservedReview", "unreadable_review_reads_as_unmet"], waived = false },
+  { id = "VA-1", expects = "the mint is idempotent under interruption: interrupting between claim and journal, then resuming the same submission, leaves one RV and one reservation consumed — checked by exercising the incumbent recovery path, not by reasoning about it" },
+]
+specs        = []
+requirements = []
+
+# ── The model (05) ─────────────────────────────────────────────────────────
+# One movement. plan.md § One phase that cannot be split carries the argument.
+
+[[phase]]
+id        = "PHASE-05"
+name      = "The condition model"
+objective = """
+The slice's core, and one movement rather than several: replace the payload-free
+`Condition` and its existential evidence scan with a macro-generated contract
+table, the eight acts that table names, and one derivation that returns a
+diagnosis instead of a boolean. The vocabulary, the rules, the act records and
+the evaluator are mutually referential — a rule names an act kind, a record is
+constructed in its rule's shape, and admission checks the correspondence — so
+they land together. Every retirement this slice owes lands here too, because
+everything that reads `Evidence` stops compiling the moment it goes.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04's exit criteria are met: `Advance`, `ContentCoverage<T>` with diff, `NodeMaterial`, `ActorClass`, `ReviewPolicy`, `ReviewPass`/`ReviewRef` and `ObservedReview` all exist." },
+  { id = "EN-2", text = "The runtime phase sheet carries an ordered task breakdown from /phase-plan, cut so that each task ends with the crate compiling. This is the slice's largest phase and the one where a green-chase is cheapest; the breakdown is the control." },
+  { id = "EN-3", text = "RV-344 pass 2's parallel-implementation line is loaded: before adding a comparison, a derivation or a vocabulary, the incumbent is checked for one that can be ridden." },
+  { id = "EN-4", text = "The macro mechanism is proved on a throwaway row before it carries nine real ones — there is no `macro_rules!` anywhere in src/ today, so this is a mechanism the codebase has never used." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One declarative macro takes the condition list once — grouped by the `Advance` it guards, carrying variant, kebab token and contract — and emits `Condition`, `Condition::ALL`, `CONTRACTS` and `boundary_conditions`. No set-equality test is written over those four, because no disagreement between them is expressible; a lawful edge the source omits makes the generated match non-exhaustive, which is a build failure." },
+  { id = "EX-2", text = "The vocabulary is nine: `required-sections-exist` retired, `drafting-readiness-attested` added, `integrated-review-present` and `blocking-findings-disposed` folded into `review-disposition-attested`. The classification is two Derived, seven Attested, zero Claimed, and `ConditionKind` has two variants — the defect tier is unrepresentable, not merely unused." },
+  { id = "EX-3", text = "`DerivationRule`, `EngineSource`, `AttestationRule`, `ActRequirement`, `RequiredActor`, `Binding`, `Coverage` and `Reach` are as sec-3 specifies. The discharging act is stated exactly once, inside the rule — there is no `remedy: &'static str` beside it — and reach and coverage stay independent axes." },
+  { id = "EX-4", text = "A const assertion per row, emitted by the same macro, fails the build at the offending row where a requirement names `confirms`, a disposition or an observed fact and its act is not one of the checkpoint five. This is the catch for the one shape the table may not hold — an enforced condition nothing can satisfy — now that the activation axis is retired with no members." },
+  { id = "EX-5", text = "`ActKind` is closed at eight. `AgentAct` carries its payload and `AgentActKind` is its fieldless discriminant, with `From<AgentActKind> for ActKind` widening only; an agent-authored `DesignAccepted` does not compile on that channel. The claim asserted is about the channel, not the caller — `--as` and DEC-088 make the stronger claim false." },
+  { id = "EX-6", text = "`CheckpointAct` and `AgentDeclaration` persist in their own snapshot groups, replaced BY ACT (at most one live per kind) and not by id — the incumbent `Attestation` is replaced by id deliberately, because two lanes reviewing one section must coexist. `Attestation` survives unchanged as `SectionReviewed`'s home." },
+  { id = "EX-7", text = "`apply` runs admit → mutate → re-observe → construct → evaluate. Construction allocates each record's id and fills `covered` from re-observed state in the shape its rule's Coverage names, `observed` from `DerivedInput`, and `confirms` from the declaration the rule names — so a declaration and its confirmation may arrive in one submission without the caller computing a digest." },
+  { id = "EX-8", text = "Admission owns the rule/record correspondence over the whole record, raising one `ActAdmissionInvalid` carrying every `ActFault` rather than the first. Every stored act satisfies the correspondence by construction; the gate never re-checks it, and a rule that has since grown an observed fact makes an old act UNMET rather than invalid." },
+  { id = "EX-9", text = "`satisfied(condition, &DesignSnapshot, &DerivedInput) -> Result<(), Vec<Cause>>` — one derivation, no branch on kind, the whole derived input rather than a parameter per fact class. `GateNotCleared` carries Vec<Unmet>, each with EVERY Cause; `Contract::remedy()` renders from the same rule, so refusal text and injected contract cannot disagree." },
+  { id = "EX-10", text = "`ObservedFact::GovernanceEdges` has its stated projection — the slice's outbound `governed_by` edges plus its `references` edges in role `concerns` — and its stated encoding: kind, role, target_id, single-space separated, `-` for no role, one per line, whole lines sorted ascending, LF-terminated, UTF-8, sha256. An unobservable fact reads as CHANGED." },
+  { id = "EX-11", text = "`Evidence`, `EvidenceDeclaration`, the `evidence` wire field, `DerivedDesignFacts::satisfies` and `LockAcceptance` retire. `WRITER_ACTS` is [WriterAct; 9]. `SectionRow::clearances` and `clearances_for` retire with the store they read, and `invalidation_rows` re-sources from the evidence set to the act set with its change-event member renamed to match." },
+  { id = "EX-12", text = "Every e2e change is an argued edit recorded in the phase notes — which fixture, which condition, and why the new expectation is the right one — not an adjustment to fit. The gate.rs unit tests that encode unchanged behaviour stay green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "the properties the existential scan could not express: an attestation by the wrong ActorClass leaves the condition unmet; `initial-concerns-recorded` with the user's graph review and no agent blocking-set declaration is unmet AND the refusal names which act is missing; a graph review made over a superseded map paired with a current declaration is unmet", test_file = "src/design_run/tests.rs", keywords = ["wrong_actor_does_not_satisfy", "missing_conjunct_names_the_missing_act", "stale_conjunct_does_not_satisfy", "ActMissing"], waived = false },
+  { id = "VT-2", expects = "the two coverages give opposite answers on the same edit, which is why they are two variants: removing a section leaves `section-attestations-current` satisfied on the remaining reviews and unmakes `user-acceptance-attested`; editing one section unmakes only that section's own act; a run holding no sections is NoSections, which whole-map equality would have reported satisfied", test_file = "src/design_run/tests.rs", keywords = ["departing_section_is_not_a_failure", "per_section_invalidates_only_its_own_subject", "empty_document_is_no_sections", "PerSection"], waived = false },
+  { id = "VT-3", expects = "progress does not invalidate and shape does: disposing an inquiry leaves `user-accepts-sufficiency` satisfied, while re-wording or re-parenting the same node unmakes it and CoverageStale::moved holds that node's id and no other", test_file = "src/design_run/tests.rs", keywords = ["progress_does_not_invalidate", "CoverageStale", "InquiryMap"], waived = false },
+  { id = "VT-4", expects = "the governance projection: two edge sets with the same members added in different orders fingerprint equal; replacing `governed_by ADR-004` with `references(concerns) ADR-004` unmakes the condition; a references edge in any other role leaves it satisfied; an empty sweep expires when the first edge appears; an unobservable fact reads as changed", test_file = "src/design_run/tests.rs", keywords = ["governance_edge_projection_is_order_independent", "kind_and_role_are_observed", "ObservedFact"], waived = false },
+  { id = "VT-5", expects = "every admission promise raises `ActAdmissionInvalid`: one test per ActFault variant asserting the variant and its payload, plus an act failing twice reporting twice. A single is-refused assertion would pass on the wrong fault.", test_file = "src/design_run/tests.rs", keywords = ["ActAdmissionInvalid", "ActFault", "act_failing_twice_reports_twice"], waived = false },
+  { id = "VT-6", expects = "reach is observable where it was argued: `drafting-readiness-attested` is required crossing drafting→reviewing and absent from the enforced set crossing reviewing→locked; the bottom edge enforces two conditions, so a run holding neither checkpoint act is refused there", test_file = "src/design_run/tests.rs", keywords = ["edge_local_is_not_accumulated", "bottom_edge_enforces_two_conditions", "Reach"], waived = false },
+  { id = "VT-7", expects = "a backward move clears nothing and breaks nothing, and a backward excursion re-earns only what moved: retreating from reviewing to drafting leaves every recorded act current and re-advancing succeeds on the same evidence, while a section edited during the excursion loses its own attestation and no other", test_file = "src/design_run/tests.rs", keywords = ["backward_move_clears_nothing", "excursion_re_earns_only_what_moved"], waived = false },
+  { id = "VT-8", expects = "the e2e path is the act model end to end: a run is driven from exploring to locked on checkpoint acts and agent declarations, with no `evidence` field on any payload", test_file = "tests/e2e_design_evaluation.rs", keywords = ["checkpoint_act", "agent_declaration", "drafting-readiness-attested"], waived = false },
+  { id = "VA-1", expects = "each changed e2e test is argued in the phase notes by fixture and by condition. A test whose change has no argument is a green-chase and is reverted." },
+  { id = "VA-2", expects = "RV-344 pass 2's parallel-implementation line applied to this phase's diff: no second spelling of a comparison, a derivation or a vocabulary. Named suspects — is_current versus the PerSection quantification (two on purpose, reason written down), the two blocker filters (likewise), and any new map-equality helper beside ContentCoverage::diff (not licensed)." },
+]
+specs        = []
+requirements = []
+
+# ── After the model (06–08) ────────────────────────────────────────────────
+# Each renders or publishes the finished model; none can precede it.
+
+[[phase]]
+id        = "PHASE-06"
+name      = "The contract corpus and the stage-entry receipt"
+objective = """
+Make the contract readable before it is violated: nine narrative assets keyed by
+the condition's kebab token, published and `fixed`, and a stage-entry receipt
+that delivers the edge's ENFORCED set — what the edge judges by, not its own
+rows alone — with the structure injected from CONTRACTS so the prose can never
+restate it and contradict it.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05's exit criteria are met: CONTRACTS exists, `Contract::remedy()` renders from the rule, and `cumulative_conditions` applies the reach filter." },
+  { id = "EN-2", text = "`fragment_section` (design.rs:1832-1851) is the live receipt register — per-invocation declaration, identity line unconditional, body only when the declaration does not match. `DesignSnapshot::fragments` is dead state and is NOT the register to build on." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Nine narrative assets exist at install/design-prompts/conditions/<token>.md, one per generated condition, addressed by `Condition::contract_asset_key`. The subdirectory is not cosmetic: it makes the corpus set-equality test a prefix filter rather than a filter minus a hand-maintained exclusion list for the four fragment stems (STD-001)." },
+  { id = "EX-2", text = "Nine [[entry]] rows in publication/manifest.toml, kind=guidance, customization=fixed, citing the same reason in the same words the obligation runbooks already give: not that a project may not disagree, but that the override seam does not exist yet (DEC-102 ruling (b); IMP-372 carries the resolution)." },
+  { id = "EX-3", text = "The prose restates nothing structural. The renderer injects kind, the acts with their required actors, the binding, the observed facts and the reach from the const row; the asset carries narrative only." },
+  { id = "EX-4", text = "`design resume` emits a contract block beside the fragment and the runbook step, selected by `Advance::from_stage`, carrying the enforced set — cumulative_conditions, reach-filtered and accumulated — so the counts are two / four / six / eight up the machine. The renderer calls the function the gate calls; there is no second copy of the reach rule." },
+  { id = "EX-5", text = "`--known-contracts <edge>` is repeatable and takes Advance's kebab name — bare, per DEC-124's no-digest ruling, which is defensible here precisely because no contract is parameterised by the run. Declared held elides every narrative body and no header line. An unknown or mismatched token elides nothing." },
+  { id = "EX-6", text = "A locked run emits no contract block — the same real answer `Fragment::for_stage` and `boundary_runbook` already give there, and asserted so that None is not read as a gap." },
+  { id = "EX-7", text = "The receipt token is NOT folded into the fragment receipt. A fragment binds bytes by digest and a contract deliberately does not; folding would force one of them to change. Two tokens on one emission." },
+]
+verification = [
+  { id = "VT-1", expects = "every condition has an asset and the corpus has no orphan — set equality over the generated vocabulary and the design-prompts/conditions/ prefix — and the manifest's rows for that prefix are set-equal to the vocabulary too, so a row naming a retired condition fails", test_file = "src/design_run/tests.rs", keywords = ["contract_asset_key", "every_condition_has_an_asset_and_no_orphan", "design-prompts/conditions"], waived = false },
+  { id = "VT-2", expects = "the remedy is the contract's: the refusal's remedy text for a condition equals the discharge the receipt injects for the same condition, asserted over EVERY row rather than a sample. `review-disposition-attested` is the row that makes the quantifier matter — it is the only multi-line discharge, and a test over the easy eight would pass without it.", test_file = "src/design_run/tests.rs", keywords = ["remedy_equals_discharge_for_every_row", "review-disposition-attested"], waived = false },
+  { id = "VT-3", expects = "the receipt covers what the edge judges by: at reviewing the block carries eight contracts, five from edges below; at drafting six, four from below. Asserted as set equality against cumulative_conditions for that edge, not as a count, so it cannot pass on the right number of wrong rows.", test_file = "src/design_run/tests.rs", keywords = ["receipt_covers_the_enforced_set", "cumulative_conditions"], waived = false },
+  { id = "VT-4", expects = "the bottom edge's receipt is its own boundary and nothing more — the exploring block carries exactly `governing-context-recorded` and `initial-concerns-recorded` — and both also appear in the reviewing block, which is what an accumulating receipt means", test_file = "src/design_run/tests.rs", keywords = ["bottom_edge_receipt_is_its_own_boundary", "governing-context-recorded"], waived = false },
+  { id = "VT-5", expects = "a declared receipt elides bodies and keeps identity; an unknown or mismatched edge token elides nothing; a locked run emits no block; and a refusal reads no asset — the gate leg renders every remedy with no embedded corpus available, which asserts the tier boundary rather than trusting it", test_file = "tests/e2e_design_state.rs", keywords = ["known-contracts", "declared_receipt_elides_bodies_not_headers", "locked_run_emits_no_contract_block"], waived = false },
+  { id = "VA-1", expects = "the nine narratives are read end to end against their const rows: each says what the const does not, restates nothing the renderer injects, and cites no repo-private id (DEC-127's general rule; ISS-309 owns the existing corpus violations, and this corpus must not add to them)" },
+  { id = "VH-1", expects = "the slice's acceptance test, taken here because this is where it becomes true: a reader who has not seen src/** or the test suite can say what exploring→inquiring requires and how to discharge it, from the receipt and a refusal alone" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "The warning lamps"
+objective = """
+Ship the two derived facts that must inform a decision without barring it —
+integrated-pass currency and outstanding findings by severity. Neither is a
+condition: a guard bars a move, and a fact whose own repair invalidates it
+cannot be a guard. Both render as no-passive-cost scalars, following
+`cursor_stale`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05's exit criteria are met, and PHASE-04 has put `ReviewPass` and `ObservedReview` on the run." },
+  { id = "EN-2", text = "`SectionRow::clearances` has already retired with the evidence store (PHASE-05 EX-11), so the envelope's uncapped neighbour is gone and this phase's additions are measured against the budget that leaves." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Currency derives as `pass.covered.is_current(current_section_digests)` — the comparison `integrated_current` already performs, over a record that can name an RV — and is never stored." },
+  { id = "EX-2", text = "`OutstandingBySeverity { blocker, major, minor, nit }` is a fixed record rather than a map, because the ledger's severity vocabulary is closed at four and an absent key and a zero count would be one fact with two spellings. Outstanding means status not in {verified, withdrawn} — deliberately wider than DEC-138's gating predicate, and the two filters stay separately spelled." },
+  { id = "EX-3", text = "Both render as scalars on `TurnEnvelope`: the currency flag inline only when true, the severity summary as one line of four counts omitted entirely when every count is zero. No passive cost, not evictable (the byte-budget ladder in `evict_one` holds lists, not scalars), and no rung to choose." },
+  { id = "EX-4", text = "Neither warning is a condition and neither can refuse: a stale pass sets the flag and reviewing→locked still succeeds." },
+  { id = "EX-5", text = "The envelope carries no contract prose at any stage, so DEC-124's byte-budget ruling is asserted rather than assumed. What this slice adds to the envelope is exactly two scalars and one enum name — the third being PHASE-03's rendered ReviewPolicy, which is the visibility half of that policy's fence and must not be trimmed as a convenience." },
+]
+verification = [
+  { id = "VT-1", expects = "the currency lamp is rendered and never refuses: a stale integrated pass sets the envelope flag and the forward move still succeeds. Asserted at the render surface, not the gate, because it is not a condition.", test_file = "src/design_run/render/envelope.rs", keywords = ["currency_lamp_renders_and_never_refuses", "is_current"], waived = false },
+  { id = "VT-2", expects = "the severity summary counts every non-terminal finding, omits itself entirely when all four counts are zero, and is wider than the gating predicate — an `answered` blocker is counted here and does not hold the edge", test_file = "src/design_run/render/envelope.rs", keywords = ["OutstandingBySeverity", "severity_summary_is_wider_than_the_gate"], waived = false },
+  { id = "VT-3", expects = "the envelope carries no contract body and no remedy at any stage", test_file = "src/design_run/render/envelope.rs", keywords = ["envelope_carries_no_contract_prose"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "The published stage-machine diagram"
+objective = """
+Objective 6, and the one deliverable the model does not touch: a single
+published, generated document showing the machine an agent is standing in —
+four stages, four forward edges, which conditions guard which, and what each
+edge INHERITS, which is the fact no local view carries. Published because the
+reader is always a repo-external consumer; generated because that reader cannot
+check freshness for itself.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05's exit criteria are met — `Advance::ALL`, `boundary_conditions` and CONTRACTS are the macro's output and are the single source this artefact is pinned to." },
+  { id = "EN-2", text = "src/funnel_machine.rs (ARTIFACT_PATH + render_artifact, fixed prose consts, derived rows, golden test) is read as the in-tree precedent — the only diagram-documenting-a-machine in the tree, and it transfers whole." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/design_run/artifact.rs is a new leaf-tier sibling module with out-degree into `gate` only, exporting ARTIFACT_PATH = install/design-run-stages.md and `render_artifact() -> String`. A sibling rather than more of gate.rs, which is about gating; rendering a string is pure, so ADR-001 is untouched." },
+  { id = "EX-2", text = "The artefact carries, in the order a reader needs them: a mermaid stateDiagram-v2 over Advance's four values with each edge labelled by its enforced count; an edge table whose INHERITED column is the point of it; a condition table whose every column is a projection of the CONTRACTS row; and fixed prose on backward moves, because there is nothing to derive — the backward relation is not enumerable and a regression is guarded by a stated reason." },
+  { id = "EX-3", text = "It does NOT carry the contract narratives. They are addressable per condition and delivered per edge; inlining nine of them makes one document nobody reads instead of nine delivered when they apply." },
+  { id = "EX-4", text = "install/design-run-stages.md is published at reference/design-run-stages.md, kind=reference, customization=fixed, reachable by `doctrine library show`. The reference/ prefix and not design-prompts/: this is a document a reader asks for by name, not a member the machine selects and delivers." },
+  { id = "EX-5", text = "The shipped file states its PROVENANCE, not its edit procedure — funnel-machine.md's change-the-table-and-re-render banner is correct in this repo and useless in a client project. The banner wording is the policy this slice sets for the first generated asset in the shipped corpus, and a second one reuses it." },
+  { id = "EX-6", text = "customization=fixed here is STRUCTURAL, a third class beside DEC-102's permanently sealed entries and the genuinely provisional runbooks: overriding a derived description does not change what is derived, it only makes the description wrong. Recorded in the manifest header, because IMP-372's sweep has two kinds of entry it must not move, not one." },
+  { id = "EX-7", text = "No flake.nix change is owed — install/ is already grafted into srcWithDist. Confirmed rather than assumed before the phase closes." },
+]
+verification = [
+  { id = "VT-1", expects = "the golden holds: render_artifact() equals the embedded bytes. The one test that makes every claim below mechanical, and the test a vocabulary addition, a reach change, a binding change or a new edge all break until the file is re-rendered.", test_file = "src/design_run/artifact.rs", keywords = ["ARTIFACT_PATH", "render_artifact", "rendered_artifact_matches_the_embedded_bytes"], waived = false },
+  { id = "VT-2", expects = "every condition appears exactly once and every edge appears exactly once — the rendered tables' key sets equal Condition::ALL and Advance's four values, and the diagram carries one labelled transition per edge row", test_file = "src/design_run/artifact.rs", keywords = ["every_condition_appears_exactly_once", "every_edge_appears_exactly_once"], waived = false },
+  { id = "VT-3", expects = "the inherited column is the enforced set: for each edge, the row's inherited conditions equal cumulative_conditions minus that edge's own boundary rows. Asserted because that column is the artefact's reason to exist and is the one a hand-render would get wrong.", test_file = "src/design_run/artifact.rs", keywords = ["inherited_column_is_the_enforced_set", "cumulative_conditions"], waived = false },
+  { id = "VT-4", expects = "the diagram and the contract headers agree: for each condition, the kind, discharging act, binding and reach rendered here equal what the receipt injects. Two renderings of one CONTRACTS row, asserted equal.", test_file = "src/design_run/artifact.rs", keywords = ["diagram_and_contract_headers_agree", "CONTRACTS"], waived = false },
+  { id = "VT-5", expects = "it is reachable by address — `doctrine library show reference/design-run-stages.md` returns the artefact — asserted at the surface a client repo would actually use, which is DEC-127's whole reason for refusing the spec-sibling", test_file = "src/publication.rs", keywords = ["design-run-stages", "reference/design-run-stages.md"], waived = false },
+  { id = "VA-1", expects = "the artefact cites no DEC-, SL- or ISS- id. Per-repo sequential ids do not dangle in a client project — they resolve to an unrelated record silently, which is worse (ISS-309)." },
+]
+specs        = []
+requirements = []
