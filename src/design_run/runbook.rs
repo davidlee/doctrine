@@ -176,9 +176,10 @@ impl StepVerification {
 /// runtime check. PHASE-16 shipped the first; PHASE-08 converted the rest, so
 /// every non-terminal stage's single outbound forward edge now carries one.
 ///
-/// Named for the edge's ORIGIN stage, which is not a shorthand: `can_advance` is
-/// total on non-terminal stages, so origin-keying and edge-keying are the same
-/// thing (D5) and there is no fifth edge for a name to become ambiguous over.
+/// Named for the edge's ORIGIN stage, which is not a shorthand:
+/// `Advance::from_stage` is total on non-terminal stages, so origin-keying and
+/// edge-keying are the same thing (D5) and there is no fifth edge for a name to
+/// become ambiguous over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum RunbookKey {
     /// The ritual discharged while standing at [`super::Stage::Exploring`],

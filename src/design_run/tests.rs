@@ -14,12 +14,12 @@
 use super::Stage;
 use super::facts::DerivedDesignFacts;
 use super::gate::{
-    Condition, ReviewStanding, advance, can_advance, cumulative_conditions, regress,
+    Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
 };
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::{Disposition, InquiryLifecycle, InquiryMap, InquiryNode, Provenance};
 use super::refusal::Refusal;
-use super::runbook::RunbookStanding;
+use super::runbook::{RunbookKey, RunbookStanding};
 use super::submission::{Batch, Declaration, Sparse};
 
 /// A validated run-local id, or a test failure naming the bad literal.
@@ -58,23 +58,18 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
     let mut admitted = Vec::new();
     for from in Stage::ALL {
         for to in Stage::ALL {
-            if can_advance(from, to) {
-                admitted.push((from, to));
+            if let Some(edge) = Advance::between(from, to) {
+                admitted.push(edge);
             }
         }
     }
 
     // Exhaustive over all 25 ordered pairs; the four adjacent forward moves of
     // design §5.4 and nothing else — no self-move, no skip, no backward move.
-    assert_eq!(
-        admitted,
-        vec![
-            (Stage::Exploring, Stage::Inquiring),
-            (Stage::Inquiring, Stage::Drafting),
-            (Stage::Drafting, Stage::Reviewing),
-            (Stage::Reviewing, Stage::Locked),
-        ]
-    );
+    // Asserted against `Advance::ALL` rather than a hand-written pair list: the
+    // type is now the forward graph's only home, so the expectation and the
+    // table are the same statement (SL-244 PHASE-01 EX-1).
+    assert_eq!(admitted, Advance::ALL.to_vec());
 
     // The verb rides the same table: a skip is refused even when every condition
     // in the run holds, so legality is not something clearance can buy.
@@ -106,6 +101,90 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
         ),
         Ok(Stage::Inquiring)
     );
+}
+
+/// The closed type's negative half (SL-244 PHASE-01 VT-1): every pair that is
+/// *not* one of the four adjacent forward moves resolves to `None`.
+///
+/// Separate from the admission test because the two fail differently. That one
+/// catches a missing edge; this one catches an extra one, and enumerates the
+/// three ways an extra could arrive — a self-move, a skip, a backward move —
+/// so a regression names which class it let through.
+#[test]
+fn advance_between_refuses_every_unlawful_pair() {
+    for stage in Stage::ALL {
+        assert_eq!(Advance::between(stage, stage), None, "self-move {stage:?}");
+    }
+
+    for (from, to) in [
+        (Stage::Exploring, Stage::Drafting),
+        (Stage::Exploring, Stage::Reviewing),
+        (Stage::Exploring, Stage::Locked),
+        (Stage::Inquiring, Stage::Reviewing),
+        (Stage::Inquiring, Stage::Locked),
+        (Stage::Drafting, Stage::Locked),
+    ] {
+        assert_eq!(Advance::between(from, to), None, "skip {from:?} → {to:?}");
+    }
+
+    // Every backward pair, derived rather than listed: a backward move is not an
+    // illegal transition, it is a different verb (`regress`), and `Advance` is
+    // deliberately the forward relation only.
+    for from in Stage::ALL {
+        for to in Stage::ALL {
+            if to < from {
+                assert_eq!(
+                    Advance::between(from, to),
+                    None,
+                    "backward {from:?} → {to:?}"
+                );
+            }
+        }
+    }
+}
+
+/// `from_stage` answers *which edge am I standing on the origin of* (SL-244
+/// PHASE-01 VT-2), and agrees with the two functions that already answer a
+/// stage-keyed question about the same edge.
+#[test]
+fn advance_from_stage_is_none_at_locked() {
+    assert_eq!(
+        Advance::from_stage(Stage::Exploring),
+        Some(Advance::ExploringInquiring)
+    );
+    assert_eq!(
+        Advance::from_stage(Stage::Inquiring),
+        Some(Advance::InquiringDrafting)
+    );
+    assert_eq!(
+        Advance::from_stage(Stage::Drafting),
+        Some(Advance::DraftingReviewing)
+    );
+    assert_eq!(
+        Advance::from_stage(Stage::Reviewing),
+        Some(Advance::ReviewingLocked)
+    );
+
+    // `Locked` is terminal, so there is no outbound forward edge to name — the
+    // same real answer `Fragment::for_stage` already gives there, asserted
+    // beside it so that `None` reads as the machine's shape and not as a gap.
+    assert_eq!(Advance::from_stage(Stage::Locked), None);
+    assert_eq!(super::prompt::Fragment::for_stage(Stage::Locked), None);
+
+    // The origin-keyed and edge-keyed selectors are the same question: each
+    // non-terminal stage's runbook is the one on the edge `from_stage` names.
+    for stage in Stage::ALL {
+        assert_eq!(
+            Advance::from_stage(stage).map(boundary_runbook),
+            match stage {
+                Stage::Exploring => Some(RunbookKey::Exploring),
+                Stage::Inquiring => Some(RunbookKey::Inquiring),
+                Stage::Drafting => Some(RunbookKey::Drafting),
+                Stage::Reviewing => Some(RunbookKey::Reviewing),
+                Stage::Locked => None,
+            }
+        );
+    }
 }
 
 #[test]

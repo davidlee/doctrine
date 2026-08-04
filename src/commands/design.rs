@@ -1738,7 +1738,10 @@ fn verifications(
     // The edge this act would cross, and only it — the guard is evaluated per
     // edge (`EX-16`), so re-checking a runbook the move does not face would
     // block on an obligation that is not at hand.
-    if design_run::gate::boundary_runbook(prior.run.stage, stage.to) != Some(facts.key) {
+    if design_run::gate::Advance::between(prior.run.stage, stage.to)
+        .map(design_run::gate::boundary_runbook)
+        != Some(facts.key)
+    {
         return results;
     }
     for step in facts.book.steps() {
@@ -1804,15 +1807,12 @@ fn check(
 
 /// The runbook on `stage`'s single outbound forward edge.
 ///
-/// `can_advance` is total on non-terminal stages — each has exactly one outbound
-/// forward edge — so asking "which runbook applies where the run stands" and
-/// asking "which runbook guards this edge" are the same question. This walks the
-/// stage order to find that edge rather than re-stating the table.
+/// Asking "which runbook applies where the run stands" and asking "which runbook
+/// guards this edge" are the same question, because
+/// [`design_run::gate::Advance::from_stage`] answers the first and the forward
+/// relation is closed. `Locked` has no outbound edge, so it has no runbook.
 fn forward_runbook(stage: Stage) -> Option<design_run::runbook::RunbookKey> {
-    Stage::ALL
-        .iter()
-        .find(|to| design_run::gate::can_advance(stage, **to))
-        .and_then(|to| design_run::gate::boundary_runbook(stage, *to))
+    design_run::gate::Advance::from_stage(stage).map(design_run::gate::boundary_runbook)
 }
 
 /// The process fragment the run's stage obliges, bound to its bytes by digest.

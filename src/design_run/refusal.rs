@@ -17,7 +17,7 @@ use super::ids::DesignId;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "refusal")]
 pub(crate) enum Refusal {
-    /// The stage move is not an edge of the [`super::gate::can_advance`] table.
+    /// The stage move is not an edge of the [`super::gate::Advance`] relation.
     IllegalStageMove { from: Stage, to: Stage },
     /// The move is a legal edge, but a cumulative gate condition does not hold
     /// against current content (DEC-066/DEC-067).

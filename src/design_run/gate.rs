@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Forward boundaries, cumulative clearance, and direct regression.
 //!
-//! [`can_advance`] is a `const fn` `matches!` table over the single-owner edge
+//! [`Advance`] is the closed forward relation and the single owner of the edge
 //! set, modelled on `src/review.rs::can` (EX-3). It is *modelled on*, not reused:
 //! `review` is tier `command` and this module is `leaf`, so importing it would be
 //! an upward edge. What is ridden is the idiom — one total, pure, const-evaluable
@@ -141,71 +141,131 @@ const fn widest_condition(rest: &[Condition]) -> usize {
 /// rendered-row arithmetic.
 const _: () = assert!(widest_condition(&Condition::ALL) <= DESIGN_ID_BYTES);
 
-/// Whether `from → to` is an edge of the forward boundary table.
+/// The design run's four guarded forward transitions (SL-244 sec-3).
 ///
-/// Pure, total, and `const`: the four adjacent forward moves of design §5.4, and
-/// every other combination — self-moves, skips, and every backward move —
-/// refused. A backward move is not illegal, it is a *different verb*
-/// ([`regress`]).
-pub(crate) const fn can_advance(from: Stage, to: Stage) -> bool {
-    matches!(
-        (from, to),
-        (Stage::Exploring, Stage::Inquiring)
-            | (Stage::Inquiring, Stage::Drafting)
-            | (Stage::Drafting, Stage::Reviewing)
-            | (Stage::Reviewing, Stage::Locked)
-    )
+/// The forward graph's single home. Every edge-keyed table below takes one of
+/// these rather than a `(Stage, Stage)` pair, and the difference is what the
+/// type buys: a pair has twenty-five values of which four are lawful, so a row
+/// keyed `(Exploring, Locked)` compiles, joins every set, and is never
+/// evaluated. Both directions close by construction — a table cannot name an
+/// unlawful transition because there is no such value to name, and it cannot
+/// leave a lawful one unguarded because the match would be non-exhaustive,
+/// which is a build failure.
+///
+/// **Forward only, and the asymmetry is deliberate.** The backward relation
+/// covers every later-to-earlier pair, not merely adjacent ones, and is barred
+/// by a missing *reason* rather than by a condition ([`regress`], DEC-067).
+/// Nothing is closed to enumerate on that side, so a counterpart type would
+/// assert a symmetry that does not exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Advance {
+    /// exploring → inquiring.
+    ExploringInquiring,
+    /// inquiring → drafting.
+    InquiringDrafting,
+    /// drafting → reviewing.
+    DraftingReviewing,
+    /// reviewing → locked.
+    ReviewingLocked,
 }
 
-/// The conditions a single forward boundary requires (design §5.4). Empty for a
-/// pair that is not an edge — [`can_advance`] is what refuses those.
-pub(crate) const fn boundary_conditions(from: Stage, to: Stage) -> &'static [Condition] {
-    match (from, to) {
-        (Stage::Exploring, Stage::Inquiring) => &[
+impl Advance {
+    /// Every forward edge, in forward order.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06/08 render the edge list")
+    )]
+    pub(crate) const ALL: [Advance; 4] = [
+        Advance::ExploringInquiring,
+        Advance::InquiringDrafting,
+        Advance::DraftingReviewing,
+        Advance::ReviewingLocked,
+    ];
+
+    /// The forward graph, written once.
+    ///
+    /// Pure, total, and `const`: the four adjacent forward moves of design §5.4,
+    /// and every other combination — self-moves, skips, and every backward move
+    /// — refused. A backward move is not illegal, it is a *different verb*
+    /// ([`regress`]).
+    pub(crate) const fn between(from: Stage, to: Stage) -> Option<Self> {
+        match (from, to) {
+            (Stage::Exploring, Stage::Inquiring) => Some(Advance::ExploringInquiring),
+            (Stage::Inquiring, Stage::Drafting) => Some(Advance::InquiringDrafting),
+            (Stage::Drafting, Stage::Reviewing) => Some(Advance::DraftingReviewing),
+            (Stage::Reviewing, Stage::Locked) => Some(Advance::ReviewingLocked),
+            _ => None,
+        }
+    }
+
+    /// The single forward edge leaving `stage`, if it has one.
+    ///
+    /// [`Advance::between`] is total on non-terminal stages — each has exactly
+    /// one outbound forward edge — so "which edge am I standing on the origin
+    /// of" is a well-posed question with a unique answer. `Locked` is terminal
+    /// and yields `None`, the same real answer
+    /// [`super::prompt::Fragment::for_stage`] gives there.
+    pub(crate) const fn from_stage(stage: Stage) -> Option<Self> {
+        match stage {
+            Stage::Exploring => Some(Advance::ExploringInquiring),
+            Stage::Inquiring => Some(Advance::InquiringDrafting),
+            Stage::Drafting => Some(Advance::DraftingReviewing),
+            Stage::Reviewing => Some(Advance::ReviewingLocked),
+            Stage::Locked => None,
+        }
+    }
+}
+
+/// The conditions a single forward boundary requires (design §5.4).
+///
+/// Total by construction: [`Advance`] has no value that is not an edge, so
+/// there is no empty arm to fall through to.
+pub(crate) const fn boundary_conditions(edge: Advance) -> &'static [Condition] {
+    match edge {
+        Advance::ExploringInquiring => &[
             Condition::GoverningContextRecorded,
             Condition::InitialConcernsRecorded,
         ],
-        (Stage::Inquiring, Stage::Drafting) => &[
+        Advance::InquiringDrafting => &[
             Condition::BlockingInquiriesDispositioned,
             Condition::UserAcceptsSufficiency,
         ],
-        (Stage::Drafting, Stage::Reviewing) => &[
+        Advance::DraftingReviewing => &[
             Condition::RequiredSectionsExist,
             Condition::MaterialisationCurrent,
         ],
-        (Stage::Reviewing, Stage::Locked) => &[
+        Advance::ReviewingLocked => &[
             Condition::SectionAttestationsCurrent,
             Condition::IntegratedReviewPresent,
             Condition::BlockingFindingsDisposed,
             Condition::UserAcceptanceAttested,
         ],
-        _ => &[],
     }
 }
 
-/// The runbook a single forward boundary requires discharged, if it has one.
+/// The runbook a single forward boundary requires discharged.
 ///
 /// A third column on the table [`boundary_conditions`] already is, and the same
-/// shape: static, `const`, total over the pair. Guards belong on **edges**, and
+/// shape: static, `const`, total over the edge. Guards belong on **edges**, and
 /// this one adds no states — the cursor it implies is run data a guard consults,
 /// not a node in the machine, exactly as [`ReviewStanding`] is (sketch §2.1).
 ///
 /// Edge-keying and origin-state-keying are isomorphic here, because
-/// [`can_advance`] is total on non-terminal stages: each has exactly one
+/// [`Advance::from_stage`] is total on non-terminal stages: each has exactly one
 /// outbound forward edge. So the `exploring` runbook is named for where you
 /// stand while discharging it, and selected by the edge it guards.
 ///
-/// Every forward edge now carries one (SL-233 PHASE-08). The `_ => None` arm
-/// covers the backward and non-adjacent pairs only: `Locked` is terminal, so it
-/// has no outbound forward edge to key a runbook to, which is the same fact that
-/// makes [`super::prompt::Fragment::for_stage`] yield `None` there.
-pub(crate) const fn boundary_runbook(from: Stage, to: Stage) -> Option<RunbookKey> {
-    match (from, to) {
-        (Stage::Exploring, Stage::Inquiring) => Some(RunbookKey::Exploring),
-        (Stage::Inquiring, Stage::Drafting) => Some(RunbookKey::Inquiring),
-        (Stage::Drafting, Stage::Reviewing) => Some(RunbookKey::Drafting),
-        (Stage::Reviewing, Stage::Locked) => Some(RunbookKey::Reviewing),
-        _ => None,
+/// Every forward edge carries one (SL-233 PHASE-08), and since SL-244 PHASE-01
+/// the type says so: with the backward and non-adjacent pairs unrepresentable
+/// there is no `None` arm left, so the return is a bare [`RunbookKey`]. The
+/// absence a caller standing at `Locked` sees is [`Advance::from_stage`]'s
+/// `None`, which is where that fact belongs.
+pub(crate) const fn boundary_runbook(edge: Advance) -> RunbookKey {
+    match edge {
+        Advance::ExploringInquiring => RunbookKey::Exploring,
+        Advance::InquiringDrafting => RunbookKey::Inquiring,
+        Advance::DraftingReviewing => RunbookKey::Drafting,
+        Advance::ReviewingLocked => RunbookKey::Reviewing,
     }
 }
 
@@ -220,7 +280,11 @@ pub(crate) fn cumulative_conditions(to: Stage) -> Vec<Condition> {
         if from >= to {
             break;
         }
-        out.extend_from_slice(boundary_conditions(from, next));
+        // Each window resolves to an edge before it reaches the boundary table;
+        // no `(Stage, Stage)` pair is threaded into it (SL-244 PHASE-01 EX-3).
+        if let Some(edge) = Advance::between(from, next) {
+            out.extend_from_slice(boundary_conditions(edge));
+        }
     }
     out
 }
@@ -292,7 +356,10 @@ pub(crate) fn advance(
     standing: ReviewStanding,
     runbook: Option<&RunbookStanding>,
 ) -> Result<Stage, Refusal> {
-    if !can_advance(from, to) {
+    // Legality is [`Advance::between`] and nothing else — the forward graph has
+    // one home, and this is the only production caller that asks it a yes/no
+    // question (SL-244 sec-3).
+    if Advance::between(from, to).is_none() {
         return Err(Refusal::IllegalStageMove { from, to });
     }
     // The runbook before the conditions, and the order is deliberate: the
@@ -309,18 +376,21 @@ pub(crate) fn advance(
     // existing conditions because they are global facts that rot independently
     // of where the run stands; a runbook is an entry ritual for one transition.
     // The first non-cumulative condition in the machine (`EX-16`).
-    if boundary_runbook(from, to).is_some() {
-        // Fail closed on a missing answer, the rule [`ReviewStanding::holds`]
-        // already follows: no standing where the table says a runbook guards
-        // this edge leaves the gate shut, not open.
-        if runbook.is_none_or(|held| !held.cleared()) {
-            return Err(Refusal::RunbookNotDischarged {
-                from,
-                to,
-                outstanding: runbook.map_or_else(Vec::new, |held| held.outstanding.clone()),
-                regressed: runbook.map_or_else(Vec::new, |held| held.regressed.clone()),
-            });
-        }
+    //
+    // Unconditional since SL-244 PHASE-01: [`boundary_runbook`] is total over
+    // [`Advance`], and the legality check above proves this pair is one, so the
+    // `is_some` test the pair form needed has no false arm left to guard.
+    //
+    // Fail closed on a missing answer, the rule [`ReviewStanding::holds`]
+    // already follows: no standing where the table says a runbook guards this
+    // edge leaves the gate shut, not open.
+    if runbook.is_none_or(|held| !held.cleared()) {
+        return Err(Refusal::RunbookNotDischarged {
+            from,
+            to,
+            outstanding: runbook.map_or_else(Vec::new, |held| held.outstanding.clone()),
+            regressed: runbook.map_or_else(Vec::new, |held| held.regressed.clone()),
+        });
     }
     let missing: Vec<Condition> = cumulative_conditions(to)
         .into_iter()

@@ -1321,7 +1321,9 @@ fn stage_move(
         // facts loaded for a different edge answers a different question, so it
         // is discarded rather than trusted.
         let runbook = facts
-            .filter(|facts| gate::boundary_runbook(from, to) == Some(facts.key))
+            .filter(|facts| {
+                gate::Advance::between(from, to).map(gate::boundary_runbook) == Some(facts.key)
+            })
             .map(|facts| {
                 facts
                     .book

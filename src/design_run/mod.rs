@@ -116,7 +116,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Landmarks, not an exhaustive FSM — inquiry lifecycle, cursor/posture, review,
 /// delegation, and recovery are separate state models (DEC-065, EX-4). The
-/// declaration order is the forward order, and [`gate::can_advance`] is the sole
+/// declaration order is the forward order, and [`gate::Advance`] is the sole
 /// authority on which moves between them are legal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
