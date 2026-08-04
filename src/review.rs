@@ -1228,62 +1228,101 @@ pub(crate) struct NewArgs {
 /// The empty-ledger RV is the real `Active`/await=`Raiser` state (D-C8).
 pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<ReviewOutput> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
+    mint_review(&root, args, entity::no_midpoint())
+}
 
+/// The content of a review about to be placed — derived from [`NewArgs`] once,
+/// then rendered for whichever id the placement yields. One renderer serves both
+/// placements (fresh mint and resume), so the two cannot drift into two shapes of
+/// the same record.
+struct ReviewDraft {
+    title: String,
+    slug: String,
+    review: ReviewMeta,
+    target: Target,
+}
+
+impl ReviewDraft {
+    fn from_args(args: &NewArgs) -> anyhow::Result<Self> {
+        let title = args
+            .title
+            .clone()
+            .unwrap_or_else(|| format!("{} review of {}", args.facet.as_str(), args.target));
+        let slug = crate::input::resolve_slug(&title, None)?;
+        Ok(Self {
+            title,
+            slug,
+            review: ReviewMeta {
+                facet: args.facet.as_str().to_owned(),
+                raiser: args.raiser.clone().unwrap_or_else(|| "raiser".to_owned()),
+                responder: args
+                    .responder
+                    .clone()
+                    .unwrap_or_else(|| "responder".to_owned()),
+            },
+            target: Target {
+                reference: args.target.clone(),
+                phase: args.phase.clone(),
+            },
+        })
+    }
+
+    /// The ledger, the brief, and the `NNN-slug` alias for a claimed `(id, canonical)`.
+    fn fileset(&self, id: u32, canonical: &str) -> anyhow::Result<entity::Fileset> {
+        let name = format!("{id:03}");
+        Ok(vec![
+            entity::Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/review-{name}.toml")),
+                body: render_review_toml(id, &self.slug, &self.title, &self.review, &self.target)?,
+            },
+            entity::Artifact::File {
+                rel_path: PathBuf::from(format!("{name}/review-{name}.md")),
+                body: render_review_md(canonical, &self.review.facet, &self.target.reference)?,
+            },
+            entity::Artifact::Symlink {
+                rel_path: PathBuf::from(format!("{name}-{}", self.slug)),
+                target: name,
+            },
+        ])
+    }
+}
+
+/// Mint an RV at a freshly reserved id, exposing the **id-claim midpoint**
+/// (DEC-086 steps 2–4). `review new` passes [`entity::no_midpoint`]; the design
+/// run's review pass passes a closure that journals the claimed canonical id
+/// before any byte is written, so recovery names the exact target from step 3 on.
+///
+/// Refactored out of `run_new` rather than added beside it — a second
+/// reservation+scaffold path is exactly the parallel implementation that drifts
+/// (`knowledge::create_record` records the same move for the record kinds).
+pub(crate) fn mint_review(
+    root: &Path,
+    args: &NewArgs,
+    on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
+) -> anyhow::Result<ReviewOutput> {
     // Forward-edge validation (design §7): refuse a dangling / unknown target
     // BEFORE claiming an id. Reuses the corpus id table (crate::kinds::KINDS).
     // Structured as `DanglingRef` (IMP-107) so the MCP transport maps it to
     // `DANGLING_REF` carrying the target, not a generic Internal.
-    crate::kinds::ensure_ref_resolves(&root, &args.target).map_err(|_unresolved| {
+    crate::kinds::ensure_ref_resolves(root, &args.target).map_err(|_unresolved| {
         ReviewError::DanglingRef {
             target: args.target.clone(),
         }
     })?;
 
-    let title = args
-        .title
-        .clone()
-        .unwrap_or_else(|| format!("{} review of {}", args.facet.as_str(), args.target));
-    let slug = crate::input::resolve_slug(&title, None)?;
-    let review = ReviewMeta {
-        facet: args.facet.as_str().to_owned(),
-        raiser: args.raiser.clone().unwrap_or_else(|| "raiser".to_owned()),
-        responder: args
-            .responder
-            .clone()
-            .unwrap_or_else(|| "responder".to_owned()),
-    };
-    let target = Target {
-        reference: args.target.clone(),
-        phase: args.phase.clone(),
-    };
-
-    let trunk_ids = crate::git::trunk_entity_ids(&root, REVIEW_DIR)?;
+    let draft = ReviewDraft::from_args(args)?;
+    let trunk_ids = crate::git::trunk_entity_ids(root, REVIEW_DIR)?;
     let (backend, mut reserved) =
-        crate::reserve::backend(&root, REVIEW_KIND.prefix, crate::install::prompt_confirm)?;
-    let out: Materialised = entity::materialise_fresh_prebuilt(
+        crate::reserve::backend(root, REVIEW_KIND.prefix, crate::install::prompt_confirm)?;
+    let out: Materialised = entity::materialise_fresh_prebuilt_hooked(
         &*backend,
-        &root,
+        root,
         REVIEW_DIR,
         REVIEW_KIND.prefix,
         &trunk_ids,
         &mut reserved,
-        |id, canonical| {
-            let name = format!("{id:03}");
-            Ok(vec![
-                entity::Artifact::File {
-                    rel_path: PathBuf::from(format!("{name}/review-{name}.toml")),
-                    body: render_review_toml(id, &slug, &title, &review, &target)?,
-                },
-                entity::Artifact::File {
-                    rel_path: PathBuf::from(format!("{name}/review-{name}.md")),
-                    body: render_review_md(canonical, &review.facet, &target.reference)?,
-                },
-                entity::Artifact::Symlink {
-                    rel_path: PathBuf::from(format!("{name}-{slug}")),
-                    target: name,
-                },
-            ])
-        },
+        on_reserved,
+        |id, canonical| draft.fileset(id, canonical),
     )?;
 
     let id = out
@@ -1295,6 +1334,24 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<R
         canonical: canonical_id(id),
         dir: out.dir,
     })
+}
+
+/// Scaffold a review into an **already-reserved** id (DEC-086 step 4, on resume).
+///
+/// The reservation is the caller's — claimed and journalled before the crash —
+/// so this claims nothing and refuses to clobber. It deliberately does **not**
+/// re-run the forward-edge check: the target resolved when the intent was
+/// journalled, and a refusal here would strand an intent nothing can discharge.
+pub(crate) fn materialise_review_at(root: &Path, id: u32, args: &NewArgs) -> anyhow::Result<()> {
+    let draft = ReviewDraft::from_args(args)?;
+    entity::materialise_prebuilt_at(
+        root,
+        REVIEW_DIR,
+        REVIEW_KIND.prefix,
+        id,
+        &draft.fileset(id, &canonical_id(id))?,
+    )?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -3437,6 +3494,87 @@ mod tests {
             Some(ReviewError::DanglingRef { target }) => assert_eq!(target, "ZZ-001"),
             other => panic!("expected DanglingRef, got {other:?}"),
         }
+    }
+
+    // -- the mint's two halves (SL-244 PHASE-04 T5, DEC-086 steps 3–4) --------
+
+    /// The id-claim midpoint reaches the RV mint: `on_reserved` runs on the
+    /// claimed id before any authored byte, and the id it names is the one the
+    /// review lands at. That equality is the whole point — from step 3 onward,
+    /// recovery names the exact target.
+    #[test]
+    fn mint_review_offers_the_claimed_id_before_writing_the_ledger() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 24);
+        let seen = std::cell::RefCell::new(None);
+
+        let out = mint_review(root, &new_args(Facet::Design, "SL-024"), |id, canonical| {
+            assert!(
+                !root.join(REVIEW_DIR).join("001/review-001.toml").exists(),
+                "the midpoint runs before any authored byte"
+            );
+            *seen.borrow_mut() = Some((id, canonical.to_owned()));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(seen.into_inner(), Some((1, "RV-001".to_owned())));
+        match out {
+            ReviewOutput::Created { id, canonical, .. } => {
+                assert_eq!(
+                    (id, canonical.as_str()),
+                    (1, "RV-001"),
+                    "mints what it named"
+                );
+            }
+            other => panic!("expected Created, got {other:?}"),
+        }
+        assert!(read_review(&root.join(REVIEW_DIR), 1).is_ok());
+    }
+
+    /// The resume half: the reservation was claimed and journalled before the
+    /// crash, so step 4 writes into *that* id rather than claiming a second.
+    #[test]
+    fn materialise_review_at_writes_into_the_journalled_reservation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 24);
+        let review_root = root.join(REVIEW_DIR);
+        std::fs::create_dir_all(review_root.join("003")).unwrap();
+
+        materialise_review_at(root, 3, &new_args(Facet::Design, "SL-024")).unwrap();
+
+        let doc = read_review(&review_root, 3).unwrap();
+        assert_eq!(doc.id, 3);
+        assert_eq!(doc.target.reference, "SL-024");
+        assert!(read_brief(&review_root, 3).unwrap().contains("## Brief"));
+        assert_eq!(
+            entity::scan_ids(&review_root).unwrap(),
+            vec![3],
+            "no second reservation claimed on resume"
+        );
+    }
+
+    /// A resume that races a completed write reports rather than overwrites —
+    /// the reservation is not a licence to clobber the record it already holds.
+    #[test]
+    fn materialise_review_at_refuses_to_overwrite_a_completed_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        plant_slice_target(root, 24);
+        let review_root = root.join(REVIEW_DIR);
+        mint_review(
+            root,
+            &new_args(Facet::Design, "SL-024"),
+            entity::no_midpoint(),
+        )
+        .unwrap();
+
+        let err = materialise_review_at(root, 1, &new_args(Facet::Design, "SL-024")).unwrap_err();
+
+        assert!(err.to_string().contains("Refusing to overwrite"), "{err}");
+        assert_eq!(read_review(&review_root, 1).unwrap().id, 1, "record intact");
     }
 
     /// `Facet::parse` accepts the closed 7-set and rejects `drift` (D-C11) /
