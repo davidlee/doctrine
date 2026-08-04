@@ -74,12 +74,19 @@ remembered one. Each is a live risk to this design, not a general caution.
   this design replaces with an act that cannot be reconstructed from what is
   stored — an active, cumulative row, so it bars the next forward move. It holds
   three declared sections and has never been materialised, so nothing else it
-  holds is at stake, and the repair is two acts rather than a migration: the user
-  re-gives the acceptance as `SufficiencyAccepted`, and the agent declares
-  `DraftingReady` — a condition this design *adds* to the very edge that run is
-  standing at, which is why the second act is a cost and not just workflow. The
-  concern is retained because the next live run need not be this cheap, not
-  because this one is expensive.
+  holds is at stake, and the repair is five acts rather than a migration. Two are
+  what its own stage owes: the user re-gives the acceptance as
+  `SufficiencyAccepted`, and the agent declares `DraftingReady` — a condition
+  this design *adds* to the very edge that run is standing at, which is why that
+  act is a cost and not just workflow. Three more are `DEC-139`'s. Activating the
+  two `exploring → inquiring` checkpoints guards every edge above them, and no
+  live run holds an exploring-stage act or can acquire one retroactively, so
+  `GovernanceConfirmed`, `GraphReviewed` and `BlockingSetDeclared` fall due by
+  hand at the next forward move. The user accepted that bill (2026-08-04) as
+  smaller than it reads: this slice's own run locks before the code lands, so
+  `SL-243` is the only live run owing a repair, and its nine-node map is worth a
+  review pass regardless. The concern is retained because the next live run need
+  not be this cheap, not because this one is expensive.
 - **Envelope byte budget.** The refusal path has no byte budget; the envelope has
   a hard one, and `clearances` already rides it uncapped. Anything this design
   adds to the envelope competes with that.
@@ -103,9 +110,12 @@ already use. If that seam is built later, this design's choice becomes a
 constraint it need not have accepted.
 
 **Interim states this slice knowingly ships**, stated rather than accidental:
-`exploring → inquiring` passes on the runbook alone until `IMP-391` builds the
-attested checkpoints; the `Conducted { review }` arm and the severity summary are
-unbuildable until `IMP-392` migrates findings onto `RV`.
+`exploring → inquiring` is guarded from this slice (`DEC-139`), but its
+*interaction* is not finished — no runbook step prompts for the two checkpoint
+acts and no CLI renders the governance edge set, so until `IMP-391` lands the
+user confirms an artefact the agent paraphrases; the `Conducted { review }` arm
+and the severity summary are unbuildable until `IMP-392` migrates findings onto
+`RV`.
 <!-- doctrine:section sec-3 -->
 ## The condition model
 
@@ -782,33 +792,54 @@ have been a guard whatever its force. It renders as one line of four counts,
 omitted entirely when every count is zero — the same render-only-when-it-says-
 something rule the currency flag follows, so neither warning has a passive cost.
 
-### Activation: the model this slice can turn on
+### Every row is enforced, and there is no activation axis
 
-`Activation` exists for one job: stop a row that **cannot be satisfied** from
-barring the edge forever.
+An earlier draft carried an `Activation` axis — `Active | Pending { blocked_on }`
+— for one job: stop a row that **cannot be satisfied** from barring its edge
+forever. It ends with no members, and this design does not build it.
 
-```rust
-pub(crate) enum Activation {
-    Active,
-    /// Specified now, enforced when the named work lands.
-    Pending { blocked_on: &'static str },
-}
-```
+**Two rows were its whole membership, and `DEC-139` activates both.**
+`governing-context-recorded` and `initial-concerns-recorded` were `Pending` on
+`IMP-391`, on the ground that until the checkpoints exist there is no act to
+attest, so the rows would bar `exploring → inquiring` permanently. `RV-344`'s
+`F-3` falsified the ground rather than the ruling: `sec-4` ships the wire acts
+and the artefact storage for all three acts involved — `GovernanceConfirmed`,
+`GraphReviewed` and `BlockingSetDeclared` — which are two of `IMP-391`'s five
+deliverables, so the act exists and the slice was doing the follow-on's work
+while still declining the guard. What `IMP-391` keeps is the *interaction*: the
+runbook prompting, the CLI rendering of the governance edge set, and the
+empty-case affordance. That is an interim on how well the edge is served, not on
+whether it is guarded, and `sec-2` states it as one.
 
-Two rows qualify, and both were stated as interim rather than discovered:
-`governing-context-recorded` and `initial-concerns-recorded` are `Pending` on
-`IMP-391`, because until the checkpoints exist there is no act to attest and the
-rows would bar `exploring → inquiring` permanently.
+The cost is what made this a decision rather than a correction. Both rows are
+`Cumulative`, so activating them filters at every edge above and not only at
+their own — and no live run holds an exploring-stage act or can acquire one
+retroactively, so activation retro-bars every run in flight. The user accepted
+hand repair (2026-08-04); `sec-2` prices the one run that owes it. The remaining
+objection — that an agent meets a guarded edge with nothing prompting it — is
+answered by the mechanism this slice ships rather than deferred: `sec-5`'s
+stage-entry receipt delivers both contracts at `exploring`, and declining to
+enforce here would mean shipping that receipt and then not using it on the one
+edge that most needs it.
 
-`review-disposition-attested` does **not** qualify, and an earlier draft's
-"partly pending" cell was wrong. `DEC-125` gives it
+**`review-disposition-attested` was never a member either**, and an earlier
+draft's "partly pending" cell was wrong. `DEC-125` gives it
 `Conducted { review } | Waived { reason }` and only `Conducted` is unbuildable
 against the runtime `Finding` model; `Waived` works, so the condition is
-satisfiable, so it never bars the edge and needs no activation exception. It is
-`active`, and the missing arm is what it actually is — an unbuilt enum variant
-tracked by `IMP-392`. The workflow consequence is stated rather than hidden:
-until `IMP-392` lands, `reviewing → locked` is crossable by *waiving* review with
-a stated reason, and the refusal text says so.
+satisfiable, so it never bars the edge and needs no exception. The missing arm is
+what it actually is — an unbuilt enum variant tracked by `IMP-392`. The workflow
+consequence is stated rather than hidden: until `IMP-392` lands,
+`reviewing → locked` is crossable by *waiving* review with a stated reason, and
+the refusal text says so.
+
+So the axis has nothing left to classify, and dropping it is this section's own
+standard applied to itself: `required-sections-exist` was retired for having no
+implementation to extend, and a two-variant enum no row takes the second variant
+of is the same shape one axis over. What replaces it is a flat obligation — the
+table may not hold a row nothing can satisfy — and `sec-4` is where the one way
+to write such a row is caught at compile time. Invariant 6 below is the same
+statement from the other side, and it becomes unqualified: every condition bars
+a move, with no row specified-but-not-enforced sitting under the claim.
 
 **`Waived` is a permanent arm, not an interim crutch**, and the sentence above
 would read as the opposite left on its own. `DEC-125` gives the row two arms
@@ -1070,39 +1101,39 @@ for `Conducted` until the migration lands. That is the footing `DEC-125` sets:
 *"SL-244 specifies its conditions against the RV-backed model; the migration is
 its own item."*
 
-Activation is a column on the one classification table rather than a second table
-to drift against the first, and the enforced set is that table filtered:
+With that axis gone there is **one** filter, and the enforced set is the
+classification table under it:
 
 - `boundary_conditions` returns the **unfiltered** target row set for the edge —
   still `const`, still total. Its parameter changes from `(Stage, Stage)` to the
-  closed `Advance` type introduced below; what it returns does not. It is what
-  the `DEC-124` stage-entry renderer reads, which is how `Pending` rows are shown
-  to the agent marked not-yet-enforced — so that renderer resolves
-  `Advance::between` first, as `advance` itself will.
+  closed `Advance` type introduced below; what it returns does not.
 - `cumulative_conditions(to)` — already non-`const` and already `Vec`-returning —
-  applies both filters, reach and activation, as it accumulates.
+  applies the reach filter as it accumulates, and resolves `Advance::between`
+  first, as `advance` itself will.
 
-Neither filter costs a `const`: a `const fn` matching on `Advance` is still one.
-`boundary_conditions` has exactly one caller today (`gate.rs:223`, inside
-`cumulative_conditions`), and it is the enforcement path where the filter
-belongs, so the two sets never had to share a name.
+The filter costs no `const`: a `const fn` matching on `Advance` is still one.
+`boundary_conditions` has one caller today (`gate.rs:223`, inside
+`cumulative_conditions`) and gains a second in `sec-6`, whose edge table renders
+each edge's *own* rows beside the set it is judged by. That is why the two never
+had to share a name: an edge's boundary and its enforced set are different
+questions, and only the second is the gate's.
 
 ### The classification
 
 `DEC-126`, restated only as far as this section's vocabulary needs. Ten in, nine
 out: **two Derived, seven Attested, zero Claimed.**
 
-| condition | derivation | coverage | observed | reach | activation |
-|---|---|---|---|---|---|
-| `blocking-inquiries-dispositioned` | `Engine(Dispositions)` | — | — | cumulative | active |
-| `materialisation-current` | `Engine(Materialisation)` | — | — | cumulative | active |
-| `governing-context-recorded` | `Attested([{GovernanceConfirmed, User}])` | artefact | `[GovernanceEdges]` | cumulative | pending `IMP-391` |
-| `initial-concerns-recorded` | `Attested([{GraphReviewed, User, confirms BlockingSetDeclared}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative | pending `IMP-391` |
-| `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | inquiry map | — | cumulative | active |
-| `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local | active |
-| `section-attestations-current` | `Attested([{SectionReviewed, RunPolicy}])` | per section | — | cumulative | active |
-| `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative | active |
-| `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative | active |
+| condition | derivation | coverage | observed | reach |
+|---|---|---|---|---|
+| `blocking-inquiries-dispositioned` | `Engine(Dispositions)` | — | — | cumulative |
+| `materialisation-current` | `Engine(Materialisation)` | — | — | cumulative |
+| `governing-context-recorded` | `Attested([{GovernanceConfirmed, User}])` | artefact | `[GovernanceEdges]` | cumulative |
+| `initial-concerns-recorded` | `Attested([{GraphReviewed, User, confirms BlockingSetDeclared}, {BlockingSetDeclared, Agent}])` | inquiry map | — | cumulative |
+| `user-accepts-sufficiency` | `Attested([{SufficiencyAccepted, User}])` | inquiry map | — | cumulative |
+| `drafting-readiness-attested` | `Attested([{DraftingReady, Agent}])` | artefact | — | edge-local |
+| `section-attestations-current` | `Attested([{SectionReviewed, RunPolicy}])` | per section | — | cumulative |
+| `review-disposition-attested` | `Attested([{ReviewDisposed, User}])` | artefact | — | cumulative |
+| `user-acceptance-attested` | `Attested([{DesignAccepted, User}])` | every section | — | cumulative |
 
 **Retired:** `required-sections-exist` — no implementation to extend, and a
 mandatory section list is craft under `DEC-102`.
@@ -1182,7 +1213,6 @@ name only what the row's coverage can observe.
 pub(crate) struct Contract {
     pub(crate) derivation: DerivationRule,
     pub(crate) reach: Reach,
-    pub(crate) activation: Activation,
     /// Key of the narrative prose asset — the condition's existing kebab token.
     pub(crate) prose: &'static str,
 }
@@ -1407,8 +1437,10 @@ generator emits and what both tests iterate.
 - **Edge-local is not accumulated** — `drafting-readiness-attested` is required
   crossing `drafting → reviewing` and absent from the enforced set crossing
   `reviewing → locked`.
-- **`Pending` rows are not enforced** — and are still returned by
-  `boundary_conditions` for the renderer.
+- **The bottom edge is guarded** — `exploring → inquiring` enforces two
+  conditions, so a run holding neither checkpoint act is refused there. Asserted
+  because that edge passed unconditionally before `DEC-139`, and because it is
+  the edge whose enforced set every later edge inherits.
 - **The currency lamp is rendered and never refuses** — a stale integrated pass
   sets the envelope flag and `reviewing → locked` still succeeds. Tested at the
   render surface, not the gate, because it is not a condition.
@@ -1473,18 +1505,17 @@ generator emits and what both tests iterate.
   What is the same on both arms is that neither is degraded: `Waived` is a
   permanent arm, not the interim's stand-in for `Conducted`.
 - `review-disposition-attested`'s `Conducted { review }` arm awaits `IMP-392`.
-  It is an unbuilt variant, not a pending row.
+  It is an unbuilt variant, not an unsatisfiable row — `Waived` clears the edge
+  throughout the interim, which is why the row needed no exception when there
+  was still an axis to take one on.
 - Whether `ObservedFact` grows beyond `GovernanceEdges` is left open. One member
   is enough to justify the seam — the alternative is a special case in `satisfied`
-  for exactly one condition — but a second member would test whether the
-  refresh/compare/absence semantics generalise. **And the one member has no
-  enforced consumer in this slice**: `GovernanceEdges` is named only by
-  `governing-context-recorded`, which is `Pending` on `IMP-391`, so it is
-  filtered out of the enforced set and nothing compares it until that work
-  lands. The seam is specified alongside the act it serves, which is the right
-  place to specify it; but the argument above is weaker than it reads, because
-  the alternative this slice actually faces is not one special case — it is
-  none.
+  for exactly one condition — and `DEC-139` gives that member an enforced
+  consumer: `governing-context-recorded` is active, so the edge set is refreshed
+  and compared on every evaluation from the bottom edge up. What stays open is
+  whether a *second* member is ever wanted; one would test whether the
+  refresh/compare/absence semantics generalise, and until one exists they are
+  specified against a single case.
 - Research currency is the third instance of the reach question and is **not** in
   this vocabulary. It is a warning-shaped fact by the same convergence argument,
   it lives outside the design run today, and settling it is outside `SL-244`.
@@ -1807,10 +1838,12 @@ a record that cannot hold it*. That is false, and the reason is worth keeping:
 `{ act: BlockingSetDeclared, actor: Fixed(Agent), confirms: Some(…) }` is a
 perfectly well-typed row. It compiles, it joins every generated set, and every
 `AgentDeclaration` written against it is then refused at admission for lacking a
-slot no agent record has — an **active condition that nothing can satisfy**,
-which is precisely the state `Activation` exists to keep out of the table.
-Claiming unrepresentability where only rejection is delivered is the same
-overclaim this section corrects for `AgentActKind` two subsections down.
+slot no agent record has — an **enforced condition that nothing can satisfy**,
+which is the one shape the table may not hold. `sec-3` retires its activation
+axis on the strength of there being no such row, so there is no longer any way
+to *mark* one either: this is where it has to be caught instead. Claiming
+unrepresentability where only rejection is delivered is the same overclaim this
+section corrects for `AgentActKind` two subsections down.
 
 So the check is generated, not typed: the macro that emits `CONTRACTS` also emits
 a compile-time assertion per row that a requirement naming `confirms`, a
@@ -2204,8 +2237,9 @@ it:
 > human and adversarial review in either order.
 
 That is the same shape `DEC-121` found on the exploring edge: an interaction
-`SL-233` specified and never built, whose residue is a condition that looks
-enforced and is not. `ISS-310` is what this particular absence looks like from
+`SL-233` specified and never built, whose residue was a condition that looked
+enforced and was not. That instance closes here — `DEC-139` activates both
+exploring rows — and `ISS-310` is what the same absence looks like from
 the gate's side — `Reviewer` is recorded on every attestation and read by
 nothing, which the tree states about itself at `attestation.rs:77-80`: *"read
 surface with no reader — the gate derives review standing from coverage, not from
@@ -2599,11 +2633,11 @@ rather than being authored anywhere.
 
 What is injected is every field `sec-3`'s `Contract` holds except the prose key
 itself: the derivation's kind, the acts it names with their required actors, the
-binding, the reach, and the activation. Reach and activation are injected for the
-same reason as the kind — they are exactly the properties a prose author would
-restate and get wrong, and `Pending` in particular must render *marked
-not-yet-enforced* rather than being described as enforced by prose written before
-`IMP-391` lands.
+binding, the observed facts the rule compares, and the reach. Reach is injected
+for the same reason as the kind — they are exactly the properties a prose author
+would restate and get wrong. There is no activation to inject: `sec-3` retires
+that axis, and the receipt renders an edge's enforced set, so every contract in a
+block is one the edge in front of the reader actually judges by.
 
 **`DEC-124`'s no-digest rationale survives `sec-4`, and one shape is why.** That
 record rejects a digested receipt because *"a contract is a pure function of the
@@ -2622,12 +2656,13 @@ instead, both payments would have been lost together.
 addressing consequence reads *"at reviewing→locked the set is all ten"*. The
 citation resolves — `cumulative_conditions` is `gate.rs:212-226` and does
 accumulate every edge below the target — but the vocabulary is nine now, and the
-enforced set at that edge is **six**: `governing-context-recorded` and
-`initial-concerns-recorded` are filtered by activation, `drafting-readiness-attested`
-by reach. Three of the six are inherited from edges below. The consequence the
-number was supporting — an agent can fail at the last edge on an earlier edge's
-condition, so addressing must be per-condition — is untouched, and is what the
-rest of this section builds against.
+enforced set at that edge is **eight**: one row, `drafting-readiness-attested`,
+is filtered by reach, and no row is filtered by anything else. Five of the eight
+are inherited from edges below. The consequence the number was supporting — an
+agent can fail at the last edge on an earlier edge's condition, so addressing
+must be per-condition — is untouched, and is what the rest of this section
+builds against; the correction makes it heavier rather than lighter, since the
+inherited majority now includes two conditions from the bottom edge.
 
 ### The refusal carries a const remedy and a run-shaped complaint
 
@@ -2918,44 +2953,40 @@ block take it. A locked run emits neither, which is the same real answer
 `Fragment::for_stage` and `boundary_runbook` already give at that stage — no
 outbound edge, nothing to guard, nothing to deliver.
 
-**Which contracts the receipt carries.** Exactly two things, unioned:
+**Which contracts the receipt carries.** Exactly one thing:
 
-> the **enforced set** at the edge — `cumulative_conditions` after both filters —
-> **plus** the `Pending` rows on that edge's own boundary, marked not-yet-enforced.
+> the **enforced set** at the edge — `cumulative_conditions`, reach-filtered and
+> accumulated.
 
-The first half is a reading of `DEC-124`'s *"the contracts for that stage's
-outbound edge"*, and it is the wider of the two available: what the edge judges
-by, not the edge's own rows alone. The narrow reading would hand an agent
-standing at `reviewing` a receipt covering three conditions while the edge it is
-about to cross judges six, and the three it omitted are exactly the ones an agent
-is least likely to have seen — they were inherited from stages it may never have
+That is a reading of `DEC-124`'s *"the contracts for that stage's outbound
+edge"*, and it is the wider of the two available: what the edge judges by, not
+the edge's own rows alone. The narrow reading would hand an agent standing at
+`reviewing` a receipt covering three conditions while the edge it is about to
+cross judges eight, and the five it omitted are exactly the ones an agent is
+least likely to have seen — they were inherited from stages it may never have
 stood at.
 
-The second half is what stops that from over-delivering. `Pending` rows are
-`Cumulative` too, so a rule of *reach-filtered, activation-annotated* would carry
-`governing-context-recorded` and `initial-concerns-recorded` into every later
-edge's receipt — eight contracts at `reviewing → locked`, two of them describing
-work that will not be asked for there and, once `IMP-391` lands, will already
-have been done two stages earlier. Restricting the annotated rows to the current
-boundary shows a `Pending` row exactly where an agent can act on it, which is the
-edge it guards.
+An earlier draft unioned a second half onto this — the not-yet-enforced rows on
+the edge's own boundary, marked as such — because two conditions were specified
+and not enforced. `DEC-139` enforces both, so there is no such row to annotate
+and the union has one operand. The rule is simpler than it was and covers
+strictly more: an agent at `exploring` gets the two contracts it must discharge
+to leave, and gets them because the edge judges by them, not as a preview.
 
-So the counts are: **four** at `drafting → reviewing`, **six** at
-`reviewing → locked`, and **two** at `exploring → inquiring` — both of them
-`Pending`, which is the honest picture of an edge that today passes on the
-runbook alone. Small, bounded by the vocabulary, delivered once.
+So the counts are **two** at `exploring → inquiring`, **four** at
+`inquiring → drafting`, **six** at `drafting → reviewing` and **eight** at
+`reviewing → locked`. Small, bounded by the vocabulary, delivered once, and
+monotone up the machine — which is the shape the receipt exists to make legible.
 
 `DEC-124`'s per-condition **addressing** consequence was argued against the narrow
 reading, and it survives over-satisfaction: the refusal cites one condition at a
 time whatever the receipt carried, and a future pull verb needs the address
 whether or not the receipt happened to include it.
 
-Neither half needs a third accumulator. The enforced set *is*
-`cumulative_conditions`, unchanged in signature and behaviour; the pending rows
-are `boundary_conditions` for the one edge, filtered to `Pending` — which is what
-`sec-3` already committed that function to supporting by returning its rows
-unfiltered. The renderer composes two functions it does not reimplement, so
-there is no second copy of the reach rule to drift from the gate's.
+The receipt needs no accumulator of its own. The enforced set *is*
+`cumulative_conditions`, unchanged in signature and behaviour; the renderer calls
+the function the gate calls, so there is no second copy of the reach rule to
+drift from the gate's.
 
 **Where the prose lives.** `design-prompts/conditions/<token>.md` — the store
 `DEC-122` names, in a subdirectory of it.
@@ -3027,24 +3058,40 @@ renderer's.
 
 ```
 contracts drafting-reviewing
-contract blocking-inquiries-dispositioned derived engine(dispositions) cumulative active
+contract governing-context-recorded attested artefact observes(governance-edges) cumulative
+  discharge: the user confirms the governing context (GovernanceConfirmed)
+  <narrative asset body>
+contract initial-concerns-recorded attested inquiry-map cumulative
+  discharge: the agent declares the blocking set (BlockingSetDeclared), then the user reviews the graph (GraphReviewed)
+  <narrative asset body>
+contract blocking-inquiries-dispositioned derived engine(dispositions) cumulative
   discharge: dispose every blocking inquiry on the map
   <narrative asset body>
-contract user-accepts-sufficiency attested inquiry-map cumulative active
+contract user-accepts-sufficiency attested inquiry-map cumulative
   discharge: the user accepts sufficiency (SufficiencyAccepted)
   <narrative asset body>
-contract materialisation-current derived engine(materialisation) cumulative active
+contract materialisation-current derived engine(materialisation) cumulative
   discharge: materialise the run's declared sections
   <narrative asset body>
-contract drafting-readiness-attested attested edge-local active
+contract drafting-readiness-attested attested artefact edge-local
   discharge: the agent declares DraftingReady
   <narrative asset body>
 ```
 
-Four, not the edge's own two — the first two are inherited from
-`inquiring → drafting`, which is the whole reason the receipt is the enforced set.
-No `Pending` row appears here, because both of them sit on `exploring → inquiring`
-and this is not that boundary.
+Six, not the edge's own two — four are inherited, two of them from
+`exploring → inquiring`, which is the whole reason the receipt is the enforced
+set. Nothing is elided for being unenforced, because after `DEC-139` there is no
+such row.
+
+**Two field-set details the block makes visible.** The `observed` column is
+injected where a rule has one, and `governing-context-recorded` is the row that
+made this necessary: its `Artefact` coverage is inert by construction, so the
+observed edge set is the entire live half of the condition, and a receipt that
+named only the act would tell the reader the wrong thing about what keeps the row
+current. It was invisible while that row was unenforced. And coverage renders on
+every attested row including `Artefact` ones, rather than being elided as a
+default — the field set is the commitment, so a row that renders one field fewer
+than its neighbour reads as a row with one fewer property.
 
 Declared held, the header lines still ride and the bodies do not — the same rule
 `fragment_section` follows, and for the reason its doc gives: *"a caller that
@@ -3142,15 +3189,20 @@ feed is untouched, on `sec-4`'s stated ground.
   mismatched coverage and a missing observed key yields two `ActFault`s in one
   refusal, the same not-just-the-first rule `causes` follows.
 - **The receipt covers what the edge judges by** — at `reviewing` the block
-  carries six contracts, three of them from edges below, and at `drafting` four,
-  two of them from below. Asserted as set equality against
+  carries eight contracts, five of them from edges below, and at `drafting` six,
+  four of them from below. Asserted as set equality against
   `cumulative_conditions` for that edge, not as a count, so the test does not
   pass on the right number of wrong rows.
-- **A `Pending` row renders marked, on its own boundary and nowhere else** —
-  `governing-context-recorded` appears in the `exploring` receipt annotated
-  not-yet-enforced, does not appear in the refusal for that edge, and does not
-  appear in the `reviewing` receipt at all. The third clause is what distinguishes
-  this rule from reach-filtered-and-annotated, which would carry it everywhere.
+- **The bottom edge's receipt is its own boundary and nothing more** — the
+  `exploring` block carries exactly `governing-context-recorded` and
+  `initial-concerns-recorded`, and both also appear in the `reviewing` block.
+  Asserted together because the pair is what an accumulating receipt means, and
+  because the second clause is what the retired not-yet-enforced annotation would
+  have got wrong.
+- **A rule's observed facts render** — `governing-context-recorded`'s block
+  names `GovernanceEdges`, and no other contract carries an observed token.
+  Asserted against `CONTRACTS` rather than as a literal, so a second member joins
+  the render for free.
 - **A declared receipt elides bodies and keeps identity** — `--known-contracts
   drafting-reviewing` suppresses every narrative body and no header line.
 - **An unknown or mismatched edge token elides nothing** — the bodies ride, on
@@ -3244,9 +3296,9 @@ is derived:
    The inherited column is the point of the table; it is the fact no local view
    carries.
 3. **The conditions** — a table, one row per `Condition`: token, kind, the act
-   that discharges it and who must author it, reach, and activation. Every column
-   is a projection of the `CONTRACTS` row, so this table and `sec-5`'s injected
-   contract header cannot disagree.
+   that discharges it and who must author it, its binding, and reach. Every
+   column is a projection of the `CONTRACTS` row, so this table and `sec-5`'s
+   injected contract header cannot disagree.
 4. **Backward moves** — fixed prose, because there is nothing to derive:
    `sec-3` establishes that the backward relation is not enumerable and that a
    regression is guarded by a stated reason rather than by conditions.
@@ -3276,8 +3328,8 @@ transfers whole. Rendering a string is pure, so `ADR-001`'s layering is
 untouched.
 
 **The golden test compares the rendered string to the embedded bytes.** A
-vocabulary addition, a reach change, an activation flip or a new edge all move
-the render and fail the test until the file is re-rendered, which is what makes
+vocabulary addition, a reach change, a binding change or a new edge all move the
+render and fail the test until the file is re-rendered, which is what makes
 `DEC-127`'s *ensured up to date* structural rather than a promise.
 
 **What it is pinned to has moved, and the citation still holds.** `DEC-127` says
@@ -3360,8 +3412,8 @@ and is not this slice's to sweep.
   boundary rows. Asserted because that column is the artefact's reason to exist
   and is the one a hand-render would get wrong.
 - **The diagram and the contract headers agree** — for each condition, the kind,
-  discharging act, reach and activation rendered here equal what `sec-5`'s
-  receipt injects. Two renderings of one `CONTRACTS` row, asserted equal.
+  discharging act, binding and reach rendered here equal what `sec-5`'s receipt
+  injects. Two renderings of one `CONTRACTS` row, asserted equal.
 - **It is published** — the existing disk-source reachability gate covers this,
   so the manifest entry is not optional.
 - **It is reachable by address** — `doctrine library show
