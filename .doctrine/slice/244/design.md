@@ -17,7 +17,25 @@ not-applicable checks and the reason each was set aside — is recorded in
 - `STD-001` — single-source named constants. Reaches further here than usual:
   the kebab condition token is load-bearing in four places.
 - `SPEC-029` — owns the gate table and describes evidence as payload-claimed.
-  The certain revision candidate of this slice.
+  The certain revision candidate of this slice, and **five** of its stated
+  responsibilities move. Listed here rather than left as an adjective, because
+  `/reconcile` authors the `REV` under `ADR-013` and needs a work-list, and
+  because this subsystem's recurring failure is exactly a design bullet nobody
+  carried through (`DEC-125`'s *"fourth instance"*):
+
+  | responsibility | what moves it |
+  |---|---|
+  | evidence is payload-claimed | `sec-3` — the `Claimed` tier empties; satisfaction is derived or attested |
+  | a const-fn forward-boundary gate table | `sec-3` — keyed by the closed `Advance`, not `(Stage, Stage)`; `can_advance` moves into that type |
+  | the design prompt pack, addressed by stable identity **with content binding** | `sec-5` — a third family joins the store addressed by a **bare** token with deliberately no digest (`DEC-124`) |
+  | the snapshot | `sec-4` — six changes, three of them migrations |
+  | the gate table's documentation | `sec-6` — the spec **cites** the published diagram address rather than holding a copy (`DEC-127`) |
+
+  The third is the one most easily missed: it is a real narrowing of a stated
+  responsibility, argued at length in `sec-5` against `Fragment`'s own refusal,
+  and it reads as an implementation detail rather than a spec change unless it is
+  named. `sec-4` separately disclaims a governance edit that is **not** owed —
+  `DEC-073`'s policy is built here, not decided here, so no superseding record.
 - `ADR-001` — module layering. `design_run` is tier `leaf`, which is why the
   gate is modelled on `src/review.rs::can` rather than reusing it.
 
@@ -2632,6 +2650,34 @@ from the condition's identity, once the contract table exists. So the remedy
 needs no new refusal field at all, and `Condition` keeps the fieldless
 `Copy`/`Ord`/serde shape `DEC-122` promised it would.
 
+**The remedy renders a row's arms, and that is where the ninth promise lands.**
+For eight of the nine rows the discharge is one act by one actor and the remedy
+is one line. `review-disposition-attested` is not: `DEC-125` gives it
+`Conducted { review } | Waived { reason }`, and a remedy that said only *the user
+performs `ReviewDisposed`* would name the obligation while hiding the only arm
+that is crossable through the whole `IMP-392` interim. That is the promise
+`sec-3` made — *"the refusal text says so"* — and an earlier draft tabulated it
+below and then gave it no home at all: no `Cause` variant, no remedy content, no
+test.
+
+It needs no new field. `ActRequirement::disposes_review` is already on the rule,
+and it is the branch:
+
+```
+review-disposition-attested — dispose this review pass, in the user's name:
+  conducted: name the RV whose pass has concluded; blockers still open or
+             contested hold the edge
+  waived:    state a reason; the findings stay on the RV, undisposed
+```
+
+Still a total function of the condition, still sourced from the one rule, still
+`leaf` — the arms are const strings on a const row, not run state. A `Cause`
+variant would have been the wrong home for the reason the finding gives: *the
+exit exists* is not a way a condition failed, and `Cause` is per-failure-mode.
+The narrative asset carries the fuller *why*; the remedy carries the fact that
+there are two doors, which is what an agent refused at the top edge needs and
+`sec-5`'s carried-forward residual says it may not be able to fetch.
+
 **The complaint is not a function of the condition**, and that is what has to
 ride. Nine promises across the two prior sections need it:
 
@@ -2645,7 +2691,7 @@ ride. Nine promises across the two prior sections need it:
 | which observed fact moved or is unobservable | `sec-3` |
 | which declaration a confirmation no longer names | `sec-4`, three facts not one |
 | which findings hold the edge | `sec-3`, `DEC-138`'s predicate |
-| that the waiver arm is available and why | `sec-3`, *"the refusal text says so"* |
+| that the waiver arm is available and why | `sec-3`, *"the refusal text says so"* — the one promise the **remedy** keeps rather than the complaint, per the subsection above |
 
 So the refusal's payload changes shape:
 
@@ -3073,6 +3119,11 @@ feed is untouched, on `sec-4`'s stated ground.
   equals the `discharge` line the receipt injects for the same condition.
   Asserted as equality between two renderings of one value, which is what makes
   invariant 4 testable rather than merely stated.
+- **A refused `reviewing → locked` names both arms** — the remedy for
+  `review-disposition-attested` renders the waiver arm and its reason
+  requirement, on a run with no pass conducted. The ninth promise, asserted at the
+  surface that keeps it; and asserted on the interim run specifically, because
+  that is the case the promise was made for.
 - **A refusal reads no asset** — the gate leg is exercised with no embedded
   corpus available and still renders every remedy. The tier boundary, asserted
   rather than trusted.
