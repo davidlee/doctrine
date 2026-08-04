@@ -57,6 +57,7 @@ use crate::design_run::attestation::{
     ReviewRef,
 };
 use crate::design_run::delegation::Delegation;
+use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::render::envelope::{self, Detail};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
@@ -64,6 +65,7 @@ use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
     ApplyRequest, Declaration, DelegationAct, DischargeClaim, Dispose,
 };
+use crate::relation::{RelationEdge, RelationLabel, Role};
 
 // ── Named constants (STD-001) ─────────────────────────────────────────────
 
@@ -82,6 +84,12 @@ const STDIN_SENTINEL: &str = "-";
 const PROVISIONAL_RECORD_ID: u32 = 0;
 /// What the DEC-088 acceptance digest joins its bound facts with.
 const ACCEPTANCE_BINDING_SEPARATOR: &str = "\u{1f}";
+/// What a projected governance edge joins its three fields with (SL-244 EX-10).
+/// Safe as a separator because no field can contain it: a `RelationLabel` and a
+/// `Role` are closed vocabularies, and a target is a single authored ref.
+const GOVERNANCE_EDGE_SEPARATOR: &str = " ";
+/// What a projected governance edge carrying no role writes in the role field.
+const GOVERNANCE_EDGE_NO_ROLE: &str = "-";
 /// What a lock rests on, said out loud (SL-233 PHASE-12 EX-5, design R12).
 ///
 /// v1 trusts a cooperative agent: the acceptance attestation is that agent's
@@ -1372,9 +1380,7 @@ fn apply(
         verifications: verifications(root, slice, &prior, &request, runbook.as_ref()),
         runbook,
         observed_review: observed_review(&prior, &request, root),
-        // T7 fills this from the canonical relation store; until then the map is
-        // empty, which reads as unobservable — refusal, not satisfaction.
-        observed_facts: design_run::gate::ObservedFacts::default(),
+        observed_facts: observed_facts(root, slice),
         // The claim digest, over the encoding the act itself owns. Computed here
         // because the pure layer never hashes, and computed unconditionally
         // whenever the payload carries a declaration, because a record with no
@@ -1839,6 +1845,85 @@ fn observed_review(
     })
 }
 
+/// Everything canonical the run does not own, observed **this invocation**
+/// (SL-244 `sec-3`).
+///
+/// A fact the shell could not observe is *absent* rather than empty, and the
+/// pure layer reads absence as changed — the gate stays shut on a missing
+/// answer rather than opening on one. So an unreadable slice record contributes
+/// nothing here instead of contributing a fingerprint over no edges, which is a
+/// different and observable fact (an edgeless slice).
+fn observed_facts(root: &Path, slice: u32) -> design_run::gate::ObservedFacts {
+    design_run::gate::ObservedFacts {
+        facts: crate::slice::relation_edges(root, slice)
+            .ok()
+            .map(|edges| {
+                (
+                    ObservedFact::GovernanceEdges,
+                    Fingerprint::new(crate::git::sha256(
+                        governance_edge_material(&edges).as_bytes(),
+                    )),
+                )
+            })
+            .into_iter()
+            .collect(),
+    }
+}
+
+/// [`ObservedFact::GovernanceEdges`]'s projection and encoding (SL-244 `EX-10`).
+///
+/// **The projection.** The slice's outbound `governed_by` edges *and* its
+/// `references` edges in role `concerns` — DEC-121's own definition of the
+/// governance edge set. `ADR-004` stores relations outbound-only and derives
+/// reciprocity, so both classes are readable from the slice's own record with no
+/// traversal and no second source that could disagree. A `references` edge in
+/// any other role is an incidental topical link and stays out; the *role filter*
+/// is what stops an unrelated link expiring a confirmation the user gave
+/// correctly.
+///
+/// **The encoding.** `kind role target`, single-space separated, `-` where an
+/// edge carries no role, one per line, LF-terminated, UTF-8. Kind and role are
+/// in the line because the set has two classes: without them `governed_by
+/// ADR-004` and `references(concerns) ADR-004` would encode identically, so
+/// swapping one for the other would not move the fingerprint and the projection
+/// would be blind to exactly the change it exists to observe.
+///
+/// The lines are collected into a [`BTreeSet`](std::collections::BTreeSet), which
+/// is *set semantics and ascending order in one type*: the fingerprint is a fact
+/// about the edge **set**, so two runs that added the same edges in different
+/// orders must agree, or the fact expires for no reason anybody can name.
+///
+/// **Why the shell owns this and not [`design_run::gate`].** `ObservedFact` says
+/// the projection obligation is part of the member rather than of the call site,
+/// and `AgentAct::claim_material` honours that in the leaf. This one cannot:
+/// `design_run` is an ADR-001 leaf with **crate out-degree zero**, and both
+/// halves of this projection are spelled in `crate::relation`'s vocabulary —
+/// filtering on `RelationLabel`/`Role` from inside the leaf would mean
+/// re-spelling their tokens as literals, which is the drift STD-001 forbids.
+/// [`acceptance_digest`] is the in-shell precedent for a projection over state
+/// the leaf cannot name.
+fn governance_edge_material(edges: &[RelationEdge]) -> String {
+    edges
+        .iter()
+        .filter(|edge| {
+            matches!(
+                (edge.label, edge.role),
+                (RelationLabel::GovernedBy, _) | (RelationLabel::References, Some(Role::Concerns))
+            )
+        })
+        .map(|edge| {
+            format!(
+                "{}{GOVERNANCE_EDGE_SEPARATOR}{}{GOVERNANCE_EDGE_SEPARATOR}{}\n",
+                edge.label.name(),
+                edge.role.map_or(GOVERNANCE_EDGE_NO_ROLE, Role::name),
+                edge.target,
+            )
+        })
+        .collect::<std::collections::BTreeSet<String>>()
+        .into_iter()
+        .collect()
+}
+
 fn runbook_facts(stage: Stage) -> Result<Option<design_run::run::RunbookFacts>> {
     let Some(key) = forward_runbook(stage) else {
         return Ok(None);
@@ -2182,5 +2267,107 @@ mod tests {
         let after = read_snapshot(root, slice).unwrap();
         assert_eq!(after.run.revision, 3, "the retry advanced the run");
         assert_eq!(after.checkpoint.intents.len(), 1);
+    }
+
+    // ── ObservedFact::GovernanceEdges (SL-244 EX-10, VT-4) ────────────────
+
+    /// A `governed_by` edge — the label-only half of the projected set.
+    fn governs(target: &str) -> RelationEdge {
+        RelationEdge::new(RelationLabel::GovernedBy, target.to_owned())
+    }
+
+    /// A `references` edge in the given role.
+    fn refers(role: Role, target: &str) -> RelationEdge {
+        RelationEdge::with_role(RelationLabel::References, Some(role), target.to_owned())
+    }
+
+    /// EX-10 fixes the encoding, so one test asserts the bytes rather than only
+    /// the equalities the other tests compare. Whole lines sorted ascending,
+    /// LF-terminated, `-` where an edge carries no role.
+    #[test]
+    fn governance_edge_material_is_kind_role_target_lines() {
+        assert_eq!(
+            governance_edge_material(&[
+                refers(Role::Concerns, "ADR-016"),
+                governs("ADR-004"),
+                governs("POL-002"),
+            ]),
+            "governed_by - ADR-004\ngoverned_by - POL-002\nreferences concerns ADR-016\n"
+        );
+    }
+
+    /// VT-4 — two edge sets with the same members added in different orders
+    /// fingerprint equal. Sorting whole lines is what makes the fact one about
+    /// the *set*: two runs that added the same edges in different orders must
+    /// agree, or the fact expires for no reason.
+    #[test]
+    fn governance_edge_projection_is_order_independent() {
+        let one = [
+            governs("ADR-004"),
+            refers(Role::Concerns, "ADR-016"),
+            governs("POL-002"),
+        ];
+        let other = [
+            governs("POL-002"),
+            governs("ADR-004"),
+            refers(Role::Concerns, "ADR-016"),
+        ];
+        assert_eq!(
+            governance_edge_material(&one),
+            governance_edge_material(&other)
+        );
+    }
+
+    /// VT-4 — kind and role are load-bearing. Swapping `governed_by ADR-004`
+    /// for `references(concerns) ADR-004` moves the fingerprint; a `references`
+    /// edge in any *other* role is outside the projection and leaves it alone.
+    #[test]
+    fn kind_and_role_are_observed() {
+        let governed = [governs("ADR-004")];
+        assert_ne!(
+            governance_edge_material(&governed),
+            governance_edge_material(&[refers(Role::Concerns, "ADR-004")]),
+            "swapping the kind must move the fingerprint"
+        );
+        assert_eq!(
+            governance_edge_material(&governed),
+            governance_edge_material(&[
+                governs("ADR-004"),
+                refers(Role::Implements, "REQ-059"),
+                refers(Role::OriginatesFrom, "IMP-398"),
+            ]),
+            "a references edge in any other role leaves the projection satisfied"
+        );
+    }
+
+    /// VT-4 — an empty sweep expires when the first edge appears. The empty
+    /// projection is a real observation (an edgeless slice), not an absent one,
+    /// so it has to differ from every non-empty one.
+    #[test]
+    fn an_empty_projection_differs_from_the_first_edge() {
+        assert_eq!(governance_edge_material(&[]), "");
+        assert_ne!(
+            governance_edge_material(&[]),
+            governance_edge_material(&[governs("ADR-004")])
+        );
+    }
+
+    /// VT-4 — an unobservable fact reads as CHANGED, and the shell says so by
+    /// omitting it: a slice whose record cannot be read observes *nothing*, and
+    /// the pure layer refuses an act whose rule names a fact it was not given.
+    /// The fixture's slice tree carries a run but no `slice-NNN.toml`.
+    #[test]
+    fn an_unreadable_slice_record_observes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        assert!(
+            crate::slice::relation_edges(root, slice).is_err(),
+            "the fixture has no slice record to read"
+        );
+        assert_eq!(
+            observed_facts(root, slice),
+            design_run::gate::ObservedFacts::default()
+        );
     }
 }
