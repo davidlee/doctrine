@@ -1268,17 +1268,30 @@ way back up. Sections edited during the excursion have invalidated their own
 attestations by fingerprint; untouched ones are still current. The excursion is
 handled nowhere, which is the point.
 
-That leaves exactly one enumeration outside Rust, and one test:
+That leaves the Rust side single-sourced, and **two** hand-maintained
+enumerations keyed off the vocabulary outside it:
 
 - **generated** — `Condition`, `ALL`, `CONTRACTS` and `boundary_conditions`, from
   one list keyed by `Advance`. Equal by construction; no test can fail because no
   disagreement is expressible.
 - **tested** — the prose asset corpus: every generated key has an asset, and the
   corpus has no key the vocabulary does not.
+- **tested, and named here rather than left to `sec-5`** — the publication
+  manifest. `sec-5` gives every contract asset an `[[entry]]` row whose address
+  embeds the condition's token, so adding a condition means adding a row by hand.
+  An earlier draft claimed *one* enumeration outside Rust and missed this, which
+  is exactly the reader-misleading shape `STD-001` exists to prevent.
+
+The manifest is covered in one direction today —
+`assert_unprojected_install_assets_are_published` fails an `install/` asset with
+no entry — and not in the other: a row naming a token the vocabulary has retired
+passes everything. `sec-5` extends the corpus set-equality to the manifest's
+`design-prompts/conditions/` rows, which closes it at no cost, since that test is
+already enumerating the same prefix.
 
 This is the same move `STD-001` asks for, and the reason `CONTRACTS` is an
 enumerable array rather than only a `const fn` match: the array is what the
-generator emits and what the asset test iterates.
+generator emits and what both tests iterate.
 
 ### Invariants
 
@@ -2553,7 +2566,7 @@ that section.
 
 `DEC-124` gives two channels and denies a third: the refusal carries the remedy
 for each unmet condition; a stage-entry receipt carries the contracts for that
-stage's outbound edge; the turn envelope gets nothing new. Taken in that order,
+stage's outbound edge; the turn envelope gets no contract content. Taken in that order,
 plus what the envelope and the change log lose when the claimed arm dissolves.
 
 ### What a contract is, and why it stays a pure function of the binary
@@ -2992,10 +3005,12 @@ Declared held, the header lines still ride and the bodies do not — the same ru
 declared a stale receipt, or lost the bytes it claimed, must still be able to
 tell what it is missing."*
 
-### The envelope gets nothing new, and loses one thing
+### The envelope gets no contract content, and loses one thing
 
-`DEC-124` denies the envelope any contract content, against a hard ceiling with
-an uncapped neighbour. That holds — `sec-3`'s currency lamp and severity summary
+`DEC-124` denies the envelope any *contract* content, against a hard ceiling with
+an uncapped neighbour. That is the whole of its ruling, and it is not a freeze on
+the envelope — this design adds three non-contract fields below, and none of them
+is in tension with it. That holds — `sec-3`'s currency lamp and severity summary
 are derived state that warns, not contract prose, and the lamp is a scalar chosen
 against exactly this budget.
 
@@ -3015,8 +3030,16 @@ sufficient. A second per-section list would restate one bit beside itself.
 
 So `sec-2`'s envelope-budget concern is partly retired rather than merely
 survived: the uncapped list it names as the competitor for bytes goes away, and
-what this design adds to the envelope is two scalars. Recorded here because the
-concern was stated as live and a reader should not have to infer that it moved.
+what this design adds to the envelope is **two scalars and one enum name** — the
+currency lamp, the severity summary, and `sec-4`'s rendered `ReviewPolicy`.
+
+The policy is counted here deliberately, because an earlier draft's inventory
+stopped at the two scalars and a reader auditing the budget against `sec-2` would
+have found it accounted for nowhere. It is also the addition least safe to leave
+unrecorded: `sec-4` makes the mutable policy defensible with *authority and
+visibility, not prohibition*, and the envelope render is the visibility half. A
+later slice trimming the envelope under budget pressure must know it is removing
+a fence, not a convenience.
 
 **The change log's evidence feed re-sources.** `invalidation_rows`
 (`run.rs:1520-1536`) diffs the live evidence set across an apply and emits an
@@ -3085,9 +3108,12 @@ feed is untouched, on `sec-4`'s stated ground.
   fragment and absent runbook, asserted so that `None` is not read as a gap.
 - **Every condition has an asset and the corpus has no orphan** — set equality
   over the generated vocabulary and the `design-prompts/conditions/` prefix.
-- **Every contract asset is published** — the existing disk-source reachability
-  gate, which needs no new test and is named here because it is what makes the
-  manifest entries non-optional.
+- **Every contract asset is published, and the manifest holds no orphan** — the
+  existing disk-source reachability gate covers the first direction and needs no
+  new test. The second is new and cheap: the manifest's
+  `design-prompts/conditions/` rows are set-equal to the generated vocabulary, so
+  a row naming a retired condition fails. `sec-3` records why this is the second
+  hand-maintained enumeration outside Rust and not the only one.
 - **The envelope carries no contract prose** — the rendered envelope for a run at
   any stage contains no contract body and no remedy, so the byte-budget ruling is
   asserted rather than assumed.
@@ -3232,14 +3258,22 @@ edit procedure:
      copy would describe a machine that does not exist. -->
 ```
 
-`customization = "fixed"` is the machine-readable half of the same statement, and
-its reason differs from every other `fixed` entry in the manifest. The process
-fragments and runbooks are `fixed` because the override seam does not exist yet
-(`IMP-372`); this one would be `fixed` even after that seam lands, because
-overriding a derived description does not change what is derived — it only makes
-the description wrong. Worth recording rather than folding into the existing
-rationale, since `IMP-372` will otherwise sweep the `fixed` entries and find one
-that must not move.
+`customization = "fixed"` is the machine-readable half of the same statement,
+and it makes the manifest's `fixed` entries **three** classes rather than two. An
+earlier draft said "every other entry is provisional pending `IMP-372`", which is
+true of the runbooks alone:
+
+| class | why `fixed` | moves when `IMP-372` lands? |
+|---|---|---|
+| sealed (`DEC-102`) | an override would make the content **false**, not merely different — `hymns/stage/design.md` and the four `design-prompts/*` process fragments, which restate what the engine enforces | no, permanently |
+| provisional | the override seam does not exist yet — the obligation runbooks, and `sec-5`'s nine contract narratives on the same rationale | yes, candidates |
+| structural (this entry) | overriding a **derived** description does not change what is derived; it only makes the description wrong | no, and for a third reason |
+
+`DEC-102` settles the first class in terms — *"The five existing fixed entries
+state what the engine enforces, so they stay fixed"* — so a sweep that assumed
+provisionality would already have been wrong before this slice. Recording the
+third class matters anyway: it is the one `IMP-372` has no prior record for, and
+the one whose reason a reader is most likely to reconstruct as the runbooks'.
 
 ### Where the citation points
 
@@ -3290,8 +3324,9 @@ and is not this slice's to sweep.
   above is the policy it sets. A second one should reuse the wording rather than
   invent a variant.
 - **`IMP-372` must not make this entry customizable.** Its `fixed` is structural,
-  not provisional — recorded here because every other `fixed` entry in the
-  manifest is provisional and a sweep would assume this one is too.
+  not provisional — a third class beside `DEC-102`'s permanently sealed entries
+  and the genuinely provisional runbooks. The sweep has two kinds of entry it must
+  not move, not one.
 - **`ISS-309` is the corpus-wide sweep** for shipped assets citing repo-private
   ids. This section avoids the defect; it does not fix the existing instances.
 - **The diagram does not carry the contract narratives**, and if a reader ever
