@@ -21,7 +21,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use super::Stage;
-use super::attestation::{Attestation, IntegratedReview, LockAcceptance, RecoveryIntent};
+use super::attestation::{
+    Attestation, IntegratedReview, LockAcceptance, RecoveryIntent, ReviewPolicy,
+};
 use super::bounds::CHANGE_LOG_REVISIONS;
 use super::change_log::ChangeLog;
 use super::delegation::{DelegationGroup, DelegationState};
@@ -56,6 +58,14 @@ pub(crate) struct RunHeader {
     /// (DEC-059).
     pub(crate) revision: u64,
     pub(crate) stage: Stage,
+    /// The reviewer lanes this run requires of each section (DEC-073, ISS-310).
+    ///
+    /// Run data rather than a constant of the gate: *which* lanes a section needs
+    /// is the user's declaration, which is why the condition's required actor
+    /// cannot be fixed in the table. `default` is what makes the migration a
+    /// no-op by construction — the same argument [`Section::seq`] makes.
+    #[serde(default)]
+    pub(crate) review_policy: ReviewPolicy,
     /// The next closed obligation, when the run knows one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) next_obligation: Option<String>,
@@ -463,6 +473,7 @@ impl DesignSnapshot {
                 slice,
                 revision: 1,
                 stage: Stage::Exploring,
+                review_policy: ReviewPolicy::default(),
                 next_obligation: None,
             },
             receipts: ReceiptGroup {
@@ -521,7 +532,9 @@ pub(crate) fn to_toml(snapshot: &DesignSnapshot) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::attestation::{AcceptanceAttestation, ContentCoverage, Reviewer};
+    use super::super::attestation::{
+        AcceptanceAttestation, ContentCoverage, ReviewPolicy, Reviewer,
+    };
     use super::*;
 
     /// A well-formed id, or a failure naming the bad literal.
@@ -608,6 +621,28 @@ mod tests {
             .sections
             .upsert(section("sec-a", "sha256:a-revised"));
         assert!(!snapshot.review_standing().sections_attested);
+    }
+
+    /// The review policy's migration is a no-op *by construction*, the same
+    /// argument [`Section::seq`] makes: a snapshot written before the field
+    /// deserialises to the default, and the default is the behaviour that run
+    /// already had. There is no migration pass to get wrong.
+    #[test]
+    fn a_snapshot_written_before_the_policy_reads_as_human_only() {
+        let pre_policy = format!(
+            "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+             version = {DESIGN_SNAPSHOT_VERSION}\n\
+             \n\
+             [run]\n\
+             uid = \"dr-test\"\n\
+             slice = 233\n\
+             revision = 4\n\
+             stage = \"reviewing\"\n"
+        );
+
+        let parsed = parse(&pre_policy).expect("a pre-policy snapshot still parses");
+        assert_eq!(parsed.run.review_policy, ReviewPolicy::HumanOnly);
+        assert_eq!(parsed.run.revision, 4, "the rest of the header is unmoved");
     }
 
     #[test]

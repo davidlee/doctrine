@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 
 use super::Stage;
-use super::attestation::ContentCoverage;
+use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, Reviewer};
 use super::facts::DerivedDesignFacts;
 use super::gate::{
     Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
@@ -644,4 +644,39 @@ fn node_material_ignores_progress_and_observes_shape() {
 
     let departed = map_of(vec![root(), child()]).materials();
     assert_eq!(coverage.diff(&departed), vec![id("inq-3")], "a node left");
+}
+
+/// The policy's membership is what the gate reads, and the two ordered variants
+/// present the *same* membership — the difference between them is order, which
+/// DEC-073 declares and nothing enforces.
+///
+/// Asserted rather than left to the reader because a gate seen discarding a
+/// distinction its own type draws reads as a bug. It is the design's intent.
+#[test]
+fn ordered_policies_present_identical_membership() {
+    assert_eq!(ReviewPolicy::HumanOnly.lanes(), [ActorClass::User]);
+    assert_eq!(
+        ReviewPolicy::AdversarialOnly.lanes(),
+        [ActorClass::Adversarial]
+    );
+    assert_eq!(
+        ReviewPolicy::HumanThenAdversarial.lanes(),
+        ReviewPolicy::AdversarialThenHuman.lanes(),
+        "order is declared, not enforced: the lanes required are the same pair"
+    );
+    assert_eq!(
+        ReviewPolicy::HumanThenAdversarial.lanes(),
+        [ActorClass::User, ActorClass::Adversarial]
+    );
+
+    // The default is DEC-074's posture, and it is what an existing run reads.
+    assert_eq!(ReviewPolicy::default(), ReviewPolicy::HumanOnly);
+
+    // A mapping, not a merge: `Reviewer` stays its own vocabulary and gains one
+    // direction into the actor axis (design sec-3).
+    assert_eq!(ActorClass::from(Reviewer::Human), ActorClass::User);
+    assert_eq!(
+        ActorClass::from(Reviewer::Adversarial),
+        ActorClass::Adversarial
+    );
 }

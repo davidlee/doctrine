@@ -27,6 +27,81 @@ pub(crate) enum Reviewer {
     Adversarial,
 }
 
+/// Who an act is attributable to, as the gate classifies *recorded acts*
+/// (design sec-3).
+///
+/// Deliberately not a merge of the two incumbents. [`Reviewer`] records who
+/// reviewed a section and [`super::traversal::Authority`] records who directed a
+/// traversal; neither is this axis, and collapsing all three is the hierarchical
+/// state machine DEC-065 rejects. What the gate needs is one *direction* — a
+/// reviewer expressed as an actor class — and that is the `From` below.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ActorClass {
+    /// The user, acting in their own name.
+    User,
+    /// The agent driving the run.
+    Agent,
+    /// An adversarial reviewer, acting as a check on the agent.
+    Adversarial,
+}
+
+impl From<Reviewer> for ActorClass {
+    fn from(reviewer: Reviewer) -> Self {
+        match reviewer {
+            Reviewer::Human => ActorClass::User,
+            Reviewer::Adversarial => ActorClass::Adversarial,
+        }
+    }
+}
+
+/// The reviewer lanes a run requires, and the order it intends them in
+/// (DEC-073). Membership is what the gate checks; order is DECLARED, not
+/// enforced.
+///
+/// Four values rather than a `Vec<Reviewer>`, because [`Reviewer`] is closed at
+/// two and the lawful policies are therefore exactly these. A vector described as
+/// *ordered, non-empty, duplicate-free* has none of those three properties — it
+/// admits `[]` and `[Human, Human]` — so the prose would claim a guarantee
+/// nothing enforced, which is ISS-310's own defect shape reappearing inside its
+/// fix. The enum makes all three structural.
+///
+/// [`ReviewPolicy::HumanOnly`] is the default (DEC-074's posture) and the header
+/// field is `#[serde(default)]`, so an existing snapshot parses and an existing
+/// run behaves exactly as it did.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ReviewPolicy {
+    /// The v1 default: a human reviews each section.
+    #[default]
+    HumanOnly,
+    /// An adversarial reviewer acts as a human proxy (DEC-074 grants this).
+    AdversarialOnly,
+    /// Both lanes, human first by intent.
+    HumanThenAdversarial,
+    /// Both lanes, adversarial first by intent.
+    AdversarialThenHuman,
+}
+
+impl ReviewPolicy {
+    /// The lanes a section must carry a live attestation in — the single home of
+    /// membership, and what PHASE-05's `RequiredActor::RunPolicy` resolves
+    /// through.
+    ///
+    /// The two ordered variants share an arm, which *is* the claim that order is
+    /// declared and not enforced: they present the same requirement to the gate,
+    /// and the distinction they draw is read by the renderer and the runbook.
+    pub(crate) const fn lanes(self) -> &'static [ActorClass] {
+        match self {
+            ReviewPolicy::HumanOnly => &[ActorClass::User],
+            ReviewPolicy::AdversarialOnly => &[ActorClass::Adversarial],
+            ReviewPolicy::HumanThenAdversarial | ReviewPolicy::AdversarialThenHuman => {
+                &[ActorClass::User, ActorClass::Adversarial]
+            }
+        }
+    }
+}
+
 /// A content-bound review attestation (DEC-073).
 ///
 /// The fingerprint is not decoration: an attestation names the exact bytes it
