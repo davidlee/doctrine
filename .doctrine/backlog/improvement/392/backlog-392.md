@@ -66,6 +66,25 @@ reversed that — see below.
   fourth-prose-loader risk. So this item adds structured state saying a pass
   concluded, alongside the section reference it is already adding.
 
+  **Its shape is already specified — do not re-design it.** `SL-244`'s
+  `design.md` § "The concluded-pass marker" (`sec-4`) fixes the marker and its
+  writer: one boolean `concluded` key in the `RV`'s `[review]` table, absent by
+  default; a new verb `doctrine review conclude <RV>` (none of the eleven
+  incumbent review verbs can set it without acquiring a second meaning, and
+  `dispose` is the worst candidate — per-finding and the responder's, where
+  concluding is per-pass and the raiser's); raiser authority; idempotent latch;
+  open findings allowed and normal; no unset; the same per-review lock every
+  mutating verb takes; no migration, since absent reads as unconcluded. That
+  section also carries the storage-rule argument the `RV` TOML header's
+  "no status — a review's status is DERIVED" comment would otherwise seem to
+  refuse: a pass concluding is an **event**, not a function of the finding set,
+  so storing it is the rule holding rather than bending.
+
+  **This is the sub-item `ISS-314` waits on, and only this one.** `ISS-314`
+  `needs` this record for the marker alone — not for the section reference, the
+  `Finding` retirement, or the severity summary. If the marker is ever split
+  out, re-point that edge.
+
 `DEC-138` also carries the arms themselves into a home: `SL-244` gives
 `CheckpointAct` a fourth optional slot for `Conducted { review } | Waived
 { reason }`, which `DEC-125` fixed and no type held. That part is `SL-244`'s to
