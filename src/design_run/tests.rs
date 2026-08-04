@@ -14,9 +14,9 @@
 use std::collections::BTreeMap;
 
 use super::Stage;
-use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, Reviewer};
+use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, ReviewRef, Reviewer};
 use super::facts::DerivedDesignFacts;
-use super::fixture::{attest, id, run_holding, section};
+use super::fixture::{attest, id, pass_over, run_holding, section};
 use super::gate::{
     Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
 };
@@ -801,4 +801,36 @@ fn invalidation_is_not_policy_filtered() {
         1,
         "the death of the act is reported under a policy that never required it"
     );
+}
+
+/// The pass is bound to the content it was opened over, not to the run — which is
+/// what lets a later edit stale it without anything storing a verdict (SL-244
+/// PHASE-04 `VT-2`).
+///
+/// Coverage, not presence: a section joining the run after the pass opened is
+/// content nobody looked at, and reads exactly like a covered section moving. The
+/// two are asserted side by side because a `covered.contains`-style implementation
+/// passes the second and fails the first, silently.
+#[test]
+fn review_pass_covers_the_sections_it_opened_over() {
+    let mut run = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
+    let pass = pass_over(&run, "RV-344");
+
+    assert_eq!(
+        pass.review,
+        ReviewRef::new("RV-344"),
+        "the pass names the RV it was minted for"
+    );
+    assert!(pass.is_current(&run.sections.fingerprints()));
+
+    // A covered section moving is the ordinary staleness.
+    run.sections.upsert(section("sec-a", "sha256:a-revised"));
+    assert!(!pass.is_current(&run.sections.fingerprints()));
+
+    // A section ARRIVING is content the pass never looked at, and stales it just
+    // as hard — the case a presence check gets wrong.
+    let mut widened = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
+    let pass = pass_over(&widened, "RV-344");
+    widened.sections.upsert(section("sec-c", "sha256:c"));
+    assert!(!pass.is_current(&widened.sections.fingerprints()));
 }

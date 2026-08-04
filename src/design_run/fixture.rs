@@ -8,7 +8,7 @@
 //!
 //! Fixtures only — no assertions, and nothing here is reachable outside `cfg(test)`.
 
-use super::attestation::{Attestation, Reviewer};
+use super::attestation::{Attestation, ContentCoverage, ReviewPass, ReviewRef, Reviewer};
 use super::ids::{DesignId, Fingerprint};
 use super::snapshot::{DesignSnapshot, Section};
 
@@ -36,6 +36,18 @@ pub(super) fn run_holding(sections: &[(&str, &str)]) -> DesignSnapshot {
         snapshot.sections.upsert(section(raw, digest));
     }
     snapshot
+}
+
+/// A review pass over the sections `snapshot` holds **now**, naming `review`.
+///
+/// Opened against current content for the same reason [`attest`] binds to it: a
+/// test that wants a stale pass opens one here and then moves a section, which is
+/// how staleness actually happens.
+pub(super) fn pass_over(snapshot: &DesignSnapshot, review: &str) -> ReviewPass {
+    ReviewPass::over(
+        ReviewRef::new(review),
+        ContentCoverage::of(snapshot.sections.fingerprints()),
+    )
 }
 
 /// Attest `subject` at the fingerprint it carries **now**.

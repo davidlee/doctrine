@@ -370,6 +370,80 @@ impl IntegratedReview {
     }
 }
 
+/// A canonical `RV` id, as the run records it (SL-244 `sec-4`).
+///
+/// Deliberately **not** a [`DesignId`]: run-local ids are one space and an `RV`
+/// sits outside it, which is the defect DEC-125 names when it says the run
+/// *"cannot hold or resolve an RV"*. Opaque here on purpose — nothing in the pure
+/// layer parses the `RV-` prefix, so `design_run` names a review without
+/// depending on the review module (ADR-001). A constructor that checked the
+/// prefix would be that dependency spelled differently; validation belongs to the
+/// wire boundary, exactly as [`Fingerprint`] is handed a digest the pure layer
+/// never computes.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub(crate) struct ReviewRef(String);
+
+impl ReviewRef {
+    /// Wrap a canonical ref the shell has already resolved.
+    pub(crate) fn new(canonical: impl Into<String>) -> ReviewRef {
+        ReviewRef(canonical.into())
+    }
+}
+
+/// The review pass the run is currently on (DEC-125, SL-244 `sec-3`).
+///
+/// Minted on entry to `reviewing` and **replaced, never reopened** on a later
+/// entry. Deliberately independent of the disposition that answers for it: the
+/// pass exists before that row is answered and under both arms of the answer,
+/// which is what lets the warnings derive on a waived run and what gives a
+/// disposition something to bind to.
+///
+/// This is the shape [`IntegratedReview`] becomes — the same record with a
+/// [`ReviewRef`] where a [`DesignId`] never belonged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-04: the type lands before the field that holds it (T2) \
+                  and the mint that fills it (T7)"
+    )
+)]
+pub(crate) struct ReviewPass {
+    /// The `RV` minted for this pass.
+    pub(crate) review: ReviewRef,
+    /// The section digests the pass was opened over.
+    pub(crate) covered: ContentCoverage<Fingerprint>,
+}
+
+impl ReviewPass {
+    /// Open a pass over the content it reviews.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-04: no caller until the mint (T7)")
+    )]
+    pub(crate) const fn over(review: ReviewRef, covered: ContentCoverage<Fingerprint>) -> Self {
+        ReviewPass { review, covered }
+    }
+
+    /// Whether it still covers current content.
+    ///
+    /// Coverage, not presence: a section that joined the run after the pass opened
+    /// is content nobody looked at, and stales the pass exactly as a covered
+    /// section moving does. Defined through [`ContentCoverage::is_current`] so the
+    /// currency lamp and the diff that explains it cannot disagree.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-244 PHASE-04: `integrated_current` re-sources onto this at T3"
+        )
+    )]
+    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
+        self.covered.is_current(current)
+    }
+}
+
 /// A user acceptance of the design as locked, and the content it accepted.
 ///
 /// The two questions stay separate rather than being crushed into one digest:
