@@ -149,6 +149,14 @@ derive them from framework-owned run state, or retire them and let the runbook
 guard the edge alone. Deciding is `/design`'s work; this slice owns the decision
 and its consequences, including `ISS-286`'s subject-rule half.
 
+> **Delivered, not deferred — 2026-08-04, `DEC-139`.** The design first specified
+> both checkpoints and left them unenforced pending `IMP-391`, which would have
+> made this objective a specification rather than a settlement. `RV-344` `F-3`
+> showed the slice ships the wire acts and the artefact storage regardless, so
+> the guard was being declined for a reason the design itself falsified. Both
+> conditions are enforced from this slice; `IMP-391` keeps the interaction. See
+> Non-Goals for the corrected boundary and the accepted migration cost.
+
 > **`ISS-286`'s subject-rule half is answered — 2026-08-03, `EVD-012`.** Not by
 > a separate repair but as a consequence of `DEC-121`: an Attested condition
 > binds to the artefact the attested act produced — for
@@ -321,6 +329,13 @@ Coarse and provisional — `/design` fixes the touch-set. Fenced as
   moves and existing runs are rejected at parse. The tier is gitignored and
   documented disposable, and one live run exists (SL-243's), so the cost is that
   run — real, bounded, and worth naming before it is paid.
+
+  > **Repriced 2026-08-04 — `DEC-139`.** Still bounded to `SL-243`, and larger
+  > than a schema move: enforcing the two exploring checkpoints bars every
+  > in-flight run at its next forward move, because both are cumulative and no
+  > run holds an exploring-stage act or can acquire one retroactively. `SL-243`
+  > owes five acts by hand, not two. The design prices it; the user accepted it
+  > as cheaper than a second round of design review.
 - **The envelope has a byte budget.** Rendering unmet conditions competes with
   everything else the envelope carries, and `EX-14` already bounds runbook
   rendering for the same reason. "Explain every condition every turn" is not
@@ -442,7 +457,9 @@ Carried into `/design`, not answered here.
   `verify research-current` is the in-repo bar.
 - Every condition is either derived from framework-owned state, explicitly
   attested as a human act, or retired — with no condition remaining that is
-  satisfied by an unexamined claim against an unrelated subject.
+  satisfied by an unexamined claim against an unrelated subject, and none
+  specified but left unenforced (`DEC-139`: every surviving row guards its edge,
+  so there is no activation axis to carry an exception).
 - The design-run suites stay green, with each intentional test change argued in
   the phase record rather than adjusted to fit.
 - `ISS-285` and `ISS-286` are closable on this slice's evidence; `IMP-390`'s
