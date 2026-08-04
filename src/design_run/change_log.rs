@@ -65,7 +65,6 @@ pub(crate) enum ChangeEvent {
     SectionFingerprintChanged,
     ReviewAttested,
     ReviewInvalidated,
-    IntegratedReviewRecorded,
     FindingRaised,
     FindingDisposed,
     AcceptanceAttested,
@@ -83,7 +82,7 @@ impl ChangeEvent {
     /// Every event, in the sketch's declaration order — the closed vocabulary,
     /// single-sourced so an exhaustive table test cannot silently miss a variant
     /// (STD-001).
-    pub(crate) const ALL: [ChangeEvent; 22] = [
+    pub(crate) const ALL: [ChangeEvent; 21] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
@@ -95,7 +94,6 @@ impl ChangeEvent {
         ChangeEvent::SectionFingerprintChanged,
         ChangeEvent::ReviewAttested,
         ChangeEvent::ReviewInvalidated,
-        ChangeEvent::IntegratedReviewRecorded,
         ChangeEvent::FindingRaised,
         ChangeEvent::FindingDisposed,
         ChangeEvent::AcceptanceAttested,
@@ -125,7 +123,6 @@ impl ChangeEvent {
             ChangeEvent::SectionFingerprintChanged => "section_fingerprint_changed",
             ChangeEvent::ReviewAttested => "review_attested",
             ChangeEvent::ReviewInvalidated => "review_invalidated",
-            ChangeEvent::IntegratedReviewRecorded => "integrated_review_recorded",
             ChangeEvent::FindingRaised => "finding_raised",
             ChangeEvent::FindingDisposed => "finding_disposed",
             ChangeEvent::AcceptanceAttested => "acceptance_attested",
@@ -185,10 +182,9 @@ impl ChangeEvent {
             ChangeEvent::FindingRaised | ChangeEvent::FindingDisposed => {
                 &[(PayloadKey::Section, ValueKind::Token)]
             }
-            // Run-wide and term-free. The integrated pass is identified by its
-            // own subject id, and an acceptance has no run-local id at all — its
-            // basis and authority are snapshot state, not delta.
-            ChangeEvent::IntegratedReviewRecorded | ChangeEvent::AcceptanceAttested => &[],
+            // Run-wide and term-free: an acceptance has no run-local id at all —
+            // its basis and authority are snapshot state, not delta.
+            ChangeEvent::AcceptanceAttested => &[],
             // Both policies are closed tokens rendered by name, so the row reads
             // as the change it is — `human-only → adversarial-only` — rather than
             // requiring the reader to fetch the run to learn what moved.

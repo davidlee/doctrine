@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    ActorClass, Attestation, IntegratedReview, LockAcceptance, RecoveryIntent, ReviewPolicy,
+    ActorClass, Attestation, LockAcceptance, RecoveryIntent, ReviewPass, ReviewPolicy,
 };
 use super::bounds::CHANGE_LOG_REVISIONS;
 use super::change_log::ChangeLog;
@@ -327,17 +327,20 @@ impl Finding {
     }
 }
 
-/// Content-bound review attestations, the integrated pass, runtime findings, and
-/// the user's acceptance of the whole.
+/// Content-bound review attestations, the run's review pass, runtime findings,
+/// and the user's acceptance of the whole.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ReviewGroup {
     #[serde(default, rename = "attestation")]
     pub(crate) attestations: Vec<Attestation>,
     #[serde(default, rename = "finding")]
     pub(crate) findings: Vec<Finding>,
-    /// The integrated adversarial pass — at most one, over the whole document.
+    /// The review pass the run is on — at most one, minted on entry to
+    /// `reviewing` and replaced on a later entry (DEC-125). It replaces the
+    /// `integrated` key an older snapshot carries: nothing here denies unknown
+    /// fields, so that key is *ignored* on read rather than refused (`A6`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) integrated: Option<IntegratedReview>,
+    pub(crate) pass: Option<ReviewPass>,
     /// The user's acceptance of the design as locked (DEC-088).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) acceptance: Option<LockAcceptance>,
@@ -439,9 +442,9 @@ impl DesignSnapshot {
             sections_attested,
             integrated_current: self
                 .review
-                .integrated
+                .pass
                 .as_ref()
-                .is_some_and(|review| review.is_current(&current)),
+                .is_some_and(|pass| pass.is_current(&current)),
             findings_disposed: !self
                 .review
                 .findings
@@ -581,7 +584,7 @@ mod tests {
     use super::super::attestation::{
         AcceptanceAttestation, ContentCoverage, ReviewPolicy, Reviewer,
     };
-    use super::super::fixture::{attest, id, run_holding, section};
+    use super::super::fixture::{attest, id, pass_over, run_holding, section};
     use super::*;
 
     /// Raise one finding against `sec-a`.
@@ -680,7 +683,8 @@ mod tests {
         let mut snapshot = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
         attest_all(&mut snapshot);
         let covered = ContentCoverage::of(snapshot.sections.fingerprints());
-        snapshot.review.integrated = Some(IntegratedReview::over(id("int-1"), covered.clone()));
+        let pass = pass_over(&snapshot, "RV-001");
+        snapshot.review.pass = Some(pass);
         snapshot.review.acceptance = Some(LockAcceptance::over(
             AcceptanceAttestation::bind("the user said so", None, Fingerprint::new("sha256:pay")),
             covered,
@@ -695,17 +699,15 @@ mod tests {
             .sections
             .upsert(section("sec-b", "sha256:b-revised"));
         let standing = snapshot.review_standing();
-        assert!(!standing.integrated_current, "the integrated pass is stale");
+        assert!(!standing.integrated_current, "the review pass is stale");
         assert!(!standing.acceptance_current, "the acceptance is stale");
 
         // A section *added* after the fact is the other half: coverage is the
         // whole set, so new content is uncovered content.
         let mut widened = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
         attest_all(&mut widened);
-        widened.review.integrated = Some(IntegratedReview::over(
-            id("int-1"),
-            ContentCoverage::of(widened.sections.fingerprints()),
-        ));
+        let pass = pass_over(&widened, "RV-001");
+        widened.review.pass = Some(pass);
         widened.sections.upsert(section("sec-c", "sha256:c"));
         assert!(!widened.review_standing().integrated_current);
     }

@@ -43,7 +43,7 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
-use design_run::attestation::ReviewPolicy;
+use design_run::attestation::{ReviewPolicy, ReviewRef};
 use design_run::change_log::ChangeEvent;
 use design_run::gate::Condition;
 use design_run::snapshot::{self, DesignSnapshot};
@@ -72,8 +72,6 @@ const ATTESTED: [(&str, &str); 3] = [
     ("att-spine", SECTION_SPINE),
 ];
 
-/// The integrated adversarial pass (EX-2 — mandatory in v1).
-const INTEGRATED: &str = "int-1";
 /// A blocking finding, raised before the lock is attempted.
 const FINDING: &str = "fnd-1";
 
@@ -236,9 +234,9 @@ impl Fixture {
                 declare.push(json!({"subject": attestation, "attests": section}));
             }
         }
-        if present(Component::Integrated) {
-            declare.push(json!({"subject": INTEGRATED}));
-        }
+        // `Component::Integrated` declares nothing. Entry to `reviewing` mints the
+        // pass (DEC-125), so its presence is guaranteed by construction and the
+        // condition is falsified by staleness alone — see [`Fixture::stale_the_pass`].
         if present(Component::FindingDisposition) {
             declare.push(json!({
                 "subject": FINDING,
@@ -253,6 +251,54 @@ impl Fixture {
             );
         }
         self.payload(submission, &body)
+    }
+
+    /// Edit a covered section so the minted pass no longer covers current
+    /// content — the only way the currency lamp can now be falsified (F2).
+    ///
+    /// Its own submission, deliberately: an edit batched with the lock payload
+    /// would race the attestations declared beside it, and the lock tests need
+    /// `section-attestations-current` to stay cleared so the refusal isolates
+    /// `integrated-review-present`. The lock payload re-attests afterwards.
+    fn stale_the_pass(&self) {
+        self.apply(&self.payload(
+            "stale-the-pass",
+            &json!({"declare": [{
+                "subject": SECTION_B,
+                "body": section_body(SECTION_B, "as revised after the pass opened"),
+            }]}),
+        ));
+    }
+
+    /// Leave `reviewing` and come back — the re-entry DEC-125 mints a fresh pass on.
+    fn re_enter_reviewing(&self, tag: &str) {
+        self.apply(&self.payload(
+            &format!("{tag}-out"),
+            &json!({"stage": {
+                "to": Stage::Drafting.as_str(),
+                "reason": "reopening the draft after the review pass",
+            }}),
+        ));
+        self.apply(&self.payload(
+            &format!("{tag}-in"),
+            &json!({"stage": {"to": Stage::Reviewing.as_str()}}),
+        ));
+    }
+
+    /// The `RV` entity dirs on disk, sorted — what the mint actually authored.
+    ///
+    /// Numeric names only: every entity dir has a `NNN-slug` alias symlink beside
+    /// it, and `is_dir()` follows symlinks, so a naive listing double-counts.
+    fn minted_reviews(&self) -> Vec<String> {
+        let mut found: Vec<String> = std::fs::read_dir(self.root.join(common::REVIEW_DIR))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.chars().all(|byte| byte.is_ascii_digit()))
+            .collect();
+        found.sort();
+        found
     }
 
     /// The parsed snapshot.
@@ -360,6 +406,9 @@ fn fail(root: &Path, args: &[&str]) -> String {
 /// exactly that condition.
 fn refuses_without(missing: Component) {
     let fixture = Fixture::reviewing();
+    if missing == Component::Integrated {
+        fixture.stale_the_pass();
+    }
     let stderr = fixture.refuse(&fixture.lock_payload("lock", Some(missing)));
     let token = missing.condition().as_str();
     assert!(
@@ -487,8 +536,10 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
         .collect();
     fixture.apply(&fixture.payload("attest", &json!({"declare": mixed})));
 
-    // The integrated pass stays mandatory, and an adversarial *section*
-    // attestation is not a substitute for it.
+    // The run-level pass stays mandatory, and an adversarial *section*
+    // attestation is not a substitute for it: with the pass staled by an edit,
+    // the mixed section review does not lock.
+    fixture.stale_the_pass();
     let stderr =
         fixture.refuse(&fixture.lock_payload("no-integrated", Some(Component::Integrated)));
     let token = Condition::IntegratedReviewPresent.as_str();
@@ -497,9 +548,88 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
         "an adversarial section attestation does not clear `{token}`, got: {stderr}"
     );
 
-    // With the integrated pass recorded, the same mixed section review locks.
+    // Re-entering `reviewing` opens a fresh pass over the edited content, and
+    // the same mixed section review locks. Since DEC-125's mint, that — not a
+    // declaration — is how the condition is cleared again.
+    fixture.re_enter_reviewing("reopen");
     fixture.apply(&fixture.lock_payload("lock", None));
     assert_eq!(fixture.stage(), Stage::Locked);
+}
+
+// ── DEC-125: the run's review pass, minted on entry to `reviewing` ─────────
+
+/// `VT-1` (a): entry to `reviewing` mints exactly one `RV`, and the run holds it
+/// as its pass over the content that was current at entry.
+#[test]
+fn mints_a_review_pass_on_entry_to_reviewing() {
+    let fixture = Fixture::reviewing();
+
+    assert_eq!(
+        fixture.minted_reviews(),
+        vec!["001".to_owned()],
+        "one pass, one RV"
+    );
+    let pass = fixture
+        .read()
+        .review
+        .pass
+        .expect("a run in `reviewing` holds a pass");
+    assert_eq!(
+        pass.review,
+        ReviewRef::new("RV-001"),
+        "the run names the RV"
+    );
+    assert!(
+        pass.is_current(&fixture.read().sections.fingerprints()),
+        "the pass covers the content it opened over"
+    );
+
+    // The RV is a real ledger against the slice, not a bare directory.
+    let ledger = std::fs::read_to_string(
+        fixture
+            .root
+            .join(common::REVIEW_DIR)
+            .join("001/review-001.toml"),
+    )
+    .expect("the minted RV carries its ledger");
+    assert!(ledger.contains(SLICE), "the RV reviews the slice: {ledger}");
+}
+
+/// `VT-1` (b) / `EX-4`: a later entry **replaces** the pass and never reopens the
+/// old one. The prior `RV` stays on disk — an authored record is never rolled
+/// back — but the run's pass names the new one, over the new content.
+#[test]
+fn re_entry_replaces_the_review_pass() {
+    let fixture = Fixture::reviewing();
+    let first = fixture
+        .read()
+        .review
+        .pass
+        .expect("the first entry minted a pass");
+
+    fixture.stale_the_pass();
+    fixture.re_enter_reviewing("second");
+
+    assert_eq!(
+        fixture.minted_reviews(),
+        vec!["001".to_owned(), "002".to_owned()],
+        "the re-entry mints a second RV and leaves the first authored"
+    );
+    let second = fixture
+        .read()
+        .review
+        .pass
+        .expect("the re-entry minted a pass");
+    assert_eq!(
+        second.review,
+        ReviewRef::new("RV-002"),
+        "replaced, not reopened"
+    );
+    assert_ne!(
+        second.covered, first.covered,
+        "opened over the edited content"
+    );
+    assert!(second.is_current(&fixture.read().sections.fingerprints()));
 }
 
 // ── ISS-310: the required lanes are the run's, and the policy is mutable ──

@@ -880,14 +880,16 @@ fn every_event_fixture() -> Fixture {
             "dispose": { "form": "create", "kind": "decision", "title": "Checkpointed decision" },
         }] }),
     ));
-    // The PHASE-12 review vocabulary: integrated_review_recorded, finding_raised,
-    // finding_disposed, acceptance_attested. No stage move — this fixture is
-    // about the rows each declaration persists, not about the lock gate, which
-    // `tests/e2e_design_review.rs` owns.
+    // The PHASE-12 review vocabulary: finding_raised, finding_disposed,
+    // acceptance_attested. No stage move — this fixture is about the rows each
+    // declaration persists, not about the lock gate, which
+    // `tests/e2e_design_review.rs` owns. `integrated_review_recorded` left this
+    // vocabulary with SL-244's retirement of the `int-` declaration: the run's
+    // review pass is minted on entry to `reviewing`, not declared, and the
+    // stage move it rides is already covered above.
     fixture.apply(&fixture.payload(
         "review",
         &json!({ "declare": [
-            { "subject": "int-1" },
             { "subject": "fnd-1", "concerns": "sec-1", "summary": "a concern" },
         ] }),
     ));

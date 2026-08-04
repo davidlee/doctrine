@@ -20,7 +20,7 @@ pub(crate) use test_support::{WORKER_MARKER_REL, doctrine_bin, repo_root, under_
 #[path = "../../src/kinds/dirs.rs"]
 mod kind_dirs;
 
-pub(crate) use kind_dirs::SLICE_DIR;
+pub(crate) use kind_dirs::{REVIEW_DIR, SLICE_DIR};
 
 /// Canonical config path — mirrors `src/dtoml::DOCTRINE_TOML` (which
 /// integration tests can't import from a binary-only crate).

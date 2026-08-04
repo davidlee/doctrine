@@ -29,8 +29,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::Stage;
 use super::attestation::{
-    AcceptanceAttestation, Attestation, ContentCoverage, IntegratedReview, IntentState,
-    IntentSubject, LockAcceptance, RecoveryIntent, ReviewRef, Reviewer,
+    AcceptanceAttestation, Attestation, ContentCoverage, IntentState, IntentSubject,
+    LockAcceptance, RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
@@ -257,18 +257,29 @@ impl Pending {
     }
 }
 
-/// Build the whole candidate, or refuse and leave `prior` untouched.
+/// What the shell resolved for this candidate — provisional on the first
+/// validation pass, real on the second (D2).
 ///
-/// `resolved` maps a checkpoint to the canonical record the shell resolved for
-/// it — provisional on the first validation pass, real on the second. It is a
-/// parameter rather than a pre-applied rewrite of `request` because an accepted
-/// proposal's declarations exist only inside this function (`EX-3`, D1).
+/// One struct rather than a growing positional list. Deliberately **not**
+/// [`DerivedInput`]: that is where *observed* facts arrive, and a minted id is
+/// resolved rather than observed.
+#[derive(Debug, Default)]
+pub(crate) struct Resolution {
+    /// Each checkpoint's canonical record. A parameter rather than a pre-applied
+    /// rewrite of `request` because an accepted proposal's declarations exist
+    /// only inside [`apply`] (`EX-3`, D1).
+    pub(crate) checkpoints: BTreeMap<DesignId, String>,
+    /// The `RV` minted for a pass this candidate opens, if it opens one.
+    pub(crate) review_pass: Option<ReviewRef>,
+}
+
+/// Build the whole candidate, or refuse and leave `prior` untouched.
 pub(crate) fn apply(
     prior: &DesignSnapshot,
     request: &ApplyRequest,
     derived: &DerivedInput,
     payload_digest: &str,
-    resolved: &BTreeMap<DesignId, String>,
+    resolved: &Resolution,
 ) -> Result<Applied, Refusal> {
     // Before anything is touched: a payload may not claim a clearance Doctrine
     // derives for itself. Checked over the whole candidate rather than inside the
@@ -348,7 +359,7 @@ pub(crate) fn apply(
     let mut declarations = request.declare.clone();
     declarations.extend(accepted);
     for declaration in &mut declarations {
-        if let Some(record) = resolved.get(declaration.subject()) {
+        if let Some(record) = resolved.checkpoints.get(declaration.subject()) {
             *declaration = declaration.clone().resolving(record);
         }
     }
@@ -452,6 +463,24 @@ pub(crate) fn apply(
             derived.runbook.as_ref(),
             &derived.verifications,
         )?);
+    }
+
+    // DEC-125: entry to `reviewing` opens a review pass over the content as it
+    // stands. Read off the candidate rather than the request's declared target —
+    // a refused advance never reaches here, so a pass is never opened for a move
+    // that did not happen, and the shell never pre-judges this core's admission.
+    //
+    // Assignment, not insertion: a later entry **replaces** the pass and never
+    // reopens the old one (`EX-4`). The `RV` the old pass named stays authored;
+    // what moves is which pass the run is on.
+    if next.run.stage == Stage::Reviewing
+        && prior.run.stage != Stage::Reviewing
+        && let Some(review) = resolved.review_pass.clone()
+    {
+        next.review.pass = Some(ReviewPass::over(
+            review,
+            ContentCoverage::of(next.sections.fingerprints()),
+        ));
     }
 
     let rows: Vec<ChangeRow> = pending
@@ -896,7 +925,6 @@ fn declare(
         IdKind::Inquiry => declare_node(next, declaration),
         IdKind::Section => declare_section(next, declaration, derived),
         IdKind::Attestation => declare_attestation(next, declaration),
-        IdKind::Integrated => declare_integrated(next, declaration),
         IdKind::Finding => declare_finding(next, declaration),
         IdKind::Checkpoint => declare_checkpoint(next, declaration, submission),
         // A delegation is not a declaration subject. It is acted on through the
@@ -1145,32 +1173,6 @@ fn declare_attestation(
             PayloadTerm::token(PayloadKey::Section, subject.as_str())?,
             PayloadTerm::token(PayloadKey::Attestation, id.as_str())?,
         ],
-    )])
-}
-
-/// Record the integrated adversarial pass over the document as it stands
-/// (DEC-074, EX-2).
-///
-/// One per run: re-declaring replaces it, because a second integrated pass over
-/// the same document is the same fact and two of them would raise the question of
-/// which one the gate reads.
-fn declare_integrated(
-    next: &mut DesignSnapshot,
-    declaration: &Declaration,
-) -> Result<Vec<Pending>, Refusal> {
-    let id = declaration.subject();
-    let covered = next.sections.fingerprints();
-    if covered.is_empty() {
-        return Err(Refusal::IntegratedReviewWithoutSections { id: id.clone() });
-    }
-    next.review.integrated = Some(IntegratedReview::over(
-        id.clone(),
-        ContentCoverage::of(covered),
-    ));
-    Ok(vec![Pending::about(
-        ChangeEvent::IntegratedReviewRecorded,
-        id,
-        Vec::new(),
     )])
 }
 
@@ -1749,7 +1751,7 @@ mod tests {
                     &claiming(&prior, condition),
                     &derived,
                     "sha256:pay",
-                    &BTreeMap::new(),
+                    &Resolution::default(),
                 ),
                 Err(Refusal::DerivedConditionClaimed { condition }),
                 "{} is derived and must not be claimable",
@@ -1765,7 +1767,7 @@ mod tests {
             &claiming(&prior, gate::Condition::RequiredSectionsExist),
             &derived,
             "sha256:pay",
-            &BTreeMap::new(),
+            &Resolution::default(),
         )
         .expect("a claimed condition is still evidence");
         assert!(

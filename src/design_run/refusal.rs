@@ -208,9 +208,6 @@ pub(crate) enum Refusal {
     FindingSummaryMissing { id: DesignId },
     /// A finding named no section, or named one the run does not hold.
     FindingSubjectMissing { id: DesignId },
-    /// An integrated review was recorded over a run holding no sections. There is
-    /// nothing to have reviewed, and a pass over nothing would clear the gate.
-    IntegratedReviewWithoutSections { id: DesignId },
     /// A checkpoint declaration is missing the inquiry it disposes or the record
     /// that disposes it — the two halves of a DEC-062 disposition.
     CheckpointIncomplete { id: DesignId },
@@ -527,9 +524,6 @@ impl fmt::Display for Refusal {
             }
             Refusal::FindingSubjectMissing { id } => {
                 write!(f, "finding {id} names no section this run holds")
-            }
-            Refusal::IntegratedReviewWithoutSections { id } => {
-                write!(f, "integrated review {id} covers a run holding no sections")
             }
             Refusal::AttestationSubjectMissing { id } => {
                 write!(f, "attestation {id} names no section this run holds")

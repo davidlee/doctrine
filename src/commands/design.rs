@@ -53,12 +53,12 @@ use crate::design_run;
 use crate::design_run::Stage;
 use crate::design_run::TurnEnvelope;
 use crate::design_run::attestation::{
-    AcceptanceAttestation, IntentState, IntentSubject, RecoveryIntent,
+    AcceptanceAttestation, IntentState, IntentSubject, RecoveryIntent, ReviewRef,
 };
 use crate::design_run::delegation::Delegation;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::render::envelope::{self, Detail};
-use crate::design_run::run::{Admission, DerivedInput};
+use crate::design_run::run::{Admission, DerivedInput, Resolution};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
     ApplyRequest, Declaration, DelegationAct, DischargeClaim, Dispose,
@@ -730,10 +730,6 @@ enum MintKind {
         slug: String,
     },
     /// The run's review pass — `review` owns the semantics (DEC-125).
-    #[expect(
-        dead_code,
-        reason = "SL-244 PHASE-04 T7 — the trigger that constructs it; delete this expect there"
-    )]
     Review(crate::review::NewArgs),
 }
 
@@ -794,6 +790,30 @@ impl MintPlan {
     /// names none, which is what keeps the resolved map keyed by `DesignId`.
     const fn checkpoint(&self) -> Option<&DesignId> {
         self.subject.checkpoint()
+    }
+}
+
+/// The mint DEC-125 owes on entry to `reviewing`: an `RV` reviewing the slice
+/// whose design this run is.
+///
+/// Facet and target are derived, not declared — there is one design run per slice
+/// and the pass is over that run's design, so a payload has nothing to say about
+/// either. `title`, `raiser` and `responder` take `review new`'s own defaults, so
+/// a minted pass and a hand-opened one are the same record shape.
+fn review_pass_plan(slice: u32) -> MintPlan {
+    MintPlan {
+        subject: IntentSubject::ReviewPass,
+        effect: MintEffect::Create(MintKind::Review(crate::review::NewArgs {
+            facet: crate::review::Facet::Design,
+            target: crate::listing::canonical_id(crate::kinds::SLICE_KIND.prefix, slice),
+            phase: None,
+            title: None,
+            raiser: None,
+            responder: None,
+        })),
+        // Not a user judgement: the pass opens because the run entered
+        // `reviewing`, so there is nothing for an acceptance to be bound to.
+        acceptance: None,
     }
 }
 
@@ -1358,22 +1378,43 @@ fn apply(
         observed_review: None,
     };
 
-    // Everything refusable, refused while the authored tier is untouched.
+    // Everything refusable, refused while the authored tier is untouched. Pass 1
+    // stands in a provisional value for every id the mints will claim, so the
+    // candidate validates against values of the real shape (D2).
     let plans = plan_checkpoints(root, &prior, &request)?;
-    let provisional: std::collections::BTreeMap<DesignId, String> = plans
-        .iter()
-        .filter_map(|plan| Some((plan.checkpoint()?.clone(), plan.provisional_record())))
-        .collect();
-    design_run::run::apply(&prior, &request, &derived, &digest, &provisional)
+    let provisional = Resolution {
+        checkpoints: plans
+            .iter()
+            .filter_map(|plan| Some((plan.checkpoint()?.clone(), plan.provisional_record())))
+            .collect(),
+        review_pass: Some(ReviewRef::new(crate::listing::canonical_id(
+            crate::kinds::REVIEW_KIND.prefix,
+            PROVISIONAL_RECORD_ID,
+        ))),
+    };
+    let candidate = design_run::run::apply(&prior, &request, &derived, &digest, &provisional)
         .map_err(|refused| refusal(&refused))?;
 
-    // DEC-086 steps 1–5, per checkpoint, resuming the first incomplete effect.
-    let mut resolved: std::collections::BTreeMap<DesignId, String> =
-        std::collections::BTreeMap::new();
-    for plan in &plans {
+    // D1: whether a pass is owed is read off pass 1's own candidate, whose value
+    // was discarded until now. The provisional candidate is thrown away — only
+    // this one bit survives it — so the mint runs on the same admission decision
+    // the core just made, and a refused advance mints nothing.
+    let opening_review = candidate.snapshot.run.stage == design_run::Stage::Reviewing
+        && prior.run.stage != design_run::Stage::Reviewing;
+    drop(candidate);
+
+    // DEC-086 steps 1–5, per mint, resuming the first incomplete effect.
+    let mut resolved = Resolution::default();
+    for plan in plans
+        .iter()
+        .chain(opening_review.then(|| review_pass_plan(slice)).iter())
+    {
         let record = execute_mint(root, slice, &request.envelope.submission_id, plan, fault)?;
-        if let Some(checkpoint) = plan.checkpoint() {
-            resolved.insert(checkpoint.clone(), record);
+        match plan.checkpoint() {
+            Some(checkpoint) => {
+                resolved.checkpoints.insert(checkpoint.clone(), record);
+            }
+            None => resolved.review_pass = Some(ReviewRef::new(record)),
         }
     }
 

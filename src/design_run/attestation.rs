@@ -337,39 +337,6 @@ impl<T: Eq> ContentCoverage<T> {
     }
 }
 
-/// The integrated adversarial pass (DEC-074, design §5.4).
-///
-/// There is no `reviewer` field. The integrated pass is adversarial *by
-/// construction* — v1 makes it mandatory and offers no other kind — so a field
-/// whose only lawful value is [`Reviewer::Adversarial`] would be somewhere to put
-/// a wrong answer. Section-level review is where the reviewer varies.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct IntegratedReview {
-    id: DesignId,
-    covered: ContentCoverage<Fingerprint>,
-}
-
-impl IntegratedReview {
-    /// Record an integrated pass over the content it reviewed.
-    pub(crate) const fn over(id: DesignId, covered: ContentCoverage<Fingerprint>) -> Self {
-        IntegratedReview { id, covered }
-    }
-
-    /// This review's id.
-    #[expect(
-        dead_code,
-        reason = "SL-233: read surface with no reader (see [`Attestation::reviewer`])"
-    )]
-    pub(crate) const fn id(&self) -> &DesignId {
-        &self.id
-    }
-
-    /// Whether it still covers current content.
-    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
-        self.covered.is_current(current)
-    }
-}
-
 /// A canonical `RV` id, as the run records it (SL-244 `sec-4`).
 ///
 /// Deliberately **not** a [`DesignId`]: run-local ids are one space and an `RV`
@@ -398,17 +365,9 @@ impl ReviewRef {
 /// which is what lets the warnings derive on a waived run and what gives a
 /// disposition something to bind to.
 ///
-/// This is the shape [`IntegratedReview`] becomes — the same record with a
-/// [`ReviewRef`] where a [`DesignId`] never belonged.
+/// This is the shape `IntegratedReview` became — the same record with a
+/// [`ReviewRef`] where a [`DesignId`] never belonged (SL-244 `EX-2`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-04: the type lands before the field that holds it (T2) \
-                  and the mint that fills it (T7)"
-    )
-)]
 pub(crate) struct ReviewPass {
     /// The `RV` minted for this pass.
     pub(crate) review: ReviewRef,
@@ -418,10 +377,6 @@ pub(crate) struct ReviewPass {
 
 impl ReviewPass {
     /// Open a pass over the content it reviews.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-04: no caller until the mint (T7)")
-    )]
     pub(crate) const fn over(review: ReviewRef, covered: ContentCoverage<Fingerprint>) -> Self {
         ReviewPass { review, covered }
     }
@@ -432,13 +387,6 @@ impl ReviewPass {
     /// is content nobody looked at, and stales the pass exactly as a covered
     /// section moving does. Defined through [`ContentCoverage::is_current`] so the
     /// currency lamp and the diff that explains it cannot disagree.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-244 PHASE-04: `integrated_current` re-sources onto this at T3"
-        )
-    )]
     pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
         self.covered.is_current(current)
     }

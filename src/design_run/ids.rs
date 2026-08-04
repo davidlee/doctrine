@@ -36,8 +36,6 @@ pub(crate) enum IdKind {
     Checkpoint,
     /// A content-bound review attestation (`att-`).
     Attestation,
-    /// The integrated adversarial pass over the whole document (`int-`).
-    Integrated,
     /// A runtime review finding (`fnd-`).
     Finding,
     /// One exported delegation assignment (`dlg-`).
@@ -46,12 +44,11 @@ pub(crate) enum IdKind {
 
 impl IdKind {
     /// Every kind — the closed vocabulary, single-sourced (STD-001).
-    pub(crate) const ALL: [IdKind; 7] = [
+    pub(crate) const ALL: [IdKind; 6] = [
         IdKind::Inquiry,
         IdKind::Section,
         IdKind::Checkpoint,
         IdKind::Attestation,
-        IdKind::Integrated,
         IdKind::Finding,
         IdKind::Delegation,
     ];
@@ -63,7 +60,6 @@ impl IdKind {
             IdKind::Section => "sec-",
             IdKind::Checkpoint => "cp-",
             IdKind::Attestation => "att-",
-            IdKind::Integrated => "int-",
             IdKind::Finding => "fnd-",
             IdKind::Delegation => "dlg-",
         }
