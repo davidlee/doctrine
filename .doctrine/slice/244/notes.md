@@ -322,15 +322,38 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   `reviewing`** — now the only way to clear it. This is `EX-8`'s *the currency
   lamp's input now exists* arriving as an argued behaviour change in
   `tests/e2e_design_review.rs`, not a weakening.
-- **The journal's wire form is preserved by construction, and nothing tests it
-  from the previous binary's bytes.** `D3` required the `Checkpoint` arm to keep
-  its bare-`DesignId` spelling; `IntentSubject` codes through
-  `try_from`/`into = "String"` and the field keeps its old key as a
-  `serde(alias = "checkpoint")`. The control `T6` names — `e2e_design_checkpoint`
-  green **unedited** — proves the round trip through the *new* types, not
-  compat with an old file, so a unit test over the literal legacy TOML was added
-  beside it (`design_run::tests`). `/audit` should read the alias as the compat
-  mechanism and that test as its evidence.
+- **`D3`'s cross-binary compat clause is DROPPED, and the code carrying it is
+  gone.** The sheet's `D3` argued the journal must be readable by a *later*
+  binary, because "a crash from the previous binary is what it is resumed from",
+  and `T6` bought that with a `serde(alias = "checkpoint")` plus a unit test over
+  literal legacy TOML. Neither the design nor `plan.toml` asks for it: `EX-4` and
+  `VA-1` are both same-binary claims (*resuming the same submission*). The
+  journal is per-submission **runtime** state under `.doctrine/state/`, cleared
+  by `complete_journal`, so the window the alias protected is "a submission
+  crashes mid-mint **and** the binary is upgraded before that same submission is
+  re-run" — a guarantee this project makes nowhere else. Removed on the user's
+  call, 2026-08-04: the alias is deleted and the doc no longer claims compat.
+  What is **kept** is the string coding itself, which is the better wire form on
+  its own terms — a bare `subject = "cp-1"` beside a reserved `review-pass`
+  token, rather than a tagged table — and the test is re-levered onto the claim
+  that survives, that the two arms cannot collide in the one slot
+  (`the_review_pass_token_cannot_be_spelled_by_a_checkpoint_id`). `T6`'s real
+  control is unchanged and undiminished: `e2e_design_checkpoint` green
+  **unedited**, at 87.
+- **PHASE-04's `VA-1` is evidence on the tree, and it sits in
+  `tests/e2e_design_review.rs` rather than the sheet's
+  `tests/e2e_design_checkpoint.rs`.** Two crash points, mirroring the pair the
+  checkpoint suite runs over the knowledge arm, because the two windows promise
+  different things: before DEC-086's id journal only *no record nothing can name*
+  holds — the dead claim's directory outlives a hard exit, which is the tolerated
+  reservation — and from the id journal onward the exact reserved id holds. The
+  second is what exercises `review::materialise_review_at` on the tree instead of
+  only in a unit test. **The departure is a strengthening, not a shortcut:** the
+  ladder to `reviewing` is the review fixture's, so minting there cost two lines
+  of fault env instead of a second copy of that ladder — and it leaves the
+  checkpoint suite byte-unchanged, which is the very control `T6` rests on. Note
+  the `VA-1` above this one is **PHASE-02's** (the snapshot round-trip harness);
+  they are different criteria in different phases.
 - **DEC-086's step 5 is not universal, and `MintKind` now says so.** A minted RV
   has no status to set (ADR-007 D-C8 derives it from the ledger) and authors its
   own `reviews` edge, so `MintKind::has_record_effects()` gates
@@ -409,7 +432,13 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   files.** `notes.md` and `slice-244.toml` rode a commit inside the phase's code
   boundary instead of a post-flip harvest commit, which is what PHASE-01 and
   PHASE-02 did. Cosmetic; the ordering is the lesson (sheet F4). Re-recording the
-  delta to exclude them would also exclude a real code change.
+  delta to exclude them would also exclude a real code change. **PHASE-04 reads
+  the same way, more so**: its boundary spans the plan amendment, `DEC-140`, and
+  two harvest/selector commits, all authored `.doctrine/**` inside the code
+  boundary. Deliberate — a handover is exactly where uncommitted authored state
+  goes missing, so it was committed when written rather than held to the phase
+  flip. `slice phase` warned at the flip that the boundary spans 12+ commits.
+  Already-explained noise at `/audit`, not a defect.
 - **`RV-344` pass 2 is specified in the ledger's `## Brief` and will not be run.**
   The user's call (2026-08-04): not because there is nothing left to find, but
   because it comes out cheaper against real code than against prose. Its four

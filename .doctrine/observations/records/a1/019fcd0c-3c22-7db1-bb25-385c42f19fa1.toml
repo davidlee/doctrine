@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcd0c-3c22-7db1-bb25-385c42f19fa1"
+recorded_at = "2026-08-04T13:52:38.946676244Z"
+kind = "friction"
+summary = "phase-plan: VA-1 named the test file holding the mechanism, not the one holding the fixture"
+detail = "SL-244 PHASE-04 T10. The sheet placed VA-1's fault-injected e2e in tests/e2e_design_checkpoint.rs because that is where the DOCTRINE_DESIGN_FAULT harness lives. But the harness is two lines (an env var on the spawn), while what the test actually needs is a run driven to 'reviewing' — three sections, six clearances, three runbook step lists and three stage moves — which is Fixture::reviewing in tests/e2e_design_review.rs. Following the sheet would have copied the expensive half to reach the cheap half, and would also have edited the very file T6 nominated as its 'green unedited' control. Landed in the review suite instead; the checkpoint suite stays byte-unchanged, so the control got STRONGER than the plan called for. Cost: a mid-execute placement decision the sheet had already pre-decided wrongly, plus the argument to record the departure. Generalises: when a phase sheet names a test file, the discriminator is where the FIXTURE lives, not where the mechanism lives — a mechanism is usually portable and a fixture usually is not."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

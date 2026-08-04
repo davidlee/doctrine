@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fccfb-f6f9-7f53-85a8-7b6880a0a0b0"
+recorded_at = "2026-08-04T13:34:52.665104822Z"
+kind = "friction"
+summary = "execute: cfg_attr(not(test), expect(dead_code)) is wrong for an item nothing constructs in tests either"
+detail = "SL-244 PHASE-04 T6. The phase sheet's R6 prescribes cfg_attr(not(test), expect(dead_code, ...)) for state staged ahead of its reader. That form is only correct when the TEST build does construct the item. For an enum variant (MintKind::Review) that no test constructs either, the cfg strips the expect in the test build and dead_code fires there instead — one wasted build cycle. The correct form for a wholly-unconstructed item is a plain #[expect(dead_code, reason = ...)], which is fulfilled in both builds. Two rules, one prescribed idiom; the discriminator is 'do tests construct it?'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
