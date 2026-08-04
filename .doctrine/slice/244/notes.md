@@ -142,9 +142,21 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · PHASE-03 · b7c97434
+fresh-as-of: 2026-08-04 · PHASE-04 in_progress · 7d1df4ba
 
 ### Produced
+
+- **PHASE-04 in progress** — three of eleven planned tasks landed, out of the
+  order the sheet first proposed (sheet `F1`: the `int-` retirement cannot
+  precede the mint that replaces it, so `T2`/`T3`/`T7` become one movement).
+  Done: `T1` `ReviewRef` + `ReviewPass` in `attestation.rs` with `pass_over` in
+  the shared fixture (`b1907148`); `T8` `undisposed_blockers` beside
+  `doc_unresolved_blockers` in `review.rs` (`ce0885f2`); `T9`
+  `ObservedReview` on `DerivedInput` + `review::observe_pass` / `PassFacts`
+  (`7d1df4ba`). `EX-7` settled and `VT-4` amended (`eb408a0d`), with the
+  reasoning as `DEC-140` (`91d709a6`, `2056b36b`). Unit suite 76 → 77; `review`
+  83 → 84 (its own count, unaffected by the design-run embed). Clippy clean
+  throughout. Remaining: `T4`, `T5`, `T6`, `[T2+T3+T7]`, `T10`, `T11`.
 
 - **PHASE-03 done** — `ISS-310` closed. `ReviewPolicy` (four variants, serde-
   defaulted) sits on the run header; `ActorClass` gains one direction from
@@ -268,6 +280,42 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 
 ### Open
 
+- **`EX-7` is SETTLED: the finding set is readable today, so `IMP-392` narrows
+  to the concluded-pass marker alone.** Evidence in tree: `FindingStatus` is
+  `{Open, Answered, Contested, Verified, Withdrawn}`, `parse_finding_status` and
+  `Severity::parse` are both live, and `grep -c concluded src/review.rs` is `0`
+  against a positive control of `3`. Recorded in `plan.md` § *One dependency the
+  plan flags rather than re-decides*. **Consequence PHASE-05 inherits:** its
+  `VA-3` clause fires — the second and third deferred assertions (an undisposed
+  blocker holding the edge; the contest/re-dispose cycle clearing) land live in
+  PHASE-05 rather than waiting on `IMP-392`; only the first (`Conducted` over an
+  unconcluded RV refused at admission) stays deferred.
+- **`VT-4` was amended mid-phase, and `/audit` should read the amendment rather
+  than the original.** Its clause *and the gate reads that as unmet* presumed
+  `review-disposition-attested`, a condition PHASE-05 owns along with the act
+  that names a review at all — so PHASE-04 had no reader and the clause could
+  only have been satisfied hollowly. PHASE-05's `VT-9` already carries it
+  verbatim, so it was dropped rather than duplicated, and `test_file` moved to
+  `src/review.rs` where an unreadable ref can exist. Consulted with the user
+  before the edit; reasoning as `DEC-140`. `EX-5` is otherwise met in full.
+- **`EX-6b`'s second half is unobservable today, and that is why it argues from
+  coupling.** The review-level `derived_status` guard could never fire while
+  `undisposed_blockers` returns anything, because any `open` or `contested`
+  finding forces `Active`. Pinned by `the_predicate_does_not_read_review_level_status`.
+  So *not inheriting the guard* is a coupling decision (ADR-007 D7: the
+  review-level status is a display summary, never a gate), not a wrong-answer
+  fix. `/audit` should not expect a behavioural difference to be demonstrable.
+- **`Condition::IntegratedReviewPresent`'s unmet mode narrows to stale-only**
+  (sheet `F2`), and the e2e suite's `refuses_without(Component::Integrated)`
+  must be re-levered onto staleness. Once entry to `reviewing` always mints a
+  pass, presence is guaranteed by construction and currency is the live
+  question — `EX-8`'s *the currency lamp's input now exists*, arriving as an
+  argued behaviour change in `tests/e2e_design_review.rs` rather than a
+  weakening. Not yet done: it lands with `[T2+T3+T7]`.
+- **Two shell surfaces carry `expect(dead_code)` naming PHASE-05**, both
+  expected to go live rather than be silenced further: `review::observe_pass`
+  and `design_run::run::ObservedReview`. `undisposed_blockers`'s own `expect`
+  was deleted the moment `observe_pass` read it, per the inverse trap.
 - **`VA-1`'s evidence is recorded, not reproducible from the tree.** It required
   a *real* run rather than a fixture, and runs live in gitignored state, so the
   harness that parsed and re-serialised `.doctrine/state/slice/{243,244}/design.toml`
