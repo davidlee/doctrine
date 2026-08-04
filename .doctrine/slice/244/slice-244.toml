@@ -122,6 +122,11 @@ selector = "src/design_run/runbook.rs"
 intent = "design-target"
 note = "PHASE-01: RunbookKey doc names the forward relation, so it re-points from can_advance to Advance::from_stage when the closed type retires the walk. Doc-only; the runbook model itself is untouched by this slice."
 
+[[selector]]
+selector = "src/design_run/inquiry.rs"
+intent = "design-target"
+note = "PHASE-02 / EX-2, EX-3: NodeMaterial projects an InquiryNode at question, provenance, parent, needs and seq — deliberately not lifecycle or disposition — and InquiryMap::materials() derives the current map purely, beside SectionGroup::fingerprints. The node model itself is unchanged."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
