@@ -59,10 +59,41 @@ Two consumers to check when fixing:
   *review-is-done* rather than on *blockers-outstanding* decides whether this fix
   has teeth beyond display.
 - `SL-244` itself specifies `review-disposition-attested`'s `Conducted` arm
-  against this behaviour. Its conclusion survives the fix — a clean pass and an
-  unrun pass are indistinguishable *from the finding set* either way, which is why
-  `DEC-138` requires a concluded-pass marker (`IMP-392`) — but the design's stated
-  premise needs rewording once this lands.
+  against this behaviour, and its stated premise needs rewording once this
+  lands. **But do not read that as this issue owning a fix over there** — see
+  the next section. The two are independent.
+
+## This fix does NOT fix what SL-244 cites it for
+
+Worth stating plainly, because the citation makes it look like it does, and a
+fixer who assumes so will either scope-creep into `SL-244` or expect a design
+correction that is not theirs to make.
+
+`SL-244`'s design offers the `(Done, None)` reading as its evidence that the
+`Conducted` arm *"would be satisfied the moment the stage was entered"*. That is
+the wrong mechanism for the hazard it names. `DEC-138`'s predicate does not read
+`status` at all:
+
+> `Conducted { review }` satisfies the row while the minted `RV` carries **no
+> finding** that is both `blocker`-severity **and** in `open` or `contested`
+> state
+
+That is universally quantified over the finding set, so it is **vacuously true on
+an empty ledger** — independently of what `derived_status` returns. `DEC-138`
+rejects binding to the review-level `await` explicitly, on `ADR-007` D7's ground
+that it is a display summary and never a gate; the design cites D7 correctly two
+paragraphs earlier and then argues from `status` anyway.
+
+So the two defects are disjoint:
+
+| | what is wrong | what fixes it |
+|---|---|---|
+| this issue | `derived_status` contradicts `ADR-007` D-C8 | repair the function and its two tests |
+| `SL-244` `sec-3` | argues vacuous satisfaction from `status` rather than from the quantifier | reword the premise; the conclusion (a concluded-pass marker is required) stands unchanged |
+
+Fixing `derived_status` leaves `SL-244`'s hazard exactly where it was. `DEC-138`
+carries the same red herring in its consequences and wants the same correction
+when the design is reconciled.
 
 ## Not urgent
 
