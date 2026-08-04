@@ -21,137 +21,18 @@ use super::facts::DerivedDesignFacts;
 use super::refusal::Refusal;
 use super::runbook::{RunbookKey, RunbookStanding};
 
-/// A named precondition of a forward boundary (design §5.4).
-///
-/// Conditions are the closed vocabulary the gate table is written in; a fact is
-/// satisfied when [`DerivedDesignFacts`] holds *live* evidence for it — evidence
-/// whose subject fingerprint still matches current content (DEC-066).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum Condition {
-    /// exploring → inquiring: governing context recorded.
-    GoverningContextRecorded,
-    /// exploring → inquiring: initial concerns recorded.
-    InitialConcernsRecorded,
-    /// inquiring → drafting: blocking inquiries dispositioned.
-    BlockingInquiriesDispositioned,
-    /// inquiring → drafting: the user accepts sufficiency.
-    UserAcceptsSufficiency,
-    /// drafting → reviewing: required sections exist.
-    RequiredSectionsExist,
-    /// drafting → reviewing: materialisation is current.
-    MaterialisationCurrent,
-    /// reviewing → locked: section attestations are current.
-    SectionAttestationsCurrent,
-    /// reviewing → locked: an integrated review exists.
-    IntegratedReviewPresent,
-    /// reviewing → locked: blocking findings are disposed.
-    BlockingFindingsDisposed,
-    /// reviewing → locked: user acceptance is attested (an auditable agent
-    /// claim in v1, not authenticated proof of a human act).
-    UserAcceptanceAttested,
-}
-
-impl Condition {
-    /// Every condition — the closed vocabulary, single-sourced so the
-    /// containment check can enumerate gate ids rather than hand-pick one
-    /// (STD-001).
-    pub(crate) const ALL: [Condition; 10] = [
-        Condition::GoverningContextRecorded,
-        Condition::InitialConcernsRecorded,
-        Condition::BlockingInquiriesDispositioned,
-        Condition::UserAcceptsSufficiency,
-        Condition::RequiredSectionsExist,
-        Condition::MaterialisationCurrent,
-        Condition::SectionAttestationsCurrent,
-        Condition::IntegratedReviewPresent,
-        Condition::BlockingFindingsDisposed,
-        Condition::UserAcceptanceAttested,
-    ];
-
-    /// Whether this condition is **derived from the run's own review state**
-    /// rather than claimed by a caller (design §5.4, the `reviewing → locked`
-    /// row).
-    ///
-    /// The four members of that boundary are answers Doctrine can read off the
-    /// run: which sections carry a live attestation, whether an integrated pass
-    /// covers current content, whether a blocking finding is outstanding, whether
-    /// the user's acceptance still covers what is being locked. Letting a payload
-    /// *claim* them would make the review machinery decorative — a caller could
-    /// lock a design it had never reviewed by asserting that it had, which is
-    /// exactly the self-attestation DEC-088 refuses for accepted truth.
-    ///
-    /// The other six remain claimed, and that asymmetry is deliberate rather than
-    /// finished: `materialisation-current` in particular is mechanically
-    /// derivable, but this boundary is what the phase owns. An exhaustive match,
-    /// so a new condition cannot join the vocabulary without answering here.
-    pub(crate) const fn is_derived(self) -> bool {
-        match self {
-            Condition::SectionAttestationsCurrent
-            | Condition::IntegratedReviewPresent
-            | Condition::BlockingFindingsDisposed
-            | Condition::UserAcceptanceAttested => true,
-            Condition::GoverningContextRecorded
-            | Condition::InitialConcernsRecorded
-            | Condition::BlockingInquiriesDispositioned
-            | Condition::UserAcceptsSufficiency
-            | Condition::RequiredSectionsExist
-            | Condition::MaterialisationCurrent => false,
-        }
-    }
-
-    /// The kebab token this condition is spelled with everywhere — the snapshot
-    /// value, the refusal text, the gate id on a rendered change row (STD-001).
-    ///
-    /// The longest member, `blocking-inquiries-dispositioned`, is exactly
-    /// [`super::bounds::DESIGN_ID_BYTES`] bytes: a gate id rides the id slot of a
-    /// change payload, and that is the derivation of the 32-byte bound.
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Condition::GoverningContextRecorded => "governing-context-recorded",
-            Condition::InitialConcernsRecorded => "initial-concerns-recorded",
-            Condition::BlockingInquiriesDispositioned => "blocking-inquiries-dispositioned",
-            Condition::UserAcceptsSufficiency => "user-accepts-sufficiency",
-            Condition::RequiredSectionsExist => "required-sections-exist",
-            Condition::MaterialisationCurrent => "materialisation-current",
-            Condition::SectionAttestationsCurrent => "section-attestations-current",
-            Condition::IntegratedReviewPresent => "integrated-review-present",
-            Condition::BlockingFindingsDisposed => "blocking-findings-disposed",
-            Condition::UserAcceptanceAttested => "user-acceptance-attested",
-        }
-    }
-}
-
-/// The widest gate id, at compile time.
-const fn widest_condition(rest: &[Condition]) -> usize {
-    match rest {
-        [] => 0,
-        [head, tail @ ..] => {
-            let head = head.as_str().len();
-            let tail = widest_condition(tail);
-            if head > tail { head } else { tail }
-        }
-    }
-}
-
-/// The provenance of [`DESIGN_ID_BYTES`], **proved rather than asserted**
-/// (EX-16(a)). A gate id rides the id slot of a change payload, and
-/// `blocking-inquiries-dispositioned` is the widest identifier that slot must
-/// carry — at exactly 32 B. That is where the number comes from, and a condition
-/// name that outgrew it would stop the build rather than silently break the
-/// rendered-row arithmetic.
-const _: () = assert!(widest_condition(&Condition::ALL) <= DESIGN_ID_BYTES);
-
 // ---------------------------------------------------------------------------
 // The contract vocabulary (design sec-3). What a condition requires, what
 // subject it binds to, and how it is discharged — stated in types the program
 // can reach, rather than in prose no run can read.
 //
-// Declarations only at this point in the phase: the table that instantiates
-// them, and the derivation that reads them, land with the generated vocabulary.
-// The `cfg_attr(not(test), expect(dead_code))` gates below are that staging, and
-// each one must be DELETED — not left — by the task that gives its subject a
-// production reader, or the unfulfilled expectation fails the lint gate.
+// These are the vocabulary; `condition_vocabulary!` below takes the nine-row
+// table written in it and GENERATES the `Condition` enum, `Condition::ALL`,
+// `CONTRACTS` and `boundary_conditions` from that one source.
+//
+// A few `cfg_attr(not(test), expect(dead_code))` gates remain, naming the task
+// that gives their subject a production reader. Each must be DELETED — not left
+// — by that task, or the unfulfilled expectation fails the lint gate.
 // ---------------------------------------------------------------------------
 
 /// How far a guard is re-derived (design sec-3, *reach*).
@@ -166,10 +47,6 @@ const _: () = assert!(widest_condition(&Condition::ALL) <= DESIGN_ID_BYTES);
 /// DEC-067's cumulative re-derivation is the **mechanism** this selects, not the
 /// default it departs from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) enum Reach {
     /// Re-derived at this edge and every edge above it (DEC-067).
     Cumulative,
@@ -185,10 +62,6 @@ pub(crate) enum Reach {
 /// can still only fail if its own artefact changes — coherent, and much weaker
 /// than "cumulative" sounds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) enum Coverage {
     /// The attested artefact's own recorded content, and nothing else. The
     /// degenerate case: it covers nothing but itself.
@@ -224,10 +97,6 @@ pub(crate) enum Coverage {
 /// anybody can name. That obligation is part of the member, not of the call site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T7 projects this, T9 tables it")
-)]
 pub(crate) enum ObservedFact {
     /// The slice's canonical governance relationship edge set.
     GovernanceEdges,
@@ -242,10 +111,6 @@ pub(crate) enum ObservedFact {
 /// An attestation is always over its own recorded content; observed facts are an
 /// additional conjunct, never a substitute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) struct Binding {
     /// What the attestation's own recorded content covers.
     pub(crate) coverage: Coverage,
@@ -261,10 +126,6 @@ pub(crate) struct Binding {
 /// per run under DEC-073. A per-*section* actor would not fit any shape of this
 /// slot; a per-*run* one is a single value an evaluation reads once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) enum RequiredActor {
     /// Fixed by the rule. Seven of the eight requirements.
     Fixed(ActorClass),
@@ -299,10 +160,6 @@ impl RequiredActor {
 
 /// One act a condition requires, and everything about *that act* the gate needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) struct ActRequirement {
     /// The act that must be present.
     pub(crate) act: ActKind,
@@ -326,10 +183,6 @@ pub(crate) struct ActRequirement {
 
 /// Derivation over recorded attestations of one or more acts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) struct AttestationRule {
     /// Every act that must be present. A **conjunction** — two entries mean
     /// *both*, never *either*. DEC-121 is explicit that initial concerns are two
@@ -342,10 +195,6 @@ pub(crate) struct AttestationRule {
 
 /// Run-owned state a condition may be recomputed from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) enum EngineSource {
     /// The inquiry map's dispositions.
     Dispositions,
@@ -364,10 +213,6 @@ pub(crate) enum EngineSource {
 /// There is deliberately **no `remedy: &'static str` beside it**. A refusal's
 /// remedy text is *rendered from* this rule, so the two cannot disagree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 writes the table this keys")
-)]
 pub(crate) enum DerivationRule {
     /// Recomputed from run-owned state; the variant names which state.
     Engine(EngineSource),
@@ -438,6 +283,395 @@ pub(crate) struct Contract {
     /// Key of the narrative prose asset — the condition's own kebab token.
     pub(crate) prose: &'static str,
 }
+
+/// Whether an act is one of the **checkpoint five** — the acts a user gives at a
+/// checkpoint, and therefore the only ones whose record has a slot for a
+/// confirmation, a disposition or an observed fact (design `sec-4`).
+///
+/// The other three are recorded in shapes that carry none of those slots: two are
+/// [`super::attestation::AgentDeclaration`]s and one is an `Attestation`.
+const fn is_checkpoint_act(act: ActKind) -> bool {
+    matches!(
+        act,
+        ActKind::GovernanceConfirmed
+            | ActKind::GraphReviewed
+            | ActKind::SufficiencyAccepted
+            | ActKind::ReviewDisposed
+            | ActKind::DesignAccepted
+    )
+}
+
+/// `EX-4`'s predicate: no requirement may name a slot the record shape it is
+/// written against cannot hold.
+///
+/// The four `ActRequirement` fields are independent, so
+/// `{ act: BlockingSetDeclared, confirms: Some(…) }` is a well-typed row that
+/// compiles, joins every generated set, and refuses every act written against it
+/// — an **enforced condition nothing can satisfy**, which is the one shape the
+/// table may not hold. The type cannot close it, so the generator does: this
+/// predicate is asserted per row at compile time.
+///
+/// `observed` is rule-level rather than per-requirement, so a rule naming an
+/// observed fact requires **every** act in it to be a checkpoint act.
+const fn requirement_slots_fit_their_record(contract: &Contract) -> bool {
+    match contract.derivation {
+        DerivationRule::Engine(_) => true,
+        DerivationRule::Attested(rule) => slots_fit(rule.acts, !rule.binding.observed.is_empty()),
+    }
+}
+
+/// The recursive half of [`requirement_slots_fit_their_record`], written the way
+/// [`widest_condition`] is: a `const fn` cannot take an iterator, and indexing is
+/// denied, so the slice is walked by pattern.
+const fn slots_fit(rest: &[ActRequirement], observed: bool) -> bool {
+    match rest {
+        [] => true,
+        [required, tail @ ..] => {
+            if (required.confirms.is_some() || required.disposes_review || observed)
+                && !is_checkpoint_act(required.act)
+            {
+                false
+            } else {
+                slots_fit(tail, observed)
+            }
+        }
+    }
+}
+
+/// The condition vocabulary, its contracts and its boundary membership, from
+/// **one** edge-keyed source (design `sec-3`, DEC-123).
+///
+/// `DEC-123` wants set equality over three enumerations — the vocabulary, the
+/// const rows, and the prose keys. Proving that by assertion does not work, and
+/// the failure is specific: a walk over `Condition::ALL` plus a count proves
+/// facts about `ALL`, not about the enum. Add a variant, give it an `as_str` arm,
+/// leave it out of `ALL` and `CONTRACTS`, and every assertion still passes while
+/// the variant has no boundary, no contract and no prose.
+///
+/// So the four are not written four times and tested for agreement — they are
+/// **generated from one list and cannot disagree**. Grouping that list by the
+/// edge each row guards is what closes the last hole rather than moving it:
+/// generating the vocabulary and contracts alone would leave
+/// [`boundary_conditions`] hand-written, so a generated condition could hold a
+/// contract and guard nothing at all, invisible to a set-equality test over the
+/// three sets that *were* generated. With [`Advance`] as the outer key, a
+/// condition that guards nothing cannot be written down, and an edge left
+/// unguarded makes the generated match non-exhaustive — a build failure.
+///
+/// The serde token is `#[serde(rename = $token)]` from the same literal
+/// [`Condition::as_str`] returns, rather than a `rename_all` derived from the
+/// variant name. Two spellings that agree today because someone checked is what
+/// this macro exists to stop; one literal used twice cannot drift.
+///
+/// **What generation costs, measured (`T1`, sheet `F6`).** Clippy does not lint
+/// tokens a macro body wrote — a generated `len() == 0` drew no `len_zero` while
+/// the identical hand-written function in this module failed the build. So the
+/// bodies below are outside the lint gate's reach, and their correctness rests on
+/// rustc (`dead_code`, non-exhaustive matches, the `const` assertions) and on
+/// tests. Lints *do* fire on tokens the caller wrote, which is the whole table.
+macro_rules! condition_vocabulary {
+    ($(
+        $edge:ident {
+            $(
+                $(#[$row:meta])*
+                $variant:ident = $token:literal => $contract:expr,
+            )+
+        }
+    )+) => {
+        /// A named precondition of a forward boundary (design §5.4, `sec-3`).
+        ///
+        /// The closed vocabulary the gate table is written in, and the **key** of
+        /// the contract table below — `DEC-101`'s closed set, kept closed.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+        pub(crate) enum Condition {
+            $($(
+                $(#[$row])*
+                #[serde(rename = $token)]
+                $variant,
+            )+)+
+        }
+
+        impl Condition {
+            /// Every condition — the closed vocabulary, single-sourced so the
+            /// containment check can enumerate gate ids rather than hand-pick one
+            /// (STD-001).
+            pub(crate) const ALL: [Condition; [$($($token,)+)+].len()] = [
+                $($(Condition::$variant,)+)+
+            ];
+
+            /// The kebab token this condition is spelled with everywhere — the
+            /// snapshot value, the refusal text, the gate id on a rendered change
+            /// row (STD-001), and its serde form, which is the same literal.
+            ///
+            /// The longest member, `blocking-inquiries-dispositioned`, is exactly
+            /// [`super::bounds::DESIGN_ID_BYTES`] bytes: a gate id rides the id
+            /// slot of a change payload, and that is the derivation of the
+            /// 32-byte bound.
+            pub(crate) const fn as_str(self) -> &'static str {
+                match self {
+                    $($(Condition::$variant => $token,)+)+
+                }
+            }
+        }
+
+        /// What each condition requires, binds to, and is discharged by
+        /// (design `sec-3`, DEC-122/DEC-123).
+        ///
+        /// An enumerable array rather than only a `const fn` match, because it is
+        /// what the prose-corpus and manifest set-equality tests iterate.
+        #[cfg_attr(
+            not(test),
+            expect(dead_code, reason = "SL-244 PHASE-05 T10 evaluates over this")
+        )]
+        pub(crate) const CONTRACTS: [(Condition, Contract); [$($($token,)+)+].len()] = [
+            $($((Condition::$variant, $contract),)+)+
+        ];
+
+        /// The conditions a single forward boundary requires (design §5.4).
+        ///
+        /// Total by construction: [`Advance`] has no value that is not an edge,
+        /// so there is no empty arm to fall through to — and no edge may be
+        /// omitted, because the generated match would not be exhaustive.
+        pub(crate) const fn boundary_conditions(edge: Advance) -> &'static [Condition] {
+            match edge {
+                $(Advance::$edge => &[$(Condition::$variant,)+],)+
+            }
+        }
+
+        // `EX-4`, emitted per row. The failure reports at the macro definition
+        // and the whole invocation block rather than at the offending line, so
+        // the row rides the assertion MESSAGE — `T1` measured that the span is
+        // useless here and the message is not (sheet `F6.5`).
+        $($(
+            const _: () = assert!(
+                requirement_slots_fit_their_record(&$contract),
+                concat!(
+                    "SL-244 contract row `", $token, "` (", stringify!($variant),
+                    ") names a confirmation, a disposition or an observed fact on \
+                     an act outside the checkpoint five — no record shape written \
+                     against it could satisfy the requirement"
+                ),
+            );
+        )+)+
+    };
+}
+
+condition_vocabulary! {
+    ExploringInquiring {
+        /// The user confirms the governing context that was found. Its `Artefact`
+        /// coverage is inert by construction — the act's own content cannot move
+        /// — so the observed edge set does all the invalidating work.
+        GoverningContextRecorded = "governing-context-recorded" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::GovernanceConfirmed,
+                    actor: RequiredActor::Fixed(ActorClass::User),
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage: Coverage::Artefact,
+                    observed: &[ObservedFact::GovernanceEdges],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "governing-context-recorded",
+        },
+        /// Two acts by two actors, in an order: the agent declares its blocking
+        /// set and the user reviews the graph, confirming that declaration.
+        /// DEC-121 is explicit that this is two acts and not one, so the rule is
+        /// a conjunction and a refusal can name which half is missing.
+        InitialConcernsRecorded = "initial-concerns-recorded" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[
+                    ActRequirement {
+                        act: ActKind::GraphReviewed,
+                        actor: RequiredActor::Fixed(ActorClass::User),
+                        confirms: Some(AgentActKind::BlockingSetDeclared),
+                        disposes_review: false,
+                    },
+                    ActRequirement {
+                        act: ActKind::BlockingSetDeclared,
+                        actor: RequiredActor::Fixed(ActorClass::Agent),
+                        confirms: None,
+                        disposes_review: false,
+                    },
+                ],
+                binding: Binding {
+                    coverage: Coverage::InquiryMap,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "initial-concerns-recorded",
+        },
+    }
+    InquiringDrafting {
+        /// Recomputed from the inquiry map's dispositions on every evaluation.
+        BlockingInquiriesDispositioned = "blocking-inquiries-dispositioned" => Contract {
+            derivation: DerivationRule::Engine(EngineSource::Dispositions),
+            reach: Reach::Cumulative,
+            prose: "blocking-inquiries-dispositioned",
+        },
+        /// `InquiryMap` coverage rather than `Artefact`: a re-seeded or materially
+        /// changed graph must unmake an acceptance given over the old one, and
+        /// with `Artefact` coverage the cumulative label would have been inert.
+        UserAcceptsSufficiency = "user-accepts-sufficiency" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::SufficiencyAccepted,
+                    actor: RequiredActor::Fixed(ActorClass::User),
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage: Coverage::InquiryMap,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "user-accepts-sufficiency",
+        },
+    }
+    DraftingReviewing {
+        /// DEC-126's replacement for `required-sections-exist`: the same shape as
+        /// `user-accepts-sufficiency` one stage later. **Edge-local** — it is a
+        /// judgement that drafting may begin, and re-asserting it at a later edge
+        /// asks a question with no meaning; the content drift one might imagine
+        /// it catching is `materialisation-current`'s job, which is cumulative.
+        DraftingReadinessAttested = "drafting-readiness-attested" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::DraftingReady,
+                    actor: RequiredActor::Fixed(ActorClass::Agent),
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage: Coverage::Artefact,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::EdgeLocal,
+            prose: "drafting-readiness-attested",
+        },
+        /// Recomputed from the authored watermark against current digests.
+        MaterialisationCurrent = "materialisation-current" => Contract {
+            derivation: DerivationRule::Engine(EngineSource::Materialisation),
+            reach: Reach::Cumulative,
+            prose: "materialisation-current",
+        },
+    }
+    ReviewingLocked {
+        /// `PerSection`, and `RequiredActor::RunPolicy` rather than a constant:
+        /// ISS-310's required lanes are the run's, declared under DEC-073. A fixed
+        /// actor here would delete a capability DEC-073 already grants.
+        SectionAttestationsCurrent = "section-attestations-current" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::SectionReviewed,
+                    actor: RequiredActor::RunPolicy,
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage: Coverage::PerSection,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "section-attestations-current",
+        },
+        /// DEC-126's fold of `integrated-review-present` and
+        /// `blocking-findings-disposed`. Cumulative through the **derivation**
+        /// rather than the coverage: `Artefact` means only the disposition
+        /// record's own content invalidates it, and what keeps the row live is
+        /// that the `Conducted` arm re-reads the ledger's undisposed blockers on
+        /// every evaluation.
+        ReviewDispositionAttested = "review-disposition-attested" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::ReviewDisposed,
+                    actor: RequiredActor::Fixed(ActorClass::User),
+                    confirms: None,
+                    disposes_review: true,
+                }],
+                binding: Binding {
+                    coverage: Coverage::Artefact,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "review-disposition-attested",
+        },
+        /// `EverySection`, not `Artefact` — `LockAcceptance` already compares its
+        /// covered map against every current section, and self-binding would have
+        /// let a design edit leave the acceptance apparently current, deleting a
+        /// guarantee that already ships.
+        UserAcceptanceAttested = "user-acceptance-attested" => Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::DesignAccepted,
+                    actor: RequiredActor::Fixed(ActorClass::User),
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage: Coverage::EverySection,
+                    observed: &[],
+                },
+            }),
+            reach: Reach::Cumulative,
+            prose: "user-acceptance-attested",
+        },
+    }
+}
+
+impl Condition {
+    /// Whether this condition is **derived from the run's own review state**
+    /// rather than claimed by a caller (design §5.4).
+    ///
+    /// **A bridge with a scheduled death (`D1`).** This is the *incumbent*
+    /// partition — which conditions [`ReviewStanding`] answers for — and it is
+    /// deliberately NOT [`ConditionKind`], which asks a different question (is the
+    /// derivation `Engine` or `Attested`). The two disagree on purpose right now:
+    /// `materialisation-current` is `Engine` and still caller-claimed here.
+    /// PHASE-05 `T10` deletes this along with the evidence scan it partitions,
+    /// and after that there is one derivation with no branch on kind at all.
+    pub(crate) const fn is_derived(self) -> bool {
+        match self {
+            Condition::SectionAttestationsCurrent
+            | Condition::ReviewDispositionAttested
+            | Condition::UserAcceptanceAttested => true,
+            Condition::GoverningContextRecorded
+            | Condition::InitialConcernsRecorded
+            | Condition::BlockingInquiriesDispositioned
+            | Condition::UserAcceptsSufficiency
+            | Condition::DraftingReadinessAttested
+            | Condition::MaterialisationCurrent => false,
+        }
+    }
+}
+
+/// The widest gate id, at compile time.
+const fn widest_condition(rest: &[Condition]) -> usize {
+    match rest {
+        [] => 0,
+        [head, tail @ ..] => {
+            let head = head.as_str().len();
+            let tail = widest_condition(tail);
+            if head > tail { head } else { tail }
+        }
+    }
+}
+
+/// The provenance of [`DESIGN_ID_BYTES`], **proved rather than asserted**
+/// (EX-16(a)). A gate id rides the id slot of a change payload, and
+/// `blocking-inquiries-dispositioned` is the widest identifier that slot must
+/// carry — at exactly 32 B. That is where the number comes from, and a condition
+/// name that outgrew it would stop the build rather than silently break the
+/// rendered-row arithmetic. The witness survives the nine-row vocabulary.
+const _: () = assert!(widest_condition(&Condition::ALL) <= DESIGN_ID_BYTES);
 
 /// The design run's four guarded forward transitions (SL-244 sec-3).
 ///
@@ -511,33 +745,6 @@ impl Advance {
             Stage::Reviewing => Some(Advance::ReviewingLocked),
             Stage::Locked => None,
         }
-    }
-}
-
-/// The conditions a single forward boundary requires (design §5.4).
-///
-/// Total by construction: [`Advance`] has no value that is not an edge, so
-/// there is no empty arm to fall through to.
-pub(crate) const fn boundary_conditions(edge: Advance) -> &'static [Condition] {
-    match edge {
-        Advance::ExploringInquiring => &[
-            Condition::GoverningContextRecorded,
-            Condition::InitialConcernsRecorded,
-        ],
-        Advance::InquiringDrafting => &[
-            Condition::BlockingInquiriesDispositioned,
-            Condition::UserAcceptsSufficiency,
-        ],
-        Advance::DraftingReviewing => &[
-            Condition::RequiredSectionsExist,
-            Condition::MaterialisationCurrent,
-        ],
-        Advance::ReviewingLocked => &[
-            Condition::SectionAttestationsCurrent,
-            Condition::IntegratedReviewPresent,
-            Condition::BlockingFindingsDisposed,
-            Condition::UserAcceptanceAttested,
-        ],
     }
 }
 
@@ -622,8 +829,16 @@ impl ReviewStanding {
     const fn holds(self, condition: Condition) -> Option<bool> {
         match condition {
             Condition::SectionAttestationsCurrent => Some(self.sections_attested),
-            Condition::IntegratedReviewPresent => Some(self.integrated_current),
-            Condition::BlockingFindingsDisposed => Some(self.findings_disposed),
+            // The `D1` bridge, with a scheduled death: DEC-126 folded
+            // `integrated-review-present` and `blocking-findings-disposed` into
+            // one row, and the incumbent standing still carries them as two
+            // booleans. Conjoining them here keeps the evidence scan working over
+            // the nine-row vocabulary for exactly as long as it survives — `T10`
+            // deletes this arm along with the scan, and `VA-2`'s sweep at `T14`
+            // re-checks that it is gone.
+            Condition::ReviewDispositionAttested => {
+                Some(self.integrated_current && self.findings_disposed)
+            }
             Condition::UserAcceptanceAttested => Some(self.acceptance_current),
             _ => None,
         }

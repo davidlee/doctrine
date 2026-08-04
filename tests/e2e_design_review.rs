@@ -96,7 +96,7 @@ const EARLIER: [Condition; 6] = [
     Condition::InitialConcernsRecorded,
     Condition::BlockingInquiriesDispositioned,
     Condition::UserAcceptsSufficiency,
-    Condition::RequiredSectionsExist,
+    Condition::DraftingReadinessAttested,
     Condition::MaterialisationCurrent,
 ];
 
@@ -126,11 +126,18 @@ impl Component {
     ];
 
     /// The gate condition this component clears.
+    ///
+    /// **No longer injective, since SL-244 PHASE-05 `T9`.** DEC-126 folded
+    /// `integrated-review-present` and `blocking-findings-disposed` into the one
+    /// `review-disposition-attested` row, so two components now clear the same
+    /// condition. The components stay four because each is still repaired by its
+    /// own act — what collapsed is the *vocabulary*, not the conjunction.
     const fn condition(self) -> Condition {
         match self {
             Component::Attestations => Condition::SectionAttestationsCurrent,
-            Component::Integrated => Condition::IntegratedReviewPresent,
-            Component::FindingDisposition => Condition::BlockingFindingsDisposed,
+            Component::Integrated | Component::FindingDisposition => {
+                Condition::ReviewDispositionAttested
+            }
             Component::Acceptance => Condition::UserAcceptanceAttested,
         }
     }
@@ -499,9 +506,12 @@ fn refuses_without(missing: Component) {
         stderr.contains(token),
         "the refusal must name `{token}`, got: {stderr}"
     );
+    // Filtered by *condition*, not by component: since DEC-126's fold two
+    // components share `review-disposition-attested`, and filtering by component
+    // would assert that the token the refusal must name is also absent.
     for other in Component::ALL
         .into_iter()
-        .filter(|component| *component != missing)
+        .filter(|component| component.condition() != missing.condition())
     {
         let held = other.condition().as_str();
         assert!(
@@ -626,7 +636,7 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
     fixture.stale_the_pass();
     let stderr =
         fixture.refuse(&fixture.lock_payload("no-integrated", Some(Component::Integrated)));
-    let token = Condition::IntegratedReviewPresent.as_str();
+    let token = Condition::ReviewDispositionAttested.as_str();
     assert!(
         stderr.contains(token),
         "an adversarial section attestation does not clear `{token}`, got: {stderr}"

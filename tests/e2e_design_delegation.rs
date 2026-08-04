@@ -105,7 +105,7 @@ const WRITER_ACTS: [(&str, fn() -> Value); 10] = [
     ("stage", || json!({"to": Stage::Drafting.as_str()})),
     (
         "evidence",
-        || json!([{"condition": Condition::RequiredSectionsExist.as_str(), "subject": SECTION_SPINE}]),
+        || json!([{"condition": Condition::DraftingReadinessAttested.as_str(), "subject": SECTION_SPINE}]),
     ),
     ("acceptance", || json!({"basis": "the delegate says so"})),
     (

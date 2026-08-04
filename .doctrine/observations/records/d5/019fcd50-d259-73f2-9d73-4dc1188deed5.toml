@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcd50-d259-73f2-9d73-4dc1188deed5"
+recorded_at = "2026-08-04T15:07:33.849840426Z"
+kind = "friction"
+summary = "/execute: PHASE-05 task order has an unchecked data dependency — T5/T6 need the CONTRACTS table T9 emits"
+detail = "SL-244 PHASE-05's sheet orders T4..T14 so that each task ends compiling and green (EN-2). T5 (admission owns the rule/record correspondence) and T6 (construction fills covered/observed/confirms in the shape the rule names) both need to resolve ActKind -> ActRequirement, whose only route is the CONTRACTS table. T9 emits that table, four tasks later. Nothing at /phase-plan time checked the task graph against the data dependencies between tasks — the ordering was reasoned about in terms of 'what breaks when Evidence goes' and 'fixtures before the flip', which is a different axis. Cost: a full consult round-trip mid-execute, plus re-reading three design regions to establish that no partial lookup exists. Same class as F3 (nothing at /plan time checks a test_file path is free or apt)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

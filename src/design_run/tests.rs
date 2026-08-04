@@ -24,9 +24,9 @@ use super::fixture::{
     section,
 };
 use super::gate::{
-    ActRequirement, Advance, AttestationRule, Binding, Condition, ConditionKind, Contract,
-    Coverage, DerivationRule, EngineSource, ObservedFact, Reach, RequiredActor, ReviewStanding,
-    advance, boundary_runbook, cumulative_conditions, regress,
+    ActRequirement, Advance, AttestationRule, Binding, CONTRACTS, Condition, ConditionKind,
+    Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach, RequiredActor,
+    ReviewStanding, advance, boundary_conditions, boundary_runbook, cumulative_conditions, regress,
 };
 use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
@@ -284,7 +284,7 @@ fn changed_fingerprint_invalidates_only_affected_evidence() {
     let facts = DerivedDesignFacts::default()
         .observe(moved.clone(), before.clone())
         .observe(stable.clone(), untouched.clone())
-        .record(Condition::RequiredSectionsExist, moved.clone(), before)
+        .record(Condition::DraftingReadinessAttested, moved.clone(), before)
         .record(
             Condition::MaterialisationCurrent,
             stable.clone(),
@@ -292,7 +292,7 @@ fn changed_fingerprint_invalidates_only_affected_evidence() {
         );
 
     assert_eq!(facts.live_evidence().count(), 2);
-    assert!(facts.satisfies(Condition::RequiredSectionsExist));
+    assert!(facts.satisfies(Condition::DraftingReadinessAttested));
     assert!(facts.satisfies(Condition::MaterialisationCurrent));
 
     // One subject's content moves. Only its evidence dies.
@@ -302,7 +302,7 @@ fn changed_fingerprint_invalidates_only_affected_evidence() {
         .map(super::facts::Evidence::subject)
         .collect();
     assert_eq!(live, vec![&stable]);
-    assert!(!after_edit.satisfies(Condition::RequiredSectionsExist));
+    assert!(!after_edit.satisfies(Condition::DraftingReadinessAttested));
     assert!(after_edit.satisfies(Condition::MaterialisationCurrent));
 
     // A subject the shell can no longer observe is treated as changed, not as
@@ -1116,6 +1116,155 @@ fn a_disposition_binds_to_the_pass_it_disposed_under_either_arm() {
         let wire = toml::to_string(held).unwrap();
         assert_eq!(&toml::from_str::<DisposedPass>(&wire).unwrap(), held);
     }
+}
+
+/// The generated table says what the design's classification says (`EX-1`,
+/// `EX-2`).
+///
+/// Deliberately **not** a set-equality test over the four generated artefacts —
+/// vocabulary, `ALL`, `CONTRACTS` and `boundary_conditions` come from one source
+/// and no disagreement is expressible, so such a test could only ever pass. What
+/// is not guaranteed by construction is the table's *content*: a row could name
+/// the wrong coverage, the wrong actor, or the wrong reach and the build would be
+/// perfectly happy. That is what this asserts, against the design's own
+/// classification table.
+#[test]
+fn the_contract_table_classifies_every_condition_as_the_design_says() {
+    assert_eq!(
+        CONTRACTS.len(),
+        Condition::ALL.len(),
+        "one row per condition"
+    );
+    for condition in Condition::ALL {
+        assert_eq!(
+            CONTRACTS
+                .iter()
+                .filter(|(keyed, _)| *keyed == condition)
+                .count(),
+            1,
+            "{} has exactly one contract",
+            condition.as_str()
+        );
+    }
+
+    // Two Derived, seven Attested, zero Claimed — DEC-126's count.
+    let derived: Vec<Condition> = CONTRACTS
+        .iter()
+        .filter(|(_, contract)| contract.derivation.kind() == ConditionKind::Derived)
+        .map(|(condition, _)| *condition)
+        .collect();
+    assert_eq!(
+        derived,
+        vec![
+            Condition::BlockingInquiriesDispositioned,
+            Condition::MaterialisationCurrent
+        ]
+    );
+
+    // Every condition sits on exactly one boundary. Not a set-equality check —
+    // membership is generated — but the *edge* a row was filed under is a
+    // content decision, and filing one under the wrong edge compiles.
+    for (condition, edge) in [
+        (
+            Condition::GoverningContextRecorded,
+            Advance::ExploringInquiring,
+        ),
+        (
+            Condition::InitialConcernsRecorded,
+            Advance::ExploringInquiring,
+        ),
+        (
+            Condition::BlockingInquiriesDispositioned,
+            Advance::InquiringDrafting,
+        ),
+        (
+            Condition::UserAcceptsSufficiency,
+            Advance::InquiringDrafting,
+        ),
+        (
+            Condition::DraftingReadinessAttested,
+            Advance::DraftingReviewing,
+        ),
+        (
+            Condition::MaterialisationCurrent,
+            Advance::DraftingReviewing,
+        ),
+        (
+            Condition::SectionAttestationsCurrent,
+            Advance::ReviewingLocked,
+        ),
+        (
+            Condition::ReviewDispositionAttested,
+            Advance::ReviewingLocked,
+        ),
+        (Condition::UserAcceptanceAttested, Advance::ReviewingLocked),
+    ] {
+        assert!(
+            boundary_conditions(edge).contains(&condition),
+            "{} guards {edge:?}",
+            condition.as_str()
+        );
+    }
+
+    // The three slots the `EX-4` const assertion polices, each named by exactly
+    // one row. The assertion proves no row names a slot its record shape lacks;
+    // this proves the rows that SHOULD name one still do — the complement, which
+    // a const predicate over an empty set would also satisfy.
+    let rules: Vec<(Condition, &AttestationRule)> = CONTRACTS
+        .iter()
+        .filter_map(|(condition, contract)| match &contract.derivation {
+            DerivationRule::Attested(rule) => Some((*condition, rule)),
+            DerivationRule::Engine(_) => None,
+        })
+        .collect();
+    assert_eq!(rules.len(), 7, "seven Attested rows");
+
+    let named = |slot: fn(&ActRequirement, &AttestationRule) -> bool| -> Vec<Condition> {
+        rules
+            .iter()
+            .filter(|(_, rule)| rule.acts.iter().any(|act| slot(act, rule)))
+            .map(|(condition, _)| *condition)
+            .collect()
+    };
+    assert_eq!(
+        named(|act, _| act.disposes_review),
+        vec![Condition::ReviewDispositionAttested]
+    );
+    assert_eq!(
+        named(|act, _| act.confirms == Some(AgentActKind::BlockingSetDeclared)),
+        vec![Condition::InitialConcernsRecorded]
+    );
+    assert_eq!(
+        named(|_, rule| rule
+            .binding
+            .observed
+            .contains(&ObservedFact::GovernanceEdges)),
+        vec![Condition::GoverningContextRecorded]
+    );
+
+    // The one edge-local row, and the one whose actor comes from the run's
+    // policy rather than from the rule (ISS-310).
+    assert_eq!(
+        CONTRACTS
+            .iter()
+            .filter(|(_, contract)| contract.reach == Reach::EdgeLocal)
+            .map(|(condition, _)| *condition)
+            .collect::<Vec<_>>(),
+        vec![Condition::DraftingReadinessAttested]
+    );
+    assert_eq!(
+        named(|act, _| act.actor == RequiredActor::RunPolicy),
+        vec![Condition::SectionAttestationsCurrent]
+    );
+
+    // DEC-121's two-act conjunction is two acts, and stays two.
+    let concerns = rules
+        .iter()
+        .find(|(condition, _)| *condition == Condition::InitialConcernsRecorded)
+        .expect("the row exists")
+        .1;
+    assert_eq!(concerns.acts.len(), 2);
+    assert_eq!(concerns.binding.coverage, Coverage::InquiryMap);
 }
 
 /// The act wire types carry the **claim** and nothing the engine authors

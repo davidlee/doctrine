@@ -1768,7 +1768,7 @@ mod tests {
         // lands.
         let applied = apply(
             &prior,
-            &claiming(&prior, gate::Condition::RequiredSectionsExist),
+            &claiming(&prior, gate::Condition::DraftingReadinessAttested),
             &derived,
             "sha256:pay",
             &Resolution::default(),
@@ -1778,7 +1778,7 @@ mod tests {
             applied
                 .snapshot
                 .gate
-                .satisfies(gate::Condition::RequiredSectionsExist)
+                .satisfies(gate::Condition::DraftingReadinessAttested)
         );
     }
 }
