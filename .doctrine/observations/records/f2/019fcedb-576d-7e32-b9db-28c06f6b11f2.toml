@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcedb-576d-7e32-b9db-28c06f6b11f2"
+recorded_at = "2026-08-04T22:18:29.101878562Z"
+kind = "friction"
+summary = "/phase-plan: a task's declaration list can silently lose a member, and only a rustdoc link knew"
+detail = "SL-244 PHASE-05. T2's sheet entry listed 'ObservedFacts' among the rule vocabulary to declare; it never landed. T3 wrote a doc link to super::gate::ObservedFacts anyway, which compiles clean because intra-doc links are only checked by cargo doc and the gate does not run it. The gap surfaced four tasks later at T6, the first task that needed the slot. Cost was small here (one newtype), but the class is: a phase sheet's declaration list is prose with no check, and a missing member is invisible until a consumer arrives — the compiler cannot help, because nothing yet refers to it except a doc comment."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
