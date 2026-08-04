@@ -473,6 +473,39 @@ pub(crate) fn materialise_fresh_prebuilt(
     reserved: ReservedIds<'_>,
     build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
 ) -> anyhow::Result<Materialised> {
+    materialise_fresh_prebuilt_hooked(
+        claim,
+        project_root,
+        dir,
+        prefix,
+        trunk_ids,
+        reserved,
+        no_midpoint(),
+        build,
+    )
+}
+
+/// [`materialise_fresh_prebuilt`] with the id-claim midpoint exposed.
+///
+/// The parameter is added **here** rather than on `materialise_fresh_prebuilt`
+/// itself, for the reason [`allocate_fresh_hooked`] writes down: the base arity is
+/// driven by `rec` (×2), `revision` and `review`, and widening it would edit all
+/// of them to accommodate a seam none of them uses. The seam is additive; the
+/// existing arity is the evidence that it is.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the prebuilt placement parameter set plus the DEC-086 id-claim midpoint (SL-244)"
+)]
+pub(crate) fn materialise_fresh_prebuilt_hooked(
+    claim: &dyn Claim,
+    project_root: &Path,
+    dir: &str,
+    prefix: &str,
+    trunk_ids: &[u32],
+    reserved: ReservedIds<'_>,
+    on_reserved: impl FnMut(u32, &str) -> anyhow::Result<()>,
+    build: impl FnMut(u32, &str) -> anyhow::Result<Fileset>,
+) -> anyhow::Result<Materialised> {
     let tree_root = project_root.join(dir);
     fs::create_dir_all(&tree_root)
         .with_context(|| format!("Failed to create {}", tree_root.display()))?;
@@ -482,7 +515,7 @@ pub(crate) fn materialise_fresh_prebuilt(
         prefix,
         trunk_ids,
         || reserved(&scan_ids(&tree_root)?),
-        no_midpoint(),
+        on_reserved,
         build,
     )
 }
@@ -578,6 +611,46 @@ fn create_in_existing(
     Ok(Materialised {
         eid: OwnedEntityId::Numbered { id, canonical },
         dir,
+    })
+}
+
+/// Materialise a **pre-built** fileset into an already-reserved numbered dir —
+/// the prebuilt twin of [`create_in_existing`], and the resume half of the
+/// midpoint [`materialise_fresh_prebuilt_hooked`] exposes (DEC-086 step 4).
+///
+/// The reservation is the caller's: it was claimed and journalled before the
+/// crash, so this must not claim a second one. No claim and no allocation, and it
+/// refuses to clobber — a resume that races a completed write reports rather than
+/// overwrites. A reservation that is no longer on disk is an error, not an
+/// invitation to create one.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-244 PHASE-04 T5 — the RV mint's resume half")
+)]
+pub(crate) fn materialise_prebuilt_at(
+    project_root: &Path,
+    dir: &str,
+    prefix: &str,
+    id: u32,
+    fileset: &Fileset,
+) -> anyhow::Result<Materialised> {
+    let tree_root = project_root.join(dir);
+    let name = format!("{id:03}");
+    let entity_dir = tree_root.join(&name);
+    if !entity_dir.is_dir() {
+        bail!(
+            "Reserved entity {name} not found at {}",
+            entity_dir.display()
+        );
+    }
+    refuse_clobber(&tree_root, fileset)?; // no silent clobber (D7)
+    write_fileset(&tree_root, fileset)?;
+    Ok(Materialised {
+        eid: OwnedEntityId::Numbered {
+            id,
+            canonical: format!("{prefix}-{name}"),
+        },
+        dir: entity_dir,
     })
 }
 
@@ -1285,6 +1358,122 @@ mod tests {
 
         assert!(created.is_dir(), "populated dir survives rollback");
         assert_eq!(fs::read_to_string(created.join("intruder")).unwrap(), "x");
+    }
+
+    // --- prebuilt numbered placement: the midpoint, and its resume half ---
+
+    /// A prebuilt fileset for a claimed `(id, canonical)` — the numbered shape
+    /// `review`/`rec`/`revision` render eagerly and hand to the engine.
+    fn prebuilt(id: u32, canonical: &str) -> anyhow::Result<Fileset> {
+        let name = format!("{id:03}");
+        Ok(vec![Artifact::File {
+            rel_path: PathBuf::from(format!("{name}/body.md")),
+            body: canonical.to_string(),
+        }])
+    }
+
+    #[test]
+    fn prebuilt_midpoint_sees_the_claimed_id_before_any_byte_is_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let seen = std::cell::RefCell::new(None);
+
+        let out = materialise_fresh_prebuilt_hooked(
+            &LocalFs,
+            root,
+            "tree",
+            "TK",
+            &[],
+            &mut local_reserved(),
+            |id, canonical| {
+                // DEC-086 step 3's window: the identity is claimed and owns its
+                // dir, and no authored byte exists inside it yet.
+                assert!(root.join("tree/001").is_dir(), "the claim owns the dir");
+                assert!(!root.join("tree/001/body.md").exists(), "no byte yet");
+                *seen.borrow_mut() = Some((id, canonical.to_string()));
+                Ok(())
+            },
+            prebuilt,
+        )
+        .unwrap();
+
+        assert_eq!(seen.into_inner(), Some((1, "TK-001".to_string())));
+        assert_eq!(out.eid.numeric_id(), Some(1));
+        assert_eq!(
+            fs::read_to_string(root.join("tree/001/body.md")).unwrap(),
+            "TK-001"
+        );
+    }
+
+    #[test]
+    fn prebuilt_midpoint_failure_leaves_no_reservation_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let err = materialise_fresh_prebuilt_hooked(
+            &LocalFs,
+            root,
+            "tree",
+            "TK",
+            &[],
+            &mut local_reserved(),
+            |_, _| bail!("journal unavailable"),
+            prebuilt,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("journal unavailable"));
+        assert!(
+            !root.join("tree/001").exists(),
+            "a refused midpoint cleans the won dir (H2)"
+        );
+    }
+
+    #[test]
+    fn materialise_prebuilt_at_writes_into_the_existing_reservation() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("tree/007")).unwrap();
+
+        let out = materialise_prebuilt_at(root, "tree", "TK", 7, &prebuilt(7, "TK-007").unwrap())
+            .unwrap();
+
+        assert_eq!(out.eid.numeric_id(), Some(7));
+        assert_eq!(out.dir, root.join("tree/007"));
+        assert_eq!(
+            fs::read_to_string(root.join("tree/007/body.md")).unwrap(),
+            "TK-007"
+        );
+        // the caller's reservation was written into, not a second one claimed
+        assert_eq!(scan_ids(&root.join("tree")).unwrap(), vec![7]);
+    }
+
+    #[test]
+    fn materialise_prebuilt_at_refuses_to_clobber_a_completed_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("tree/007")).unwrap();
+        fs::write(root.join("tree/007/body.md"), "already there").unwrap();
+
+        let err = materialise_prebuilt_at(root, "tree", "TK", 7, &prebuilt(7, "TK-007").unwrap())
+            .unwrap_err();
+
+        assert!(err.to_string().contains("Refusing to overwrite"));
+        assert_eq!(
+            fs::read_to_string(root.join("tree/007/body.md")).unwrap(),
+            "already there"
+        );
+    }
+
+    #[test]
+    fn materialise_prebuilt_at_bails_when_the_reservation_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let err = materialise_prebuilt_at(root, "tree", "TK", 7, &prebuilt(7, "TK-007").unwrap())
+            .unwrap_err();
+
+        assert!(err.to_string().contains("not found"));
     }
 
     // --- materialise_named (seam A — pre-built fileset, no Kind) ---
