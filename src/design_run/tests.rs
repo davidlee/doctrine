@@ -36,7 +36,9 @@ use super::refusal::Refusal;
 use super::run::live_reviews;
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup};
-use super::submission::{Batch, Declaration, Sparse};
+use super::submission::{
+    AgentActDeclaration, Batch, CheckpointActDeclaration, Declaration, Sparse,
+};
 
 /// Facts in which every *claimed* cumulative condition up to `stage` holds, each
 /// cleared against a distinct subject at a known fingerprint.
@@ -1113,6 +1115,70 @@ fn a_disposition_binds_to_the_pass_it_disposed_under_either_arm() {
     for held in [&conducted, &waived] {
         let wire = toml::to_string(held).unwrap();
         assert_eq!(&toml::from_str::<DisposedPass>(&wire).unwrap(), held);
+    }
+}
+
+/// The act wire types carry the **claim** and nothing the engine authors
+/// (`EX-7b`).
+///
+/// `deny_unknown_fields` is the whole guarantee here, and nothing else catches
+/// this: without it a caller supplying `covered`, `observed`, `confirms` or `id`
+/// would be told nothing and silently get the engine's value instead of theirs —
+/// the same silent-no-op class `Declaration`'s own `deny_unknown_fields` was
+/// added for (submission.rs `EX-14`). Admission cannot catch it either, because
+/// by the time admission runs the key is already gone.
+///
+/// The positive case is asserted first, so a refusal that came from a malformed
+/// payload rather than from the rejected key cannot pass as the guarantee.
+#[test]
+fn the_act_wire_types_carry_the_claim_and_refuse_engine_authored_slots() {
+    let checkpoint = serde_json::json!({
+        "act": "review-disposed",
+        "acceptance": {"basis": "the pass was conducted and its findings answered"},
+        "disposition": {"conducted": {"review": "RV-344"}},
+    });
+    let parsed: CheckpointActDeclaration = serde_json::from_value(checkpoint.clone()).unwrap();
+    assert_eq!(parsed.act, ActKind::ReviewDisposed);
+    assert_eq!(
+        parsed.disposition,
+        Some(ReviewDisposition::Conducted {
+            review: ReviewRef::new("RV-344")
+        })
+    );
+
+    let agent = serde_json::json!({
+        "act": {"blocking-set-declared": {"blocking": ["inq-1", "inq-2"]}},
+        "basis": "these two questions gate the draft",
+    });
+    let parsed: AgentActDeclaration = serde_json::from_value(agent.clone()).unwrap();
+    assert_eq!(parsed.act.kind(), AgentActKind::BlockingSetDeclared);
+    assert_eq!(
+        parsed.turn, None,
+        "the turn is optional, not engine-authored"
+    );
+
+    // Each engine-authored slot, refused on the wire it does not belong on.
+    for slot in ["covered", "observed", "confirms", "id"] {
+        let mut payload = checkpoint.clone();
+        payload
+            .as_object_mut()
+            .unwrap()
+            .insert(slot.to_owned(), serde_json::json!(null));
+        assert!(
+            serde_json::from_value::<CheckpointActDeclaration>(payload).is_err(),
+            "a checkpoint act declaration carrying `{slot}` must not deserialise"
+        );
+    }
+    for slot in ["covered", "id"] {
+        let mut payload = agent.clone();
+        payload
+            .as_object_mut()
+            .unwrap()
+            .insert(slot.to_owned(), serde_json::json!(null));
+        assert!(
+            serde_json::from_value::<AgentActDeclaration>(payload).is_err(),
+            "an agent declaration carrying `{slot}` must not deserialise"
+        );
     }
 }
 

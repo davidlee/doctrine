@@ -1733,6 +1733,8 @@ mod tests {
             delegation: None,
             discharge: None,
             review_policy: None,
+            checkpoint_act: None,
+            agent_declaration: None,
         }
     }
 

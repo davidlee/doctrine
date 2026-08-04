@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Stage;
-use super::attestation::{ReviewPolicy, Reviewer};
+use super::attestation::{ActKind, AgentAct, ReviewDisposition, ReviewPolicy, Reviewer};
 use super::gate::Condition;
 use super::ids::DesignId;
 use super::inquiry::{DispositionForm, InquiryLifecycle, Provenance};
@@ -554,6 +554,11 @@ const WRITER_ACT_DISCHARGE: &str = "discharge";
 /// run requires is a user judgement, not housekeeping, so it is its own act
 /// rather than a field an agent can move in passing.
 const WRITER_ACT_REVIEW_POLICY: &str = "review_policy";
+/// The ninth and tenth acts (SL-244 PHASE-05, DEC-121). A recorded act is the
+/// only thing an attested condition reads, so a payload carrying one changes what
+/// the gate will say — which is precisely what makes it a writer act.
+const WRITER_ACT_CHECKPOINT_ACT: &str = "checkpoint_act";
+const WRITER_ACT_AGENT_DECLARATION: &str = "agent_declaration";
 
 /// A change to the run's review policy, which is a user act like any other
 /// (DEC-073, ISS-310).
@@ -573,6 +578,60 @@ const WRITER_ACT_REVIEW_POLICY: &str = "review_policy";
 pub(crate) struct ReviewPolicyDeclaration {
     pub(crate) policy: ReviewPolicy,
     pub(crate) acceptance: AcceptanceDeclaration,
+}
+
+/// A user act at a checkpoint, as a **caller** may state it (design `sec-4`,
+/// `EX-7b`).
+///
+/// The record it becomes ([`super::attestation::CheckpointAct`]) also holds an
+/// allocated `id`, a covered map, observed fingerprints and a confirmed
+/// declaration's digest — every one of them engine-authored from state the caller
+/// cannot assert. So they are **absent here**, and `deny_unknown_fields` is what
+/// makes that absence a refusal rather than a key serde quietly swallows: a
+/// caller who supplies `covered` would otherwise be told nothing and get the
+/// engine's value, which is the silent-no-op class [`Declaration`]'s own
+/// `deny_unknown_fields` exists to close. Admission cannot cover for it — by then
+/// the key is already gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CheckpointActDeclaration {
+    /// Which of the five checkpoint acts this is.
+    pub(crate) act: ActKind,
+    /// The user's acceptance, carrying the basis. Routed through
+    /// [`AcceptanceAttestation::bind`] at construction, so authority stays
+    /// unclaimable (DEC-088).
+    ///
+    /// [`AcceptanceAttestation::bind`]: super::attestation::AcceptanceAttestation::bind
+    pub(crate) acceptance: AcceptanceDeclaration,
+    /// How the act disposes of the current pass. Present exactly on
+    /// [`ActKind::ReviewDisposed`], per the rule/record correspondence — and
+    /// checked there rather than here, so the failure is a typed refusal naming
+    /// the act (the [`DischargeDeclaration::reason`] precedent).
+    ///
+    /// The **pass** it disposes is not on the wire: the run knows which pass is
+    /// current and a caller naming a different one could only be wrong.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) disposition: Option<ReviewDisposition>,
+}
+
+/// An agent's declaration about its own work, as the agent states it (DEC-121,
+/// `EX-7b`).
+///
+/// `act` is the payload-tagged [`AgentAct`] rather than its discriminant: a wire
+/// carrying only the kind could not deliver a blocking set. The engine supplies
+/// the `id`, the covered map and the claim fingerprint — the last being why a
+/// declaration and the act confirming it can arrive in one submission with no
+/// caller-computed digest — so none of the three is spellable here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentActDeclaration {
+    /// The act with what it declares.
+    pub(crate) act: AgentAct,
+    /// The stated basis. Non-blank, checked at admission.
+    pub(crate) basis: String,
+    /// The harness turn it was declared in, when the caller knows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) turn: Option<String>,
 }
 
 /// One delegation act (DEC-068).
@@ -667,6 +726,18 @@ pub(crate) struct ApplyRequest {
     /// policy is a property of the run and not of any declaration subject.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) review_policy: Option<ReviewPolicyDeclaration>,
+    /// One user act at a checkpoint (DEC-121). `Option` rather than a `Vec` for
+    /// [`Batch`]'s reason: two acts in one submission would need an order the
+    /// batch refuses to carry (DEC-063), and a second act of one kind would
+    /// replace the first with no rule saying which won.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) checkpoint_act: Option<CheckpointActDeclaration>,
+    /// One agent declaration (DEC-121), on the same terms — and beside the act
+    /// above rather than inside it, because DEC-121's interaction is *the agent
+    /// declares, the user confirms*: both may ride one submission, and the build
+    /// order is what makes the confirmation land on the declaration made with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) agent_declaration: Option<AgentActDeclaration>,
 }
 
 /// One writer act: the wire key a refusal names it by, and the test for whether a
@@ -689,7 +760,7 @@ impl ApplyRequest {
     /// A bare list of keys beside a hand-written branch chain would let a seventh
     /// branch widen the class silently, which is the shape `RV-324` F-6 found in
     /// the e2e table.
-    pub(crate) const WRITER_ACTS: [WriterAct; 8] = [
+    pub(crate) const WRITER_ACTS: [WriterAct; 10] = [
         (WRITER_ACT_STAGE, |request| request.stage.is_some()),
         (WRITER_ACT_DECLARE, |request| !request.declare.is_empty()),
         (WRITER_ACT_EVIDENCE, |request| !request.evidence.is_empty()),
@@ -705,6 +776,12 @@ impl ApplyRequest {
         (WRITER_ACT_DISCHARGE, |request| request.discharge.is_some()),
         (WRITER_ACT_REVIEW_POLICY, |request| {
             request.review_policy.is_some()
+        }),
+        (WRITER_ACT_CHECKPOINT_ACT, |request| {
+            request.checkpoint_act.is_some()
+        }),
+        (WRITER_ACT_AGENT_DECLARATION, |request| {
+            request.agent_declaration.is_some()
         }),
     ];
 

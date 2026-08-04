@@ -44,11 +44,13 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
-use design_run::attestation::ReviewPolicy;
+use design_run::attestation::{ActKind, AgentAct, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
 use design_run::gate::Condition;
 use design_run::snapshot::{self, DesignSnapshot};
-use design_run::submission::ApplyRequest;
+use design_run::submission::{
+    AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, CheckpointActDeclaration,
+};
 use design_run::traversal::Posture;
 
 /// The slice every fixture designs.
@@ -99,7 +101,7 @@ const CLEARED: [Condition; 4] = [
 ///
 /// The bodies need only be well-formed enough to deserialize: the guard fires on a
 /// field's *presence*, ahead of anything that would validate it.
-const WRITER_ACTS: [(&str, fn() -> Value); 8] = [
+const WRITER_ACTS: [(&str, fn() -> Value); 10] = [
     ("stage", || json!({"to": Stage::Drafting.as_str()})),
     (
         "evidence",
@@ -124,6 +126,28 @@ const WRITER_ACTS: [(&str, fn() -> Value); 8] = [
             "policy": ReviewPolicy::AdversarialOnly.as_str(),
             "acceptance": {"basis": "the delegate says the lanes should change"},
         })
+    }),
+    // The two act rows are built from the wire types rather than hand-written
+    // JSON: neither `ActKind` nor `AgentAct` carries an `as_str`, and re-typing a
+    // serde-derived token here is exactly the drift STD-001 forbids.
+    ("checkpoint_act", || {
+        serde_json::to_value(CheckpointActDeclaration {
+            act: ActKind::GraphReviewed,
+            acceptance: AcceptanceDeclaration {
+                basis: "the delegate says the graph is steered".to_owned(),
+                turn: None,
+            },
+            disposition: None,
+        })
+        .unwrap()
+    }),
+    ("agent_declaration", || {
+        serde_json::to_value(AgentActDeclaration {
+            act: AgentAct::DraftingReady,
+            basis: "the delegate says the draft is ready".to_owned(),
+            turn: None,
+        })
+        .unwrap()
     }),
 ];
 
