@@ -14,7 +14,7 @@ ref   = "SL-244"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected `Waived` to clear `reviewing → locked` throughout the IMP-392 interim; observed both arms bind to a `ReviewPass` nothing in this slice mints, so the edge is barred outright"
 detail = """
@@ -35,10 +35,12 @@ Consequence if implemented as written: during the stated interim there is no cur
 That inverts DEC-138 in terms — "`Waived { reason }` satisfies it unconditionally"; "The `Waived` arm needs nothing from it. Until IMP-392 lands the interim is the same on both arms, not one strict path and one lax one" — and inverts the design's own repeated claim (`sec-3`:971-981 "`Waived` reads no `ObservedReview` at all"; `sec-3`:1359-1362 "the row stays satisfiable throughout the interim"; `sec-4`:2310-2315 "Waiving is not a degraded path — `reviewing → locked` clears on a `Waived { reason }` disposition with no integrated pass recorded"). The `sec-2` snapshot-cost analysis also assumes SL-243 can be repaired by two acts, which this would not permit at the reviewing edge.
 
 The gap is a missing producer, not a wrong decision — but it must be specified before implementation, because the mechanism (an authored-entity mint from inside `apply`) is exactly the kind of thing DEC-101's no-subprocess-in-admit→persist constraint and DEC-086's journalled-intent protocol govern."""
+disposition = "design-wrong"
+response = "Confirmed, and the strong form does not survive: a producer exists, is decided and is built. DEC-125 rationale cites it -- checkpoints mint authored entities from inside apply via DEC-086 journalled intent, the protocol SL-233 shipped and DEC-120..DEC-126 were minted through. sec-3 now names it, states the two things owed on top (the seam is wired for knowledge-record semantics only, so the RV half is new; and ADR-001 survives because the mint is command-tier and the pass arrives on DerivedInput), and settles ownership -- SL-244 mints, per the user 2026-08-04. sec-4 amended. IMP-392 loses the bullet; that governance edit is outstanding."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected `AgentActKind` to be a discriminant usable in a `&'static` rule table; observed `sec-4` gives it a payload, so `sec-3`'s `confirms` slot and two later types cannot hold it"
 detail = """
@@ -67,6 +69,8 @@ Three further sites inherit the same conflation:
 - `sec-4`:2000-2004 "Replacement is by act, not by id. At most one live declaration per `AgentActKind`" — keyed on the enum *value*, two `BlockingSetDeclared`s over different node sets are distinct values and both survive, which is precisely the "which one did the user confirm" ambiguity that subsection exists to remove.
 
 `sec-4`:2231-2239 states the intended semantics correctly — "The lookup is by act, not by fingerprint. The rule names which declaration must be confirmed" — which is the discriminant reading, not the value reading. The repair is small (a discriminant type, or `mem::discriminant`-style keying) but it is a modelling decision the design has to make, not an implementation detail: `sec-4`:1983-1989 argues the closed sub-enum on unrepresentability grounds, and that argument has to survive the split."""
+disposition = "design-wrong"
+response = "Confirmed as a concrete type error. AgentActKind carried BlockingSetDeclared { blocking: BTreeSet<DesignId> } while four sites need a bare discriminant -- ActRequirement::confirms in the static CONTRACTS table, Cause::ConfirmationStale, ActFault::Confirmation, and replace-by-act. Split into AgentAct (content) and AgentActKind (fieldless discriminant) with AgentAct::kind(), the same cut CheckpointAct/ActKind already has. Unrepresentability is unaffected: both enums close at the same two members. Wire type and replacement key updated; carried-forward notes the double-edit cost of the split and why it beats a BTreeSet in a const table."
 
 [[finding]]
 id = "F-3"
@@ -90,7 +94,7 @@ Either the two rows are enforceable on this slice's own mechanism (and `Pending`
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected conjunctive binding to keep an empty governance sweep honest via the artefact conjunct; observed `Artefact` coverage can never fail, so the argument and its verification bullet describe a mechanism that does not exist"
 detail = """
@@ -112,10 +116,12 @@ Two things follow that the design does not concede:
 2. **The verification bullet at `sec-3`:1292-1294 is unwritable.** "**An empty observed set still binds its artefact** — a governance sweep that found nothing, whose search evidence is then edited, is unmet. The strict-path case, and the reason `Binding` is conjunctive." There is no mechanism by which "search evidence is then edited" reaches a stored `CheckpointAct`: the search evidence lives in the act's `acceptance.basis`, which is not covered by anything and is not editable in place. Written as specified, this test can only be made to pass by asserting something else.
 
 This also bears on DEC-121's consequence — "The empty case becomes the strict path in both checkpoints: a governance sweep finding nothing ... shown with what was searched and **never skippable**" — which `sec-3`:1052-1054 currently claims is satisfied by the observed conjunct doing the work while "its artefact coverage holds the dismissals and search evidence". Holding is not binding; nothing derives over the held content."""
+disposition = "design-wrong"
+response = "Confirmed, and the fix is smaller than the finding implies. Artefact coverage is inert exactly as argued -- it covers nothing but itself and a CheckpointAct is immutable, so currency cannot police it. But the guarantee DEC-121 requires is an admission property and already ships: CheckpointAct embeds AcceptanceAttestation, and Refusal::AcceptanceBasisMissing refuses an empty basis. Conjunctive binding re-justified on the ordinary case (alternative binding would let a moved observed fact read current off an unchanged artefact). The unwritable verification bullet is replaced by two writable ones: an admission test on the empty basis, and a real invalidation test (empty sweep, then one edge added). The reach subsection corrected -- observed does all the work, holding is not binding."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected `sec-5` to keep all nine promises it tabulates; observed the ninth — that the refusal says the waiver arm is available and why — has no `Cause` variant, no remedy content and no test"
 detail = """
@@ -135,10 +141,12 @@ Eight of the nine land in `Cause` (`sec-5`:2542-2571): `ActMissing { act, lanes 
 - **Not tested.** `sec-5`:2912-2973's verification impact has a bullet for every other promise in the table (the missing lane, the two-cause conjunction, the named node, `NoSections`, remedy equality, `ReviewUnavailable`, `PassSuperseded`) and none for this one.
 
 This is the promise with the most operational weight of the nine: it is the one that tells an agent blocked at the last edge, during the whole `IMP-392` interim, how to proceed. It is also the promise most at risk of being silently dropped, because unlike the other eight nothing in the type system notices its absence."""
+disposition = "design-wrong"
+response = "Confirmed. The ninth promise lands on the REMEDY rather than the complaint, for the reason the finding itself gives: the exit exists is not a failure mode and Cause is per-failure-mode. No new field needed -- ActRequirement::disposes_review is already on the rule and is the branch, so the remedy for review-disposition-attested renders both arms as const strings on a const row. Still a total function of the condition, still sourced from one rule, still leaf. Verification bullet asserts it on a run with no pass conducted, which is the interim case the promise was made for."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "minor"
 title = 'Expected "exactly one enumeration outside Rust, and one test"; observed `sec-5` adds nine hand-written `publication/manifest.toml` rows keyed by the same vocabulary'
 detail = """
@@ -151,10 +159,12 @@ SL-244 design.md `sec-3` ("The condition model") against `sec-5` ("The contract 
 `sec-5` is aware of one direction of the guard but not the other: :2810-2816 says "the asset corpus is bounded twice by two independent tests" — `assert_unprojected_install_assets_are_published` catches an `install/` asset with no manifest entry, and `sec-3`'s set-equality catches vocabulary↔corpus divergence. Neither catches a manifest entry naming a token the vocabulary has retired, and `sec-6`:3094-3097 repeats the same two-test framing for its own single entry.
 
 Small in consequence (nine rows, and a retired condition's asset would be deleted with it), but the design's own claim is stronger than what it ships, and `sec-3`'s sentence is the one a later reader will rely on when adding a tenth condition."""
+disposition = "design-wrong"
+response = "Confirmed. The manifest rows are a second hand-maintained enumeration keyed off the same vocabulary, and the claim of exactly one was the reader-misleading shape STD-001 exists to prevent. sec-3 now names both and tabulates the coverage gap: assert_unprojected_install_assets_are_published catches an asset with no entry, nothing caught a row naming a retired condition. Closed by extending sec-5 corpus set-equality to the manifest design-prompts/conditions/ rows -- free, since that test already enumerates the prefix."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "minor"
 title = """Expected `sec-6`'s "every other `fixed` entry is provisional" to hold; observed DEC-102 seals five of them permanently on the false-not-different criterion"""
 detail = """
@@ -167,10 +177,12 @@ DEC-102 says the opposite for the incumbents. Its `context` records that "`hymns
 So five of the manifest's `fixed` entries are sealed on the same permanent criterion `sec-6` claims is unique to its diagram — an override would make the content *false*, not merely different. It is the **runbooks** alone that ship `fixed` provisionally pending `IMP-372`, which is exactly what `sec-5`:2803-2808 gets right when it quotes the manifest header's runbook rationale verbatim. `sec-6` over-generalises that rationale to "the process fragments and runbooks" and then to "every other entry".
 
 Consequence is small but real and is the one `sec-6` itself names: the note is written to steer `IMP-372`'s sweep, and it mis-describes what that sweep will find — three classes (permanently sealed, provisionally fixed, structurally fixed), not two."""
+disposition = "design-wrong"
+response = "Confirmed verbatim against DEC-102, whose choice reads: the five existing fixed entries state what the engine enforces, so they stay fixed. Replaced the two-class claim with a three-class table -- sealed (DEC-102, permanent, false-not-different), provisional (runbooks and the nine contract narratives, pending IMP-372), structural (the diagram). Carried-forward corrected: the sweep has two kinds of entry it must not move, not one."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected the empty-ledger reading to match ADR-007 D-C8 (`active` / `raiser`); observed the design asserts `(Done, None)`, the reading D-C8 exists to forbid"
 detail = """
@@ -191,10 +203,12 @@ all verified/withdrawn        → status = done,   await = none
 The design's conclusion survives — a clean pass and an unrun pass are indistinguishable from the finding set either way, so the concluded marker is still needed — but the premise as written contradicts an accepted ADR that is one of this pass's named pins, and it does so undeclared. Note the design cites `derived_status` correctly two paragraphs earlier (`sec-3`:809-813, "reads `status` and never `severity`"), so the divergence is local to this passage rather than a considered reading.
 
 Two ways this bites. If `derived_status` really does return `(Done, None)` on an empty ledger, that is an ADR-007 D-C8 violation in the incumbent and the design should raise it rather than build on it. If it does not, the design (and DEC-138, which carries the same sentence) is asserting a fact about the ledger it specifies against that is simply wrong, in the one passage where the ledger's own semantics are load-bearing. Either way the design should say which. (Confirming which is a pass-2 question; the governance contradiction is not.)"""
+disposition = "design-wrong"
+response = "Confirmed on the first horn, and sharpened. derived_status (src/review.rs:1010) does return (Done, None) on an empty ledger, against ADR-007 D-C8 which fixes it at active/raiser and states its reason. Two tests pin the violating value. Raised as ISS-314, linked to SL-244 and ADR-007. But the design premise was wrong in a second way the finding did not reach: DEC-138 predicate is universally quantified over the finding set and never reads status, so vacuous satisfaction on an empty ledger is a quantifier property and survives the ISS-314 fix untouched. sec-3 now argues from the quantifier and cites ISS-314 for the ledger defect. DEC-138 carries the same superseded sentence and wants the same correction -- that governance edit is outstanding."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "minor"
 title = 'Expected the design to state what the "certain" SPEC-029 revision consists of; observed only the sec-6 citation, while the contract receipt narrows a SPEC-029 responsibility unnamed'
 detail = """
@@ -208,10 +222,12 @@ SPEC-029's structured `responsibilities` carry at least three claims this design
 - the snapshot responsibility, against `sec-4`:2407-2419's "The snapshot changes in six ways, not one".
 
 The design is not obliged to author the revision — `/reconcile` owns that, routed through a REV under ADR-013. It is obliged not to leave "certain revision candidate" as the whole of the statement when the same document has itself found that undocumented spec/design divergence is this subsystem's recurring failure (DEC-125's "fourth instance in this subsystem of a design bullet specifying something never built"). A reader picking this up at `/plan` or `/reconcile` has no list to work from."""
+disposition = "design-wrong"
+response = "Confirmed. Replaced the adjective with a five-row work-list: the claimed-evidence footing, the const-fn gate table now keyed by Advance, the prompt pack content-binding responsibility narrowed by the bare contract token, the six snapshot changes, and the sec-6 citation. Named the third explicitly as the easily-missed one -- it reads as an implementation detail unless stated. /reconcile authors the REV under ADR-013; this is its work-list, not a revision authored here."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected `sec-5`'s envelope accounting to cover everything the design adds there; observed it counts two scalars and omits `sec-4`'s third addition, the rendered review policy"
 detail = """
@@ -224,6 +240,8 @@ SL-244 design.md `sec-5` ("The contract channels"), subsection "The envelope get
 `sec-4`:2124-2126 adds a third, in the fence that makes the mutable review policy defensible: "**The current policy renders in the envelope**, so no reader has to guess which lanes a run requires." `sec-4`:2294-2300's verification impact leans on the same surface (`review_outstanding` at `render/envelope.rs:799` repaired to read the policy). Neither appears in `sec-5`'s inventory, and the section heading — "The envelope gets nothing new" — is the assertion `sec-5`:2434-2437 attributes to DEC-124 and then does not hold.
 
 The byte cost is trivially small (one enum name). The finding is that this is the one subsection whose job is to close a stated concern with a complete inventory, and it closes it against an incomplete one — so a later reader auditing the budget against `sec-2` will not find the policy line accounted for anywhere. It also weakens `sec-4`'s own argument: the policy render is one of the three things standing in for prohibition ("authority and visibility, not prohibition", `sec-4`:2111-2130), and it is easier to drop under budget pressure if no section has recorded that it rides there."""
+disposition = "design-wrong"
+response = "Confirmed. The inventory is two scalars and one enum name -- currency lamp, severity summary, and sec-4 rendered ReviewPolicy. Counted, with the reason it is the addition least safe to leave unrecorded: it is the visibility half of the authority-and-visibility fence that makes the mutable policy defensible, so a later slice trimming the envelope must know it is removing a fence. DEC-124 restatement and the subsection heading rescoped to contract content, which is all that record ever ruled on."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
