@@ -1372,6 +1372,18 @@ fn apply(
         verifications: verifications(root, slice, &prior, &request, runbook.as_ref()),
         runbook,
         observed_review: observed_review(&prior, &request, root),
+        // T7 fills this from the canonical relation store; until then the map is
+        // empty, which reads as unobservable — refusal, not satisfaction.
+        observed_facts: design_run::gate::ObservedFacts::default(),
+        // The claim digest, over the encoding the act itself owns. Computed here
+        // because the pure layer never hashes, and computed unconditionally
+        // whenever the payload carries a declaration, because a record with no
+        // digest is refused rather than stored carrying an empty one.
+        declaration_fingerprint: request.agent_declaration.as_ref().map(|declared| {
+            design_run::ids::Fingerprint::new(crate::git::sha256(
+                declared.act.claim_material(&declared.basis).as_bytes(),
+            ))
+        }),
     };
 
     // Everything refusable, refused while the authored tier is untouched. Pass 1

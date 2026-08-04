@@ -12,12 +12,15 @@
 //! shape rather than out of a flag: after a direct regression there is nothing to
 //! un-set, and returning forward cannot inherit clearance it no longer earns.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{ActKind, ActorClass, AgentActKind, ReviewPolicy};
 use super::bounds::DESIGN_ID_BYTES;
 use super::facts::DerivedDesignFacts;
+use super::ids::Fingerprint;
 use super::refusal::Refusal;
 use super::runbook::{RunbookKey, RunbookStanding};
 
@@ -126,6 +129,29 @@ impl ObservedFact {
             ObservedFact::GovernanceEdges => "governance-edges",
         }
     }
+}
+
+/// The observed facts the shell established **this invocation** (design `sec-3`).
+///
+/// Transient by construction, and the newtype is what says so: it never enters a
+/// snapshot and is never a mirror of canonical state the run does not own. It
+/// arrives as a field on [`DerivedInput`](super::run::DerivedInput), where every
+/// other shell-established fact arrives and for the reason stated there — a fact
+/// about what canonical state says is one Doctrine derives, never one it takes on
+/// a caller's word.
+///
+/// Its persisted counterpart is [`CheckpointAct::observed`], which is the same map
+/// with the opposite lifetime: what an act was *given over*, kept, versus what is
+/// true *now*, discarded. The comparison between the two is the whole mechanism.
+///
+/// [`CheckpointAct::observed`]: super::attestation::CheckpointAct::observed
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct ObservedFacts {
+    /// Each fact the shell could observe, at the fingerprint it observed.
+    ///
+    /// A fact the shell could **not** observe is absent rather than empty, and
+    /// absence reads as changed — the gate stays shut on a missing answer.
+    pub(crate) facts: BTreeMap<ObservedFact, Fingerprint>,
 }
 
 /// What an attestation is current against — its own coverage, **and**
@@ -445,10 +471,6 @@ macro_rules! condition_vocabulary {
         ///
         /// An enumerable array rather than only a `const fn` match, because it is
         /// what the prose-corpus and manifest set-equality tests iterate.
-        #[cfg_attr(
-            not(test),
-            expect(dead_code, reason = "SL-244 PHASE-05 T10 evaluates over this")
-        )]
         pub(crate) const CONTRACTS: [(Condition, Contract); [$($($token,)+)+].len()] = [
             $($((Condition::$variant, $contract),)+)+
         ];
@@ -661,13 +683,6 @@ condition_vocabulary! {
 /// row would be a correspondence check against a rule nothing is written
 /// against, and nothing in the types would say so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05 T6 constructs the records this rule is resolved for"
-    )
-)]
 pub(crate) struct ActRule {
     /// What this act must have been given.
     pub(crate) required: ActRequirement,
@@ -687,13 +702,6 @@ pub(crate) struct ActRule {
 /// [`ActKind`] is in fact named by exactly one row — which is
 /// `every_act_kind_is_named_by_exactly_one_contract_row`'s to prove, not this
 /// signature's to claim.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05 T6 resolves each submitted act through this"
-    )
-)]
 pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
     CONTRACTS
         .iter()

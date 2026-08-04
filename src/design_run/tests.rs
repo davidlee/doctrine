@@ -1932,3 +1932,62 @@ fn every_act_kind_is_named_by_exactly_one_contract_row() {
         );
     }
 }
+
+/// The claim a declaration is fingerprinted over is its act **and what it
+/// declares** — which is the whole of what the confirmation link is for.
+///
+/// An earlier design draft hashed the act and the basis alone, so a
+/// re-declaration naming different questions carried the same claim and a stale
+/// `confirms` still matched. Each assertion below is one way two declarations can
+/// differ; all three must move the claim.
+#[test]
+fn a_declaration_claims_its_act_its_blocking_set_and_its_basis() {
+    let declared = AgentAct::BlockingSetDeclared {
+        blocking: [id("inq-1"), id("inq-2")].into(),
+    };
+
+    let by_act = AgentAct::DraftingReady.claim_material("the sweep found these");
+    let by_set = AgentAct::BlockingSetDeclared {
+        blocking: [id("inq-1")].into(),
+    }
+    .claim_material("the sweep found these");
+    let by_basis = declared.claim_material("a different sweep");
+    let claim = declared.claim_material("the sweep found these");
+
+    assert_ne!(claim, by_act, "a different act is a different claim");
+    assert_ne!(
+        claim, by_set,
+        "a different blocking set is a different claim"
+    );
+    assert_ne!(claim, by_basis, "a different basis is a different claim");
+
+    // And the material is what it says it is: the act's own kebab name, the set
+    // ascending, then the basis — no id, no turn, no covered map.
+    assert_eq!(
+        claim,
+        "blocking-set-declared\n2\ninq-1\ninq-2\nthe sweep found these\n"
+    );
+}
+
+/// A basis is free text and a node id is not, so the claim must say where the
+/// declared set ends.
+///
+/// Without that framing the two declarations below encode identically — same act,
+/// and `inq-2` sitting either in the set or at the head of the basis. The agent
+/// authors both halves, so a re-declaration that quietly drops a blocking
+/// question could keep the user's `confirms` matching, which is exactly the
+/// ordering guarantee the fingerprint exists to provide.
+#[test]
+fn a_basis_cannot_be_read_as_the_blocking_set_beside_it() {
+    let declared = AgentAct::BlockingSetDeclared {
+        blocking: [id("inq-1"), id("inq-2")].into(),
+    };
+    let narrowed = AgentAct::BlockingSetDeclared {
+        blocking: [id("inq-1")].into(),
+    };
+    assert_ne!(
+        declared.claim_material("the sweep found these"),
+        narrowed.claim_material("inq-2\nthe sweep found these"),
+        "the declared set and the basis must not be able to trade a line"
+    );
+}

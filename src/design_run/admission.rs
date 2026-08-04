@@ -45,13 +45,6 @@ use super::run::ObservedReview;
 /// row gets forgotten for a shape. Every arm below is total over the three, and
 /// a fourth record shape would not compile until it answered every row.
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05 T6 constructs the records and admits them here"
-    )
-)]
 pub(crate) enum RecordedAct<'a> {
     /// One of the five acts a user gives at a checkpoint — the only shape with a
     /// slot for a confirmation, a disposition or an observed fact.
@@ -100,13 +93,6 @@ impl<'a> RecordedAct<'a> {
 /// An agent that repairs one slot and resubmits should not discover the rest one
 /// round-trip at a time, which is the rule [`Refusal::GateNotCleared`] already
 /// follows for conditions.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-244 PHASE-05 T6 runs this over each act the batch records"
-    )
-)]
 pub(crate) fn admit_act(
     record: RecordedAct<'_>,
     rule: ActRule,

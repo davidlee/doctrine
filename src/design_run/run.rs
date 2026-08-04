@@ -28,15 +28,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Stage;
+use super::admission::{RecordedAct, admit_act};
 use super::attestation::{
-    AcceptanceAttestation, Attestation, ContentCoverage, IntentState, IntentSubject,
-    LockAcceptance, RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
+    AcceptanceAttestation, ActKind, AgentActKind, AgentDeclaration, Attestation, CheckpointAct,
+    ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, LockAcceptance,
+    RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
 use super::delegation::{Delegation, DelegationState, Proposal};
 use super::facts::DerivedDesignFacts;
 use super::gate;
+use super::gate::{ActRule, Coverage, ObservedFact, ObservedFacts};
 use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{Disposition, InquiryLifecycle, InquiryNode, Provenance};
 use super::refusal::Refusal;
@@ -132,6 +135,24 @@ pub(crate) struct DerivedInput {
     /// the shell distinguishes them at the point it can, and neither clears an
     /// edge.
     pub(crate) observed_review: Option<ObservedReview>,
+    /// The canonical state outside the run that the shell observed this
+    /// invocation, for the acts whose rule binds to one (SL-244 `sec-3`).
+    ///
+    /// Refreshed every invocation and never cached in the snapshot: what an act
+    /// stores is the fingerprint it was *given over*, and this is what is true
+    /// *now*. A fact the shell could not observe is absent here, and absence reads
+    /// as changed.
+    pub(crate) observed_facts: ObservedFacts,
+    /// The digest of the agent declaration this batch carries, over the claim
+    /// encoding the declaration's own act owns
+    /// ([`AgentAct::claim_material`](super::attestation::AgentAct::claim_material)).
+    ///
+    /// Here rather than on the wire because the pure layer never hashes and a
+    /// caller-supplied digest would be a claim about content rather than a fact
+    /// about it — and because a declaration and the act confirming it arrive in one
+    /// submission, so there is no round-trip in which a caller could have computed
+    /// one.
+    pub(crate) declaration_fingerprint: Option<Fingerprint>,
 }
 
 /// One `RV` as the shell read it, for the acts that name one (SL-244 `sec-3`).
@@ -378,6 +399,13 @@ pub(crate) fn apply(
         );
     }
 
+    // Step 4 of the build order, after re-observation and before the stage move,
+    // and the declaration BEFORE the act: an act confirming a declaration names
+    // the fingerprint of the record the engine has just written, so both arrive in
+    // one submission with no caller-computed digest (design `sec-4`).
+    record_declaration(&mut next, request, derived)?;
+    record_act(&mut next, request, derived, payload_digest)?;
+
     // After re-observation, so the coverage is of what this batch left behind,
     // and before the stage move, so a lock may be accepted and taken in one
     // submission.
@@ -511,6 +539,183 @@ pub(crate) fn apply(
         snapshot: next,
         rows,
     })
+}
+
+/// Construct the agent declaration this batch carries, admit it, and record it
+/// (design `sec-4`, build order step 4).
+///
+/// **Runs before [`record_act`]**, so an act confirming this declaration can be
+/// given the fingerprint of the record written here rather than one its caller
+/// computed — which is what lets DEC-121's interaction, *the agent declares and
+/// the user confirms*, arrive in one submission.
+fn record_declaration(
+    next: &mut DesignSnapshot,
+    request: &ApplyRequest,
+    derived: &DerivedInput,
+) -> Result<(), Refusal> {
+    let Some(declared) = request.agent_declaration.as_ref() else {
+        return Ok(());
+    };
+    if declared.basis.trim().is_empty() {
+        return Err(Refusal::AcceptanceBasisMissing);
+    }
+    let Some(fingerprint) = derived.declaration_fingerprint.clone() else {
+        return Err(Refusal::DeclarationDigestMissing {
+            act: declared.act.kind(),
+        });
+    };
+    let act = ActKind::from(declared.act.kind());
+    let rule = gate::requirement_for(act);
+    let record = AgentDeclaration {
+        id: act_id(IdKind::AgentDeclaration, act)?,
+        act: declared.act.clone(),
+        basis: declared.basis.clone(),
+        turn: declared.turn.clone(),
+        covered: rule.and_then(|rule| covered_in(next, rule.binding.coverage)),
+        fingerprint,
+    };
+    admit_against(RecordedAct::Agent(&record), rule, derived)?;
+    next.declarations.record(record);
+    Ok(())
+}
+
+/// Construct the checkpoint act this batch carries, admit it, and record it
+/// (design `sec-4`, build order step 4).
+fn record_act(
+    next: &mut DesignSnapshot,
+    request: &ApplyRequest,
+    derived: &DerivedInput,
+    payload_digest: &str,
+) -> Result<(), Refusal> {
+    let Some(declared) = request.checkpoint_act.as_ref() else {
+        return Ok(());
+    };
+    if declared.acceptance.basis.trim().is_empty() {
+        return Err(Refusal::AcceptanceBasisMissing);
+    }
+    // The pass is the RUN's, never the caller's: a caller naming one could only
+    // be wrong, and a run on no pass has nothing to dispose at all.
+    let disposition = match declared.disposition.as_ref() {
+        None => None,
+        Some(disposition) => Some(DisposedPass {
+            pass: next
+                .review
+                .pass
+                .as_ref()
+                .map(|pass| pass.review.clone())
+                .ok_or(Refusal::ReviewPassAbsent)?,
+            disposition: disposition.clone(),
+        }),
+    };
+    let rule = gate::requirement_for(declared.act);
+    let record = CheckpointAct {
+        id: act_id(IdKind::CheckpointAct, declared.act)?,
+        act: declared.act,
+        // Routed through `bind`, which is the only route to the type and sets
+        // `AcceptanceAuthority::User` itself — so DEC-088's guarantee is carried
+        // here rather than re-argued.
+        acceptance: AcceptanceAttestation::bind(
+            declared.acceptance.basis.clone(),
+            declared.acceptance.turn.clone(),
+            Fingerprint::new(payload_digest),
+        ),
+        covered: rule.and_then(|rule| covered_in(next, rule.binding.coverage)),
+        observed: rule
+            .map(|rule| observed_in(derived, rule.binding.observed))
+            .unwrap_or_default(),
+        confirms: rule.and_then(|rule| confirmation(next, rule.required.confirms)),
+        disposition,
+    };
+    admit_against(RecordedAct::Checkpoint(&record), rule, derived)?;
+    next.acts.record(record);
+    Ok(())
+}
+
+/// Check one constructed record against the rule it is written against.
+///
+/// The `None` arm is unreachable rather than a case, and
+/// `every_act_kind_is_named_by_exactly_one_contract_row` is what says so: an act
+/// no contract row names is required by no condition, so there is no requirement
+/// for the record to correspond to and no gate that could ever read it. The
+/// engine slots are filled off the same `Option`, so such a record carries none of
+/// them.
+fn admit_against(
+    record: RecordedAct<'_>,
+    rule: Option<ActRule>,
+    derived: &DerivedInput,
+) -> Result<(), Refusal> {
+    match rule {
+        Some(rule) => admit_act(record, rule, derived.observed_review.as_ref()),
+        None => Ok(()),
+    }
+}
+
+/// The id a recorded act is written under.
+///
+/// **Derived from the act, not counted**, because replacement is by act: a second
+/// `GraphReviewed` displaces the first, so the run holds one live answer per kind
+/// and an ordinal would give that one answer a new name on every rewriting — while
+/// `invalidation_rows` reports the death of a recorded act *by subject*. The act
+/// kind is the subject. The 32-byte admission bound is
+/// [`DesignId::parse`]'s and the widest of the eight clears it with room.
+fn act_id(prefix: IdKind, act: ActKind) -> Result<DesignId, Refusal> {
+    DesignId::parse(&format!("{}{}", prefix.prefix(), act.as_str()))
+}
+
+/// The covered map in the shape the rule's [`Coverage`] names, off the state this
+/// batch left behind.
+///
+/// `Artefact` is an **absent** coverage rather than an empty one: the record's own
+/// content is its binding, and an empty map is not the same claim as no claim.
+/// `PerSection` is carried by no act at all — it is a quantification the
+/// derivation performs over the section set — so there is nothing to fill and
+/// admission refuses the record, which keeps that answer with its one owner.
+fn covered_in(next: &DesignSnapshot, coverage: Coverage) -> Option<CoveredSet> {
+    match coverage {
+        Coverage::EverySection => Some(CoveredSet::Sections(ContentCoverage::of(
+            next.sections.fingerprints(),
+        ))),
+        Coverage::InquiryMap => Some(CoveredSet::Nodes(ContentCoverage::of(
+            next.map.inquiry.materials(),
+        ))),
+        Coverage::Artefact | Coverage::PerSection => None,
+    }
+}
+
+/// Each fact the rule names, at the fingerprint the shell observed it at.
+///
+/// A fact the shell could not observe is **omitted**, not defaulted: admission
+/// then reports it missing, so *unobservable reads as refusal* has one owner
+/// rather than a second spelling here.
+fn observed_in(
+    derived: &DerivedInput,
+    required: &[ObservedFact],
+) -> BTreeMap<ObservedFact, Fingerprint> {
+    required
+        .iter()
+        .filter_map(|fact| {
+            derived
+                .observed_facts
+                .facts
+                .get(fact)
+                .map(|seen| (*fact, seen.clone()))
+        })
+        .collect()
+}
+
+/// The claim digest of the declaration this act's rule says it confirms.
+///
+/// **The lookup is by act, not by fingerprint**: the rule names which declaration
+/// must be confirmed, and the stored digest then answers only *is it still the one
+/// confirmed*. An absent declaration leaves this `None` and admission refuses the
+/// act for lacking a confirmation its rule names.
+fn confirmation(next: &DesignSnapshot, confirms: Option<AgentActKind>) -> Option<Fingerprint> {
+    let kind = confirms?;
+    next.declarations
+        .declarations
+        .iter()
+        .find(|held| held.act.kind() == kind)
+        .map(|held| held.fingerprint.clone())
 }
 
 /// DEC-092 rule 2: the sole lawful crossing of a divergence, as a protocol.
@@ -1636,7 +1841,11 @@ fn invalidation_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::super::submission::EvidenceDeclaration;
+    use super::super::attestation::{AgentAct, ReviewDisposition};
+    use super::super::refusal::ActFault;
+    use super::super::submission::{
+        AcceptanceDeclaration, AgentActDeclaration, CheckpointActDeclaration, EvidenceDeclaration,
+    };
     use super::*;
 
     /// A well-formed id, or a failure naming the bad literal.
@@ -1705,8 +1914,9 @@ mod tests {
         );
     }
 
-    /// One `apply` payload claiming `condition` against `sec-a`.
-    fn claiming(prior: &DesignSnapshot, condition: gate::Condition) -> ApplyRequest {
+    /// An empty payload against `prior` — the base each test below narrows to the
+    /// one act it is about, so a field joining [`ApplyRequest`] is spelled once.
+    fn payload(prior: &DesignSnapshot) -> ApplyRequest {
         ApplyRequest {
             envelope: SubmissionEnvelope {
                 run_uid: prior.run.uid.clone(),
@@ -1717,10 +1927,7 @@ mod tests {
             traversal: TraversalDeclaration::default(),
             stage: None,
             acceptance: None,
-            evidence: vec![EvidenceDeclaration {
-                condition,
-                subject: id("sec-a"),
-            }],
+            evidence: Vec::new(),
             declare: Vec::new(),
             delegation: None,
             discharge: None,
@@ -1728,6 +1935,385 @@ mod tests {
             checkpoint_act: None,
             agent_declaration: None,
         }
+    }
+
+    /// One `apply` payload claiming `condition` against `sec-a`.
+    fn claiming(prior: &DesignSnapshot, condition: gate::Condition) -> ApplyRequest {
+        ApplyRequest {
+            evidence: vec![EvidenceDeclaration {
+                condition,
+                subject: id("sec-a"),
+            }],
+            ..payload(prior)
+        }
+    }
+
+    /// A run holding one section and one inquiry node.
+    fn run_with_a_map() -> DesignSnapshot {
+        let mut snapshot = run_with_a_section();
+        snapshot
+            .map
+            .inquiry
+            .insert(InquiryNode::open(
+                id("inq-1"),
+                "what governs this?",
+                Provenance::UserDirected,
+            ))
+            .expect("the fixture node seats");
+        snapshot
+    }
+
+    /// A user act at a checkpoint, as a caller states it.
+    fn checkpoint(act: ActKind, basis: &str) -> CheckpointActDeclaration {
+        CheckpointActDeclaration {
+            act,
+            acceptance: AcceptanceDeclaration {
+                basis: basis.to_owned(),
+                turn: None,
+            },
+            disposition: None,
+        }
+    }
+
+    /// An agent declaration, as the agent states it.
+    fn declaring(act: AgentAct, basis: &str) -> AgentActDeclaration {
+        AgentActDeclaration {
+            act,
+            basis: basis.to_owned(),
+            turn: None,
+        }
+    }
+
+    /// Derived input carrying the shell's claim digest — the one slot in the new
+    /// shapes with no route to a value in the pure layer.
+    fn derived_claiming(digest: &str) -> DerivedInput {
+        DerivedInput {
+            declaration_fingerprint: Some(Fingerprint::new(digest)),
+            ..DerivedInput::default()
+        }
+    }
+
+    /// The one-submission case: an agent declares and the user confirms, in one
+    /// batch, with no caller-computed digest anywhere.
+    ///
+    /// This is what the build order buys. The declaration is constructed and
+    /// fingerprinted at step 4 *before* the act that confirms it, so `confirms`
+    /// can be filled from the record the engine has just written — the caller
+    /// never names a digest, and could not, since the claim it would have to hash
+    /// is the engine's own encoding.
+    #[test]
+    fn a_declaration_and_the_act_confirming_it_arrive_in_one_submission() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            agent_declaration: Some(declaring(
+                AgentAct::BlockingSetDeclared {
+                    blocking: [id("inq-1")].into(),
+                },
+                "these block drafting",
+            )),
+            checkpoint_act: Some(checkpoint(ActKind::GraphReviewed, "the set is right")),
+            ..payload(&prior)
+        };
+
+        let applied = apply(
+            &prior,
+            &request,
+            &derived_claiming("sha256:claim"),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("a declaration and its confirmation are one submission");
+
+        let [declared] = applied.snapshot.declarations.declarations.as_slice() else {
+            panic!("the batch records one declaration");
+        };
+        let [act] = applied.snapshot.acts.acts.as_slice() else {
+            panic!("the batch records one act");
+        };
+        assert_eq!(
+            act.confirms.as_ref(),
+            Some(&declared.fingerprint),
+            "the act confirms the declaration this batch wrote"
+        );
+        assert_eq!(
+            declared.fingerprint,
+            Fingerprint::new("sha256:claim"),
+            "the claim digest is the shell's, not a caller's"
+        );
+    }
+
+    /// Each record is covered in the shape its **rule** names, and `Artefact` is an
+    /// absent coverage rather than an empty one.
+    #[test]
+    fn a_record_is_covered_in_the_shape_its_rule_names() {
+        let prior = run_with_a_map();
+        let covered = |act: ActKind| {
+            let request = ApplyRequest {
+                checkpoint_act: Some(checkpoint(act, "so stated")),
+                ..payload(&prior)
+            };
+            let applied = apply(
+                &prior,
+                &request,
+                &DerivedInput::default(),
+                "sha256:pay",
+                &Resolution::default(),
+            )
+            .map(|applied| {
+                applied
+                    .snapshot
+                    .acts
+                    .acts
+                    .first()
+                    .and_then(|held| held.covered.clone())
+            });
+            applied
+        };
+
+        assert_eq!(
+            covered(ActKind::DesignAccepted),
+            Ok(Some(CoveredSet::Sections(ContentCoverage::of(
+                prior.sections.fingerprints()
+            )))),
+            "`EverySection` is the section digest map"
+        );
+        assert_eq!(
+            covered(ActKind::SufficiencyAccepted),
+            Ok(Some(CoveredSet::Nodes(ContentCoverage::of(
+                prior.map.inquiry.materials()
+            )))),
+            "`InquiryMap` is the node material map"
+        );
+        assert_eq!(
+            covered(ActKind::DraftingReady),
+            Ok(None),
+            "`Artefact` binds to the record's own content, so no map is filled"
+        );
+    }
+
+    /// The covered map is of what the batch left behind, not of what it found.
+    ///
+    /// Construction runs after re-observation for exactly this: an act given at a
+    /// checkpoint in the same batch that changed the graph is bound to the graph as
+    /// the user was shown it, and a coverage captured from pre-batch state would
+    /// record what the act was *not* given over.
+    #[test]
+    fn a_covered_map_holds_what_the_batch_left_behind() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            declare: vec![
+                Declaration::about(id("inq-2")).question(Sparse::Value("and this one?".to_owned())),
+            ],
+            checkpoint_act: Some(checkpoint(ActKind::SufficiencyAccepted, "enough asked")),
+            ..payload(&prior)
+        };
+
+        let applied = apply(
+            &prior,
+            &request,
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("a node may be declared and the map accepted in one batch");
+
+        let [act] = applied.snapshot.acts.acts.as_slice() else {
+            panic!("the batch records one act");
+        };
+        assert_eq!(
+            act.covered,
+            Some(CoveredSet::Nodes(ContentCoverage::of(
+                applied.snapshot.map.inquiry.materials()
+            ))),
+            "the act covers the map this batch left, which the prior map is not"
+        );
+        assert_ne!(
+            applied.snapshot.map.inquiry.materials(),
+            prior.map.inquiry.materials(),
+            "the control: this batch did move the map"
+        );
+    }
+
+    /// An act whose rule names an observed fact carries it from derived input, and
+    /// an act that cannot is refused rather than recorded over an empty
+    /// observation.
+    #[test]
+    fn an_act_carries_the_observed_facts_its_rule_names() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            checkpoint_act: Some(checkpoint(ActKind::GovernanceConfirmed, "these govern")),
+            ..payload(&prior)
+        };
+
+        assert_eq!(
+            apply(
+                &prior,
+                &request,
+                &DerivedInput::default(),
+                "sha256:pay",
+                &Resolution::default()
+            ),
+            Err(Refusal::ActAdmissionInvalid {
+                act: ActKind::GovernanceConfirmed,
+                causes: vec![ActFault::ObservedKeys {
+                    missing: vec![ObservedFact::GovernanceEdges],
+                    extra: Vec::new(),
+                }],
+            }),
+            "an unobservable fact is refusal, not an empty observation"
+        );
+
+        let derived = DerivedInput {
+            observed_facts: ObservedFacts {
+                facts: BTreeMap::from([(
+                    ObservedFact::GovernanceEdges,
+                    Fingerprint::new("sha256:edges"),
+                )]),
+            },
+            ..DerivedInput::default()
+        };
+        let applied = apply(
+            &prior,
+            &request,
+            &derived,
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the same act, once the fact is observable");
+        let [act] = applied.snapshot.acts.acts.as_slice() else {
+            panic!("the batch records one act");
+        };
+        assert_eq!(
+            act.observed.get(&ObservedFact::GovernanceEdges),
+            Some(&Fingerprint::new("sha256:edges")),
+            "the act stores the fingerprint it was given over"
+        );
+    }
+
+    /// A disposition binds to the pass the **run** is on — the caller never names
+    /// it — and a run on no pass has nothing to dispose.
+    #[test]
+    fn a_disposition_binds_to_the_pass_the_run_is_on() {
+        let mut prior = run_with_a_map();
+        let disposing = |act: ActKind| CheckpointActDeclaration {
+            disposition: Some(ReviewDisposition::Waived {
+                reason: "the change is small".to_owned(),
+            }),
+            ..checkpoint(act, "no pass is needed here")
+        };
+        let request = ApplyRequest {
+            checkpoint_act: Some(disposing(ActKind::ReviewDisposed)),
+            ..payload(&prior)
+        };
+
+        assert_eq!(
+            apply(
+                &prior,
+                &request,
+                &DerivedInput::default(),
+                "sha256:pay",
+                &Resolution::default()
+            ),
+            Err(Refusal::ReviewPassAbsent),
+            "a disposition submitted while the run is on no pass disposes nothing"
+        );
+
+        prior.review.pass = Some(ReviewPass::over(
+            ReviewRef::new("RV-901"),
+            ContentCoverage::of(prior.sections.fingerprints()),
+        ));
+        let applied = apply(
+            &prior,
+            &request,
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the same act, once the run is on a pass");
+        let [act] = applied.snapshot.acts.acts.as_slice() else {
+            panic!("the batch records one act");
+        };
+        assert_eq!(
+            act.disposition.as_ref().map(|disposed| &disposed.pass),
+            Some(&ReviewRef::new("RV-901")),
+            "the engine names the pass, so a caller cannot dispose another run's"
+        );
+    }
+
+    /// A declaration with no shell-computed claim digest is REFUSED, never stored
+    /// carrying an empty one.
+    ///
+    /// The shell computes it whenever the payload carries a declaration, so this
+    /// pins the contract rather than a reachable path — the same guarantee
+    /// [`Refusal::ImportedEntryDigestMissing`] gives an imported entry, and the
+    /// failure worth foreclosing is the same: a record that carries a fingerprint
+    /// nothing was hashed into and reads as though it had one.
+    #[test]
+    fn a_declaration_without_a_claim_digest_is_refused_rather_than_stored_empty() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            agent_declaration: Some(declaring(
+                AgentAct::DraftingReady,
+                "the sections are seeded",
+            )),
+            ..payload(&prior)
+        };
+        assert_eq!(
+            apply(
+                &prior,
+                &request,
+                &DerivedInput::default(),
+                "sha256:pay",
+                &Resolution::default()
+            ),
+            Err(Refusal::DeclarationDigestMissing {
+                act: AgentActKind::DraftingReady,
+            })
+        );
+    }
+
+    /// A re-recorded act keeps the id its kind gives it, so the change log names
+    /// one subject across the act's whole life rather than a new one per writing.
+    #[test]
+    fn an_act_re_recorded_keeps_the_id_its_kind_gives_it() {
+        let prior = run_with_a_map();
+        let request = ApplyRequest {
+            checkpoint_act: Some(checkpoint(
+                ActKind::DraftingReady,
+                "the sections are seeded",
+            )),
+            ..payload(&prior)
+        };
+        let once = apply(
+            &prior,
+            &request,
+            &DerivedInput::default(),
+            "sha256:pay",
+            &Resolution::default(),
+        )
+        .expect("the act records");
+        let mut again = request;
+        again.envelope.known_revision = once.snapshot.run.revision;
+        again.envelope.submission_id = "s2".to_owned();
+        let twice = apply(
+            &once.snapshot,
+            &again,
+            &DerivedInput::default(),
+            "sha256:pay2",
+            &Resolution::default(),
+        )
+        .expect("a second act of the same kind displaces the first");
+
+        let [first] = once.snapshot.acts.acts.as_slice() else {
+            panic!("one act");
+        };
+        let [second] = twice.snapshot.acts.acts.as_slice() else {
+            panic!("replacement is by act, so still one");
+        };
+        assert_eq!(
+            first.id, second.id,
+            "the id is the act's, not the writing's"
+        );
     }
 
     #[test]

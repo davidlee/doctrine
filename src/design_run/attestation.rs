@@ -638,6 +638,53 @@ impl AgentAct {
             AgentAct::DraftingReady => AgentActKind::DraftingReady,
         }
     }
+
+    /// The canonical bytes of this declaration's **claim**, for the shell to
+    /// digest into [`AgentDeclaration::fingerprint`] (design `sec-4`).
+    ///
+    /// This leaf owns the encoding and never hashes it — the split
+    /// [`Step::material`](super::runbook::Step::material) already makes, for the
+    /// same reason: *what the claim is* belongs beside the type that holds it,
+    /// and hashing belongs to the shell.
+    ///
+    /// The claim is the act and its basis and nothing else. `id` is engine-
+    /// allocated and not content; `turn` is a harness detail; `covered`'s currency
+    /// is the coverage mechanism's job, and folding it in here would conflate *is
+    /// this the claim the user was shown* with *has the material moved since*.
+    ///
+    /// **The declared set is length-framed, which the design's own sketch is not.**
+    /// A basis is free text and may carry a newline; a [`DesignId`] may not. So an
+    /// unframed term list lets a line move between the set and the basis without
+    /// changing a byte — declaring `{inq-1, inq-2}` on basis `b` encodes exactly as
+    /// declaring `{inq-1}` on basis `"inq-2\nb"`. The agent authors both halves, so
+    /// that is a route to dropping a blocking question while the user's `confirms`
+    /// still matches, which is the one guarantee this digest exists to give. The
+    /// count restores injectivity for one line and no change of shape; it frames
+    /// the claim rather than joining it, so *act and basis and nothing else* still
+    /// describes what is hashed. Pinned by
+    /// `a_basis_cannot_be_read_as_the_blocking_set_beside_it`.
+    pub(crate) fn claim_material(&self, basis: &str) -> String {
+        let empty = BTreeSet::new();
+        // Ascending, because a set has no order and two declarations of the same
+        // questions must agree — the whole-line-sort discipline the governance
+        // edge projection uses, and a `BTreeSet` already holds that order.
+        let declared = match *self {
+            AgentAct::BlockingSetDeclared { ref blocking } => blocking,
+            AgentAct::DraftingReady => &empty,
+        };
+        let mut material = String::new();
+        material.push_str(ActKind::from(self.kind()).as_str());
+        material.push('\n');
+        material.push_str(&declared.len().to_string());
+        material.push('\n');
+        for node in declared {
+            material.push_str(node.as_str());
+            material.push('\n');
+        }
+        material.push_str(basis);
+        material.push('\n');
+        material
+    }
 }
 
 /// An agent's declaration about the state of its own work (DEC-121).

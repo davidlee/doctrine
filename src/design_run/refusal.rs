@@ -410,6 +410,27 @@ pub(crate) enum Refusal {
     /// than the first: an agent that repairs one slot and resubmits should not
     /// discover the rest one round-trip at a time.
     ActAdmissionInvalid { act: ActKind, causes: Vec<ActFault> },
+    /// A disposition arrived while the run is on **no review pass**.
+    ///
+    /// Refused at construction rather than reported as a fault, because it is not
+    /// one: the correspondence asks whether a record matches its rule, and here
+    /// there is no record to make — a [`DisposedPass`] binds to the pass it
+    /// disposes and the run has none to name. The [`Refusal::RunbookAbsent`]
+    /// precedent, one act along.
+    ///
+    /// Run-level, so it carries no id: only `ReviewDisposed` may dispose, and
+    /// naming it would restate what the rule already says.
+    ///
+    /// [`DisposedPass`]: super::attestation::DisposedPass
+    ReviewPassAbsent,
+    /// An agent declaration arrived with no shell-computed claim digest.
+    ///
+    /// The pure layer never hashes, so the digest is a derived fact like any
+    /// other — and a record carrying an empty fingerprint would read as though it
+    /// had one, silently matching whatever `confirms` was written beside it. The
+    /// [`Refusal::ImportedEntryDigestMissing`] rule, applied to the other
+    /// shell-supplied digest: refused, never seeded with a placeholder.
+    DeclarationDigestMissing { act: AgentActKind },
     /// The eviction ladder was exhausted and the **no-drop set alone** still
     /// exceeds the whole-envelope ceiling. The one irreducible state, refused
     /// rather than emitted as a quietly malformed envelope.
@@ -746,6 +767,15 @@ impl fmt::Display for Refusal {
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("; ")
+            ),
+            Refusal::ReviewPassAbsent => write!(
+                f,
+                "the act disposes of a review pass and the run is on none"
+            ),
+            Refusal::DeclarationDigestMissing { act } => write!(
+                f,
+                "the `{}` declaration arrived with no claim digest",
+                ActKind::from(*act).as_str()
             ),
             Refusal::EnvelopeIrreducible { budget, rendered } => write!(
                 f,

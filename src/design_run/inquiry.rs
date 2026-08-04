@@ -301,14 +301,6 @@ impl InquiryNode {
 
     /// What this node is made of, for coverage purposes — everything except the
     /// two fields [`NodeMaterial`] excludes and the `id` the map keys on.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-244 PHASE-05: reached only through InquiryMap::materials, whose first \
-                      reader is the condition model"
-        )
-    )]
     fn material(&self) -> NodeMaterial {
         NodeMaterial {
             question: self.question.clone(),
@@ -417,14 +409,6 @@ impl InquiryMap {
     /// Pure, and it has to be: `DerivedInput` is built before `apply` runs the
     /// batch, so a shell-supplied digest of this map would have been taken
     /// *before* the very mutations it is meant to observe.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-244 PHASE-05: the condition model is the first reader — it owns \
-                      Coverage::InquiryMap and the CoverageStale refusal this feeds"
-        )
-    )]
     pub(crate) fn materials(&self) -> BTreeMap<DesignId, NodeMaterial> {
         self.nodes
             .iter()
