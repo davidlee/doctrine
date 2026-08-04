@@ -142,27 +142,32 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · PHASE-04 in_progress · 4943333a
+fresh-as-of: 2026-08-05 · PHASE-04 completed · 7e2b768d
 
 ### Produced
 
-- **PHASE-04 in progress** — nine of eleven planned tasks landed, in `F1`'s
-  order rather than the sheet's listing order (the `int-` retirement cannot
-  precede the mint that replaces it, so `T2`/`T3`/`T7` are one movement). Done:
-  `T1` `ReviewRef` + `ReviewPass` with `pass_over` in the shared fixture
-  (`b1907148`); `T8` `undisposed_blockers` (`ce0885f2`); `T9` `ObservedReview` +
+- **PHASE-04 COMPLETE** — all eleven tasks landed, in `F1`'s order rather than
+  the sheet's listing order (the `int-` retirement cannot precede the mint that
+  replaces it, so `T2`/`T3`/`T7` are one movement). Done: `T1` `ReviewRef` +
+  `ReviewPass` with `pass_over` in the shared fixture (`b1907148`); `T8`
+  `undisposed_blockers` (`ce0885f2`); `T9` `ObservedReview` +
   `review::observe_pass` (`7d1df4ba`); `T4` the DEC-086 id-claim midpoint on the
   prebuilt placement path plus `materialise_prebuilt_at` (`510a966c`); `T5`
   `mint_review` / `materialise_review_at` refactored out of `run_new`
   (`4b5c9ad0`); `T6` the journal widened to `IntentSubject` + `MintKind` with the
-  D4 rename set (`6a62ba95`); and `[T2+T3+T7]` as one movement — the mint on
+  D4 rename set (`6a62ba95`); `[T2+T3+T7]` as one movement — the mint on
   entry to `reviewing`, `IntegratedReview` retired whole, `integrated_current`
-  re-sourced onto `pass.covered` (`4943333a`). `EX-7` settled and `VT-4` amended
-  (`eb408a0d`), reasoning as `DEC-140` (`91d709a6`, `2056b36b`). Counts: entity
-  33 → 38, `review` 84 → 87, `design_run` unit 77 → 78, `e2e_design_review`
-  86 → 90, `e2e_design_checkpoint` 87 **unedited** (T6's control). All 102 test
-  binaries green; clippy clean at every commit. Remaining: `T10` (VA-1 fault
-  idempotency) and `T11` (close out).
+  re-sourced onto `pass.covered` (`4943333a`); `T10` `VA-1`'s two fault-injected
+  e2e rows (`c0d41a7e`, sheet `F5` — landed in `tests/e2e_design_review.rs`, not
+  the checkpoint suite); `T11` close-out (`ae9cac57`). `EX-7` settled and `VT-4`
+  amended (`eb408a0d`), reasoning as `DEC-140` (`91d709a6`, `2056b36b`).
+  A late detour — `29c12e05` dropped `D3`'s intent-key alias and `7e2b768d`
+  restored it (sheet `F6`), which unmasked `ISS-315` (sheet `F7`).
+  Counts: entity 33 → 38, `review` 84 → 87, `design_run` unit 77 → 79,
+  `e2e_design_review` 86 → 92, `e2e_design_checkpoint` 87 **unedited** (T6's
+  control, and `T10` kept it that way). `verify-vt` `VT-1`…`VT-4` all PASS after
+  the flip. `doctrine check gate` green; clippy clean at every commit.
+  Memory recorded: `mem.fact.entity.crash-orphaned-claim-dir` (`f1af3c31`).
 
 - **PHASE-03 done** — `ISS-310` closed. `ReviewPolicy` (four variants, serde-
   defaulted) sits on the run header; `ActorClass` gains one direction from
@@ -322,24 +327,41 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   `reviewing`** — now the only way to clear it. This is `EX-8`'s *the currency
   lamp's input now exists* arriving as an argued behaviour change in
   `tests/e2e_design_review.rs`, not a weakening.
-- **`D3`'s cross-binary compat clause is DROPPED, and the code carrying it is
-  gone.** The sheet's `D3` argued the journal must be readable by a *later*
-  binary, because "a crash from the previous binary is what it is resumed from",
-  and `T6` bought that with a `serde(alias = "checkpoint")` plus a unit test over
-  literal legacy TOML. Neither the design nor `plan.toml` asks for it: `EX-4` and
-  `VA-1` are both same-binary claims (*resuming the same submission*). The
-  journal is per-submission **runtime** state under `.doctrine/state/`, cleared
-  by `complete_journal`, so the window the alias protected is "a submission
-  crashes mid-mint **and** the binary is upgraded before that same submission is
-  re-run" — a guarantee this project makes nowhere else. Removed on the user's
-  call, 2026-08-04: the alias is deleted and the doc no longer claims compat.
-  What is **kept** is the string coding itself, which is the better wire form on
-  its own terms — a bare `subject = "cp-1"` beside a reserved `review-pass`
-  token, rather than a tagged table — and the test is re-levered onto the claim
-  that survives, that the two arms cannot collide in the one slot
-  (`the_review_pass_token_cannot_be_spelled_by_a_checkpoint_id`). `T6`'s real
-  control is unchanged and undiminished: `e2e_design_checkpoint` green
-  **unedited**, at 87.
+- **`D3`'s intent-key compat was dropped and then RESTORED the same day, and the
+  round trip is the finding.** `29c12e05` deleted the
+  `serde(alias = "checkpoint")` on the argument that `D3`'s stated reason was
+  speculative — the sheet justified it as *"a crash from the previous binary is
+  what it is resumed from"*, and neither `design.md` nor `plan.toml` asks for
+  that (`EX-4` and `VA-1` are same-binary claims about resuming the *same*
+  submission). That argument was **right about `D3`'s reason and wrong about the
+  alias**. `RecoveryIntent` is serialised into the design-run **snapshot** —
+  `[[checkpoint.intent]]` in `design.toml` — not only into the per-submission
+  journal `complete_journal` clears, and a run spans weeks, so a snapshot
+  routinely outlives the binary that wrote it. Dropping the alias made
+  `doctrine design show` fail outright on this repo's own live runs: `SL-243`
+  carries 9 pre-`DEC-125` intent rows, `SL-244` carries 16, including this
+  slice's own locked run. Reverted in `7e2b768d`, with the doc now stating the
+  reason it actually has. **Pinned at the tier that broke** —
+  `a_snapshot_written_before_the_intent_subject_key_still_parses`
+  (`src/design_run/snapshot.rs`, beside the `ReviewPolicy` precedent), not over
+  `RecoveryIntent` alone; negative control run, it fails with the alias removed.
+  The lesson for `/audit` is not "the alias is justified" — it is that the
+  sheet's *reason* for it was never the load-bearing one, and a compat claim
+  whose stated justification is wrong survives exactly until someone acts on the
+  justification. `T6`'s control is untouched throughout:
+  `e2e_design_checkpoint` green **unedited**, at 87.
+- **`ISS-315` — `design show 244` is still broken, by `PHASE-04`, and it is not
+  the alias.** Unmasked while fixing the above: `4943333a` retired
+  `ChangeEvent::IntegratedReviewRecorded` per `EX-2`, but `SL-244`'s own change
+  log already held one such row from when the run declared `int-1`. `ChangeEvent`
+  deserialises strictly, so one unrecognised row fails the whole snapshot.
+  `EX-2` is right about the **write** path; the change log is append-only
+  **history**, and the vocabulary it writes is not the vocabulary it must read.
+  Same class as the alias above, and the alias is the near-sibling that got it
+  right. Filed as `ISS-315` with three candidate resolutions; **not decided
+  here** — what a closed vocabulary owes its own history is a governance
+  question. No authored artefact is at risk (this is a runtime-state read), and
+  `PHASE-05` does not depend on reading the run.
 - **PHASE-04's `VA-1` is evidence on the tree, and it sits in
   `tests/e2e_design_review.rs` rather than the sheet's
   `tests/e2e_design_checkpoint.rs`.** Two crash points, mirroring the pair the

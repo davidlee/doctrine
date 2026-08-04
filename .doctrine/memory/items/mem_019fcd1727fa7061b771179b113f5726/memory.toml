@@ -1,0 +1,46 @@
+memory_uid = "mem_019fcd1727fa7061b771179b113f5726"
+memory_key = "mem.fact.design-run.snapshot-outlives-the-binary"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = 'Design-run snapshots are long-lived — "runtime state is disposable" does not license a serde break'
+summary = "A design run spans weeks and its snapshot holds every persisted type; changing one's wire form breaks live runs, despite .doctrine/state/ being classed disposable"
+created = "2026-08-04"
+updated = "2026-08-04"
+
+[scope]
+paths = ["src/design_run/attestation.rs", "src/design_run/snapshot.rs", "src/design_run/change_log.rs"]
+globs = []
+commands = []
+tags = ["design-run", "serde", "storage-tiers"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b9776dfb42085f2a3acb5bca14c61d06f60ef362"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9a48ace31cb3d41c5f2fcf1ef1a6f3977c4f81c59308c6b6c969c8582078d308"
+base_commit = "7e2b768d9f10906ee77997dc03c22efc3ae4e8ae"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcd17-57f8-7f53-bb1b-459dbea7145d"
+recorded_at = "2026-08-04T14:04:46.968461626Z"
+kind = "friction"
+summary = "execute: 'runtime state is disposable' framing licensed a serde break that failed two live design runs"
+detail = "SL-244 PHASE-04. Acting on the storage model's 'runtime state (.doctrine/state/): gitignored, disposable, rm -rf-able' framing, I argued a serde alias on RecoveryIntent was unnecessary and deleted it — reasoning that the intent journal is per-submission and cleared by complete_journal. The same type is also serialised into the design-run SNAPSHOT (.doctrine/state/slice/NNN/design.toml), which is opened at design start and lives for weeks across many binaries, and which no authored artefact reproduces (design start --from-design cannot rebuild attestations, receipts or gate clearances). doctrine design show failed outright on SL-243 (9 legacy rows) and SL-244 (16). Reverted within the hour. Cost: two commits plus the revert, and the failure was only caught because /handover happens to run design show --format status; nothing in the test suite covered a legacy snapshot at that tier. Generalises: the tier framing is a statement about the tier, not a licence for any file in it — the boot snapshot's storage-model line reads as the latter, and a design run's snapshot is the counterexample. Two other findings ride this: the same class broke design show 244 a second way via ChangeEvent (ISS-315), and a compat claim whose STATED reason is wrong (D3's 'a crash from the previous binary') survives exactly until someone acts on the justification."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
