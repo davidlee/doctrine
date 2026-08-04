@@ -83,6 +83,47 @@ impl DesignRun {
     }
 }
 
+/// Seed the authored slice record a `governance-confirmed` act needs to be
+/// admissible (SL-244 `EX-10`).
+///
+/// `ObservedFact::GovernanceEdges` is projected from the slice's own outbound
+/// relations, and a slice record the shell **cannot read** is an unobservable
+/// fact, which `sec-3` fixes as CHANGED — so the act is refused rather than
+/// recorded. Every design e2e fixture creates the slice *directory* and nothing
+/// in it, which was enough until the projection went live: a ladder that records
+/// the act needs a record to project from.
+///
+/// Both tiers, because `slice::relation_edges` reads through the show-path
+/// reader and that reader wants the `.md` as well as the `.toml` — the
+/// projection itself only reads the `.toml`, so the second write is a
+/// precondition of the *reader*, not of the fact.
+///
+/// **No `[[relation]]` rows.** An edgeless slice is an *observable* fact (the
+/// empty projection), which is all a ladder needs; a fixture whose subject is
+/// the edge set moving writes its own rows.
+pub(crate) fn seed_slice_record(root: &Path, slice_number: &str) {
+    let dir = root.join(crate::common::SLICE_DIR).join(slice_number);
+    std::fs::create_dir_all(&dir).unwrap();
+    let id: u32 = slice_number.parse().expect("the slice number is numeric");
+    std::fs::write(
+        dir.join(format!("slice-{slice_number}.toml")),
+        format!(
+            "id      = {id}\n\
+             slug    = \"fixture\"\n\
+             title   = \"Fixture\"\n\
+             status  = \"started\"\n\
+             created = \"2026-01-01\"\n\
+             updated = \"2026-01-01\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(format!("slice-{slice_number}.md")),
+        "# Fixture\n\nA throwaway slice record, seeded so the governance edge set is observable.\n",
+    )
+    .unwrap();
+}
+
 /// Spawn the built binary rooted at `root`, asserting success; return stdout.
 pub(crate) fn run(root: &Path, args: &[&str]) -> String {
     let out = spawn(root, args);

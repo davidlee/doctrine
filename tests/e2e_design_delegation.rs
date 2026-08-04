@@ -31,6 +31,10 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 mod common;
+/// Opted into for [`design_fixture::seed_slice_record`] alone — SL-244 `T8`'s
+/// governance act projects the slice's own edge set, and one seeder shared with
+/// the other design suites beats three copies.
+mod design_fixture;
 mod runbook_fixture;
 
 /// The pure model, from source. `design_run` is a leaf with crate out-degree
@@ -44,9 +48,10 @@ mod runbook_fixture;
 mod design_run;
 
 use design_run::Stage;
-use design_run::attestation::{ActKind, AgentAct, ReviewPolicy};
+use design_run::attestation::{ActKind, AgentAct, AgentActKind, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
 use design_run::gate::Condition;
+use design_run::ids::DesignId;
 use design_run::snapshot::{self, DesignSnapshot};
 use design_run::submission::{
     AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, CheckpointActDeclaration,
@@ -169,7 +174,11 @@ impl Fixture {
     fn inquiring() -> Fixture {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
-        std::fs::create_dir_all(root.join(common::SLICE_DIR).join(SLICE_NUMBER)).unwrap();
+        // SL-244 `T8`: the `governance-confirmed` act projects the slice's own
+        // outbound edge set, so the tree needs an authored record to project
+        // from — a slice directory with nothing in it is an UNOBSERVABLE fact,
+        // which reads as changed and refuses the act.
+        design_fixture::seed_slice_record(&root, SLICE_NUMBER);
         let out = run(&root, &["design", "start", SLICE, "-p", "."]);
         let uid = out
             .split_whitespace()
@@ -197,13 +206,53 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
+        // SL-244 `T8` (`D2`) — both mechanisms live at once. The `evidence`
+        // claims below are what clears the gate *today*; the acts are what will
+        // clear it once `T10` flips the evaluator, and they land now so that
+        // flip is a change of mechanism with no change of fixture.
+        //
+        // The map is declared in its own submission, ahead of the acts, because
+        // `initial-concerns-recorded` binds to the inquiry map: an act recorded
+        // before `OBLIGATION` existed would carry a covered map the very next
+        // submission invalidates. Declare, then attest over what was declared.
+        fixture.apply(&fixture.payload(
+            "seed-map",
+            &json!({"declare": [
+                {"subject": SECTION_SPINE, "body": spine_body()},
+                {"subject": OBLIGATION, "question": "does delegation need a transport in v1?"},
+            ]}),
+        ));
+        fixture.apply(&fixture.payload(
+            "governance",
+            &json!({
+                "checkpoint_act": checkpoint_act(
+                    ActKind::GovernanceConfirmed,
+                    "the governing artefacts are the ones found",
+                ),
+            }),
+        ));
+        // DEC-121's two acts by two actors, in one submission — which is what
+        // `T6`'s build order buys: the declaration is constructed and
+        // fingerprinted before the act that confirms it, so no caller computes a
+        // digest.
+        fixture.apply(&fixture.payload(
+            "graph",
+            &json!({
+                "agent_declaration": agent_declaration(
+                    AgentAct::BlockingSetDeclared {
+                        blocking: [DesignId::parse(OBLIGATION).unwrap()].into(),
+                    },
+                    "the obligation blocks drafting until it is settled",
+                ),
+                "checkpoint_act": checkpoint_act(
+                    ActKind::GraphReviewed,
+                    "the blocking set is right",
+                ),
+            }),
+        ));
         fixture.apply(&fixture.payload(
             "seed",
             &json!({
-                "declare": [
-                    {"subject": SECTION_SPINE, "body": spine_body()},
-                    {"subject": OBLIGATION, "question": "does delegation need a transport in v1?"},
-                ],
                 "evidence": CLEARED
                     .map(|condition| json!({
                         "condition": condition.as_str(),
@@ -304,6 +353,34 @@ impl Fixture {
             &["design", "apply", SLICE, "-p", ".", "--input", body],
         )
     }
+}
+
+/// A checkpoint act as a payload field, built from the wire type (SL-244 `T8`).
+///
+/// `serde_json::to_value` over [`CheckpointActDeclaration`] rather than a JSON
+/// literal, for the reason the [`WRITER_ACTS`] rows already give: [`ActKind`]
+/// carries no `as_str`, and re-typing a serde-derived kebab token in a test is
+/// the drift `STD-001` forbids.
+fn checkpoint_act(act: ActKind, basis: &str) -> Value {
+    serde_json::to_value(CheckpointActDeclaration {
+        act,
+        acceptance: AcceptanceDeclaration {
+            basis: basis.to_owned(),
+            turn: None,
+        },
+        disposition: None,
+    })
+    .unwrap()
+}
+
+/// An agent declaration as a payload field, on the same terms.
+fn agent_declaration(act: AgentAct, basis: &str) -> Value {
+    serde_json::to_value(AgentActDeclaration {
+        act,
+        basis: basis.to_owned(),
+        turn: None,
+    })
+    .unwrap()
 }
 
 /// The spine section's body, which must open with its own heading.
@@ -483,6 +560,20 @@ fn delegated_worker_cannot_advance_the_run() {
             &runbook_fixture::discharge_body(step),
         ));
     }
+    // SL-244 `T8` — what this crossing will owe after `T10`:
+    // `user-accepts-sufficiency`. Recorded here rather than in the fixture
+    // because it belongs to *this* edge, and because the recorded proposal above
+    // deliberately changed no map state, so the act's inquiry-map coverage is
+    // still current when it is given.
+    fixture.apply(&fixture.payload(
+        "sufficiency",
+        &json!({
+            "checkpoint_act": checkpoint_act(
+                ActKind::SufficiencyAccepted,
+                "the obligation is understood well enough to draft",
+            ),
+        }),
+    ));
     fixture.apply(&fixture.payload(
         "coordinator-advances",
         &json!({"stage": {"to": Stage::Drafting.as_str()}}),
@@ -540,5 +631,53 @@ fn accepted_proposal_retains_its_attribution() {
             .map(|held| held.by().to_owned()),
         Some(DELEGATE.to_owned()),
         "attribution is stored, not re-derived"
+    );
+}
+
+// ── SL-244 T8: the ladder's acts are recorded, not merely submitted ────────
+
+/// `T8`'s own control — the acts the fixture adds are *recorded*, so a payload
+/// key that silently deserialised into nothing cannot read as done.
+///
+/// Necessary because `T8` is additive by design (`D2`): the incumbent evidence
+/// scan is what clears the gate until `T10`, so nothing else in this suite would
+/// fail if the acts went nowhere. The suite would stay green and the fixture
+/// would be inert JSON — which is precisely the state `T10` is supposed to be
+/// able to flip into without touching a fixture.
+///
+/// It asserts the acts by **kind**, not the whole record: the record's engine
+/// slots are `T5`/`T6`'s to pin, and unit tests already do so by payload.
+#[test]
+fn the_ladder_records_the_acts_its_crossings_will_owe() {
+    let fixture = Fixture::inquiring();
+    let held = fixture.read();
+
+    let acts: BTreeSet<ActKind> = held.acts.acts.iter().map(|act| act.act).collect();
+    assert_eq!(
+        acts,
+        BTreeSet::from([ActKind::GovernanceConfirmed, ActKind::GraphReviewed]),
+        "the exploring → inquiring crossing owes both of its conditions' acts"
+    );
+
+    let declared: Vec<AgentActKind> = held
+        .declarations
+        .declarations
+        .iter()
+        .map(|declaration| declaration.act.kind())
+        .collect();
+    assert_eq!(
+        declared,
+        vec![AgentActKind::BlockingSetDeclared],
+        "and the declaration the user's `GraphReviewed` confirms"
+    );
+    assert!(
+        held.declarations.declarations.iter().all(|declaration| {
+            held.acts
+                .acts
+                .iter()
+                .any(|act| act.confirms.as_ref() == Some(&declaration.fingerprint))
+        }),
+        "the confirmation link is live: the act carries the digest of the record the \
+         engine wrote in the same submission, with no caller-computed digest anywhere"
     );
 }
