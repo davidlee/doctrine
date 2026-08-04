@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::gate::Condition;
-use super::ids::DesignId;
+use super::ids::{DesignId, IdKind};
 
 /// Why the pure core refused a submission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,10 +234,15 @@ pub(crate) enum Refusal {
     DelegateCannotAdvance { what: &'static str },
     /// An act named an assignment this run does not hold.
     UnknownDelegation { id: DesignId },
-    /// A `dlg-` subject appeared in a declaration batch. A delegation is acted on
-    /// through the payload's own `delegation` field; a declaration route to it
-    /// would be a second way into the state the sole-writer boundary keeps single.
-    DelegationNotDeclarable { id: DesignId },
+    /// A subject appeared in a declaration batch whose kind is not addressable
+    /// that way — its state is written through a run-level payload field
+    /// instead, and a declaration route to it would be a second way into state
+    /// the sole-writer boundary keeps single.
+    ///
+    /// One variant for three kinds rather than one each: the rule is the same
+    /// rule, and only the field it names differs — which the message reads off
+    /// the id's own kind.
+    SubjectNotDeclarable { id: DesignId },
     /// An export named an obligation that is already spoken for — one bounded
     /// obligation means one outstanding assignment at a time.
     DelegationOutstanding { id: DesignId, obligation: DesignId },
@@ -554,10 +559,14 @@ impl fmt::Display for Refusal {
             Refusal::UnknownDelegation { id } => {
                 write!(f, "this run holds no delegation `{id}`")
             }
-            Refusal::DelegationNotDeclarable { id } => write!(
+            Refusal::SubjectNotDeclarable { id } => write!(
                 f,
-                "{id} cannot be declared — a delegation is exported, proposed to, accepted \
-                 or refused through the payload's `delegation` field"
+                "{id} cannot be declared — it is written through the payload's `{}` field",
+                match id.kind() {
+                    IdKind::CheckpointAct => "checkpoint_act",
+                    IdKind::AgentDeclaration => "agent_declaration",
+                    _ => "delegation",
+                }
             ),
             Refusal::DelegationOutstanding { id, obligation } => write!(
                 f,

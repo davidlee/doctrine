@@ -927,15 +927,17 @@ fn declare(
         IdKind::Attestation => declare_attestation(next, declaration),
         IdKind::Finding => declare_finding(next, declaration),
         IdKind::Checkpoint => declare_checkpoint(next, declaration, submission),
-        // A delegation is not a declaration subject. It is acted on through the
-        // payload's own `delegation` field, because an assignment is about the
-        // run's obligation rather than about a subject the batch declares — and
-        // because a `dlg-` subject reaching here would be a *second* route to
-        // delegation state, which is exactly the sole-writer boundary this phase
-        // exists to make single.
-        IdKind::Delegation => Err(Refusal::DelegationNotDeclarable {
-            id: declaration.subject().clone(),
-        }),
+        // None of these three is a declaration subject; each is written through
+        // a run-level payload field of its own. A `dlg-` assignment is about the
+        // run's obligation rather than about a subject the batch declares, and a
+        // recorded act or agent declaration is constructed by the engine after
+        // the batch has been applied. A subject route to any of them would be a
+        // *second* way into state the sole-writer boundary keeps single.
+        IdKind::Delegation | IdKind::CheckpointAct | IdKind::AgentDeclaration => {
+            Err(Refusal::SubjectNotDeclarable {
+                id: declaration.subject().clone(),
+            })
+        }
     }
 }
 

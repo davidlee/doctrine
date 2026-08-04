@@ -15,23 +15,27 @@ use std::collections::BTreeMap;
 
 use super::Stage;
 use super::attestation::{
-    ActKind, ActorClass, AgentActKind, ContentCoverage, IntentSubject, RecoveryIntent,
-    ReviewPolicy, ReviewRef, Reviewer,
+    ActKind, ActorClass, AgentAct, AgentActKind, ContentCoverage, DisposedPass, IntentSubject,
+    RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef, Reviewer,
 };
 use super::facts::DerivedDesignFacts;
-use super::fixture::{attest, id, pass_over, run_holding, section};
+use super::fixture::{
+    attest, blocking_set_declared, checkpoint_act, drafting_ready, id, pass_over, run_holding,
+    section,
+};
 use super::gate::{
     ActRequirement, Advance, AttestationRule, Binding, Condition, ConditionKind, Contract,
     Coverage, DerivationRule, EngineSource, ObservedFact, Reach, RequiredActor, ReviewStanding,
     advance, boundary_runbook, cumulative_conditions, regress,
 };
-use super::ids::{DesignId, Fingerprint};
+use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
 use super::refusal::Refusal;
 use super::run::live_reviews;
 use super::runbook::{RunbookKey, RunbookStanding};
+use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup};
 use super::submission::{Batch, Declaration, Sparse};
 
 /// Facts in which every *claimed* cumulative condition up to `stage` holds, each
@@ -984,4 +988,158 @@ fn a_contract_states_its_derivation_reach_and_prose_key_and_nothing_else() {
         ActKind::from(AgentActKind::BlockingSetDeclared),
         ActKind::BlockingSetDeclared
     );
+}
+
+/// A recorded act group round-trips, and **replacement is by act** — the key
+/// that distinguishes these records from `Attestation`'s.
+///
+/// The third assertion is the anti-regression that proves the two keys really do
+/// differ: two attestations on one section coexist (different lanes), while two
+/// checkpoint acts of one kind do not. Keying acts by id, or attestations by
+/// subject, would each fail exactly one half of this.
+#[test]
+fn a_recorded_act_is_replaced_by_kind_where_an_attestation_is_replaced_by_id() {
+    let mut acts = CheckpointActGroup::default();
+    acts.record(checkpoint_act(
+        "cpa-1",
+        ActKind::GovernanceConfirmed,
+        "first",
+    ));
+    acts.record(checkpoint_act(
+        "cpa-2",
+        ActKind::GraphReviewed,
+        "other kind",
+    ));
+    acts.record(checkpoint_act(
+        "cpa-3",
+        ActKind::GovernanceConfirmed,
+        "second",
+    ));
+
+    assert_eq!(acts.acts.len(), 2, "a second act of one kind displaces it");
+    let held = acts
+        .acts
+        .iter()
+        .find(|held| held.act == ActKind::GovernanceConfirmed)
+        .expect("the surviving act");
+    assert_eq!(
+        held.id,
+        id("cpa-3"),
+        "the later act wins, id notwithstanding"
+    );
+
+    // The group survives the wire unchanged — and stores in a deterministic
+    // order, so an unrelated re-record cannot churn the snapshot's bytes.
+    let wire = toml::to_string(&acts).unwrap();
+    assert_eq!(toml::from_str::<CheckpointActGroup>(&wire).unwrap(), acts);
+    let mut reordered = CheckpointActGroup::default();
+    reordered.record(checkpoint_act(
+        "cpa-3",
+        ActKind::GovernanceConfirmed,
+        "second",
+    ));
+    reordered.record(checkpoint_act(
+        "cpa-2",
+        ActKind::GraphReviewed,
+        "other kind",
+    ));
+    assert_eq!(toml::to_string(&reordered).unwrap(), wire);
+
+    // The same rule for agent declarations, keyed on the narrower vocabulary.
+    let mut declared = AgentDeclarationGroup::default();
+    declared.record(blocking_set_declared("agd-1", &["inq-1"]));
+    declared.record(blocking_set_declared("agd-2", &["inq-1", "inq-2"]));
+    declared.record(drafting_ready("agd-3"));
+    assert_eq!(declared.declarations.len(), 2);
+    assert_eq!(
+        declared
+            .declarations
+            .iter()
+            .find(|held| held.act.kind() == AgentActKind::BlockingSetDeclared)
+            .map(|held| &held.id),
+        Some(&id("agd-2")),
+        "a second declaration displaces the first however its set differs"
+    );
+
+    // The anti-regression: `Attestation` keys on ID, so one section reviewed in
+    // two lanes holds two live attestations. If acts had been keyed the same
+    // way, the displacement above would not have happened.
+    let mut run = run_holding(&[("sec-a", "sha256:a")]);
+    attest(&mut run, "att-1", "sec-a", Reviewer::Human);
+    attest(&mut run, "att-2", "sec-a", Reviewer::Adversarial);
+    assert_eq!(run.review.attestations.len(), 2);
+}
+
+/// `AgentAct` is tagged with its payload, so the two illegal shapes are
+/// unrepresentable rather than refused: `DraftingReady` cannot carry a blocking
+/// set, and `BlockingSetDeclared` cannot omit one.
+///
+/// `kind()` is the widening a rule reads, and it is the only direction — there
+/// is no narrowing from `ActKind` back.
+#[test]
+fn an_agent_act_carries_its_payload_and_widens_to_a_kind_a_rule_can_name() {
+    let declared = AgentAct::BlockingSetDeclared {
+        blocking: [id("inq-2"), id("inq-1")].into_iter().collect(),
+    };
+    assert_eq!(declared.kind(), AgentActKind::BlockingSetDeclared);
+    assert_eq!(
+        ActKind::from(declared.kind()),
+        ActKind::BlockingSetDeclared,
+        "a requirement names an ActKind; the view answers by widening"
+    );
+    assert_eq!(AgentAct::DraftingReady.kind(), AgentActKind::DraftingReady);
+}
+
+/// The disposition's two arms both bind to a pass, and the pass reference sits
+/// *beside* the arm rather than inside `Conducted` — because both arms dispose of
+/// one pass and only one of them names an `RV` for its own reasons.
+#[test]
+fn a_disposition_binds_to_the_pass_it_disposed_under_either_arm() {
+    let conducted = DisposedPass {
+        pass: ReviewRef::new("RV-344"),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new("RV-344"),
+        },
+    };
+    let waived = DisposedPass {
+        pass: ReviewRef::new("RV-344"),
+        disposition: ReviewDisposition::Waived {
+            reason: "the design is a one-line token rename".to_owned(),
+        },
+    };
+    assert_eq!(conducted.pass, waived.pass, "one pass, two ways to dispose");
+    assert_ne!(conducted.disposition, waived.disposition);
+
+    for held in [&conducted, &waived] {
+        let wire = toml::to_string(held).unwrap();
+        assert_eq!(&toml::from_str::<DisposedPass>(&wire).unwrap(), held);
+    }
+}
+
+/// `IdKind::ALL`'s **order is load-bearing**, and this is what says so.
+///
+/// `DesignId::parse` and `DesignId::kind` both resolve a prefix by walking `ALL`
+/// and taking the first match, so two kinds sharing a stem must appear
+/// longest-first. `cpa-` and `cp-` are the first such pair (SL-244 PHASE-05 T3);
+/// before them every prefix was distinct at byte three and the ordering was free.
+///
+/// The negative control is the point: with the rows swapped, `cpa-1` parses as a
+/// checkpoint whose body is `a1`, silently and with no error anywhere.
+#[test]
+fn id_kinds_sharing_a_stem_are_ordered_longest_first() {
+    for (index, kind) in IdKind::ALL.iter().enumerate() {
+        for other in IdKind::ALL.iter().skip(index + 1) {
+            assert!(
+                !other.prefix().starts_with(kind.prefix()),
+                "{} precedes {}, which extends it — the longer prefix can never match",
+                kind.prefix(),
+                other.prefix()
+            );
+        }
+    }
+
+    // The pair that made this a rule, resolved both ways.
+    assert_eq!(id("cpa-1").kind(), IdKind::CheckpointAct);
+    assert_eq!(id("cp-1").kind(), IdKind::Checkpoint);
+    assert_eq!(id("agd-1").kind(), IdKind::AgentDeclaration);
 }

@@ -15,7 +15,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use super::gate::ObservedFact;
 use super::ids::{DesignId, Fingerprint};
+use super::inquiry::NodeMaterial;
 
 /// Who reviewed a section (DEC-073, DEC-074).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -447,6 +449,175 @@ impl ReviewPass {
     pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
         self.covered.is_current(current)
     }
+}
+
+/// A covered map in the shape the act's [`Coverage`](super::gate::Coverage)
+/// selector names.
+///
+/// A sum rather than two optional fields: an act covers sections or nodes, never
+/// both and never neither-while-claiming-coverage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum CoveredSet {
+    /// Section digests — what `EverySection` compares.
+    Sections(ContentCoverage<Fingerprint>),
+    /// Inquiry-node material — what `InquiryMap` compares. Material rather than
+    /// a digest of it, because nodes are mutated by pure code after any shell
+    /// digest would have been taken.
+    Nodes(ContentCoverage<NodeMaterial>),
+}
+
+/// DEC-125's two arms, given a home. Admissibility is DEC-138's, checked at
+/// admission rather than here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ReviewDisposition {
+    /// A pass was run and is being disposed of. The `review` field is retained
+    /// beside [`DisposedPass::pass`] rather than folded into it because the two
+    /// can only differ by being refused — a value that says the same thing twice
+    /// is checkable.
+    Conducted {
+        /// The `RV` whose findings answer for this pass.
+        review: ReviewRef,
+    },
+    /// The user declines a pass, on the record. Admissible over any review
+    /// state; the reason must be non-blank, which is the only thing admission
+    /// checks here.
+    Waived {
+        /// Why the pass was declined. Blank is refused at admission.
+        reason: String,
+    },
+}
+
+/// A disposition and the pass it was given over (design `sec-4`).
+///
+/// The pass reference sits **beside** the arm rather than inside `Conducted`,
+/// because both arms bind to it and only one names an `RV` for its own reasons.
+/// The row is satisfied only while `pass` equals the run's current
+/// [`ReviewPass::review`], which is what makes a waiver dispose of **one** pass
+/// rather than of review as such.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct DisposedPass {
+    /// The pass being disposed of.
+    pub(crate) pass: ReviewRef,
+    /// How it was disposed.
+    pub(crate) disposition: ReviewDisposition,
+}
+
+/// A user act, in the form the gate reads it (DEC-121).
+///
+/// Named for the four checkpoint acts; `DesignAccepted` is the run-level fifth,
+/// which is why [`LockAcceptance`] is subsumed rather than kept beside it — that
+/// type is exactly this one with `act: DesignAccepted`, `covered: Sections(…)`
+/// and every other slot empty.
+///
+/// **The fields are `pub(crate)` and no constructor guards them**, deliberately:
+/// which slots a given act may fill is its *rule's* statement, and admission is
+/// the single place that checks the record against it. A constructor enforcing a
+/// subset of the same correspondence would be a second checker that could
+/// disagree with the first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct CheckpointAct {
+    /// Engine-allocated, on the run's `cpa-` prefix.
+    pub(crate) id: DesignId,
+    /// Which act this is — and the key it is replaced by.
+    pub(crate) act: ActKind,
+    /// The acceptance itself. Embedded, not widened: its constructor still sets
+    /// [`AcceptanceAuthority::User`], so DEC-088's guarantee is carried rather
+    /// than re-argued. Its non-blank `basis` is also what makes DEC-121's empty
+    /// case strict — a sweep that found nothing must still state what was
+    /// searched, or the act is not admitted.
+    pub(crate) acceptance: AcceptanceAttestation,
+    /// What it was given over. `None` is `Coverage::Artefact`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) covered: Option<CoveredSet>,
+    /// Each observed fact as it stood when the act was given.
+    ///
+    /// Deliberately the bare map rather than
+    /// [`ObservedFacts`](super::gate::ObservedFacts): that type is transient by
+    /// construction and says so, and this one is persisted.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) observed: BTreeMap<ObservedFact, Fingerprint>,
+    /// The agent declaration this act confirms, where its rule names one — the
+    /// declaration's own claim fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) confirms: Option<Fingerprint>,
+    /// How the act disposes of a review, and **which** pass it disposed. `Some`
+    /// on `ReviewDisposed` alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) disposition: Option<DisposedPass>,
+}
+
+/// The acts an agent may declare, each carrying what it declares.
+///
+/// Tagged with its payload rather than paired with an optional field beside it,
+/// so `DraftingReady` cannot carry a blocking set and `BlockingSetDeclared`
+/// cannot omit one. Closed, and deliberately **not** [`ActKind`]: an
+/// agent-authored `DesignAccepted` is the value that must not exist, and the fix
+/// is unrepresentability rather than a check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AgentAct {
+    /// The inquiries the agent considers blocking — DEC-121's artefact, and the
+    /// thing the user's `GraphReviewed` confirms. Every id must be a node of the
+    /// covered map; an id outside it is refused at admission.
+    BlockingSetDeclared {
+        /// The blocking node ids.
+        blocking: BTreeSet<DesignId>,
+    },
+    /// The agent's judgement that drafting may begin. Its basis is the claim.
+    DraftingReady,
+}
+
+impl AgentAct {
+    /// Widen to the discriminant — the half a rule can name, and the only
+    /// direction needed.
+    pub(crate) const fn kind(&self) -> AgentActKind {
+        match *self {
+            AgentAct::BlockingSetDeclared { .. } => AgentActKind::BlockingSetDeclared,
+            AgentAct::DraftingReady => AgentActKind::DraftingReady,
+        }
+    }
+}
+
+/// An agent's declaration about the state of its own work (DEC-121).
+///
+/// Deliberately **not** an [`AcceptanceAttestation`]: nothing here is accepted
+/// truth, and that type's single-member authority enum is the claim it makes.
+/// Widening it to admit an agent would delete DEC-088's guarantee, which is not
+/// this slice's to spend.
+///
+/// It carries no `observed`, `confirms` or `disposition`, and that is the
+/// correspondence rule rather than a shape decision: no requirement whose actor
+/// is an agent names any of the three, so there is nothing for those slots to
+/// hold.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct AgentDeclaration {
+    /// Engine-allocated, on the run's `agd-` prefix.
+    pub(crate) id: DesignId,
+    /// The act with its payload. `act.kind()` is what rules and refusals name,
+    /// and the key it is replaced by.
+    pub(crate) act: AgentAct,
+    /// The stated basis, as an acceptance carries one.
+    pub(crate) basis: String,
+    /// The harness turn it was declared in, when the caller knew it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) turn: Option<String>,
+    /// What it was declared over. `None` is `Coverage::Artefact` — the
+    /// declaration's own content is its binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) covered: Option<CoveredSet>,
+    /// The digest of this declaration's **claim** — `act` and `basis`, and
+    /// nothing else. Shell-computed and arriving on `DerivedInput`; a confirming
+    /// [`CheckpointAct`] names it.
+    ///
+    /// `id` is excluded because the engine allocates it and it is not content;
+    /// `turn` because it is a harness detail rather than part of the claim; and
+    /// `covered` because its currency is already the coverage mechanism's job.
+    /// Those are two questions on two mechanisms — *is this the claim the user
+    /// was shown*, and *has the material moved since* — and they are two on
+    /// purpose.
+    pub(crate) fingerprint: Fingerprint,
 }
 
 /// A user acceptance of the design as locked, and the content it accepted.

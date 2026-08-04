@@ -40,20 +40,38 @@ pub(crate) enum IdKind {
     Finding,
     /// One exported delegation assignment (`dlg-`).
     Delegation,
+    /// A recorded user act (`cpa-`).
+    ///
+    /// Distinct from [`IdKind::Checkpoint`] and deliberately so: a `cp-` is a
+    /// checkpoint disposing an inquiry, and a `cpa-` is the record of a user act
+    /// given at one. `parse` orders its prefix search longest-first, so the two
+    /// cannot shadow each other.
+    CheckpointAct,
+    /// A recorded agent declaration (`agd-`).
+    AgentDeclaration,
 }
 
 impl IdKind {
     /// Every kind — the closed vocabulary, single-sourced (STD-001).
-    pub(crate) const ALL: [IdKind; 6] = [
+    pub(crate) const ALL: [IdKind; 8] = [
         IdKind::Inquiry,
         IdKind::Section,
+        // Longest-first among shared stems: `cpa-` must be tried before `cp-`,
+        // or every `cpa-` id parses as a `cp-` whose body starts with `a`.
+        // `parse` and `kind` both walk this array, so one ordering serves both.
+        IdKind::CheckpointAct,
         IdKind::Checkpoint,
         IdKind::Attestation,
         IdKind::Finding,
         IdKind::Delegation,
+        IdKind::AgentDeclaration,
     ];
 
     /// The id prefix, including its trailing hyphen.
+    ///
+    /// Two prefixes may share a stem (`cp-` / `cpa-`), and [`IdKind::ALL`]'s
+    /// order is what resolves them — see the ordering note there. It is pinned
+    /// by `id_kinds_sharing_a_stem_are_ordered_longest_first`.
     pub(crate) const fn prefix(self) -> &'static str {
         match self {
             IdKind::Inquiry => "inq-",
@@ -62,6 +80,8 @@ impl IdKind {
             IdKind::Attestation => "att-",
             IdKind::Finding => "fnd-",
             IdKind::Delegation => "dlg-",
+            IdKind::CheckpointAct => "cpa-",
+            IdKind::AgentDeclaration => "agd-",
         }
     }
 }

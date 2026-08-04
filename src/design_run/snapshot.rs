@@ -22,7 +22,8 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    ActorClass, Attestation, LockAcceptance, RecoveryIntent, ReviewPass, ReviewPolicy,
+    ActorClass, AgentDeclaration, Attestation, CheckpointAct, LockAcceptance, RecoveryIntent,
+    ReviewPass, ReviewPolicy,
 };
 use super::bounds::CHANGE_LOG_REVISIONS;
 use super::change_log::ChangeLog;
@@ -346,6 +347,66 @@ pub(crate) struct ReviewGroup {
     pub(crate) acceptance: Option<LockAcceptance>,
 }
 
+/// The user acts the run has recorded (design `sec-4`).
+///
+/// **Its own group, not a `ReviewGroup` member.** A recorded act is its own state
+/// model — it is written at four different stages, replaced by act rather than by
+/// id, and read by conditions that have nothing to do with review. Folding it in
+/// beside the attestations would be the hierarchical machine DEC-065 rejects, and
+/// the same reasoning that gave `delegation` and `runbook` their own groups.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct CheckpointActGroup {
+    #[serde(default, rename = "act")]
+    pub(crate) acts: Vec<CheckpointAct>,
+}
+
+impl CheckpointActGroup {
+    /// Record `act`, displacing any prior act of the **same kind**.
+    ///
+    /// Keyed on [`ActKind`], explicitly **not** on the record's id — which is
+    /// [`Attestation`]'s key and must stay that way. An act answers *has this
+    /// been done, latest*, so a second `GraphReviewed` supersedes the first; an
+    /// attestation answers *who reviewed this section*, so two lanes on one
+    /// section coexist. Same retain-then-push mechanism, different key, and the
+    /// difference is the whole design.
+    ///
+    /// Kind-ordered on the way in, so an unrelated re-record cannot churn the
+    /// snapshot's bytes — the serialisation rule [`SectionGroup::upsert`]
+    /// already follows for ids.
+    pub(crate) fn record(&mut self, act: CheckpointAct) {
+        self.acts.retain(|held| held.act != act.act);
+        self.acts.push(act);
+        self.acts.sort_by_key(|held| held.act);
+    }
+}
+
+/// The agent declarations the run has recorded (design `sec-4`).
+///
+/// Its own group for [`CheckpointActGroup`]'s reasons, and separate from it
+/// because the two are replaced on **different vocabularies**: an agent
+/// declaration keys on [`AgentActKind`], the narrower closed set that makes an
+/// agent-authored user act unrepresentable.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct AgentDeclarationGroup {
+    #[serde(default, rename = "declaration")]
+    pub(crate) declarations: Vec<AgentDeclaration>,
+}
+
+impl AgentDeclarationGroup {
+    /// Record `declaration`, displacing any prior declaration of the same kind.
+    ///
+    /// Keyed on the **discriminant**, so a second `BlockingSetDeclared`
+    /// displaces the first however its blocking set differs. Two live ones would
+    /// make *which did the user confirm* ambiguous, and removing that ambiguity
+    /// is what the confirmation link exists for.
+    pub(crate) fn record(&mut self, declaration: AgentDeclaration) {
+        self.declarations
+            .retain(|held| held.act.kind() != declaration.act.kind());
+        self.declarations.push(declaration);
+        self.declarations.sort_by_key(|held| held.act.kind());
+    }
+}
+
 /// One prompt-fragment receipt: what the caller has already been shown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct FragmentReceipt {
@@ -402,6 +463,14 @@ pub(crate) struct DesignSnapshot {
     pub(crate) sections: SectionGroup,
     #[serde(default)]
     pub(crate) review: ReviewGroup,
+    /// Recorded user acts (design `sec-4`). Its own group — a recorded act is
+    /// its own state model, written at four stages and keyed by act.
+    #[serde(default)]
+    pub(crate) acts: CheckpointActGroup,
+    /// Recorded agent declarations (DEC-121). Separate from `acts` because the
+    /// two are replaced on different vocabularies.
+    #[serde(default)]
+    pub(crate) declarations: AgentDeclarationGroup,
     /// Exported assignments and the proposals they are waiting for (DEC-068).
     /// Its own group, because delegation is its own state model.
     #[serde(default)]
@@ -533,6 +602,8 @@ impl DesignSnapshot {
             gate: DerivedDesignFacts::default(),
             sections: SectionGroup::default(),
             review: ReviewGroup::default(),
+            acts: CheckpointActGroup::default(),
+            declarations: AgentDeclarationGroup::default(),
             delegation: DelegationGroup::default(),
             fragments: FragmentGroup::default(),
             runbook: RunbookGroup::default(),

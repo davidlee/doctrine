@@ -8,7 +8,12 @@
 //!
 //! Fixtures only — no assertions, and nothing here is reachable outside `cfg(test)`.
 
-use super::attestation::{Attestation, ContentCoverage, ReviewPass, ReviewRef, Reviewer};
+use std::collections::BTreeMap;
+
+use super::attestation::{
+    AcceptanceAttestation, ActKind, AgentAct, AgentDeclaration, Attestation, CheckpointAct,
+    ContentCoverage, ReviewPass, ReviewRef, Reviewer,
+};
 use super::ids::{DesignId, Fingerprint};
 use super::snapshot::{DesignSnapshot, Section};
 
@@ -75,4 +80,49 @@ pub(super) fn attest(
         fingerprint,
         reviewer,
     ));
+}
+
+/// A checkpoint act of `kind`, accepted on `basis` and covering nothing.
+///
+/// The degenerate `Coverage::Artefact` shape — enough to exercise recording,
+/// replacement and the wire. A test that needs coverage, an observed fact, a
+/// confirmation or a disposition fills the slot it is about and leaves the rest.
+pub(super) fn checkpoint_act(raw: &str, act: ActKind, basis: &str) -> CheckpointAct {
+    CheckpointAct {
+        id: id(raw),
+        act,
+        acceptance: AcceptanceAttestation::bind(basis, None, Fingerprint::new("sha256:accepted")),
+        covered: None,
+        observed: BTreeMap::new(),
+        confirms: None,
+        disposition: None,
+    }
+}
+
+/// An agent declaration of the questions it considers blocking.
+pub(super) fn blocking_set_declared(raw: &str, blocking: &[&str]) -> AgentDeclaration {
+    agent_declaration(
+        raw,
+        AgentAct::BlockingSetDeclared {
+            blocking: blocking.iter().map(|node| id(node)).collect(),
+        },
+    )
+}
+
+/// An agent declaration that drafting may begin.
+pub(super) fn drafting_ready(raw: &str) -> AgentDeclaration {
+    agent_declaration(raw, AgentAct::DraftingReady)
+}
+
+/// The shared shape behind the two above — the fingerprint stands in for the
+/// shell-computed claim digest, which no pure test can compute.
+fn agent_declaration(raw: &str, act: AgentAct) -> AgentDeclaration {
+    AgentDeclaration {
+        id: id(raw),
+        act,
+        basis: format!("fixture declaration {raw}"),
+        turn: None,
+        covered: None,
+        fingerprint: Fingerprint::new(format!("sha256:{raw}")),
+    }
 }
