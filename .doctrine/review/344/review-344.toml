@@ -74,7 +74,7 @@ response = "Confirmed as a concrete type error. AgentActKind carried BlockingSet
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = 'Expected `Activation::Pending` to mean "no act exists to attest"; observed `sec-4` wires all eight acts in this slice, so the two exploring rows are pending on a reason the design itself falsifies'
 detail = """
@@ -91,6 +91,25 @@ Two consequences, neither declared:
 2. It sits across the scope's own boundary. `slice-244.md` § Non-Goals lists under `IMP-391`: "the **wire acts**, the **artefact storage**, the runbook steps and the CLI rendering are the follow-on", and `IMP-391` § What is here opens with "The two checkpoint acts on the wire" and "The artefact each produces as structured state". `sec-4` ships both halves for those acts while leaving the rows unenforced — so the slice does the follow-on's work and still does not get the objective-4 guard, and no section reconciles the split.
 
 Either the two rows are enforceable on this slice's own mechanism (and `Pending` should go, with `IMP-391` narrowed to prompting), or they are not (and `sec-4` owes the reason a `GovernanceConfirmed` cannot be submitted through the field it just declared). As written the design asserts both."""
+disposition = "design-wrong"
+response = """
+Upheld, and settled by DEC-139 (accepted 2026-08-04, decided_by user): take the first horn. Both exploring rows are enforced on this slice, and Activation goes with them — with those two activated it has no members, since review-disposition-attested never qualified either (an unbuilt `Conducted` arm is an unbuilt enum variant, not an unsatisfiable row; `Waived` clears the edge throughout).
+
+The finding's premise check is exact and was verified at source before disposal: sec-4 does ship CheckpointActDeclaration and AgentActDeclaration on ApplyRequest with WRITER_ACTS 7 -> 9 and a snapshot group each, so "there is no act to attest" was false as stated, and the drafting-readiness-attested asymmetry is real.
+
+What the finding did not reach, and what made this a decision rather than a correction: both rows are Cumulative, so activating them filters at every edge above their own, and no live run holds an exploring-stage act or can acquire one retroactively — activation retro-bars every run in flight. The user accepted hand repair, judging it cheaper than a second design-review round: this slice locks before the code lands, so SL-243 is the only live run owing acts, and its repair moves from two to five (GovernanceConfirmed, GraphReviewed, BlockingSetDeclared on top of SufficiencyAccepted and DraftingReady).
+
+Integrated at design.md revision f0ecce6a, adopted into the run at revision 80:
+
+- sec-2 — the interim bullet now says the edge is guarded and IMP-391 owes the interaction; the snapshot-versioning bullet reprices SL-243 at five acts. These were consequence 1 of the finding, the parallel necessity claim.
+- sec-3 — the Activation subsection is replaced by "Every row is enforced, and there is no activation axis", carrying the falsified ground, the cumulative-reach cost and the migration bill; the classification table and Contract lose the activation column and field; one filter (reach) remains; boundary_conditions keeps a second caller in sec-6. Verification impact swaps the "Pending rows are not enforced" assertion for a bottom-edge-is-guarded one. Carried forward: GovernanceEdges now has an enforced consumer, so that weakening is struck.
+- sec-4 — the passage citing Activation as what keeps unsatisfiable rows out of the table now states the flat obligation and points at the generated compile-time assertion that is the actual guard.
+- sec-5 — the DEC-124 arithmetic correction moves from six to eight; the receipt is the enforced set alone, with the not-yet-enforced union retired; counts are 2/4/6/8; the rendered block gains the two exploring contracts and loses the activation token.
+- sec-6 — the condition table and the diagram/header agreement test lose activation.
+
+Consequence 2, the scope-boundary contradiction, is settled in governance at 62f8ff6f: slice-244.md Non-Goals amended (the wire acts and artefact storage are in this slice; objective 4 delivered, not deferred), IMP-391 narrowed to prompting, CLI rendering and the empty-case affordance with its first two bullets marked done.
+
+Two things this disposal deliberately does not claim. The interaction quality DEC-121 wants is still below par until IMP-391 lands — with no CLI rendering the user confirms an artefact the agent paraphrases — and that is an interim on rendering, stated in sec-2 and in IMP-391, not on enforcement. And DEC-121 is refined, not superseded: its ruling on what the checkpoints ARE is untouched; only its stated interim (exploring passes on the runbook alone until IMP-391) no longer holds."""
 
 [[finding]]
 id = "F-4"
