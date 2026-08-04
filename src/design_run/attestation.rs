@@ -27,6 +27,63 @@ pub(crate) enum Reviewer {
     Adversarial,
 }
 
+/// Every act a condition may require (design sec-4, *the acts and where each
+/// lives*). **Closed at eight**, in the order that table lists them.
+///
+/// The gate asks one question of a recorded act — *is there one of this kind, by
+/// this actor, still current against this binding?* — so the kind is the
+/// vocabulary the contract table is written in, and the record shapes below
+/// (three of them, for these eight) are storage rather than identity.
+///
+/// [`AgentActKind`] narrows this to the two an agent may author. The narrowing
+/// runs one way only: every agent act is an act, and no widening exists in the
+/// other direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ActKind {
+    /// The user confirms the governing context that was found (DEC-121).
+    GovernanceConfirmed,
+    /// The user reviews and steers the seeded inquiry graph (DEC-121).
+    GraphReviewed,
+    /// The agent declares which questions it considers blocking (DEC-121).
+    BlockingSetDeclared,
+    /// The user accepts that interrogation is sufficient.
+    SufficiencyAccepted,
+    /// The agent declares the draft ready to be reviewed.
+    DraftingReady,
+    /// A reviewer attests one section, in one lane.
+    SectionReviewed,
+    /// The user disposes of an adversarial pass — conducted or waived (DEC-125).
+    ReviewDisposed,
+    /// The user accepts the design, at run level.
+    DesignAccepted,
+}
+
+/// The two acts an **agent** may author, as a vocabulary of its own.
+///
+/// A separate fieldless type rather than a predicate on [`ActKind`], because it
+/// is what [`super::gate::ActRequirement`]'s `confirms` slot ranges over: a
+/// requirement may name an agent declaration to be confirmed, and naming a *user*
+/// act there is a contradiction that should not be spellable. The `From` below is
+/// the one-way widening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum AgentActKind {
+    /// The agent declares which questions it considers blocking.
+    BlockingSetDeclared,
+    /// The agent declares the draft ready to be reviewed.
+    DraftingReady,
+}
+
+impl From<AgentActKind> for ActKind {
+    fn from(agent: AgentActKind) -> Self {
+        match agent {
+            AgentActKind::BlockingSetDeclared => ActKind::BlockingSetDeclared,
+            AgentActKind::DraftingReady => ActKind::DraftingReady,
+        }
+    }
+}
+
 /// Who an act is attributable to, as the gate classifies *recorded acts*
 /// (design sec-3).
 ///

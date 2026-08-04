@@ -15,12 +15,15 @@ use std::collections::BTreeMap;
 
 use super::Stage;
 use super::attestation::{
-    ActorClass, ContentCoverage, IntentSubject, RecoveryIntent, ReviewPolicy, ReviewRef, Reviewer,
+    ActKind, ActorClass, AgentActKind, ContentCoverage, IntentSubject, RecoveryIntent,
+    ReviewPolicy, ReviewRef, Reviewer,
 };
 use super::facts::DerivedDesignFacts;
 use super::fixture::{attest, id, pass_over, run_holding, section};
 use super::gate::{
-    Advance, Condition, ReviewStanding, advance, boundary_runbook, cumulative_conditions, regress,
+    ActRequirement, Advance, AttestationRule, Binding, Condition, ConditionKind, Contract,
+    Coverage, DerivationRule, EngineSource, ObservedFact, Reach, RequiredActor, ReviewStanding,
+    advance, boundary_runbook, cumulative_conditions, regress,
 };
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::{
@@ -852,4 +855,133 @@ fn the_review_pass_token_cannot_be_spelled_by_a_checkpoint_id() {
     assert!(wire.contains("review-pass"), "the reserved token: {wire}");
     assert_eq!(toml::from_str::<RecoveryIntent>(&wire).unwrap(), pass);
     assert_eq!(pass.subject().checkpoint(), None, "a pass names no node");
+}
+
+/// `RequiredActor` names *where the actor comes from*, and resolution is what
+/// fixes the conjunction's arity (design sec-3, `RequiredActor`).
+///
+/// The `RunPolicy` arm is asserted against `ReviewPolicy::lanes()` itself rather
+/// than against a written-out lane list: the rule rides the policy's single home
+/// of membership, and a second lane table beside it is the parallel
+/// implementation `VA-2` refuses.
+#[test]
+fn a_required_actor_resolves_to_the_lanes_an_act_must_satisfy() {
+    // Fixed is the singleton case — seven of the eight requirements.
+    assert_eq!(
+        RequiredActor::Fixed(ActorClass::User).resolve(ReviewPolicy::HumanOnly),
+        [ActorClass::User]
+    );
+    assert_eq!(
+        RequiredActor::Fixed(ActorClass::Agent).resolve(ReviewPolicy::AdversarialOnly),
+        [ActorClass::Agent],
+        "a fixed actor is fixed: the run's policy does not reach it"
+    );
+
+    // RunPolicy is the one requirement whose arity the run fixes, and it yields
+    // exactly what the policy's own membership says — one lane or two.
+    for policy in ReviewPolicy::ALL {
+        assert_eq!(
+            RequiredActor::RunPolicy.resolve(policy),
+            policy.lanes(),
+            "the actor slot reads DEC-073's policy, it does not restate it"
+        );
+    }
+    assert_eq!(
+        RequiredActor::RunPolicy
+            .resolve(ReviewPolicy::HumanOnly)
+            .len(),
+        1
+    );
+    assert_eq!(
+        RequiredActor::RunPolicy
+            .resolve(ReviewPolicy::HumanThenAdversarial)
+            .len(),
+        2,
+        "one requirement standing for two required acts"
+    );
+}
+
+/// `ConditionKind` is a projection of the derivation rule, never a stored field
+/// (design sec-3, target behaviour). `Claimed` is DEC-120's defect class and is
+/// not representable — asserted by the type having two variants that both
+/// project, with no third to reach.
+#[test]
+fn a_condition_kind_is_projected_from_the_derivation_rule() {
+    assert_eq!(
+        DerivationRule::Engine(EngineSource::Dispositions).kind(),
+        ConditionKind::Derived
+    );
+    assert_eq!(
+        DerivationRule::Engine(EngineSource::Materialisation).kind(),
+        ConditionKind::Derived
+    );
+
+    let attested = DerivationRule::Attested(AttestationRule {
+        acts: &[ActRequirement {
+            act: ActKind::DraftingReady,
+            actor: RequiredActor::Fixed(ActorClass::Agent),
+            confirms: None,
+            disposes_review: false,
+        }],
+        binding: Binding {
+            coverage: Coverage::Artefact,
+            observed: &[],
+        },
+    });
+    assert_eq!(attested.kind(), ConditionKind::Attested);
+}
+
+/// The vocabulary composes into a whole contract, over each coverage the nine
+/// rows will need — the shape `T9`'s table instantiates.
+///
+/// Written as construction rather than assertion because that is the property
+/// under test: `Contract` states derivation, reach and prose key and *nothing
+/// else*, and in particular carries no `remedy` string beside the rule it would
+/// be rendered from. A field added there would fail this test by not compiling.
+#[test]
+fn a_contract_states_its_derivation_reach_and_prose_key_and_nothing_else() {
+    let engine = Contract {
+        derivation: DerivationRule::Engine(EngineSource::Materialisation),
+        reach: Reach::Cumulative,
+        prose: "materialisation-current",
+    };
+    assert_eq!(engine.derivation.kind(), ConditionKind::Derived);
+
+    // Reach and coverage are independent axes: an edge-local row over whole-map
+    // coverage, and a cumulative row over an artefact, are both coherent.
+    for (reach, coverage) in [
+        (Reach::Cumulative, Coverage::Artefact),
+        (Reach::Cumulative, Coverage::EverySection),
+        (Reach::EdgeLocal, Coverage::InquiryMap),
+        (Reach::EdgeLocal, Coverage::PerSection),
+    ] {
+        let attested = Contract {
+            derivation: DerivationRule::Attested(AttestationRule {
+                acts: &[ActRequirement {
+                    act: ActKind::SectionReviewed,
+                    actor: RequiredActor::RunPolicy,
+                    confirms: None,
+                    disposes_review: false,
+                }],
+                binding: Binding {
+                    coverage,
+                    observed: &[ObservedFact::GovernanceEdges],
+                },
+            }),
+            reach,
+            prose: "section-attestations-current",
+        };
+        assert_eq!(attested.derivation.kind(), ConditionKind::Attested);
+    }
+
+    // The `confirms` slot ranges over agent acts only — naming a user act there
+    // is a contradiction the type does not admit. The widening runs one way.
+    assert_eq!(
+        ActKind::from(AgentActKind::DraftingReady),
+        ActKind::DraftingReady
+    );
+    assert_eq!(
+        ActKind::from(AgentActKind::BlockingSetDeclared),
+        ActKind::BlockingSetDeclared
+    );
 }
