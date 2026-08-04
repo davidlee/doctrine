@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-04 · design/drafting (run rev 76) · 3e0ef4b5
+fresh-as-of: 2026-08-04 · design/drafting (run rev 79) · 56502ed5
 
 ### Produced
 
@@ -287,22 +287,87 @@ New this session, all read off the tree:
   `sec-6` `0d739cd3f4cb`. Commits `2e05ac8f`, `87336de9`, `f596e797`,
   `c29da1e9`, `d4d8d80b`, `3e0ef4b5`.
 
+### Round 6 (2026-08-04) — RV-344 opened, nine of ten findings integrated
+
+- **`RV-344` opened** — design facet, target `SL-244`, raiser posture `holistic`,
+  primed from 60 selector paths. Deliberately **two passes on one ledger**, and
+  deliberately neither an inquisition nor per-section: codex has run that lens
+  over every section repeatedly. Pass 1 (architecture / internal coherence over
+  the document as one artefact plus its cited records) is **done**. Pass 2
+  (landing terrain — parallel-implementation risk, in-tree citation
+  verification, unbuilt-vs-misread dependencies, selector coverage) is
+  **specified in the ledger's `## Brief` and not yet run**; it is for after the
+  design nominally locks, and the user's stated preference is Sonnet for it.
+- **Ten findings raised, all ten independently verified by me before disposal** —
+  six checked at source (`F-1`, `F-2`, `F-3`, `F-4`, `F-7`, `F-8`), four against
+  the cited design lines. None spurious.
+- **Nine disposed `design-wrong` and verified.** `F-3` remains **open** — see
+  Open below.
+- **`ISS-314` raised** — `derived_status` (`review.rs:1010`) returns
+  `(Done, None)` on an empty ledger, against `ADR-007` D-C8 which fixes it at
+  `active`/`raiser` and states the reason. Two tests pin the violating value.
+  The user is driving it in parallel; its body carries an explicit table
+  separating it from `SL-244`'s premise so a fixer does not scope-creep.
+- **`F-8` sharpened past what the pass found.** The design argued vacuous
+  `Conducted` satisfaction from `derived_status`; the real source is that
+  `DEC-138`'s predicate is **universally quantified over the finding set** and
+  never reads `status`, so it is vacuously true on an empty ledger and the
+  `ISS-314` fix leaves the hazard untouched. **This supersedes the prior
+  harvest's Learned bullet** *"a clean pass is structurally identical to one never
+  run — `findings: []`, `status: Done`, `await: None`"*: the first clause stands,
+  the `(Done, None)` half is an incumbent defect, not a specification.
+- **`F-1`'s producer traced to `DEC-086`** via `DEC-125`'s rationale —
+  *"checkpoints mint authored entities from inside `apply` via `DEC-086`'s
+  journalled intent"*, live in `src/commands/design.rs` (`journal_intent`,
+  `journalled_intent`, `write_journal`). The design cited neither `DEC-083` nor
+  `DEC-086`. **`SL-244` mints the pass** (user, 2026-08-04); `IMP-392` loses that
+  bullet.
+- **`DEC-139` minted** — the exploring checkpoints are enforced on this slice.
+  Carries the cumulative-reach argument, the accepted hand-repair cost, and the
+  consequence that `Activation` retires with no members.
+- **Advancing the run is itself a specimen.** `drafting → reviewing` refused with
+  all six cumulative conditions outstanding; four had died because `sec-1` and
+  `sec-2`'s *prose* moved. **This supersedes the prior Open bullet** that the
+  three user acts were "deliberately not re-recorded by an agent": they were
+  re-bound this session to cross the edge, on the user's instruction to advance,
+  with the map unchanged. Under this design that invalidation does not occur at
+  all — `user-accepts-sufficiency` binds to `InquiryMap`, not to a section.
+- **Friction: a spawned `Agent`-tool subagent cannot run `Bash` here.** A
+  `worktree-jail: cwd-not-a-worktree` PreToolUse hook rejects
+  `/workspace/doctrine`. Pass 1 completed by reading entities raw and using
+  `Monitor` as a shell. **Pass 2 needs `grep` over `src/` and will hit this
+  harder.** Observation `.doctrine/observations/records/42/`.
+- Commits `6e012172`, `07de5711`, `05b894bc`, `e844b03b`, `ef78b50f`,
+  `b5293523`, `afa890a4`, `56502ed5`.
+
 ### Open
-- **Four clearances are stale** — the run cannot cross `drafting → reviewing`
-  until they are re-recorded. `governing-context-recorded`,
-  `initial-concerns-recorded` and `user-accepts-sufficiency` are **user acts**,
-  deliberately not re-recorded by an agent: under the incumbent's claimed arm
-  they could be, and an agent asserting *the user accepts sufficiency* is the
-  defect this slice exists to close. `blocking-inquiries-dispositioned` is the
-  fourth and is mechanical (16 nodes, 0 open) — left in the same batch rather
-  than split on an agent's judgement of its own entitlement.
-- **No external round has seen the repairs.** Round 5 reviewed rev 68/70 bytes;
-  every section except `sec-1` has moved since, and `sec-6` was written after the
-  round and has never been reviewed by anyone. Whether that warrants a round 6 is
-  the user's call — the round-5 integration was large and self-consistent, but
-  five of six sections are unreviewed at their current bytes.
-- **`ObservedFact`'s single member** — the seam has no enforced consumer this
-  slice, since `GovernanceEdges` is named only by a `Pending` row. Stated
-  honestly in `sec-3`'s carried-forward; left open rather than forced.
+- **`F-3` is the one open finding, and its edit is the outstanding design work.**
+  `DEC-139` settles the decision; the design does not yet carry it. The edit
+  activates both exploring rows, **retires `Activation` entirely** (no members
+  left), and ripples: `sec-3`'s classification table and activation subsection,
+  `sec-5`'s enforced-set arithmetic (2 / 4 / 6 / 8, was 0 / 2 / 4 / 6), its
+  rendered example block and its `Pending`-renders-marked verification bullets,
+  `sec-6`'s activation column, and `sec-2`'s parallel necessity claim.
+- **Three governance edits fall out of the disposals and are unwritten**:
+  `slice-244.md` Non-Goals (the wire acts and artefact storage are in this slice,
+  not `IMP-391`'s), `IMP-391` (narrow to prompting / CLI rendering / empty-case;
+  its first two bullets arrive done), `IMP-392` (loses the `RV`-minting bullet),
+  and `DEC-138` (carries the same superseded `(Done, None)` sentence `sec-3` just
+  corrected).
+- **Clearances will be stale again.** Six were re-bound at run rev 78 to advance;
+  the regression to `drafting` and every edit since has moved the sections they
+  bind to. Re-recording them is a precondition of the next
+  `drafting → reviewing`, and `sec-1` / `sec-2` will have moved by then too.
+- **No external round has seen the repairs**, and round 6 was deliberately not
+  one — `RV-344` pass 1 was an internal-coherence pass over the whole document,
+  which is the lens no per-section codex round could apply. Every section has now
+  moved again. The user's position (2026-08-04) is that per-section external
+  review is done; what remains is `RV-344` pass 2, the landing-terrain pass,
+  after nominal lock.
+- **`ObservedFact`'s single member** — the seam had no enforced consumer while
+  `GovernanceEdges` was named only by a `Pending` row. **`DEC-139` closes this
+  half**: once `governing-context-recorded` is active the fact is compared on
+  every evaluation. What stays open is whether a *second* member is ever wanted;
+  `sec-3`'s carried-forward needs the first half struck when `F-3` lands.
 - **`CHR-049` is settled** — priced from the corpus this session (see round 5
   above), so the design carries no unverified claim of its own.

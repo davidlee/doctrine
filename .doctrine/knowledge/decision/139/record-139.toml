@@ -1,0 +1,52 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 139
+slug = "the-exploring-checkpoints-are-enforced-on-this-slice"
+title = "The exploring checkpoints are enforced on this slice"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-04"
+updated = "2026-08-04"
+tags = ["design-run", "gate", "activation", "scope-boundary"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-121 spawned IMP-391 to build the exploring-stage checkpoints and stated an interim: until it lands, exploring -> inquiring passes on the runbook alone. SL-244's design encoded that as Activation::Pending on governing-context-recorded and initial-concerns-recorded, on the stated ground that until the checkpoints exist there is no act to attest. RV-344 F-3 falsified the ground: sec-4 ships the wire acts and the artefact storage for all three acts involved, which are two of IMP-391's five deliverables and which SL-244's own Non-Goals assign to the follow-on. So the slice does the follow-on's work and still declines the guard."
+choice       = "Activate both rows on this slice. Narrow IMP-391 to the runbook prompting, the CLI rendering and the empty-case affordance. Amend SL-244's Non-Goals: the wire acts and artefact storage are in this slice, not the follow-on. Objective 4 is delivered rather than deferred."
+alternatives = [
+  "Keep both Pending and correct only the stated reason (they are pending on the missing INTERACTION -- prompting and rendering -- not on a missing act). Rejected: cheaper and honest, but leaves objective 4 undelivered while the slice has already paid for the mechanism that would deliver it.",
+  "Activate initial-concerns-recorded alone, on the argument that its InquiryMap coverage is the same shape as the already-active user-accepts-sufficiency and the run already renders the map, while governing-context-recorded needs the governance edge set rendered. Rejected: cumulative reach makes the migration cost identical, so it buys half an objective at the whole price.",
+]
+rationale    = "Both rows are cumulative, so activation is not a question about one edge -- it filters at every edge above. The real objection was therefore migration: no run holds an exploring-stage act and none can acquire one retroactively, so activating retro-bars every in-flight run. The user accepted hand repair (2026-08-04), judging it cheaper than a second round of design review, and the bill is smaller than it first appeared: SL-244's own run will be locked (terminal, no outbound edge) before this code lands, so SL-243 is the only live run owing acts. Its governing context is real and its nine-node map is worth a review pass regardless. The remaining objection -- that an agent meets a guarded edge with no runbook step prompting it -- is answered by the mechanism this slice ships: sec-5's stage-entry contract receipt delivers both contracts at exploring. Declining to enforce here would mean shipping the receipt and then not using it on the one edge that most needs it."
+consequences = [
+  "Activation has no members left. Pending existed only for these two rows -- SL-244 explicitly rules that review-disposition-attested does NOT qualify, because an unbuildable ARM is an unbuilt enum variant rather than a pending row. So the type, the activation filter, sec-5's Pending renders marked machinery and sec-6's activation column all retire. This is a simplification on the design's own standard (required-sections-exist was retired for having no implementation to extend), not a loss.",
+  "The enforced-set arithmetic moves everywhere sec-5 states it: 2 at exploring -> inquiring (was 0), 4 at inquiring -> drafting (was 2), 6 at drafting -> reviewing (was 4), 8 at reviewing -> locked (was 6). sec-5's rendered example block and its receipt-count verification bullet both change.",
+  "SL-243 needs a hand repair at its next forward move: GovernanceConfirmed, GraphReviewed and BlockingSetDeclared, on top of the SufficiencyAccepted and DraftingReady that sec-2 already prices. Five acts, not two.",
+  "IMP-391 keeps the interaction and loses the mechanism. Its first two bullets arrive done.",
+  "DEC-121's stated interim -- until IMP-391 lands, exploring -> inquiring passes on the runbook alone -- no longer holds. This record refines it; it does not supersede DEC-121, whose substantive ruling on what the checkpoints ARE is untouched.",
+  "The interaction quality is still below what DEC-121 wants until IMP-391 lands: with no CLI rendering the user confirms an artefact the agent paraphrases. That is a stated interim on rendering, not on enforcement, and IMP-391 owns closing it.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-04"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "RV-344 F-3 -- the falsified activation rationale and the scope-boundary contradiction, with the deliverable-by-deliverable comparison against IMP-391",
+  "SL-244 design.md sec-4 -- CheckpointActDeclaration and AgentActDeclaration on ApplyRequest, WRITER_ACTS 7 -> 9, and a snapshot group for each",
+  "SL-244 slice-244.md Non-Goals -- 'the wire acts, the artefact storage, the runbook steps and the CLI rendering are the follow-on'",
+  "IMP-391 What is here -- five deliverables, of which the first two are the wire acts and the artefact storage",
+  "SL-243 design run dr-019fc13a-24f5-75b3-be8f-5bee1529c172 rev 28 -- at drafting, three sections, nine resolved nodes; the one live run owing a repair",
+]
+contradicts = []
+notes       = [
+  "The cumulative-reach consequence is what makes this a decision rather than a correction: activating a row on the bottom edge guards every edge above it, so the cost lands on runs that have already left exploring.",
+  "Activation's retirement is a consequence, not a separate decision -- it follows from the design's own rule that an unbuildable arm needs no activation exception.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-244"
