@@ -1,0 +1,46 @@
+memory_uid = "mem_019fcd3123807b31aaa259e8884cc0de"
+memory_key = "mem.fact.rust.clippy-skips-macro-generated-bodies"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Clippy does not lint macro_rules-generated bodies"
+summary = "Repo clippy denies are silent on tokens a local macro_rules! body emits; they fire only on caller-written argument tokens."
+created = "2026-08-04"
+updated = "2026-08-04"
+
+[scope]
+paths = ["src/design_run/gate.rs"]
+globs = []
+commands = []
+tags = ["rust", "clippy", "macros", "lint-gate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1f3ad1eb7de4cac2f99d1f662dcff3ba274dc0b1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ff4a5e2f2d9df64b96d29c6d810aa8a552e3f40a3a6d26c1d021e28b0581b644"
+base_commit = "9798d91b33ad461bde04964800fe6cd7d0d2f3b5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+
