@@ -78,6 +78,28 @@ pub(crate) enum AgentActKind {
 }
 
 impl ActKind {
+    /// Every act, in the order the design's membership table lists them — the
+    /// closed vocabulary, single-sourced so an exhaustive test cannot silently
+    /// miss a member (STD-001).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-244 PHASE-05: whether `gate::requirement_for` is total over the \
+                      vocabulary is a test's question; no production path enumerates the acts"
+        )
+    )]
+    pub(crate) const ALL: [ActKind; 8] = [
+        ActKind::GovernanceConfirmed,
+        ActKind::GraphReviewed,
+        ActKind::BlockingSetDeclared,
+        ActKind::SufficiencyAccepted,
+        ActKind::DraftingReady,
+        ActKind::SectionReviewed,
+        ActKind::ReviewDisposed,
+        ActKind::DesignAccepted,
+    ];
+
     /// The kebab token this act is spelled with everywhere — the stored value,
     /// the rendered remedy, the refusal text (STD-001). It agrees with the serde
     /// rename by construction of the test that compares them, which is
@@ -404,6 +426,16 @@ impl<T: Eq> ContentCoverage<T> {
             .collect()
     }
 
+    /// Whether `subject` was one of the subjects covered.
+    ///
+    /// Membership only, and deliberately a different question from
+    /// [`ContentCoverage::diff`]'s: a blocking set names nodes that must have
+    /// been **on** the map it was declared over, and says nothing about whether
+    /// their material has moved since.
+    pub(crate) fn covers(&self, subject: &DesignId) -> bool {
+        self.covered.contains_key(subject)
+    }
+
     /// Whether every covered subject still carries what it was covered at — and
     /// nothing has joined or left.
     ///
@@ -432,6 +464,15 @@ impl ReviewRef {
     /// Wrap a canonical ref the shell has already resolved.
     pub(crate) fn new(canonical: impl Into<String>) -> ReviewRef {
         ReviewRef(canonical.into())
+    }
+
+    /// The canonical ref as the shell handed it over.
+    ///
+    /// The shell's read-back: `design_run` records the ref opaquely and the
+    /// command tier resolves the ledger behind it, so the string has to be able
+    /// to cross back out the way it came in.
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
     }
 }
 

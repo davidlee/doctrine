@@ -10,8 +10,144 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use super::Stage;
-use super::gate::Condition;
+use super::attestation::{ActKind, AgentActKind, ReviewRef};
+use super::gate::{Condition, Coverage, ObservedFact};
 use super::ids::{DesignId, IdKind};
+
+/// One way a recorded act fails to correspond to the rule it is written against
+/// (design `sec-4`).
+///
+/// Four of the variants are the four correspondence rows — coverage, observed
+/// facts, confirmation, disposition — and the other four are the complement of
+/// the generated `const` assertion in [`super::gate`]: that assertion fixes which
+/// *slots* a rule may name, and these are about the *value* a record put in one.
+///
+/// Deliberately **not** merged with the gate's own unmet-condition vocabulary.
+/// The two answer different questions at different times: a fault is *this record
+/// is malformed against its rule*, raised once on write; an unmet condition is
+/// *this condition is not met by the records that exist*, re-derived at every
+/// crossing. Folding them would give the gate variants it can never raise and
+/// admission variants it can never check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ActFault {
+    /// The rule names this coverage; the act carries that one, or none.
+    ///
+    /// [`Coverage::PerSection`] is carried by **no** act — it is a
+    /// quantification the derivation performs over the section set — so a rule
+    /// naming it refuses every record that carries a covered map at all.
+    CoverageMismatch {
+        required: Coverage,
+        carried: Option<Coverage>,
+    },
+    /// The observed map's key set is not the rule's [`ObservedFact`] list.
+    ///
+    /// An act whose map is simply **absent** where its rule names a fact is
+    /// refused rather than read as an empty observation, so the conjunctive
+    /// binding cannot be evaded by omitting the field.
+    ObservedKeys {
+        missing: Vec<ObservedFact>,
+        extra: Vec<ObservedFact>,
+    },
+    /// A confirmation is present where the rule names none, or absent where it
+    /// names one. Presence-exactly-when, so one variant with a direction.
+    Confirmation {
+        expected: Option<AgentActKind>,
+        carried: bool,
+    },
+    /// Likewise for a disposition.
+    Disposition { expected: bool, carried: bool },
+    /// A `Conducted` arm naming a review that is not the run's current pass.
+    ForeignPass {
+        named: ReviewRef,
+        current: ReviewRef,
+    },
+    /// A `Conducted` arm over a pass whose ledger carries no concluded marker —
+    /// **including one the shell could not read at all**. Absence is refusal, not
+    /// satisfaction: a review Doctrine cannot see cannot have concluded.
+    PassNotConcluded { review: ReviewRef },
+    /// A `Waived` arm whose reason is empty or whitespace.
+    WaiverReasonMissing,
+    /// A blocking set naming nodes outside the map it was declared over.
+    BlockingSetUnknownNodes { nodes: Vec<DesignId> },
+}
+
+impl fmt::Display for ActFault {
+    /// One clause, on [`Refusal`]'s terms: the *data* is the contract and this
+    /// is what crosses a `Display` boundary.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActFault::CoverageMismatch { required, carried } => write!(
+                f,
+                "its rule binds to `{}` coverage and the act carries {}",
+                required.as_str(),
+                carried.map_or_else(
+                    || "none".to_owned(),
+                    |carried| format!("`{}`", carried.as_str())
+                )
+            ),
+            ActFault::ObservedKeys { missing, extra } => {
+                let list = |facts: &[ObservedFact]| {
+                    facts
+                        .iter()
+                        .map(|fact| fact.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                write!(
+                    f,
+                    "its observed facts are not the ones its rule names — missing: [{}], \
+                     unasked-for: [{}]",
+                    list(missing),
+                    list(extra)
+                )
+            }
+            // `Some(_)` with a confirmation carried is agreement, not a fault, so
+            // only two of the four combinations reach here — and the match stays
+            // total on the direction rather than on the pair.
+            ActFault::Confirmation { expected, carried } => match expected {
+                Some(declaration) => write!(
+                    f,
+                    "its rule requires it to confirm the current `{}` and it confirms nothing",
+                    ActKind::from(*declaration).as_str()
+                ),
+                None => write!(
+                    f,
+                    "it confirms a declaration its rule does not name (carried: {carried})"
+                ),
+            },
+            ActFault::Disposition { expected, .. } => f.write_str(if *expected {
+                "its rule requires it to dispose of the review pass and it disposes nothing"
+            } else {
+                "it disposes of a review pass its rule does not name"
+            }),
+            ActFault::ForeignPass { named, current } => write!(
+                f,
+                "it disposes `{}`, which is not the pass this run is on (`{}`)",
+                named.as_str(),
+                current.as_str()
+            ),
+            ActFault::PassNotConcluded { review } => write!(
+                f,
+                "`{}` carries no concluded-pass marker Doctrine can read, so a conducted \
+                 disposition over it is a claim about a pass that has not finished",
+                review.as_str()
+            ),
+            ActFault::WaiverReasonMissing => f.write_str(
+                "a waiver states why the pass was declined, and this one states nothing",
+            ),
+            ActFault::BlockingSetUnknownNodes { nodes } => write!(
+                f,
+                "it declares nodes the map it was declared over does not hold: {}",
+                nodes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
 
 /// Why the pure core refused a submission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +396,20 @@ pub(crate) enum Refusal {
         obligation: DesignId,
         exported_at: u64,
     },
+    /// A recorded act does not correspond to the rule it is written against
+    /// (design `sec-4`).
+    ///
+    /// Raised on WRITE, before anything is persisted — so every stored act
+    /// satisfies the correspondence by construction and the gate never re-checks
+    /// it. **One variant, not eight refusals**, on [`Refusal::RunbookNotDischarged`]'s
+    /// own precedent and its stated reason: the fact refused is one fact — this
+    /// act does not correspond to its rule — and what differs is which slot, so
+    /// the slot rides a field.
+    ///
+    /// `causes` is non-empty, and carries **every** way the act failed rather
+    /// than the first: an agent that repairs one slot and resubmits should not
+    /// discover the rest one round-trip at a time.
+    ActAdmissionInvalid { act: ActKind, causes: Vec<ActFault> },
     /// The eviction ladder was exhausted and the **no-drop set alone** still
     /// exceeds the whole-envelope ceiling. The one irreducible state, refused
     /// rather than emitted as a quietly malformed envelope.
@@ -586,6 +736,16 @@ impl fmt::Display for Refusal {
                  at revision {exported_at} — the proposal stays recorded and unapplied, and \
                  is never rebased onto content it did not answer; re-export the obligation \
                  to delegate it as it stands now"
+            ),
+            Refusal::ActAdmissionInvalid { act, causes } => write!(
+                f,
+                "the `{}` act does not correspond to its rule: {}",
+                act.as_str(),
+                causes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ")
             ),
             Refusal::EnvelopeIrreducible { budget, rendered } => write!(
                 f,

@@ -61,7 +61,8 @@ pub(crate) enum Reach {
 /// that is `Cumulative` over `Artefact` is re-derived on every forward move and
 /// can still only fail if its own artefact changes — coherent, and much weaker
 /// than "cumulative" sounds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum Coverage {
     /// The attested artefact's own recorded content, and nothing else. The
     /// degenerate case: it covers nothing but itself.
@@ -87,6 +88,21 @@ pub(crate) enum Coverage {
     PerSection,
 }
 
+impl Coverage {
+    /// The kebab token this coverage is spelled with everywhere — the refusal
+    /// text and its serde form (STD-001). It agrees with the serde rename by
+    /// construction of the test that compares them, which is
+    /// [`ActKind::as_str`]'s arrangement.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Coverage::Artefact => "artefact",
+            Coverage::EverySection => "every-section",
+            Coverage::InquiryMap => "inquiry-map",
+            Coverage::PerSection => "per-section",
+        }
+    }
+}
+
 /// Canonical state the run does not own, observed by the shell this invocation
 /// (design sec-3, *observed facts*).
 ///
@@ -100,6 +116,16 @@ pub(crate) enum Coverage {
 pub(crate) enum ObservedFact {
     /// The slice's canonical governance relationship edge set.
     GovernanceEdges,
+}
+
+impl ObservedFact {
+    /// The kebab token this fact is spelled with everywhere (STD-001), on
+    /// [`Coverage::as_str`]'s terms.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ObservedFact::GovernanceEdges => "governance-edges",
+        }
+    }
 }
 
 /// What an attestation is current against — its own coverage, **and**
@@ -625,6 +651,63 @@ condition_vocabulary! {
             prose: "user-acceptance-attested",
         },
     }
+}
+
+/// The rule one act is written against — its own requirement, and the binding
+/// the requirement's condition carries.
+///
+/// A pair rather than two parameters, and [`requirement_for`] is the only way to
+/// build one: a requirement checked against a binding lifted off a *different*
+/// row would be a correspondence check against a rule nothing is written
+/// against, and nothing in the types would say so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-05 T6 constructs the records this rule is resolved for"
+    )
+)]
+pub(crate) struct ActRule {
+    /// What this act must have been given.
+    pub(crate) required: ActRequirement,
+    /// What its condition binds to, and therefore what invalidates it.
+    pub(crate) binding: Binding,
+}
+
+/// The rule `act` is written against, out of the generated [`CONTRACTS`] table.
+///
+/// A **function of the table** rather than a second table (`VA-2`): the answer
+/// moves when a row does, and a rule and its lookup cannot be set to disagree.
+/// Both admission (`T5`, the correspondence) and construction (`T6`, the shape
+/// the covered map is filled in) resolve an act this way, and this is the only
+/// route.
+///
+/// `Option` because a search over data cannot be total to the type system. Every
+/// [`ActKind`] is in fact named by exactly one row — which is
+/// `every_act_kind_is_named_by_exactly_one_contract_row`'s to prove, not this
+/// signature's to claim.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-244 PHASE-05 T6 resolves each submitted act through this"
+    )
+)]
+pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
+    CONTRACTS
+        .iter()
+        .find_map(|(_, contract)| match contract.derivation {
+            DerivationRule::Engine(_) => None,
+            DerivationRule::Attested(rule) => rule
+                .acts
+                .iter()
+                .find(|required| required.act == act)
+                .map(|required| ActRule {
+                    required: *required,
+                    binding: rule.binding,
+                }),
+        })
 }
 
 impl Condition {

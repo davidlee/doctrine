@@ -14,9 +14,10 @@
 use std::collections::BTreeMap;
 
 use super::Stage;
+use super::admission::{RecordedAct, admit_act};
 use super::attestation::{
-    ActKind, ActorClass, AgentAct, AgentActKind, ContentCoverage, DisposedPass, IntentSubject,
-    RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef, Reviewer,
+    ActKind, ActorClass, AgentAct, AgentActKind, ContentCoverage, CoveredSet, DisposedPass,
+    IntentSubject, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef, Reviewer,
 };
 use super::facts::DerivedDesignFacts;
 use super::fixture::{
@@ -24,16 +25,17 @@ use super::fixture::{
     section,
 };
 use super::gate::{
-    ActRequirement, Advance, AttestationRule, Binding, CONTRACTS, Condition, ConditionKind,
-    Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach, RequiredActor,
-    ReviewStanding, advance, boundary_conditions, boundary_runbook, cumulative_conditions, regress,
+    ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Condition,
+    ConditionKind, Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach,
+    RequiredActor, ReviewStanding, advance, boundary_conditions, boundary_runbook,
+    cumulative_conditions, regress, requirement_for,
 };
 use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
-use super::refusal::Refusal;
-use super::run::live_reviews;
+use super::refusal::{ActFault, Refusal};
+use super::run::{ObservedReview, live_reviews};
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup};
 use super::submission::{
@@ -1342,6 +1344,20 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
             let stored = serde_json::to_string(&required.act).expect("an act serialises");
             assert_eq!(stored, format!("\"{}\"", required.act.as_str()));
         }
+        // The two vocabularies an act fault names are held to the same rule —
+        // they are rendered into a refusal and stored on the wire, so a second
+        // spelling would drift exactly where it is least visible.
+        let coverage = rule.binding.coverage;
+        assert_eq!(
+            serde_json::to_string(&coverage).expect("a coverage serialises"),
+            format!("\"{}\"", coverage.as_str())
+        );
+        for fact in rule.binding.observed {
+            assert_eq!(
+                serde_json::to_string(fact).expect("an observed fact serialises"),
+                format!("\"{}\"", fact.as_str())
+            );
+        }
     }
 }
 
@@ -1435,4 +1451,484 @@ fn id_kinds_sharing_a_stem_are_ordered_longest_first() {
     assert_eq!(id("cpa-1").kind(), IdKind::CheckpointAct);
     assert_eq!(id("cp-1").kind(), IdKind::Checkpoint);
     assert_eq!(id("agd-1").kind(), IdKind::AgentDeclaration);
+}
+
+// ---------------------------------------------------------------------------
+// T5 — admission owns the rule/record correspondence (`EX-8`, `VT-5`).
+//
+// Every test below asserts the fault's **variant and payload**. A bare
+// is-refused assertion passes on the wrong fault, which is exactly the drift a
+// correspondence check is supposed to catch.
+// ---------------------------------------------------------------------------
+
+/// The rule an act is written against — the one lookup admission and
+/// construction both go through.
+fn rule_for(act: ActKind) -> ActRule {
+    requirement_for(act).expect("every act is named by a contract row")
+}
+
+/// The causes `record` fails `rule` with, or an empty vector where it
+/// corresponds — with the refusal's own two invariants checked in passing: it
+/// names the act it refused, and its cause list is never empty.
+fn faults(
+    record: RecordedAct<'_>,
+    rule: ActRule,
+    observed: Option<&ObservedReview>,
+    expected_act: ActKind,
+) -> Vec<ActFault> {
+    match admit_act(record, rule, observed) {
+        Ok(()) => Vec::new(),
+        Err(Refusal::ActAdmissionInvalid { act, causes }) => {
+            assert_eq!(act, expected_act, "the refusal names the act it refused");
+            assert!(!causes.is_empty(), "`causes` is documented non-empty");
+            causes
+        }
+        Err(other) => panic!("admission refused with the wrong variant: {other:?}"),
+    }
+}
+
+/// An empty covered map of either shape — enough to exercise the *selector*,
+/// which is all the coverage correspondence reads.
+fn covered_sections() -> CoveredSet {
+    CoveredSet::Sections(ContentCoverage::of(BTreeMap::new()))
+}
+
+fn covered_nodes() -> CoveredSet {
+    CoveredSet::Nodes(ContentCoverage::of(BTreeMap::new()))
+}
+
+/// Correspondence row 1: the carried map's shape is the one the rule names, and
+/// `Artefact` pairs with no map at all.
+///
+/// The third case is the degenerate one the design argues in place: `PerSection`
+/// is carried by **no** act, so a rule naming it refuses every carrying shape
+/// however it is filled, while the per-section attestation — which carries no
+/// map because the derivation quantifies instead — is what it corresponds to.
+#[test]
+fn a_covered_map_in_a_shape_its_rule_does_not_name_is_refused() {
+    // `drafting-readiness-attested` binds to `Artefact`, which pairs with none.
+    let mut declared = drafting_ready("agd-1");
+    declared.covered = Some(covered_nodes());
+    assert_eq!(
+        faults(
+            RecordedAct::Agent(&declared),
+            rule_for(ActKind::DraftingReady),
+            None,
+            ActKind::DraftingReady
+        ),
+        vec![ActFault::CoverageMismatch {
+            required: Coverage::Artefact,
+            carried: Some(Coverage::InquiryMap),
+        }]
+    );
+
+    // `user-acceptance-attested` binds to `EverySection`, so an act given over
+    // nothing is the fault in the other direction.
+    let bare = checkpoint_act("cpa-1", ActKind::DesignAccepted, "the design is right");
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&bare),
+            rule_for(ActKind::DesignAccepted),
+            None,
+            ActKind::DesignAccepted
+        ),
+        vec![ActFault::CoverageMismatch {
+            required: Coverage::EverySection,
+            carried: None,
+        }]
+    );
+
+    // `PerSection`: the attestation corresponds, the checkpoint act cannot.
+    assert!(
+        admit_act(
+            RecordedAct::Section,
+            rule_for(ActKind::SectionReviewed),
+            None
+        )
+        .is_ok(),
+        "the per-section shape is what `PerSection` corresponds to"
+    );
+    let quantified = ActRule {
+        required: rule_for(ActKind::DesignAccepted).required,
+        binding: Binding {
+            coverage: Coverage::PerSection,
+            observed: &[],
+        },
+    };
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&bare),
+            quantified,
+            None,
+            ActKind::DesignAccepted
+        ),
+        vec![ActFault::CoverageMismatch {
+            required: Coverage::PerSection,
+            carried: None,
+        }],
+        "no value of a carrying shape corresponds to `PerSection` — `None` included"
+    );
+
+    // And the attestation under any other coverage, for the same reason.
+    assert_eq!(
+        faults(
+            RecordedAct::Section,
+            rule_for(ActKind::DesignAccepted),
+            None,
+            ActKind::SectionReviewed
+        ),
+        vec![ActFault::CoverageMismatch {
+            required: Coverage::EverySection,
+            carried: None,
+        }]
+    );
+}
+
+/// Correspondence row 2: the observed map's key set is **exactly** the rule's
+/// fact list.
+///
+/// The first direction is the one that matters: an act whose map is simply
+/// absent where its rule names a fact is refused rather than read as an empty
+/// observation, so the conjunctive binding cannot be evaded by omitting a field.
+#[test]
+fn an_observed_map_that_is_not_its_rules_fact_list_is_refused() {
+    let bare = checkpoint_act(
+        "cpa-1",
+        ActKind::GovernanceConfirmed,
+        "swept the governance corpus",
+    );
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&bare),
+            rule_for(ActKind::GovernanceConfirmed),
+            None,
+            ActKind::GovernanceConfirmed
+        ),
+        vec![ActFault::ObservedKeys {
+            missing: vec![ObservedFact::GovernanceEdges],
+            extra: Vec::new(),
+        }]
+    );
+
+    let mut unasked = checkpoint_act("cpa-2", ActKind::DesignAccepted, "the design is right");
+    unasked.covered = Some(covered_sections());
+    unasked.observed.insert(
+        ObservedFact::GovernanceEdges,
+        Fingerprint::new("sha256:edges"),
+    );
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&unasked),
+            rule_for(ActKind::DesignAccepted),
+            None,
+            ActKind::DesignAccepted
+        ),
+        vec![ActFault::ObservedKeys {
+            missing: Vec::new(),
+            extra: vec![ObservedFact::GovernanceEdges],
+        }]
+    );
+}
+
+/// Correspondence row 3: a confirmation is present exactly when the rule names a
+/// declaration.
+///
+/// The absent direction is what keeps DEC-121's ordering — *the agent declares,
+/// the user confirms* — from being droppable: a `graph-reviewed` that confirms
+/// nothing would correspond to its rule perfectly if presence were not required.
+#[test]
+fn a_confirmation_is_required_exactly_where_its_rule_names_a_declaration() {
+    let mut unconfirmed = checkpoint_act("cpa-1", ActKind::GraphReviewed, "steered the graph");
+    unconfirmed.covered = Some(covered_nodes());
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&unconfirmed),
+            rule_for(ActKind::GraphReviewed),
+            None,
+            ActKind::GraphReviewed
+        ),
+        vec![ActFault::Confirmation {
+            expected: Some(AgentActKind::BlockingSetDeclared),
+            carried: false,
+        }]
+    );
+
+    let mut gratuitous = checkpoint_act("cpa-2", ActKind::SufficiencyAccepted, "enough asked");
+    gratuitous.covered = Some(covered_nodes());
+    gratuitous.confirms = Some(Fingerprint::new("sha256:claim"));
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&gratuitous),
+            rule_for(ActKind::SufficiencyAccepted),
+            None,
+            ActKind::SufficiencyAccepted
+        ),
+        vec![ActFault::Confirmation {
+            expected: None,
+            carried: true,
+        }]
+    );
+}
+
+/// Correspondence row 4: a disposition is present exactly when the rule names
+/// one — `review-disposition-attested` alone.
+#[test]
+fn a_disposition_is_required_exactly_where_its_rule_names_one() {
+    let bare = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&bare),
+            rule_for(ActKind::ReviewDisposed),
+            None,
+            ActKind::ReviewDisposed
+        ),
+        vec![ActFault::Disposition {
+            expected: true,
+            carried: false,
+        }]
+    );
+
+    let mut gratuitous = checkpoint_act("cpa-2", ActKind::DesignAccepted, "the design is right");
+    gratuitous.covered = Some(covered_sections());
+    gratuitous.disposition = Some(DisposedPass {
+        pass: ReviewRef::new("RV-344"),
+        disposition: ReviewDisposition::Waived {
+            reason: "no reviewer was available".to_owned(),
+        },
+    });
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&gratuitous),
+            rule_for(ActKind::DesignAccepted),
+            None,
+            ActKind::DesignAccepted
+        ),
+        vec![ActFault::Disposition {
+            expected: false,
+            carried: true,
+        }]
+    );
+}
+
+/// A `Conducted` arm may only name the pass the run is on.
+///
+/// The observation is supplied and concluded, so the *only* thing left for the
+/// refusal to be about is which pass was named — the arrangement that stops this
+/// passing on `PassNotConcluded` instead.
+#[test]
+fn a_conducted_disposition_naming_a_pass_the_run_is_not_on_is_refused() {
+    let mut act = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new("RV-344"),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new("RV-324"),
+        },
+    });
+    let observed = ObservedReview {
+        reference: ReviewRef::new("RV-324"),
+        concluded: true,
+        undisposed_blockers: Vec::new(),
+    };
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&act),
+            rule_for(ActKind::ReviewDisposed),
+            Some(&observed),
+            ActKind::ReviewDisposed
+        ),
+        vec![ActFault::ForeignPass {
+            named: ReviewRef::new("RV-324"),
+            current: ReviewRef::new("RV-344"),
+        }]
+    );
+}
+
+/// A `Conducted` arm is admissible only over a pass whose ledger says it
+/// concluded — and **absence is refusal, not satisfaction**.
+///
+/// The third case is the one an implementer would get wrong: an observation of
+/// some *other* ledger answers a question nobody asked, and reading it as this
+/// pass's would be worse than reading nothing.
+#[test]
+fn a_conducted_disposition_over_a_pass_that_has_not_concluded_is_refused() {
+    let mut act = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new("RV-344"),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new("RV-344"),
+        },
+    });
+    let unconcluded = ActFault::PassNotConcluded {
+        review: ReviewRef::new("RV-344"),
+    };
+
+    let read = ObservedReview {
+        reference: ReviewRef::new("RV-344"),
+        concluded: false,
+        undisposed_blockers: Vec::new(),
+    };
+    let refused = |observed: Option<&ObservedReview>| {
+        faults(
+            RecordedAct::Checkpoint(&act),
+            rule_for(ActKind::ReviewDisposed),
+            observed,
+            ActKind::ReviewDisposed,
+        )
+    };
+    assert_eq!(refused(Some(&read)), vec![unconcluded.clone()]);
+    assert_eq!(
+        refused(None),
+        vec![unconcluded.clone()],
+        "an RV the shell could not read leaves admission refusing"
+    );
+
+    let elsewhere = ObservedReview {
+        reference: ReviewRef::new("RV-324"),
+        concluded: true,
+        undisposed_blockers: Vec::new(),
+    };
+    assert_eq!(
+        refused(Some(&elsewhere)),
+        vec![unconcluded],
+        "a concluded marker on another ledger says nothing about this pass"
+    );
+}
+
+/// A `Waived` arm states why the pass was declined; blank is refused.
+///
+/// The positive case is asserted too, and with no observation at all: a waiver
+/// is admissible over any review state, which is what makes it the available
+/// exit through the whole `IMP-392` interim.
+#[test]
+fn a_waiver_with_a_blank_reason_is_refused() {
+    let waived = |reason: &str| {
+        let mut act = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
+        act.disposition = Some(DisposedPass {
+            pass: ReviewRef::new("RV-344"),
+            disposition: ReviewDisposition::Waived {
+                reason: reason.to_owned(),
+            },
+        });
+        act
+    };
+
+    let blank = waived("  \n ");
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&blank),
+            rule_for(ActKind::ReviewDisposed),
+            None,
+            ActKind::ReviewDisposed
+        ),
+        vec![ActFault::WaiverReasonMissing]
+    );
+
+    let stated = waived("no adversarial reviewer is available for this pass");
+    assert!(
+        admit_act(
+            RecordedAct::Checkpoint(&stated),
+            rule_for(ActKind::ReviewDisposed),
+            None
+        )
+        .is_ok(),
+        "a stated waiver is admissible over any review state"
+    );
+}
+
+/// A declared blocking set names nodes of the map it was declared over.
+#[test]
+fn a_blocking_set_naming_nodes_outside_its_coverage_is_refused() {
+    let map = map_of(vec![InquiryNode::open(
+        id("inq-1"),
+        "the one on the map?",
+        Provenance::UserDirected,
+    )]);
+    let mut declared = blocking_set_declared("agd-1", &["inq-1", "inq-9"]);
+    declared.covered = Some(CoveredSet::Nodes(ContentCoverage::of(map.materials())));
+    assert_eq!(
+        faults(
+            RecordedAct::Agent(&declared),
+            rule_for(ActKind::BlockingSetDeclared),
+            None,
+            ActKind::BlockingSetDeclared
+        ),
+        vec![ActFault::BlockingSetUnknownNodes {
+            nodes: vec![id("inq-9")],
+        }]
+    );
+
+    let held = blocking_set_declared("agd-2", &["inq-1"]);
+    let mut held = held;
+    held.covered = Some(CoveredSet::Nodes(ContentCoverage::of(map.materials())));
+    assert!(
+        admit_act(
+            RecordedAct::Agent(&held),
+            rule_for(ActKind::BlockingSetDeclared),
+            None
+        )
+        .is_ok()
+    );
+}
+
+/// **Every** way an act failed its rule, never the first.
+///
+/// The control this buys is a round-trip: an agent that fixes the coverage and
+/// resubmits learns about the missing disposition now rather than one refusal
+/// later.
+#[test]
+fn an_act_that_fails_its_rule_twice_reports_both_faults() {
+    // `review-disposition-attested` binds to `Artefact` and names a disposition;
+    // this act gets the coverage wrong AND disposes nothing.
+    let mut act = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
+    act.covered = Some(covered_sections());
+    assert_eq!(
+        faults(
+            RecordedAct::Checkpoint(&act),
+            rule_for(ActKind::ReviewDisposed),
+            None,
+            ActKind::ReviewDisposed
+        ),
+        vec![
+            ActFault::CoverageMismatch {
+                required: Coverage::Artefact,
+                carried: Some(Coverage::EverySection),
+            },
+            ActFault::Disposition {
+                expected: true,
+                carried: false,
+            },
+        ]
+    );
+}
+
+/// `requirement_for` is a **total** function of the generated table, and this is
+/// what says so.
+///
+/// The signature returns `Option` because a search over data cannot be total to
+/// the type system. What makes the `None` arm unreachable is this: every act in
+/// the closed vocabulary is named by exactly one contract row. An act named by
+/// none would be an unrequireable act; one named by two would make *which rule*
+/// ambiguous with nothing to break the tie, and `requirement_for` would silently
+/// answer with whichever row came first.
+#[test]
+fn every_act_kind_is_named_by_exactly_one_contract_row() {
+    for act in ActKind::ALL {
+        let naming: Vec<&'static str> = CONTRACTS
+            .iter()
+            .filter(|(_, contract)| match contract.derivation {
+                DerivationRule::Attested(rule) => {
+                    rule.acts.iter().any(|required| required.act == act)
+                }
+                DerivationRule::Engine(_) => false,
+            })
+            .map(|(condition, _)| condition.as_str())
+            .collect();
+        assert_eq!(naming.len(), 1, "`{}` is named by {naming:?}", act.as_str());
+        assert_eq!(
+            requirement_for(act).map(|rule| rule.required.act),
+            Some(act),
+            "`{}` resolves to its own requirement",
+            act.as_str()
+        );
+    }
 }
