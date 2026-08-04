@@ -52,7 +52,9 @@ use clap::{Subcommand, ValueEnum as _};
 use crate::design_run;
 use crate::design_run::Stage;
 use crate::design_run::TurnEnvelope;
-use crate::design_run::attestation::{AcceptanceAttestation, IntentState, RecoveryIntent};
+use crate::design_run::attestation::{
+    AcceptanceAttestation, IntentState, IntentSubject, RecoveryIntent,
+};
 use crate::design_run::delegation::Delegation;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
 use crate::design_run::render::envelope::{self, Detail};
@@ -378,32 +380,32 @@ fn store_journal(root: &Path, slice: u32, journal: &CheckpointGroup) -> Result<(
     crate::fsutil::write_atomic(&path, toml::to_string(journal)?.as_bytes())
 }
 
-/// Upsert one intent, keyed by `(submission, checkpoint)`.
+/// Upsert one intent, keyed by `(submission, subject)`.
 ///
-/// Keyed by submission and not by checkpoint id alone, so a retry of the same
+/// Keyed by submission and not by subject alone, so a retry of the same
 /// submission finds *its own* intent and resumes it rather than writing a second
 /// one (DEC-086).
 fn journal_intent(root: &Path, slice: u32, intent: &RecoveryIntent) -> Result<()> {
     let mut journal = read_journal(root, slice)?;
     journal.intents.retain(|held| {
-        held.submission() != intent.submission() || held.checkpoint() != intent.checkpoint()
+        held.submission() != intent.submission() || held.subject() != intent.subject()
     });
     journal.intents.push(intent.clone());
     store_journal(root, slice, &journal)
 }
 
-/// The journalled intent for `(submission, checkpoint)`, if this submission has
+/// The journalled intent for `(submission, subject)`, if this submission has
 /// been here before.
 fn journalled_intent(
     root: &Path,
     slice: u32,
     submission: &str,
-    checkpoint: &DesignId,
+    subject: &IntentSubject,
 ) -> Result<Option<RecoveryIntent>> {
     Ok(read_journal(root, slice)?
         .intents
         .into_iter()
-        .find(|held| held.submission() == submission && held.checkpoint() == checkpoint))
+        .find(|held| held.submission() == submission && held.subject() == subject))
 }
 
 /// Journal any candidate intent the shell did not already journal itself — the
@@ -418,11 +420,11 @@ fn write_journal(root: &Path, slice: u32, candidate: &DesignSnapshot) -> Result<
     let mut added = false;
     for intent in &candidate.checkpoint.intents {
         let known = journal.intents.iter().any(|held| {
-            held.submission() == intent.submission() && held.checkpoint() == intent.checkpoint()
+            held.submission() == intent.submission() && held.subject() == intent.subject()
         });
         if !known {
             let mut fresh =
-                RecoveryIntent::journalled(intent.submission(), intent.checkpoint().clone());
+                RecoveryIntent::journalled(intent.submission(), intent.subject().clone());
             if let Some(record) = intent.reserved_record() {
                 fresh = fresh.reserving(record);
             }
@@ -714,42 +716,84 @@ fn injected_authored_edit() -> impl Fn(&Path) -> std::io::Result<()> {
 
 // ── DEC-086: the recoverable checkpoint ───────────────────────────────────
 
-/// What one checkpoint asks Doctrine to *effect* on the authored tier.
+/// What a mint places on the authored tier — the closed vocabulary (D4).
 ///
-/// The two note-bearing dispositions are absent by construction: they produce no
-/// record, so they have no six-step execution and never reach here.
-enum CheckpointEffect {
-    /// Doctrine creates the record (DEC-086 steps 2–4).
-    Create {
+/// A closed enum rather than a trait object or a pair of closures, matching
+/// `MaterialiseRequest`'s stated idiom: a new placement is a compiler-forced
+/// variant. Each arm carries exactly what *its* mint needs, so no arm ignores a
+/// field another arm requires.
+enum MintKind {
+    /// A knowledge record — `knowledge` owns the semantics (DEC-086).
+    Knowledge {
         kind: crate::knowledge::RecordKind,
         title: String,
         slug: String,
     },
+    /// The run's review pass — `review` owns the semantics (DEC-125).
+    #[expect(
+        dead_code,
+        reason = "SL-244 PHASE-04 T7 — the trigger that constructs it; delete this expect there"
+    )]
+    Review(crate::review::NewArgs),
+}
+
+impl MintKind {
+    /// The canonical prefix a provisional id of this kind carries.
+    fn prefix(&self) -> &'static str {
+        match self {
+            MintKind::Knowledge { kind, .. } => kind.prefix(),
+            MintKind::Review(_) => crate::kinds::REVIEW_KIND.prefix,
+        }
+    }
+
+    /// Does DEC-086 step 5 have anything to do for this kind?
+    ///
+    /// A minted review has neither half: its `reviews` edge is authored by the
+    /// mint itself, and its status is *derived* from its ledger rather than
+    /// stored (ADR-007 D-C8), so there is no status for an acceptance to move.
+    const fn has_record_effects(&self) -> bool {
+        matches!(self, MintKind::Knowledge { .. })
+    }
+}
+
+/// What one mint asks Doctrine to *effect* on the authored tier.
+///
+/// The two note-bearing dispositions are absent by construction: they produce no
+/// record, so they have no six-step execution and never reach here.
+enum MintEffect {
+    /// Doctrine creates the entity (DEC-086 steps 2–4).
+    Create(MintKind),
     /// The record exists; only steps 5–6 remain.
     Adopt { record: String },
 }
 
-/// One checkpoint's plan: everything the six steps need, resolved against the
-/// knowledge surface **before** any of them runs.
-struct CheckpointPlan {
-    checkpoint: DesignId,
-    effect: CheckpointEffect,
+/// One mint's plan: everything the six steps need, resolved against the authored
+/// surface **before** any of them runs.
+struct MintPlan {
+    subject: IntentSubject,
+    effect: MintEffect,
     /// The user's acceptance, already bound to the digest Doctrine derived.
     acceptance: Option<AcceptanceAttestation>,
 }
 
-impl CheckpointPlan {
-    /// The canonical ref this checkpoint will name, as far as it is known before
+impl MintPlan {
+    /// The canonical ref this mint will name, as far as it is known before
     /// execution. `Adopt` already knows it; `Create` stands in a **provisional**
     /// id of the right prefix so the candidate validates against a value of the
     /// real shape — the provisional candidate is discarded and never stored.
     fn provisional_record(&self) -> String {
         match &self.effect {
-            CheckpointEffect::Create { kind, .. } => {
+            MintEffect::Create(kind) => {
                 crate::listing::canonical_id(kind.prefix(), PROVISIONAL_RECORD_ID)
             }
-            CheckpointEffect::Adopt { record } => record.clone(),
+            MintEffect::Adopt { record } => record.clone(),
         }
+    }
+
+    /// The inquiry node this mint disposes, if it disposes one. A review pass
+    /// names none, which is what keeps the resolved map keyed by `DesignId`.
+    const fn checkpoint(&self) -> Option<&DesignId> {
+        self.subject.checkpoint()
     }
 }
 
@@ -789,7 +833,7 @@ fn plan_checkpoints(
     root: &Path,
     prior: &DesignSnapshot,
     request: &ApplyRequest,
-) -> Result<Vec<CheckpointPlan>> {
+) -> Result<Vec<MintPlan>> {
     let mut plans = Vec::new();
     for declaration in request
         .declare
@@ -821,7 +865,7 @@ fn plan_checkpoints(
                 let title = crate::input::resolve_title(Some(create.title.clone()))?;
                 let slug = crate::input::resolve_slug(&title, create.slug.clone())?;
                 (
-                    CheckpointEffect::Create { kind, title, slug },
+                    MintEffect::Create(MintKind::Knowledge { kind, title, slug }),
                     create.acceptance.as_ref(),
                 )
             }
@@ -829,7 +873,7 @@ fn plan_checkpoints(
                 // EX-4: kind and usable status, checked against the real record.
                 crate::knowledge::adoptable(root, record)?;
                 (
-                    CheckpointEffect::Adopt {
+                    MintEffect::Adopt {
                         record: record.clone(),
                     },
                     None,
@@ -856,8 +900,8 @@ fn plan_checkpoints(
                 ))
             })
             .transpose()?;
-        plans.push(CheckpointPlan {
-            checkpoint: declaration.subject().clone(),
+        plans.push(MintPlan {
+            subject: IntentSubject::Checkpoint(declaration.subject().clone()),
             effect,
             acceptance,
         });
@@ -865,8 +909,8 @@ fn plan_checkpoints(
     Ok(plans)
 }
 
-/// Run DEC-086 steps 1–5 for one checkpoint, resuming the first incomplete
-/// effect, and return the canonical record it names.
+/// Run DEC-086 steps 1–5 for one mint, resuming the first incomplete effect, and
+/// return the canonical id it names.
 ///
 /// Every step is guarded by the journalled state, so a retry of the same
 /// submission repeats nothing: from [`IntentState::Reserved`] onward the resumed
@@ -874,20 +918,24 @@ fn plan_checkpoints(
 /// Nothing here removes or rewrites an authored record to repair a runtime
 /// failure (DEC-083) — a step that cannot be resumed is reported, and the run
 /// does not advance.
-fn execute_checkpoint(
+///
+/// The six steps are the mint's, not the checkpoint's: a review pass runs the
+/// same protocol against `review`'s semantics, which is the whole of D4's
+/// widening (`CheckpointStep`'s tokens are unchanged — they name the steps).
+fn execute_mint(
     root: &Path,
     slice: u32,
     submission: &str,
-    plan: &CheckpointPlan,
+    plan: &MintPlan,
     fault: FaultHook<'_>,
 ) -> Result<String> {
     // Step 1 — the intent, before anything else exists.
-    let held = journalled_intent(root, slice, submission, &plan.checkpoint)?;
+    let held = journalled_intent(root, slice, submission, &plan.subject)?;
     let mut intent = if let Some(held) = held {
         held
     } else {
         fault(CheckpointStep::IntentJournal);
-        let fresh = RecoveryIntent::journalled(submission, plan.checkpoint.clone())
+        let fresh = RecoveryIntent::journalled(submission, plan.subject.clone())
             .accepted(plan.acceptance.clone());
         journal_intent(root, slice, &fresh)?;
         fresh
@@ -896,19 +944,19 @@ fn execute_checkpoint(
     match &plan.effect {
         // An adoption needs no reservation: the id exists, so step 3 records it
         // directly and step 4 has nothing to materialise.
-        CheckpointEffect::Adopt { record } => {
+        MintEffect::Adopt { record } => {
             if intent.state() < IntentState::Materialised {
                 fault(CheckpointStep::IdJournal);
                 intent = intent.reserving(record).reaching(IntentState::Materialised);
                 journal_intent(root, slice, &intent)?;
             }
         }
-        CheckpointEffect::Create { kind, title, slug } => {
+        MintEffect::Create(kind) => {
             if intent.state() < IntentState::Reserved {
                 // Steps 2–4, with step 3 riding the id-claim midpoint.
                 fault(CheckpointStep::IdClaim);
                 let base = intent.clone();
-                crate::knowledge::create_record(root, *kind, title, slug, |_id, canonical| {
+                let midpoint = |_id: u32, canonical: &str| {
                     fault(CheckpointStep::IdJournal);
                     journal_intent(
                         root,
@@ -920,11 +968,19 @@ fn execute_checkpoint(
                     )?;
                     fault(CheckpointStep::RecordMaterialise);
                     Ok(())
-                })?;
+                };
+                match kind {
+                    MintKind::Knowledge { kind, title, slug } => {
+                        crate::knowledge::create_record(root, *kind, title, slug, midpoint)?;
+                    }
+                    MintKind::Review(args) => {
+                        crate::review::mint_review(root, args, midpoint)?;
+                    }
+                }
                 // Re-read rather than reconstruct: the id this run continues
                 // against is the one the JOURNAL holds, which is the same fact
                 // recovery would read.
-                intent = journalled_intent(root, slice, submission, &plan.checkpoint)?
+                intent = journalled_intent(root, slice, submission, &plan.subject)?
                     .context("the claimed canonical id was journalled but cannot be read back")?
                     .reaching(IntentState::Materialised);
                 journal_intent(root, slice, &intent)?;
@@ -933,11 +989,18 @@ fn execute_checkpoint(
                 // against the EXACT reserved id.
                 let reserved = intent
                     .reserved_record()
-                    .context("a reserved checkpoint intent with no canonical id")?
+                    .context("a reserved mint intent with no canonical id")?
                     .to_owned();
-                let (held_kind, id) = crate::knowledge::resolve_ref(&reserved)?;
                 fault(CheckpointStep::RecordMaterialise);
-                crate::knowledge::materialise_record_at(root, held_kind, id, title, slug)?;
+                match kind {
+                    MintKind::Knowledge { title, slug, .. } => {
+                        let (held_kind, id) = crate::knowledge::resolve_ref(&reserved)?;
+                        crate::knowledge::materialise_record_at(root, held_kind, id, title, slug)?;
+                    }
+                    MintKind::Review(args) => {
+                        crate::review::materialise_review_at(root, &reserved, args)?;
+                    }
+                }
                 intent = intent.reaching(IntentState::Materialised);
                 journal_intent(root, slice, &intent)?;
             }
@@ -946,13 +1009,18 @@ fn execute_checkpoint(
 
     let record = intent
         .reserved_record()
-        .context("a materialised checkpoint intent with no canonical id")?
+        .context("a materialised mint intent with no canonical id")?
         .to_owned();
 
-    // Step 5 — status and the legal relation edges.
+    // Step 5 — status and the legal relation edges, for the kinds that have them.
     if intent.state() < IntentState::Applied {
         fault(CheckpointStep::EffectsApply);
-        apply_record_effects(root, slice, &record, intent.acceptance())?;
+        if match &plan.effect {
+            MintEffect::Create(kind) => kind.has_record_effects(),
+            MintEffect::Adopt { .. } => true,
+        } {
+            apply_record_effects(root, slice, &record, intent.acceptance())?;
+        }
         intent = intent.reaching(IntentState::Applied);
         journal_intent(root, slice, &intent)?;
     }
@@ -1294,7 +1362,7 @@ fn apply(
     let plans = plan_checkpoints(root, &prior, &request)?;
     let provisional: std::collections::BTreeMap<DesignId, String> = plans
         .iter()
-        .map(|plan| (plan.checkpoint.clone(), plan.provisional_record()))
+        .filter_map(|plan| Some((plan.checkpoint()?.clone(), plan.provisional_record())))
         .collect();
     design_run::run::apply(&prior, &request, &derived, &digest, &provisional)
         .map_err(|refused| refusal(&refused))?;
@@ -1303,8 +1371,10 @@ fn apply(
     let mut resolved: std::collections::BTreeMap<DesignId, String> =
         std::collections::BTreeMap::new();
     for plan in &plans {
-        let record = execute_checkpoint(root, slice, &request.envelope.submission_id, plan, fault)?;
-        resolved.insert(plan.checkpoint.clone(), record);
+        let record = execute_mint(root, slice, &request.envelope.submission_id, plan, fault)?;
+        if let Some(checkpoint) = plan.checkpoint() {
+            resolved.insert(checkpoint.clone(), record);
+        }
     }
 
     let mut applied = design_run::run::apply(&prior, &request, &derived, &digest, &resolved)

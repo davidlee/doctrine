@@ -530,7 +530,64 @@ impl IntentState {
     }
 }
 
-/// A recoverable checkpoint's intent (DEC-083, DEC-086).
+/// The reserved wire token for the run-level review pass. No [`IdKind`] carries a
+/// `review-` prefix, so no [`DesignId`] can spell it and the string coding below
+/// stays unambiguous by construction (STD-001).
+///
+/// [`IdKind`]: super::ids::IdKind
+const REVIEW_PASS_TOKEN: &str = "review-pass";
+
+/// What a journalled intent is *about* (DEC-086, widened by DEC-125).
+///
+/// String-coded on the wire, and the `Checkpoint` arm keeps the bare `DesignId`
+/// spelling it has always had. That is not cosmetic: the journal is precisely what
+/// a crash from the **previous** binary is resumed from, so a format break there
+/// loses the recoverability DEC-086 exists for. The `RecoveryIntent` field keeps
+/// its old key as a serde alias for the same reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub(crate) enum IntentSubject {
+    /// A checkpoint disposing an inquiry node.
+    Checkpoint(DesignId),
+    /// The run's review pass, minted on entry to `reviewing` (DEC-125). There is
+    /// at most one per run, so the subject needs no id of its own — the
+    /// submission key already distinguishes one mint from the next.
+    ReviewPass,
+}
+
+impl IntentSubject {
+    /// The checkpoint this intent is about, if it is about one. A review pass
+    /// names no inquiry node, which is what keeps the resolved-checkpoint map
+    /// keyed by `DesignId` while the pass rides beside it (D2).
+    pub(crate) const fn checkpoint(&self) -> Option<&DesignId> {
+        match self {
+            IntentSubject::Checkpoint(id) => Some(id),
+            IntentSubject::ReviewPass => None,
+        }
+    }
+}
+
+impl From<IntentSubject> for String {
+    fn from(subject: IntentSubject) -> String {
+        match subject {
+            IntentSubject::Checkpoint(id) => id.into(),
+            IntentSubject::ReviewPass => REVIEW_PASS_TOKEN.to_owned(),
+        }
+    }
+}
+
+impl TryFrom<String> for IntentSubject {
+    type Error = <DesignId as TryFrom<String>>::Error;
+
+    fn try_from(raw: String) -> Result<IntentSubject, Self::Error> {
+        if raw == REVIEW_PASS_TOKEN {
+            return Ok(IntentSubject::ReviewPass);
+        }
+        DesignId::try_from(raw).map(IntentSubject::Checkpoint)
+    }
+}
+
+/// A recoverable mint's intent (DEC-083, DEC-086).
 ///
 /// Recorded *before* the authored effect, so recovery always has the exact
 /// canonical target and resumes the first incomplete effect. Authored records are
@@ -538,7 +595,10 @@ impl IntentState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RecoveryIntent {
     submission: String,
-    checkpoint: DesignId,
+    /// What the intent is about. Read under its pre-DEC-125 key too, so a journal
+    /// the previous binary wrote still resumes.
+    #[serde(alias = "checkpoint")]
+    subject: IntentSubject,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     reserved_record: Option<String>,
     /// How far this intent got. `#[serde(default)]` reads a pre-state journal as
@@ -562,10 +622,10 @@ impl IntentState {
 
 impl RecoveryIntent {
     /// Journal the intent for `submission`, before any authored byte is written.
-    pub(crate) fn journalled(submission: impl Into<String>, checkpoint: DesignId) -> Self {
+    pub(crate) fn journalled(submission: impl Into<String>, subject: IntentSubject) -> Self {
         RecoveryIntent {
             submission: submission.into(),
-            checkpoint,
+            subject,
             reserved_record: None,
             state: IntentState::Journalled,
             acceptance: None,
@@ -602,9 +662,9 @@ impl RecoveryIntent {
         &self.submission
     }
 
-    /// The checkpoint being created.
-    pub(crate) const fn checkpoint(&self) -> &DesignId {
-        &self.checkpoint
+    /// What this intent is about.
+    pub(crate) const fn subject(&self) -> &IntentSubject {
+        &self.subject
     }
 
     /// The reserved canonical id, once journalled.

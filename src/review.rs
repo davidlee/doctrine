@@ -1342,7 +1342,14 @@ pub(crate) fn mint_review(
 /// so this claims nothing and refuses to clobber. It deliberately does **not**
 /// re-run the forward-edge check: the target resolved when the intent was
 /// journalled, and a refusal here would strand an intent nothing can discharge.
-pub(crate) fn materialise_review_at(root: &Path, id: u32, args: &NewArgs) -> anyhow::Result<()> {
+pub(crate) fn materialise_review_at(
+    root: &Path,
+    reference: &str,
+    args: &NewArgs,
+) -> anyhow::Result<()> {
+    // The ref comes off the journal, so `review` parses it rather than teaching
+    // the design command the RV grammar.
+    let id = parse_ref(reference)?;
     let draft = ReviewDraft::from_args(args)?;
     entity::materialise_prebuilt_at(
         root,
@@ -3543,7 +3550,7 @@ mod tests {
         let review_root = root.join(REVIEW_DIR);
         std::fs::create_dir_all(review_root.join("003")).unwrap();
 
-        materialise_review_at(root, 3, &new_args(Facet::Design, "SL-024")).unwrap();
+        materialise_review_at(root, "RV-003", &new_args(Facet::Design, "SL-024")).unwrap();
 
         let doc = read_review(&review_root, 3).unwrap();
         assert_eq!(doc.id, 3);
@@ -3571,7 +3578,8 @@ mod tests {
         )
         .unwrap();
 
-        let err = materialise_review_at(root, 1, &new_args(Facet::Design, "SL-024")).unwrap_err();
+        let err =
+            materialise_review_at(root, "RV-001", &new_args(Facet::Design, "SL-024")).unwrap_err();
 
         assert!(err.to_string().contains("Refusing to overwrite"), "{err}");
         assert_eq!(read_review(&review_root, 1).unwrap().id, 1, "record intact");

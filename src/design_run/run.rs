@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::Stage;
 use super::attestation::{
     AcceptanceAttestation, Attestation, ContentCoverage, IntegratedReview, IntentState,
-    LockAcceptance, RecoveryIntent, ReviewRef, Reviewer,
+    IntentSubject, LockAcceptance, RecoveryIntent, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
@@ -1297,7 +1297,8 @@ fn declare_checkpoint(
         disposition.form().as_str(),
     )?);
 
-    let mut intent = RecoveryIntent::journalled(submission, id.clone());
+    let subject = IntentSubject::Checkpoint(id.clone());
+    let mut intent = RecoveryIntent::journalled(submission, subject.clone());
     if let Some(record) = disposition.record() {
         intent = intent.reserving(record);
     }
@@ -1313,7 +1314,7 @@ fn declare_checkpoint(
     // must find its own intent rather than create a second one (DEC-086).
     next.checkpoint
         .intents
-        .retain(|held| held.submission() != submission || held.checkpoint() != id);
+        .retain(|held| held.submission() != submission || held.subject() != &subject);
     next.checkpoint.intents.push(intent);
     Ok(vec![Pending::about(
         ChangeEvent::CheckpointDisposed,

@@ -14,7 +14,9 @@
 use std::collections::BTreeMap;
 
 use super::Stage;
-use super::attestation::{ActorClass, ContentCoverage, ReviewPolicy, ReviewRef, Reviewer};
+use super::attestation::{
+    ActorClass, ContentCoverage, IntentSubject, RecoveryIntent, ReviewPolicy, ReviewRef, Reviewer,
+};
 use super::facts::DerivedDesignFacts;
 use super::fixture::{attest, id, pass_over, run_holding, section};
 use super::gate::{
@@ -833,4 +835,22 @@ fn review_pass_covers_the_sections_it_opened_over() {
     let pass = pass_over(&widened, "RV-344");
     widened.sections.upsert(section("sec-c", "sha256:c"));
     assert!(!pass.is_current(&widened.sections.fingerprints()));
+}
+
+/// D3's wire compat: a journal written by the *previous* binary keys its intent
+/// with a bare `checkpoint = "<DesignId>"` string, and it must still parse — the
+/// journal is precisely what a crash from that binary is resumed from, so a
+/// format break there loses the recoverability DEC-086 exists for. The run-level
+/// review pass rides the same slot under a reserved token no id can take.
+#[test]
+fn a_pre_subject_journal_parses_and_the_review_pass_rides_the_same_slot() {
+    let held: RecoveryIntent =
+        toml::from_str("submission = \"sub-1\"\ncheckpoint = \"cp-1\"\n").unwrap();
+    assert_eq!(held.subject().checkpoint(), Some(&id("cp-1")));
+
+    let pass = RecoveryIntent::journalled("sub-2", IntentSubject::ReviewPass);
+    let wire = toml::to_string(&pass).unwrap();
+    assert!(wire.contains("review-pass"), "the reserved token: {wire}");
+    assert_eq!(toml::from_str::<RecoveryIntent>(&wire).unwrap(), pass);
+    assert_eq!(pass.subject().checkpoint(), None, "a pass names no node");
 }

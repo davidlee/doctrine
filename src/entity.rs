@@ -623,10 +623,6 @@ fn create_in_existing(
 /// refuses to clobber — a resume that races a completed write reports rather than
 /// overwrites. A reservation that is no longer on disk is an error, not an
 /// invitation to create one.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-04 T5 — the RV mint's resume half")
-)]
 pub(crate) fn materialise_prebuilt_at(
     project_root: &Path,
     dir: &str,
