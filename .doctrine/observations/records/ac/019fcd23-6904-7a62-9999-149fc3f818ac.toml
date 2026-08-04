@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fcd23-6904-7a62-9999-149fc3f818ac"
+recorded_at = "2026-08-04T14:17:57.764738729Z"
+kind = "friction"
+summary = "phase-plan: a plan VT's test_file named an existing file with an unrelated subject"
+detail = "SL-244 PHASE-05 VT-8/VT-10 name test_file=tests/e2e_design_evaluation.rs. That path exists and is SL-233 PHASE-09's CHR-049 evaluation kit (rubric/transcripts, explicitly not engine behaviour). Nothing at /plan time checked whether the named path was free or apt, and verify-vt scans exactly that path for keywords — so the collision is invisible until the phase is planned and then forces a plan amendment (the second on this slice, after VT-4). Cost: a full e2e-suite survey during /phase-plan plus a blocking question to the user. A cheap guard would be /plan validating that each VT test_file either does not exist or belongs to the slice's own surface."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
