@@ -1285,7 +1285,7 @@ compile-time legality assertion** keeps two enumerations and binds them by test,
 and needs two assertions rather than the obvious one, since without *every lawful
 transition has a row* you can add a transition and forget to guard it. The closed
 type needs neither, and is the move this design already makes for `Claimed` and
-for `AgentActKind`: render the illegal value unrepresentable rather than rejected.
+for `AgentAct`: render the illegal value unrepresentable rather than rejected.
 
 **`Advance` is the forward relation only, and the asymmetry is deliberate.** The
 run has two transition relations and they differ in kind. The forward one is a
@@ -1823,7 +1823,7 @@ always a user act at a checkpoint; an agent act confirming another, or a section
 review confirming anything, is an interaction nobody has specified. `disposition`
 is `DEC-138`'s, and both of its arms are user acts carrying an
 `AcceptanceDeclaration`, so an agent-authored disposition is exactly the value
-`AgentActKind` exists to make unrepresentable and a per-section one has no
+`AgentAct` exists to make unrepresentable and a per-section one has no
 subject to dispose. `observed` is not intrinsic: a declaration or a section
 review *could* be bound to canonical state outside the run. It is refused because
 that state is governance, confirming governance is `GovernanceConfirmed`'s job,
@@ -2686,8 +2686,14 @@ needs no new refusal field at all, and `Condition` keeps the fieldless
 `Copy`/`Ord`/serde shape `DEC-122` promised it would.
 
 **The remedy renders a row's arms, and that is where the ninth promise lands.**
-For eight of the nine rows the discharge is one act by one actor and the remedy
-is one line. `review-disposition-attested` is not: `DEC-125` gives it
+For eight of the nine rows there is exactly **one way through**, so the remedy is
+one line — which is not the same as one act by one actor, and the two rows that
+prove it are worth naming here rather than leaving a reader to notice the
+mismatch. The two `Engine` rows name no act at all: their remedy describes work
+(*dispose every blocking inquiry on the map*). `initial-concerns-recorded` names
+two acts by two actors and still renders one line, because the acts are conjunct
+and ordered rather than alternative. `review-disposition-attested` is the row
+that differs in kind: `DEC-125` gives it
 `Conducted { review } | Waived { reason }`, and a remedy that said only *the user
 performs `ReviewDisposed`* would name the obligation while hiding the only arm
 that is crossable through the whole `IMP-392` interim. That is the promise
@@ -2706,7 +2712,13 @@ review-disposition-attested — dispose this review pass, in the user's name:
 ```
 
 Still a total function of the condition, still sourced from the one rule, still
-`leaf` — the arms are const strings on a const row, not run state. A `Cause`
+`leaf` — the arms are const strings on a const row, not run state. **So the
+receipt injects this same block**, and that is the point rather than an
+afterthought: invariant 4 has one discharge source, and the equality asserted
+below is between the refusal's remedy and the receipt's `discharge`, so a row
+whose remedy grew arms grows them in both channels or the two renderings
+disagree. The `discharge` line is a *rendering* of the rule, and for this one row
+it is three lines. A `Cause`
 variant would have been the wrong home for the reason the finding gives: *the
 exit exists* is not a way a condition failed, and `Cause` is per-failure-mode.
 The narrative asset carries the fuller *why*; the remedy carries the fact that
@@ -2714,7 +2726,11 @@ there are two doors, which is what an agent refused at the top edge needs and
 `sec-5`'s carried-forward residual says it may not be able to fetch.
 
 **The complaint is not a function of the condition**, and that is what has to
-ride. Nine promises across the two prior sections need it:
+ride. Nine promises across the two prior sections need refusal text the
+condition's name cannot supply; **eight** of them need the complaint, and the
+ninth is the one the remedy above keeps — tabulated together because a reader
+auditing the promises needs the whole list, and because which of the two channels
+answers each is the question this subsection exists to settle:
 
 | promise | source |
 |---|---|
@@ -3163,9 +3179,12 @@ feed is untouched, on `sec-4`'s stated ground.
   degenerate guard reaching the refusal, so the two are distinguishable by a
   caller and not only by the gate.
 - **The remedy is the contract's** — the refusal's remedy text for a condition
-  equals the `discharge` line the receipt injects for the same condition.
-  Asserted as equality between two renderings of one value, which is what makes
-  invariant 4 testable rather than merely stated.
+  equals the `discharge` the receipt injects for the same condition. Asserted as
+  equality between two renderings of one value, over **every** row rather than a
+  sample, which is what makes invariant 4 testable rather than merely stated —
+  and `review-disposition-attested` is the row that makes the quantifier matter,
+  since it is the only multi-line discharge and a test over the easy eight would
+  pass without it.
 - **A refused `reviewing → locked` names both arms** — the remedy for
   `review-disposition-attested` renders the waiver arm and its reason
   requirement, on a run with no pass conducted. The ninth promise, asserted at the
