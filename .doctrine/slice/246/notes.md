@@ -54,6 +54,40 @@ the exploration pass *added* to them.
   slice. The design labels any `EVD`/`HYP`/`CPT` field list as invention rather
   than deriving it.
 
+## Parked 2026-08-05 — design run at `inquiring`
+
+Run `dr-019fd1ab-39d9-7370-ab6c-9e39fc8ac2bc`, revision 19. Re-enter with
+`doctrine design resume 246`.
+
+**Where it stands.** The `exploring` runbook is discharged and its gate cleared
+(`governance-confirmed`, `blocking-set-declared` over `inq-1`..`inq-6`,
+`graph-reviewed`). All seven inquiry nodes are resolved. Nothing is outstanding
+at `inquiring`; the next move is either further inquiry or the gate to
+`drafting`.
+
+**The durable output is the seven decisions, not the run.** The run snapshot
+lives at `.doctrine/state/slice/246/design.toml` — runtime tier, gitignored,
+disposable. If it is lost the decisions survive; the map does not.
+
+| node | question | record |
+|---|---|---|
+| `inq-1` | surface | `DEC-145` — rides `doctrine inspect` |
+| `inq-2` | composition seam | `DEC-146` — per-id read, not scan-carried |
+| `inq-3` | closure seam for `IMP-398` S5 | `DEC-147` — selection split from render; caption is text |
+| `inq-4` | record selection | `DEC-148` — filter on source kind, not label |
+| `inq-5` | empty facet | `DEC-149` — marked, never papered over |
+| `inq-6` | field selection | `DEC-150` — what rules, not the argument |
+| `inq-7` | test strategy | `DEC-151` — synthetic goldens + agent attestation |
+
+**Raised and deliberately not made nodes** — drafting detail, revisit if they
+turn out to be decisions: the flag and level naming (`--knowledge
+skip|facets|full`?), and whether each kind's `show` gains `DEC-145`'s pointer
+line.
+
+**Spun out of this stage.** `IMP-403` (knowledge facets systematically unfilled —
+carries the TOML-only analysis). `ISS-316` (`SPEC-019` governs four record kinds,
+the corpus has seven) predates the stage and stays open.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
