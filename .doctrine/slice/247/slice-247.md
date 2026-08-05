@@ -35,9 +35,10 @@ about the outcome and wrong about the solution space being empty. A
 `PassThrough` escape hatch already exists and is already load-bearing: the
 nomination allowlist (SL-206 PHASE-11, design §5.6) at the fixed, out-of-jail
 path `.doctrine/state/orch-allowlist.txt`, read by
-`is_nominated` (`src/worktree/pretooluse.rs:502`), checked *before* the topology
-leg, scoped to exactly one `agent_id`, and fail-safe (absent or unreadable file
-⇒ not nominated). It is granted by an explicit write on the confined-orchestrator
+`is_nominated` (`src/worktree/subagent.rs:502`, called from
+`src/worktree/pretooluse.rs:444`), checked *before* the topology leg, scoped to
+exactly one `agent_id`, and fail-safe (absent or unreadable file ⇒ not
+nominated). It is granted by an explicit write on the confined-orchestrator
 path (Mode B), never by default — so no ordinary subagent is ever nominated.
 
 This matters for scope: the change may well be *"grant the existing verdict to
