@@ -1,255 +1,204 @@
-# Capsule dispatch v0
+# Capsule provisioning and Linux backend
 
 ## Context
 
-This is the implementation slice RFC-025 § State of play calls for in
-next-obvious-action 2: *"Scope the implementation slice from SPEC-030, then
-design and plan it without starting implementation."*
+The first implementation slice of RFC-025's capsule programme. It builds the
+trusted side of *starting* a capsule transaction: resolving its contract,
+provisioning fresh confined state, and proving the backend's properties.
 
-The governing target contract already exists and is settled:
+The target contract is settled and this slice does not relitigate it —
+**ADR-020** (accepted) makes the execution capsule the dispatch authority
+boundary; **SPEC-030** (active, under SPEC-003, from PRD-015) specifies the
+container across REQ-448–REQ-461; **SL-241**'s spike supplies the Linux/bwrap
+evidence; **DEC-134** and **DEC-136** settle persistent control-plane
+orchestration and the interpretation-policy home. **REV-046** is the governance
+cutover Revision and stays `proposed` — it is not this slice's to apply.
 
-- **ADR-020** (accepted) — execution capsules are the dispatch authority
-  boundary. A persistent trusted control plane; fresh headless phase and
-  verification capsules; bundle-snapshot ingestion; journaled admission;
-  capsule-provenance candidate recovery; frozen-source/fresh-repair lifecycle.
-- **SPEC-030** (active, tech container under SPEC-003, descends from PRD-015) —
-  *Dispatch execution capsules*. Twelve functional and two quality
-  requirements, REQ-448–REQ-461, all `pending`. This slice's job is to move
-  them to satisfied.
-- **REV-046** (proposed, unapproved) — the governance cutover Revision. It is
-  explicitly *not* the implementation: "implementation itself — this Revision
-  is the governance boundary that a later slice must satisfy, not the slice."
+### Why this slice exists at this size
 
-The evidence base is `SL-241`'s completed spike (the capsule spike rig) and the
-banked artefacts under `.doctrine/rfc/025/` — `mechanism-census.md`,
-`red-team.md`, `probe-specs.md`, `evidence/`, `go-no-go.md`. Its verdict is
-**go**, scoped: measured on Linux/bwrap, one client shape, n = 1 for the
-real-agent phase, with the seven limits in `evidence/README.md` attached to
-every claim. The rig is disposable; its hostile rows and stage assertions
-become production acceptance tests, they are not migrated.
+SL-248 originally scoped all fourteen SPEC-030 requirements as one cutover.
+Measured against this project's own history that was a repeat of two known
+failure modes at once: SL-233 ran 16 phases on 781 design lines (~49 per phase)
+and left holes that CHR-049 and SL-244 had to patch; SL-244 ran 8 phases on
+3459 design lines (~430 per phase) and was uncomfortably inefficient. The
+comfortable band here is ~1000 design lines over 6–9 phases. Fourteen
+requirements extrapolated past both ends of it.
 
-The settled epistemic inputs are `DEC-133` (durable admission journal vs
-expiring forensic exhibit), `DEC-134` (persistent control-plane orchestration,
-fresh headless phase worker), `DEC-135` (bundle ingestion), `DEC-136`
-(`[interpretation]` policy in `.doctrine/doctrine.toml`, resolved from the
-contracted base), `DEC-137` (same-base candidate admission, frozen source
-capsules, fresh repair). Their questions `QUE-200`/`QUE-201`/`QUE-202` are
-answered and terminal.
+The programme is therefore decomposed into roughly five slices (provisionally;
+see OQ-1). **Shipping is not cutting over** — every slice but the last lands as
+tested machinery sitting beside the incumbent worktree arms, unused, with no
+flag day. Only the final slice flips the switch. This is that first slice.
 
-### Why now, and why one slice
+### Why REQ-449 is here and not a slice of its own
 
-REV-046's apply gate 3 requires *"a planned implementation"* that proves
-uniform headless worker launch, contracted bases, Linux/bwrap confinement,
-trusted-side ingestion, separate-capsule verification, normalization, durable
-admission journaling, and crash-safe admission/integration. Gate 4 requires
-that implementation to **name the exact compatibility/cutover point**. So the
-approved design and plan of *this* slice are an input to REV-046's approval —
-not the reverse. Sequencing is therefore:
+The decomposition first proposed the `[interpretation]` policy surface as a
+standalone precursor, on the theory that it is purely additive config work.
+Reading REQ-449's acceptance criteria kills that: its first criterion is
+*"**Capsule provisioning** refuses a missing block, missing required key,
+unknown key, unsupported schema version, invalid normalized value, or empty
+verification sequence"*, and its fourth is the phase-contract
+monotonic-restriction algebra — both of which are provisioning-time behaviour,
+not parser behaviour. SPEC-030 § Transaction authority says the same thing
+structurally: the control plane creates a transaction *from* base + resolved
+policy + work contract + capsule identity + resource choices.
 
-    SL-248 scope → design → plan  →  REV-046 approve + apply  →  SL-248 execute
-
-Capsule dispatch does not ship in halves: a partial cutover leaves the repo
-neither on the incumbent worktree arms nor on capsules. The requirement set is
-large, so the decomposition is carried by **phases**, not by sibling slices —
-see OQ-1 if that judgement should be revisited at design time.
+Only REQ-449's second criterion (typed parse plus canonical hash) is
+independently landable. Splitting there would either ship a parser with no
+consumer and retrofit the refusals later, or put the schema design in the
+provisioning slice and its implementation in the config slice — backwards. So
+contract resolution and provisioning land together.
 
 ## Scope & Objectives
 
-Satisfy SPEC-030's requirement set at v0 altitude, on the Linux/bubblewrap
-backend, reusing existing seams rather than building parallel machinery.
+**REQ-449 — contract and interpretation provenance.** The required v1
+`[interpretation]` block in `.doctrine/doctrine.toml`: typed parse; validation
+of `trusted_side_forbidden_executables` (normalized basenames, no slash /
+whitespace / empty / `.` / `..`), `interpreted_paths` (normalized
+repo-relative gitignore-style patterns; absolute, backslash, NUL, and lexical
+`..` refused), and `[[interpretation.verification]]` rows (non-empty `argv` of
+non-empty UTF-8); duplicate rejection, then byte-sorted set-valued lists with
+verification-row and argument order preserved; one canonical hash over the
+typed value. Resolution **once** from the contracted base, bound into the work
+contract, never re-resolved from a capsule checkout. Phase-contract refinement
+that may add forbidden entries and append verification rows but may not remove,
+reorder, widen, or replace — subset validation over normalized typed values,
+never source text. Missing block, missing key, unknown key, unknown schema
+version, or empty verification sequence refuses provisioning. Extends the
+existing `doctrine.toml` parser (DEC-136); does not fork one.
 
-**In scope**
+**REQ-450 (partial) — fresh mutable state.** Provisioning from the exact
+accepted commit and only explicit immutable inputs, with fresh mutable phase
+state. This slice discharges criterion 1 — two phase transactions share no
+mutable checkout, repository, runtime, process, or temporary state — and builds
+the mechanism criteria 2 and 3 later assert against. See OQ-3.
 
-1. **Authority split and capsule lifecycle** (REQ-448, REQ-450) — the trusted
-   control plane as sole canonical mutation authority; the transaction
-   lifecycle `resolve → provision → launch → notify → snapshot → harvest/freeze
-   → conform → verify → normalize → journal → admit/integrate → close →
-   explicit cleanup`, each transition with one trusted writer and a durable
-   state. Fresh mutable state per phase worker and per verifier.
-2. **Contract and interpretation provenance** (REQ-449) — the required v1
-   `[interpretation]` block in `.doctrine/doctrine.toml`: typed parse,
-   validation, normalization, canonical hash; resolution once from the
-   contracted base; monotonic-restriction-only phase contract refinement.
-   Extends the existing `doctrine.toml` parser (`src/dtoml.rs`,
-   `src/dispatch_config.rs`), it does not fork one.
-3. **Result publication and hostile ingestion** (REQ-451, REQ-452) — worker
-   publishes one Git bundle; the control plane makes one bounded immutable
-   parent-owned snapshot under path/symlink/quiescence/byte/time/object bounds;
-   trusted Git reads only that snapshot through a fresh disposable quarantine
-   repository; no fetch-from-capsule path, primary or fallback.
-4. **Trusted conformance** (REQ-453) — pin exactly one result identity; check
-   contracted-base ancestry, merge shape, actual changed paths, declared phase
-   scope, forbidden paths, modes, gitlinks/submodules, and interpretation
-   obligations, all from Git objects. Reuses the declared/changed selector
-   algebra (`src/conformance.rs`, `slice selector`) rather than restating it.
-5. **Separate-capsule verification and normalization** (REQ-454) — construct
-   the exact normalized candidate; provision a fresh verification capsule from
-   that immutable identity and the bound policy; run the declared verification
-   rows in order without trusted-side shell evaluation; the verifier process
-   result plus trusted evidence capture is the verdict. Journaled verified
-   identity == later admitted identity.
-6. **Journaled admission and CAS** (REQ-455) — journal intent before any
-   canonical mutation; precheck the expected accepted tip before object
-   transfer; one expected-old-object compare-and-swap; idempotent replay
-   classifying already-applied / still-applicable / diverged. Rides the
-   existing CAS and journal-before-mutation substrate (SPEC-022, `src/git.rs`,
-   `src/ledger.rs`).
-7. **Capsule-provenance candidate recovery** (REQ-456) — stale results enter
-   the *existing* object-only candidate engine through an explicit
-   capsule-provenance seam (current accepted commit, pinned source commit,
-   contracted base, verification attestation) with no incumbent
-   coordination-journal consultation. Created / Conflicted are durable; every
-   clean, hand-resolved, and fix-on-top candidate is freshly verified at its
-   exact immutable commit before admission; a second accepted-tip movement
-   records explicit supersession.
-8. **Frozen source, fresh repair, cleanup discipline** (REQ-457) — repair is a
-   new transaction from the current accepted commit with the frozen result as
-   input; cleanup requires mechanically recorded incorporation, integration
-   plus formal closure, or explicit operator abandonment. Tree similarity never
-   authorizes cleanup.
-9. **Journal, live-work, and forensic-exhibit lifecycle** (REQ-458) — durable
-   compact admission journal; unresolved source capsules are non-evictable live
-   work; post-close exhibits may expire without rewriting journal truth.
-10. **Platform backend contract** (REQ-459) — a shared property-conformance
-    suite (freshness, explicit inputs, bounded filesystem and network reach,
-    process-tree teardown, resource observation, denial of canonical state and
-    credentials); Linux/bubblewrap implemented and measured against it.
-11. **Non-destructive failure envelope** (REQ-460) — adversarial coverage of
-    failed verification, malformed result, stale base, candidate conflict,
-    repeated ref movement, crash replay, and low capacity; no force-update, no
-    auto-resolution, no capsule resumption, no automated loss of unresolved
-    work.
-12. **Advisory capacity handling** (REQ-461) — configurable expected capsule
-    size, conspicuous structured low-space warning, halt-for-manual-intervention
-    on exhaustion; no reservation, backpressure, eviction, or rescue archive.
-13. **The named cutover point** (REV-046 gate 4) — the exact commit/flag/verb at
-    which no dispatch run can still depend on worktree marker identity,
-    `DOCTRINE_WORKER`, the SubagentStart hook stamp, the gated `worker_commit`
-    tool, patch/worktree import, or coordination-worktree placement. Naming it
-    is in scope; *executing* the governance retirement is REV-046's apply.
-14. **Production acceptance tests** derived from SL-241's hostile matrix rows
-    and stage assertions — carried across as behaviour, not as rig code.
+**REQ-459 — platform backend contract.** The shared property-conformance suite:
+fresh mutable state, explicit input set, no writable canonical repo / shared
+object store / control-plane state / credentials, bounded host filesystem
+visibility, explicit network posture, deterministic working directory,
+process-tree teardown, and trusted observation of resource limits and
+termination. Plus the Linux/bubblewrap backend implemented against it, recast
+from SL-241's rig profile and `src/worktree/jail.rs`'s existing bwrap knowledge.
+The suite is the admission gate for any future backend.
 
-**Out of scope** — see Non-Goals.
+**REQ-461 — advisory capacity.** Configurable expected capsule size; a
+conspicuous structured warning below threshold (an initial default may warn
+below twice the expectation, without reserving); exhaustion halts for manual
+intervention and never deletes a capsule or result.
+
+**Also in scope:** answering `QUE-207` as a DEC (see OQ-2) — provisioning is the
+first trusted-side code written, so the control-plane topology question gets
+decided on concrete ground here rather than in the abstract.
 
 ## Non-Goals
 
-Inherited verbatim from SPEC-030 § Overview and REV-046 § Deliberately outside:
+Everything downstream of a provisioned capsule belongs to later slices and is
+explicitly **not** here: result publication, snapshot, and quarantine ingestion
+(REQ-451, REQ-452); trusted conformance over the pinned result (REQ-453);
+verification-capsule construction and normalization (REQ-454); the admission
+journal and CAS (REQ-455); the capsule-provenance candidate seam (REQ-456);
+freeze, repair, and cleanup discipline (REQ-457); the journal/exhibit retention
+lifecycle (REQ-458); and the named cutover point with its skill and CLI collapse.
+
+Inherited from SPEC-030 and REV-046, and out of the whole programme:
 
 - **macOS / Seatbelt backend** — unselected until independently specified and
-  measured. No claim of cross-platform parity.
+  measured against the REQ-459 suite. No cross-platform parity claim.
 - **Egress allowlisting and non-Git build-input provisioning** — `IMP-397` and
-  `QUE-204` own this separately.
-- **Retention durations, quota hierarchy, project/slice/machine policy
-  layering** beyond the DEC-133/DEC-137 live-work / journal / exhibit
-  separation.
-- **Capacity reservation, throughput backpressure, capsule eviction, rescue
-  archive** — deferred by D7 because guessing early could destroy work.
-- **Migrating solo `/execute` worktrees to capsules** — solo worktrees remain a
-  supported non-dispatch isolation mode; SPEC-012 keeps that mechanism.
+  `QUE-204` own it.
+- **Capacity reservation, backpressure, eviction, rescue archive** (D7).
+- **Retention durations and quota hierarchy** beyond DEC-133/DEC-137.
+- **Migrating solo `/execute` worktrees to capsules** — SPEC-012 keeps that
+  mechanism and it survives the cutover.
 - **Production optimisations** — overlays, snapshots, reflinks, shared caches,
   remote execution.
-- **Applying REV-046** — this slice supplies the design/plan its gates need and
-  names the cutover point; the Revision's approve/apply is its own act, and it
-  precedes phase execution (see Context § Why now).
-- **Rewriting RFC-025 prose** or migrating the SL-241 spike rig
-  (`scripts/spike-capsule/`) into product.
-- **A second conflict system** — DEC-137 forbids it; the candidate engine is
-  reused behind a provenance seam.
+- **Retiring any incumbent dispatch mechanism.** Marker identity,
+  `DOCTRINE_WORKER`, the SubagentStart stamp, `worker_commit`, worktree import,
+  and coordination-worktree placement all keep working. This slice is additive.
+- **Applying REV-046**, or rewriting RFC-025 beyond its § State of play entry.
+- **Migrating the SL-241 rig** (`scripts/spike-capsule/`) into product — its
+  hostile rows and stage assertions carry across as *behaviour*, as production
+  acceptance tests.
 
 ## Affected surface
 
-Coarse and provisional — `/design` fixes the exact touch-set. Seeded as
-`scope-relevant` selectors.
+Coarse and provisional; `/design` fixes the touch-set, and `QUE-207`'s answer
+may relocate most of it into a new crate or binary.
 
-| Area | Paths | Expected shape |
-|---|---|---|
-| Capsule transaction engine | `src/capsule/**` (new) | new module: contract, provision, launch, snapshot, quarantine, harvest, verify, normalize |
-| Dispatch orchestration | `src/dispatch.rs`, `src/funnel_machine.rs`, `src/dispatch_config.rs` | funnel/state-machine investment transfers; arm routing and altitude retire |
-| Worktree machinery | `src/worktree/**` | `marker.rs`, `subagent.rs`, `import.rs`, `fork.rs`, `pretooluse.rs`, `dispatch_record.rs` retire or narrow to solo; `jail.rs`/`jail_prefix.rs` recast as the measured Linux backend; `create.rs`/`provision.rs`/`gc.rs`/`land.rs` keep their solo legs |
-| Git / admission substrate | `src/git.rs`, `src/ledger.rs`, `src/conformance.rs` | reused: OIDs, merge-tree, CAS, candidate rows, selector algebra; extended with a capsule-provenance seam and admission journal |
-| Config | `src/dtoml.rs`, `.doctrine/doctrine.toml` | required `[interpretation]` v1 block: parse, validate, normalize, hash |
-| CLI + MCP surface | `src/commands/**`, `src/mcp_server/**` | new capsule verbs; `worker_commit` retires at the cutover point |
-| Skills / docs | `.agents/skills/dispatch*`, `install/**` | dispatch skill arms collapse to one headless launch path |
-| Tests | `tests/**` | acceptance tests derived from SL-241's hostile matrix and stage assertions |
+| Area | Paths |
+|---|---|
+| Capsule contract + provisioning | `src/capsule/**` (new) |
+| Interpretation policy parse/normalize/hash | `src/dtoml.rs`, `src/dispatch_config.rs`, `.doctrine/doctrine.toml` |
+| Linux backend | `src/worktree/jail.rs`, `src/worktree/jail_prefix.rs` |
+| CLI surface | `src/commands/**` |
+| Property suite + acceptance tests | `tests/**` |
 
 ## Risks / Assumptions / Open questions
 
-**OQ-1 — one slice or several?** SPEC-030 carries 14 requirements across
-provisioning, ingestion, conformance, verification, admission, candidate
-recovery, repair, retention, and backend conformance. This scope treats them as
-one shippable cutover decomposed by phases, because a half-cutover is a state
-the repo cannot sit in. If `/design` finds an independently shippable
-sub-boundary — most plausibly the `[interpretation]` config surface (REQ-449),
-which is additive and can land before any capsule exists — split it out rather
-than carrying it as dead weight.
+**OQ-1 — the decomposition is provisional.** The working shape is: (1) this
+slice; (2) ingestion and conformance (REQ-451–453); (3) verification and
+admission (REQ-454, 455); (4) recovery — candidate provenance, freeze/repair,
+retention (REQ-456–458); (5) cutover. Later slices are deliberately **unminted**
+— scoping slice 4 before slice 2 is designed is SL-233's failure at a coarser
+grain. RFC-025 § State of play carries this as provisional, not settled.
 
-**OQ-2 — `QUE-207` is open and blocks design.** *Binary and crate topology for
-the control plane* (open, 2026-08-05, shapes RFC-025) asks where the authority
-boundary is expressed: one `doctrine` binary with environment-derived privilege
-(frame option A), one workspace with `doctrine` + `doctrine-control` binaries
-over shared crates (option B, the frame's provisional choice), or a separate
-control-plane system (option C). This is upstream of nearly every module
-decision in the table above. It should be answered — as a `DEC` — during or
-immediately before `/design`, not discovered mid-plan.
+**OQ-2 — `QUE-207` is open and gates design.** *Binary and crate topology for
+the control plane*: one `doctrine` binary with environment-derived privilege
+(A), a workspace with `doctrine` + `doctrine-control` over shared crates (B, the
+frame's provisional choice), or a separate control-plane system (C). Under A
+provisioning is a subcommand; under B it is `doctrine-control`'s; under C it is
+a service boundary. It must be answered as a DEC at the top of `/design`.
 
-**OQ-3 — the cutover point's shape.** REV-046 gate 4 wants an exact point.
-Whether that is a flag day, a config-gated dual-run window, or an atomic
-release is a design decision with real consequences for how many phases can be
-green in isolation.
+**OQ-3 — three requirements are cross-cutting and close in no single slice.**
+REQ-448 (control plane as sole canonical mutation authority), REQ-450
+(freshness, whose criteria 2 and 3 need the candidate identity and harvest that
+slices 3 and 4 build), and REQ-460 (the non-destructive failure envelope, whose
+adversarial matrix spans stale base, candidate conflict, ref movement, and crash
+replay). Coverage records per (slice, requirement, **change**), so each can
+carry multiple contributing changes and close at the end — but an invariant
+owned by every slice is owned by none unless each slice's closure intent names
+its obligation explicitly. This slice's obligations: REQ-448's *denial* half
+(the backend proves a capsule cannot reach canonical refs, shared object
+storage, control-plane state, or credentials — REQ-459's suite is where that is
+proven) and REQ-450 criterion 1.
 
-**OQ-4 — what replaces `review/*` and `phase/*` refs.** REV-046 § ADR-012
-explicitly leaves the population of these refs "a target-design question, not a
-DELETE-by-count conclusion." The admission journal and human-facing evidence
-views must supply the same durable guarantees before they change.
+**R1 — evidence altitude.** SL-241 is Linux/bwrap, one client shape, n = 1 on
+the real-agent leg. Feasibility evidence, not performance, portability, or
+production-readiness evidence. No design or plan claim may exceed it. The
+"16/16" summary is forbidden: fifteen rows reached model level, the env-file row
+is unproven beyond the Rust fixture, structural `n/a` cells are not omissions,
+and four `fail` rows are successful mutant detections.
 
-**R1 — evidence altitude.** SL-241 is Linux/bwrap, one client shape, n = 1 for
-the real-agent leg. It is feasibility evidence, not performance, portability,
-or production-readiness evidence. No design or plan claim may exceed it, and
-the "16/16" summary is explicitly forbidden (fifteen rows reached model level;
-the env-file row is unproven beyond the Rust fixture; structural `n/a` cells
-are not omissions; four `fail` rows are successful mutant detections).
+**R2 — additive, so incumbent suites stay green unchanged.** This slice touches
+`src/worktree/jail.rs`, which incumbent dispatch confinement uses. Per AGENTS.md
+the existing suites are the behaviour-preservation proof.
 
-**R2 — behaviour-preservation on shared machinery.** The candidate engine, CAS,
-selector algebra, and journal are shared with non-dispatch paths. Per AGENTS.md
-the existing suites are the proof: they stay green unchanged.
+**R3 — a property suite is only as good as its adversary.** REQ-459's suite is
+the gate every future backend passes. Written weakly it certifies nothing.
+SL-241's confinement matrix (P-C2) is the floor, not the ceiling.
 
-**R3 — bootstrapping.** Doctrine dogfoods its own dispatch. The cutover has to
-be executable *by* the machinery being replaced, and the incumbent arms must
-stay usable until the named cutover point.
-
-**R4 — census verdicts are target-state, not a delete list.** RFC-025 § State
-of play: the mechanism-census verdicts "describe the capsule target state, not
-mechanisms already retired." REV-046 gate 5: every requirement gets an explicit
-keep / transform / retire / solo-scoped disposition; nothing retires solely
-because a census row says DELETE.
-
-**A1** — SPEC-030 and ADR-020 are the authority; where this scope and they
-disagree, they win. **A2** — REV-046 stays proposed through design and plan,
-and is approved and applied before phase execution begins. **A3** — the
-existing `doctrine.toml` parser is extended, not forked (DEC-136).
+**A1** — SPEC-030 and ADR-020 are the authority; where this scope disagrees with
+them, they win. **A2** — REV-046 stays proposed and unapplied throughout; this
+slice retires nothing. **A3** — the existing `doctrine.toml` parser is extended,
+not forked (DEC-136).
 
 ## Verification / closure intent
 
-Closure is judged by SPEC-030's own acceptance criteria, not by this document.
-
-- All fourteen requirements REQ-448–REQ-461 move `pending → satisfied`, each
-  with recorded coverage (`doctrine coverage record`) naming the test or agent
-  evidence that discharges it.
-- The REQ-459 shared property-conformance suite passes on Linux/bubblewrap and
-  is structured so a second backend can be admitted only by passing it
-  independently.
-- REQ-460's adversarial cases are `VT` tests, not attestations — failed
-  verification, malformed result, stale base, candidate conflict, repeated ref
-  movement, crash replay, low capacity — each proving the last accepted
-  canonical state and all unresolved source work survive.
-- Existing dispatch, candidate, CAS, and conformance suites are green
-  **unchanged** (R2).
-- The cutover point is named in the design and demonstrated: after it, no
-  dispatch path reads a worktree marker, `DOCTRINE_WORKER`, the SubagentStart
-  stamp, or the `worker_commit` gate.
-- REV-046's six apply gates are satisfiable from this slice's artefacts, and
-  the Revision is approved and applied before phase execution.
+- REQ-449, REQ-459, REQ-461 move `pending → satisfied` with recorded coverage
+  (`doctrine coverage record`) naming the discharging test or agent evidence.
+- REQ-450 records this slice as a contributing `--change` against criterion 1
+  and stays `pending`; likewise REQ-448's denial half via the REQ-459 suite.
+  Both are stated as partial in the reconciliation brief, not quietly claimed.
+- The REQ-459 property suite passes on Linux/bubblewrap and is structured so a
+  second backend is admissible only by passing it independently — no
+  Linux-specific assertion leaks into the shared contract.
+- REQ-449's refusal cases are `VT` tests over the real parser: missing block,
+  missing key, unknown key, unknown schema version, empty verification
+  sequence, invalid normalized values, and each phase-contract widening attempt.
+- A capsule-side rewrite of `.doctrine/doctrine.toml` demonstrably cannot change
+  the bound policy (REQ-449 criterion 3).
+- `QUE-207` is answered by an accepted DEC before the design gate clears.
+- Existing dispatch, worktree, and confinement suites green **unchanged** (R2).
 - `doctrine check gate` green; clippy zero warnings.
 
 ## Summary

@@ -1,10 +1,10 @@
 id = 248
-slug = "capsule-dispatch-v0"
-title = "Capsule dispatch v0"
-status = "proposed"
+slug = "capsule-provisioning-and-linux-backend"
+title = "Capsule provisioning and Linux backend"
+status = "design"
 created = "2026-08-05"
 updated = "2026-08-05"
-tags = ["area:config", "area:dispatch", "area:git", "area:worktree", "cluster:capsule"]
+tags = ["area:config", "area:confinement", "area:dispatch", "area:worktree", "cluster:capsule"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
@@ -15,31 +15,7 @@ selector = "src/capsule/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/worktree/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/dispatch.rs"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/dispatch_config.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/funnel_machine.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/git.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/ledger.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/conformance.rs"
 intent = "scope-relevant"
 
 [[selector]]
@@ -51,10 +27,6 @@ selector = "src/commands/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "src/mcp_server/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "tests/**"
 intent = "scope-relevant"
 
@@ -63,11 +35,11 @@ selector = ".doctrine/doctrine.toml"
 intent = "scope-relevant"
 
 [[selector]]
-selector = ".agents/skills/dispatch*/**"
+selector = "src/worktree/jail.rs"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "install/**"
+selector = "src/worktree/jail_prefix.rs"
 intent = "scope-relevant"
 
 [[relation]]
