@@ -137,6 +137,31 @@ selector = "src/entity.rs"
 intent = "design-target"
 note = "PHASE-04 / D5: the DEC-086 id-claim midpoint reaches the prebuilt placement path — materialise_fresh_prebuilt_hooked (the base delegates via no_midpoint) plus materialise_prebuilt_at, create_in_existing minus the scaffold. Additive siblings on allocate_fresh_hooked's precedent; the unchanged entity suite is the behaviour-preservation control."
 
+[[selector]]
+selector = "src/design_run/admission.rs"
+intent = "design-target"
+note = "PHASE-05 / EX-8: NEW leaf module — the rule/record correspondence, one pass over the whole record raising every ActFault rather than the first. A sibling of gate.rs rather than more of it: gate.rs answers is this condition satisfied now, admission answers may this record be stored at all (F19)."
+
+[[selector]]
+selector = "tests/design_act/mod.rs"
+intent = "design-target"
+note = "PHASE-05 / T8: the shared e2e helpers the act ladders need — design_act builds the act payloads from the wire types (never a re-typed serde token, STD-001) and design_fixture gains seed_slice_record, which T7's governance projection makes a fixture precondition. One home each rather than three copies (F34, F39)."
+
+[[selector]]
+selector = "tests/design_fixture/mod.rs"
+intent = "design-target"
+note = "PHASE-05 / T8: the shared e2e helpers the act ladders need — design_act builds the act payloads from the wire types (never a re-typed serde token, STD-001) and design_fixture gains seed_slice_record, which T7's governance projection makes a fixture precondition. One home each rather than three copies (F34, F39)."
+
+[[selector]]
+selector = "src/design_run/ids.rs"
+intent = "design-target"
+note = "PHASE-05 / T3: the cpa- and agd- id kinds join IdKind, and their ordering is pinned — a record's id is DERIVED from its act kind rather than counted, so the group's replace-by-act contract cannot mint two ids for one act (F9, F25). PHASE-04 / A4 retired int- here in the same file."
+
+[[selector]]
+selector = "tests/common/mod.rs"
+intent = "design-target"
+note = "PHASE-04 / T2+T3+T7: the shared e2e helper the review-pass mint needed; touched once and only there."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"
