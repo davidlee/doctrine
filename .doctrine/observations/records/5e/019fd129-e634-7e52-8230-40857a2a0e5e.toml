@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd129-e634-7e52-8230-40857a2a0e5e"
+recorded_at = "2026-08-05T09:03:31.89245014Z"
+kind = "friction"
+summary = "/phase-plan: no read-back verb for a phase's plan.toml criteria"
+detail = "Expanding SL-244 PHASE-07. To read the authored phase entry (objective/EN/EX/VT) the only route is parsing .doctrine/slice/244/plan.toml by hand — 'doctrine slice plan <id>' is a WRITER and refuses with 'Refusing to overwrite existing plan.toml', and 'slice show' does not render phase criteria. Cost: one failed CLI call plus a python block to slice the [[phase]] table out of a 250-line TOML, against a guardrail that says read entities via show. Known and already memorised (mem_019facc24ac576e0a4d9ace5b2eeb12f), which is the point: it recurs once per phase-plan."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
