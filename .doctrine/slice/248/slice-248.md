@@ -96,7 +96,7 @@ Everything downstream of a provisioned capsule belongs to later slices and is
 explicitly **not** here: result publication, snapshot, and quarantine ingestion
 (REQ-451, REQ-452); trusted conformance over the pinned result (REQ-453);
 verification-capsule construction and normalization (REQ-454); the admission
-journal and CAS (REQ-455); the capsule-provenance candidate seam (REQ-456);
+journal and CAS (REQ-455); the capsule-provenance candidate adapter (REQ-456);
 freeze, repair, and cleanup discipline (REQ-457); the journal/exhibit retention
 lifecycle (REQ-458); and the named cutover point with its skill and CLI collapse.
 

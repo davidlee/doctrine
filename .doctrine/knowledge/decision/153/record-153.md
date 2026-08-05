@@ -99,7 +99,7 @@ Honest costs, none of them hidden:
 this exact fork, shipped the `syn` dependency-fitness gate
 (`tests/architecture_layering.rs`, `LAYER_MAP` + frozen `ACCEPTED_VIOLATIONS` +
 intra-tier cycle ratchet, under `just gate`) and deferred the crate split on the
-reasoning that its layer map de-risks the later cut. Extracting along those tiers is
+reasoning that its layer map de-risks the later extraction. Extracting along those tiers is
 where `doctrine-control` stops inheriting embeds, because the embed roots hang off
 command-tier and engine modules the control plane does not need.
 
