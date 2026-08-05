@@ -71,10 +71,6 @@ impl Reach {
     /// for the kind: reach is exactly the property a narrative author would
     /// restate and get wrong, and it is the one that says whether discharging a
     /// condition once is the end of it.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
-    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Reach::Cumulative => "cumulative",
@@ -283,10 +279,6 @@ impl EngineSource {
     /// The bare source, not the `engine(…)` wrapper the block renders around it:
     /// the wrapper is the renderer's punctuation, and spelling it here would put
     /// half the rendered field in the leaf and half in the caller.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
-    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             EngineSource::Dispositions => "dispositions",
@@ -318,10 +310,6 @@ impl DerivationRule {
     ///
     /// DEC-120's vocabulary survives as a discriminant of the rule, so a kind
     /// and a rule cannot be set to disagree. There is nothing to keep in step.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-05 T9 renders the contract")
-    )]
     pub(crate) const fn kind(&self) -> ConditionKind {
         match *self {
             DerivationRule::Engine(_) => ConditionKind::Derived,
@@ -340,10 +328,6 @@ impl DerivationRule {
 /// it is not representable here: a tier with no legitimate members is not a tier,
 /// and leaving it constructible invites a new member.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-05 T9 renders the contract")
-)]
 pub(crate) enum ConditionKind {
     /// Recomputed from run-owned state.
     Derived,
@@ -358,10 +342,6 @@ impl ConditionKind {
     /// DEC-123's injected field: the prose never restates the kind, so this is
     /// the only place a reader is told whether discharging the condition means
     /// recording an act or repairing run-owned state.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
-    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             ConditionKind::Derived => "derived",
@@ -934,10 +914,6 @@ pub(crate) enum Advance {
 
 impl Advance {
     /// Every forward edge, in forward order.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06/08 render the edge list")
-    )]
     pub(crate) const ALL: [Advance; 4] = [
         Advance::ExploringInquiring,
         Advance::InquiringDrafting,
@@ -954,10 +930,6 @@ impl Advance {
     /// is a CLI contract, and deriving it would let a stage rename silently
     /// move a name a caller has already declared. That the two agree *today* is
     /// `an_edge_token_names_the_two_stages_it_joins`'s to hold.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the block header")
-    )]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Advance::ExploringInquiring => "exploring-inquiring",
@@ -973,10 +945,6 @@ impl Advance {
     /// cannot drift: a token this returns `None` for is one no edge answers to,
     /// which is what the receipt's fail-open-to-delivery rule turns on. A
     /// lenient parse would elide bodies for a caller holding nothing.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T6 wires --known-contracts")
-    )]
     pub(crate) fn parse(token: &str) -> Option<Self> {
         Advance::ALL.into_iter().find(|edge| edge.as_str() == token)
     }
@@ -994,10 +962,6 @@ impl Advance {
     /// the forward graph cannot disagree. No `from()` is added, because
     /// [`Advance::from_stage`] already supplies the origin to every caller that
     /// has one.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T3 resolves the enforced set")
-    )]
     pub(crate) const fn to(self) -> Stage {
         match self {
             Advance::ExploringInquiring => Stage::Inquiring,

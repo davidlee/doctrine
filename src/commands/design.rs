@@ -198,6 +198,16 @@ pub(crate) struct ResumeArgs {
     /// run agrees rather than re-sending it.
     #[arg(long)]
     known_fragment: Vec<String>,
+    /// Declare a stage boundary's contracts you already hold, by the edge's own
+    /// name (e.g. `drafting-reviewing`), so resume sends the headers without the
+    /// narratives. Repeatable; one declaration names a whole edge's block,
+    /// because edge-grained delivery is what a contract receipt is.
+    ///
+    /// Bare, with no digest, unlike a fragment receipt: a contract is a pure
+    /// function of the binary, so there is nothing within a run's life for a
+    /// digest to detect.
+    #[arg(long)]
+    known_contracts: Vec<String>,
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     path: Option<PathBuf>,
@@ -1760,6 +1770,11 @@ fn run_resume(args: ResumeArgs) -> Result<()> {
     lines.extend(fragment_lines(&run, &args.known_fragment));
     lines.extend(fragment_section(&run, &args.known_fragment)?);
     lines.extend(runbook_section(&run)?);
+    // Last: the largest optional payload rides at the tail, and the three
+    // incumbent sections stay byte-identical, which is the cheaper diff to
+    // audit. The design fixes that the block sits beside the fragment and the
+    // runbook step, not the order among them.
+    lines.extend(contract_section(&run, &args.known_contracts)?);
     emit(&lines)
 }
 
@@ -2110,6 +2125,46 @@ fn fragment_section(run: &DesignSnapshot, declared: &[String]) -> Result<Vec<Str
 /// Reports agreement or absence; it never *withholds* anything the projection
 /// would otherwise have carried, because a flag that changes what a read means
 /// is a flag a caller has to remember.
+/// The stage-entry receipt's contract block — the shell half of the split
+/// [`design_run::prompt::contract_block`] makes, and the third section built the
+/// same way as [`fragment_section`] and [`runbook_section`]: Doctrine resolves
+/// and reads, the pure core renders.
+///
+/// Selected by [`design_run::gate::Advance::from_stage`], exactly as the runbook
+/// step is. A locked run therefore emits nothing — no outbound edge, nothing to
+/// guard, nothing to deliver — which is the same real answer
+/// [`design_run::prompt::Fragment::for_stage`] and
+/// [`design_run::gate::boundary_runbook`] already give there.
+///
+/// A caller that declared this edge gets every header and no narrative, and the
+/// read is **skipped** rather than performed and discarded: there is nothing to
+/// elide if nothing was fetched. An unknown or mismatched token elides nothing,
+/// which is the fail-open-to-delivery rule the fragment register already
+/// follows — the parse is closed over the edge vocabulary, so a token no edge
+/// answers to can never read as a hold.
+///
+/// The token is bare and is NOT folded into the fragment receipt. A fragment
+/// binds bytes by digest and a contract deliberately does not, so folding would
+/// force one of them to change. Two tokens on one emission is the cheaper
+/// answer.
+fn contract_section(run: &DesignSnapshot, declared: &[String]) -> Result<Vec<String>> {
+    let Some(edge) = design_run::gate::Advance::from_stage(run.run.stage) else {
+        return Ok(Vec::new());
+    };
+    let holds_current = declared
+        .iter()
+        .any(|token| design_run::gate::Advance::parse(token) == Some(edge));
+
+    let mut bodies = std::collections::BTreeMap::new();
+    if !holds_current {
+        for condition in design_run::gate::cumulative_conditions(edge.to()) {
+            let body = crate::install::asset_text(&condition.contract_asset_key())?;
+            bodies.insert(condition, body);
+        }
+    }
+    Ok(design_run::prompt::contract_block(edge, &bodies))
+}
+
 fn fragment_lines(run: &DesignSnapshot, declared: &[String]) -> Vec<String> {
     declared
         .iter()

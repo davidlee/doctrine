@@ -138,10 +138,6 @@ impl Condition {
     /// test needs to *enumerate* these assets: under a prefix that is a filter,
     /// and flat it is a filter minus a hand-maintained exclusion list for the
     /// four fragment stems — the shape STD-001 exists to refuse.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-06 T6 reads the narrative corpus")
-    )]
     pub(crate) fn contract_asset_key(self) -> String {
         format!("{STORE}/conditions/{}.md", self.as_str())
     }
@@ -175,10 +171,6 @@ impl Condition {
 /// the bytes it claimed, must still be able to tell what it is missing. The
 /// shell fails on an unreadable asset before it reaches this function, so an
 /// absent entry means *held*, never *lost*.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-06 T6 emits the block from resume")
-)]
 pub(crate) fn contract_block(edge: Advance, bodies: &BTreeMap<Condition, String>) -> Vec<String> {
     let mut lines = vec![format!("contracts {}", edge.as_str())];
     for condition in cumulative_conditions(edge.to()) {
@@ -204,10 +196,6 @@ pub(crate) fn contract_block(edge: Advance, bodies: &BTreeMap<Condition, String>
 /// reach. The subject is one field rather than two nullable ones, which is the
 /// [`DerivationRule`] coupling showing on the wire — a derived row has no
 /// coverage to state and an attested row has no engine source.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "SL-244 PHASE-06 T6 emits the block from resume")
-)]
 fn contract_line(condition: Condition) -> String {
     let contract = condition.contract();
     let mut fields = vec![
