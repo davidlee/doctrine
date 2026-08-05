@@ -126,6 +126,17 @@ impl Fragment {
     }
 }
 
+/// Where the narrative contracts live inside [`STORE`] — the one source every
+/// consumer derives from, rather than three spellings of one path (STD-001).
+///
+/// A function rather than a `const` because it is composed from `STORE`, and a
+/// const literal would be exactly the second spelling this exists to prevent.
+/// Its consumers are the key below, the corpus set-equality gate, and the
+/// suite that reads a shipped narrative off disk.
+pub(crate) fn contract_store() -> String {
+    format!("{STORE}/conditions")
+}
+
 impl Condition {
     /// The embedded asset key the shell resolves for this condition's narrative
     /// half. One condition, one file — leaf tier names the key and never reads
@@ -139,7 +150,7 @@ impl Condition {
     /// and flat it is a filter minus a hand-maintained exclusion list for the
     /// four fragment stems — the shape STD-001 exists to refuse.
     pub(crate) fn contract_asset_key(self) -> String {
-        format!("{STORE}/conditions/{}.md", self.as_str())
+        format!("{}/{}.md", contract_store(), self.as_str())
     }
 }
 

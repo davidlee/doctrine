@@ -404,10 +404,16 @@ fn design_prompts_have_no_consumer_outside_the_design_run() {
         // The catalogue that OWNS the store name: one `STORE` const the four
         // asset keys derive from (STD-001).
         "src/design_run/prompt.rs",
-        // EX-3: the five assets' publication library addresses.
+        // EX-3: the five assets' publication library addresses, plus SL-244
+        // PHASE-06's nine narrative contracts under `conditions/`.
         "publication/manifest.toml",
         // This file — the assertions below, and the published-address table.
         "tests/e2e_claude_install.rs",
+        // SL-244 PHASE-06 `VT-1`: the corpus set-equality gate lives here, and
+        // the criterion's keyword mandate names the prefix in raw bytes. The
+        // filter's *value* is derived from `prompt::contract_store()`, so this
+        // is a prose mention and not a second source (STD-001).
+        "src/commands/design.rs",
     ]
     .into_iter()
     .map(str::to_owned)

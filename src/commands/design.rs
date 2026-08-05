@@ -2452,7 +2452,10 @@ mod tests {
     fn every_condition_has_an_asset_and_no_orphan() {
         use design_run::gate::Condition;
 
-        const PREFIX: &str = "design-prompts/conditions/";
+        // Derived from the store, not spelled again: `design-prompts/conditions`
+        // has one source, and it is `design_run::prompt` (STD-001).
+        let prefix = format!("{}/", design_run::prompt::contract_store());
+        let prefix = prefix.as_str();
 
         let expected: std::collections::BTreeSet<String> = Condition::ALL
             .into_iter()
@@ -2471,7 +2474,7 @@ mod tests {
         let corpus: std::collections::BTreeSet<String> =
             crate::asset_source::install_asset_keys_from_disk()
                 .into_iter()
-                .filter(|key| key.starts_with(PREFIX))
+                .filter(|key| key.starts_with(prefix))
                 .collect();
         assert_eq!(
             corpus, expected,
@@ -2486,7 +2489,7 @@ mod tests {
             .entries()
             .iter()
             .map(|entry| entry.address().as_str().to_owned())
-            .filter(|address| address.starts_with(PREFIX))
+            .filter(|address| address.starts_with(prefix))
             .collect();
         assert_eq!(
             published, expected,

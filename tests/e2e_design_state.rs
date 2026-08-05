@@ -211,6 +211,13 @@ impl Fixture {
         self.apply(&format!("{{{}}}", self.envelope(submission)));
     }
 
+    /// `design resume`, with any extra flags the receipt tests declare.
+    fn resume(&self, extra: &[&str]) -> String {
+        let mut args = vec!["design", "resume", SLICE, "-p", "."];
+        args.extend_from_slice(extra);
+        run(&self.root, &args)
+    }
+
     /// `design show`, budgeted.
     fn show(&self, extra: &[&str]) -> String {
         let mut args = vec!["design", "show", SLICE, "-p", "."];
@@ -2279,4 +2286,172 @@ fn adoption_derives_the_title_by_the_same_procedure_as_declare() {
 /// Parse a run-local id in a test, where a malformed literal is a test bug.
 fn id(raw: &str) -> DesignId {
     DesignId::parse(raw).expect("a well-formed run-local id")
+}
+
+// ── SL-244 PHASE-06: the stage-entry receipt (VT-5) ───────────────────────
+//
+// The receipt's wire behaviour, over the built binary and the real embedded
+// corpus. The block's *content* is asserted in the pure suite, which can reach
+// every edge without a ladder; what only an e2e can say is that the corpus is
+// actually embedded, that the flag reaches the renderer, and that the refusal
+// leg reaches no asset at all.
+
+/// The edge a run at `exploring` stands on — the only one a cold fixture can
+/// reach without the review suite's four-edge ladder.
+const COLD_EDGE: &str = "exploring-inquiring";
+
+/// One narrative's opening words, read from the shipped corpus rather than
+/// re-typed, so an edit to the asset cannot leave this test asserting prose
+/// that no longer ships.
+fn narrative_opening(token: &str) -> String {
+    let path = common::repo_root()
+        .join("install")
+        .join(design_run::prompt::contract_store())
+        .join(format!("{token}.md"));
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("shipped narrative {}: {e}", path.display()));
+    text.lines()
+        .next()
+        .expect("a narrative is not empty")
+        .to_owned()
+}
+
+/// Every condition the cold fixture's edge enforces.
+fn cold_conditions() -> Vec<design_run::gate::Condition> {
+    let edge = design_run::gate::Advance::parse(COLD_EDGE).expect("the edge token parses");
+    design_run::gate::cumulative_conditions(edge.to())
+}
+
+/// `VT-5` (a) — a declared receipt elides every narrative body and no header
+/// line.
+///
+/// The header-and-discharge half riding unconditionally is the point, and it is
+/// the fragment register's rule for its stated reason: a caller that declared a
+/// stale receipt, or lost the bytes it claimed, must still be able to tell what
+/// it is missing.
+#[test]
+fn declared_receipt_elides_bodies_not_headers() {
+    let fixture = Fixture::start();
+
+    let delivered = fixture.resume(&[]);
+    let declared = fixture.resume(&["--known-contracts", COLD_EDGE]);
+
+    assert!(
+        !cold_conditions().is_empty(),
+        "the edge enforces something, or both sides of this test are vacuous"
+    );
+    for condition in cold_conditions() {
+        let token = condition.as_str();
+        let opening = narrative_opening(token);
+        // The positive control for the elision: the body ships and is embedded,
+        // so its absence below is the receipt working rather than the corpus
+        // being missing.
+        assert!(
+            delivered.contains(&opening),
+            "{token}'s narrative is delivered when nothing is declared"
+        );
+        assert!(
+            !declared.contains(&opening),
+            "{token}'s narrative is elided by the declaration"
+        );
+        // Identity survives: the header and its discharge are not the body.
+        assert!(
+            declared.contains(&format!("contract {token} ")),
+            "{token} keeps its header line"
+        );
+        assert!(
+            declared.contains(&condition.contract().remedy()),
+            "{token} keeps its discharge"
+        );
+    }
+    assert!(
+        declared.contains(&format!("contracts {COLD_EDGE}")),
+        "and the block header rides"
+    );
+}
+
+/// `VT-5` (b) — an unknown or mismatched edge token elides nothing.
+///
+/// Fail open to delivery. The parse is closed over the edge vocabulary, so a
+/// token no edge answers to can never read as a hold, and a token naming a
+/// *different* edge is not this edge's receipt.
+#[test]
+fn an_unknown_or_mismatched_edge_token_elides_nothing() {
+    let fixture = Fixture::start();
+    let delivered = fixture.resume(&[]);
+
+    for token in ["nonesuch", "reviewing-locked", "exploring", ""] {
+        let rendered = fixture.resume(&["--known-contracts", token]);
+        assert_eq!(
+            rendered, delivered,
+            "`--known-contracts {token}` withholds nothing"
+        );
+    }
+
+    // Repeatable, and one true declaration among strangers still holds: the
+    // flag is a set of held edges, not a single last-wins value.
+    let declared = fixture.resume(&[
+        "--known-contracts",
+        "nonesuch",
+        "--known-contracts",
+        COLD_EDGE,
+    ]);
+    assert_ne!(declared, delivered, "the true declaration is not discarded");
+}
+
+/// `VT-5` (d) — a refusal renders every remedy and reads no asset.
+///
+/// The tier boundary asserted rather than trusted. `Contract::remedy` is a
+/// total function of the const table, so the refusal leg needs no corpus at
+/// all — and the way to prove it is not to make the embed unavailable, which
+/// cannot be done to a compiled-in corpus, but to show that prose the *same
+/// binary* demonstrably holds does not appear in the refusal.
+///
+/// The positive control is in the same test: `resume` carries each narrative,
+/// so its absence from the refusal is the boundary, not a missing asset.
+#[test]
+fn a_refusal_renders_every_remedy_and_reads_no_asset() {
+    let fixture = Fixture::start();
+    let delivered = fixture.resume(&[]);
+
+    // The runbook guards the same edge and is checked first, so a cold run's
+    // refusal is the runbook's and never reaches the conditions. Discharging it
+    // is what puts the condition gate in front of the caller.
+    for step in runbook_fixture::EXPLORING_STEPS {
+        fixture.apply(&fixture.payload(step, &runbook_fixture::discharge_body(step)));
+    }
+
+    let error = fixture.refuse(&fixture.payload(
+        "premature-advance",
+        &json!({"stage": {"to": design_run::Stage::Inquiring.as_str()}}),
+    ));
+
+    let mut checked = 0usize;
+    for condition in cold_conditions() {
+        let token = condition.as_str();
+        let opening = narrative_opening(token);
+        assert!(
+            delivered.contains(&opening),
+            "control: {token}'s narrative is reachable from this binary"
+        );
+
+        assert!(error.contains(token), "the refusal names {token}: {error}");
+        assert!(
+            error.contains(&condition.contract().remedy()),
+            "the refusal carries {token}'s remedy: {error}"
+        );
+        assert!(
+            !error.contains(&opening),
+            "the refusal reads no narrative for {token}: {error}"
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "the refusal has conditions to report");
+
+    // And no rendered block leaked into the refusal either — the receipt is
+    // resume's, not apply's.
+    assert!(
+        !error.contains("discharge:") && !error.contains(&format!("contracts {COLD_EDGE}")),
+        "the refusal is not a receipt: {error}"
+    );
 }
