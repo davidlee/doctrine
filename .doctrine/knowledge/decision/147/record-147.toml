@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 147
+slug = "selection-is-split-from-rendering-the-records-caption-is-selection-supplied-text"
+title = "Selection is split from rendering; the record's caption is selection-supplied text"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-246 objective 3 requires the inbound derivation be factored so IMP-398 S5's recursive knowledge view extends it rather than replaces it. `inspect` is not one path with a depth knob: `InspectView`/`render_from` (1-hop) and `TransitiveView`/`render_transitive_human` (N-hop) are siblings with different shapes, and `walk_transitive` yields reachable-key groups per label, nothing resembling `InspectView`'s inbound groups."
+choice       = "Two pieces. A selection step yields an ordered, deduplicated list of records, each with a caption; a pure render step takes that list plus the verbosity level. The caption is selection-supplied TEXT, not a `RelationLabel`. Nothing else is generalised."
+alternatives = [
+  "Put the verbosity level on `--transitive` now, treating 1-hop as depth 1 — delivers the closure surface immediately, but it is an explicit non-goal, `Shapes` legally targets record kinds so the knowledge-to-knowledge halting rule is undecided, and `TransitiveView` would need reconciling. That is building S5, not seaming for it.",
+  "Render inline in `inspect_from` and let S5 refactor — cheapest now, fails objective 3 by construction.",
+]
+rationale    = "The only thing the 1-hop and N-hop cases genuinely share is `given selected records and a level, render their content`; what differs is selection. Splitting there is the decomposition the 1-hop case wants anyway — a pure function over an impure selection, the project's stated pure/imperative split — so objective 3 costs approximately nothing and buys no abstraction on spec. The caption is the load-bearing detail: at one hop a record's caption is its inbound label, at depth 3 it is a path. A renderer keyed on `RelationLabel` would have to change for S5, which is exactly the `replaces` outcome objective 3 exists to prevent."
+consequences = [
+  "Dedup belongs to selection, not rendering. `EVD-012` already arrives under two inbound labels at one hop on SL-244, and at N hops a record arrives at several depths; keeping dedup in selection leaves the renderer ignorant of traversal entirely.",
+  "The label allow-list (SL-246 inq-4) lives in selection; DEC-146's per-id accessor feeds it.",
+  "S5 writes a second selection and reuses the renderer untouched. No depth parameter, no traversal abstraction, and no knowledge-to-knowledge halting rule enters SL-246.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

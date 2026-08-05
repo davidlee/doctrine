@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 146
+slug = "record-content-is-read-per-id-at-the-render-layer-not-carried-by-the-corpus-scan"
+title = "Record content is read per-id at the render layer, not carried by the corpus scan"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "Under DEC-145 the composed read lands on `doctrine inspect`, which runs over `ScannedEntity` (`src/catalog/scan.rs:105`) from `scan_entities` — not `CatalogEntity`, which SL-246's OQ-6 named. `ScannedEntity` already carries a risk facet, tags, and an optional body gated by `ScanMode { include_bodies }`, but no `RecordFacet`. Something has to join record content to the derived inbound id set."
+choice       = "Read each selected record by id at the render layer, through a `pub(crate)` accessor on `knowledge` — the sibling of `knowledge::relation_edges` (SL-096 PHASE-01). `ScannedEntity` gains no facet field and the corpus scan is untouched."
+alternatives = [
+  "`ScannedEntity` grows `Option<RecordFacet>`, parsed during the scan for record-kind entities. One place, and every hop of IMP-398 S5's transitive walk would get facets with no extra read — but every corpus scan pays the parse, including `validate`, `survey`, the priority graph and `backlog show`, none of which want it.",
+  "`CatalogEntity` grows the facet, as OQ-6 literally scoped it. Moot under DEC-145: that struct is not on `inspect`'s path.",
+]
+rationale    = "Better to make a small, bounded set of reads less efficient than one that serves the whole corpus. The read is lazy by construction — the level flag that asks for content is the same flag that pays for it, so the `skip` default stays byte-identical for free rather than by careful preservation. It also keeps `RecordFacet` parsing owned by `knowledge` (ADR-001 layering) instead of smearing it into the catalog scan layer, and it rides `inspect_from`'s existing split: one corpus scan for the graph, per-entity re-reads from `root` for detail. SL-222 PHASE-09 deleted `[estimate]`/`[value]` from the scan and left `check_facet_residue` as a tripwire; the scan-carried arm walks back that direction."
+consequences = [
+  "Cost is 2 file reads (toml + md) per selected record — roughly 12-15 on the SL-244 specimen, zero at the `skip` default.",
+  "N grows with IMP-398 S5's transitive closure. Two bounds apply: the label filter (SL-246 inq-4) prunes before any read, and a read-through cache keyed by record id within one render pass absorbs repeats — `EVD-012` already appears under two inbound labels on SL-244.",
+  "`read_record` reads the `.md` unconditionally and errors when it is missing, so the `facets` level either pays for prose it discards or the accessor needs a facet-only path. A design detail to settle, not a fork.",
+  "If the transitive closure ever becomes the common case rather than the deep-dive case, the scan-carried arm's amortisation starts to win and this should be revisited.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 148
+slug = "knowledge-selection-filters-on-the-sources-kind-not-on-the-relation-label"
+title = "Knowledge selection filters on the source's kind, not on the relation label"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-246 risk R2 says inbound noise swamps signal — 11 of SL-244's 28 inbound edges are `references(originates_from)` harvest exhaust — and OQ-3 framed the fix as curating which relation labels qualify. On the specimen the two noisy groups are `originated from` (11 backlog items) and `reviews` (RV-344), whose sources are not knowledge records at all. The noise is a source-kind property that a label filter would exclude only by coincidence."
+choice       = "Select inbound edges whose SOURCE prefix is a member of `kinds::RECORD`. Groups keep their existing inbound label captions. No label allow-list."
+alternatives = [
+  "An explicit two-label allow-list (`shaped_by`, `concerned by`) — selects the identical set on SL-244 because every record-sourced inbound edge there happens to use one of the two, but is silently wrong on other subject kinds.",
+  "A caller-controlled `--knowledge-labels` flag — maximum flexibility, another flag to specify and document, and no evidence anyone wants a narrower cut.",
+]
+rationale    = "The feature is `the knowledge records that point at this entity` — a statement about what the source IS, not about which verb it used, so encoding it as a list of verbs is an indirection that must be maintained in step with the relation vocabulary. Filtering by source kind also yields the closed six-label set for free, since those labels are by definition the ones a record can point outward with. And it leaves no literal list to drift: `mem.pattern.doctrine.record-kind-touch-sites` records ~17 sites already hardcoding `ASM|DEC|QUE|CON` instead of reading `kinds::RECORD`, and an allow-list written as literals would be the eighteenth."
+consequences = [
+  "Correct across subject kinds a two-label list would break: a backlog item's `spawned_by` names the QUE that produced it, a record subject's `supported_by` names its evidence and `superseded by` names its replacement. All are knowledge shaping that entity; none is `shapes` or `concerns`.",
+  "A caller-controlled narrowing (`--knowledge-labels`) can be added on top later if a real need appears. It cannot be subtracted.",
+  "Explicitly rejected: dropping `concerned by` to improve the output. It contributed exactly the three decisions on the specimen that render nothing at the `facets` level (DEC-140/141/142), but DEC-144 is also `concerned by` and is substantive. Curating a label out to dodge a rendering defect fixes the wrong thing; that defect is SL-246 inq-5.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
