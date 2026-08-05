@@ -105,7 +105,7 @@ note = "Unit tests for the new vocabulary, act admission, reach and the golden a
 [[selector]]
 selector = "src/review.rs"
 intent = "design-target"
-note = "sec-3 DEC-138: supplies the per-finding blocker predicate (severity==Blocker AND status in {open, contested}) that ObservedReview::undisposed_blockers reads — doc_unresolved_blockers minus the state restriction; also the concluded-pass marker's read side (lands with IMP-392)."
+note = "sec-3 DEC-138: supplies the per-finding blocker predicate (severity==Blocker AND status in {open, contested}) that ObservedReview::undisposed_blockers reads — doc_unresolved_blockers minus the state restriction; also the concluded-pass marker's read side (lands with IMP-392). PHASE-07 adds the third filter over the same ledger — outstanding_by_severity (status not in {verified, withdrawn}, all four severities, EX-2), deliberately wider than the gate's and separately spelled — and splits the reader: read_pass_facts is the single Result-returning parse, observe_pass its .ok() wrapper, so the gate keeps PHASE-04 EX-5's absence-is-refusal posture while the projection path fails loud (D5)."
 
 [[selector]]
 selector = "install/design-run-stages.md"

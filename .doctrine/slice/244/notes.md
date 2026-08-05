@@ -142,30 +142,47 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1 of 7 done) · 725482c2
+fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1–T6 of 7 done) · e462c0fd
 
 ### Produced
 
-- **PHASE-07 IN FLIGHT — `T1`, the currency lamp, landed (`c7dcaf62`).**
+- **PHASE-07 IN FLIGHT — both lamps are built and rendered; `T7` (close-out) is
+  all that is left.** The movement: the currency lamp (`c7dcaf62`); the count in
+  `review` (`cdc9d86f`); the leaf record and the projection seam (`593751c2`);
+  the summary rendering (`c239834f`); `VT-3`'s no-contract-prose assertion
+  (`4742d770`); the criteria amendment and `DEC-144` (`e462c0fd`).
   `TurnEnvelope::pass_stale` derives through `review_standing()` — one
   comparison, two readers — guarded by `pass.is_some()` so *no pass* and *stale
-  pass* stay different facts, and renders as a bare `review_pass STALE` line in
-  `prompt()` only when true. `VT-1` PASSes in three clauses over
-  `fixture::cleared()`, three negative controls run and reverted. design_run unit
-  130 → 131; `doctrine check gate` exit 0.
+  pass* stay different facts. `TurnEnvelope::outstanding` carries
+  `OutstandingBySeverity`, shell-read on every projection and never stored;
+  `review::outstanding_by_severity` is the third filter over the same ledger and
+  agrees with neither neighbour. All four PHASE-07 `VT` rows PASS;
+  `doctrine check gate` exit 0.
   **Two user rulings opened the phase**, both on the sheet as `D5`/`D6`:
   an unreadable or unparseable pass ledger **fails loud** rather than rendering a
-  third quiet state (so the reader splits — a `Result` parse under
-  `observe_pass`'s `.ok()` wrapper, because the gate path still needs
-  `PHASE-04` `EX-5`'s absence-is-refusal posture and the projection path needs
-  the error); and `VT-2` splits with a `VT-4` appended in `src/review.rs`, the
-  `DEC-141` amendment class, because `envelope.rs` is leaf-tier and cannot import
-  `review` to compare the two predicates.
+  third quiet state (so the reader split — `review::read_pass_facts` is the
+  single `Result`-returning parse and `observe_pass` is now nothing but its
+  `.ok()` wrapper, because the gate path still needs `PHASE-04` `EX-5`'s
+  absence-is-refusal posture and the projection path needs the error); and `VT-2`
+  splits with a `VT-4` appended in `src/review.rs` (`DEC-144`, the `DEC-141`
+  amendment class), because `envelope.rs` is leaf-tier and cannot import `review`
+  to compare the two predicates.
+  **`F2` is ruled and closed: both lamps render in `prompt` AND `status`,
+  together; `resume` is excluded.** The decision review terminates on — is
+  another round worth its cost — is the human's (`RFC-026` E3), and `status` is
+  the human's surface. `resume` is SL-233 scope §4's seven fields in that order,
+  pinned by an e2e, and widening that contract is not this slice's.
   **One design-text repair is owed at reconcile:** `design.md:770` says both
   warnings arrive on `DerivedInput`, which is assembled only on the apply path
   while the envelope is also projected by `design show` and `design resume`. The
   counts ride a `project` parameter instead. The ruling (shell-read, never
   stored) is untouched; only the carrier was wrong.
+  **Boundary noise, already explained:** the recorded range
+  `a9803d26..e462c0fd` has this phase's own commit at both ends, so `PHASE-06`
+  `F8`'s hazard did not occur — but three other agents' commits are interleaved
+  through it (`56e376bd`, `01a660c9` for SL-246; `a48afbbb` for SL-245). No
+  contiguous range excludes them and `record-delta` only moves the tip, which is
+  already right. Shared-tree cost, not a defect.
 
 - **PHASE-06 COMPLETE — the contract corpus and the stage-entry receipt.** Ten
   tasks. The movement: the injected field vocabulary (`b36f7044`); the pure
@@ -333,6 +350,24 @@ assert anything about the crossing: three unrelated rows refuse first. Re-open
 the *pass* over the digests the run has moved past instead. The general form: a
 content-bound record with many co-bound neighbours must be staled at the record,
 not at the content, or the fixture stops narrowing.
+
+**PHASE-07 (general, past this slice)** — *a negative assertion is only as good
+as the probes it hunts with, and hardcoded probes rot silently.*
+`envelope_carries_no_contract_prose` lifts its probes out of a real
+`contract_block` rendering and asserts the positive control finds them before
+concluding anything from not finding them elsewhere. A hardcoded `"discharge:"`
+would keep passing forever after the renderer stopped spelling it that way — the
+test would report the absence of a token nothing emits any more. Cost: three
+lines. It generalises to every *X does not appear in Y* test.
+
+**PHASE-07 (general, past this slice)** — *elision is a property of the line, not
+of the fields in it.* `EX-2` spent a decision removing the absent-vs-zero
+ambiguity from the record (a fixed four-field struct, not a map); rendering
+`blocker=1 minor=2` and dropping the zeroes would have put that same ambiguity
+straight back one level down, in the rendering, where nobody was looking for it.
+So all four counts render and the *line* elides — a different fact (*nothing is
+outstanding*) with its own single spelling. When a record's shape is chosen to
+kill an ambiguity, the renderer inherits the obligation.
 
 **PHASE-06 (general, past this slice)** — a fragment's prose is *elidable* and
 the turn envelope's `DECLARATION_EXAMPLE` is not: a caller declaring the
