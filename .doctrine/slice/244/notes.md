@@ -142,10 +142,48 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-06 in_progress, T1 done · 01bd550e
+fresh-as-of: 2026-08-05 · PHASE-06 complete · 930d811d
 
 ### Produced
 
+- **PHASE-06 COMPLETE — the contract corpus and the stage-entry receipt.** Ten
+  tasks. The movement: the injected field vocabulary (`b36f7044`); the pure
+  `contract_block` renderer with `contract_line` extracted as DEC-123's whole
+  injection, plus `Condition::contract_asset_key` (`92f73f97`); nine narratives
+  written *against* the rendered block, published `guidance`/`fixed`, bounded by
+  `VT-1`'s three-way set equality over vocabulary / disk corpus / manifest rows
+  (`9cbdfbc8`); `--known-contracts` wired and the block emitted last, retiring
+  twelve staged `expect(dead_code)` attributes in one commit (`8b59b860`);
+  `VT-5`'s three cold-edge clauses (`27d90da7`); and `VT-6` (`bafcb80c`).
+  **Every PHASE-06 `VT` row PASSes** — `VT-1`–`VT-6`; `doctrine check gate` exit
+  0. Suites at close: `design_run::` unit 130, `e2e_design_state` 175,
+  `e2e_design_review` 148.
+  `R1`'s mitigation (write the prose against the rendered block, T3 before T4)
+  worked — the injected fields were on the page throughout, and the corpus
+  sweep came back clean on the first pass with a positive control ahead of it.
+  Two coupling guards fired during `T8` and both were repaired rather than
+  widened: `design-prompts/conditions` now has one source
+  (`prompt::contract_store()`), and the e2e reads the corpus through
+  `common::repo_root()` rather than a baked `env!` path.
+  Findings `F1`–`F7` on the sheet. `F1` is the one worth carrying: a staged
+  `expect(dead_code)` does not travel down the call chain, and the prediction
+  that it would was written on the sheet and corrected by rustc.
+- **`VT-5` split, `VT-6` appended** (`bafcb80c`, reasoning as `DEC-141`).
+  `VT-5`'s locked clause had no home in the file `VT-5` named: every fixture in
+  `tests/e2e_design_state.rs` is a cold run at `exploring`, and a run at `Locked`
+  is reachable only through the four-component ladder in
+  `tests/e2e_design_review.rs`. A two-file mandate is not expressible —
+  `Vt::test_file` is `Option<String>`, one path, no list and no glob — so the
+  clause was rehoused rather than weakened. The hoisted-ladder and
+  duplicated-ladder alternatives are both recorded as rejected.
+- **`VA-1` clause 2 read structurally** (`DEC-142`). *States no structural fact
+  the renderer states*, not *touches no injected property*. All nine narratives
+  pass; no prose change. The boundary is written down: a narrative spelling
+  `cumulative` or `observes(...)` would still fail.
+- **`IMP-402` — the inquiry fragment names its edge kinds** (`930d811d`, closed
+  `done`). Raised by the user while reading the `VH-1` artefact and deliberately
+  kept out of PHASE-06: the asset is SL-233's. The map has been a graph since
+  DEC-061 and the prose said none of it.
 - **PHASE-06 T1 — `Advance` has a wire token and a destination** (`203b28a7`).
   `as_str` / `parse` / `to`, two tests off `Advance::ALL`, negative control run.
   `D3` on the phase sheet argues why PHASE-01's refusal of `from()`/`to()` does
@@ -263,6 +301,21 @@ fresh-as-of: 2026-08-05 · PHASE-06 in_progress, T1 done · 01bd550e
 
 Tree facts read off the source, still load-bearing for the phases that consume
 them. Cited by phase so a reader knows why each is here.
+
+**PHASE-06 (general, past this slice)** — a fragment's prose is *elidable* and
+the turn envelope's `DECLARATION_EXAMPLE` is not: a caller declaring the
+fragment digest has the body withheld, while the no-drop set always rides. So
+any fact stated only in fragment prose is invisible on a warm turn, and the
+example is the surface that survives. Found while measuring `IMP-402`'s byte
+cost; it is why the `needs` edge went into the example and not only into the
+prose, and the reasoning now sits in the constant's own doc comment.
+
+**PHASE-06 (for PHASE-07/08)** — the contract renderer's injected surface is
+`contract <token> <kind> [<coverage>|engine(<source>)] [observes(…)] <reach>`
+plus one `discharge:` line, and `Contract::remedy()` is a total function of the
+const table — asserted equal to the injected discharge over every row (`VT-2`).
+PHASE-08's `VT-4` reads that same equality from the diagram side, so it has a
+proven counterpart to compare against rather than a second rendering to trust.
 
 **PHASE-04/05 (from PHASE-02)** — `ContentCoverage<T>` is generic and its
 `diff(&current) -> Vec<DesignId>` is id-ordered, so `CoverageStale::moved` reads

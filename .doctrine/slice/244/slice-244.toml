@@ -162,6 +162,16 @@ selector = "tests/common/mod.rs"
 intent = "design-target"
 note = "PHASE-04 / T2+T3+T7: the shared e2e helper the review-pass mint needed; touched once and only there."
 
+[[selector]]
+selector = "src/design_run/prompt.rs"
+intent = "design-target"
+note = "PHASE-06: the pure contract renderer — contract_block over cumulative_conditions, contract_line as DEC-123's whole injection, and contract_store() as the one source for the design-prompts/conditions prefix. The src/design_run/** row is scope-relevant and invisible to the conformance map (PHASE-05 F64)."
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+note = "PHASE-06 T8: the design-prompts consumer guard. Adding the conditions/ corpus made src/commands/design.rs a second consumer of the store name, so this suite's allowed-consumer list is an argued edit of the guard, not a green-chase — one of the two coupling guards that fired and were repaired rather than widened."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"

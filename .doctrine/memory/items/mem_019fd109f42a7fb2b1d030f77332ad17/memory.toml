@@ -1,0 +1,46 @@
+memory_uid = "mem_019fd109f42a7fb2b1d030f77332ad17"
+memory_key = "mem.pattern.doctrine.conformance-needs-a-correct-boundary-row"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Conformance reads the recorded boundary row, not the diff"
+summary = "A phase's conformance verdict is meaningless until its boundary row exists and ends at the phase's own code tip"
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = [".doctrine/state/slice"]
+globs = []
+commands = []
+tags = ["conformance", "phase-close"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b337b386e3545c27c059cfa407980b4ce3fe30c2"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e32adc67db2e55529c7f229a5c169bc55312edba189caa1a28eb45143ec24419"
+base_commit = "930d811d693ac85ad9ae82a5279536564e83d30f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+
