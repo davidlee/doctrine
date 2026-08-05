@@ -871,11 +871,9 @@ fn every_event_fixture() -> Fixture {
         "{{{},\"declare\":[{{\"subject\":\"inq-3\",\"needs\":[]}}]}}",
         fixture.envelope("unneed")
     ));
-    // review_attested, and the clearances the stage move needs
+    // review_attested
     fixture.apply(&format!(
-        "{{{},\"declare\":[{{\"subject\":\"att-1\",\"attests\":\"sec-1\"}}],\
-         \"evidence\":[{{\"condition\":\"governing-context-recorded\",\"subject\":\"sec-1\"}},\
-         {{\"condition\":\"initial-concerns-recorded\",\"subject\":\"sec-1\"}}]}}",
+        "{{{},\"declare\":[{{\"subject\":\"att-1\",\"attests\":\"sec-1\"}}]}}",
         fixture.envelope("attest")
     ));
     // SL-244 `T10` — the crossing below owes `governing-context-recorded` and

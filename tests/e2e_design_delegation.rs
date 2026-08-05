@@ -53,7 +53,6 @@ mod design_run;
 use design_run::Stage;
 use design_run::attestation::{ActKind, AgentAct, AgentActKind, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
-use design_run::gate::Condition;
 use design_run::ids::DesignId;
 use design_run::inquiry::DispositionForm;
 use design_run::snapshot::{self, DesignSnapshot};
@@ -77,9 +76,10 @@ const DELEGATION: &str = "dlg-1";
 const PROPOSED_NODE: &str = "inq-2";
 /// The checkpoint the coordinator disposes [`OBLIGATION`] through.
 const CHECKPOINT: &str = "cp-1";
-/// A section nothing in this suite edits. Every claimed clearance binds to it, so
-/// the coordinator's positive-control stage move stays reachable no matter what a
-/// test does to the inquiry map.
+/// A section nothing in this suite edits, so the coordinator's positive-control
+/// stage move stays reachable no matter what a test does to the inquiry map. It
+/// held every claimed clearance until SL-244 `T13` retired the last of them; the
+/// acts that cleared the gate in their place bind to the run, not to a section.
 const SECTION_SPINE: &str = "sec-spine";
 
 /// Who the proposal says did the work. Stored verbatim: `EX-1` asks for an
@@ -90,16 +90,6 @@ const PROPOSAL_SUMMARY: &str =
     "the obligation splits: the transport question is separable from the authority question";
 /// Why the coordinator turns it down — the one thing a refusal has to carry.
 const REFUSAL_REASON: &str = "the obligation was deferred; re-export it if it returns";
-
-/// The conditions of the two boundaries below `drafting`, claimed through the
-/// generic evidence route. The gate re-derives the whole cumulative set on every
-/// forward move, so a positive control at `inquiring → drafting` needs all four.
-const CLEARED: [Condition; 4] = [
-    Condition::GoverningContextRecorded,
-    Condition::InitialConcernsRecorded,
-    Condition::BlockingInquiriesDispositioned,
-    Condition::UserAcceptsSufficiency,
-];
 
 /// Every writer act a proposal-bearing payload may not also carry (`EX-2`) — one
 /// row per key [`ApplyRequest::WRITER_ACTS`] checks, and that equality is itself
@@ -172,7 +162,8 @@ struct Fixture {
 
 impl Fixture {
     /// A run in `inquiring` holding the obligation, the spine section, and the
-    /// four claimed clearances — the state every delegation test starts from.
+    /// acts that cleared the two boundaries below it — the state every delegation
+    /// test starts from.
     fn inquiring() -> Fixture {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
@@ -208,11 +199,6 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
-        // SL-244 `T8` (`D2`) — both mechanisms live at once. The `evidence`
-        // claims below are what clears the gate *today*; the acts are what will
-        // clear it once `T10` flips the evaluator, and they land now so that
-        // flip is a change of mechanism with no change of fixture.
-        //
         // The map is declared in its own submission, ahead of the acts, because
         // `initial-concerns-recorded` binds to the inquiry map: an act recorded
         // before `OBLIGATION` existed would carry a covered map the very next
@@ -252,18 +238,8 @@ impl Fixture {
                 ),
             }),
         ));
-        fixture.apply(&fixture.payload(
-            "seed",
-            &json!({
-                "evidence": CLEARED
-                    .map(|condition| json!({
-                        "condition": condition.as_str(),
-                        "subject": SECTION_SPINE,
-                    }))
-                    .to_vec(),
-                "stage": {"to": Stage::Inquiring.as_str()},
-            }),
-        ));
+        fixture
+            .apply(&fixture.payload("seed", &json!({"stage": {"to": Stage::Inquiring.as_str()}})));
         fixture
     }
 
@@ -359,7 +335,7 @@ impl Fixture {
 
 /// The spine section's body, which must open with its own heading.
 fn spine_body() -> String {
-    format!("## {SECTION_SPINE}\n\nThe section every claimed clearance binds to.\n")
+    format!("## {SECTION_SPINE}\n\nThe section no test in this suite edits.\n")
 }
 
 /// Run the built binary, expecting success; returns stdout.

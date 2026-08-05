@@ -51,8 +51,8 @@ mod design_run;
 
 use design_run::Stage;
 use design_run::attestation::{
-    ActKind, AgentAct, AgentActKind, CoveredSet, IntentState, IntentSubject, RecoveryIntent,
-    ReviewDisposition, ReviewPolicy, ReviewRef,
+    AcceptanceAuthority, ActKind, AgentAct, AgentActKind, CoveredSet, IntentState, IntentSubject,
+    RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
 };
 use design_run::change_log::ChangeEvent;
 use design_run::gate::Condition;
@@ -81,10 +81,11 @@ const JOURNAL_FILE: &str = "design-journal.toml";
 /// other must be seen to survive that edit (EX-1's `only`).
 const SECTION_A: &str = "sec-a";
 const SECTION_B: &str = "sec-b";
-/// A third section that is never edited. Every earlier-boundary clearance is
-/// claimed against it, so an edit in a test invalidates review evidence
-/// *without* also dropping the six conditions that got the run to `reviewing` —
-/// otherwise a refusal could not be attributed to the component under test.
+/// A third section that no test edits, so an edit in a test invalidates the
+/// review state it is aimed at and nothing else — otherwise a refusal could not
+/// be attributed to the component under test. Until SL-244 `T13` it also carried
+/// every earlier boundary's evidence claim; the acts that replaced those claims
+/// are bound to the run rather than to a section, so only the isolation remains.
 const SECTION_SPINE: &str = "sec-spine";
 
 /// Section id → the attestation that reviews it.
@@ -97,16 +98,10 @@ const ATTESTED: [(&str, &str); 3] = [
 /// A blocking finding, raised before the lock is attempted.
 const FINDING: &str = "fnd-1";
 
-/// The conditions of the three earlier boundaries, claimed through the generic
-/// evidence route because this suite is about the *fourth* boundary.
-const EARLIER: [Condition; 6] = [
-    Condition::GoverningContextRecorded,
-    Condition::InitialConcernsRecorded,
-    Condition::BlockingInquiriesDispositioned,
-    Condition::UserAcceptsSufficiency,
-    Condition::DraftingReadinessAttested,
-    Condition::MaterialisationCurrent,
-];
+/// Why the ladder waives its pass — one spelling, because `VT-10` asserts that
+/// the change row carries this exact prose and a second copy could drift from
+/// the payload that produced it (STD-001).
+const WAIVER_REASON: &str = "no adversarial reviewer was engaged on this run";
 
 /// One component of the `reviewing → locked` conjunction (design §5.4).
 ///
@@ -164,9 +159,9 @@ struct Fixture {
 }
 
 impl Fixture {
-    /// A run in `reviewing` holding three sections, the six earlier clearances,
-    /// and one **undisposed blocking finding** — the state every lock test
-    /// starts from.
+    /// A run in `reviewing` holding three sections, the acts that cleared the
+    /// three earlier boundaries, and one **undisposed blocking finding** — the
+    /// state every lock test starts from.
     fn reviewing() -> Fixture {
         let (fixture, entry) = Fixture::at_the_reviewing_edge();
         fixture.apply(&entry);
@@ -229,11 +224,6 @@ impl Fixture {
         for step in runbook_fixture::EXPLORING_STEPS {
             fixture.apply(&fixture.payload(step, &runbook_fixture::discharge_body(step)));
         }
-        // SL-244 `T8` (`D2`) — both mechanisms live at once. The `evidence`
-        // claims below are what clears the gate *today*; the acts are what will
-        // clear it once `T10` flips the evaluator, and they land now so that
-        // flip is a change of mechanism with no change of fixture.
-        //
         // `exploring → inquiring` owes two conditions' acts and `ApplyRequest`
         // holds one checkpoint act, so it owes two submissions.
         fixture.apply(&fixture.payload(
@@ -270,7 +260,6 @@ impl Fixture {
             "draft",
             &json!({
                 "declare": sections,
-                "evidence": claimed(),
                 "stage": {"to": Stage::Inquiring.as_str()},
             }),
         ));
@@ -390,7 +379,7 @@ impl Fixture {
                 &json!({"checkpoint_act": design_act::review_disposed(
                     "the pass is disposed of at the close of review",
                     ReviewDisposition::Waived {
-                        reason: "no adversarial reviewer was engaged on this run".to_owned(),
+                        reason: WAIVER_REASON.to_owned(),
                     },
                 )}),
             ));
@@ -527,7 +516,23 @@ impl Fixture {
 
     /// A payload carrying the current revision and `submission`, plus `body`'s
     /// top-level keys merged in.
+    ///
+    /// **No payload this suite builds carries an `evidence` key** (SL-244 `T13`,
+    /// `VT-8`). The guard lives here rather than in one test because
+    /// `ApplyRequest` is the one submission type that cannot carry
+    /// `deny_unknown_fields` — its `#[serde(flatten)]` envelope makes serde
+    /// unable to have both — so a claim against a *retired* field is swallowed in
+    /// silence rather than refused. That is exactly how the six evidence claims
+    /// outlived the field itself in this fixture: `T11` deleted the wire slot,
+    /// the suite stayed green because the key had stopped meaning anything, and
+    /// nothing said so. One assertion at the single point every payload passes
+    /// through states that the ladder runs on acts — for every test, and every
+    /// time.
     fn payload(&self, submission: &str, body: &Value) -> String {
+        assert!(
+            !body.as_object().unwrap().contains_key("evidence"),
+            "the ladder clears its gates on acts alone: no payload carries `evidence`, got {body}"
+        );
         let mut object = json!({
             "run_uid": self.uid,
             "known_revision": self.revision(),
@@ -580,15 +585,6 @@ impl Fixture {
 /// A section body, which must open with the section's own heading.
 fn section_body(id: &str, note: &str) -> String {
     format!("## {id}\n\n{id} {note}.\n")
-}
-
-/// The clearances the fixture claims through the generic evidence route, each
-/// bound to the never-edited spine section.
-fn claimed() -> Vec<Value> {
-    EARLIER
-        .into_iter()
-        .map(|condition| json!({"condition": condition.as_str(), "subject": SECTION_SPINE}))
-        .collect()
 }
 
 /// Run the built binary, expecting success; returns stdout.
@@ -1215,4 +1211,167 @@ fn loosening_the_policy_clears_the_gate() {
     // And the attestations recorded before any of this now clear the gate.
     fixture.apply(&fixture.lock_payload("lock", Some(Component::Attestations)));
     assert_eq!(fixture.stage(), Stage::Locked);
+}
+
+// ── SL-244 T13 / VT-10: neither arm is takeable except in the user's name ──
+
+/// The disposition payload with its acceptance **removed**.
+///
+/// Built from the typed payload and then stripped, rather than hand-written as a
+/// JSON literal: the act token and the arm's shape come from the wire types the
+/// binary compiles (STD-001), and the `expect` is a positive control — if the
+/// field were renamed, this returns a payload that is missing nothing and the
+/// test fails loudly instead of passing on a refusal it did not cause.
+fn without_acceptance(disposition: ReviewDisposition) -> Value {
+    let mut declared = design_act::review_disposed("the pass is disposed of", disposition);
+    declared
+        .as_object_mut()
+        .expect("the declaration is an object")
+        .remove("acceptance")
+        .expect("the builder supplies an acceptance to remove");
+    json!({ "checkpoint_act": declared })
+}
+
+/// `VT-10`, first fact: **neither** arm may be taken without an
+/// [`AcceptanceDeclaration`], so a disposition is never something an agent
+/// records as housekeeping.
+///
+/// Both arms are asserted even though only `Waived` is admissible this phase
+/// (sheet `A3`), and that is the finding rather than an oversight: the
+/// acceptance is a **required field of the wire type**, so the refusal happens
+/// in deserialisation, upstream of the admission check that would otherwise
+/// reject `Conducted` for its unconcluded ledger. The `Conducted` arm here names
+/// the run's own pass, so the only thing wrong with the payload is the missing
+/// acceptance.
+///
+/// What this deliberately does not assert is *an agent cannot author it* — `--as`
+/// is cooperative role assertion, and an `AcceptanceDeclaration` cannot
+/// distinguish a user's payload from an agent's (DEC-088). The fence is
+/// authority and visibility, not prohibition, and a test claiming otherwise
+/// would assert a property this system does not deliver.
+///
+/// [`AcceptanceDeclaration`]: design_run::submission::AcceptanceDeclaration
+#[test]
+fn disposition_requires_an_acceptance_declaration() {
+    let fixture = Fixture::reviewing();
+    let pass = fixture
+        .read()
+        .review
+        .pass
+        .as_ref()
+        .expect("a run in `reviewing` holds a pass")
+        .review
+        .clone();
+    let arms = [
+        ReviewDisposition::Waived {
+            reason: WAIVER_REASON.to_owned(),
+        },
+        ReviewDisposition::Conducted { review: pass },
+    ];
+
+    for disposition in arms {
+        let arm = disposition.arm();
+        let stderr = fixture
+            .refuse(&fixture.payload(&format!("dispose-{arm}"), &without_acceptance(disposition)));
+        assert!(
+            stderr.contains("acceptance"),
+            "the `{arm}` arm must be refused for its missing acceptance, got: {stderr}"
+        );
+    }
+
+    // A refused disposition records nothing — the run is still on an undisposed
+    // pass, which is what the lock gate reads.
+    let held = fixture.read();
+    assert!(
+        !held
+            .acts
+            .acts
+            .iter()
+            .any(|act| act.act == ActKind::ReviewDisposed),
+        "a refused disposition leaves no act: {:?}",
+        held.acts.acts
+    );
+    assert_eq!(
+        disposition_rows(&held),
+        Vec::<Vec<String>>::new(),
+        "and no row in the log"
+    );
+}
+
+/// `VT-10`, the other two facts: an accepted disposition is recorded **in the
+/// user's name**, and it is **not silent**.
+///
+/// The two are one test because they are one act's two disclosures — where the
+/// authority came from, and where a later reader finds out it happened. The row
+/// carries the arm and (on this arm) the reason, so a waiver is legible from the
+/// log without holding the snapshot; the pass it disposed is not a term, because
+/// a disposition naming a pass other than the run's current one is refused at
+/// admission and the row's pass is therefore derivable (`F54`).
+#[test]
+fn an_accepted_disposition_is_the_users_and_leaves_a_row() {
+    let fixture = Fixture::reviewing();
+    // The dispose act alone — `Component::Acceptance`'s own act is withheld, so
+    // the one `DesignAccepted` in the run cannot stand in for what is asserted
+    // here.
+    fixture.record_lock_acts("dispose", Some(Component::Acceptance));
+    let held = fixture.read();
+
+    let recorded = held
+        .acts
+        .acts
+        .iter()
+        .find(|act| act.act == ActKind::ReviewDisposed)
+        .expect("the disposition is recorded");
+    // Read off the persisted acceptance rather than through
+    // `AcceptanceAttestation::authority`, which carries an `expect(dead_code)`
+    // that a reader here would leave unfulfilled *in this binary alone* — the
+    // accessor stays dead in the `src` build, so the marker is right there and
+    // wrong here. Both sides of the comparison come from the type's own serde
+    // form, so no token is re-typed (STD-001), and what is asserted is what a
+    // later reader of the snapshot actually finds.
+    assert_eq!(
+        serde_json::to_value(&recorded.acceptance).unwrap()["authority"],
+        serde_json::to_value(AcceptanceAuthority::User).unwrap(),
+        "a disposition carries user authority — set by `bind` at construction, \
+         never accepted from the wire (DEC-088)"
+    );
+
+    let disposed = recorded
+        .disposition
+        .as_ref()
+        .expect("the act carries its disposition");
+    assert_eq!(
+        disposition_rows(&held),
+        vec![vec![
+            disposed.disposition.arm().to_owned(),
+            WAIVER_REASON.to_owned()
+        ]],
+        "one row, naming the arm chosen and why"
+    );
+    assert_eq!(
+        held.change_log
+            .since(0)
+            .into_iter()
+            .find(|row| row.event == ChangeEvent::ReviewDisposed)
+            .and_then(|row| row.subject.as_ref().map(|id| id.as_str().to_owned())),
+        Some(recorded.id.as_str().to_owned()),
+        "and it is about the act that was admitted, not the payload that asked \
+         for it — a declaration refused at admission leaves no row at all"
+    );
+}
+
+/// Every disposition row's terms, in order — the log's whole account of what was
+/// disposed and how.
+fn disposition_rows(held: &DesignSnapshot) -> Vec<Vec<String>> {
+    held.change_log
+        .since(0)
+        .into_iter()
+        .filter(|row| row.event == ChangeEvent::ReviewDisposed)
+        .map(|row| {
+            row.terms
+                .iter()
+                .map(|term| term.value().to_owned())
+                .collect()
+        })
+        .collect()
 }
