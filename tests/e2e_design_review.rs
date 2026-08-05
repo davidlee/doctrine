@@ -298,6 +298,14 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
+        // SL-244 `T10` — `drafting → reviewing` also owes
+        // `materialisation-current`, and the evaluator derives it from the
+        // authored watermark rather than reading the claim `EARLIER` carries.
+        // So the ladder materialises the design it has just drafted, which is
+        // the act the condition has always named and which the incumbent scan
+        // let a claim stand in for. Before `entry` is built, for the reason
+        // spelled out below it.
+        run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
         // `drafting → reviewing` owes `drafting-readiness-attested`, which is an
         // AGENT act. Recorded before the entry payload is *built*, not merely
         // before it is applied: `payload` pins the revision it is built at, so a

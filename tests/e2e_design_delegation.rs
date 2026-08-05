@@ -55,6 +55,7 @@ use design_run::attestation::{ActKind, AgentAct, AgentActKind, ReviewPolicy};
 use design_run::delegation::{Delegation, DelegationState};
 use design_run::gate::Condition;
 use design_run::ids::DesignId;
+use design_run::inquiry::DispositionForm;
 use design_run::snapshot::{self, DesignSnapshot};
 use design_run::submission::{
     AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, CheckpointActDeclaration,
@@ -74,6 +75,8 @@ const OBLIGATION: &str = "inq-1";
 const DELEGATION: &str = "dlg-1";
 /// The map change the delegate proposes — a child of the obligation it worked.
 const PROPOSED_NODE: &str = "inq-2";
+/// The checkpoint the coordinator disposes [`OBLIGATION`] through.
+const CHECKPOINT: &str = "cp-1";
 /// A section nothing in this suite edits. Every claimed clearance binds to it, so
 /// the coordinator's positive-control stage move stays reachable no matter what a
 /// test does to the inquiry map.
@@ -535,6 +538,29 @@ fn delegated_worker_cannot_advance_the_run() {
             &runbook_fixture::discharge_body(step),
         ));
     }
+    // SL-244 `T10` — the other thing this crossing owes once the evaluator
+    // derives it: `blocking-inquiries-dispositioned`. The fixture declares
+    // `OBLIGATION` blocking, and the incumbent scan cleared that condition on a
+    // claim; the evaluator reads the map. So the coordinator disposes the
+    // question it delegated before it advances past it — which is the
+    // condition's whole point, and was previously assertable only as a claim.
+    //
+    // `unresolved` rather than a record-bearing form: the proposal above is
+    // recorded and deliberately unapplied, so *retained, unresolved, with the
+    // reason stated* is the true disposition here. Disposing moves no material —
+    // `NodeMaterial` excludes lifecycle and disposition on purpose (PHASE-02
+    // `EX-2`) — so the two inquiry-map coverages given above stay current.
+    fixture.apply(&fixture.payload(
+        "dispose-the-obligation",
+        &json!({"declare": [{
+            "subject": CHECKPOINT,
+            "disposes": OBLIGATION,
+            "dispose": {
+                "form": DispositionForm::RetainUnresolved.as_str(),
+                "note": "the delegate's proposal stands unapplied; drafting proceeds without it",
+            },
+        }]}),
+    ));
     // SL-244 `T8` — what this crossing will owe after `T10`:
     // `user-accepts-sufficiency`. Recorded here rather than in the fixture
     // because it belongs to *this* edge, and because the recorded proposal above

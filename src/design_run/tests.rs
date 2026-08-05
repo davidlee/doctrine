@@ -22,14 +22,13 @@ use super::attestation::{
 };
 use super::facts::DerivedDesignFacts;
 use super::fixture::{
-    attest, blocking_set_declared, checkpoint_act, drafting_ready, id, pass_over, run_holding,
-    section,
+    attest, blocking_set_declared, checkpoint_act, cleared, drafting_ready, id, pass_over,
+    run_holding, section,
 };
 use super::gate::{
-    ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Condition,
+    ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
     ConditionKind, Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach,
-    RequiredActor, ReviewStanding, advance, boundary_conditions, boundary_runbook,
-    cumulative_conditions, regress, requirement_for,
+    RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, regress, requirement_for,
 };
 use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
@@ -42,32 +41,6 @@ use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup};
 use super::submission::{
     AgentActDeclaration, Batch, CheckpointActDeclaration, Declaration, Sparse,
 };
-
-/// Facts in which every *claimed* cumulative condition up to `stage` holds, each
-/// cleared against a distinct subject at a known fingerprint.
-///
-/// The derived conditions are filtered out rather than recorded here: recording
-/// them would build a fact set that looks like clearance the gate does not read
-/// (a claim on a derived condition is refused at admission, and
-/// [`Condition::is_derived`] is why). Their absence is what a
-/// [`ReviewStanding`] answers for.
-fn cleared_through(stage: Stage) -> DerivedDesignFacts {
-    let mut facts = DerivedDesignFacts::default();
-    for (index, condition) in cumulative_conditions(stage)
-        .into_iter()
-        .filter(|condition| !condition.is_derived())
-        .enumerate()
-    {
-        let subject = id(&format!("sec-{index}"));
-        let fingerprint = Fingerprint::new(format!("sha256:{index}"));
-        facts = facts.observe(subject.clone(), fingerprint.clone()).record(
-            condition,
-            subject,
-            fingerprint,
-        );
-    }
-    facts
-}
 
 #[test]
 fn stage_gate_table_admits_only_legal_forward_moves() {
@@ -89,15 +62,9 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
 
     // The verb rides the same table: a skip is refused even when every condition
     // in the run holds, so legality is not something clearance can buy.
-    let facts = cleared_through(Stage::Locked);
+    let (run, derived) = cleared();
     assert_eq!(
-        advance(
-            Stage::Exploring,
-            Stage::Drafting,
-            &facts,
-            ReviewStanding::default(),
-            None
-        ),
+        advance(Stage::Exploring, Stage::Drafting, &run, &derived, None),
         Err(Refusal::IllegalStageMove {
             from: Stage::Exploring,
             to: Stage::Drafting,
@@ -111,8 +78,8 @@ fn stage_gate_table_admits_only_legal_forward_moves() {
         advance(
             Stage::Exploring,
             Stage::Inquiring,
-            &facts,
-            ReviewStanding::default(),
+            &run,
+            &derived,
             Some(&RunbookStanding::default())
         ),
         Ok(Stage::Inquiring)
@@ -236,20 +203,21 @@ fn direct_regression_requires_a_recorded_reason() {
     assert_eq!(recorded.to(), Stage::Exploring);
     assert_eq!(recorded.reason(), "the framing was wrong");
 
-    // DEC-067's other half: returning forward inherits no clearance. Facts that
-    // satisfy only the drafting boundary do not re-open drafting, because the
-    // *cumulative* set is re-derived against current content.
-    let mut partial = DerivedDesignFacts::default();
-    for condition in [
-        Condition::BlockingInquiriesDispositioned,
-        Condition::UserAcceptsSufficiency,
-    ] {
-        let subject = id("sec-late");
-        let fingerprint = Fingerprint::new("sha256:late");
-        partial = partial
-            .observe(subject.clone(), fingerprint.clone())
-            .record(condition, subject, fingerprint);
-    }
+    // DEC-067's other half: returning forward inherits no clearance. A run that
+    // discharges only the drafting boundary does not re-open drafting, because
+    // the *cumulative* set is re-derived against current content.
+    //
+    // Built by taking the cleared run's two exploring→inquiring acts away rather
+    // than by constructing a partial run: what makes this assertion about
+    // accumulation is that everything the crossing edge itself asks for is still
+    // there, and only the edge below it is unmade.
+    let (mut partial, derived) = cleared();
+    partial.acts.acts.retain(|held| {
+        !matches!(
+            held.act,
+            ActKind::GovernanceConfirmed | ActKind::GraphReviewed
+        )
+    });
     // The runbook standing is CLEARED here on purpose. SL-233 PHASE-08 gave this
     // edge a runbook, and the gate fails closed on a missing standing *before*
     // it derives conditions — so passing `None` would stop the advance one check
@@ -262,15 +230,27 @@ fn direct_regression_requires_a_recorded_reason() {
             Stage::Inquiring,
             Stage::Drafting,
             &partial,
-            ReviewStanding::default(),
+            &derived,
             Some(&discharged)
         ),
         Err(Refusal::GateNotCleared {
             from: Stage::Inquiring,
             to: Stage::Drafting,
-            missing: vec![
-                Condition::GoverningContextRecorded,
-                Condition::InitialConcernsRecorded,
+            unmet: vec![
+                Unmet {
+                    condition: Condition::GoverningContextRecorded,
+                    causes: vec![Cause::ActMissing {
+                        act: ActKind::GovernanceConfirmed,
+                        lanes: vec![ActorClass::User],
+                    }],
+                },
+                Unmet {
+                    condition: Condition::InitialConcernsRecorded,
+                    causes: vec![Cause::ActMissing {
+                        act: ActKind::GraphReviewed,
+                        lanes: vec![ActorClass::User],
+                    }],
+                },
             ],
         })
     );

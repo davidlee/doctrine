@@ -26,6 +26,13 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 mod common;
+/// The wire-shaped act payloads a ladder submits (SL-244 `T8`), shared with the
+/// other design suites that cross an edge.
+mod design_act;
+/// Opted into for [`design_fixture::seed_slice_record`] alone — SL-244 `T7`'s
+/// governance act projects the slice's own edge set, and one seeder shared with
+/// the other design suites beats four copies.
+mod design_fixture;
 mod runbook_fixture;
 
 /// The pure model, from source. `design_run` is a leaf with crate out-degree
@@ -38,6 +45,7 @@ mod runbook_fixture;
 )]
 mod design_run;
 
+use design_run::attestation::{ActKind, AgentAct};
 use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
 use design_run::change_log::{ChangeEvent, ChangeRow, PayloadTerm, ValueKind};
 use design_run::ids::{DesignId, IdKind};
@@ -823,6 +831,14 @@ fn every_event_fixture() -> Fixture {
             &json!({ "declare": [{ "subject": "sec-1", "body": body }] }),
         )
     };
+    // SL-244 `T7`/`T8`: the `governance-confirmed` act below projects the
+    // slice's own outbound edge set, so the tree needs an authored record to
+    // project from — a slice directory with nothing in it is an UNOBSERVABLE
+    // fact, which reads as changed and refuses the act. Seeded here rather than
+    // in `Fixture::start` because this is the only ladder in the suite that
+    // records the act, and the other 140-odd tests have no business acquiring a
+    // slice record they never read.
+    design_fixture::seed_slice_record(&fixture.root, SLICE_NUMBER);
     // step_discharged — first, while the run still stands at `exploring`, which
     // is the only stage whose outbound edge carries a runbook. The whole
     // sequence, not just the first step: the same edge's guard (`EX-8`) blocks
@@ -856,6 +872,34 @@ fn every_event_fixture() -> Fixture {
          \"evidence\":[{{\"condition\":\"governing-context-recorded\",\"subject\":\"sec-1\"}},\
          {{\"condition\":\"initial-concerns-recorded\",\"subject\":\"sec-1\"}}]}}",
         fixture.envelope("attest")
+    ));
+    // SL-244 `T10` — the crossing below owes `governing-context-recorded` and
+    // `initial-concerns-recorded`, and the evaluator derives both from the acts
+    // rather than reading the claims above. Two submissions because
+    // `ApplyRequest` holds one checkpoint act at a time and this crossing owes
+    // two; the pair that does fit in one is the declaration and the act that
+    // confirms it. An EMPTY blocking set, which is the truth here — this fixture
+    // interrogates none of the three questions it declares — and it keeps the
+    // next crossing's condition out of a fixture whose subject is change rows.
+    fixture.apply(&fixture.payload(
+        "governance",
+        &json!({"checkpoint_act": design_act::checkpoint_act(
+            ActKind::GovernanceConfirmed,
+            "the governing artefacts are the ones found",
+        )}),
+    ));
+    fixture.apply(&fixture.payload(
+        "graph",
+        &json!({
+            "agent_declaration": design_act::agent_declaration(
+                AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
+                "nothing blocks: this run interrogates no questions",
+            ),
+            "checkpoint_act": design_act::checkpoint_act(
+                ActKind::GraphReviewed,
+                "the empty blocking set is right",
+            ),
+        }),
     ));
     // stage_moved (forward)
     fixture.apply(&format!(
