@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd007-4ace-7062-9ceb-94928967db70"
+recorded_at = "2026-08-05T03:46:06.670322461Z"
+kind = "friction"
+summary = "/execute: sheet task card under-specified the retirement's reader chain"
+detail = "SL-244 PHASE-05 T11. The task card named two retirements (facts.rs 'check, don't assume', DerivedDesignFacts) but the reader chain resolved to five (module whole, DesignSnapshot::gate, reobserve, current_fingerprint). Cost was low because the card flagged the conditional — but the card also missed two consumers entirely: Refusal::DerivedConditionClaimed (unconstructible once its guard went; clippy cannot see a dead enum variant with a live Display arm, so only a name sweep found it) and resume's evidence_references (a field named in ANOTHER slice's scope contract, SL-233 sec 4, which forced a mid-task consult). Neither is findable from the task card; both are findable by grepping the retiring type's readers at phase-plan time. The pattern: a deletion task's scope is its transitive reader set, and /phase-plan sizes it from the design's prose instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
