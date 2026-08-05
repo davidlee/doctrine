@@ -180,3 +180,14 @@ worktree subagent out of its worktree.**
 ## Summary
 
 ## Follow-Ups
+
+- **At reconcile — contribute the post-capsule finding to RFC-025** (DEC-154's
+  sibling disposition, `inq-7`, user 2026-08-06). Aim (2) — learning what
+  subagents look like once dispatch is gone — lands in RFC-025's programme,
+  which is where the successor reads. Deliberately deferred to reconcile:
+  before the implementation lands and the live probe runs, the finding is a
+  prediction. Do NOT write it at design or execute time.
+- **Not taken: amending `ADR-006` §D2b.** Declined at `inq-7` — `ADR-013` routes
+  it through a REV, and `ADR-020`'s cutover rewrites the section anyway. The
+  accepted cost is that until then `ADR-006` states a posture `DEC-152` has
+  changed, reconciled only in a reader who finds both.

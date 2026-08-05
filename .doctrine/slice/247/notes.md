@@ -118,7 +118,10 @@ fresh-as-of: 2026-08-05 · design/inquiring · e771a5da
 
 ### Open
 
-- `inq-7`, `inq-8` — blocking, live in the design run. Read them
+- **At reconcile:** contribute the post-capsule finding to RFC-025 (`inq-7`,
+  deferred by the user 2026-08-06 — it is a prediction until the code lands and
+  the probe runs). Mirrored in `slice-247.md` § Follow-Ups.
+- `inq-8` — blocking, live in the design run. Read it
   there (`doctrine design resume 247`), not from a copy here.
 - Slice `OQ-3` — whether IMP-269 and IMP-342 close as duplicates of this
   slice. Settle at reconcile, not before.
