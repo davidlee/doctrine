@@ -5,10 +5,10 @@ id = 46
 slug = "emit-rendered-diagrams-inline-via-the-terminal-graphics-protocol"
 title = "Emit rendered diagrams inline via the terminal graphics protocol"
 kind = "idea"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "promoted"
 created = "2026-08-02"
-updated = "2026-08-02"
+updated = "2026-08-05"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
