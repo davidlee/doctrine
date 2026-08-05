@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd155-2586-7d20-a6ba-bd7d8e478632"
+recorded_at = "2026-08-05T09:50:46.150709626Z"
+kind = "friction"
+summary = "phase sheet task text goes stale against rulings appended to the same sheet (/execute)"
+detail = """
+SL-244 PHASE-07. The sheet's Tasks section was written at /phase-plan; two user rulings (D5/D6) were later appended ABOVE it, and nothing reconciled the tasks with them. T3's text still said 'resolve the run's own pass RV through review::observe_pass' — the exact call D5 had already ruled out for that path, because it swallows the failure the projection must propagate. Following the task text literally would have silently defeated the ruling recorded two screens up in the same file.
+
+Two more stale claims in the same sheet, same cause (the sheet predicts tree state and the tree moves): T7 asserted src/design_run/render/envelope.rs and src/review.rs were 'scope-relevant and therefore invisible to the design-target map' — both were already design-target selectors with notes, so no selector was owed; and T3 said 'five in-file test call sites move with the signature' when there were seven.
+
+Cost is small per instance (re-read, judge, proceed) but it is paid on every task, and the failure mode is asymmetric: an agent that trusts the task text over the ruling produces work that looks conformant and is not. Sheets have no mechanism that marks a task as superseded by a later decision on the same sheet, and no read-back verb that would let one be checked against the rulings above it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
