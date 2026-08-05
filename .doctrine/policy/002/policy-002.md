@@ -5,7 +5,7 @@
 Doctrine is the product; the repository it runs in is merely a client. Anything
 the shipped product **enforces, computes, or depends on** must rest on contracts
 doctrine itself owns — never on a host project's conventions or its transient
-local state. Two prohibitions follow:
+local state. Three prohibitions follow:
 
 1. **No load-bearing on host conventions.** A platform mechanism must not depend
    on a host's commit-message style, branch names, directory layout, tagging
@@ -15,6 +15,20 @@ local state. Two prohibitions follow:
    local data or operational condition tempts permanent leniency or complexity
    in the shipped library, refuse it. Keep the durable code strict and clean; fix
    the transient local state out-of-band.
+3. **No undeclared dependency on a host tool.** Doctrine may depend on
+   capabilities the host provides — a binary like `git` or `dot`, a version
+   floor, a terminal protocol. These are host *capabilities*, not host
+   conventions, and facet (1) does not reach them. What is forbidden is
+   depending on one **silently**. Every such dependency is declared at the
+   altitude matching its reach:
+   - a **baseline requirement**, needed for doctrine to function at all, is
+     named in the project's stated requirements — README and install
+     documentation — including any version floor;
+   - a **feature-scoped capability** is opt-in, so no default path acquires the
+     dependency, and when it is absent the feature fails with a message naming
+     what was missing and what would satisfy it.
+
+   A capability assumed silently is a host coupling by another name.
 
 ## Rationale
 
@@ -44,6 +58,10 @@ share?" If yes, it must be re-grounded on an owned contract or moved out-of-band
 The conformance work in RFC-004 (record source-delta SHAs rather than grep
 `(SL-NNN)`) is the originating worked example.
 
+For facet (3) the challenge has a second limb: "does this acquire a host
+capability, and if so is it declared — in the stated requirements if baseline,
+behind an opt-in with a descriptive absence path if feature-scoped?"
+
 ## References
 
 - RFC-004 — path-intent selector; surfaced facet (1) while resolving slice-delta
@@ -54,3 +72,5 @@ The conformance work in RFC-004 (record source-delta SHAs rather than grep
   project-local state out-of-band."
 - `mem.pattern.design.product-not-compromised-by-project-local-ops` — the memory
   this policy promotes and unifies with facet (1).
+- IDE-046 / SL-245 — inline terminal diagram rendering; the `graphviz`
+  dependency that surfaced facet (3). Amended by REV-047.
