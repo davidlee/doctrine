@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentActKind, ReviewRef};
-use super::gate::{Condition, Coverage, ObservedFact, Unmet};
+use super::gate::{Coverage, ObservedFact, Unmet};
 use super::ids::{DesignId, IdKind};
 
 /// One way a recorded act fails to correspond to the rule it is written against
@@ -275,17 +275,6 @@ pub(crate) enum Refusal {
     SectionTitleEmpty { id: DesignId },
     /// An attestation named no section, or named one the run does not hold.
     AttestationSubjectMissing { id: DesignId },
-    /// A payload claimed a clearance Doctrine derives for itself
-    /// ([`Condition::is_derived`]).
-    ///
-    /// Refused rather than ignored: a caller that believes it has cleared the
-    /// lock gate, and is silently not believed, learns nothing. This is the
-    /// self-attestation bypass closed at admission — the reviewing conditions are
-    /// read off the run's review state, so a claim about them is a category error
-    /// and not merely redundant.
-    ///
-    /// [`Condition::is_derived`]: super::gate::Condition::is_derived
-    DerivedConditionClaimed { condition: Condition },
     /// A user acceptance arrived with a blank basis. DEC-088 calls the basis
     /// concise and *required*: an acceptance with nothing stated is an
     /// unattributable claim, and the lock gate's whole point is that the claim is
@@ -557,11 +546,6 @@ impl fmt::Display for Refusal {
                 "no runbook guards the edge out of `{}`, so there is nothing here to \
                  discharge",
                 stage.as_str()
-            ),
-            Refusal::DerivedConditionClaimed { condition } => write!(
-                f,
-                "{} is derived from the run's review state and cannot be claimed as evidence",
-                condition.as_str()
             ),
             Refusal::RegressionReasonMissing { from, to } => write!(
                 f,

@@ -5,7 +5,7 @@
 //! is **zero**: std plus the serde *derive* only, following the `funnel_machine`
 //! and `boundary` precedent (a data-shape derive is neither IO nor domain
 //! knowledge). No clock, rng, git, or filesystem anywhere beneath this module —
-//! the shell gathers facts and passes them in as [`facts::DerivedDesignFacts`]
+//! the shell gathers facts and passes them in as [`gate::ObservedFacts`]
 //! (AGENTS.md pure/imperative split).
 //!
 //! # Two rules this module tree is laid out to satisfy
@@ -79,7 +79,6 @@ pub(crate) mod bounds;
 pub(crate) mod change_log;
 pub(crate) mod delegation;
 pub(crate) mod document;
-pub(crate) mod facts;
 pub(crate) mod gate;
 pub(crate) mod ids;
 pub(crate) mod inquiry;

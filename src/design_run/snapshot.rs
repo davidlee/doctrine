@@ -22,13 +22,12 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{
-    ActorClass, AgentDeclaration, Attestation, CheckpointAct, LockAcceptance, RecoveryIntent,
-    ReviewPass, ReviewPolicy,
+    ActorClass, AgentDeclaration, Attestation, CheckpointAct, RecoveryIntent, ReviewPass,
+    ReviewPolicy,
 };
 use super::bounds::CHANGE_LOG_REVISIONS;
 use super::change_log::ChangeLog;
 use super::delegation::{DelegationGroup, DelegationState};
-use super::facts::DerivedDesignFacts;
 use super::gate::ReviewStanding;
 use super::ids::{DesignId, Fingerprint};
 use super::inquiry::InquiryMap;
@@ -317,17 +316,6 @@ pub(crate) struct Finding {
     pub(crate) resolution: Option<String>,
 }
 
-impl Finding {
-    /// Whether this finding still holds the lock gate open.
-    pub(crate) fn is_outstanding(&self) -> bool {
-        self.blocking
-            && self
-                .resolution
-                .as_ref()
-                .is_none_or(|resolution| resolution.trim().is_empty())
-    }
-}
-
 /// Content-bound review attestations, the run's review pass, runtime findings,
 /// and the user's acceptance of the whole.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -342,9 +330,6 @@ pub(crate) struct ReviewGroup {
     /// fields, so that key is *ignored* on read rather than refused (`A6`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) pass: Option<ReviewPass>,
-    /// The user's acceptance of the design as locked (DEC-088).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) acceptance: Option<LockAcceptance>,
 }
 
 /// The user acts the run has recorded (design `sec-4`).
@@ -455,10 +440,6 @@ pub(crate) struct DesignSnapshot {
     pub(crate) receipts: ReceiptGroup,
     #[serde(default)]
     pub(crate) map: MapGroup,
-    /// Gate evidence, each clearance bound to the subject fingerprint it was
-    /// recorded against (DEC-066). Clearance itself is **derived, never stored**.
-    #[serde(default)]
-    pub(crate) gate: DerivedDesignFacts,
     #[serde(default)]
     pub(crate) sections: SectionGroup,
     #[serde(default)]
@@ -500,30 +481,12 @@ impl DesignSnapshot {
     /// what the answers *mean*, this owns where they come from.
     pub(crate) fn review_standing(&self) -> ReviewStanding {
         let current = self.sections.fingerprints();
-        // Coverage, not presence: a run with three sections and two live
-        // attestations has not been reviewed. `is_empty` is the degenerate case —
-        // a run holding no sections cannot have current attestations for them,
-        // and reporting `true` would let an empty draft lock. It CANNOT be folded
-        // into the emptiness of the unreviewed list: a run with no sections owes
-        // no lanes, so that list is empty and would read as satisfied.
-        let sections_attested = !current.is_empty() && self.sections_unreviewed().is_empty();
         ReviewStanding {
-            sections_attested,
             integrated_current: self
                 .review
                 .pass
                 .as_ref()
                 .is_some_and(|pass| pass.is_current(&current)),
-            findings_disposed: !self
-                .review
-                .findings
-                .iter()
-                .any(super::snapshot::Finding::is_outstanding),
-            acceptance_current: self
-                .review
-                .acceptance
-                .as_ref()
-                .is_some_and(|accepted| accepted.is_current(&current)),
         }
     }
 
@@ -599,7 +562,6 @@ impl DesignSnapshot {
                 receipts: Vec::new(),
             },
             map: MapGroup::default(),
-            gate: DerivedDesignFacts::default(),
             sections: SectionGroup::default(),
             review: ReviewGroup::default(),
             acts: CheckpointActGroup::default(),
@@ -652,22 +614,10 @@ pub(crate) fn to_toml(snapshot: &DesignSnapshot) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::attestation::{
-        AcceptanceAttestation, ContentCoverage, ReviewPolicy, Reviewer,
-    };
+    use super::super::attestation::{ReviewPolicy, Reviewer};
+    use super::super::change_log::ChangeEvent;
     use super::super::fixture::{attest, id, pass_over, run_holding, section};
     use super::*;
-
-    /// Raise one finding against `sec-a`.
-    fn raise(snapshot: &mut DesignSnapshot, raw: &str, blocking: bool, resolution: Option<&str>) {
-        snapshot.review.findings.push(Finding {
-            id: id(raw),
-            subject: id("sec-a"),
-            summary: "something is wrong".to_owned(),
-            blocking,
-            resolution: resolution.map(str::to_owned),
-        });
-    }
 
     /// Attest every section the run currently holds, in the default lane.
     fn attest_all(snapshot: &mut DesignSnapshot) {
@@ -687,7 +637,7 @@ mod tests {
     fn section_attestations_are_current_only_when_every_section_is_covered() {
         let mut snapshot = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
         assert!(
-            !snapshot.review_standing().sections_attested,
+            !snapshot.sections_unreviewed().is_empty(),
             "an unreviewed run is not attested"
         );
 
@@ -699,7 +649,7 @@ mod tests {
             Reviewer::Human,
         ));
         assert!(
-            !snapshot.review_standing().sections_attested,
+            !snapshot.sections_unreviewed().is_empty(),
             "a partially reviewed run is not attested"
         );
 
@@ -709,14 +659,14 @@ mod tests {
             Fingerprint::new("sha256:b"),
             Reviewer::Human,
         ));
-        assert!(snapshot.review_standing().sections_attested);
+        assert!(snapshot.sections_unreviewed().is_empty());
 
         // And an edit to one section drops the standing, because that
         // section is no longer covered at the fingerprint it was attested at.
         snapshot
             .sections
             .upsert(section("sec-a", "sha256:a-revised"));
-        assert!(!snapshot.review_standing().sections_attested);
+        assert!(!snapshot.sections_unreviewed().is_empty());
     }
 
     /// The review policy's migration is a no-op *by construction*, the same
@@ -784,37 +734,69 @@ mod tests {
         );
     }
 
+    /// `T11` renamed `ChangeEvent::EvidenceInvalidated` to `ActInvalidated` when
+    /// the feed re-sourced to the act set (`EX-11`, `F1`). Pinned at the
+    /// whole-file tier for the same reason as the row above, and it is the
+    /// sharper case: `ChangeEvent` deserialises **strictly**, so one unrecognised
+    /// `event` fails the entire snapshot rather than one row — and eight rows on
+    /// this repo's own live `SL-243`/`SL-244` runs carry the old token. This is
+    /// `ISS-315`'s defect class, and the alias is what forecloses it.
     #[test]
-    fn a_run_holding_no_sections_is_never_attested() {
-        // The degenerate case `all()` gets wrong: vacuous truth over an empty
-        // set would let an empty draft clear the gate.
-        let snapshot = run_holding(&[]);
-        assert!(!snapshot.review_standing().sections_attested);
+    fn a_snapshot_written_before_the_act_invalidated_rename_still_parses() {
+        let pre_rename = format!(
+            "schema = \"{DESIGN_SNAPSHOT_SCHEMA}\"\n\
+             version = {DESIGN_SNAPSHOT_VERSION}\n\
+             \n\
+             [run]\n\
+             uid = \"dr-test\"\n\
+             slice = 244\n\
+             revision = 12\n\
+             stage = \"drafting\"\n\
+             \n\
+             [change_log]\n\
+             floor = 0\n\
+             \n\
+             [[change_log.row]]\n\
+             revision = 11\n\
+             index = 0\n\
+             event = \"evidence_invalidated\"\n\
+             subject = \"sec-1\"\n"
+        );
+
+        let parsed = parse(&pre_rename).expect("a pre-rename snapshot still parses");
+        let [row] = parsed.change_log.rows.as_slice() else {
+            panic!("one row: {:?}", parsed.change_log.rows);
+        };
+        assert_eq!(
+            row.event,
+            ChangeEvent::ActInvalidated,
+            "the retired token reads as the vocabulary member that replaced it"
+        );
     }
 
+    /// `T11` retired this test's acceptance half with [`LockAcceptance`]
+    /// (`EX-11`) — a user acceptance is now a `DesignAccepted` checkpoint act,
+    /// and its currency is the act's coverage, asserted at the gate. What
+    /// survives is the pass half, which is `D3`'s one surviving
+    /// `ReviewStanding` field and PHASE-07's lamp input.
     #[test]
-    fn whole_run_evidence_stops_being_current_when_any_section_moves() {
+    fn a_review_pass_stops_being_current_when_any_section_moves() {
         let mut snapshot = run_holding(&[("sec-a", "sha256:a"), ("sec-b", "sha256:b")]);
         attest_all(&mut snapshot);
-        let covered = ContentCoverage::of(snapshot.sections.fingerprints());
         let pass = pass_over(&snapshot, "RV-001");
         snapshot.review.pass = Some(pass);
-        snapshot.review.acceptance = Some(LockAcceptance::over(
-            AcceptanceAttestation::bind("the user said so", None, Fingerprint::new("sha256:pay")),
-            covered,
-        ));
 
-        let standing = snapshot.review_standing();
-        assert!(standing.integrated_current && standing.acceptance_current);
+        assert!(snapshot.review_standing().integrated_current);
 
-        // A section neither of them named individually still moves both, because
-        // both were given over the document.
+        // A section the pass never named individually still moves it, because it
+        // was given over the document.
         snapshot
             .sections
             .upsert(section("sec-b", "sha256:b-revised"));
-        let standing = snapshot.review_standing();
-        assert!(!standing.integrated_current, "the review pass is stale");
-        assert!(!standing.acceptance_current, "the acceptance is stale");
+        assert!(
+            !snapshot.review_standing().integrated_current,
+            "the review pass is stale"
+        );
 
         // A section *added* after the fact is the other half: coverage is the
         // whole set, so new content is uncovered content.
@@ -824,33 +806,5 @@ mod tests {
         widened.review.pass = Some(pass);
         widened.sections.upsert(section("sec-c", "sha256:c"));
         assert!(!widened.review_standing().integrated_current);
-    }
-
-    #[test]
-    fn only_a_blocking_finding_that_is_undisposed_holds_the_gate() {
-        let mut snapshot = run_holding(&[("sec-a", "sha256:a")]);
-
-        // Non-blocking and undisposed: the gate does not wait for it.
-        raise(&mut snapshot, "fnd-1", false, None);
-        assert!(snapshot.review_standing().findings_disposed);
-
-        // Blocking and undisposed: it does.
-        raise(&mut snapshot, "fnd-2", true, None);
-        assert!(!snapshot.review_standing().findings_disposed);
-
-        // A blank resolution is not a disposition, so the predicate reads the
-        // content and not the presence.
-        snapshot.review.findings.clear();
-        raise(&mut snapshot, "fnd-3", true, Some("   \n"));
-        assert!(!snapshot.review_standing().findings_disposed);
-
-        snapshot.review.findings.clear();
-        raise(
-            &mut snapshot,
-            "fnd-4",
-            true,
-            Some("accepted — fixed in §5.4"),
-        );
-        assert!(snapshot.review_standing().findings_disposed);
     }
 }

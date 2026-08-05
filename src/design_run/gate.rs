@@ -667,10 +667,10 @@ condition_vocabulary! {
             reach: Reach::Cumulative,
             prose: "review-disposition-attested",
         },
-        /// `EverySection`, not `Artefact` — `LockAcceptance` already compares its
-        /// covered map against every current section, and self-binding would have
-        /// let a design edit leave the acceptance apparently current, deleting a
-        /// guarantee that already ships.
+        /// `EverySection`, not `Artefact` — the retired `LockAcceptance` compared
+        /// its covered map against every current section, and self-binding would
+        /// have let a design edit leave the acceptance apparently current,
+        /// deleting a guarantee that already shipped.
         UserAcceptanceAttested = "user-acceptance-attested" => Contract {
             derivation: DerivationRule::Attested(AttestationRule {
                 acts: &[ActRequirement {
@@ -731,40 +731,6 @@ pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
                     binding: rule.binding,
                 }),
         })
-}
-
-impl Condition {
-    /// Whether a caller may not claim this condition as recorded evidence
-    /// (DEC-063).
-    ///
-    /// **What is left of `D1`'s bridge, and it is no longer a bridge.** `T10`
-    /// deleted the partition's gate-side half — [`satisfied`] derives every
-    /// condition from its own contract row and asks nothing here. What survives is
-    /// the *admission*-side half: `ApplyRequest::evidence` is still on the wire
-    /// until `T11`, and this is the set a payload may not assert.
-    ///
-    /// It is deliberately still NOT [`ConditionKind`], and after `T10` it is not
-    /// the derivation partition either — under DEC-120 **every** condition is
-    /// derived, so the honest total answer is *no condition is claimable*. That
-    /// answer is not given here because it would refuse the evidence claims the
-    /// three e2e ladders still carry, and retiring those is `T11`'s deletion sweep
-    /// (`D2`): `T10` changes the mechanism with no simultaneous change of fixture.
-    /// This retires with [`Evidence`] and the wire field it guards.
-    ///
-    /// [`Evidence`]: super::facts::Evidence
-    pub(crate) const fn is_derived(self) -> bool {
-        match self {
-            Condition::SectionAttestationsCurrent
-            | Condition::ReviewDispositionAttested
-            | Condition::UserAcceptanceAttested => true,
-            Condition::GoverningContextRecorded
-            | Condition::InitialConcernsRecorded
-            | Condition::BlockingInquiriesDispositioned
-            | Condition::UserAcceptsSufficiency
-            | Condition::DraftingReadinessAttested
-            | Condition::MaterialisationCurrent => false,
-        }
-    }
 }
 
 /// The widest gate id, at compile time.
@@ -1036,21 +1002,28 @@ pub(crate) fn cumulative_conditions(to: Stage) -> Vec<Condition> {
 /// earns.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ReviewStanding {
-    /// Every section carries an attestation bound to its current content.
-    pub(crate) sections_attested: bool,
     /// An integrated adversarial pass covers current content.
+    ///
+    /// **The one survivor of four (`D3`).** `sections_attested`,
+    /// `findings_disposed` and `acceptance_current` retired at `T11` with the
+    /// partition that read them: [`satisfied`] now derives each from its own
+    /// contract row, and `sections_attested` was in any case defined *through*
+    /// [`DesignSnapshot::sections_unreviewed`], which the evaluator calls
+    /// directly. This one stays because its reader is PHASE-07's currency lamp
+    /// rather than the gate.
+    ///
+    /// [`DesignSnapshot::sections_unreviewed`]: super::snapshot::DesignSnapshot::sections_unreviewed
     pub(crate) integrated_current: bool,
-    /// No blocking finding is outstanding.
-    pub(crate) findings_disposed: bool,
-    /// A user acceptance covers current content.
-    pub(crate) acceptance_current: bool,
 }
 
 /// One way a condition failed (design `sec-6`).
 ///
-/// A variant per failure mode rather than a message, for the reason
-/// [`ReviewStanding`]'s four booleans are four: each is repaired by a different
-/// act, and collapsing them reports one outstanding thing where several are.
+/// A variant per failure mode rather than a message: each is repaired by a
+/// different act, and collapsing them reports one outstanding thing where
+/// several are. This is the argument [`ReviewStanding`] used to carry in four
+/// booleans, inherited here when `T11` retired three of them (`D3`) — the
+/// separation was never about that type, it was about what a caller must go and
+/// do next.
 ///
 /// Serde rides here because [`Refusal`] derives it whole; a refusal is an error
 /// surface and never stored state, so nothing round-trips this.

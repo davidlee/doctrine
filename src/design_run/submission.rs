@@ -18,7 +18,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentAct, ReviewDisposition, ReviewPolicy, Reviewer};
-use super::gate::Condition;
 use super::ids::DesignId;
 use super::inquiry::{DispositionForm, InquiryLifecycle, Provenance};
 use super::refusal::Refusal;
@@ -280,9 +279,10 @@ pub(crate) struct AcceptanceDeclaration {
 ///
 /// **Two arms, not three.** The record distinguishes attested / verified /
 /// skipped, but `verified` is not on this wire: a verifier result is exactly the
-/// kind of fact Doctrine must derive rather than accept on a caller's word, and
-/// [`super::refusal::Refusal::DerivedConditionClaimed`] already enforces that
-/// rule for gate conditions. Whether an admitted discharge is recorded attested
+/// kind of fact Doctrine must derive rather than accept on a caller's word. Gate
+/// conditions make the same point one tier stronger since `SL-244`: there is no
+/// wire slot to claim one through, so the category error is unspellable rather
+/// than refused. Whether an admitted discharge is recorded attested
 /// or verified is decided by the step's own definition and by what the shell
 /// executed, never by what the payload said.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -480,14 +480,6 @@ pub(crate) struct StageDeclaration {
     pub(crate) reason: Option<String>,
 }
 
-/// A declared clearance, recorded against the subject's *current* fingerprint
-/// (DEC-066).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct EvidenceDeclaration {
-    pub(crate) condition: Condition,
-    pub(crate) subject: DesignId,
-}
-
 /// A declared change of traversal direction (design §5.3, EX-8).
 ///
 /// Pin, cursor and posture are separate fields carrying one shared
@@ -538,7 +530,6 @@ impl TraversalDeclaration {
 /// keys a caller reads in the refusal and then removes from their own JSON: the
 /// refusal has to name the key that is actually there.
 const WRITER_ACT_STAGE: &str = "stage";
-const WRITER_ACT_EVIDENCE: &str = "evidence";
 const WRITER_ACT_ACCEPTANCE: &str = "acceptance";
 const WRITER_ACT_ADOPT_AUTHORED: &str = "adopt_authored";
 const WRITER_ACT_DECLARE: &str = "declare";
@@ -709,8 +700,6 @@ pub(crate) struct ApplyRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) acceptance: Option<AcceptanceDeclaration>,
     #[serde(default)]
-    pub(crate) evidence: Vec<EvidenceDeclaration>,
-    #[serde(default)]
     pub(crate) declare: Vec<Declaration>,
     /// One delegation act (DEC-068). Run-level, like the acceptance: an
     /// assignment is about the run's obligation, not about a declaration subject.
@@ -746,7 +735,7 @@ type WriterAct = (&'static str, fn(&ApplyRequest) -> bool);
 
 impl ApplyRequest {
     /// Every writer act, each paired with the test for its presence — the closed
-    /// vocabulary, single-sourced in [`gate::Condition::ALL`]'s shape (STD-001).
+    /// vocabulary, single-sourced in [`Condition::ALL`](super::gate::Condition::ALL)'s shape (STD-001).
     ///
     /// Enumerated over the run-level fields rather than derived from one flag,
     /// because "does this payload write" is a question about the *whole* payload:
@@ -760,10 +749,9 @@ impl ApplyRequest {
     /// A bare list of keys beside a hand-written branch chain would let a seventh
     /// branch widen the class silently, which is the shape `RV-324` F-6 found in
     /// the e2e table.
-    pub(crate) const WRITER_ACTS: [WriterAct; 10] = [
+    pub(crate) const WRITER_ACTS: [WriterAct; 9] = [
         (WRITER_ACT_STAGE, |request| request.stage.is_some()),
         (WRITER_ACT_DECLARE, |request| !request.declare.is_empty()),
-        (WRITER_ACT_EVIDENCE, |request| !request.evidence.is_empty()),
         (WRITER_ACT_ACCEPTANCE, |request| {
             request.acceptance.is_some()
         }),

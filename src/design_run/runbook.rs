@@ -651,9 +651,10 @@ fn placeholders_in(element: &str) -> anyhow::Result<Vec<String>> {
 ///
 /// Three arms in the record, **two** on the wire: a caller may say `attested`
 /// or `skipped` and may never say `verified`. A verifier result is exactly the
-/// kind of fact Doctrine must derive rather than accept on a caller's word —
-/// the rule [`super::refusal::Refusal::DerivedConditionClaimed`] already
-/// enforces for gate conditions.
+/// kind of fact Doctrine must derive rather than accept on a caller's word. The
+/// gate conditions used to make that point through a refusal; since `SL-244`
+/// they make it structurally, by having no wire slot to claim one through at
+/// all — which is this enum's own arrangement, one tier weaker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum DischargeOutcome {

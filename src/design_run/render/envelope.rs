@@ -40,6 +40,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
+use super::super::attestation::ActKind;
 use super::super::ids::DesignId;
 use super::super::inquiry::{Disposition, InquiryLifecycle, InquiryNode};
 use super::super::refusal::Refusal;
@@ -187,15 +188,33 @@ pub(crate) struct BlockerEntry {
     pub(crate) needs_in_degree: usize,
 }
 
-/// One section / review-state row, carrying the clearances bound to its current
-/// content — which is also where `resume`'s *evidence references* come from.
+/// One recorded act, and whether it still binds to what it was given over.
+///
+/// This is what `resume`'s *evidence references* re-sourced to at `T11` — the
+/// same substitution `EX-11` makes for the change log's invalidation feed, for
+/// the same reason: under DEC-120 the recorded acts **are** the run's evidence,
+/// so the field SL-233 scope §4 names keeps its meaning rather than its store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ActRow {
+    pub(crate) act: &'static str,
+    /// Whether the act's coverage still matches current content.
+    pub(crate) current: bool,
+}
+
+/// One section / review-state row.
+///
+/// **`clearances` retired at `T11`** (`EX-11`) with the evidence store it read,
+/// and is deliberately *not* rebuilt from the acts. Of the nine conditions
+/// exactly one is per-section, and `review_outstanding` on this same row already
+/// reports it — so a second per-section list would restate one bit beside
+/// itself. Its removal takes the uncapped list out of the envelope's byte
+/// budget, which is the one competitor `sec-2` named.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SectionRow {
     pub(crate) id: String,
     pub(crate) title: String,
     pub(crate) fingerprint: String,
     pub(crate) review_outstanding: bool,
-    pub(crate) clearances: Vec<&'static str>,
 }
 
 /// One linked durable record, and the inquiry whose disposition linked it.
@@ -263,6 +282,8 @@ pub(crate) struct TurnEnvelope {
     pub(crate) frontier: Vec<FrontierEntry>,
     pub(crate) blockers: Vec<BlockerEntry>,
     pub(crate) sections: Vec<SectionRow>,
+    /// The recorded acts — `resume`'s evidence references (SL-233 scope §4).
+    pub(crate) acts: Vec<ActRow>,
     pub(crate) durable_records: Vec<DurableRef>,
     pub(crate) changes: ChangeDelta,
     pub(crate) declaration_example: &'static str,
@@ -420,6 +441,7 @@ fn assemble(run: &DesignSnapshot, known_revision: u64, detail: Detail) -> TurnEn
         frontier,
         blockers,
         sections,
+        acts: acts(run),
         durable_records,
         changes,
         declaration_example: DECLARATION_EXAMPLE,
@@ -769,6 +791,39 @@ fn blockers(run: &DesignSnapshot, detail: Detail) -> (Vec<BlockerEntry>, usize) 
     (entries, omitted)
 }
 
+/// The acts this run has on record, and whether each still binds.
+///
+/// **Uncapped, and structurally bounded rather than budgeted.** Both act groups
+/// replace by kind — [`CheckpointActGroup::record`] retains-then-pushes, and an
+/// agent declaration displaces its predecessor — so this list can never exceed
+/// [`ActKind::ALL`]'s eight members and needs no entry on the eviction ladder.
+/// That is the difference from the `clearances` list it replaces, which grew
+/// with the run and was the byte-budget competitor `sec-2` named: `EX-11` did
+/// not trade one uncapped list for another.
+///
+/// [`CheckpointActGroup::record`]: super::super::snapshot::CheckpointActGroup::record
+fn acts(run: &DesignSnapshot) -> Vec<ActRow> {
+    let live = super::super::run::live_acts(run);
+    let mut rows: Vec<ActRow> = run
+        .acts
+        .acts
+        .iter()
+        .map(|held| (held.act, &held.id))
+        .chain(
+            run.declarations
+                .declarations
+                .iter()
+                .map(|held| (ActKind::from(held.act.kind()), &held.id)),
+        )
+        .map(|(act, id)| ActRow {
+            act: act.as_str(),
+            current: live.contains(&(act, id.clone())),
+        })
+        .collect();
+    rows.sort_by_key(|row| row.act);
+    rows
+}
+
 /// Section / review-state rows: outstanding review first, then section order.
 fn sections(run: &DesignSnapshot, detail: Detail) -> (Vec<SectionRow>, usize) {
     let mut ranked: Vec<(bool, DesignId)> = run
@@ -793,7 +848,6 @@ fn sections(run: &DesignSnapshot, detail: Detail) -> (Vec<SectionRow>, usize) {
                 // truncation: the stored row keeps the whole digest.
                 fingerprint: super::abbreviate_digest(section.fingerprint.as_str()),
                 review_outstanding: !settled,
-                clearances: clearances_for(run, &id),
             })
         })
         .collect();
@@ -811,21 +865,6 @@ fn review_outstanding(run: &DesignSnapshot, id: &DesignId) -> bool {
         return true;
     };
     !run.missing_lanes(id, &section.fingerprint).is_empty()
-}
-
-/// The gate conditions currently cleared against this subject's live content —
-/// `resume`'s *evidence references*, riding the row that already carries the
-/// subject rather than needing a cap of their own.
-fn clearances_for(run: &DesignSnapshot, id: &DesignId) -> Vec<&'static str> {
-    let mut held: Vec<&'static str> = run
-        .gate
-        .live_evidence()
-        .filter(|evidence| evidence.subject() == id)
-        .map(|evidence| evidence.condition().as_str())
-        .collect();
-    held.sort_unstable();
-    held.dedup();
-    held
 }
 
 /// Linked durable records, most recently linked first.
@@ -1026,18 +1065,13 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
     lines.push(format!("sections{}", more(envelope.omitted.sections)));
     for row in &envelope.sections {
         lines.push(format!(
-            "  {} fingerprint={} review={} clearances={}{}",
+            "  {} fingerprint={} review={}{}",
             row.id,
             row.fingerprint,
             if row.review_outstanding {
                 "outstanding"
             } else {
                 "current"
-            },
-            if row.clearances.is_empty() {
-                "none".to_owned()
-            } else {
-                row.clearances.join(",")
             },
             if row.title.is_empty() {
                 String::new()
@@ -1131,11 +1165,17 @@ pub(crate) fn resume(envelope: &TurnEnvelope) -> Vec<String> {
     }
     lines.push("assumptions".to_owned());
     lines.extend(record_lines(envelope, "ASM-"));
+    // Re-sourced from the evidence store to the act set at `T11`, keeping the
+    // field SL-233 scope §4 names. `current` is the point of the row: an act
+    // whose material has moved is still on the record and no longer binds, and a
+    // resuming agent that could not tell those apart would re-do work or skip it.
     lines.push("evidence_references".to_owned());
-    for row in &envelope.sections {
-        for clearance in &row.clearances {
-            lines.push(format!("  {clearance} against {}", row.id));
-        }
+    for row in &envelope.acts {
+        lines.push(format!(
+            "  {} — {}",
+            row.act,
+            if row.current { "current" } else { "stale" }
+        ));
     }
     lines.push("blockers".to_owned());
     for entry in &envelope.blockers {
@@ -1294,12 +1334,12 @@ mod tests {
         };
 
         assert_eq!(run.run.review_policy, ReviewPolicy::HumanOnly);
-        assert!(!run.review_standing().sections_attested, "the gate refuses");
+        assert!(!run.sections_unreviewed().is_empty(), "the gate refuses");
         assert!(!settled(&run), "and the envelope agrees it is outstanding");
 
         run.run.review_policy = ReviewPolicy::AdversarialOnly;
         assert!(
-            run.review_standing().sections_attested,
+            run.sections_unreviewed().is_empty(),
             "the gate is satisfied by the attestation already recorded"
         );
         assert!(

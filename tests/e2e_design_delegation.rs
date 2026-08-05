@@ -112,12 +112,8 @@ const CLEARED: [Condition; 4] = [
 ///
 /// The bodies need only be well-formed enough to deserialize: the guard fires on a
 /// field's *presence*, ahead of anything that would validate it.
-const WRITER_ACTS: [(&str, fn() -> Value); 10] = [
+const WRITER_ACTS: [(&str, fn() -> Value); 9] = [
     ("stage", || json!({"to": Stage::Drafting.as_str()})),
-    (
-        "evidence",
-        || json!([{"condition": Condition::DraftingReadinessAttested.as_str(), "subject": SECTION_SPINE}]),
-    ),
     ("acceptance", || json!({"basis": "the delegate says so"})),
     (
         "declare",

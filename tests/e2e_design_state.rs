@@ -438,11 +438,6 @@ fn adopt_authored_crosses_divergence_and_rebaselines_alone() {
 #[test]
 fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
     let fixture = materialised("first draft");
-    fixture.apply(&format!(
-        "{{{},\"evidence\":[{{\"condition\":\"governing-context-recorded\",\
-         \"subject\":\"sec-1\"}}]}}",
-        fixture.envelope("clear")
-    ));
     let foreign = authored_document("sec-1", "hand written prose");
     std::fs::write(fixture.doc(), &foreign).unwrap();
     let doc_digest = common::sha256(foreign.as_bytes());
@@ -450,7 +445,6 @@ fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
 
     let before = fixture.read();
     let watermark_before = before.authored.watermark.clone();
-    let clearance_before = before.gate.clone();
 
     // (a) stale declared fingerprint.
     let stale = fixture.refuse(&format!(
@@ -473,10 +467,11 @@ fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark() {
         after.authored.watermark, watermark_before,
         "the watermark is UNCHANGED against its pre-call value"
     );
-    assert_eq!(
-        after.gate, clearance_before,
-        "and no clearance moved either way"
-    );
+    // `T11` retired the gate-clearance witness with `Evidence` (`EX-11`), so the
+    // claim is made on the whole snapshot instead — which is strictly stronger
+    // than the one field it replaces: a refusal must leave `prior` untouched
+    // entire, not merely leave one group untouched.
+    assert_eq!(after, before, "and the refusal moved nothing at all");
 }
 
 /// §9.2 — an absent `design.md` before first materialisation is COLD rather than
@@ -821,6 +816,10 @@ fn within_revision_index_is_candidate_order_not_submission_order() {
 const FIRST_SECTION_BODY: &str = "## Draft one\n";
 /// The redraft that moves the fingerprint.
 const REVISED_SECTION_BODY: &str = "## Draft two\n";
+/// A third draft, declared **after** the run's acceptance, so the
+/// `EverySection`-covered `design-accepted` act stops binding and the run owes
+/// an `act_invalidated` row (SL-244 `T11`, `EX-11`).
+const REACCEPTED_SECTION_BODY: &str = "## Draft three\n";
 
 /// Drive the run through every material event kind, and return the fixture.
 fn every_event_fixture() -> Fixture {
@@ -981,6 +980,13 @@ fn every_event_fixture() -> Fixture {
             } }),
         ));
     }
+    // act_invalidated. The acceptance above recorded a `design-accepted` act
+    // covering every section, so moving one retires it — the row `T11`
+    // re-sourced from the evidence feed, exercised by the death of a real act
+    // rather than by a claim expiring. It has to come after the acceptance:
+    // before it there is no `EverySection`-covered act to invalidate, which is
+    // why the earlier `revise` alone does not produce this row.
+    fixture.apply(&section(REACCEPTED_SECTION_BODY, "redraft"));
     fixture.apply(&fixture.payload(
         "accept-dlg-1",
         &json!({ "delegation": { "act": "accept", "id": "dlg-1" } }),

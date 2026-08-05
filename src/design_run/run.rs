@@ -31,13 +31,12 @@ use super::Stage;
 use super::admission::admit_act;
 use super::attestation::{
     AcceptanceAttestation, ActKind, AgentActKind, AgentDeclaration, Attestation, CheckpointAct,
-    ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, LockAcceptance,
-    RecordedAct, RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
+    ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, RecordedAct,
+    RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
 use super::delegation::{Delegation, DelegationState, Proposal};
-use super::facts::DerivedDesignFacts;
 use super::gate;
 use super::gate::{ActRule, Coverage, ObservedFact, ObservedFacts};
 use super::ids::{DesignId, Fingerprint, IdKind};
@@ -46,8 +45,8 @@ use super::refusal::Refusal;
 use super::runbook::{Discharge, Runbook, RunbookKey, StepVerification};
 use super::snapshot::{DesignSnapshot, Finding, Pin, Receipt, Section};
 use super::submission::{
-    ApplyRequest, Batch, Declaration, DelegationAct, DischargeClaim, DischargeDeclaration, Dispose,
-    Sparse, SubmissionEnvelope, TraversalDeclaration,
+    ApplyRequest, Batch, CheckpointActDeclaration, Declaration, DelegationAct, DischargeClaim,
+    DischargeDeclaration, Dispose, Sparse, SubmissionEnvelope, TraversalDeclaration,
 };
 use super::traversal::{Authority, Cursor, TraversalPosture};
 
@@ -102,10 +101,10 @@ pub(crate) struct DerivedInput {
     ///
     /// Asset data the shell read and digested, arriving where every other
     /// shell-derived fact arrives. Deliberately **not** caller-authored payload:
-    /// `StageDeclaration` has no slot for it, and routing it through
-    /// `request.evidence` compiles and is then refused by
-    /// [`Refusal::DerivedConditionClaimed`] — because a fact about what an asset
-    /// says is one Doctrine derives, never one it takes on a caller's word.
+    /// `StageDeclaration` has no slot for it, and since `SL-244` neither has
+    /// anything else — the evidence field a caller could once have routed this
+    /// through is gone, so a fact about what an asset says is one Doctrine
+    /// derives and not one it could take on a caller's word even by mistake.
     pub(crate) runbook: Option<RunbookFacts>,
     /// What executing a step's `verify` returned, for every check the shell ran
     /// this invocation.
@@ -294,21 +293,7 @@ pub(crate) fn apply(
     payload_digest: &str,
     resolved: &Resolution,
 ) -> Result<Applied, Refusal> {
-    // Before anything is touched: a payload may not claim a clearance Doctrine
-    // derives for itself. Checked over the whole candidate rather than inside the
-    // recording loop, so the refusal does not depend on where in the list the
-    // claim sits (DEC-063).
-    if let Some(claimed) = request
-        .evidence
-        .iter()
-        .find(|evidence| evidence.condition.is_derived())
-    {
-        return Err(Refusal::DerivedConditionClaimed {
-            condition: claimed.condition,
-        });
-    }
-
-    // And before anything is touched: a delegate's channel may not carry a writer
+    // Before anything is touched: a delegate's channel may not carry a writer
     // act (EX-2, DEC-068). Checked over the whole payload for the same reason the
     // claim check is — the refusal must not depend on which key came first.
     if let Some(act) = request.delegation.as_ref()
@@ -322,7 +307,7 @@ pub(crate) fn apply(
     let revision = prior.run.revision.saturating_add(1);
     next.run.revision = revision;
 
-    let live_evidence_before = live_evidence(&prior.gate);
+    let live_acts_before = live_acts(prior);
     // Unfiltered by the run's review policy, on purpose: this pair feeds
     // `invalidation_rows`, which reports the death of a recorded act. Whether an
     // attestation satisfied a lane the run requires is a different question,
@@ -385,42 +370,35 @@ pub(crate) fn apply(
         )?);
     }
 
-    // Sections may have moved, so re-observe every subject before evidence is
-    // recorded or liveness re-derived: DEC-066 binds evidence to *current*
-    // content, and a clearance recorded in this batch is recorded against what
-    // this batch left behind.
-    reobserve(&mut next);
-    for evidence in &request.evidence {
-        let fingerprint = current_fingerprint(&next, &evidence.subject)?;
-        next.gate = std::mem::take(&mut next.gate).record(
-            evidence.condition,
-            evidence.subject.clone(),
-            fingerprint,
-        );
-    }
-
     // Step 4 of the build order, after re-observation and before the stage move,
     // and the declaration BEFORE the act: an act confirming a declaration names
     // the fingerprint of the record the engine has just written, so both arrive in
     // one submission with no caller-computed digest (design `sec-4`).
     record_declaration(&mut next, request, derived)?;
-    record_act(&mut next, request, derived, payload_digest)?;
+    if let Some(declared) = request.checkpoint_act.as_ref() {
+        record_act(&mut next, declared, derived, payload_digest)?;
+    }
 
-    // After re-observation, so the coverage is of what this batch left behind,
-    // and before the stage move, so a lock may be accepted and taken in one
+    // Before the stage move, so a lock may be accepted and taken in one
     // submission.
+    //
+    // `LockAcceptance` retired into [`CheckpointAct`] (`EX-11`): the run-level
+    // field keeps its wire shape and changes where it lands, so this is the same
+    // act by a shorter route and is built by the same constructor rather than a
+    // second one. Ordered after the explicit act on purpose — `record` is keyed
+    // by act kind and replaces, so a payload carrying both settles the way the
+    // group's own contract already settles two acts of one kind.
     if let Some(declared) = request.acceptance.as_ref() {
-        if declared.basis.trim().is_empty() {
-            return Err(Refusal::AcceptanceBasisMissing);
-        }
-        next.review.acceptance = Some(LockAcceptance::over(
-            AcceptanceAttestation::bind(
-                declared.basis.clone(),
-                declared.turn.clone(),
-                Fingerprint::new(payload_digest),
-            ),
-            ContentCoverage::of(next.sections.fingerprints()),
-        ));
+        record_act(
+            &mut next,
+            &CheckpointActDeclaration {
+                act: ActKind::DesignAccepted,
+                acceptance: declared.clone(),
+                disposition: None,
+            },
+            derived,
+            payload_digest,
+        )?;
         pending.push(Pending::run_wide(
             ChangeEvent::AcceptanceAttested,
             Vec::new(),
@@ -454,8 +432,8 @@ pub(crate) fn apply(
     }
 
     pending.extend(invalidation_rows(
-        &live_evidence_before,
-        &live_evidence(&next.gate),
+        &live_acts_before,
+        &live_acts(&next),
         &live_reviews_before,
         &live_reviews(&next),
     )?);
@@ -582,13 +560,10 @@ fn record_declaration(
 /// (design `sec-4`, build order step 4).
 fn record_act(
     next: &mut DesignSnapshot,
-    request: &ApplyRequest,
+    declared: &CheckpointActDeclaration,
     derived: &DerivedInput,
     payload_digest: &str,
 ) -> Result<(), Refusal> {
-    let Some(declared) = request.checkpoint_act.as_ref() else {
-        return Ok(());
-    };
     if declared.acceptance.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
     }
@@ -1740,38 +1715,42 @@ const fn outcome_label(claim: DischargeClaim) -> &'static str {
     }
 }
 
-/// Re-observe every section's current fingerprint, so DEC-066 liveness is
-/// evaluated against what this batch left behind.
-fn reobserve(next: &mut DesignSnapshot) {
-    let fingerprints = next.sections.fingerprints();
-    let mut facts = std::mem::take(&mut next.gate);
-    for (id, fingerprint) in fingerprints {
-        facts = facts.observe(id, fingerprint);
-    }
-    next.gate = facts;
-}
-
-/// The current fingerprint of a subject, for binding a clearance to it.
-fn current_fingerprint(next: &DesignSnapshot, subject: &DesignId) -> Result<Fingerprint, Refusal> {
-    next.sections
-        .find(subject)
-        .map(|section| section.fingerprint.clone())
-        .ok_or_else(|| Refusal::UnknownNode {
-            id: subject.clone(),
-        })
-}
-
-/// Every clearance currently bound to live content, as a comparable key.
-fn live_evidence(facts: &DerivedDesignFacts) -> BTreeSet<(gate::Condition, DesignId, Fingerprint)> {
-    facts
-        .live_evidence()
-        .map(|evidence| {
-            (
-                evidence.condition(),
-                evidence.subject().clone(),
-                evidence.fingerprint().clone(),
-            )
-        })
+/// Every recorded act still bound to the content it was given over.
+///
+/// **Deliberately rule-free**, on exactly [`live_reviews`]' stated ground: this
+/// feeds [`invalidation_rows`], which reports the *death of a recorded act*, and
+/// an act whose material has moved is dead whatever rule currently reads it. The
+/// gate's `coverage_moved` asks the other question — does this act discharge
+/// the coverage its rule *now* names — and reads the record through that rule.
+/// Both call [`CoveredSet::moved`], so the comparison itself is single-sourced
+/// and only the framing differs.
+///
+/// An act carrying no covered map is `Coverage::Artefact`-bound: its own recorded
+/// content cannot move, so it is inert here and never dies of coverage. It still
+/// leaves the set by being *replaced*, which is a death worth a row —
+/// [`CheckpointActGroup::record`] retains-then-pushes by kind.
+///
+/// [`CheckpointActGroup::record`]: super::snapshot::CheckpointActGroup::record
+pub(super) fn live_acts(snapshot: &DesignSnapshot) -> BTreeSet<(ActKind, DesignId)> {
+    let sections = snapshot.sections.fingerprints();
+    let nodes = snapshot.map.inquiry.materials();
+    let live = |covered: Option<&CoveredSet>| {
+        covered.is_none_or(|covered| covered.moved(&sections, &nodes).is_empty())
+    };
+    snapshot
+        .acts
+        .acts
+        .iter()
+        .filter(|held| live(held.covered.as_ref()))
+        .map(|held| (held.act, held.id.clone()))
+        .chain(
+            snapshot
+                .declarations
+                .declarations
+                .iter()
+                .filter(|held| live(held.covered.as_ref()))
+                .map(|held| (ActKind::from(held.act.kind()), held.id.clone())),
+        )
         .collect()
 }
 
@@ -1818,20 +1797,17 @@ pub(super) fn live_reviews(
 /// whoever changed the content, so a new way of moving a fingerprint cannot
 /// forget to report what it killed.
 fn invalidation_rows(
-    evidence_before: &BTreeSet<(gate::Condition, DesignId, Fingerprint)>,
-    evidence_after: &BTreeSet<(gate::Condition, DesignId, Fingerprint)>,
+    acts_before: &BTreeSet<(ActKind, DesignId)>,
+    acts_after: &BTreeSet<(ActKind, DesignId)>,
     reviews_before: &BTreeSet<(DesignId, DesignId, Fingerprint)>,
     reviews_after: &BTreeSet<(DesignId, DesignId, Fingerprint)>,
 ) -> Result<Vec<Pending>, Refusal> {
     let mut rows: Vec<Pending> = Vec::new();
-    for (condition, subject, fingerprint) in evidence_before.difference(evidence_after) {
+    for (act, id) in acts_before.difference(acts_after) {
         rows.push(Pending::about(
-            ChangeEvent::EvidenceInvalidated,
-            subject,
-            vec![
-                PayloadTerm::token(PayloadKey::Gate, condition.as_str())?,
-                PayloadTerm::digest(PayloadKey::Fingerprint, fingerprint.as_str()),
-            ],
+            ChangeEvent::ActInvalidated,
+            id,
+            vec![PayloadTerm::token(PayloadKey::Act, act.as_str())?],
         ));
     }
     for (attestation, subject, _fingerprint) in reviews_before.difference(reviews_after) {
@@ -1852,7 +1828,7 @@ mod tests {
     use super::super::attestation::{AgentAct, ReviewDisposition};
     use super::super::refusal::ActFault;
     use super::super::submission::{
-        AcceptanceDeclaration, AgentActDeclaration, CheckpointActDeclaration, EvidenceDeclaration,
+        AcceptanceDeclaration, AgentActDeclaration, CheckpointActDeclaration,
     };
     use super::*;
 
@@ -1935,24 +1911,12 @@ mod tests {
             traversal: TraversalDeclaration::default(),
             stage: None,
             acceptance: None,
-            evidence: Vec::new(),
             declare: Vec::new(),
             delegation: None,
             discharge: None,
             review_policy: None,
             checkpoint_act: None,
             agent_declaration: None,
-        }
-    }
-
-    /// One `apply` payload claiming `condition` against `sec-a`.
-    fn claiming(prior: &DesignSnapshot, condition: gate::Condition) -> ApplyRequest {
-        ApplyRequest {
-            evidence: vec![EvidenceDeclaration {
-                condition,
-                subject: id("sec-a"),
-            }],
-            ..payload(prior)
         }
     }
 
@@ -2321,50 +2285,6 @@ mod tests {
         assert_eq!(
             first.id, second.id,
             "the id is the act's, not the writing's"
-        );
-    }
-
-    #[test]
-    fn a_derived_condition_cannot_be_claimed_as_evidence() {
-        let prior = run_with_a_section();
-        let derived = DerivedInput::default();
-
-        // The self-claim bypass, closed at admission: without this refusal a
-        // caller could lock a design it never reviewed by asserting that it had.
-        let derived_conditions = gate::Condition::ALL
-            .into_iter()
-            .filter(|condition| condition.is_derived());
-        for condition in derived_conditions {
-            assert_eq!(
-                apply(
-                    &prior,
-                    &claiming(&prior, condition),
-                    &derived,
-                    "sha256:pay",
-                    &Resolution::default(),
-                ),
-                Err(Refusal::DerivedConditionClaimed { condition }),
-                "{} is derived and must not be claimable",
-                condition.as_str()
-            );
-        }
-
-        // The positive control: the refusal is targeted, not a blanket ban on
-        // claiming clearance. A claimed condition Doctrine cannot derive still
-        // lands.
-        let applied = apply(
-            &prior,
-            &claiming(&prior, gate::Condition::DraftingReadinessAttested),
-            &derived,
-            "sha256:pay",
-            &Resolution::default(),
-        )
-        .expect("a claimed condition is still evidence");
-        assert!(
-            applied
-                .snapshot
-                .gate
-                .satisfies(gate::Condition::DraftingReadinessAttested)
         );
     }
 }

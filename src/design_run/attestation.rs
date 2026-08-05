@@ -541,6 +541,29 @@ pub(crate) enum CoveredSet {
     Nodes(ContentCoverage<NodeMaterial>),
 }
 
+impl CoveredSet {
+    /// The subjects this set no longer matches, compared in its own shape.
+    ///
+    /// Shape-safe by construction: each arm compares against the current map its
+    /// own variant was built from, so no caller can hand a section set to the
+    /// node comparison. Both readers of coverage currency go through here — the
+    /// gate's rule-driven `coverage_moved` and the change log's rule-free
+    /// [`live_acts`] — so the two frame the question differently and cannot
+    /// disagree about the answer.
+    ///
+    /// [`live_acts`]: super::run::live_acts
+    pub(crate) fn moved(
+        &self,
+        sections: &BTreeMap<DesignId, Fingerprint>,
+        nodes: &BTreeMap<DesignId, NodeMaterial>,
+    ) -> Vec<DesignId> {
+        match self {
+            CoveredSet::Sections(covered) => covered.diff(sections),
+            CoveredSet::Nodes(covered) => covered.diff(nodes),
+        }
+    }
+}
+
 /// DEC-125's two arms, given a home. Admissibility is DEC-138's, checked at
 /// admission rather than here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -580,10 +603,10 @@ pub(crate) struct DisposedPass {
 
 /// A user act, in the form the gate reads it (DEC-121).
 ///
-/// Named for the four checkpoint acts; `DesignAccepted` is the run-level fifth,
-/// which is why [`LockAcceptance`] is subsumed rather than kept beside it — that
-/// type is exactly this one with `act: DesignAccepted`, `covered: Sections(…)`
-/// and every other slot empty.
+/// Named for the four checkpoint acts; `DesignAccepted` is the run-level fifth.
+/// The incumbent `LockAcceptance` was exactly this shape with
+/// `act: DesignAccepted`, `covered: Sections(…)` and every other slot empty, so
+/// it was subsumed rather than kept beside this type and retired at `SL-244`.
 ///
 /// **The fields are `pub(crate)` and no constructor guards them**, deliberately:
 /// which slots a given act may fill is its *rule's* statement, and admission is
@@ -827,48 +850,6 @@ impl<'a> RecordedAct<'a> {
             RecordedAct::Checkpoint(act) => act.disposition.as_ref(),
             RecordedAct::Agent(_) | RecordedAct::Section => None,
         }
-    }
-}
-
-/// A user acceptance of the design as locked, and the content it accepted.
-///
-/// The two questions stay separate rather than being crushed into one digest:
-/// [`AcceptanceAttestation`] answers *who accepted, on what basis, in which
-/// submission* (DEC-088, and its `digest` is the submission payload digest that
-/// decision arrived in); [`ContentCoverage`] answers *of what content*. Binding
-/// currency to the payload digest instead would make every later apply invalidate
-/// the acceptance, and binding it to nothing would let an acceptance be lifted
-/// onto content the user never saw.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct LockAcceptance {
-    attestation: AcceptanceAttestation,
-    covered: ContentCoverage<Fingerprint>,
-}
-
-impl LockAcceptance {
-    /// Bind a user acceptance to the content it was given over.
-    pub(crate) const fn over(
-        attestation: AcceptanceAttestation,
-        covered: ContentCoverage<Fingerprint>,
-    ) -> Self {
-        LockAcceptance {
-            attestation,
-            covered,
-        }
-    }
-
-    /// The acceptance itself.
-    #[expect(
-        dead_code,
-        reason = "SL-233: read surface with no reader (see [`Attestation::reviewer`])"
-    )]
-    pub(crate) const fn attestation(&self) -> &AcceptanceAttestation {
-        &self.attestation
-    }
-
-    /// Whether it still covers current content.
-    pub(crate) fn is_current(&self, current: &BTreeMap<DesignId, Fingerprint>) -> bool {
-        self.covered.is_current(current)
     }
 }
 

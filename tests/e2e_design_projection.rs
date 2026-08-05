@@ -32,6 +32,9 @@ mod design_fixture;
 )]
 mod design_run;
 
+mod design_act;
+
+use design_run::attestation::AgentAct;
 use design_run::render::under_test as caps;
 
 use design_fixture::{DesignRun, SLICE, fail, run};
@@ -225,13 +228,17 @@ fn large_run() -> DesignRun {
         }] }),
     );
 
-    // A clearance, so `resume` has an evidence reference to report.
+    // A recorded act, so `resume` has an evidence reference to report. `T11`
+    // re-sourced that section from the retired evidence store to the act set,
+    // so this is the same fixture intent in the new vocabulary.
     fixture.apply(
-        "clear",
-        json!({ "evidence": [
-            {"condition": "governing-context-recorded", "subject": "sec-01"},
-            {"condition": "initial-concerns-recorded", "subject": "sec-01"},
-        ] }),
+        "declare-ready",
+        json!({
+            "agent_declaration": design_act::agent_declaration(
+                AgentAct::DraftingReady,
+                "the draft is ready for review",
+            ),
+        }),
     );
 
     // The cursor at the chain's foot, on the user's authority.
@@ -662,8 +669,8 @@ fn resume_returns_the_seven_scope_fields_without_optional_flags() {
         "and so do assumptions: {resumed}"
     );
     assert!(
-        resumed.contains("governing-context-recorded against sec-01"),
-        "evidence references name the condition and the subject it cleared: {resumed}"
+        resumed.contains("drafting-ready — current"),
+        "evidence references name the recorded act and whether it still binds: {resumed}"
     );
 
     // `--run` is an assumption CHECK: right passes, wrong refuses.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! The design §9.1 pure-engine suite — eight tests, named by SL-233 PHASE-02
-//! EX-8, operating on values and injected [`DerivedDesignFacts`] only.
+//! EX-8, operating on values and injected [`DerivedInput`] only.
 //!
 //! No clock, disk, git, or rng is reachable from here, because none is reachable
 //! from the module under test.
@@ -20,7 +20,6 @@ use super::attestation::{
     IntentSubject, RecordedAct, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
     Reviewer,
 };
-use super::facts::DerivedDesignFacts;
 use super::fixture::{
     BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
     checkpoint_act, cleared, drafting_ready, id, pass_over, run_holding, section,
@@ -255,45 +254,6 @@ fn direct_regression_requires_a_recorded_reason() {
             ],
         })
     );
-}
-
-#[test]
-fn changed_fingerprint_invalidates_only_affected_evidence() {
-    let moved = id("sec-moved");
-    let stable = id("sec-stable");
-    let before = Fingerprint::new("sha256:aaa");
-    let after = Fingerprint::new("sha256:bbb");
-    let untouched = Fingerprint::new("sha256:ccc");
-
-    let facts = DerivedDesignFacts::default()
-        .observe(moved.clone(), before.clone())
-        .observe(stable.clone(), untouched.clone())
-        .record(Condition::DraftingReadinessAttested, moved.clone(), before)
-        .record(
-            Condition::MaterialisationCurrent,
-            stable.clone(),
-            untouched.clone(),
-        );
-
-    assert_eq!(facts.live_evidence().count(), 2);
-    assert!(facts.satisfies(Condition::DraftingReadinessAttested));
-    assert!(facts.satisfies(Condition::MaterialisationCurrent));
-
-    // One subject's content moves. Only its evidence dies.
-    let after_edit = facts.observe(moved.clone(), after);
-    let live: Vec<&DesignId> = after_edit
-        .live_evidence()
-        .map(super::facts::Evidence::subject)
-        .collect();
-    assert_eq!(live, vec![&stable]);
-    assert!(!after_edit.satisfies(Condition::DraftingReadinessAttested));
-    assert!(after_edit.satisfies(Condition::MaterialisationCurrent));
-
-    // A subject the shell can no longer observe is treated as changed, not as
-    // unchanged — absence is not proof the bytes still match.
-    let unobservable =
-        DerivedDesignFacts::default().record(Condition::MaterialisationCurrent, stable, untouched);
-    assert_eq!(unobservable.live_evidence().count(), 0);
 }
 
 #[test]
@@ -691,7 +651,7 @@ fn policy_decides_the_required_lane() {
 
     assert_eq!(run.run.review_policy, ReviewPolicy::HumanOnly);
     assert!(
-        !run.review_standing().sections_attested,
+        !run.sections_unreviewed().is_empty(),
         "an adversarial review does not satisfy a human lane"
     );
     assert_eq!(
@@ -702,7 +662,7 @@ fn policy_decides_the_required_lane() {
 
     run.run.review_policy = ReviewPolicy::AdversarialOnly;
     assert!(
-        run.review_standing().sections_attested,
+        run.sections_unreviewed().is_empty(),
         "the same attestation satisfies the lane the run now requires"
     );
     assert!(run.sections_unreviewed().is_empty());
@@ -724,10 +684,10 @@ fn both_lanes_required_per_section() {
         vec![(id("sec-a"), ActorClass::Adversarial)],
         "one section owes one lane; the other owes nothing"
     );
-    assert!(!run.review_standing().sections_attested);
+    assert!(!run.sections_unreviewed().is_empty());
 
     attest(&mut run, "att-a2", "sec-a", Reviewer::Adversarial);
-    assert!(run.review_standing().sections_attested);
+    assert!(run.sections_unreviewed().is_empty());
 }
 
 /// DEC-073 says *intended* order, and `Attestation` carries no turn, sequence or
@@ -748,14 +708,14 @@ fn order_is_declared_not_enforced() {
 
     attest(&mut run, "att-a1", "sec-a", Reviewer::Human);
     assert!(
-        run.review_standing().sections_attested,
+        run.sections_unreviewed().is_empty(),
         "both lanes are present, and the order they arrived in is not a fact the gate holds"
     );
 
     // The sibling variant differs only in declared order, so it demands the same
     // pair of the same run.
     run.run.review_policy = ReviewPolicy::AdversarialThenHuman;
-    assert!(run.review_standing().sections_attested);
+    assert!(run.sections_unreviewed().is_empty());
 }
 
 /// The third reader of the attestation set, and the one the policy must **not**

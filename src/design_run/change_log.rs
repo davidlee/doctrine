@@ -60,7 +60,17 @@ pub(crate) enum ChangeEvent {
     NeedsAdded,
     NeedsRemoved,
     StageMoved,
-    EvidenceInvalidated,
+    /// A recorded act stopped being bound to the content it was given over.
+    ///
+    /// **Renamed from `EvidenceInvalidated` at `T11`** (`EX-11`, `F1`), when the
+    /// feed re-sourced from the retired evidence set to the act set. The alias is
+    /// not optional: `ChangeEvent` deserialises **strictly**, so one unrecognised
+    /// `event` fails the whole snapshot rather than one row, and the change log is
+    /// append-only *history* — the vocabulary a run writes is not the vocabulary
+    /// it must read. Eight rows on this repo's own live `SL-243`/`SL-244` runs
+    /// carry the old token; dropping the alias is how `ISS-315` happened.
+    #[serde(alias = "evidence_invalidated")]
+    ActInvalidated,
     SectionCreated,
     SectionFingerprintChanged,
     ReviewAttested,
@@ -89,7 +99,7 @@ impl ChangeEvent {
         ChangeEvent::NeedsAdded,
         ChangeEvent::NeedsRemoved,
         ChangeEvent::StageMoved,
-        ChangeEvent::EvidenceInvalidated,
+        ChangeEvent::ActInvalidated,
         ChangeEvent::SectionCreated,
         ChangeEvent::SectionFingerprintChanged,
         ChangeEvent::ReviewAttested,
@@ -118,7 +128,7 @@ impl ChangeEvent {
             ChangeEvent::NeedsAdded => "needs_added",
             ChangeEvent::NeedsRemoved => "needs_removed",
             ChangeEvent::StageMoved => "stage_moved",
-            ChangeEvent::EvidenceInvalidated => "evidence_invalidated",
+            ChangeEvent::ActInvalidated => "act_invalidated",
             ChangeEvent::SectionCreated => "section_created",
             ChangeEvent::SectionFingerprintChanged => "section_fingerprint_changed",
             ChangeEvent::ReviewAttested => "review_attested",
@@ -170,10 +180,7 @@ impl ChangeEvent {
                 (PayloadKey::To, ValueKind::Label),
                 (PayloadKey::Reason, ValueKind::Prose),
             ],
-            ChangeEvent::EvidenceInvalidated => &[
-                (PayloadKey::Gate, ValueKind::Token),
-                (PayloadKey::Fingerprint, ValueKind::Digest),
-            ],
+            ChangeEvent::ActInvalidated => &[(PayloadKey::Act, ValueKind::Token)],
             ChangeEvent::SectionCreated => &[(PayloadKey::Fingerprint, ValueKind::Digest)],
             ChangeEvent::ReviewAttested | ChangeEvent::ReviewInvalidated => &[
                 (PayloadKey::Section, ValueKind::Token),
@@ -258,6 +265,8 @@ pub(crate) enum PayloadKey {
     Fingerprint,
     Section,
     Attestation,
+    /// Which recorded act a row is about (`EX-11`).
+    Act,
     Node,
     Record,
     Disposition,
@@ -283,6 +292,7 @@ impl PayloadKey {
             PayloadKey::Fingerprint => "fingerprint",
             PayloadKey::Section => "section",
             PayloadKey::Attestation => "attestation",
+            PayloadKey::Act => "act",
             PayloadKey::Node => "node",
             PayloadKey::Record => "record",
             PayloadKey::Step => "step",

@@ -376,10 +376,11 @@ fn import_manufactures_no_attestation_receipt_or_gate_clearance() {
         "import manufactures no submission receipt: {:?}",
         run.receipts.receipts
     );
-    assert_eq!(
-        run.gate.live_evidence().count(),
-        0,
-        "import manufactures no gate clearance"
+    assert!(
+        run.acts.acts.is_empty() && run.declarations.declarations.is_empty(),
+        "import manufactures no recorded act: {:?} / {:?}",
+        run.acts.acts,
+        run.declarations.declarations
     );
     assert_eq!(
         run.run.stage,
