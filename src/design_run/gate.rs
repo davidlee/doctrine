@@ -63,6 +63,26 @@ pub(crate) enum Reach {
     EdgeLocal,
 }
 
+impl Reach {
+    /// The kebab token this reach is spelled with in a rendered contract, on
+    /// [`Coverage::as_str`]'s terms (STD-001).
+    ///
+    /// Injected rather than left to the prose for the reason the design gives
+    /// for the kind: reach is exactly the property a narrative author would
+    /// restate and get wrong, and it is the one that says whether discharging a
+    /// condition once is the end of it.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
+    )]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Reach::Cumulative => "cumulative",
+            Reach::EdgeLocal => "edge-local",
+        }
+    }
+}
+
 /// The run-owned subject set an attestation is current against (design sec-3).
 ///
 /// Independent of [`Reach`], and conflating the two is a live error: reach says
@@ -256,6 +276,25 @@ pub(crate) enum EngineSource {
     Materialisation,
 }
 
+impl EngineSource {
+    /// The kebab token naming *which* run-owned state a derived condition is
+    /// recomputed from (STD-001).
+    ///
+    /// The bare source, not the `engine(…)` wrapper the block renders around it:
+    /// the wrapper is the renderer's punctuation, and spelling it here would put
+    /// half the rendered field in the leaf and half in the caller.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
+    )]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            EngineSource::Dispositions => "dispositions",
+            EngineSource::Materialisation => "materialisation",
+        }
+    }
+}
+
 /// How one condition is derived — **the discharging act, stated exactly once**
 /// (design sec-3, DEC-123).
 ///
@@ -310,6 +349,25 @@ pub(crate) enum ConditionKind {
     Derived,
     /// Derived over acts an actor recorded.
     Attested,
+}
+
+impl ConditionKind {
+    /// The kebab token this kind is spelled with in a rendered contract
+    /// (STD-001).
+    ///
+    /// DEC-123's injected field: the prose never restates the kind, so this is
+    /// the only place a reader is told whether discharging the condition means
+    /// recording an act or repairing run-owned state.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the contract block")
+    )]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ConditionKind::Derived => "derived",
+            ConditionKind::Attested => "attested",
+        }
+    }
 }
 
 /// What one condition requires, binds to, and is discharged by — the value the

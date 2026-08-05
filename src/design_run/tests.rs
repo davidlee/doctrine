@@ -1354,6 +1354,39 @@ fn the_remedy_renders_from_the_rule_including_the_row_with_two_arms() {
     }
 }
 
+/// Every field the receipt injects is spelled once, and the contract table
+/// exercises the whole vocabulary (SL-244 PHASE-06 `T2`, STD-001).
+///
+/// The pinned literals are the wire half: these tokens ride the rendered block a
+/// caller reads, so they are stated rather than derived from variant names. The
+/// second leg is what stops the first from being a restatement of the match arms
+/// — the tokens `CONTRACTS` actually reaches are set-equal to the pinned ones, so
+/// a variant no row uses, or a seventh token a row needs and the vocabulary does
+/// not have, fails here.
+#[test]
+fn the_injected_field_vocabulary_is_one_kebab_token_per_variant() {
+    assert_eq!(Reach::Cumulative.as_str(), "cumulative");
+    assert_eq!(Reach::EdgeLocal.as_str(), "edge-local");
+    assert_eq!(ConditionKind::Derived.as_str(), "derived");
+    assert_eq!(ConditionKind::Attested.as_str(), "attested");
+    assert_eq!(EngineSource::Dispositions.as_str(), "dispositions");
+    assert_eq!(EngineSource::Materialisation.as_str(), "materialisation");
+
+    let mut reaches = BTreeSet::new();
+    let mut kinds = BTreeSet::new();
+    let mut sources = BTreeSet::new();
+    for (_, contract) in CONTRACTS {
+        reaches.insert(contract.reach.as_str());
+        kinds.insert(contract.derivation.kind().as_str());
+        if let DerivationRule::Engine(source) = contract.derivation {
+            sources.insert(source.as_str());
+        }
+    }
+    assert_eq!(reaches, BTreeSet::from(["cumulative", "edge-local"]));
+    assert_eq!(kinds, BTreeSet::from(["attested", "derived"]));
+    assert_eq!(sources, BTreeSet::from(["dispositions", "materialisation"]));
+}
+
 /// The act wire types carry the **claim** and nothing the engine authors
 /// (`EX-7b`).
 ///
