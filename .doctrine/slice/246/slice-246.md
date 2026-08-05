@@ -9,9 +9,9 @@ together, so the ruling and the argument for it can only be read apart.
 
 `SL-244` is the specimen. Its `design.md` is **3,456 lines** and cites **20
 distinct `DEC` records by id**, quoting fragments of them inline (`DEC-121`
-appears 8+ times as quoted phrases). Sixteen knowledge records point at the slice
-— twelve `DEC` via `shapes`, three `DEC` via `references(concerns)`, plus
-`EVD-012` and `QUE-206`. `doctrine slice show SL-244` renders **none** of them:
+appears 8+ times as quoted phrases). Fifteen knowledge records point at the slice
+— twelve via `shapes` (ten `DEC`, plus `EVD-012` and `QUE-206`) and three `DEC`
+via `references(concerns)`. `doctrine slice show SL-244` renders **none** of them:
 it emits outbound relations only, as does every other kind's `show`.
 
 The derivation already exists. `doctrine relation list --target SL-244` returns
@@ -43,8 +43,10 @@ citations are explicitly *not* consulted — see Non-Goals.
 | facets | the deciding fields only — a `DEC`'s `choice` + `rationale`, a `QUE`'s `question` + `why_matters` |
 | full | complete record bodies |
 
-The middle level is the one that earns the feature: it is what makes a composed
-read affordable on a design the size of `SL-244`'s.
+The middle level is the one that earns the feature. Measured on the specimen it
+costs **~30% of `full`** (31.8 KB vs 107 KB across the fifteen records) — a real
+saving, but not the order of magnitude first assumed; see `research/research.md`
+§ *The specimen, re-measured*.
 
 **Objectives**
 
@@ -130,6 +132,19 @@ versus fallback to prose.
 
 **OQ-5 — closure seam shape.** How far to factor the inbound derivation now so
 S5's typed traversal extends it (objective 3) without speculative generality.
+
+**OQ-6 — the composition seam** (added post-research). `CatalogEntity`
+(`src/catalog/hydrate.rs:111-113`) carries identity and body but **no facet**, so
+the inbound derivation `relation list --target` already performs cannot render
+facets as-is. Either `CatalogEntity` grows a `RecordFacet`, or each composing
+`show` calls `knowledge::read_record` per inbound id. The load-bearing
+architectural choice.
+
+**Post-research reordering.** `OQ-4` is primary and `OQ-2` is largely settled by
+evidence — governance declares no field tiering and the corpus populates facets
+as an all-or-nothing unit (35/35/35 on decisions), so field selection is
+low-stakes and gap handling is the whole design. See
+`research/research.md` § *Design-input deltas*.
 
 ## Verification / closure intent
 
