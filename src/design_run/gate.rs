@@ -13,16 +13,22 @@
 //! un-set, and returning forward cannot inherit clearance it no longer earns.
 
 use std::collections::BTreeMap;
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 use super::Stage;
-use super::attestation::{ActKind, ActorClass, AgentActKind, ReviewPolicy};
+use super::attestation::{
+    ActKind, ActorClass, AgentAct, AgentActKind, CoveredSet, DisposedPass, RecordedAct,
+    ReviewDisposition, ReviewPolicy, ReviewRef,
+};
 use super::bounds::DESIGN_ID_BYTES;
-use super::facts::DerivedDesignFacts;
-use super::ids::Fingerprint;
+use super::ids::{DesignId, Fingerprint};
+use super::inquiry::InquiryLifecycle;
 use super::refusal::Refusal;
+use super::run::DerivedInput;
 use super::runbook::{RunbookKey, RunbookStanding};
+use super::snapshot::DesignSnapshot;
 
 // ---------------------------------------------------------------------------
 // The contract vocabulary (design sec-3). What a condition requires, what
@@ -196,10 +202,6 @@ impl RequiredActor {
     ///
     /// Rides [`ReviewPolicy::lanes`] — membership has one home, and a second lane
     /// table here would be the parallel implementation this slice refuses.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-05 T10 evaluates over this")
-    )]
     pub(crate) const fn resolve(self, policy: ReviewPolicy) -> &'static [ActorClass] {
         match self {
             RequiredActor::Fixed(ActorClass::User) => &[ActorClass::User],
@@ -464,6 +466,19 @@ macro_rules! condition_vocabulary {
                     $($(Condition::$variant => $token,)+)+
                 }
             }
+
+            /// What this condition requires, binds to, and is discharged by.
+            ///
+            /// A generated match rather than a search over [`CONTRACTS`], so it
+            /// is **total** — every condition has a contract because the two are
+            /// emitted from one row, and no caller has an `Option` to decide what
+            /// to do with. `CONTRACTS` remains for the readers that iterate;
+            /// neither can drift from the other, since both are this row.
+            pub(crate) const fn contract(self) -> Contract {
+                match self {
+                    $($(Condition::$variant => $contract,)+)+
+                }
+            }
         }
 
         /// What each condition requires, binds to, and is discharged by
@@ -719,16 +734,24 @@ pub(crate) fn requirement_for(act: ActKind) -> Option<ActRule> {
 }
 
 impl Condition {
-    /// Whether this condition is **derived from the run's own review state**
-    /// rather than claimed by a caller (design §5.4).
+    /// Whether a caller may not claim this condition as recorded evidence
+    /// (DEC-063).
     ///
-    /// **A bridge with a scheduled death (`D1`).** This is the *incumbent*
-    /// partition — which conditions [`ReviewStanding`] answers for — and it is
-    /// deliberately NOT [`ConditionKind`], which asks a different question (is the
-    /// derivation `Engine` or `Attested`). The two disagree on purpose right now:
-    /// `materialisation-current` is `Engine` and still caller-claimed here.
-    /// PHASE-05 `T10` deletes this along with the evidence scan it partitions,
-    /// and after that there is one derivation with no branch on kind at all.
+    /// **What is left of `D1`'s bridge, and it is no longer a bridge.** `T10`
+    /// deleted the partition's gate-side half — [`satisfied`] derives every
+    /// condition from its own contract row and asks nothing here. What survives is
+    /// the *admission*-side half: `ApplyRequest::evidence` is still on the wire
+    /// until `T11`, and this is the set a payload may not assert.
+    ///
+    /// It is deliberately still NOT [`ConditionKind`], and after `T10` it is not
+    /// the derivation partition either — under DEC-120 **every** condition is
+    /// derived, so the honest total answer is *no condition is claimable*. That
+    /// answer is not given here because it would refuse the evidence claims the
+    /// three e2e ladders still carry, and retiring those is `T11`'s deletion sweep
+    /// (`D2`): `T10` changes the mechanism with no simultaneous change of fixture.
+    /// This retires with [`Evidence`] and the wire field it guards.
+    ///
+    /// [`Evidence`]: super::facts::Evidence
     pub(crate) const fn is_derived(self) -> bool {
         match self {
             Condition::SectionAttestationsCurrent
@@ -780,10 +803,6 @@ impl Contract {
     /// had to be carried. A condition's remedy **is** recoverable, once the table
     /// exists — so this needs no new refusal field, and `Condition` keeps the
     /// fieldless `Copy`/`Ord`/serde shape DEC-122 promised.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "SL-244 PHASE-05 T10 renders this in a refusal")
-    )]
     pub(crate) fn remedy(&self) -> String {
         match self.derivation {
             DerivationRule::Engine(source) => source.remedy().to_owned(),
@@ -962,8 +981,21 @@ pub(crate) const fn boundary_runbook(edge: Advance) -> RunbookKey {
     }
 }
 
-/// Every condition on the path from [`Stage::Exploring`] up to `to` — the
-/// *cumulative* set DEC-067 requires to hold again against current content.
+/// Every condition the crossing into `to` enforces — the *cumulative* set
+/// DEC-067 requires to hold again against current content, **filtered by reach**.
+///
+/// The filter is applied as the set accumulates rather than after it, because
+/// reach is a property of the row relative to *this* crossing: an
+/// [`Reach::EdgeLocal`] row is enforced by the edge that names it and by no edge
+/// above, while a [`Reach::Cumulative`] row is enforced by every edge from its own
+/// upward. Accumulating first and filtering after would have nothing left to
+/// filter *by* — the edge each row came from is exactly what is lost.
+///
+/// So a run standing at `reviewing` is not asked to hold
+/// `drafting-readiness-attested` again: re-asserting *drafting may begin* two
+/// stages after it began asks a question with no meaning, and the content drift
+/// one might imagine that catching is `materialisation-current`'s, which is
+/// cumulative.
 pub(crate) fn cumulative_conditions(to: Stage) -> Vec<Condition> {
     let mut out = Vec::new();
     for pair in Stage::ALL.windows(2) {
@@ -976,7 +1008,15 @@ pub(crate) fn cumulative_conditions(to: Stage) -> Vec<Condition> {
         // Each window resolves to an edge before it reaches the boundary table;
         // no `(Stage, Stage)` pair is threaded into it (SL-244 PHASE-01 EX-3).
         if let Some(edge) = Advance::between(from, next) {
-            out.extend_from_slice(boundary_conditions(edge));
+            let crossing = next == to;
+            out.extend(
+                boundary_conditions(edge)
+                    .iter()
+                    .copied()
+                    .filter(|condition| {
+                        crossing || condition.contract().reach == Reach::Cumulative
+                    }),
+            );
         }
     }
     out
@@ -1006,40 +1046,488 @@ pub(crate) struct ReviewStanding {
     pub(crate) acceptance_current: bool,
 }
 
-impl ReviewStanding {
-    /// This standing's answer for `condition`, or `None` when the condition is
-    /// not one this type owns.
+/// One way a condition failed (design `sec-6`).
+///
+/// A variant per failure mode rather than a message, for the reason
+/// [`ReviewStanding`]'s four booleans are four: each is repaired by a different
+/// act, and collapsing them reports one outstanding thing where several are.
+///
+/// Serde rides here because [`Refusal`] derives it whole; a refusal is an error
+/// surface and never stored state, so nothing round-trips this.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Cause {
+    /// No live act of the required kind. `lanes` is the lanes with no act — one
+    /// entry under [`RequiredActor::Fixed`], up to two once
+    /// [`RequiredActor::RunPolicy`] resolves.
+    ActMissing {
+        /// The act the rule names.
+        act: ActKind,
+        /// The lanes it is owed in.
+        lanes: Vec<ActorClass>,
+    },
+    /// [`Coverage::PerSection`]: these sections have no live act for the named
+    /// lane.
+    SectionsUnreviewed {
+        /// Each (section, lane) pair still owed, id-ordered.
+        subjects: Vec<(DesignId, ActorClass)>,
+    },
+    /// A per-section requirement over a run holding no sections. Distinct from an
+    /// empty [`Cause::SectionsUnreviewed`], which cannot occur: a run owing no
+    /// sections owes no lanes, so the quantification is vacuously satisfied and
+    /// an empty document would lock.
+    NoSections,
+    /// The act is live and what it was given over has moved.
+    CoverageStale {
+        /// The act whose coverage went stale.
+        act: ActKind,
+        /// The subjects that moved, id-ordered.
+        moved: Vec<DesignId>,
+    },
+    /// A fact the rule names has moved, or could not be observed at all.
+    ObservedStale {
+        /// The act that was given over it.
+        act: ActKind,
+        /// The fact that moved.
+        fact: ObservedFact,
+    },
+    /// The act names a declaration that has since changed.
+    ConfirmationStale {
+        /// The confirming act.
+        act: ActKind,
+        /// The declaration it no longer names.
+        declaration: AgentActKind,
+    },
+    /// The named `RV` carries blockers in `open` or `contested`, by `F-n` id.
+    BlockersUndisposed {
+        /// The ledger's own finding ids.
+        findings: Vec<String>,
+    },
+    /// The disposition was given over a pass that is no longer the run's current
+    /// one — `sec-3`'s re-entry rule. Names both, because the repair is to
+    /// dispose the new pass and the reader has to know there is one.
+    PassSuperseded {
+        /// The pass the act disposed.
+        disposed: ReviewRef,
+        /// The pass the run is on now.
+        current: ReviewRef,
+    },
+    /// The act is live and names an `RV` the shell could not read at all.
     ///
-    /// The `None` arm is defence, not a case: [`Condition::is_derived`] is the
-    /// partition and [`satisfied`] consults it first. If the two ever disagreed,
-    /// a derived condition with no answer here reads as **unsatisfied** — the
-    /// gate stays shut rather than opening on a missing answer.
-    const fn holds(self, condition: Condition) -> Option<bool> {
-        match condition {
-            Condition::SectionAttestationsCurrent => Some(self.sections_attested),
-            // The `D1` bridge, with a scheduled death: DEC-126 folded
-            // `integrated-review-present` and `blocking-findings-disposed` into
-            // one row, and the incumbent standing still carries them as two
-            // booleans. Conjoining them here keeps the evidence scan working over
-            // the nine-row vocabulary for exactly as long as it survives — `T10`
-            // deletes this arm along with the scan, and `VA-2`'s sweep at `T14`
-            // re-checks that it is gone.
-            Condition::ReviewDispositionAttested => {
-                Some(self.integrated_current && self.findings_disposed)
+    /// Distinct from [`Cause::BlockersUndisposed`], which reports a ledger that
+    /// WAS read; reporting an unreadable one as carrying blockers would name
+    /// findings nobody has seen. It is what makes the derivation total over
+    /// `sec-3`'s *absence is refusal* rule — admission checked the ledger when the
+    /// act was written and cannot reach back, so a ledger that later becomes
+    /// unreadable needs a truthful value to be unmet *with*.
+    ReviewUnavailable {
+        /// The review the act named.
+        review: ReviewRef,
+    },
+    /// [`EngineSource::Dispositions`]: these blocking inquiries are not disposed.
+    InquiriesOpen {
+        /// The node ids still owed a disposition, id-ordered.
+        nodes: Vec<DesignId>,
+    },
+    /// [`EngineSource::Materialisation`]: `design.md` is not the document the run
+    /// last wrote.
+    MaterialisationStale,
+}
+
+/// One condition an edge required and did not get.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Unmet {
+    /// The condition, which is also the address of its contract.
+    pub(crate) condition: Condition,
+    /// EVERY way this condition is unmet, not the first. A conjunction that fails
+    /// on both halves says both — which is DEC-121's own reason for refusing the
+    /// fold into `user-accepts-sufficiency`.
+    ///
+    /// Non-empty in fact and not in type: [`satisfied`] is its sole producer and
+    /// returns satisfied where it pushed nothing, so an empty one cannot be built
+    /// by any path that exists. Stated rather than claimed as an invariant.
+    pub(crate) causes: Vec<Cause>,
+}
+
+impl fmt::Display for Cause {
+    /// What went wrong, in the caller's own vocabulary.
+    ///
+    /// Rendered here rather than at the refusal, so a cause and the data it
+    /// carries stay in one place. Every token is the closed vocabulary's own
+    /// `as_str` — `clippy::use_debug` is denied and a second spelling of a
+    /// serde-derived token is the drift STD-001 forbids.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Cause::ActMissing { act, ref lanes } => write!(
+                f,
+                "no live `{}` from {}",
+                act.as_str(),
+                join(lanes.iter().map(|lane| lane.as_str()))
+            ),
+            Cause::SectionsUnreviewed { ref subjects } => write!(
+                f,
+                "unreviewed: {}",
+                join(subjects.iter().map(|(subject, lane)| format!(
+                    "{} ({})",
+                    subject.as_str(),
+                    lane.as_str()
+                )))
+            ),
+            Cause::NoSections => write!(f, "the document holds no sections"),
+            Cause::CoverageStale { act, ref moved } => write!(
+                f,
+                "`{}` was given over content that has moved: {}",
+                act.as_str(),
+                join(moved.iter().map(DesignId::as_str))
+            ),
+            Cause::ObservedStale { act, fact } => write!(
+                f,
+                "`{}` was given over `{}`, which has moved or cannot be observed",
+                act.as_str(),
+                fact.as_str()
+            ),
+            Cause::ConfirmationStale { act, declaration } => write!(
+                f,
+                "`{}` confirms a `{}` that is not the one recorded",
+                act.as_str(),
+                ActKind::from(declaration).as_str()
+            ),
+            Cause::BlockersUndisposed { ref findings } => write!(
+                f,
+                "blocking findings hold the edge: {}",
+                join(findings.iter().map(String::as_str))
+            ),
+            Cause::PassSuperseded {
+                ref disposed,
+                ref current,
+            } => write!(
+                f,
+                "the disposition covers pass `{}`; the run is on `{}`",
+                disposed.as_str(),
+                current.as_str()
+            ),
+            Cause::ReviewUnavailable { ref review } => {
+                write!(f, "`{}` could not be read", review.as_str())
             }
-            Condition::UserAcceptanceAttested => Some(self.acceptance_current),
-            _ => None,
+            Cause::InquiriesOpen { ref nodes } => write!(
+                f,
+                "blocking inquiries await disposition: {}",
+                join(nodes.iter().map(DesignId::as_str))
+            ),
+            Cause::MaterialisationStale => write!(
+                f,
+                "`design.md` is not the document this run last materialised"
+            ),
         }
     }
 }
 
-/// Whether one condition holds — from the run's review state if it is derived,
-/// from recorded evidence if it is claimed.
-fn satisfied(condition: Condition, facts: &DerivedDesignFacts, standing: ReviewStanding) -> bool {
-    if condition.is_derived() {
-        standing.holds(condition) == Some(true)
+/// One comma-separated list, so eleven causes do not spell it eleven ways.
+fn join(terms: impl Iterator<Item = impl fmt::Display>) -> String {
+    terms
+        .map(|term| term.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+impl fmt::Display for Unmet {
+    /// One line: the condition's token — the address of its contract — then every
+    /// way it failed, then how to discharge it.
+    ///
+    /// The remedy is rendered from the same [`DerivationRule`] the injected
+    /// contract line is, so the refusal text and the contract cannot disagree:
+    /// they are one value formatted twice. It is the one promise this line keeps
+    /// that the causes cannot, because *the exit exists* is not a way a condition
+    /// failed.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}: {} → {}",
+            self.condition.as_str(),
+            join(self.causes.iter()),
+            self.condition.contract().remedy()
+        )
+    }
+}
+
+/// Whether one condition holds against current content, and every way it does
+/// not (design `sec-3`, `sec-6`, `EX-9`).
+///
+/// **One derivation, with no branch on kind.** DEC-120's `Attested` names input
+/// *provenance*, not a second decision procedure: every condition here is derived
+/// from the rule its own row carries, and what varies is who could author the
+/// state it derives over. The fork this replaced — a review-standing arm and an
+/// existential evidence scan — could not express any of the causes below, because
+/// *someone asserted this against some subject whose bytes have not moved* is not
+/// a reading of the state at all.
+///
+/// The second parameter is the **whole** derived-input record rather than a
+/// parameter per fact class, because which facts a condition needs is a property
+/// of its rule and not of this signature — and because a new observed fact then
+/// arrives without touching a call site.
+///
+/// A predicate plus a separate explainer would be two derivations that can
+/// disagree, and a gate that refuses while the explanation says nothing is wrong
+/// is worse than either alone.
+pub(crate) fn satisfied(
+    condition: Condition,
+    run: &DesignSnapshot,
+    derived: &DerivedInput,
+) -> Result<(), Vec<Cause>> {
+    let mut causes = Vec::new();
+    match condition.contract().derivation {
+        DerivationRule::Engine(EngineSource::Dispositions) => {
+            let nodes = blocking_inquiries_open(run);
+            if !nodes.is_empty() {
+                causes.push(Cause::InquiriesOpen { nodes });
+            }
+        }
+        DerivationRule::Engine(EngineSource::Materialisation) => {
+            // The document Doctrine last wrote, against the document it reads
+            // now. `materialised` is what makes absence answerable: a run that
+            // has never materialised has no watermark and no document, and
+            // "equal" there means *nothing to compare*, not *current*.
+            if !run.authored.materialised || run.authored.watermark != derived.authored_fingerprint
+            {
+                causes.push(Cause::MaterialisationStale);
+            }
+        }
+        // The quantified shape: the derivation walks the section set rather than
+        // reading a map any act carries, and the non-empty guard is part of what
+        // `PerSection` means rather than a check beside it.
+        DerivationRule::Attested(rule) if rule.binding.coverage == Coverage::PerSection => {
+            if run.sections.fingerprints().is_empty() {
+                causes.push(Cause::NoSections);
+            } else {
+                let subjects = run.sections_unreviewed();
+                if !subjects.is_empty() {
+                    causes.push(Cause::SectionsUnreviewed { subjects });
+                }
+            }
+        }
+        DerivationRule::Attested(rule) => {
+            for required in rule.acts {
+                act_causes(*required, rule.binding, run, derived, &mut causes);
+            }
+        }
+    }
+    if causes.is_empty() {
+        Ok(())
     } else {
-        facts.satisfies(condition)
+        Err(causes)
+    }
+}
+
+/// Every way one required act fails to discharge its half of a rule.
+///
+/// A conjunction of independent checks rather than a first-failure walk: an act
+/// whose coverage has moved *and* whose confirmation is stale is two repairs, and
+/// reporting one would send a caller round the loop twice.
+fn act_causes(
+    required: ActRequirement,
+    binding: Binding,
+    run: &DesignSnapshot,
+    derived: &DerivedInput,
+    causes: &mut Vec<Cause>,
+) {
+    let act = required.act;
+    let Some(record) = live_act(run, act) else {
+        causes.push(Cause::ActMissing {
+            act,
+            lanes: required.actor.resolve(run.run.review_policy).to_vec(),
+        });
+        return;
+    };
+    let moved = coverage_moved(binding.coverage, record, run);
+    if !moved.is_empty() {
+        causes.push(Cause::CoverageStale { act, moved });
+    }
+    for fact in binding.observed {
+        // Conjunctive with the coverage and with each other, and fail-closed on
+        // both sides: an act that stored no fingerprint for a fact its rule now
+        // names, and a fact the shell could not observe this invocation, both
+        // read as CHANGED. Absence is never agreement.
+        let given = record.observed().get(fact);
+        let seen = derived.observed_facts.facts.get(fact);
+        if !matches!((given, seen), (Some(given), Some(seen)) if given == seen) {
+            causes.push(Cause::ObservedStale { act, fact: *fact });
+        }
+    }
+    if let Some(declaration) = required.confirms {
+        let live = run
+            .declarations
+            .declarations
+            .iter()
+            .find(|held| held.act.kind() == declaration);
+        // One way: the act names the declaration's claim digest, so a declaration
+        // made or edited after the confirmation carries a different one and the
+        // link breaks. Coverage answers whether the material moved; this answers
+        // whether this is the claim the user was shown.
+        if !matches!((record.confirms(), live), (Some(named), Some(live)) if *named == live.fingerprint)
+        {
+            causes.push(Cause::ConfirmationStale { act, declaration });
+        }
+    }
+    if let Some(disposed) = record.disposition() {
+        disposition_causes(disposed, run, derived, causes);
+    }
+}
+
+/// The blocking inquiries this run still owes a disposition, id-ordered.
+///
+/// **Which inquiries are blocking is the run's own recorded answer**, not a
+/// re-derivation: DEC-121 makes the agent's [`AgentAct::BlockingSetDeclared`] the
+/// artefact and the user's `GraphReviewed` the confirmation of it, so the set the
+/// user steered is the set this row quantifies over. Reading *every open node*
+/// instead would gate on questions nobody said were blocking, and would leave the
+/// declared set with no consumer at all — which is the one thing DEC-121 created
+/// it to be.
+///
+/// It cannot be gated on a set nobody declared: `initial-concerns-recorded` is
+/// [`Reach::Cumulative`] and carries the declaration, so this edge and every edge
+/// above it already require one. A declaration whose map has moved goes stale
+/// there rather than being silently re-read here.
+///
+/// **Disposed** is `resolved`, which is the only lifecycle that can carry a
+/// [`Disposition`](super::inquiry::Disposition) — DEC-062 makes resolution
+/// without one unrepresentable, so *has a disposition* and *is resolved* are one
+/// question. A node that has left the map entirely is not outstanding: the
+/// declaration's `InquiryMap` coverage is what answers for a map that moved.
+///
+/// [`AgentAct::BlockingSetDeclared`]: super::attestation::AgentAct::BlockingSetDeclared
+fn blocking_inquiries_open(run: &DesignSnapshot) -> Vec<DesignId> {
+    run.declarations
+        .declarations
+        .iter()
+        .find_map(|held| match held.act {
+            AgentAct::BlockingSetDeclared { ref blocking } => Some(blocking),
+            AgentAct::DraftingReady => None,
+        })
+        .map(|blocking| {
+            blocking
+                .iter()
+                .filter(|node| {
+                    run.map
+                        .inquiry
+                        .get(node)
+                        .is_some_and(|node| node.lifecycle() != InquiryLifecycle::Resolved)
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The live record of `act`, in whichever group holds acts of its shape.
+///
+/// Keyed on the act rather than on its required actor: the three vocabularies are
+/// disjoint in [`ActKind`], so the lookup cannot reach into the wrong group, and
+/// it stays right if a rule's actor ever changes. [`ActKind::SectionReviewed`]
+/// yields `None` here by construction — its shape is quantified over, never
+/// looked up, which is why [`satisfied`] answers `PerSection` before it arrives.
+fn live_act(run: &DesignSnapshot, act: ActKind) -> Option<RecordedAct<'_>> {
+    run.acts
+        .acts
+        .iter()
+        .find(|held| held.act == act)
+        .map(RecordedAct::Checkpoint)
+        .or_else(|| {
+            run.declarations
+                .declarations
+                .iter()
+                .find(|held| ActKind::from(held.act.kind()) == act)
+                .map(RecordedAct::Agent)
+        })
+}
+
+/// The subjects a live act's coverage no longer matches, in the shape its rule
+/// names.
+///
+/// A map of the wrong shape — or none where one is required — covers **nothing**,
+/// so every current subject has moved. That is not a defensive branch: admission
+/// refuses a mismatched shape on write, so the only route here is a rule that
+/// changed under a stored act, and reading the record through the rule is exactly
+/// how the design retires one.
+fn coverage_moved(
+    coverage: Coverage,
+    record: RecordedAct<'_>,
+    run: &DesignSnapshot,
+) -> Vec<DesignId> {
+    let carried = record.covered();
+    match coverage {
+        // Inert by construction: the act's own recorded content cannot move, so a
+        // row bound this way is invalidated only by its observed conjunct — which
+        // is `governing-context-recorded`'s whole mechanism.
+        Coverage::Artefact => Vec::new(),
+        Coverage::EverySection => {
+            let current = run.sections.fingerprints();
+            match carried {
+                Some(CoveredSet::Sections(covered)) => covered.diff(&current),
+                _ => current.into_keys().collect(),
+            }
+        }
+        Coverage::InquiryMap => {
+            let current = run.map.inquiry.materials();
+            match carried {
+                Some(CoveredSet::Nodes(covered)) => covered.diff(&current),
+                _ => current.into_keys().collect(),
+            }
+        }
+        // Carried by no act: the derivation quantifies over the section set
+        // instead, above. An act reaching here under a changed rule covers nothing
+        // that rule now names, which is every section it quantifies over.
+        Coverage::PerSection => run.sections.fingerprints().into_keys().collect(),
+    }
+}
+
+/// What a carried disposition must still be, at this crossing.
+///
+/// Live rather than settled at admission, and the split is deliberate: admission
+/// asks *was this a true claim when written* (has the pass concluded), and the
+/// gate asks *is it still the answer* (is it the run's current pass, and are its
+/// blockers still open). The first is a fact about a moment; the second rots.
+fn disposition_causes(
+    disposed: &DisposedPass,
+    run: &DesignSnapshot,
+    derived: &DerivedInput,
+    causes: &mut Vec<Cause>,
+) {
+    // A pass is minted on entry to `reviewing` and replaced, never cleared, and a
+    // disposition cannot be constructed while the run is on none
+    // (`Refusal::ReviewPassAbsent`). So a disposition implies a pass, and `None`
+    // here is unreachable rather than defended against — it would be a refusal
+    // with no pass to name.
+    if let Some(pass) = run.review.pass.as_ref()
+        && pass.review != disposed.pass
+    {
+        causes.push(Cause::PassSuperseded {
+            disposed: disposed.pass.clone(),
+            current: pass.review.clone(),
+        });
+    }
+    let ReviewDisposition::Conducted { ref review } = disposed.disposition else {
+        // `Waived` is answered entirely at admission: its reason is non-blank or
+        // the act does not exist. Nothing about it rots, which is what makes it
+        // the arm that is crossable through the whole IMP-392 interim.
+        return;
+    };
+    // The observation must be OF this review: one taken over another ledger
+    // answers a question nobody asked, and reading it as this one's would be
+    // worse than reading nothing.
+    let Some(seen) = derived
+        .observed_review
+        .as_ref()
+        .filter(|seen| seen.reference == *review)
+    else {
+        causes.push(Cause::ReviewUnavailable {
+            review: review.clone(),
+        });
+        return;
+    };
+    if !seen.undisposed_blockers.is_empty() {
+        causes.push(Cause::BlockersUndisposed {
+            findings: seen.undisposed_blockers.clone(),
+        });
     }
 }
 
@@ -1053,8 +1541,8 @@ fn satisfied(condition: Condition, facts: &DerivedDesignFacts, standing: ReviewS
 pub(crate) fn advance(
     from: Stage,
     to: Stage,
-    facts: &DerivedDesignFacts,
-    standing: ReviewStanding,
+    run: &DesignSnapshot,
+    derived: &DerivedInput,
     runbook: Option<&RunbookStanding>,
 ) -> Result<Stage, Refusal> {
     // Legality is [`Advance::between`] and nothing else — the forward graph has
@@ -1093,14 +1581,21 @@ pub(crate) fn advance(
             regressed: runbook.map_or_else(Vec::new, |held| held.regressed.clone()),
         });
     }
-    let missing: Vec<Condition> = cumulative_conditions(to)
+    // Every unmet condition with every way it is unmet, never the first of
+    // either: an agent that fixes one and retries should not have to discover the
+    // rest one round-trip at a time.
+    let unmet: Vec<Unmet> = cumulative_conditions(to)
         .into_iter()
-        .filter(|condition| !satisfied(*condition, facts, standing))
+        .filter_map(|condition| {
+            satisfied(condition, run, derived)
+                .err()
+                .map(|causes| Unmet { condition, causes })
+        })
         .collect();
-    if missing.is_empty() {
+    if unmet.is_empty() {
         Ok(to)
     } else {
-        Err(Refusal::GateNotCleared { from, to, missing })
+        Err(Refusal::GateNotCleared { from, to, unmet })
     }
 }
 

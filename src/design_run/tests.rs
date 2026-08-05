@@ -14,10 +14,11 @@
 use std::collections::BTreeMap;
 
 use super::Stage;
-use super::admission::{RecordedAct, admit_act};
+use super::admission::admit_act;
 use super::attestation::{
     ActKind, ActorClass, AgentAct, AgentActKind, ContentCoverage, CoveredSet, DisposedPass,
-    IntentSubject, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef, Reviewer,
+    IntentSubject, RecordedAct, RecoveryIntent, ReviewDisposition, ReviewPolicy, ReviewRef,
+    Reviewer,
 };
 use super::facts::DerivedDesignFacts;
 use super::fixture::{

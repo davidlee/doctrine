@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentActKind, ReviewRef};
-use super::gate::{Condition, Coverage, ObservedFact};
+use super::gate::{Condition, Coverage, ObservedFact, Unmet};
 use super::ids::{DesignId, IdKind};
 
 /// One way a recorded act fails to correspond to the rule it is written against
@@ -160,7 +160,10 @@ pub(crate) enum Refusal {
     GateNotCleared {
         from: Stage,
         to: Stage,
-        missing: Vec<Condition>,
+        /// Every condition the edge required and did not get, each with every way
+        /// it failed. Replaces `missing: Vec<Condition>`, which could carry no
+        /// row of the complaint the design owes a caller.
+        unmet: Vec<Unmet>,
     },
     /// A direct regression was submitted without a recorded reason (DEC-067).
     RegressionReasonMissing { from: Stage, to: Stage },
@@ -441,27 +444,44 @@ impl fmt::Display for Refusal {
     /// A terse, single-line rendering. The *data* is the contract — tests assert
     /// on the variant, never on this text — but a refusal has to be able to cross
     /// a `Display` boundary, and serde's `try_from` is one of them.
+    ///
+    /// **Two variants are multi-line, and the second half above is what makes the
+    /// first half negotiable.** [`Refusal::VerifierFailed`] embeds a newline
+    /// before the verifier's own output, and [`Refusal::GateNotCleared`] renders
+    /// one line per unmet condition — token, causes, remedy. The shell's only
+    /// crossing is `anyhow!("{refused}")`, so a refusal that does not say a thing
+    /// here does not say it to any caller; and DEC-124 gives the gate leg no byte
+    /// budget, which is the whole reason the remedy rides this line rather than
+    /// the envelope. Not [`Refusal::RunbookNotDischarged`], whose `regressed`
+    /// clause appends to its first line rather than following it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Refusal::IllegalStageMove { from, to } => {
                 write!(f, "illegal stage move: {} → {}", from.as_str(), to.as_str())
             }
-            // The conditions are **named**, not counted. The type has always
-            // carried every missing one for the reason the module doc gives — an
-            // agent that fixes one and retries should not discover the rest one
-            // round-trip at a time — but the only surface a black-box caller has
-            // is this line, and a count told it nothing it could act on.
-            Refusal::GateNotCleared { from, to, missing } => write!(
-                f,
-                "gate not cleared for {} → {}: {} outstanding",
-                from.as_str(),
-                to.as_str(),
-                missing
-                    .iter()
-                    .map(|condition| condition.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            // The conditions are **named**, not counted, and each carries how it
+            // failed and how to discharge it. The type has always held every
+            // missing one for the reason the module doc gives — an agent that
+            // fixes one and retries should not discover the rest one round-trip
+            // at a time — but the only surface a black-box caller has is this
+            // text, so a name alone told it what was outstanding and not what to
+            // do about it. The remedy is a total function of the condition
+            // (`Contract::remedy`), which is what lets a caller refused at the
+            // top edge on a bottom edge's condition act on it without fetching
+            // anything.
+            Refusal::GateNotCleared { from, to, unmet } => {
+                write!(
+                    f,
+                    "gate not cleared for {} → {}: {} outstanding",
+                    from.as_str(),
+                    to.as_str(),
+                    unmet.len()
+                )?;
+                for outstanding in unmet {
+                    write!(f, "\n  {outstanding}")?;
+                }
+                Ok(())
+            }
             Refusal::AcceptanceBasisMissing => write!(
                 f,
                 "a user acceptance must state its basis; an auditable claim with nothing stated \

@@ -26,66 +26,14 @@
 
 use std::collections::BTreeSet;
 
-#[cfg(doc)]
-use super::attestation::Attestation;
 use super::attestation::{
-    ActKind, AgentAct, AgentActKind, AgentDeclaration, CheckpointAct, CoveredSet, DisposedPass,
+    AgentAct, AgentActKind, AgentDeclaration, CoveredSet, DisposedPass, RecordedAct,
     ReviewDisposition,
 };
 use super::gate::{ActRule, Coverage, ObservedFact};
 use super::ids::DesignId;
 use super::refusal::{ActFault, Refusal};
 use super::run::ObservedReview;
-
-/// One recorded act, in whichever of the three shapes holds it.
-///
-/// A borrowed sum rather than a check per shape, because the correspondence is
-/// **one** rule that ranges over all three: three of its four rows reach
-/// [`CheckpointAct`] alone, and reaching that conclusion per call site is how a
-/// row gets forgotten for a shape. Every arm below is total over the three, and
-/// a fourth record shape would not compile until it answered every row.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum RecordedAct<'a> {
-    /// One of the five acts a user gives at a checkpoint — the only shape with a
-    /// slot for a confirmation, a disposition or an observed fact.
-    Checkpoint(&'a CheckpointAct),
-    /// One of the two acts an agent declares about its own work.
-    Agent(&'a AgentDeclaration),
-    /// The one act that is per-section, recorded as a content-bound
-    /// [`Attestation`].
-    ///
-    /// **Carries no attestation, and the absence is the finding.** All four rows
-    /// resolve for this shape without reading a field: it has no covered map
-    /// because the derivation quantifies over the section set instead, and no
-    /// slot for an observed fact, a confirmation or a disposition. So the answer
-    /// is a function of the rule alone — *does it name `PerSection`* — and every
-    /// attestation gives the same one. Carrying the record here to look
-    /// symmetrical would be carrying a value nothing reads.
-    ///
-    /// What an attestation *is* checked for is elsewhere by construction: its
-    /// subject at [`Refusal::AttestationSubjectMissing`], its lane at the gate.
-    Section,
-}
-
-impl<'a> RecordedAct<'a> {
-    /// Which act this record is of — what a rule names it by, and what a refusal
-    /// reports.
-    fn kind(self) -> ActKind {
-        match self {
-            RecordedAct::Checkpoint(act) => act.act,
-            RecordedAct::Agent(declaration) => ActKind::from(declaration.act.kind()),
-            RecordedAct::Section => ActKind::SectionReviewed,
-        }
-    }
-
-    /// The disposition this record carries, where its shape has a slot for one.
-    fn disposition(self) -> Option<&'a DisposedPass> {
-        match self {
-            RecordedAct::Checkpoint(act) => act.disposition.as_ref(),
-            RecordedAct::Agent(_) | RecordedAct::Section => None,
-        }
-    }
-}
 
 /// Admit one recorded act against the rule it is written against.
 ///
@@ -123,20 +71,16 @@ pub(crate) fn admit_act(
 /// Correspondence row 1: the carried [`CoveredSet`] variant is the one the rule's
 /// [`Coverage`] names, and `Artefact` pairs with `None`.
 fn coverage_fault(record: RecordedAct<'_>, required: Coverage) -> Option<ActFault> {
-    let carried = match record {
-        // The per-section shape **is** the quantification `PerSection` names: it
-        // carries no covered map because the derivation walks the section set
-        // instead. So it corresponds to that coverage and to no other.
-        RecordedAct::Section => {
-            return (required != Coverage::PerSection).then_some(ActFault::CoverageMismatch {
-                required,
-                carried: None,
-            });
-        }
-        RecordedAct::Checkpoint(act) => act.covered.as_ref(),
-        RecordedAct::Agent(declaration) => declaration.covered.as_ref(),
+    // The per-section shape **is** the quantification `PerSection` names: it
+    // carries no covered map because the derivation walks the section set
+    // instead. So it corresponds to that coverage and to no other.
+    if matches!(record, RecordedAct::Section) {
+        return (required != Coverage::PerSection).then_some(ActFault::CoverageMismatch {
+            required,
+            carried: None,
+        });
     }
-    .map(|covered| match *covered {
+    let carried = record.covered().map(|covered| match *covered {
         CoveredSet::Sections(_) => Coverage::EverySection,
         CoveredSet::Nodes(_) => Coverage::InquiryMap,
     });
@@ -153,13 +97,7 @@ fn coverage_fault(record: RecordedAct<'_>, required: Coverage) -> Option<ActFaul
 /// Correspondence row 2: the observed map's key set is **exactly** the rule's
 /// fact list — no missing fact, no extra one.
 fn observed_fault(record: RecordedAct<'_>, required: &[ObservedFact]) -> Option<ActFault> {
-    let carried: BTreeSet<ObservedFact> = match record {
-        RecordedAct::Checkpoint(act) => act.observed.keys().copied().collect(),
-        // Neither shape has the slot, so an act of either can only ever be given
-        // the empty set — which is why no rule naming an observed fact may name
-        // their acts, and why that is a build error rather than a check here.
-        RecordedAct::Agent(_) | RecordedAct::Section => BTreeSet::new(),
-    };
+    let carried: BTreeSet<ObservedFact> = record.observed().keys().copied().collect();
     let missing: Vec<ObservedFact> = required
         .iter()
         .copied()
@@ -175,7 +113,7 @@ fn observed_fault(record: RecordedAct<'_>, required: &[ObservedFact]) -> Option<
 /// Correspondence row 3: a confirmation is present exactly when the rule names a
 /// declaration, and absent exactly when it does not.
 fn confirmation_fault(record: RecordedAct<'_>, expected: Option<AgentActKind>) -> Option<ActFault> {
-    let carried = matches!(record, RecordedAct::Checkpoint(act) if act.confirms.is_some());
+    let carried = record.confirms().is_some();
     (expected.is_some() != carried).then_some(ActFault::Confirmation { expected, carried })
 }
 

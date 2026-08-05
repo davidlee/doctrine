@@ -28,11 +28,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Stage;
-use super::admission::{RecordedAct, admit_act};
+use super::admission::admit_act;
 use super::attestation::{
     AcceptanceAttestation, ActKind, AgentActKind, AgentDeclaration, Attestation, CheckpointAct,
     ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, LockAcceptance,
-    RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
+    RecordedAct, RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
@@ -480,8 +480,7 @@ pub(crate) fn apply(
             &mut next,
             stage.to,
             stage.reason.as_deref(),
-            derived.runbook.as_ref(),
-            &derived.verifications,
+            derived,
         )?);
     }
 
@@ -1571,12 +1570,15 @@ fn direct_traversal(
 
 /// A forward advance or a direct regression — one declaration, two verbs, chosen
 /// by the target rather than by a flag the caller could set inconsistently.
+///
+/// It takes `derived` **whole** rather than the two fields it used to pick out of
+/// it: the gate now reads whichever facts a condition's own rule names, so a
+/// parameter per fact class would have to grow every time a rule does (`EX-9`).
 fn stage_move(
     next: &mut DesignSnapshot,
     to: Stage,
     reason: Option<&str>,
-    facts: Option<&RunbookFacts>,
-    verifications: &[StepVerification],
+    derived: &DerivedInput,
 ) -> Result<Pending, Refusal> {
     let from = next.run.stage;
     let mut terms = vec![
@@ -1590,20 +1592,26 @@ fn stage_move(
         terms.push(PayloadTerm::prose(PayloadKey::Reason, regression.reason()));
         next.run.stage = regression.to();
     } else {
-        let standing = next.review_standing();
         // Derived here rather than stored, and derived for THIS edge: a set of
         // facts loaded for a different edge answers a different question, so it
         // is discarded rather than trusted.
-        let runbook = facts
+        let runbook = derived
+            .runbook
+            .as_ref()
             .filter(|facts| {
                 gate::Advance::between(from, to).map(gate::boundary_runbook) == Some(facts.key)
             })
             .map(|facts| {
-                facts
-                    .book
-                    .standing(&next.runbook.discharges, &facts.digests, verifications)
+                facts.book.standing(
+                    &next.runbook.discharges,
+                    &facts.digests,
+                    &derived.verifications,
+                )
             });
-        next.run.stage = gate::advance(from, to, &next.gate, standing, runbook.as_ref())?;
+        // The shared borrow is resolved into a local before the mutable write:
+        // the gate now reads the whole snapshot, and `next` is `&mut` here.
+        let cleared = gate::advance(from, to, next, derived, runbook.as_ref())?;
+        next.run.stage = cleared;
         if let Some(reason) = reason {
             terms.push(PayloadTerm::prose(PayloadKey::Reason, reason));
         }

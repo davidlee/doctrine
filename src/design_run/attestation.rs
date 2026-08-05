@@ -146,6 +146,20 @@ pub(crate) enum ActorClass {
     Adversarial,
 }
 
+impl ActorClass {
+    /// The kebab token this lane is spelled with everywhere — a refusal naming a
+    /// missing lane, and its serde form (STD-001). It agrees with the serde
+    /// rename by construction of the test that compares them, which is
+    /// [`ActKind::as_str`]'s arrangement.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            ActorClass::User => "user",
+            ActorClass::Agent => "agent",
+            ActorClass::Adversarial => "adversarial",
+        }
+    }
+}
+
 impl From<Reviewer> for ActorClass {
     fn from(reviewer: Reviewer) -> Self {
         match reviewer {
@@ -725,6 +739,95 @@ pub(crate) struct AgentDeclaration {
     /// was shown*, and *has the material moved since* — and they are two on
     /// purpose.
     pub(crate) fingerprint: Fingerprint,
+}
+
+/// One recorded act, in whichever of the three shapes holds it.
+///
+/// A borrowed sum over the three record types above, because **two** readers ask
+/// the same questions of an act and neither owns the answer: admission checks the
+/// record against its rule on write ([`admit_act`]), and the gate reads the record
+/// through its rule at every crossing ([`satisfied`]). Both need the same four
+/// slots, and three of those slots exist on one shape only — so reaching that
+/// conclusion per call site is how a slot gets forgotten for a shape. A fourth
+/// record type would not compile until it answered every accessor below.
+///
+/// [`admit_act`]: super::admission::admit_act
+/// [`satisfied`]: super::gate::satisfied
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RecordedAct<'a> {
+    /// One of the five acts a user gives at a checkpoint — the only shape with a
+    /// slot for a confirmation, a disposition or an observed fact.
+    Checkpoint(&'a CheckpointAct),
+    /// One of the two acts an agent declares about its own work.
+    Agent(&'a AgentDeclaration),
+    /// The one act that is per-section, recorded as a content-bound
+    /// [`Attestation`].
+    ///
+    /// **Carries no attestation, and the absence is the finding.** Every
+    /// accessor below resolves for this shape without reading a field: it has no
+    /// covered map because both readers quantify over the section set instead,
+    /// and no slot for an observed fact, a confirmation or a disposition. So each
+    /// answer is a function of the shape alone, and every attestation gives the
+    /// same one. Carrying the record here to look symmetrical would be carrying a
+    /// value nothing reads.
+    ///
+    /// What an attestation *is* checked for is elsewhere by construction: its
+    /// subject at [`Refusal::AttestationSubjectMissing`], its lane at the gate.
+    ///
+    /// [`Refusal::AttestationSubjectMissing`]: super::refusal::Refusal::AttestationSubjectMissing
+    Section,
+}
+
+impl<'a> RecordedAct<'a> {
+    /// Which act this record is of — what a rule names it by, and what a refusal
+    /// reports.
+    pub(crate) fn kind(self) -> ActKind {
+        match self {
+            RecordedAct::Checkpoint(act) => act.act,
+            RecordedAct::Agent(declaration) => ActKind::from(declaration.act.kind()),
+            RecordedAct::Section => ActKind::SectionReviewed,
+        }
+    }
+
+    /// What the act was given over, where its shape carries a map. `None` is
+    /// [`Coverage::Artefact`](super::gate::Coverage::Artefact) on the two shapes
+    /// that can carry one, and the quantified shape on the one that cannot.
+    pub(crate) const fn covered(self) -> Option<&'a CoveredSet> {
+        match self {
+            RecordedAct::Checkpoint(act) => act.covered.as_ref(),
+            RecordedAct::Agent(declaration) => declaration.covered.as_ref(),
+            RecordedAct::Section => None,
+        }
+    }
+
+    /// Each observed fact as it stood when the act was given.
+    ///
+    /// Empty for the two shapes with no slot, which is why no rule naming an
+    /// observed fact may name their acts — and why that is a build error at the
+    /// contract row rather than a check at either reader.
+    pub(crate) fn observed(self) -> &'a BTreeMap<ObservedFact, Fingerprint> {
+        const NONE: &BTreeMap<ObservedFact, Fingerprint> = &BTreeMap::new();
+        match self {
+            RecordedAct::Checkpoint(act) => &act.observed,
+            RecordedAct::Agent(_) | RecordedAct::Section => NONE,
+        }
+    }
+
+    /// The declaration digest this act confirms, where its shape has a slot.
+    pub(crate) const fn confirms(self) -> Option<&'a Fingerprint> {
+        match self {
+            RecordedAct::Checkpoint(act) => act.confirms.as_ref(),
+            RecordedAct::Agent(_) | RecordedAct::Section => None,
+        }
+    }
+
+    /// The disposition this record carries, where its shape has a slot for one.
+    pub(crate) const fn disposition(self) -> Option<&'a DisposedPass> {
+        match self {
+            RecordedAct::Checkpoint(act) => act.disposition.as_ref(),
+            RecordedAct::Agent(_) | RecordedAct::Section => None,
+        }
+    }
 }
 
 /// A user acceptance of the design as locked, and the content it accepted.
