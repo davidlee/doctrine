@@ -561,6 +561,14 @@ impl Fixture {
         )
     }
 
+    /// `design resume`, over the same `common::doctrine_cmd` seam every other
+    /// invocation here rides. Owned by this suite rather than hoisted beside the
+    /// ladder: the state suite's copy is four lines of argument vector, and one
+    /// shared runner already carries the part worth sharing (SL-244 `VT-6`).
+    fn resume(&self) -> String {
+        run(&self.root, &["design", "resume", SLICE, "-p", "."])
+    }
+
     /// Apply a payload with a fault injected before DEC-086's `step`, expecting
     /// the process to die there.
     ///
@@ -690,6 +698,58 @@ fn lock_admits_with_all_four_present() {
         assert!(
             stdout.contains(claim),
             "the lock must disclose `{claim}`, got: {stdout}"
+        );
+    }
+}
+
+// ── SL-244 PHASE-06: the top of the machine delivers no contract ───────────
+
+/// `VT-6` (`EX-6`) — a locked run emits no contract block.
+///
+/// The same real answer `Fragment::for_stage` and `boundary_runbook` already
+/// give at `locked`: nothing stands in front of the run, so there is no
+/// enforced set to deliver. Asserted so that `None` is not read as a gap.
+///
+/// **Why it lives in this suite.** `VT-5` carries the other three clauses in
+/// `tests/e2e_design_state.rs`, whose fixtures are all cold runs at `exploring`.
+/// A run at `Locked` is reachable only through the four-component ladder above,
+/// and re-creating that ladder beside a cold fixture is the parallel
+/// implementation this slice's own `VA-2` rows hunt for. One criterion, one
+/// file — the split, not a two-file mandate `test_file` cannot express.
+///
+/// The positive control is the same fixture one submission earlier: at
+/// `reviewing` every enforced header rides, so their absence after the lock is
+/// the stage deciding rather than the corpus going missing. Both halves read
+/// the vocabulary the binary compiles, so a retired or renamed condition moves
+/// this test with it (STD-001).
+#[test]
+fn locked_run_emits_no_contract_block() {
+    let fixture = Fixture::reviewing();
+    let enforced = design_run::gate::cumulative_conditions(Stage::Locked);
+    assert!(
+        !enforced.is_empty(),
+        "the lock edge enforces something, or the control below is vacuous"
+    );
+
+    let below = fixture.resume();
+    for condition in &enforced {
+        assert!(
+            below.contains(&format!("contract {} ", condition.as_str())),
+            "the control: at `reviewing` the block carries {}, got: {below}",
+            condition.as_str()
+        );
+    }
+
+    fixture.record_lock_acts("lock", None);
+    fixture.apply(&fixture.lock_payload("lock", None));
+    assert_eq!(fixture.stage(), Stage::Locked);
+
+    let locked = fixture.resume();
+    for condition in Condition::ALL {
+        assert!(
+            !locked.contains(&format!("contract {} ", condition.as_str())),
+            "a locked run delivers no contract, but it carried {}: {locked}",
+            condition.as_str()
         );
     }
 }
