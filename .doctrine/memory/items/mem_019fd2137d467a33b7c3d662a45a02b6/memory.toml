@@ -1,0 +1,46 @@
+memory_uid = "mem_019fd2137d467a33b7c3d662a45a02b6"
+memory_key = "mem.fact.clap.requires-inert-on-required-group-member"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clap requires is inert on a required ArgGroup member"
+summary = """clap's requires = "<arg>" never fires when <arg> is a required member of an ArgGroup — the group being satisfied by a sibling reads as the requirement met; validate in code instead"""
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = ["src/slice.rs"]
+globs = []
+commands = []
+tags = ["clap", "cli", "validation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "966cee209539e582f3c76a7de5db6633ae5f77a0"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2b40c5eb9f828e5ec74f8a97c5388949b19c67c6078b53936c9de2dc068192ea"
+base_commit = "5a43f40207772f7ab10f93a6b1e0bcad20042087"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "issue"
+ref = "ISS-317"
+
