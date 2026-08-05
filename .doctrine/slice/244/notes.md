@@ -146,6 +146,39 @@ fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1–T6 of 7 done) · e462c0fd
 
 ### Produced
 
+- **PHASE-08 DONE — the stage machine ships, published and pinned.**
+  `install/design-run-stages.md` is the corpus's **first generated asset**,
+  rendered by `src/design_run/artifact.rs` from the gate's macro output and
+  published at `reference/design-run-stages.md`
+  (`doctrine library show reference/design-run-stages.md`). The movement: the
+  module and its provenance banner (`21ac1e7d`); the diagram (`09ad2cb4`); the
+  edge table and its inherited column (`42c56765`); the condition table and the
+  discharge list (`0be59025`); the render, the golden and the backward-moves
+  prose (`28489006`); the manifest row and `VT-5` (`e8cc2dc1`); the `VA-1`
+  detector (`3aed3918`). All five `VT` rows PASS, `VA-1` is discharged
+  mechanically, `doctrine check gate` exit 0.
+  **Two facts about the artefact worth carrying.** The banner states
+  *provenance*, not an edit procedure — the shipped policy for a generated
+  asset, and the first thing a second one should reuse. And `customization =
+  "fixed"` here is a **third** class in the manifest, recorded in its header:
+  not sealed, not provisional-pending-an-override-seam, but *structural* —
+  overriding a derived description does not change what is derived, it only
+  makes the description wrong. `IMP-372`'s sweep now has two kinds of entry it
+  must not move.
+  **Two sheet assumptions were wrong and are worth the next phase's attention.**
+  `ARTIFACT_PATH` cannot land before the golden that reads it (no `cfg_attr`
+  shape admits a constant dead in *both* builds), and the golden cannot call
+  `crate::test_support::repo_root()` at all: `design_run` names `crate::`
+  nowhere, because the `e2e_design_*` binaries `#[path]`-include the whole tree
+  into a crate with no such path. Both are on the sheet as `F2`/`F3`; the second
+  generalises — **any** `cfg(test)` block in this leaf is bound by the same rule
+  as its shipped code.
+  **One planned departure for `/audit`:** the discharging act rides a list
+  beneath the condition table rather than a fifth column in it (sheet `D2`,
+  a letter-departure from `EX-2`(3)). `review-disposition-attested`'s remedy is
+  three lines and no markdown cell survives it; flattening would forfeit the
+  byte equality `VT-4` rests on.
+
 - **PHASE-07 IN FLIGHT — both lamps are built and rendered; `T7` (close-out) is
   all that is left.** The movement: the currency lamp (`c7dcaf62`); the count in
   `review` (`cdc9d86f`); the leaf record and the projection seam (`593751c2`);
@@ -339,6 +372,25 @@ fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1–T6 of 7 done) · e462c0fd
 
 Tree facts read off the source, still load-bearing for the phases that consume
 them. Cited by phase so a reader knows why each is here.
+
+**PHASE-08 (general, past this slice)** — *a leaf's crate-out-degree-zero rule
+binds its tests too, and only one build tells you.* `src/design_run/` names
+`crate::` nowhere so the `e2e_design_*` binaries can `#[path]`-include the whole
+tree standalone. That constraint is usually stated about shipped code, but a
+`crate::test_support::…` call inside a `#[cfg(test)] mod tests` breaks those
+binaries just as hard — and `cargo test --bin doctrine` compiles clean, so the
+failure only appears in a suite most inner loops skip. A leaf that needs a
+test-support helper spells it locally (`legacy.rs:168`'s precedent for the same
+reason on the shipped side); the shared helper is not reachable from both crates
+under one path.
+
+**PHASE-08 (general, past this slice)** — *`expect(dead_code)` cannot cover a
+symbol that is dead in both builds.* A module-level `cfg_attr(not(test),
+expect(dead_code))` absorbs items whose only consumers are tests, but a constant
+introduced *ahead* of its test consumer is dead in the `cfg(test)` build too,
+where the gate does not apply. An unconditional `expect` would then go
+unfulfilled the moment the consumer arrives, trading one build error for
+another. Land the symbol with its first reader, not before it.
 
 **PHASE-07 (general, past this slice)** — *staleness is made from the side that
 went stale.* `fixture::pass_over` and `attest` share a doc sentence — "a test
