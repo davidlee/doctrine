@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd1d7-a5fe-78f0-9f45-7ff642a3fe9c"
+recorded_at = "2026-08-05T12:13:18.718451405Z"
+kind = "friction"
+summary = "/design: dispose:create mints a knowledge record with an empty facet, so every ruling is hand-patched into TOML afterwards"
+detail = "CreateRecord accepts kind/title/slug/acceptance and no facet fields, yet the agent writing the checkpoint has the full ruling in hand at that moment. Across DEC-145..DEC-148 in SL-246's run that meant four Read+Edit+Write cycles on record-NNN.toml and record-NNN.md immediately after each apply — the content already existed in the conversation and was re-authored into two files per record. Directly implicated in the corpus-wide 24% decision fill rate; backlogged as IMP-403 lead 2."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

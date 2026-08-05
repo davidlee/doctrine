@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd212-adc7-7df3-94d1-fa49a1ba9e14"
+recorded_at = "2026-08-05T13:17:47.335592081Z"
+kind = "friction"
+summary = "/slice: the scaffolded slice-NNN.toml comment and the /slice skill both show 'doctrine link SL-NNN specs SPEC-018', but SL cannot author 'specs'"
+detail = "Scoping SL-248. Both the slice skill's step-4 example and the generated slice-248.toml header comment demonstrate 'doctrine link SL-NNN specs SPEC-018'. Running it errors: '`specs` is not a relation label authorable by SL via `link`. Legal labels: references, references, references, supersedes, governed_by, related, fulfils'. Then 'fulfils SPEC-030' also fails (targets must be ISS/IMP/CHR/RSK/IDE), then 'references SPEC-030' fails again for a missing --role. Three failed invocations to author one edge, each error revealing only one layer of the constraint. Also: the legal-label list prints 'references' three times (once per role) rather than naming the roles inline."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

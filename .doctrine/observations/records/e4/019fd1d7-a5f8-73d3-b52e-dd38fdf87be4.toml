@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd1d7-a5f8-73d3-b52e-dd38fdf87be4"
+recorded_at = "2026-08-05T12:13:18.712973483Z"
+kind = "friction"
+summary = "/design: the design apply payload shape had to be reverse-engineered from serde errors and source"
+detail = """Four probe cycles to learn one submission shape. `design show` prints a single `declare` example carrying subject/question/parent/needs; every other field had to be found by reading src/design_run/submission.rs. Specific costs: `discharge` is a struct that serde will also accept from a sequence, so passing a list produced 'invalid length 1, expected struct DischargeDeclaration with 3 elements' rather than naming the field; `provenance` is an internally-tagged enum needing {"provenance":"user-directed"} and rejected the bare string with 'expected internally tagged enum Provenance'; `known_revision" is required on every submission and its absence is a parse error, not a refusal naming it. Roughly 6 tool calls and a source read to get the first checkpoint accepted. A worked example per act kind in the envelope, or a --explain on apply, would collapse it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
