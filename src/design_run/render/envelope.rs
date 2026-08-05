@@ -1431,9 +1431,10 @@ mod tests {
     use crate::design_run::fixture::{
         PASS, SECTION_A, SECTION_B, attest, cleared, pass_over, run_holding,
     };
-    use crate::design_run::gate::advance;
+    use crate::design_run::gate::{Advance, advance};
     use crate::design_run::ids::DesignId;
     use crate::design_run::inquiry::{InquiryNode, Provenance};
+    use crate::design_run::prompt::contract_block;
     use crate::design_run::refusal::Refusal;
     use crate::design_run::runbook::RunbookStanding;
     use crate::design_run::snapshot::DesignSnapshot;
@@ -1677,6 +1678,66 @@ mod tests {
             !resumed.contains("blocker=") && !resumed.contains("review_pass"),
             "resume keeps its seven-field shape: {resumed}"
         );
+    }
+
+    /// `VT-3` / `EX-5` — the envelope carries no contract prose, at any stage.
+    ///
+    /// `DEC-124` ruled the contract block out of the envelope and into the
+    /// stage-entry receipt, on byte-budget grounds. A ruling nobody asserts is a
+    /// ruling that decays into a habit, and the decay is silent: contract prose
+    /// leaking back in would show up as a budget that mysteriously stopped fitting,
+    /// not as a failure naming its cause.
+    ///
+    /// **The probes are lifted from a real block rather than hardcoded**, so they
+    /// cannot drift out of date and quietly stop matching anything — the failure
+    /// mode that makes a negative assertion vacuous. The positive control runs
+    /// first for the same reason: it proves the tokens are findable at all before
+    /// anything concludes from not finding them.
+    ///
+    /// A synthetic narrative body is deliberately **not** among the probes: the
+    /// envelope could not contain a string this test invented, so asserting its
+    /// absence would prove nothing. What stands in for the body is the header and
+    /// the remedy — the two spellings a real block always carries, body or not.
+    #[test]
+    fn envelope_carries_no_contract_prose() {
+        let block = contract_block(Advance::ReviewingLocked, &std::collections::BTreeMap::new());
+        let header = block
+            .first()
+            .expect("a block opens with its header")
+            .clone();
+        let remedy = block
+            .iter()
+            .find(|line| line.starts_with("  discharge: "))
+            .expect("every condition renders its remedy")
+            .clone();
+        let probes = [header, remedy, "discharge:".to_owned()];
+
+        // The positive control: the tokens are findable where contracts DO render.
+        let rendered = block.join("\n");
+        for probe in &probes {
+            assert!(rendered.contains(probe), "the control finds `{probe}`");
+        }
+
+        for stage in Stage::ALL {
+            let (mut run, _) = cleared();
+            run.run.stage = stage;
+            let envelope = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+                .expect("the fixture run projects at every stage");
+            for (rendering, lines) in [
+                ("prompt", prompt(&envelope)),
+                ("status", status(&envelope)),
+                ("resume", resume(&envelope)),
+            ] {
+                let joined = lines.join("\n");
+                for probe in &probes {
+                    assert!(
+                        !joined.contains(probe),
+                        "{rendering} at {} carries `{probe}`: {joined}",
+                        stage.as_str()
+                    );
+                }
+            }
+        }
     }
 
     /// The gate and the envelope answer *is this section reviewed* from the same
