@@ -36,6 +36,13 @@
 # override seam does not exist yet (DEC-102 ruling (b); IMP-372 carries the
 # resolution). The set is bounded by the generated condition vocabulary and is
 # asserted set-equal to it, so a row here naming a retired condition fails.
+#
+# SL-244 PHASE-08 added the first GENERATED asset in the corpus — the design-run
+# stage machine, rendered from the gate tables and pinned to them by a golden.
+# Its `fixed` is a THIRD reason, not either of the two above: overriding a
+# derived description does not change what is derived, it only makes the
+# description wrong. So IMP-372's sweep has two kinds of entry it must not move,
+# not one — the sealed rows and this structural one.
 
 [[entry]]
 address       = "reference/LICENSE"
@@ -249,6 +256,15 @@ address       = "design-prompts/reviewing.toml"
 backing       = "design-prompts/reviewing.toml"
 kind          = "guidance"
 title         = "Design reviewing obligation runbook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "reference/design-run-stages.md"
+backing       = "design-run-stages.md"
+kind          = "reference"
+title         = "Design run stage machine"
 licence       = "MIT"
 provenance    = "declared"
 customization = "fixed"

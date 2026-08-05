@@ -743,6 +743,30 @@ mod tests {
         assert_eq!(got, expected, "resolve returns the backing bytes verbatim");
     }
 
+    /// SL-244 `VT-5` — the generated stage machine is reachable by address, at
+    /// the surface a client repo actually uses.
+    ///
+    /// Asserts the bytes ARE the render, not merely that something resolves: the
+    /// weaker form (resolves, non-empty, contains a marker) passes against any
+    /// published file and so proves the manifest row rather than the artefact.
+    ///
+    /// A red here for a *build* reason is possible and is kept rather than routed
+    /// around — `EmbeddedAdapter` serves the compiled embed, and a lone `install/`
+    /// edit does not re-embed. An embed that disagrees with disk means the
+    /// installed binary serves stale bytes, which is a real red; the remedy is
+    /// `touch src/install.rs && cargo build`, never a weaker assertion.
+    #[test]
+    fn generated_stage_machine_resolves_to_the_render() {
+        let resolver = shipped_resolver();
+        let addr = LogicalAddress::parse("reference/design-run-stages.md").expect("addr");
+        let got = resolver.resolve(&addr).expect("declared address resolves");
+        assert_eq!(
+            String::from_utf8(got.to_vec()).expect("the artefact is utf-8"),
+            crate::design_run::artifact::render_artifact(),
+            "the published address serves the rendered artefact"
+        );
+    }
+
     #[test]
     fn undeclared_address_is_unknown_not_empty() {
         let resolver = shipped_resolver();
