@@ -81,10 +81,29 @@ through `inq-8`. Not restated here; the run is the source of truth.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-08-05 · design/inquiring · e771a5da
 
 ### Produced
 
+- DEC-152 — disposes `inq-1`.
+- ISS-318 — design-run defect found while driving this slice.
+- Observation records `019fd226-…` and `019fd22a-…` (RFC-011 instrumentation).
+- `research/` (runtime, gitignored — not a durable sink; its findings are
+  carried in the triage section above).
+
 ### Learned
 
+- The `PRIVILEGED_AGENT_TYPES` fusion trap — recorded in the triage section
+  above, **memory candidate** at close. It is not in any durable sink outside
+  this file, and `research.md` is disposable.
+- Stale `~/.cargo/bin/doctrine` narrows `apply` payloads silently — see
+  ISS-318 § Related. Also a memory candidate.
+
 ### Open
+
+- `inq-5`, `inq-7`, `inq-8` — blocking, live in the design run. Read them
+  there (`doctrine design resume 247`), not from a copy here.
+- Slice `OQ-3` — whether IMP-269 and IMP-342 close as duplicates of this
+  slice. Settle at reconcile, not before.
+- IMP-400 plus IMP-401's per-worktree `.claude/` legs — deferred to a second
+  slice, not yet cut.
