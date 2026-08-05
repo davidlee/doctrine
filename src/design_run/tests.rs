@@ -2326,6 +2326,59 @@ fn waiver_clears_over_live_findings_and_dismisses_none() {
     );
 }
 
+/// `VT-9` / `VA-3` — a blocker held the edge, and disposing it clears again.
+///
+/// PHASE-04 `D7` settled that this clause lands live here rather than deferring
+/// to `IMP-392`: the blocker predicate is buildable today and only the
+/// *concluded* marker waits. It is the `Conducted` arm's one positive case —
+/// every other test of that arm approaches it from a failure — and the axis is
+/// before/after on one run, where
+/// `waiver_clears_over_live_findings_and_dismisses_none`'s is arm-against-arm
+/// over one observation. The shared first leg is this test's control: without it
+/// a derivation that never looked at the ledger would pass the second.
+///
+/// What it pins is that finding state is **not monotone** (design `sec-3`) —
+/// `contest` reopens what `dispose` closed, so the row must re-derive from the
+/// ledger on every crossing rather than latch the first answer it liked.
+#[test]
+fn a_re_disposed_blocker_clears_the_edge_again() {
+    let (mut run, mut derived) = cleared();
+    let act = run
+        .acts
+        .acts
+        .iter_mut()
+        .find(|held| held.act == ActKind::ReviewDisposed)
+        .expect("the fixture disposes the pass");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new(PASS),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new(PASS),
+        },
+    });
+    let observing = |undisposed_blockers: Vec<String>| {
+        Some(ObservedReview {
+            reference: ReviewRef::new(PASS),
+            concluded: true,
+            undisposed_blockers,
+        })
+    };
+
+    derived.observed_review = observing(vec!["F-2".to_owned()]);
+    assert_eq!(
+        causes_of(Condition::ReviewDispositionAttested, &run, &derived),
+        vec![Cause::BlockersUndisposed {
+            findings: vec!["F-2".to_owned()],
+        }],
+        "a contested blocker holds the edge"
+    );
+
+    // The responder disposes it. Nothing on the run moved — the same stored act,
+    // the same pass — so a row that cleared here on anything but the ledger
+    // would be reading its own history.
+    derived.observed_review = observing(Vec::new());
+    assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
+}
+
 /// `VT-9` — a disposition expires with the pass it answered, and an unreadable
 /// ledger is a refusal rather than a silence.
 ///
