@@ -171,7 +171,11 @@ fresh-as-of: 2026-08-05 · PHASE-05 completed · eff3c8e3
   something and that is the argument for running them — `VA-1` a task whose e2e
   edits were never tabled (`F61`), `VA-2` one second spelling and one orphan to
   adjudicate (`F62`), `VA-3` a clause the plan said lands live and which did not
-  until close-out wrote it (`F63`). Four durable memories recorded (the
+  until close-out wrote it (`F63`). A fourth close-out read — conformance —
+  found five code paths this slice edited that no *design-target* selector
+  claimed, `src/design_run/**`'s scope-relevant row being invisible to that map
+  (`F64`, declared at `7973b45c`); conformance now reports no undeclared code
+  path. Four durable memories recorded (the
   clippy-skips-macro-generated-bodies fact, the unconstructible-variant dead_code
   blind spot, the flatten/retirement trap, the per-compilation-unit `expect`
   trap) and six friction observations.
