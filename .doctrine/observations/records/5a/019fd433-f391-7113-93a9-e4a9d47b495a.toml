@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd433-f391-7113-93a9-e4a9d47b495a"
+recorded_at = "2026-08-05T23:13:22.321523442Z"
+kind = "friction"
+summary = "design apply accepts unknown payload keys silently"
+detail = "/design on SL-248: sent `doctrine design apply` a payload containing an unrecognised top-level key (`bogus_key_probe`) alongside run_uid/known_revision/submission_id. It was accepted and bumped the run to revision 2 rather than refusing. A mistyped key (`discharges` for `discharge`, say) therefore burns a revision and silently no-ops, and the agent has no signal. Contrast the same repo's own fail-closed precedent for config parsing (jail.rs deny_unknown_fields). Cost me a probe round-trip plus a wasted revision to learn the schema, because the schema is only discoverable by probing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
