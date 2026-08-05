@@ -280,28 +280,36 @@ pub(crate) fn existing_phase_stems(dir: &Path) -> anyhow::Result<BTreeSet<String
     Ok(stems)
 }
 
-/// The one field the rollup reads from a `phase-NN.toml`. Optional + tolerant:
-/// unknown keys are ignored, and a malformed file parses to `status = None`
-/// (treated as `missing_toml`, never an error — design § 5.5).
+/// The fields read back from a `phase-NN.toml` tracking block. Optional +
+/// tolerant: unknown keys are ignored, and a malformed file parses to all-`None`
+/// (`status` absent is counted `missing_toml`, never an error — design § 5.5).
 #[derive(Deserialize)]
 struct TrackingStatus {
     status: Option<String>,
+    /// HEAD stamped at the `in_progress` flip by [`capture_phase_boundary`] —
+    /// read back there to close the boundary, and by [`narrowing_refusal`] as a
+    /// witness to how far back the phase really started (ISS-317).
+    code_start_oid: Option<String>,
 }
 
-/// Read one phase stem's status string. `None` when the `.toml` is absent (a
-/// `.md`-only crash-partial), unparseable, or carries no `status` — all of which
-/// the fold counts as `missing_toml` rather than dropping the phase (R-F4). A
-/// genuine IO error (not "not found") propagates.
-pub(crate) fn read_phase_status(dir: &Path, stem: &str) -> anyhow::Result<Option<String>> {
+/// Read one phase stem's tracking block. `None` when the `.toml` is absent (a
+/// `.md`-only crash-partial) or unparseable — which the rollup counts as
+/// `missing_toml` rather than dropping the phase (R-F4). A genuine IO error (not
+/// "not found") propagates.
+fn read_tracking(dir: &Path, stem: &str) -> anyhow::Result<Option<TrackingStatus>> {
     let path = dir.join(format!("{stem}.toml"));
     let text = match fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
     };
-    Ok(toml::from_str::<TrackingStatus>(&text)
-        .ok()
-        .and_then(|t| t.status))
+    Ok(toml::from_str::<TrackingStatus>(&text).ok())
+}
+
+/// Read one phase stem's status string — `None` on every shape [`read_tracking`]
+/// folds to absent, plus a parsed block carrying no `status`.
+pub(crate) fn read_phase_status(dir: &Path, stem: &str) -> anyhow::Result<Option<String>> {
+    Ok(read_tracking(dir, stem)?.and_then(|t| t.status))
 }
 
 /// Derive the phase-completion rollup for a slice from its runtime tracking tree.
@@ -714,6 +722,20 @@ const SPAN_ADVISORY_HEAD: usize = 3;
 /// depend on (POL-002) — so the binding surfaces the range for review and names
 /// the correction (`slice record-delta`) instead of guessing.
 ///
+/// The correction it names is the RANGE shape, never `--commit` (ISS-317):
+/// `--commit S` records exactly `[S^, S]`, so on the only inputs this advisory
+/// fires for (>= 2 commits) it would replace a too-wide boundary with a one-commit
+/// one — trading a VISIBLE over-report (foreign paths in `conformance`'s
+/// `undeclared` cell) for a SILENT under-report (real deliverables reading
+/// `undelivered`, their VT rows `UNATTRIBUTABLE`). Printing the shape WITHOUT
+/// filling in the oids is what keeps POL-002: the reader picks its own commits out
+/// of the list above. The range is not thereby exact — a [`BoundaryRow`] is one
+/// contiguous span, upserted one-per-phase and consumed as a two-dot tree diff, so
+/// a foreign commit interleaved between the phase's own first and last is
+/// inexpressible-away. It is the TIGHTEST EXPRESSIBLE boundary, and its residual
+/// error stays in the visible direction. [`narrowing_refusal`] is the other half:
+/// it catches the `--commit` mistake wherever it is made, not only when prompted.
+///
 /// `commits` is newest-first oneline output for the range. `None` — nothing to
 /// review — for a single-commit range (provably that commit's own patch, the
 /// [`single_commit_boundary`] shape) or an empty one (`start == end`).
@@ -745,8 +767,15 @@ fn span_advisory(slice_id: u32, phase_id: &str, commits: &[String]) -> Option<St
     }
     lines.extend(commits.iter().skip(commits.len() - tail).map(indented));
     lines.push(format!(
-        "correct with: doctrine slice record-delta {slice_id} {phase_id} --commit <this phase's own code tip>"
+        "tighten with: doctrine slice record-delta {slice_id} {phase_id} \
+         --start <your first own commit>^ --end <your own code tip>"
     ));
+    lines.push(
+        "  (one contiguous range per phase: a foreign commit BETWEEN your own first and last \
+         still rides along — it lands in `slice conformance`'s undeclared cell, where it is \
+         visible)"
+            .to_owned(),
+    );
     Some(lines.join("\n"))
 }
 
@@ -763,6 +792,109 @@ fn advise_boundary_span(root: &Path, slice_id: u32, phase_id: &str, start: &str,
     if let Some(advisory) = span_advisory(slice_id, phase_id, &commits) {
         let _ignored = writeln!(std::io::stderr(), "{advisory}");
     }
+}
+
+/// A boundary span already known for a phase, and the witness that knows it
+/// (ISS-317). The registry row carries both ends; the phase sheet's stamp carries
+/// only a start, because the end is not known until the `completed` flip.
+struct PriorSpan {
+    start: String,
+    end: Option<String>,
+    /// Operator-facing name of the witness, for the refusal message.
+    source: &'static str,
+}
+
+/// Every prior span known for `phase_id`: the recorded registry row, then the
+/// phase sheet's stamped `code_start_oid`. DEGRADING — an absent registry, an
+/// unwritten or unreadable sheet, and an unstamped one all simply contribute no
+/// witness, because a guard that blocks on its own blind spots is worse than the
+/// mistake it prevents.
+fn prior_spans(project_root: &Path, slice_id: u32, phase_id: &str) -> Vec<PriorSpan> {
+    let mut spans = Vec::new();
+    if let Ok(rows) = read_source_deltas(project_root, slice_id)
+        && let Some(row) = rows.into_iter().find(|r| r.phase == phase_id)
+    {
+        spans.push(PriorSpan {
+            start: row.code_start_oid,
+            end: Some(row.code_end_oid),
+            source: "recorded boundary",
+        });
+    }
+    if let Ok(stem) = phase_stem(phase_id)
+        && let Ok(Some(tracking)) = read_tracking(&phases_dir(project_root, slice_id), &stem)
+        && let Some(start) = tracking.code_start_oid.filter(|s| !s.is_empty())
+    {
+        spans.push(PriorSpan {
+            start,
+            end: None,
+            source: "phase sheet stamp",
+        });
+    }
+    spans
+}
+
+/// True iff `incoming` covers strictly fewer commits than `prior` — `prior`'s
+/// range contains it and is not equal to it. Every ancestry probe that fails
+/// reads `false`: this decides a REFUSAL, so it fires only on a fact it could
+/// establish, never on one it could not disprove.
+fn covers_less(project_root: &Path, prior: &PriorSpan, incoming: &BoundaryRow) -> bool {
+    let contains = |outer: &str, inner: &str| {
+        crate::git::is_ancestor(project_root, outer, inner).unwrap_or(false)
+    };
+    let start_held = contains(&prior.start, &incoming.code_start_oid);
+    let end_held = prior
+        .end
+        .as_ref()
+        .is_none_or(|e| contains(&incoming.code_end_oid, e));
+    // Containment alone is not narrowing — an identical re-record is legitimate.
+    // An endless (stamp-only) witness can only differ at the start, so a matching
+    // start reads as "nothing established", never as a narrowing.
+    let strictly = prior.start != incoming.code_start_oid
+        || prior
+            .end
+            .as_deref()
+            .is_some_and(|e| e != incoming.code_end_oid);
+    start_held && end_held && strictly
+}
+
+/// The refusal for a re-record that would DROP commits a prior span covered
+/// (ISS-317) — `Some(message)` to refuse, `None` to allow. The `--commit S` mode
+/// records exactly `[S^, S]`, which on a multi-commit phase silently under-reports:
+/// dropped paths vanish from `slice conformance`'s `conformant` cell into
+/// `undelivered`, and criteria whose test files sat in the dropped commits read
+/// `UNATTRIBUTABLE` in `slice verify-vt`. Nothing else says a range was truncated,
+/// which is why this is a refusal and not a warning.
+///
+/// Guards the `--commit` mode ONLY. `--start`/`--end` names both ends
+/// deliberately, and is the very shape [`span_advisory`] prescribes for a phase
+/// whose stamp reaches back past its own first commit — guarding it would refuse
+/// the correction it just printed.
+pub(crate) fn narrowing_refusal(
+    project_root: &Path,
+    slice_id: u32,
+    phase_id: &str,
+    incoming: &BoundaryRow,
+) -> Option<String> {
+    let prior = prior_spans(project_root, slice_id, phase_id)
+        .into_iter()
+        .find(|p| covers_less(project_root, p, incoming))?;
+    let known = match &prior.end {
+        Some(end) => format!("{}..{end}", prior.start),
+        None => format!(
+            "{} (start only — the end is stamped at completion)",
+            prior.start
+        ),
+    };
+    Some(format!(
+        "record-delta: this records {}..{}, which DROPS commits covered by {phase_id}'s \
+         {} {known}.\n  A narrower boundary under-reports SILENTLY: its paths leave \
+         `slice conformance`'s conformant cell for undelivered, and criteria whose tests sat \
+         in the dropped commits read UNATTRIBUTABLE in `slice verify-vt`.\n  span the phase: \
+         doctrine slice record-delta {slice_id} {phase_id} --start <your first own commit>^ \
+         --end <your own code tip>\n  or, if the phase really is just this commit: re-run \
+         with --force",
+        incoming.code_start_oid, incoming.code_end_oid, prior.source
+    ))
 }
 
 /// Emit a single NAMED capture-degradation warning to stderr (the binding never
@@ -2322,6 +2454,22 @@ mod tests {
             advisory.contains("doctrine slice record-delta 138 PHASE-02"),
             "names the correction with the phase's own coordinates: {advisory}"
         );
+        // ISS-317: the remedy must be the RANGE shape. `--commit S` records exactly
+        // `[S^, S]`, so on the only inputs this advisory fires for (>= 2 commits) it
+        // would replace a too-wide boundary with a one-commit one — trading a visible
+        // over-report for a silent under-report.
+        assert!(
+            advisory.contains("--start") && advisory.contains("--end"),
+            "prescribes the range shape, the only one that can span the phase: {advisory}"
+        );
+        assert!(
+            !advisory.contains("--commit"),
+            "never prescribes --commit: it truncates the very range this fires on: {advisory}"
+        );
+        assert!(
+            advisory.contains("undeclared"),
+            "names the residual — an interleaved foreign commit still rides the range: {advisory}"
+        );
 
         // A single-commit range is provably that commit's own patch — nothing to review.
         assert_eq!(
@@ -2378,6 +2526,99 @@ mod tests {
         assert!(
             !short.contains("more)"),
             "no elision for a short range: {short}"
+        );
+    }
+
+    // ISS-317: `record-delta --commit S` records exactly `[S^, S]`, so on a phase
+    // already known to span more it SILENTLY drops the commits in between —
+    // deliverables vanish from `slice conformance` and their VT rows read
+    // UNATTRIBUTABLE. The guard refuses any re-record that covers strictly less
+    // than a span already known for the phase, from either witness.
+    #[test]
+    fn narrowing_refusal_fires_on_a_re_record_that_drops_commits() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+        let mut oids = vec![base.clone()];
+        for m in ["own 1", "own 2", "own 3"] {
+            git(&repo, &["commit", "-q", "--allow-empty", "-m", m]);
+            oids.push(git(&repo, &["rev-parse", "HEAD"]));
+        }
+        let (c1, c2, c3) = (oids[1].clone(), oids[2].clone(), oids[3].clone());
+
+        // Nothing known yet — no witness, so nothing to contradict.
+        assert_eq!(
+            narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &c2, &c3)),
+            None,
+            "no prior span ⇒ the guard has no fact to refuse on"
+        );
+
+        record_source_delta(&repo, 317, row("PHASE-01", &base, &c3)).unwrap();
+
+        // `--commit c3` builds [c3^, c3] == [c2, c3]: the start moved forward, so
+        // c1 and c2's paths would be dropped. This is the ISS-317 case exactly.
+        let refusal = narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &c2, &c3))
+            .expect("a forward start over a known span is a narrowing");
+        assert!(
+            refusal.contains(&base),
+            "names the prior start so it can be reused verbatim: {refusal}"
+        );
+        assert!(
+            refusal.contains("--start") && refusal.contains("--force"),
+            "names both the right shape and the override: {refusal}"
+        );
+
+        // `--commit c1` keeps the start but drops the END — narrowing too.
+        assert!(
+            narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &base, &c1)).is_some(),
+            "a retreating end drops commits just as a forward start does"
+        );
+
+        // Re-recording the same span, or a WIDER one, is not a narrowing.
+        assert_eq!(
+            narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &base, &c3)),
+            None,
+            "an identical re-record covers no less"
+        );
+        assert_eq!(
+            narrowing_refusal(&repo, 318, "PHASE-01", &row("PHASE-01", &base, &c3)),
+            None,
+            "a different slice's registry is not a witness for this one"
+        );
+    }
+
+    // ISS-317: the phase sheet's stamped `code_start_oid` is a witness in its own
+    // right — it is present before any row is recorded (the solo binding stamps it
+    // at the `in_progress` flip), and it carries no end.
+    #[test]
+    fn narrowing_refusal_reads_the_phase_sheet_stamp_as_a_witness() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", "own"]);
+        let own = git(&repo, &["rev-parse", "HEAD"]);
+
+        let dir = phases_dir(&repo, 317);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("phase-01.toml"),
+            format!("status = \"in_progress\"\ncode_start_oid = \"{base}\"\n"),
+        )
+        .unwrap();
+
+        let refusal = narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &own, &own))
+            .expect("the stamp alone establishes the phase started earlier");
+        assert!(
+            refusal.contains(&base),
+            "names the stamped start: {refusal}"
+        );
+
+        // A sheet with no stamp (never flipped in_progress) is not a witness.
+        fs::write(dir.join("phase-01.toml"), "status = \"planned\"\n").unwrap();
+        assert_eq!(
+            narrowing_refusal(&repo, 317, "PHASE-01", &row("PHASE-01", &own, &own)),
+            None,
+            "an unstamped sheet establishes nothing"
         );
     }
 

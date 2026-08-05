@@ -387,7 +387,8 @@ pub(crate) enum SliceCommand {
 
         /// Safe default: the phase's single import commit `S`. Records exactly
         /// its own patch `[S^, S]`; rejects a merge or root commit (no single
-        /// own patch). Mutually exclusive with `--start`/`--end`.
+        /// own patch), and refuses to narrow a span already known for the phase
+        /// (`--force` overrides). Mutually exclusive with `--start`/`--end`.
         #[arg(long, group = RECORD_DELTA_MODE, required = true)]
         commit: Option<String>,
 
@@ -401,6 +402,15 @@ pub(crate) enum SliceCommand {
         /// code tip (pre-knowledge-record). Prefer the safe `--commit` mode.
         #[arg(long, requires = "start", conflicts_with = "commit")]
         end: Option<String>,
+
+        /// Record `--commit <S>` even when it narrows a span already known for
+        /// the phase (ISS-317). Only meaningful with `--commit`; `--start`/`--end`
+        /// names both ends deliberately and is never guarded. Rejected in code,
+        /// not by clap: a `requires = "commit"` here is INERT, because `commit` is
+        /// a `required` member of the mode group and `--start` satisfying that
+        /// group reads as the requirement already met.
+        #[arg(long)]
+        force: bool,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -526,8 +536,9 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             commit,
             start,
             end,
+            force,
             path,
-        } => run_record_delta(path, id, &phase, commit, start, end),
+        } => run_record_delta(path, id, &phase, commit, start, end, force),
         SliceCommand::VerifyVt { id, path } => run_verify_vt(path, id),
         SliceCommand::Research { id, restamp, path } => run_research(path, id, restamp),
     }
@@ -3016,7 +3027,11 @@ fn run_conformance(
 /// `slice record-delta <id> <PHASE-NN>` in one of two modes (SL-147 PHASE-04,
 /// SL-189) — the MANUAL escape hatch beside the automatic solo phase-binding.
 /// SAFE DEFAULT `--commit <S>`: derive `S`'s own patch `[S^, S]` via
-/// [`single_commit_boundary`] (rejects a merge/root `S`). RAW `--start <a> --end
+/// [`single_commit_boundary`] (rejects a merge/root `S`), then clear
+/// [`crate::state::narrowing_refusal`] — "safe" holds only while the phase really
+/// is one commit, and on a phase known to span more this mode truncates SILENTLY
+/// (ISS-317). `--force` overrides that guard; it is meaningless on the range mode,
+/// which names both ends deliberately. RAW `--start <a> --end
 /// <b>`: resolve both to full oids and build the range row directly (the
 /// pre-SL-189 behaviour, unchanged — for a multi-commit / bootstrap phase). Both
 /// stamp `Provenance::Manual` (never reclassifies an existing landing path — the
@@ -3032,16 +3047,31 @@ fn run_record_delta(
     commit: Option<String>,
     start: Option<String>,
     end: Option<String>,
+    force: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
+    if force && commit.is_none() {
+        anyhow::bail!(
+            "record-delta: --force is only meaningful with --commit — the --start/--end range \
+             names both ends deliberately and is never guarded for narrowing (ISS-317)"
+        );
+    }
     let row = match (commit, start, end) {
-        // Safe default: scope to the single import commit's own patch.
-        (Some(c), None, None) => crate::state::single_commit_boundary(
-            &root,
-            &c,
-            crate::boundary::Provenance::Manual,
-            phase,
-        )?,
+        // Safe default: scope to the single import commit's own patch — guarded,
+        // because "safe" holds only while the phase really is one commit (ISS-317).
+        (Some(c), None, None) => {
+            let row = crate::state::single_commit_boundary(
+                &root,
+                &c,
+                crate::boundary::Provenance::Manual,
+                phase,
+            )?;
+            if !force && let Some(refusal) = crate::state::narrowing_refusal(&root, id, phase, &row)
+            {
+                anyhow::bail!(refusal);
+            }
+            row
+        }
         // Raw escape hatch: an explicit start..end range (unchanged behaviour).
         (None, Some(s), Some(e)) => {
             let resolve = |refish: &str| -> anyhow::Result<String> {

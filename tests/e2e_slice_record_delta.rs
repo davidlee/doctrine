@@ -372,3 +372,79 @@ fn neither_mode_is_a_clap_error() {
     );
     assert!(!deltas_path(&repo).exists(), "refused run records nothing");
 }
+
+/// ISS-317 — `--commit S` records exactly `[S^, S]`, so on a phase already known
+/// to span more it silently truncates the boundary. The guard refuses it, names
+/// the range shape, and persists the prior row unchanged; `--force` overrides for
+/// the phase that really is one commit.
+#[test]
+fn commit_mode_refuses_to_narrow_a_known_span_unless_forced() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let base = git(&repo, &["rev-parse", "HEAD"]);
+    for m in ["own 1", "own 2", "own 3"] {
+        git(&repo, &["commit", "-q", "--allow-empty", "-m", m]);
+    }
+    let tip = git(&repo, &["rev-parse", "HEAD"]);
+
+    // The phase's real span, recorded first.
+    assert!(
+        record_delta(&repo, &repo, "147", "PHASE-01", &base, &tip)
+            .status
+            .success(),
+        "the wide range records"
+    );
+
+    // Following the old advisory verbatim: `--commit <tip>` keeps only [tip^, tip].
+    let out = record_delta_raw(&repo, &repo, "147", "PHASE-01", &["--commit", &tip]);
+    assert!(!out.status.success(), "narrowing refused");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("DROPS"), "says what it would cost: {err}");
+    assert!(
+        err.contains("--start") && err.contains("--end"),
+        "names the shape that can span the phase: {err}"
+    );
+    assert!(err.contains("--force"), "names the override: {err}");
+    let body = std::fs::read_to_string(deltas_path(&repo)).unwrap();
+    assert!(
+        body.contains(&base),
+        "the refused run left the prior row intact: {body}"
+    );
+
+    // `--force` is the escape for a phase that really is one commit (the guard's
+    // one false positive: foreign commits landing before a single-commit phase).
+    let out = record_delta_raw(
+        &repo,
+        &repo,
+        "147",
+        "PHASE-01",
+        &["--commit", &tip, "--force"],
+    );
+    assert!(
+        out.status.success(),
+        "--force records anyway: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let body = std::fs::read_to_string(deltas_path(&repo)).unwrap();
+    assert!(
+        !body.contains(&base),
+        "the forced narrow range replaced the wide one: {body}"
+    );
+
+    // `--force` is meaningless without `--commit`, and clap says so.
+    let out = record_delta_raw(
+        &repo,
+        &repo,
+        "147",
+        "PHASE-01",
+        &["--start", &base, "--end", &tip, "--force"],
+    );
+    assert!(!out.status.success(), "--force without --commit refused");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("--commit"),
+        "names the flag --force requires"
+    );
+}
