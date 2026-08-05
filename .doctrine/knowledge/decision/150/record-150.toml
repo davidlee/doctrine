@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 150
+slug = "the-facets-level-carries-what-rules-not-the-argument-tiers-annotate-the-existing-field-match"
+title = "The facets level carries what rules, not the argument; tiers annotate the existing field match"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-246's OQ-2 asks which facet fields constitute the `facets` verbosity level for each of the seven record kinds. The pre-design research round proposed a list whose exclusions rested on two different arguments: `alternatives` and `consequences` are bulk, while `answer`/`answered_*` were excluded because the corpus populates them 0 of 38 times. DEC-149 rules that the renderer is built for a healthy corpus, which invalidates the second argument."
+choice      = "The criterion is what RULES and what changes whether the ruling still stands; the argument that got there is excluded. Per kind — DEC: context, choice, rationale. QUE: question, why_matters, answer. CON: statement, source, applies_to, waiver_reason. ASM: claim, confidence, basis, invalidated_by. EVD: datum, provenance, confidence (all). HYP: proposition, predicts (all). CPT: none, renders DEC-149's by-design marker. Encoded as a tier annotation on each field line inside `format_facet`'s existing per-kind match, not as a separate field-list constant."
+alternatives = [
+  "The research round's list, which additionally excluded `answer`, `waiver_reason` and `invalidated_by` on current-fill-rate grounds — rejected under DEC-149: a question that has been answered rendered without its answer is absurd, and each of the three is short and changes whether the record still binds.",
+  "A per-kind field-list constant beside `format_facet` — what STD-001 would suggest, but it would sit next to the match that already carries the field order and the two could drift silently: a field added to one and not the other renders in `show` and vanishes from the composed read.",
+]
+rationale    = "Size is a consequence of the criterion, not the criterion. DEC-080 is the measurement: its facet renders at roughly 4.5 KB against a 274-byte prose body, and `alternatives` plus `consequences` are nearly all of it — so dropping the argument fields is what makes the level cost less than `full`, while dropping short status fields buys nothing and loses correctness. Annotating the existing match keeps one table, one field order and one place, and forces a newly added field to be classified rather than defaulting into either tier."
+consequences = [
+  "ISS-316's governance gap does not block this question. EVD has three fields, HYP two and CPT none — every one is a deciding field, so the honest subset for the three ungoverned kinds is `all of them` and there is nothing to invent. The gap stays real and stays on ISS-316.",
+  "`show_opt_line` / `show_list_line` grow a tier argument; the DEC-149 policy filters on it.",
+  "Judgement calls that may move: `context` on DEC is setup rather than ruling, kept because `choice` is often unintelligible without it; `validation_plan` on ASM states what would falsify the assumption and is arguably deciding, excluded as the longest field on the kind.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

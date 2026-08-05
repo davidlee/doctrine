@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 151
+slug = "synthetic-corpus-goldens-pin-the-mechanics-the-acceptance-specimen-is-verified-by-agent"
+title = "Synthetic-corpus goldens pin the mechanics; the acceptance specimen is verified by agent"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SPEC-013 pins rendered output byte-exact per verb, and SL-246's closure intent makes SL-244 the acceptance specimen — reading its design at the `facets` level must surface the twelve `shapes` decisions' rulings without the 11 `originates_from` rows, at a cost a working agent would actually pay. SL-244 is a live slice whose inbound record set keeps changing. The existing goldens already avoid this: tests/e2e_inspect_golden.rs hand-seeds a synthetic corpus in a temp dir precisely because `inspect` reads only authored TOML, so fixed bytes in yield byte-exact bytes out."
+choice       = "Synthetic-corpus goldens pin the mechanics at all three levels — a filled DEC, an unfilled one, a CPT, a record reachable under two inbound labels (the EVD-012 dedup case), and a backlog item plus a review as inbound noise. The specimen claim is verified BY AGENT at audit: an agent runs the command against SL-244 and attests the rulings surfaced and the cost was acceptable."
+alternatives = [
+  "Golden the live SL-244 output — rots on the next record minted against it; SL-244 gained DEC-144 recently and its design run keeps minting.",
+  "Add a live-corpus invariant test asserting `facets` output is a subsequence of `full` and `skip` is byte-identical to today's. Considered with the plumbing confirmed present and declined; see consequences.",
+]
+rationale    = "`Worth what it costs` is a judgement, and dressing it as a test would be pretending. The verification taxonomy already carries a by-agent mode for exactly this. The mechanical claims — tier filtering, source-kind selection, dedup, the two empty markers, byte-identical `skip` — are all fixture-provable, so the split falls cleanly."
+consequences = [
+  "The live-corpus invariant test was declined on inspection, not on unavailability. The plumbing exists: `common::repo_root()` is documented `for the few goldens that read the real tree`, and tests/e2e_relation_migration_storage.rs reads the committed .doctrine/ directly to assert on-disk invariants. Two reasons it still loses. First, half of it degenerates into the rejected arm — `skip` is byte-identical to today's needs a stored baseline of today's output, which IS a live-corpus golden. Second, `facets` is a subsequence of `full` holds by construction under DEC-150's single field-order table with a tier filter, so the test re-proves a structural guarantee and catches only a refactor that abandons the design, which the goldens catch anyway.",
+  "Concrete brittleness it avoids: a line-wise subsequence assertion over the whole corpus goes red when someone writes a multi-line TOML string into a facet — a corpus edit reddening the build.",
+  "The precedent test earns its live read because on-disk TOML shape genuinely cannot be proven from a fixture — a migration either landed on the real files or it did not. Rendered-output relations have no such property.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"

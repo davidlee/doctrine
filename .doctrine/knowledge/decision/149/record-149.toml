@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 149
+slug = "an-unfilled-facet-is-marked-never-papered-over-the-renderer-assumes-a-healthy-corpus"
+title = "An unfilled facet is marked, never papered over; the renderer assumes a healthy corpus"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-246 objective 4 requires empty facets be legible as gaps rather than as absence of content. The current renderer does the opposite: `format_facet` (src/knowledge.rs:1302-1364) emits the `[facet]` header only when at least one axis is populated, and `show_opt_line` (:1286-1291) drops absent fields silently, so a wholly-unfilled record renders as nothing at all. Four of the SL-244 specimen's fifteen inbound records are in that state (QUE-206, DEC-140, DEC-141, DEC-142), all carrying substantial prose. The JSON path already disagrees, emitting every field as null."
+choice       = "Every selected record renders a header line unconditionally. Where the chosen fields yield nothing, emit an explicit marker in place of them, with the prose size and the command that would show it. Two distinct markers: an unfilled record and a kind that has no facet by design are different facts and must not share wording. No prose fallback. The renderer is built for a corpus whose facets are filled; it states the gap and does not compensate for it."
+alternatives = [
+  "Silent — consistent with `format_facet` today, and fails objective 4 outright: 4 of 15 specimen records would render as an id and nothing else, telling the reader less than opening the record would.",
+  "Fall back to the prose body when the facet is empty — superficially the most helpful, but the level's cost becomes unbounded and unpredictable (QUE-206 alone is 6.7 KB, most of the facets level's entire measured budget for all fifteen records) and it launders the defect: the reader can no longer distinguish a record carrying a ruling from one that does not.",
+]
+rationale     = "Render as if the facet content problem were already solved; certainly do not paper over it silently. A renderer designed around the current corpus's defects would bake them in and would have to be undone when IMP-403 lands. The marker is the honest minimum and it costs nothing once facets are filled — it simply stops firing. `RecordFacet::Concept(_)` returns an empty string by construction because `ConceptFacet {}` has no fields (every concept rides its attributed prose body), so a CPT is permanently in the empty-facet state BY DESIGN; a marker reading as a defect would libel every concept in the corpus and would train readers to ignore it."
+consequences  = [
+  "One renderer, not two. `format_facet` gains two policy inputs — field selection and empty-handling — with `knowledge show` passing (all fields, silent) so its SPEC-013 goldens stay byte-identical, and the composed read passing (subset, marked). This is DEC-147's caps-on-one-code-path principle applied a second time: the levels cannot disagree about field order because there is one field-order table.",
+  "IMP-403's eventual fix to `knowledge show` becomes a policy flip at one call site rather than a rewrite.",
+  "The prose-size hint costs a `metadata()` call, not a read — which matters because DEC-146 flagged that the facets level may want to skip the `.md` entirely. It is permanent for CPT, whose prose is always the payload, and incidental for unfilled records.",
+  "SL-246 does not change `knowledge show`'s output. The concealing behaviour there is IMP-403's, not this slice's.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
