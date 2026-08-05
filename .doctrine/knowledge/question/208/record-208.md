@@ -99,6 +99,16 @@ persistent service — lifecycle, availability, crash recovery, version negotiat
 and DEC-153 deliberately kept the daemon axis separate from binary count, so choosing
 one here does not reopen that.
 
+## Deferred, deliberately (2026-08-06)
+
+Parked until needed, not neglected. It does not block `SL-248` (capsule provisioning
+and the Linux backend), whose four requirements do not touch entity minting. It becomes
+live for the ingestion and conformance slice, and unavoidable by the recovery slice —
+see RFC-025 § State of play next-action 2 for the decomposition.
+
+`ISS-319` is separable and can be fixed on its own schedule; it is a defect in the
+current allocation path regardless of what this question decides.
+
 ## What would settle it
 
 1. Whether v0 permits capsules to mint entities at all. If entity minting stays a
