@@ -293,6 +293,25 @@ pub(crate) struct TurnEnvelope {
     pub(crate) acts: Vec<ActRow>,
     pub(crate) durable_records: Vec<DurableRef>,
     pub(crate) changes: ChangeDelta,
+    /// The run's review pass no longer covers current content (SL-244 `sec-3`,
+    /// `DEC-126`).
+    ///
+    /// **A warning, never a condition.** Disposing a finding moves the sections,
+    /// so whole-map currency invalidates the very pass that found it; a guard on
+    /// that would demand a fixpoint review provably cannot reach (`RFC-026` E3).
+    /// Review terminates when the user declines another round, so staleness must
+    /// inform that decision rather than bar it.
+    ///
+    /// A scalar following [`RunLine::cursor_stale`], and for its three reasons:
+    /// nothing renders while the pass is current (no passive cost), the eviction
+    /// ladder holds lists and never scalars (so a warning cannot be dropped in
+    /// favour of the material it warns about), and there is therefore no rung to
+    /// choose.
+    ///
+    /// `false` when the run holds no pass at all: *nobody has reviewed this* and
+    /// *the review has gone stale* are different facts, and only the second is
+    /// this one. The first is what the section rows and the gate already say.
+    pub(crate) pass_stale: bool,
     pub(crate) declaration_example: &'static str,
     pub(crate) omitted: Omitted,
     pub(crate) truncated: bool,
@@ -451,6 +470,12 @@ fn assemble(run: &DesignSnapshot, known_revision: u64, detail: Detail) -> TurnEn
         acts: acts(run),
         durable_records,
         changes,
+        // Derived through `review_standing`, so the lamp and the gate's own
+        // reading of the pass cannot disagree — one comparison, two readers. The
+        // `is_some` guard is what keeps *no pass* out of *stale pass*:
+        // `integrated_current` is `false` in both cases, and they are not the
+        // same fact.
+        pass_stale: run.review.pass.is_some() && !run.review_standing().integrated_current,
         declaration_example: DECLARATION_EXAMPLE,
         truncated: omitted.any(),
         omitted,
@@ -1037,6 +1062,12 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
         ),
         totals_line(&envelope.totals),
     ];
+    // Inline only when it says something: a current pass renders nothing, which
+    // is the no-passive-cost property that made this a lamp rather than a
+    // section of its own.
+    if envelope.pass_stale {
+        lines.push("review_pass STALE".to_owned());
+    }
     if let Some(obligation) = envelope.next_obligation.as_ref() {
         lines.push(format!("next_obligation {obligation}"));
     }
@@ -1272,12 +1303,19 @@ fn more(omitted: usize) -> String {
     reason = "test code — the repo's panic-avoidance denials target production paths"
 )]
 mod tests {
-    use super::{Detail, ENVELOPE_NORMAL_BUDGET_BYTES, project, project_within, rendered_bytes};
+    use super::{
+        Detail, ENVELOPE_NORMAL_BUDGET_BYTES, project, project_within, prompt, rendered_bytes,
+    };
+    use crate::design_run::Stage;
     use crate::design_run::attestation::{ReviewPolicy, Reviewer};
-    use crate::design_run::fixture::{attest, run_holding};
+    use crate::design_run::fixture::{
+        PASS, SECTION_A, SECTION_B, attest, cleared, pass_over, run_holding,
+    };
+    use crate::design_run::gate::advance;
     use crate::design_run::ids::DesignId;
     use crate::design_run::inquiry::{InquiryNode, Provenance};
     use crate::design_run::refusal::Refusal;
+    use crate::design_run::runbook::RunbookStanding;
     use crate::design_run::snapshot::DesignSnapshot;
 
     /// A run with `count` open nodes hanging off one root.
@@ -1309,6 +1347,84 @@ mod tests {
             crate::design_run::traversal::Authority::UserPinned,
         );
         run
+    }
+
+    /// `VT-1` — the currency lamp is rendered and never refuses.
+    ///
+    /// Asserted at the render surface rather than at the gate, because it is not
+    /// a condition: `DEC-126` makes integrated-pass currency derived state that
+    /// **warns**, on `RFC-026` E3's termination ground — disposing a finding moves
+    /// the sections, so whole-map currency invalidates the very pass that found
+    /// it, and a guard on that demands a fixpoint review cannot reach.
+    ///
+    /// **The pass is staled by re-opening it over content the run has moved past,
+    /// not by moving a section.** Moving a section stales that section's
+    /// attestations and every act covering it as well (`DEC-066`), so the
+    /// crossing would refuse for reasons that are not this test's subject and the
+    /// never-refuses half would be unassertable. [`cleared`] is the fixture every
+    /// gate test narrows: unmake the one thing the test is about and nothing else.
+    #[test]
+    fn currency_lamp_renders_and_never_refuses() {
+        let (mut run, derived) = cleared();
+
+        // The positive control, and it is load-bearing: without it, a lamp that
+        // is stuck on renders the same assertion below as a lamp that works.
+        let current = project(&run, 0, Detail::Normal).expect("the fixture run projects");
+        assert!(
+            !current.pass_stale,
+            "the fixture's pass covers current content"
+        );
+        assert!(
+            !prompt(&current)
+                .iter()
+                .any(|line| line.contains("review_pass")),
+            "a current pass renders nothing at all — the no-passive-cost property"
+        );
+
+        // Same run, same acts, same attestations. Only the pass's coverage moves.
+        let moved = run_holding(&[(SECTION_A, "sha256:moved"), (SECTION_B, "sha256:b")]);
+        run.review.pass = Some(pass_over(&moved, PASS));
+        assert!(
+            !run.review
+                .pass
+                .as_ref()
+                .expect("the pass was just set")
+                .is_current(&run.sections.fingerprints()),
+            "the fixture is set up: the pass no longer covers current content"
+        );
+
+        let stale = project(&run, 0, Detail::Normal).expect("a stale pass still projects");
+        assert!(stale.pass_stale, "the lamp lights");
+        assert!(
+            prompt(&stale)
+                .iter()
+                .any(|line| line.contains("review_pass STALE")),
+            "and it renders inline, following `cursor_stale`"
+        );
+
+        // *Nobody has reviewed this* is not *the review has gone stale*, and
+        // `integrated_current` is `false` for both — so the guard that separates
+        // them is asserted rather than commented.
+        let unreviewed = run_holding(&[(SECTION_A, "sha256:a")]);
+        assert!(
+            !project(&unreviewed, 0, Detail::Normal)
+                .expect("a run with no pass projects")
+                .pass_stale,
+            "a run that never opened a pass has no stale one"
+        );
+
+        // The whole point of the phase: it warns, and the crossing still happens.
+        assert_eq!(
+            advance(
+                Stage::Reviewing,
+                Stage::Locked,
+                &run,
+                &derived,
+                Some(&RunbookStanding::default()),
+            ),
+            Ok(Stage::Locked),
+            "a stale pass warns; it does not bar the crossing"
+        );
     }
 
     /// The gate and the envelope answer *is this section reviewed* from the same
