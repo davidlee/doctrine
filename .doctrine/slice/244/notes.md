@@ -142,10 +142,25 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-05 completed · eff3c8e3
+fresh-as-of: 2026-08-05 · PHASE-06 in_progress, T1 done · 01bd550e
 
 ### Produced
 
+- **PHASE-06 T1 — `Advance` has a wire token and a destination** (`203b28a7`).
+  `as_str` / `parse` / `to`, two tests off `Advance::ALL`, negative control run.
+  `D3` on the phase sheet argues why PHASE-01's refusal of `from()`/`to()` does
+  not reach `to()`; no `from()` was added.
+- **`VT-1`'s `test_file` amended to `src/commands/design.rs`** (`35fe509f`).
+  `src/design_run/tests.rs` cannot hold it — `super::`-only imports, because the
+  e2e binaries `#[path]`-include the module *with* its test child. Reasoning
+  appended to `plan.toml` in place, id untouched; `IMP-399` carries the declined
+  alternative (extract all four of the design command's asset-reading section
+  builders, judged on its own merits).
+- **`mem.pattern.lint.dead-code-staged-ahead-cfg-test` extended** (`01bd550e`):
+  a staged `expect(dead_code)` does not travel down the call chain — a dead
+  reader does not make its callee live, so every link carries its own and they
+  retire together at the first production caller. Predicted wrong on the sheet,
+  corrected by rustc.
 - **PHASE-05 COMPLETE — the condition model.** Fourteen tasks, in `D4`'s order
   (`T9` ahead of `T5`–`T8`, because both resolve `ActKind → ActRequirement` and
   the generated `CONTRACTS` table is the only route). The movement: one
