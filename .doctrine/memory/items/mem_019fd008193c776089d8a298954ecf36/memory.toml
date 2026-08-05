@@ -1,0 +1,46 @@
+memory_uid = "mem_019fd008193c776089d8a298954ecf36"
+memory_key = "mem.pattern.rust.unconstructible-variant-evades-dead-code"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Deleting a variant's only constructor leaves it invisible to dead_code"
+summary = "An enum variant whose sole construction site is deleted stays lint-clean while a Display/match arm still names it — find it by name sweep, not by the build"
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = ["src/design_run/refusal.rs"]
+globs = []
+commands = []
+tags = ["rust", "dead-code", "refactor", "deletion-sweep"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f00e9c6973009706646639a9f5c542d6e2c7d95f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "44f6f25e092ae79e5ed50703bfa0aa7be6f7c95cce2e8630724d14b33d544af6"
+base_commit = "bcc2a508125d18c87123d409e679082d7f584180"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+
