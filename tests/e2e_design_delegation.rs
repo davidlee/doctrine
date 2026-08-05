@@ -56,9 +56,7 @@ use design_run::delegation::{Delegation, DelegationState};
 use design_run::ids::DesignId;
 use design_run::inquiry::DispositionForm;
 use design_run::snapshot::{self, DesignSnapshot};
-use design_run::submission::{
-    AcceptanceDeclaration, AgentActDeclaration, ApplyRequest, CheckpointActDeclaration,
-};
+use design_run::submission::ApplyRequest;
 use design_run::traversal::Posture;
 
 /// The slice every fixture designs.
@@ -124,27 +122,22 @@ const WRITER_ACTS: [(&str, fn() -> Value); 9] = [
             "acceptance": {"basis": "the delegate says the lanes should change"},
         })
     }),
-    // The two act rows are built from the wire types rather than hand-written
-    // JSON: neither `ActKind` nor `AgentAct` carries an `as_str`, and re-typing a
-    // serde-derived token here is exactly the drift STD-001 forbids.
+    // The two act rows go through the shared builders rather than a second
+    // spelling of them. Written out here at `T4`, four tasks before
+    // `design_act` existed, and re-pointed at `T14`'s `VA-2` sweep — the
+    // builders make the same claim (from the wire types, never a re-typed
+    // serde token, STD-001) in one place.
     ("checkpoint_act", || {
-        serde_json::to_value(CheckpointActDeclaration {
-            act: ActKind::GraphReviewed,
-            acceptance: AcceptanceDeclaration {
-                basis: "the delegate says the graph is steered".to_owned(),
-                turn: None,
-            },
-            disposition: None,
-        })
-        .unwrap()
+        design_act::checkpoint_act(
+            ActKind::GraphReviewed,
+            "the delegate says the graph is steered",
+        )
     }),
     ("agent_declaration", || {
-        serde_json::to_value(AgentActDeclaration {
-            act: AgentAct::DraftingReady,
-            basis: "the delegate says the draft is ready".to_owned(),
-            turn: None,
-        })
-        .unwrap()
+        design_act::agent_declaration(
+            AgentAct::DraftingReady,
+            "the delegate says the draft is ready",
+        )
     }),
 ];
 
