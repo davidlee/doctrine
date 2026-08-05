@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd1b3-8ddd-7a13-850d-c1f4aa6fa9cb"
+recorded_at = "2026-08-05T11:33:53.24547648Z"
+kind = "friction"
+summary = "/execute: PHASE-08 sheet prescribed two build-impossible steps"
+detail = """
+SL-244 PHASE-08's sheet was otherwise excellent (reading list with verified anchors, decisions, STOP conditions), but two of its instructions could not compile as written, each costing a build cycle plus an on-the-spot decision.
+
+(1) T1 said to export ARTIFACT_PATH with the module, six tasks before the golden that reads it. A constant dead in BOTH builds has no cfg_attr shape: the module-level cfg_attr(not(test), expect(dead_code)) does not cover the cfg(test) build, and an unconditional expect would go unfulfilled when the consumer arrived.
+
+(2) EN-2 and D4 both pinned the golden to test_support::repo_root(), copying funnel_machine.rs. src/design_run/ names crate:: nowhere — five e2e binaries #[path]-include it standalone — and that rule binds cfg(test) blocks too. cargo test --bin doctrine compiles clean, so the breakage only appears in a suite the inner loop skips.
+
+Both are the same class: a phase sheet written from reading source can prescribe a symbol arrangement the compiler refuses, and neither the plan nor the sheet has a cheap way to be wrong about it before execution. The planner had read both the module gate and the e2e include shape; it just did not carry them into the task text. A phase-plan check worth considering: for each new symbol, name its first consumer and the build it is live in."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
