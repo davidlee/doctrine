@@ -106,3 +106,33 @@ has no source to read. The same opacity elsewhere produces guessing.
 Argument and instrument: **RFC-026 E8.7**. Raised from the observation that the
 subject kept leaving the delivered surface for source at every stage of the run —
 first after a serde refusal, later pre-emptively.
+
+## What SL-244 discharged, and what is left (2026-08-05)
+
+`SL-244` names this item in its `originates_from` set and delivered **one** of the
+four candidates above — *on refusal, name the remedy, not just the objection* —
+plus the discoverability the third face asked for. This item stays **open**; the
+other three candidates are untouched.
+
+Delivered:
+
+- Every gate condition now carries a contract (kind, subject binding, reach, and
+  the act that discharges it) in one macro-generated table, so `remedy()` answers
+  the refusal and the stage-entry receipt injects the same rows.
+- The contract is readable *before* it is violated and without source: nine
+  narratives at `design-prompts/conditions/`, and a generated stage diagram
+  published at `reference/design-run-stages.md`.
+- Face 3's measured cost — the four gate-condition reads and the one `tests.rs`
+  read out of E8.7's 33 — has its answer shipped.
+
+Not delivered, and still this item's:
+
+- **`next_obligation` still has no writer.** Confirmed at close: `snapshot.rs:558`
+  constructs it `None`, and every other mention is the declaration, the projection
+  or the render. The `DEC-064` v1-wire-change constraint recorded above is
+  untouched, as is the open question of whether this face or `IMP-367` owns the
+  disposition.
+- **The payload contract is still exemplified, not fetchable** — face 2, the
+  fifteen `submission.rs` reads, and the `declare` hint that omits `cursor`.
+- **Unmet conditions for the *next* stage are still not rendered** in the
+  envelope; the receipt is delivered at stage entry, not as a forward look.

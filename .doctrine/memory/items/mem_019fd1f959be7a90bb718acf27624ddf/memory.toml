@@ -1,0 +1,50 @@
+memory_uid = "mem_019fd1f959be7a90bb718acf27624ddf"
+memory_key = "mem.fact.conformance.reconcile-rev-target-undelivered"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Reconcile-stage REV delivery never reads conformant"
+summary = "A design-target selector discharged by a REV at reconcile stays undelivered forever — every source-delta row binds to a PHASE-NN and reconcile lands after the last phase"
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice conformance"]
+tags = ["conformance", "reconcile", "revision", "close"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "efe66d1244add554e2dbcd75fa55a55069a3b3f9"
+ref_name = "refs/heads/edge"
+checkout_state_id = "85c41d7661becddb6a2aebf9e2f58cb963d567b63b786946fed85a27e62534c3"
+base_commit = "3947cbb45b3060b153c4760b123c30ca3e55c771"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "minor"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-244"
+
+[[source]]
+kind = "review"
+ref = "RV-345"
+

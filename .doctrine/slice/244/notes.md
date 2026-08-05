@@ -142,7 +142,7 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · audit (RV-345 resolved, 9 findings terminal) · a891463b
+fresh-as-of: 2026-08-05 · close (RV-345 reconciled, REV-048 done) · 3947cbb4
 
 ### Produced
 
@@ -158,6 +158,21 @@ fresh-as-of: 2026-08-05 · audit (RV-345 resolved, 9 findings terminal) · a8914
   (`.doctrine/spec/tech/029/**`, which is `F-2`) / 68 undeclared, of which zero
   are code. `slice verify-vt 244`: 40 rows, all PASS. `doctrine check gate`:
   exit 0, 116 suites, zero clippy warnings.
+- **RECONCILE DONE — `RV-345`'s brief discharged, `REV-048` `done`.** Five
+  per-slice edits landed (the `design.md:19` `SPEC-029` mischaracterisation, three
+  settlements in § Open, the `Cause::SectionsUnreviewed` correction, the PHASE-08
+  truncation entry), and the owed spec revision landed in both tiers: `SPEC-029`
+  gains five responsibilities and the `DEC-127` citation of
+  `reference/design-run-stages.md` as a third stated ownership boundary. No
+  requirement status moved; `spec validate SPEC-029` clean. Outcome recorded in
+  `RV-345` § *Reconciliation Outcome*.
+- **One residual, structural and filed**: `slice conformance 244` still reads
+  `undelivered (1): .doctrine/spec/tech/029/**` *after* `REV-048` landed it —
+  every source-delta row binds to a `PHASE-NN` and reconcile writes land after the
+  last phase, so a REV-discharged design target can never register conformant.
+  Both repairs falsify something (widening PHASE-08's boundary; `selector rm` on a
+  non-spurious row), so neither was taken. `IMP-292` **Defect 4** +
+  `mem.fact.conformance.reconcile-rev-target-undelivered`.
 - **minted: `ISS-317`** — the phase-binding boundary-span advisory prescribes
   `record-delta --commit`, the one mode that truncates the multi-commit range it
   fires on. Root cause of `F-1`; pre-existing, outside this slice's surface.
