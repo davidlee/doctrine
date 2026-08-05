@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd22a-126f-74e0-aef4-3fd910f5db05"
+recorded_at = "2026-08-05T13:43:20.431893054Z"
+kind = "friction"
+summary = "/design: stale ~/.cargo/bin/doctrine silently ignores unknown apply fields — same --version string, different build, agent_declaration dropped with no error"
+detail = "SL-247 run dr-019fd215. Submitted an agent_declaration (blocking-set-declared) twice via PATH doctrine: exit 0, revision bumped, receipt written, and NO agd- record in the snapshot and no change row. Re-submitted the identical payload via ./target/debug/doctrine: recorded immediately. Both report 'doctrine 0.35.1', so --version cannot distinguish them. Cause: ApplyRequest carries no deny_unknown_fields, so a binary predating DEC-121's agent acts deserializes the payload minus that field and reports success. Cost here: ~6 tool calls and a wrong root-cause hypothesis (I was about to report state-loss in the snapshot writer). Two fixes worth considering: deny_unknown_fields on ApplyRequest so an old binary refuses rather than silently narrows, and a build/commit stamp in --version so stale-PATH is detectable. AGENTS.md already warns to prefer the tree binary for corpus verbs; the silent-narrowing failure mode is what makes ignoring that advice expensive."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

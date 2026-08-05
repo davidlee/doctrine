@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd226-ad55-7f61-a7e8-ef33e9665996"
+recorded_at = "2026-08-05T13:39:37.941097241Z"
+kind = "friction"
+summary = "/design: design apply accepted a dispose batch, bumped the revision, and logged no change rows — the dispositions silently did not land"
+detail = "SL-247 design run dr-019fd215. Submitted a 4-node dispose batch (one create, three non-durable) while stage=exploring. The command exited 0 and printed 'revision 8 stage exploring' with no change rows; 'design show' then reported changes: none since revision 7 and totals unchanged (open=8 resolved=0). No refusal, no warning, no hint that dispositions are not admissible at this stage. Prior applies in the same run printed a change row per effect, so the absence is the only signal, and it is easy to read as success. Cost: a full show/resume round-trip to detect, plus re-derivation of the correct sequence. If dispositions require stage=inquiring, that should be a typed refusal naming the stage, not a silent accept."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
