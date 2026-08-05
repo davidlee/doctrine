@@ -46,6 +46,25 @@ A lint leg: flag any non-draft record whose kind-required facet fields are all
 empty. Cheap, and it catches the half-invisible amendment before the ruling is
 needed. See `mem.pattern.doctrine.amend-knowledge-both-tiers`.
 
+## Fourth canary — prose cites a knowledge id it holds no edge to (SL-246, 2026-08-05)
+
+A design's prose cites `DEC-NNN` while the corpus holds no relation edge joining
+them, so every relation-keyed read misses the citation. `SL-244`'s `design.md`
+cites 20 `DEC` records; only 12 are joined by `shapes` (plus 3 by
+`references(concerns)`). The other ~10 — `DEC-063`, `-065/066/067`, `-073/074`,
+`-086/088`, `-101/102` — are inherited governing context carried forward from
+earlier slices (`DEC-063` `shapes` `SL-233`), cited as load-bearing and linked
+nowhere.
+
+`SL-246` deliberately does **not** parse prose on its read path (its Non-Goals);
+it reads edges. That decision is only safe if something else raises the
+divergence, which is this leg: scan authored prose for canonical knowledge refs,
+and warn where a cited id shares no edge with the citing entity. Warn, not fail —
+a citation is not always a relationship, and the author decides which.
+
+Note the direction of the fix: usually the missing artefact is the *edge*, not
+the citation, so the warning's remedy line should name `doctrine link`.
+
 ## Also fold in (C3 structural)
 
 The `knowledge list` reveal rule (`list_rows`) reproduces `listing::retain`'s

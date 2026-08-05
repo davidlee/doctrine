@@ -28,3 +28,7 @@ target = "IDE-009"
 [[relation]]
 label = "related"
 target = "QUE-206"
+
+[[relation]]
+label = "related"
+target = "SL-246"

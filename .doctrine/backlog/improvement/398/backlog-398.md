@@ -2,126 +2,170 @@
 
 ## Motivation
 
-The `/knowledge` skill now creates knowledge records (assumptions, decisions,
+The `/knowledge` skill creates knowledge records (assumptions, decisions,
 questions, constraints, evidence, hypotheses, concepts) as part of the design
-workflow. These records link to slices, RFCs, ADRs, specs, and each other —
-but they're hard to *find* after creation. An agent who wants to answer "what
-do we assume about this slice?" or "what decisions shaped this spec?" has no
-direct CLI path; they must either know the ids or grep raw files.
+workflow. These records link to slices, RFCs, ADRs, specs, and each other — but
+they are hard to *find* after creation. An agent asking "what do we assume about
+this slice?" or "what decisions shaped this spec?" has no direct CLI path; they
+must know the ids or grep raw files.
 
 The aim is to make knowledge records as legible as the entities they annotate.
 
-## Gaps (from exploratory survey 2026-08-04)
+## Status: partially sliced (2026-08-05)
 
-### 1. `knowledge list` has no `--type` filter
+The largest gap — **reading an entity together with the content of the knowledge
+records that shape it** — is now **`SL-246`** (*Entity reads carry their
+knowledge records*). Its scope: a relation-keyed, one-hop composed read with a
+`skip | facets | full` verbosity dial, motivated by `SL-244`'s 3,456-line
+`design.md` citing 20 `DEC` records whose content nothing renders alongside it.
 
-Rows carry `record_kind` but there's no flag. You can't list only decisions or
+The **prose-cited-but-unlinked** problem discovered while shaping that slice is
+now a fourth lint canary on **`IDE-009`** — `SL-244`'s design cites ~10 `DEC`
+records it holds no edge to, so a relation-keyed read misses them. `SL-246`
+deliberately reads edges and does not parse prose; `IDE-009` raises the
+divergence instead.
+
+What remains on this card is below, shaped in the same 2026-08-05 pass.
+
+## Remaining candidates
+
+### A. `knowledge list` has no kind filter
+
+Rows carry `record_kind`; there is no flag. You cannot list only decisions or
 only assumptions.
 
-### 2. No `--related-to` filter on `knowledge list`
+**Shape — settled, small.** `backlog list --kind <KIND>` is the exact structural
+precedent: a cross-kind survey verb over a kind family with a value-enum flag.
+`knowledge list` is the same shape over `RecordKind` and simply never got it. The
+seam exists — `knowledge.rs:1644` already runs a per-item pre-pass before the
+shared `listing::retain` *because* "the status-keyed `retain` closure cannot see
+the kind" — so the predicate has the kind in hand. `RecordKind::ALL` supplies the
+vocabulary and `knowledge new <KIND>` already exposes it as a value enum
+(`assumption, decision, question, constraint, evidence, hypothesis, concept`).
 
-No way to ask "what knowledge records are attached to SL-226?" (or RFC-008,
-ADR-016, PRD-004, etc.). The relation edges exist (`shapes`, `governed_by`,
-`references(concerns)`, `related`) but `knowledge list` can't filter by them.
+Arg + predicate + tests. No new machinery.
 
-### 3. `doctrine graph --kind` excludes the focus node
+**Open:** flag name. `--kind` matches `backlog list` and the `record_kind` field;
+`--type` was this card's original wording. Note `memory retrieve --type` uses the
+other word for a different concept (memory *type*, not a kind family). Recommend
+`--kind` for CLI-grammar consistency (`SPEC-013`).
 
-`doctrine graph SL-226 --kind ASM --kind DEC ...` fails with "SL-226 excluded
-by --kind". You can't say "show me the knowledge neighbourhood of this slice."
+**Note:** `IDE-009`'s C3 leg proposes a kind-aware `listing::retain` closure that
+would kill the `knowledge.rs:1644` duplication. If both land, land C3 first or
+this filter will be written against a seam that is about to move.
 
-### 4. No collective `KN` kind prefix
+### B. No inbound reciprocity on `show` (with `ISS-306`)
 
-To include all knowledge subtypes in a graph or list you need 7 separate
-`--kind` flags (`ASM DEC QUE CON EVD HYP CPT`).
+**Confirmed corpus-wide, not knowledge-specific.** `using-doctrine.md` states
+reciprocity is derived and rendered both directions; no kind does it.
+`doctrine slice show SL-244` renders `governed_by` and `references(*)` — all
+outbound — while sixteen knowledge records pointing *at* it appear nowhere.
+`ISS-306` scopes this to `knowledge show/inspect`; the identical hole is on
+`spec` / `slice` / `adr` / `rfc` `show`. One fix at the shared render seam.
 
-### 5. `doctrine graph --label` takes exactly one label
+**Shape — the derivation is done; the curation is the work.** `doctrine relation
+list --target <ref>` already computes inbound correctly. It lives in a third
+command family reachable from neither the entity nor the record, so nothing
+routes you to it from where the question arises.
 
-Can't include all the edge types that connect knowledge ↔ entities
-(`shapes`, `governed_by`, `references(concerns)`, `related`) in one graph.
+The real problem is **noise**. `SL-244` carries 28 inbound edges, of which **11
+are `references(originates_from)` from backlog items** — harvest exhaust, not
+content. An uncurated inbound render makes the common read worse, not better. So
+this needs a label allow-list, a grouping, or an opt-in flag before it is an
+improvement at all.
 
-### 6. No combined entity + knowledge view
+`SL-246` will settle a version of this question for its own render (its `OQ-3`);
+check what it concluded before designing this one.
 
-`doctrine slice show` (or `adr show`, `spec show`, `rfc show`) doesn't
-surface linked knowledge records. You stitch it manually.
+### C. `knowledge list --related-to <ref>`
+
+No way to ask "what knowledge records are attached to `SL-226`?" as a *list*.
+
+**Shape.** The list-shaped sibling of **B**, sharing one reverse-scan derivation
+(relations are outbound-only — `ADR-004` — so this cannot walk the ref's own
+edges; the earlier sketch on this card said otherwise and was wrong). Cheap once
+B exists; do not build the derivation twice. Its own open question — one-hop or
+transitive — is really **D**'s question.
+
+### D. Recursive knowledge view from a non-knowledge entity
+
+From a `SPEC` / `RFC` / `ADR` / `SL`, show all knowledge records reachable
+*without another non-knowledge entity separating them*. Speculative; wanted
+later.
+
+**Shape — this is a typed traversal, and it reframes the graph gaps.** The bound
+is a type predicate ("halt at any non-knowledge node"), not a hop count. Walk out
+from the focus, continue through knowledge→knowledge edges (`supersedes`,
+`supports`, `refines`), stop at the first non-knowledge node. Neither `--depth`
+(a hop count) nor `--kind` (a global node filter) can express it.
+
+That is why the three graph gaps below are **enablers of D**, not independent
+asks — each is something D needs and none is separately motivated. Recorded here
+so a later reader does not re-derive them as standalone work:
+
+- **`KN` collective kind prefix.** Including all seven knowledge subtypes needs
+  seven `--kind` flags. ⚠ Lands in a known minefield:
+  `mem.pattern.doctrine.record-kind-touch-sites` records ~17 sites hardcoding
+  record-kind prefix literals instead of reading `kinds::RECORD`, one a
+  `debug_assert!` that panics every debug-build corpus scan if a kind is added
+  without a matching scan arm. **No drift canary — only grep finds them.**
+- **`graph --label` takes exactly one label.** Cannot include `shapes`,
+  `governed_by`, `references(concerns)`, and `related` in one graph. Making it
+  repeatable is trivial in itself.
+- **`graph --kind` filters the focus out.** `doctrine graph SL-226 --kind ASM
+  --kind DEC` fails with *"SL-226 excluded by `--kind`"*. The pipeline
+  (`src/commands/graph.rs:114-126`) applies `filter_kinds` to the whole graph
+  *before* `neighbourhood(focus, depth)`, so the focus is dropped and the
+  neighbourhood loses its anchor; the check at `:94-112` exists to fail loudly
+  rather than print an empty graph. ⚠ **Changing this is a spec change, not a bug
+  fix** — `SPEC-027` lists that error as intended behaviour ("Report focus
+  exclusion as a named, self-describing error — focus absent, focus *filtered out
+  by `--kind`* …"). Exempting the focus makes that clause wrong rather than
+  merely superseded, so it needs a **`REV` against `SPEC-027`**.
+
+Also note **D and `SL-246` are the same capability at different reach** — both
+are "the knowledge closure of this entity", one emitted as content and one as a
+graph. `SL-246`'s objective 3 keeps its inbound derivation factored so D extends
+it rather than replaces it. Check that seam before starting D.
+
+### E. Also consider (unshaped)
+
+- `doctrine search` — should knowledge records surface in results?
+- `doctrine slice plan` / phase sheets — should linked knowledge be visible
+  during planning?
+- `/design` skill — should it auto-surface existing knowledge when resuming a
+  design run?
 
 ## Worked instance (2026-08-05)
 
-`QUE-206` (*is the interview substrate separable from slice design*) was
-captured with `shapes` edges onto `PRD-019` and `SL-244`. What each surface
-shows:
+`QUE-206` (*is the interview substrate separable from slice design*) was captured
+with `shapes` edges onto `PRD-019` and `SL-244`. What each surface shows:
 
 | view | result |
 |---|---|
 | `knowledge show QUE-206` | `shapes: [PRD-019, SL-244]` — correct |
-| `spec show PRD-019` | **nothing** — no sign QUE-206 exists |
+| `spec show PRD-019` | **nothing** — no sign `QUE-206` exists |
 | `relation list --target PRD-019` | both inbound edges, correctly |
 
-Three things this pins down that the gap list above states only abstractly:
-
-- **The capability exists; the discoverability does not.** `doctrine relation
-  list --target <ref>` already answers "what points at this?" — including the
-  knowledge records. It lives in a third command family (`relation`), reachable
-  from neither `knowledge` nor `<kind> show`, so nothing leads you to it from
-  where the question arises. Part of this item is routing to an existing verb,
-  not building a new one.
-- **Gap 6 is the same defect ISS-306 reports, one entity-kind wider.** ISS-306
-  scopes the missing inbound render to `knowledge show/inspect`. The identical
-  hole is on `spec show` / `slice show` / `adr show` / `rfc show` — an entity
-  never renders the knowledge that shapes it. Whatever derives reciprocity
-  should be fixed once at the render seam both share, not twice.
-- **The asymmetry has a direction that matters.** The entity is where the
-  question gets asked ("what's unresolved about PRD-019?") and it is the side
-  with no answer. The side that renders correctly is the side you already had
-  the id for.
-
-## Correction to the `--related-to` sketch
-
-The design consideration below reads *"resolve the ref, walk outbound edges,
-return knowledge records on the other end."* That will return nothing for the
-common case. Relations are stored **outbound-only** (ADR-004) and knowledge
-records author their own edges — `shapes` lives on `QUE-206` pointing at
-`PRD-019`; `PRD-019` stores no edge at all. Walking the ref's outbound edges
-finds knowledge records only when the *entity* happened to author the link.
-
-So `--related-to <ref>` is a reverse scan — find knowledge records whose
-outbound edges target the ref — or it reuses whatever index already backs
-`relation list --target`. That is the same derivation ISS-306 needs, which is
-further reason to treat the two as one fix.
+The capability exists; the discoverability does not. The entity is where the
+question gets asked ("what is unresolved about `PRD-019`?") and it is the side
+with no answer; the side that renders correctly is the side you already had the
+id for.
 
 ## Scope
 
-This item covers the **discoverability** surface — filtering, listing, and
-graph projection — for knowledge records in relation to the entities they
-annotate. It applies to all entity kinds that carry knowledge relationships
-(slices, RFCs, ADRs, specs, backlog items — anything linkable to a knowledge
-record).
-
-## Design considerations (for the eventual slice)
-
-- **`--type` on `knowledge list`**: straightforward — filter by `record_kind`.
-- **`--related-to <ref>` on `knowledge list`**: reverse scan — find knowledge
-  records whose outbound edges target the ref (see *Correction* above; walking
-  the ref's own edges does not work under outbound-only storage). Should this be
-  one-hop or transitive? Which edge labels qualify?
-- **Graph `--kind` not filtering the focus**: the focus should anchor the
-  neighbourhood regardless of its kind; `--kind` should filter *other* nodes.
-- **`KN` kind prefix**: a convenience alias for all seven knowledge subtypes.
-- **`--label` repeatable**: or a label-set syntax, so you can include multiple
-  edge types.
-- **Combined views**: could be `doctrine slice show --with-knowledge` or a
-  separate `doctrine knowledge related-to <ref>` that renders the entity +
-  its knowledge neighbourhood. Worth surveying actual usage patterns before
-  committing.
-- **Also consider**: `doctrine search` (should knowledge records surface in
-  results?), `doctrine slice plan` / phase sheets (should linked knowledge be
-  visible during planning?), and the `/design` skill workflow (should it
-  auto-surface existing knowledge when resuming a design run?).
+The **discoverability** surface — filtering, listing, and graph projection — for
+knowledge records in relation to the entities they annotate, across all entity
+kinds that carry knowledge relationships. The *composed content read* half has
+left this card for `SL-246`.
 
 ## Related
 
-- ISS-306: `knowledge show/inspect` render no inbound reciprocity — same
-  defect as gap 6, scoped one entity-kind narrower; fix together
-- IDE-009: Knowledge read-path validation / lint verb
-- IMP-120: Transitive impact query on relation graph
-- QUE-206: the worked instance above — `shapes PRD-019`, invisible from
-  `spec show PRD-019`
+- `SL-246`: the sliced half — entity reads carry their knowledge records
+- `ISS-306`: `knowledge show/inspect` render no inbound reciprocity — same defect
+  as **B**, scoped one entity-kind narrower; fix together
+- `IDE-009`: knowledge lint verb — now also holds the prose-cited-but-unlinked
+  canary, and a C3 leg that moves the seam **A** would be written against
+- `IMP-120`: transitive impact query on relation graph — likely shares **D**'s
+  traversal
+- `QUE-206`: the worked instance above
