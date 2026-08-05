@@ -78,13 +78,14 @@ dropping the wall.
 **One shippable change: make a non-worktree subagent useful without letting a
 worktree subagent out of its worktree.**
 
-1. **Settle the policy for the fourth arm.** Decide what an ordinary,
-   un-nominated, non-worktree subagent may do — full pass-through, or a floor
-   that denies only writes outside the repo root / to `.git`. This is the
-   decision the slice exists to make; it is a policy question, not a bug fix.
-2. **Implement it** on whichever seam the design selects — a new verdict in
-   `resolve_target`, a broadened nomination grant, or a policy input to the
-   existing arms.
+1. **Settle the policy for the fourth arm** — *settled: DEC-152.* An ordinary,
+   un-nominated, non-worktree subagent passes through unconfined; no repo-root
+   floor. It was a policy question, not a bug fix.
+2. **Implement it** at the seam the inquiry selected — a **three-valued
+   topology input** to `resolve_target` (DEC-154), so DEC-152's grant applies
+   only where the topology is positively known not to be a worktree, and
+   `Unknown` keeps today's deny. Not the nomination grant (the
+   `PRIVILEGED_AGENT_TYPES` fusion trap) and not a `JailPolicy` input.
 3. **Preserve the worktree wall.** `Jail(wt)` behaviour for
    `isolation: worktree` subagents is unchanged and stays proven by the existing
    suites (the behaviour-preservation gate — shared-machinery change, existing
@@ -130,50 +131,72 @@ worktree subagent out of its worktree.**
 - `src/worktree/jail.rs` — `resolve_target`, `Target`, `decide_bash`,
   `decide_write`, `decide_agent`.
 - `src/worktree/pretooluse.rs` — the `decide()` entry, nomination read,
-  `project_anchor()` resolution.
-- `src/worktree/subagent.rs` — `SubagentStart` role resolution and the
-  nomination write, if the design routes through nomination.
-- Agent definitions under `.agents/` / `plugins/doctrine/` — if worker tool
-  surfaces get pinned.
+  `project_anchor()` resolution, and `cwd_is_project_worktree`, which stops
+  collapsing its three error sites into `false` (DEC-154).
+- `tests/e2e_worktree_pretooluse.rs` — new. The verb is the only one of its
+  stdin-payload family (`create-fork`, `stamp`, `verify-worker`) with no e2e
+  coverage, and DEC-154 puts the change in the shell (`inq-8`).
+- ~~`src/worktree/subagent.rs`~~ — **out**. The nomination route was rejected
+  at triage (the `PRIVILEGED_AGENT_TYPES` fusion trap), so no `SubagentStart`
+  role resolution is added.
+- Agent definitions under `.agents/` / `plugins/doctrine/` — named, not pulled.
+  Tool-surface scoping is a term in what the wall guarantees (`inq-6`), not a
+  change this slice makes.
 
 ## Risks, assumptions, open questions
 
-- **`R1` — fail-open regression.** Any broadening of `PassThrough` risks
-  restoring the hole the `Reject` arm was written to close. The
-  `isolation: none` case (carries `agent_id`, cwd = repo root) is
-  indistinguishable at `PreToolUse` from a mis-placed dispatch worker, because
-  the `PreToolUse` payload carries `agent_id` + `cwd` but **not** `agent_type`.
-  Role must be resolved at `SubagentStart` if it is to be resolved at all.
+- **`R1` — fail-open regression. Held, but its stated cause was wrong**
+  (corrected 2026-08-06, `inq-5`). The regression risk is real and DEC-154
+  answers it: `Unknown` topology keeps the deny. The claim that `agent_type` is
+  absent from the payload is **false** — `docs/claude/hooks.md:592` and a
+  verified probe log both say the harness sends it beside `agent_id`; the
+  original ✓ cited our own `PreToolUseInput` struct, which is evidence about
+  the parser, not the payload. Role is therefore probably resolvable at
+  deny-time, but the route dies on POL-002 regardless (it needs a closed set of
+  agent-type names in the engine), so nothing downstream changes.
 - **`A1` — dispatch is out of scope but not out of the blast radius.** The
   confined-orchestrator path (Mode B, SL-198/199/206) depends on the nomination
   arm. A change to nomination semantics reaches it.
-- **`OQ-1`** — What should a non-worktree subagent be allowed to do? Full
-  pass-through, or a repo-root floor? What threat is being modelled now that
-  dispatch is out of scope? (Inherited from IMP-401 `OQ-1`.)
-- **`OQ-2`** — Does the fix belong in `resolve_target` as a new verdict, or in
-  the nomination grant as a broadened population? The former is a smaller
-  diff; the latter reuses proven, fail-safe machinery.
+- **`OQ-1` — SETTLED by DEC-152.** Full pass-through, no floor. The threat
+  model is accident, not adversary.
+- **`OQ-2` — SETTLED: neither.** Nomination is a trap (the
+  `PRIVILEGED_AGENT_TYPES` fusion), `JailPolicy` cannot carry it, and role
+  discrimination dies on POL-002. The fix is a three-valued topology input to
+  `resolve_target` (DEC-154) — the smaller diff, and the one that keeps
+  `Unknown` fail-closed.
 - **`OQ-3`** — Do IMP-269 and IMP-342 close as duplicates of this slice, or do
   they carry residue? IMP-269 (2026-07-05) reports the identical defect for
   `/fork` subagents and poses the same open question. IMP-342 reports the
   narrower symptom — the Bash arm blocking read-only `doctrine` CLI reads from
   delegated research subagents. Both plausibly discharge here; confirm at
   reconcile rather than assuming.
-- **`OQ-4`** — Does the wall keep claiming adversarial containment? The MCP
-  bypass says that claim is not currently true on the Claude arm.
+- **`OQ-4` — SETTLED.** No. The wall is a guard-rail against mostly-accidental
+  holes. What it guarantees is **composite** — bwrap for `Bash`, pathcheck for
+  `Edit`/`Write`, tool-surface scoping at the agent definition for `mcp__*`
+  (`inq-6`: the punch-through is a scoped grant, not an unguarded hole).
 
 ## Verification / closure intent
 
 - **By test** — the existing `resolve_target` / `decide` unit suites stay green
-  unchanged (behaviour preservation for the `Orchestrator`, `Jail`, and
-  nomination arms), plus new cases pinning whatever the fourth arm becomes,
-  including the `isolation: none`-shaped input the old rule was written to
-  reject.
+  (behaviour preservation for the `Orchestrator`, `Jail`, and nomination arms),
+  plus new cases pinning the three-valued topology input, including the
+  `isolation: none`-shaped input the old rule was written to reject. Note the
+  one departure from *unchanged*: widening the boolean churns the 7 existing
+  `resolve_target` call sites mechanically (DEC-154). No behaviour moves.
+- **By test (new leg, `inq-8`)** — a thin e2e on the `pretooluse` verb,
+  `tests/e2e_worktree_pretooluse.rs`: confirmed worktree ⇒ Bash rewritten to
+  the bwrap argv; confirmed non-worktree ⇒ pass-through; topology `Unknown` ⇒
+  deny. Deny is stdout data, never an exit code — the verb always exits 0. The
+  `Unknown` case needs no git surgery: an absent `CLAUDE_PROJECT_DIR` produces
+  it deterministically. Justified because DEC-154 puts the change in the
+  **shell**, the layer with no coverage at all.
 - **By agent** — a live probe on the Claude harness: a plain (non-worktree)
   subagent runs `Bash` and edits a file within the repo; a worktree subagent
   still cannot write outside its worktree. The control matters as much as the
   case — this surface has a documented history of reasoning that did not
-  survive probing.
+  survive probing. **Its evidence lands in an authored sink** (`notes.md` or an
+  EVD record), never the gitignored scratchpad — a VA criterion over runtime
+  state leaves an audit nothing to re-derive.
 - **By human** — the stated guarantee of the wall is accurate and the posture
   documentation matches it.
 
