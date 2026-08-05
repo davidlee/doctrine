@@ -96,12 +96,33 @@ Seeded as coarse `scope-relevant` selectors; the exact touch-set is `/design`'s.
 
 ## Risks, assumptions, open questions
 
-**R1 — the facet tier is routinely empty.** The `facets` level depends on
-structured fields that authors habitually leave blank while writing the whole
-record as prose (`mem.pattern.doctrine.amend-knowledge-both-tiers`; observed on
-`DEC-099`, `ASM-007`, `QUE-201`). A middle level that renders blanks on real
-records is worthless. Objective 4 is the mitigation, and the feature may need to
-name the gap loudly enough to drive hygiene.
+**R1 — the facet tier is routinely empty, and the renderer hides it.** Measured
+in the research round (2026-08-05):
+
+- Corpus fill: decisions **24%** populated (35 of 142), questions **10%** (4 of
+  38), assumptions 37%, evidence 58%, constraints 60%.
+- Population is **all-or-nothing**: every decision carrying one textual field
+  carries all of them (35/35/35 on `context`/`choice`/`rationale`) — there are no
+  partially-filled records. So *which* fields the level selects barely matters;
+  *whether the record has a facet* is the whole question. This is why `OQ-4`
+  outranks `OQ-2`.
+- On the acceptance specimen, **4 of the 15** inbound records render **nothing**
+  at the `facets` level — `QUE-206`, `DEC-140`, `DEC-141`, `DEC-142` — and all
+  four carry substantial prose (`QUE-206` is 6.7 KB).
+
+The mechanism is the renderer itself: `format_facet`
+(`src/knowledge.rs:1302-1364`) emits the `\n[facet]\n` header **only when at
+least one axis is populated**, and `show_opt_line` (`:1286-1291`) drops absent
+fields silently — its doc comment says so outright. An empty facet therefore
+renders as *nothing at all*: not a blank block, not a header. The render
+**reproduces** the half-invisible failure this risk names
+(`mem.pattern.doctrine.amend-knowledge-both-tiers`; observed on `DEC-099`,
+`ASM-007`, `QUE-201`) rather than merely failing to fill it. Note the JSON path
+disagrees — `facet_json` (`:1432-1462`) emits every field with `Option` → `null`
+— so `OQ-4` reconciles two existing behaviours rather than inventing one.
+
+Objective 4 is the mitigation. A naive middle level inherits the concealment and
+tells the reader *less* than opening the record would.
 
 **R2 — inbound noise swamps the signal.** `SL-244` carries 28 inbound edges, of
 which **11 are `references(originates_from)` from backlog items** — harvest
@@ -145,6 +166,47 @@ evidence — governance declares no field tiering and the corpus populates facet
 as an all-or-nothing unit (35/35/35 on decisions), so field selection is
 low-stakes and gap handling is the whole design. See
 `research/research.md` § *Design-input deltas*.
+
+## Design inputs carried from research
+
+Full artefact: `research/research.md` (runtime tier — **gitignored and
+disposable**; re-run with `doctrine slice research 246` if absent). The findings
+that must survive it are inlined here and in `ISS-316`.
+
+- **Ride the `Detail` precedent, do not invent a dial.** `design show --full`
+  widens a `Detail::{Normal, Full}` enum
+  (`src/design_run/render/envelope.rs:86-117`) whose comment states the
+  principle: the caps are what make *"normal is a subsequence of full" the same
+  code path rather than two implementations that could disagree*. The three
+  levels should be one renderer under different bounds. Nothing in the tree today
+  is a three-level detail dial — this would be the first.
+- **`OQ-2`'s evidence-backed answer, for the four *governed* kinds:** `DEC`
+  `context`+`choice`+`rationale`; `QUE` `question`+`why_matters`; `CON`
+  `statement`+`source`+`applies_to`; `ASM` `claim`+`confidence`+`basis`.
+  Excluded as bulk-without-signal on the current corpus: `alternatives`,
+  `consequences`, `decided_*`, `answer`/`answered_*` (0 of 38 populated),
+  `validated_*`, `waiver_*`. Closed enums are ~100% populated wherever a facet
+  exists, so including them is cheap and reliable.
+- **`EVD`/`HYP`/`CPT` have no governance to defer to** — `ISS-316`. `SPEC-019`
+  specifies four record kinds, not seven. Any field list for those three is
+  **invention, and must be labelled as such** rather than presented as derived.
+  They are also the thinnest in evidence (`EVD` n=12, `CPT` n=1, `HYP` **n=0** —
+  never used). `CPT` has no facet fields at all by design
+  (`knowledge.rs:570-573`).
+- **The inbound label set is closed and pre-named** (`src/relation.rs`):
+  `shaped_by` (`:528`), `concerned by` (`:426`), `spawned_by` (`:542`),
+  `supported_by`/`disputed_by` (`:699`/`:712`), `superseded by`. `OQ-3` is a
+  selection from six named labels, not a judgement call — and the specimen argues
+  the answer, since `references(concerns)` contributed exactly the three
+  empty-facet decisions.
+- **`Shapes` targets include the record kinds themselves** (`:530-531`), so
+  knowledge→knowledge edges are legal. Objective 3's seam for `IMP-398`'s
+  recursive view is real, not hypothetical.
+- **`SPEC-013` pins rendered output byte-exact** via per-verb black-box goldens
+  (`SPEC-013:13`, `:123`) — which is what makes `skip`-as-default load-bearing
+  rather than merely polite.
+- **No duplication risk.** Nothing else claims a record-content render;
+  `relation list --target` derives the inbound set correctly but emits ids only.
 
 ## Verification / closure intent
 
