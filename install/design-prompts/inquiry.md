@@ -34,14 +34,25 @@ has accepted your summary.
   question, not one longer message.
 - Focus on purpose, constraints, success criteria, and verification strategy.
   Those are what every later stage argues from.
+- A map is a decomposition, not a list of questions. Give a node its parent
+  where one exists: the tree is how anyone reading the map later finds their
+  way in. Add a `needs` edge only where one question genuinely cannot be
+  answered before another — it is the exception, and a map where everything
+  needs everything has recorded nothing.
 
 ## What the machine will reject
 
 - Add inquiry nodes for the questions that actually shape the design. A node is
   a question worth a decision, not a task to tick off.
+- Both edge kinds are acyclic and both are checked. An edge that would close a
+  cycle is refused, not quietly dropped.
 - Disposition blocking inquiries explicitly. Advancing to drafting needs every
   blocking node dispositioned and the user's acceptance — not your judgement
-  that they are unimportant.
+  that they are unimportant. That declared set is your assertion about which
+  questions hold the stage; it is not the same as a node being *blocked*, which
+  is derived from `needs` and never declared — a node is blocked while anything
+  it needs is still open or deferred, and resolving that unblocks it with no
+  second act.
 - To merge two inquiries, cite the canonical record by id. Text similarity never
   merges: if two nodes are the same question, say so with a citation.
 - Imported prose enters unverified, carrying its source location and

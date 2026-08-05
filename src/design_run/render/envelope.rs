@@ -65,9 +65,16 @@ const TURN_ENVELOPE_VERSION: u32 = 1;
 /// never elided, and the compile-time assertion below is the refusal EX-4's
 /// no-truncate rule calls for, moved to build time — an oversized example is an
 /// authoring defect in this constant, not something a projection should clip.
+///
+/// **It carries both edge kinds on purpose** (IMP-402). The `inquiry` fragment
+/// explains the primary-parent tree and the sparse `needs` set in prose, but a
+/// caller that declares the fragment digest has that prose elided — leaving this
+/// line as the only surface naming the map's shape. Showing `parent` alone
+/// taught a warm run that the map is a tree, which it is not. Do not trim
+/// `needs` back out as a byte saving: the bound is 1024 and this is under 320.
 const DECLARATION_EXAMPLE: &str = concat!(
     r#"{"run_uid":"<uid>","known_revision":<n>,"submission_id":"<unique>","#,
-    r#""declare":[{"subject":"inq-2","question":"...","parent":"inq-1"}],"#,
+    r#""declare":[{"subject":"inq-2","question":"...","parent":"inq-1","needs":["inq-1"]}],"#,
     r#""traversal":{"pin":"inq-2","posture":"depth","authority":"user-pinned"}}"#,
     "  (omit a key to persist it, send null to clear a scalar, [] to clear a collection)"
 );

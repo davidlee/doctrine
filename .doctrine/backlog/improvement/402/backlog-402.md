@@ -66,6 +66,33 @@ Optionally `needs` into `DECLARATION_EXAMPLE`, which costs bytes against a
 compile-time-asserted bound (`ENVELOPE_DECLARATION_EXAMPLE_BYTES`) — measure
 before assuming it fits.
 
+## Resolution — done 2026-08-05
+
+All four landed. Two things the measurement changed:
+
+**The byte caveat above was unfounded.** The bound is 1024 and the example was
+288; with `needs` it is 306. There was never a budget question.
+
+**The example change is not optional — it is the load-bearing half.** A caller
+that declares the fragment digest has the fragment body *elided*, which is the
+fragment receipt working as designed. `DECLARATION_EXAMPLE` is in the no-drop
+set and is never elided. So on any warm turn the prose is gone and the example
+is the only surface naming the map's shape: showing `parent` alone taught a warm
+run that the map is a tree. That reasoning is now in the constant's doc comment,
+so the 18 bytes cannot be trimmed back out as a saving by someone reading only
+the byte budget.
+
+Proved end to end in a throwaway installed project: the three prose additions
+ship from the embed, and the shipped example copied **verbatim** is accepted on
+the wire and immediately renders the derived consequence —
+`blockers / inq-2 — needs inq-1`. Prose teaches it, the example shows it, the
+wire takes it, the envelope shows what it did.
+
+**Not touched:** `.doctrine/backlog/chore/049/exercise/moderator-sheet.md` quotes
+the pre-change digest `inquiry@98fffa6b…`. That is a transcript of what an
+exercise run observed at the time, not an expectation to match — updating it
+would falsify the record. Leave it stale.
+
 ## Cost and constraints
 
 Cheap. `design-prompts/inquiry.md` is `customization = "fixed"` in
