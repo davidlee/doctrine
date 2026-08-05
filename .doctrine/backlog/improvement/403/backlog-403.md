@@ -78,16 +78,50 @@ seeded-empty shape reads as "optional" — unexamined.
 ## Adjacent: should knowledge records be TOML-only?
 
 Raised during `SL-246` design (2026-08-05). Unlike most entity kinds, a knowledge
-record's facet and body are authored in the same breath, so the two-file split
-may be creating the very gap above. The counter-argument is that collapsing the
-files does not change the incentive — an author who writes prose and skips the
-facet today would write `body` and skip the facet in a single file — and that
-`CPT` is prose-only by design (`ConceptFacet {}`) while `DEC` is facet-primary,
-so the kinds do not want the same shape.
+record's facet and body are authored in the same breath. If they remain backed by
+separate files, that implies a CLI good enough to hide the fact.
 
-The provisional read is that this is an argument for a **better CLI that hides
-the two-tier split** (lead 1 + lead 2), not for changing the storage model. But
-it should be settled deliberately, and it is a real fork, not a rhetorical one.
+**Provisional answer: no, don't merge — but the second clause is the right
+diagnosis.** The split is not causing the empty facets; it is making them
+invisible. Collapsing the files fixes the invisibility and leaves the cause
+untouched.
+
+Three reasons to resist the merge:
+
+1. **The incentive does not change.** Population is all-or-nothing — 35/35/35 on
+   decisions, no partially-filled records anywhere. Authors are not running out
+   of steam mid-facet; they never enter the structured tier at all. In one file
+   they would fill `body` and skip `choice`/`rationale`/`consequences` for the
+   same reason they do now: nothing asks, no verb writes, nothing complains. The
+   result is 24% fill in one file instead of two.
+2. **The kinds do not want the same shape.** `ConceptFacet {}` has no fields by
+   design (`src/knowledge.rs:570-573`) — *"every concept rides its attributed
+   prose body"*. `CPT` is prose-primary, `DEC` is facet-primary, `EVD` is nearly
+   all facet. One storage decision across seven kinds has to be wrong for some.
+3. **Prose in TOML is a real cost.** `QUE-206`'s body is 6.7 KB. Multi-line TOML
+   strings diff badly, lose Markdown editor support, and break on an embedded
+   `"""`. Knowledge would also become the one kind that reads differently from
+   every other — `show` synthesizes two tiers for all of them, `paths` prints
+   both, and the publication machinery assumes both.
+
+**What to build instead**, in leverage order — this is the concrete content of
+"a better CLI that hides the split":
+
+1. **Capture the facet at mint time** (lead 2). The highest-leverage fix by a
+   distance: the ruling exists, fully argued, in the same payload that mints the
+   record.
+2. **`doctrine knowledge edit`** (lead 1), modelled on `memory edit` — a single
+   read→mutate→write transaction over fields. Note which corpus is well
+   populated.
+3. **Advisory validation** (lead 3).
+
+**The honest counter, unresolved.** If `knowledge edit` ends up needing to write
+prose *and* fields in one transaction — likely, since the two genuinely are
+authored together — then it performs the merge at the interface layer while
+still paying to keep two files on disk. That is a defensible trade (files stay
+diffable, Markdown stays Markdown) but it *is* a trade, and it deserves deciding
+rather than defaulting. Build the interface first; the storage question is much
+easier to answer once nobody is hand-editing either file.
 
 ## Not in scope
 
