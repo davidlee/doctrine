@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd057-7246-74b2-bba6-f05fff970c48"
+recorded_at = "2026-08-05T05:13:39.654242006Z"
+kind = "friction"
+summary = "/execute: the phase's VA (agent-verified) criteria are the only rows with no mechanical check, and two of three were partly unmet when close-out finally read them"
+detail = """
+SL-244 PHASE-05 T14. `doctrine slice verify-vt` reads every VT row and reported all eleven PASS; the three VA rows have no equivalent and are discharged by an agent reading the criterion at close-out. All three found something: VA-1 found a whole task (T11) whose four e2e edits were never tabled in Findings; VA-2 found a second spelling left behind by a mid-phase helper extraction; VA-3 found that a clause the plan asserted "lands live in this phase" had never been written — every test of the arm in question approached it from a failure, so its positive case was asserted nowhere.
+
+The cost is not the sweeps themselves (cheap, and they paid). It is that nothing between the phase's start and its last task asks whether a VA row is being satisfied as work proceeds, so all three arrive as archaeology over a 6300-line diff — the most expensive moment to read them. The VT rows get a per-task check (F47 already recorded "run verify-vt at the end of each task, not at T14"); the VA rows get nothing, and they are the criteria whose subject is precisely the thing a green suite cannot see.
+
+Cheapest thing that would have helped: /execute or /phase-plan surfacing the phase's VA rows at each task boundary the way the sheet surfaces the task list — a prompt, not a check. A criterion that says a clause "lands live" is not evidence that it did."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

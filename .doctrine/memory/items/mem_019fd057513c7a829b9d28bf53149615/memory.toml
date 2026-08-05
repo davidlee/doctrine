@@ -1,0 +1,42 @@
+memory_uid = "mem_019fd057513c7a829b9d28bf53149615"
+memory_key = "mem.pattern.refactor.sweep-predecessors-of-a-late-helper"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A helper minted mid-phase leaves its predecessors unswept"
+summary = "When a shared helper lands part-way through a multi-task phase, earlier sites that hand-rolled the same value stay hand-rolled — nothing in a forward-ordered task breakdown looks backward. Sweep them at close."
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["refactor", "duplication", "review", "close-out"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "35c37a2e43381acd4e9f33554f77a864f3a5a660"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1a9f064d7874a253a01ddc77a8e8b4fd8c3f2c3247bfaf2b09bc845198dca873"
+base_commit = "058e21ac1909f4a6b2cb5bc320ef5fc1342e5019"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
