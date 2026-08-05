@@ -22,22 +22,23 @@ use super::attestation::{
 };
 use super::facts::DerivedDesignFacts;
 use super::fixture::{
-    attest, blocking_set_declared, checkpoint_act, cleared, drafting_ready, id, pass_over,
-    run_holding, section,
+    BLOCKING_NODE, OPEN_NODE, PASS, SECTION_A, SECTION_B, attest, blocking_set_declared,
+    checkpoint_act, cleared, drafting_ready, id, pass_over, run_holding, section,
 };
 use super::gate::{
     ActRequirement, ActRule, Advance, AttestationRule, Binding, CONTRACTS, Cause, Condition,
     ConditionKind, Contract, Coverage, DerivationRule, EngineSource, ObservedFact, Reach,
-    RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, regress, requirement_for,
+    RequiredActor, Unmet, advance, boundary_conditions, boundary_runbook, cumulative_conditions,
+    regress, requirement_for, satisfied,
 };
 use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
 use super::refusal::{ActFault, Refusal};
-use super::run::{ObservedReview, live_reviews};
+use super::run::{DerivedInput, ObservedReview, live_reviews};
 use super::runbook::{RunbookKey, RunbookStanding};
-use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup};
+use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot};
 use super::submission::{
     AgentActDeclaration, Batch, CheckpointActDeclaration, Declaration, Sparse,
 };
@@ -1857,7 +1858,7 @@ fn a_blocking_set_naming_nodes_outside_its_coverage_is_refused() {
 /// resubmits learns about the missing disposition now rather than one refusal
 /// later.
 #[test]
-fn an_act_that_fails_its_rule_twice_reports_both_faults() {
+fn an_act_failing_twice_reports_twice() {
     // `review-disposition-attested` binds to `Artefact` and names a disposition;
     // this act gets the coverage wrong AND disposes nothing.
     let mut act = checkpoint_act("cpa-1", ActKind::ReviewDisposed, "the pass is answered");
@@ -1970,5 +1971,531 @@ fn a_basis_cannot_be_read_as_the_blocking_set_beside_it() {
         declared.claim_material("the sweep found these"),
         narrowed.claim_material("inq-2\nthe sweep found these"),
         "the declared set and the basis must not be able to trade a line"
+    );
+}
+
+// ── the evaluator (SL-244 PHASE-05 `T10`) ─────────────────────────────────
+//
+// Every test below narrows one fixture: [`cleared`] is a run in which all nine
+// conditions hold, and each test unmakes the one thing it is about and asserts
+// the [`Cause`]s that name it. That is what stops a passing assertion from being
+// a run that was broken for some other reason — the control `F18`/`F24` had to
+// build by hand for the earlier tasks is here a property of the fixture.
+//
+// Whole `Vec<Cause>` equality throughout, never *is-unmet*: a bare refusal
+// assertion passes on the wrong cause, and the causes are the whole point of
+// replacing the existential scan.
+
+/// The causes `condition` fails with here, or a failure saying it held.
+fn causes_of(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput) -> Vec<Cause> {
+    satisfied(condition, run, derived).expect_err("the condition must not hold here")
+}
+
+/// `condition` holds against this state.
+fn assert_holds(condition: Condition, run: &DesignSnapshot, derived: &DerivedInput) {
+    assert_eq!(
+        satisfied(condition, run, derived),
+        Ok(()),
+        "`{}` must hold here",
+        condition.as_str()
+    );
+}
+
+/// `VT-1` — an act by the wrong actor class is not an act.
+///
+/// The existential scan could not express this at all: it asked whether *someone*
+/// had claimed the condition against *some* subject whose bytes had not moved,
+/// and a lane is not part of that question. Here the section is reviewed, by the
+/// wrong reviewer, and the refusal names the lane still owed.
+#[test]
+fn wrong_actor_does_not_satisfy() {
+    let (mut run, derived) = cleared();
+    run.review
+        .attestations
+        .retain(|held| held.subject() != &id(SECTION_A));
+    attest(
+        &mut run,
+        "att-adversarial",
+        SECTION_A,
+        Reviewer::Adversarial,
+    );
+
+    assert_eq!(
+        causes_of(Condition::SectionAttestationsCurrent, &run, &derived),
+        vec![Cause::SectionsUnreviewed {
+            subjects: vec![(id(SECTION_A), ActorClass::User)],
+        }],
+        "the run's policy is HumanOnly, so an adversarial pass leaves the user lane owed"
+    );
+    // The control: the section the fixture left alone is not named, so this is
+    // about the lane and not about the subject.
+    assert!(run.sections.find(&id(SECTION_B)).is_some());
+}
+
+/// `VT-1` — a conjunction that loses one half says which half.
+///
+/// DEC-121 makes `initial-concerns-recorded` two acts by two actors precisely so
+/// a refusal can name the missing one. Both causes are asserted, in order: the
+/// user's review now confirms a declaration that is not there, and the agent's
+/// declaration is missing outright.
+#[test]
+fn missing_conjunct_names_the_missing_act() {
+    let (mut run, derived) = cleared();
+    run.declarations
+        .declarations
+        .retain(|held| held.act.kind() != AgentActKind::BlockingSetDeclared);
+
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![
+            Cause::ConfirmationStale {
+                act: ActKind::GraphReviewed,
+                declaration: AgentActKind::BlockingSetDeclared,
+            },
+            Cause::ActMissing {
+                act: ActKind::BlockingSetDeclared,
+                lanes: vec![ActorClass::Agent],
+            },
+        ]
+    );
+}
+
+/// `VT-1` — a review given over a map that has since moved, beside a declaration
+/// that has not.
+///
+/// The pair is what makes this a test rather than two: the agent re-declares over
+/// the new map, so the only stale half is the user's review of it. A scan for
+/// *someone claimed this* would have found the current declaration and stopped.
+#[test]
+fn stale_conjunct_does_not_satisfy() {
+    let (mut run, derived) = cleared();
+    let late = id("inq-3");
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            late.clone(),
+            "what did the graph review not see?",
+            Provenance::AgentProposed,
+        ))
+        .expect("a fresh node closes no cycle");
+    // Re-declared over the new map, with the same blocking set — so the claim
+    // digest, and with it the confirmation link, does not move.
+    let mut redeclared = blocking_set_declared("agd-blocking", &[BLOCKING_NODE]);
+    redeclared.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    run.declarations.record(redeclared);
+
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![Cause::CoverageStale {
+            act: ActKind::GraphReviewed,
+            moved: vec![late],
+        }]
+    );
+}
+
+/// `VT-2` — a departing section is a failure for one coverage and not the other,
+/// which is why they are two variants.
+///
+/// `PerSection` quantifies over the sections the run holds **now**, so a leaver
+/// takes its own requirement with it. `EverySection` compares an act's covered
+/// map against that same set, so a leaver is a difference the act was not given
+/// over.
+#[test]
+fn departing_section_is_not_a_failure() {
+    let (mut run, derived) = cleared();
+    run.sections
+        .sections
+        .retain(|held| held.id != id(SECTION_B));
+
+    assert_holds(Condition::SectionAttestationsCurrent, &run, &derived);
+    assert_eq!(
+        causes_of(Condition::UserAcceptanceAttested, &run, &derived),
+        vec![Cause::CoverageStale {
+            act: ActKind::DesignAccepted,
+            moved: vec![id(SECTION_B)],
+        }]
+    );
+}
+
+/// `VT-2` — editing one section unmakes that section's own review and no other.
+#[test]
+fn per_section_invalidates_only_its_own_subject() {
+    let (mut run, derived) = cleared();
+    run.sections
+        .upsert(section(SECTION_A, "sha256:a-redrafted"));
+
+    assert_eq!(
+        causes_of(Condition::SectionAttestationsCurrent, &run, &derived),
+        vec![Cause::SectionsUnreviewed {
+            subjects: vec![(id(SECTION_A), ActorClass::User)],
+        }],
+        "`sec-b` was not edited and is not owed"
+    );
+}
+
+/// `VT-2` — a run holding no sections is `NoSections`, not satisfied.
+///
+/// The non-empty guard is part of what `PerSection` **means**, not a check beside
+/// it: a whole-map equality would find nothing owed and lock an empty document.
+/// Distinct from an empty [`Cause::SectionsUnreviewed`], which no path produces.
+#[test]
+fn empty_document_is_no_sections() {
+    let (mut run, derived) = cleared();
+    run.sections.sections.clear();
+
+    assert_eq!(
+        causes_of(Condition::SectionAttestationsCurrent, &run, &derived),
+        vec![Cause::NoSections]
+    );
+}
+
+/// `VT-3` — progress through the inquiry graph does not invalidate an acceptance
+/// given over it; a change to the graph does.
+///
+/// The distinction `NodeMaterial` exists to draw (PHASE-02 `EX-2`), read here at
+/// the condition rather than at the projection: answering a question is what the
+/// run is *for*, and an acceptance that expired every time one was answered would
+/// be unreachable.
+#[test]
+fn progress_does_not_invalidate_but_shape_does() {
+    let (mut run, derived) = cleared();
+    let open = id(OPEN_NODE);
+    let disposed = run
+        .map
+        .inquiry
+        .get(&open)
+        .expect("the fixture holds the open node")
+        .clone()
+        .resolve(Disposition::RetainedUnresolved {
+            note: "answered in passing".to_owned(),
+        });
+    run.map
+        .inquiry
+        .insert(disposed)
+        .expect("disposing closes no cycle");
+
+    assert_holds(Condition::UserAcceptsSufficiency, &run, &derived);
+
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            open.clone(),
+            "is inq-2 settled, exactly?",
+            Provenance::AgentProposed,
+        ))
+        .expect("re-wording closes no cycle");
+
+    assert_eq!(
+        causes_of(Condition::UserAcceptsSufficiency, &run, &derived),
+        vec![Cause::CoverageStale {
+            act: ActKind::SufficiencyAccepted,
+            moved: vec![open],
+        }],
+        "the node that was re-worded, and no other"
+    );
+}
+
+/// `VT-6` — an `EdgeLocal` row is enforced by the edge that names it and by no
+/// edge above.
+///
+/// Observable exactly where the design argued it: `drafting-readiness-attested`
+/// is a judgement that drafting may begin, and re-asserting it two stages later
+/// asks a question with no meaning. The cumulative row on the same edge is the
+/// positive control — the filter discriminates by reach, not by edge.
+#[test]
+fn edge_local_is_not_accumulated() {
+    assert!(
+        cumulative_conditions(Stage::Reviewing).contains(&Condition::DraftingReadinessAttested),
+        "the edge that names it enforces it"
+    );
+    assert!(
+        !cumulative_conditions(Stage::Locked).contains(&Condition::DraftingReadinessAttested),
+        "and no edge above does"
+    );
+    assert!(
+        cumulative_conditions(Stage::Locked).contains(&Condition::MaterialisationCurrent),
+        "while the cumulative row on that same edge still is"
+    );
+}
+
+/// `VT-6` — the bottom edge enforces two conditions, and a run holding neither
+/// of their checkpoint acts is refused there naming both.
+#[test]
+fn bottom_edge_enforces_two_conditions() {
+    assert_eq!(
+        cumulative_conditions(Stage::Inquiring),
+        vec![
+            Condition::GoverningContextRecorded,
+            Condition::InitialConcernsRecorded,
+        ]
+    );
+
+    let (mut run, derived) = cleared();
+    run.acts.acts.retain(|held| {
+        !matches!(
+            held.act,
+            ActKind::GovernanceConfirmed | ActKind::GraphReviewed
+        )
+    });
+    let refusal = advance(
+        Stage::Exploring,
+        Stage::Inquiring,
+        &run,
+        &derived,
+        Some(&RunbookStanding::default()),
+    )
+    .expect_err("neither act is recorded");
+    let Refusal::GateNotCleared { unmet, .. } = refusal else {
+        panic!("the conditions are what refuse here: {refusal:?}");
+    };
+    assert_eq!(
+        unmet
+            .iter()
+            .map(|held| held.condition)
+            .collect::<Vec<Condition>>(),
+        vec![
+            Condition::GoverningContextRecorded,
+            Condition::InitialConcernsRecorded,
+        ],
+        "both, never the first"
+    );
+}
+
+/// `VT-7` — a backward move clears nothing and breaks nothing.
+///
+/// DEC-067's regression is a change of *position*, not of standing: no act is
+/// invalidated by retreating, so the same crossing succeeds again on the same
+/// acts. The half of DEC-067 that does bite — no clearance is inherited — is
+/// `direct_regression_requires_a_recorded_reason`'s.
+#[test]
+fn backward_move_clears_nothing() {
+    let (mut run, derived) = cleared();
+    let (acts, declarations) = (run.acts.clone(), run.declarations.clone());
+    let recorded = regress(Stage::Reviewing, Stage::Drafting, "the framing was wrong")
+        .expect("a backward adjacent move is a regression");
+    run.run.stage = recorded.to();
+
+    // "Clears nothing", literally: a regression is a change of position, and the
+    // record of what has been done is not part of the position.
+    assert_eq!((&run.acts, &run.declarations), (&acts, &declarations));
+    assert_eq!(
+        advance(
+            Stage::Drafting,
+            Stage::Reviewing,
+            &run,
+            &derived,
+            Some(&RunbookStanding::default())
+        ),
+        Ok(Stage::Reviewing),
+        "nothing was spent by retreating"
+    );
+}
+
+/// `VT-7` — an excursion re-earns only what moved during it.
+///
+/// A section redrafted while the run stood at `drafting` costs that section's own
+/// review and nothing else: the crossing back up asks nothing about section
+/// attestations, and the lock asks about exactly the one subject that changed.
+#[test]
+fn excursion_re_earns_only_what_moved() {
+    let (mut run, derived) = cleared();
+    run.run.stage = Stage::Drafting;
+    run.sections
+        .upsert(section(SECTION_A, "sha256:a-redrafted"));
+
+    assert_eq!(
+        advance(
+            Stage::Drafting,
+            Stage::Reviewing,
+            &run,
+            &derived,
+            Some(&RunbookStanding::default())
+        ),
+        Ok(Stage::Reviewing),
+        "no condition on this edge is about section review"
+    );
+    assert_eq!(
+        causes_of(Condition::SectionAttestationsCurrent, &run, &derived),
+        vec![Cause::SectionsUnreviewed {
+            subjects: vec![(id(SECTION_A), ActorClass::User)],
+        }],
+        "and the lock owes the edited section, and only it"
+    );
+}
+
+/// `VT-9` — the `Waived` arm clears the lock over live findings, and dismisses
+/// none of them.
+///
+/// DEC-138 fixes the two arms as answering different questions: a waiver says
+/// *no adversarial pass is available*, which is true whatever the ledger holds,
+/// and it is the arm that stays crossable through the whole `IMP-392` interim
+/// (`A3`). The control is the other arm over the **same** observation — the
+/// findings are not dismissed, they simply are not what a waiver answers.
+#[test]
+fn waiver_clears_over_live_findings_and_dismisses_none() {
+    let (run, mut derived) = cleared();
+    let findings = vec!["F-1".to_owned(), "F-4".to_owned()];
+    derived.observed_review = Some(ObservedReview {
+        reference: ReviewRef::new(PASS),
+        concluded: false,
+        undisposed_blockers: findings.clone(),
+    });
+
+    assert_holds(Condition::ReviewDispositionAttested, &run, &derived);
+
+    let mut conducted = run.clone();
+    let act = conducted
+        .acts
+        .acts
+        .iter_mut()
+        .find(|held| held.act == ActKind::ReviewDisposed)
+        .expect("the fixture disposes the pass");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new(PASS),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new(PASS),
+        },
+    });
+
+    assert_eq!(
+        causes_of(Condition::ReviewDispositionAttested, &conducted, &derived),
+        vec![Cause::BlockersUndisposed { findings }],
+        "the same findings hold the edge under the arm that reads them"
+    );
+}
+
+/// `VT-9` — a disposition expires with the pass it answered, and an unreadable
+/// ledger is a refusal rather than a silence.
+///
+/// Two ways one stored act stops being the answer, asserted together because both
+/// are the *live* half of the split `T5` drew: admission asks whether the claim
+/// was true when written, and this asks whether it still is.
+#[test]
+fn a_disposition_expires_with_the_pass_it_answered() {
+    let (mut run, derived) = cleared();
+    let superseding = "RV-245";
+    run.review.pass = Some(pass_over(&run, superseding));
+
+    assert_eq!(
+        causes_of(Condition::ReviewDispositionAttested, &run, &derived),
+        vec![Cause::PassSuperseded {
+            disposed: ReviewRef::new(PASS),
+            current: ReviewRef::new(superseding),
+        }],
+        "both references, because the repair is to dispose the new pass"
+    );
+
+    // The other axis: the run is on the pass the act disposed, the act names an
+    // `RV` by the `Conducted` arm, and the shell could not read it.
+    let (mut run, mut derived) = cleared();
+    let act = run
+        .acts
+        .acts
+        .iter_mut()
+        .find(|held| held.act == ActKind::ReviewDisposed)
+        .expect("the fixture disposes the pass");
+    act.disposition = Some(DisposedPass {
+        pass: ReviewRef::new(PASS),
+        disposition: ReviewDisposition::Conducted {
+            review: ReviewRef::new(PASS),
+        },
+    });
+    derived.observed_review = None;
+
+    assert_eq!(
+        causes_of(Condition::ReviewDispositionAttested, &run, &derived),
+        vec![Cause::ReviewUnavailable {
+            review: ReviewRef::new(PASS),
+        }],
+        "an unreadable ledger names no findings — nobody has seen them"
+    );
+}
+
+/// `VT-11` — the confirmation link runs one way and expires on its own axis.
+///
+/// The agent re-declares a wider blocking set after the user reviewed the narrow
+/// one. The declaration is current and its coverage is current; what is stale is
+/// that this is no longer the claim the user was shown.
+///
+/// The moved digest is set directly. The claim material it stands for is the
+/// shell's to hash, and `a_basis_cannot_be_read_as_the_blocking_set_beside_it`
+/// is where that encoding is pinned — here the fingerprint is the input.
+#[test]
+fn late_declaration_does_not_satisfy() {
+    let (mut run, derived) = cleared();
+    let mut relisted = blocking_set_declared("agd-blocking", &[BLOCKING_NODE, OPEN_NODE]);
+    relisted.covered = Some(CoveredSet::Nodes(ContentCoverage::of(
+        run.map.inquiry.materials(),
+    )));
+    relisted.fingerprint = Fingerprint::new("sha256:agd-blocking-relisted");
+    run.declarations.record(relisted);
+
+    assert_eq!(
+        causes_of(Condition::InitialConcernsRecorded, &run, &derived),
+        vec![Cause::ConfirmationStale {
+            act: ActKind::GraphReviewed,
+            declaration: AgentActKind::BlockingSetDeclared,
+        }]
+    );
+}
+
+/// `VT-11` — the material moving does not move the claim digest, so the two
+/// mechanisms fail separately.
+///
+/// A second test rather than a second assertion in the one above, because the
+/// fingerprint and the coverage answer different questions — *is this the claim
+/// the user was shown* and *has the material moved since* — and one test would
+/// let either mechanism cover for the other's absence.
+#[test]
+fn coverage_does_not_move_the_declaration_fingerprint() {
+    let (mut run, derived) = cleared();
+    let digest = |run: &DesignSnapshot| {
+        run.declarations
+            .declarations
+            .iter()
+            .find(|held| held.act.kind() == AgentActKind::BlockingSetDeclared)
+            .expect("the fixture declares a blocking set")
+            .fingerprint
+            .clone()
+    };
+    let before = digest(&run);
+
+    let open = id(OPEN_NODE);
+    run.map
+        .inquiry
+        .insert(InquiryNode::open(
+            open.clone(),
+            "is inq-2 settled, exactly?",
+            Provenance::AgentProposed,
+        ))
+        .expect("re-wording closes no cycle");
+
+    assert_eq!(
+        digest(&run),
+        before,
+        "the claim digest is over the declared set, not over the map"
+    );
+    let causes = causes_of(Condition::InitialConcernsRecorded, &run, &derived);
+    assert_eq!(
+        causes,
+        vec![
+            Cause::CoverageStale {
+                act: ActKind::GraphReviewed,
+                moved: vec![open.clone()],
+            },
+            Cause::CoverageStale {
+                act: ActKind::BlockingSetDeclared,
+                moved: vec![open],
+            },
+        ],
+        "both acts were given over the map, so both lost their coverage"
+    );
+    assert!(
+        !causes
+            .iter()
+            .any(|cause| matches!(*cause, Cause::ConfirmationStale { .. })),
+        "and `confirms` still matches, because nothing about the claim moved"
     );
 }
