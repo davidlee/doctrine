@@ -1,0 +1,73 @@
+id = 247
+slug = "usable-non-worktree-subagents"
+title = "Usable non-worktree subagents"
+status = "design"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = ["area:dispatch", "area:worktree", "harness:claude"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/worktree/jail.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/pretooluse.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/subagent.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-008"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-401"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "same defect, raised 2026-07-05 for /fork subagents; may close as duplicate"
+target = "IMP-269"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "narrower symptom: Bash arm blocks read-only doctrine CLI reads from research subagents"
+target = "IMP-342"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "writable mcp__* bypass bounds what the wall can claim"
+target = "RSK-225"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule successor programme — this slice must stay deletable"
+target = "RFC-025"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

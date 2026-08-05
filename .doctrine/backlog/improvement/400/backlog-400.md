@@ -137,6 +137,9 @@ writing it.
   canonical skill source (it already feeds `npx skills` and the symlink channel),
   and keep `.claude-plugin/marketplace.json` published for anyone who prefers the
   plugin. Confirm before scoping.
+  **SETTLED 2026-08-05 (user):** that reading is correct. Retire the Claude
+  marketplace/plugin *delivery path* only; `plugins/` stays canonical and
+  `.claude-plugin/marketplace.json` stays published.
 - **`OQ-2` — `settings.json` or `settings.local.json`?** The intent names
   `settings.json` (project, committable — so the activation is reviewable and
   travels with the repo). Doctrine's existing merge core targets
