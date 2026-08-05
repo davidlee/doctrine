@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 145
+slug = "the-composed-knowledge-read-rides-doctrine-inspect"
+title = "The composed knowledge read rides `doctrine inspect`"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-246 renders an entity together with the content of the knowledge records that point at it. The surface question is where that render lives. `doctrine slice show SL-244` emits outbound relations only, as does every kind's `show` — but `doctrine inspect <ref>` is already the kind-agnostic inbound view, already grouped by inbound label name (`shaped_by:`, `concerned by:`, `originated from:`), and emits ids only."
+choice       = "Add the knowledge verbosity level to `doctrine inspect`. Each kind's `show` gains at most a one-line pointer naming the record count and the command, never the renderer itself."
+alternatives = [
+  "A verbosity flag on each kind's `show` (`slice`, `spec`, `adr`, `rfc`, `prd`) — answers the question where it is asked, at the cost of five-plus seams each wiring the same derivation and each carrying its own SPEC-013 byte-exact golden.",
+  "A new kind-agnostic verb (`knowledge digest <ref>`) — cohesion-clean, but a third command surface for a neighbourhood question that already has one, and it either duplicates or wraps `inspect`'s derivation.",
+]
+rationale    = "One seam instead of one per kind, and the derivation, the label grouping and the inbound label names all already exist there. Decisively: `inspect --transitive --direction inbound --labels …` already exists, and that traversal axis is exactly what IMP-398 S5's recursive knowledge view must extend — so SL-246 objective 3 (factor the derivation so the closure extends it) costs nothing extra on this surface and would need a new home on either other option."
+consequences = [
+  "`inspect` widens from `read-only cross-kind relation view` to that view optionally carrying neighbour content. Its doc string and SPEC-013 conformance row move with it.",
+  "Discoverability is not solved by the surface choice — an agent asks the question at `show`. A pointer line on each kind's `show` is the separate, cheap answer; it is not part of this decision.",
+  "The composed read is an explicit second command, never the default reading posture for a design. Making it the default would require the per-kind arm and is now foreclosed.",
+  "One seam means one call site for the composition question (SL-246 inq-2), which lowers the cost of the per-id `read_record` arm relative to carrying facets through the catalog.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-05"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-246"
