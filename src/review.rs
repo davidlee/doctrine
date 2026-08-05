@@ -1601,6 +1601,68 @@ fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
         .collect()
 }
 
+/// The findings one `RV` still holds, counted by severity (SL-244 `EX-2`).
+///
+/// A **fixed record rather than a map**, because the ledger's severity vocabulary
+/// is closed at four ([`Severity`]) — with a map, an absent key and a zero count
+/// would be one fact with two spellings, and every reader would have to choose.
+///
+/// `review`'s tier-local record, paired into `design_run`'s `OutstandingBySeverity`
+/// by the command tier — exactly as [`PassFacts`] is paired into `ObservedReview`,
+/// and for the same reason (SL-244 `D4`): the *rendered* record belongs to the leaf
+/// that renders it, and a general ledger query does not take a dependency on one
+/// consumer's render vocabulary.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct OutstandingCounts {
+    pub(crate) blocker: usize,
+    pub(crate) major: usize,
+    pub(crate) minor: usize,
+    pub(crate) nit: usize,
+}
+
+/// Pure count (SL-244 `EX-2`): what this RV still holds, by severity — every
+/// finding whose `status ∉ {verified, withdrawn}`, across all four severities.
+///
+/// **Spelled separately from both neighbours, and the divergence is the point.**
+/// This is the third filter over the same ledger and it agrees with neither:
+///
+/// - [`undisposed_blockers`] asks *does this pass hold a design run's edge* —
+///   blockers alone, and an `answered` blocker has been disposed of. This asks
+///   *what does a reader still owe work on*, which an answered blocker plainly is.
+///   Reusing that filter would take the lamp dark on exactly the findings it
+///   exists to surface (`VT-4`).
+/// - [`doc_unresolved_blockers`] asks *is this review finished* (D-C9b) — also
+///   blockers alone, and it early-returns on a `Done` review. Neither restriction
+///   belongs here: severity is what this counts *by*, not what it filters on, and
+///   the review-level guard would bind a per-finding count to a display summary
+///   ADR-007 D7 says is never a gate. That guard is unobservable for this
+///   predicate — a `Done` review's findings are all terminal, so every count is
+///   already zero — which is why the argument is about coupling, as its
+///   neighbour's is.
+///
+/// A severity that will not parse is counted nowhere, matching
+/// [`undisposed_blockers`]'s handling of the same malformed row.
+///
+/// No I/O: operates on already-read data, like both neighbours.
+fn outstanding_by_severity(doc: &ReviewDoc) -> OutstandingCounts {
+    let mut counts = OutstandingCounts::default();
+    for finding in doc
+        .finding
+        .iter()
+        .filter(|f| !parse_finding_status(&f.status).is_terminal())
+    {
+        let bucket = match Severity::parse(&finding.severity) {
+            Ok(Severity::Blocker) => &mut counts.blocker,
+            Ok(Severity::Major) => &mut counts.major,
+            Ok(Severity::Minor) => &mut counts.minor,
+            Ok(Severity::Nit) => &mut counts.nit,
+            Err(_) => continue,
+        };
+        *bucket = bucket.saturating_add(1);
+    }
+    counts
+}
+
 /// What a design run's gate needs to know about one named `RV` (SL-244 `sec-3`).
 ///
 /// `review`'s half of the answer, without the reference the caller already holds:
@@ -1609,6 +1671,7 @@ fn undisposed_blockers(doc: &ReviewDoc) -> Vec<String> {
 /// reference out is what lets `review` answer this without importing `design_run`
 /// (ADR-001) — the dependency runs one way, `design`-shell → `review`-query, as
 /// [`unresolved_blockers_for`]'s does.
+#[derive(Debug)]
 pub(crate) struct PassFacts {
     /// Whether the ledger carries the concluded-pass marker.
     ///
@@ -1621,6 +1684,43 @@ pub(crate) struct PassFacts {
     pub(crate) concluded: bool,
     /// The findings holding the run's `reviewing → locked` edge, by `F-n` id.
     pub(crate) undisposed_blockers: Vec<String>,
+    /// What the ledger still holds, by severity — the warning lamp's input, wider
+    /// than [`Self::undisposed_blockers`] on purpose (SL-244 `EX-2`).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-244 PHASE-07 T3 lands the projection seam that reads it"
+        )
+    )]
+    pub(crate) outstanding: OutstandingCounts,
+}
+
+/// Read a named `RV` for a design run — the single parse both consumers share.
+///
+/// `Err` where the reference will not parse or names no readable ledger, naming
+/// the reference either way.
+///
+/// **One read, two postures** (SL-244 `D5`, the owner's 2026-08-05 ruling). The
+/// failure is *returned* here rather than decided here, because the two callers
+/// want opposite things from it and a second parse is how they would drift apart:
+///
+/// - the **gate** swallows it through [`observe_pass`] — `PHASE-04`'s `EX-5`
+///   requires an unreadable pass to read as refusal, never as an error a caller
+///   can dismiss;
+/// - the **projection** path propagates it, because the render vocabulary is
+///   two-valued (silence, or the counts) and silence means *nothing outstanding*.
+///   A lamp that cannot read its own ledger has to say so rather than borrow the
+///   spelling of good news.
+pub(crate) fn read_pass_facts(root: &Path, reference: &str) -> anyhow::Result<PassFacts> {
+    let id = parse_ref(reference)?;
+    let doc = read_review(&root.join(REVIEW_DIR), id)
+        .with_context(|| format!("read the review pass `{reference}`"))?;
+    Ok(PassFacts {
+        concluded: false,
+        undisposed_blockers: undisposed_blockers(&doc),
+        outstanding: outstanding_by_severity(&doc),
+    })
 }
 
 /// Read a named `RV` for a design run's gate — `None` if it cannot be read.
@@ -1631,13 +1731,11 @@ pub(crate) struct PassFacts {
 /// edge an unreadable review must hold. The two failures are one answer on
 /// purpose: the caller's question is *can Doctrine see this pass*, and it cannot,
 /// either way.
+///
+/// The `.ok()` is the whole of this wrapper: [`read_pass_facts`] does the reading,
+/// and this chooses the gate's posture over its failure.
 pub(crate) fn observe_pass(root: &Path, reference: &str) -> Option<PassFacts> {
-    let id = parse_ref(reference).ok()?;
-    let doc = read_review(&root.join(REVIEW_DIR), id).ok()?;
-    Some(PassFacts {
-        concluded: false,
-        undisposed_blockers: undisposed_blockers(&doc),
-    })
+    read_pass_facts(root, reference).ok()
 }
 
 /// The reverse close-gate scan (design §7, D8/D-C9b) — a **standalone scoped scan**
@@ -4581,6 +4679,156 @@ mod tests {
             observe_pass(root, "RV-001").unwrap().undisposed_blockers,
             vec!["F-1".to_owned()]
         );
+    }
+
+    // ---- SL-244 PHASE-07: the severity summary (EX-2) ----
+
+    /// SL-244 `VT-4`: the summary is deliberately **wider** than the edge predicate.
+    ///
+    /// Rehoused here from `VT-2` (`DEC-140`/`DEC-141` class) because the comparison
+    /// cannot be made where the summary renders: `envelope.rs` is leaf-tier and
+    /// cannot import `review` to ask the gate's predicate the same question.
+    ///
+    /// One ledger asked twice, not two ledgers: an `answered` blocker has been
+    /// disposed of, so it does not hold the run's `reviewing → locked` edge — and it
+    /// is still outstanding, so the lamp must show it. A summary that reused the
+    /// gate's filter would go dark on exactly the findings a reader still owes work
+    /// on, which is the failure this pins.
+    ///
+    /// Both halves are taken off one [`read_pass_facts`] rather than called
+    /// separately, so the test also pins that the divergence survives the shared
+    /// reader — two filters over one parse, which is what `D3` bought.
+    #[test]
+    fn severity_summary_is_wider_than_the_gate() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+        run_dispose(
+            Some(root.to_path_buf()),
+            &dispose_args("RV-001", "F-1"),
+            Role::Responder,
+        )
+        .unwrap();
+
+        let facts = read_pass_facts(root, "RV-001").unwrap();
+        assert!(
+            facts.undisposed_blockers.is_empty(),
+            "an answered blocker does not hold the run's edge"
+        );
+        assert_eq!(
+            facts.outstanding,
+            OutstandingCounts {
+                blocker: 1,
+                ..OutstandingCounts::default()
+            },
+            "...and the lamp still shows it"
+        );
+    }
+
+    /// SL-244 `EX-2`: outstanding is `status ∉ {verified, withdrawn}`, counted
+    /// across all four severities.
+    ///
+    /// One ledger carrying every severity and both terminal states, because the
+    /// failures being guarded are a dropped severity arm and a terminal state that
+    /// leaks into a count — neither is visible to a test that exercises one
+    /// severity at a time. The two terminal rows are the negative control: they sit
+    /// on severities that are also counted elsewhere in the same ledger, so a
+    /// filter that stopped excluding them changes a number rather than adding one.
+    #[test]
+    fn outstanding_counts_span_the_severities_and_drop_the_terminal() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        for (severity, title) in [
+            (Severity::Blocker, "F-1 open"),
+            (Severity::Major, "F-2 answered"),
+            (Severity::Minor, "F-3 contested"),
+            (Severity::Nit, "F-4 open"),
+            (Severity::Blocker, "F-5 verified"),
+            (Severity::Major, "F-6 withdrawn"),
+        ] {
+            run_raise(
+                Some(root.to_path_buf()),
+                &raise_args("RV-001", severity, title),
+                Role::Raiser,
+            )
+            .unwrap();
+        }
+        for finding in ["F-2", "F-3", "F-5"] {
+            run_dispose(
+                Some(root.to_path_buf()),
+                &dispose_args("RV-001", finding),
+                Role::Responder,
+            )
+            .unwrap();
+        }
+        run_contest(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-3",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        run_verify(
+            Some(root.to_path_buf()),
+            "RV-001",
+            "F-5",
+            None,
+            Role::Raiser,
+        )
+        .unwrap();
+        run_withdraw(Some(root.to_path_buf()), "RV-001", "F-6", Role::Raiser).unwrap();
+
+        assert_eq!(
+            outstanding_by_severity(&read_doc(root, 1)),
+            OutstandingCounts {
+                blocker: 1,
+                major: 1,
+                minor: 1,
+                nit: 1,
+            }
+        );
+    }
+
+    /// SL-244 `D5` (the owner's 2026-08-05 ruling): one read, two postures.
+    ///
+    /// The gate must read an unreadable pass as *refusal* — `None`, never an error a
+    /// caller can dismiss (`PHASE-04` `EX-5`, pinned by
+    /// [`unreadable_review_reads_as_unmet`] above). The projection path must **fail
+    /// loud** — there is no third quiet render state, so a lamp that cannot read its
+    /// own ledger says so, naming the reference, rather than rendering the silence
+    /// that means *nothing outstanding*.
+    ///
+    /// Both postures are asserted over the same reference in one test, because the
+    /// regression is not either posture alone — it is the two drifting apart onto
+    /// two parses that disagree about what unreadable means.
+    #[test]
+    fn an_unreadable_pass_fails_loud_only_for_the_projection() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+
+        for unreadable in ["not-a-ref", "RV-999"] {
+            assert!(
+                observe_pass(root, unreadable).is_none(),
+                "the gate reads {unreadable} as refusal, not as an error"
+            );
+            let err = read_pass_facts(root, unreadable)
+                .expect_err("the projection path refuses to render silence")
+                .to_string();
+            assert!(
+                err.contains(unreadable),
+                "the failure names the reference it could not read, got: {err}"
+            );
+        }
+
+        // The positive control: a readable ledger is Ok through the same reader, so
+        // the loud half is not loud about everything.
+        assert!(read_pass_facts(root, "RV-001").is_ok());
     }
 
     /// VT-3: with no `.doctrine/review/` tree at all, the scan is a clean empty —
