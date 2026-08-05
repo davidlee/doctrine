@@ -18,12 +18,17 @@ use super::gate::{
     cumulative_conditions,
 };
 
+/// The committed file this renderer is pinned to, relative to the repo root.
+/// The *published* address is the manifest's; this is what gets embedded.
+pub(crate) const ARTIFACT_PATH: &str = "install/design-run-stages.md";
+
 /// Render the shipped stage-machine document.
 pub(crate) fn render_artifact() -> String {
     let mut out = String::from(ARTIFACT_HEADER);
     out.push_str(&diagram());
     out.push_str(&edge_table());
     out.push_str(&condition_table());
+    out.push_str(BACKWARD);
     out
 }
 
@@ -175,7 +180,7 @@ your `doctrine` binary evaluates, so what you read here is what refuses you.
 
 /// The diagram section's fixed opening.
 const DIAGRAM_OPEN: &str = "
-## The machine
+## The stages
 
 Each edge is labelled with the number of conditions the crossing enforces —
 its own, plus everything it inherits.
@@ -224,6 +229,27 @@ these are the acts that clear them.
 
 ";
 
+/// The one section with nothing to derive.
+///
+/// The backward relation covers every later-to-earlier pair rather than the
+/// adjacent ones, so there is no closed set of moves to enumerate and no table to
+/// render; and a regression is barred by a missing *reason* rather than by
+/// conditions, so there is no condition column either. Fixed prose is what that
+/// asymmetry looks like on the page.
+const BACKWARD: &str = "
+## Going back
+
+Going back is a different verb, not a refused advance. Any earlier stage is
+reachable from any later one — not merely the adjacent one — and no condition
+guards the move. What it requires is a **reason**, stated and recorded; a
+regression with a blank one is refused.
+
+Nothing is replayed on the way back, because nothing needs to be: every
+condition above is re-derived against current content on the way forward again,
+which is the same guarantee that makes a discharge from two stages ago worth
+re-checking here.
+";
+
 /// The placeholder for a cell that lists no conditions.
 const NO_CONDITIONS: &str = "—";
 
@@ -237,6 +263,22 @@ mod tests {
 
     use super::super::prompt::contract_block;
     use super::*;
+
+    /// The repo root, resolved at runtime.
+    ///
+    /// Spelled here rather than taken from `crate::test_support`, and the leaf
+    /// property is why: this module names `crate::` nowhere, because the e2e
+    /// design binaries `#[path]`-include the whole tree into a test crate that
+    /// has no such path. A `crate::` reference in a `cfg(test)` block breaks them
+    /// exactly as one in shipped code would.
+    ///
+    /// Runtime `CARGO_MANIFEST_DIR`, not `env!` — the compile-time value bakes
+    /// the tree a binary was *built* in, which is not always the tree it runs in.
+    fn repo_root() -> std::path::PathBuf {
+        std::env::var("CARGO_MANIFEST_DIR")
+            .map(std::path::PathBuf::from)
+            .expect("a cargo-driven test run sets CARGO_MANIFEST_DIR")
+    }
 
     /// Every arrow inside the mermaid block, minus mermaid's entry marker — the
     /// rendered transition set `VT-2`'s edge half is about.
@@ -278,6 +320,43 @@ mod tests {
         cell.split(", ")
             .map(|token| token.trim_matches('`').to_owned())
             .collect()
+    }
+
+    /// `VT-1` — the golden. A vocabulary addition, a reach change, a binding
+    /// change or a new edge all move the render and fail here until the file is
+    /// re-rendered, which is what makes *ensured up to date* structural rather
+    /// than a promise.
+    ///
+    /// Read from disk at runtime, not through the embed: `install/` is embedded
+    /// with no `rerun-if-changed`, so an incremental build over an `install/`
+    /// edit serves stale compiled bytes and would false-green this.
+    #[test]
+    fn rendered_artifact_matches_the_embedded_bytes() {
+        let path = repo_root().join(ARTIFACT_PATH);
+        let shipped = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read the shipped artefact at {}: {e}", path.display()));
+        assert_eq!(
+            render_artifact(),
+            shipped,
+            "the shipped artefact has drifted from the gate tables — re-render with \
+             `cargo test --bin doctrine regen_artifact -- --ignored`, never hand-edit ({})",
+            path.display()
+        );
+    }
+
+    /// Re-render the shipped file.
+    ///
+    /// A test rather than a CLI verb, and named for what it does so the golden's
+    /// failure message can point at it: re-rendering is a dev act in this
+    /// repository and meaningless in a client project, where the file is a
+    /// read-only artefact of an installed binary. `#[ignore]`d so it cannot fire
+    /// by accident, which an env-gated write inside the golden could.
+    #[test]
+    #[ignore = "writes the shipped artefact; run deliberately after a gate-table change"]
+    fn regen_artifact_writes_the_shipped_file() {
+        let path = repo_root().join(ARTIFACT_PATH);
+        std::fs::write(&path, render_artifact())
+            .unwrap_or_else(|e| panic!("write the shipped artefact to {}: {e}", path.display()));
     }
 
     #[test]
