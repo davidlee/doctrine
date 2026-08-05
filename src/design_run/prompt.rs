@@ -12,8 +12,19 @@
 //! it. The shell resolves the key against the embedded corpus and digests the
 //! bytes, because a leaf may not touch the filesystem (AGENTS.md pure/imperative
 //! split).
+//!
+//! Since SL-244 PHASE-06 it holds the store's **second** family and the
+//! rendering that delivers it: one narrative asset per gate condition, and the
+//! contract block a stage-entry receipt carries. The two families share the
+//! store, the key-naming discipline and the elide-the-body-only receipt rule,
+//! which is why they share a module rather than a third one (`D1`). The
+//! direction is one-way — this module reads [`super::gate`], and the gate does
+//! not read back.
+
+use std::collections::BTreeMap;
 
 use super::Stage;
+use super::gate::{Advance, Condition, DerivationRule, cumulative_conditions};
 
 /// Where the fragment store lives inside the `install/` embed root. Single
 /// source (STD-001) — the four keys derive from it rather than repeating it.
@@ -115,8 +126,117 @@ impl Fragment {
     }
 }
 
+impl Condition {
+    /// The embedded asset key the shell resolves for this condition's narrative
+    /// half. One condition, one file — leaf tier names the key and never reads
+    /// it, exactly as [`Fragment::asset_key`] does.
+    ///
+    /// The `conditions/` subdirectory earns itself twice. [`STORE`] already
+    /// holds two families keyed by two vocabularies, and a third family of `.md`
+    /// files keyed by a third would share an extension with the fragment stems
+    /// and avoid collision only by luck. More usefully, the corpus set-equality
+    /// test needs to *enumerate* these assets: under a prefix that is a filter,
+    /// and flat it is a filter minus a hand-maintained exclusion list for the
+    /// four fragment stems — the shape STD-001 exists to refuse.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T6 reads the narrative corpus")
+    )]
+    pub(crate) fn contract_asset_key(self) -> String {
+        format!("{STORE}/conditions/{}.md", self.as_str())
+    }
+}
+
+/// The contract block one forward edge delivers — the stage-entry receipt's
+/// whole payload (design `sec-5`, DEC-122/DEC-123/DEC-124).
+///
+/// **Pure.** The caller reads the narrative assets and hands them over, which
+/// is the split [`super::runbook::Runbook::section`] already makes: Doctrine
+/// reads, the leaf renders. It is also what keeps the rendering assertable
+/// without a disk.
+///
+/// **The set is the edge's enforced set** — [`cumulative_conditions`] at the
+/// edge's destination, reach-filtered and accumulated. What the edge judges by,
+/// not its own rows alone: an agent standing at `reviewing` would otherwise get
+/// a receipt covering three conditions while the edge in front of it judges
+/// eight, and the five omitted are exactly the ones it is least likely to have
+/// seen. This calls the function the gate calls, so there is no second copy of
+/// the reach rule to drift from the gate's.
+///
+/// **Every structural field is injected here** — the kind, the subject the
+/// derivation names, the observed conjuncts and the reach — so the narrative
+/// can never restate them and contradict them. The field set is the
+/// commitment and the punctuation is this function's; the prose carries only
+/// the half the const cannot.
+///
+/// **An absent body is not placed, and the header still rides.** That is what a
+/// declared receipt looks like from here, and it is [`Fragment`]'s rule for the
+/// reason its emission gives: a caller that declared a stale receipt, or lost
+/// the bytes it claimed, must still be able to tell what it is missing. The
+/// shell fails on an unreadable asset before it reaches this function, so an
+/// absent entry means *held*, never *lost*.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-244 PHASE-06 T6 emits the block from resume")
+)]
+pub(crate) fn contract_block(edge: Advance, bodies: &BTreeMap<Condition, String>) -> Vec<String> {
+    let mut lines = vec![format!("contracts {}", edge.as_str())];
+    for condition in cumulative_conditions(edge.to()) {
+        lines.push(contract_line(condition));
+        // One entry however many lines the remedy renders as: the discharge is
+        // a *rendering* of the rule, and on the row with two doors it is three
+        // lines. Splitting them would re-indent the continuations and break the
+        // equality with `Contract::remedy` that invariant 4 rests on.
+        lines.push(format!("  discharge: {}", condition.contract().remedy()));
+        if let Some(body) = bodies.get(&condition) {
+            lines.push(body.clone());
+        }
+    }
+    lines
+}
+
+/// One condition's header line — the whole of DEC-123's injection, and the
+/// reason the narrative below it may restate none of this.
+///
+/// Its own function because the block around it is only *placement*, and
+/// because the field order is the commitment: kind, then the subject the
+/// derivation names, then the observed conjuncts where a rule has them, then
+/// reach. The subject is one field rather than two nullable ones, which is the
+/// [`DerivationRule`] coupling showing on the wire — a derived row has no
+/// coverage to state and an attested row has no engine source.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-244 PHASE-06 T6 emits the block from resume")
+)]
+fn contract_line(condition: Condition) -> String {
+    let contract = condition.contract();
+    let mut fields = vec![
+        condition.as_str().to_owned(),
+        contract.derivation.kind().as_str().to_owned(),
+    ];
+    match contract.derivation {
+        DerivationRule::Engine(source) => fields.push(format!("engine({})", source.as_str())),
+        DerivationRule::Attested(rule) => {
+            fields.push(rule.binding.coverage.as_str().to_owned());
+            if !rule.binding.observed.is_empty() {
+                let observed: Vec<&str> = rule
+                    .binding
+                    .observed
+                    .iter()
+                    .map(|fact| fact.as_str())
+                    .collect();
+                fields.push(format!("observes({})", observed.join(",")));
+            }
+        }
+    }
+    fields.push(contract.reach.as_str().to_owned());
+    format!("contract {}", fields.join(" "))
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -132,6 +252,45 @@ mod tests {
                 fragment.asset_key(),
                 format!("design-prompts/{}.md", fragment.name()),
                 "asset key sits under the store and is derived from the name"
+            );
+        }
+    }
+
+    /// The contract corpus is addressed the way the fragment corpus is, one
+    /// level down (SL-244 PHASE-06 `T3`, `EX-1`).
+    ///
+    /// The prefix is the claim. `VT-1` enumerates the corpus on disk with it,
+    /// and it only works as a filter if every key is under it and no fragment
+    /// stem is.
+    #[test]
+    fn every_condition_has_a_distinct_key_under_the_conditions_prefix() {
+        let keys: BTreeSet<String> = Condition::ALL
+            .into_iter()
+            .map(Condition::contract_asset_key)
+            .collect();
+        assert_eq!(
+            keys.len(),
+            Condition::ALL.len(),
+            "one condition, one file — no two share a key"
+        );
+
+        for condition in Condition::ALL {
+            assert_eq!(
+                condition.contract_asset_key(),
+                format!("design-prompts/conditions/{}.md", condition.as_str()),
+                "the key is the store, the prefix and the condition's own token"
+            );
+        }
+
+        // The subdirectory's other job: no fragment stem lands under the
+        // prefix, so the corpus filter needs no exclusion list (STD-001).
+        for fragment in Fragment::ALL {
+            assert!(
+                !fragment
+                    .asset_key()
+                    .starts_with("design-prompts/conditions/"),
+                "{} sits beside the prefix, not inside it",
+                fragment.name()
             );
         }
     }

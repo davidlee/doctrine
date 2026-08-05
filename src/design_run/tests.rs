@@ -34,6 +34,7 @@ use super::ids::{DesignId, Fingerprint, IdKind};
 use super::inquiry::{
     Disposition, InquiryLifecycle, InquiryMap, InquiryNode, NodeMaterial, Provenance,
 };
+use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
 use super::run::{DerivedInput, ObservedReview, live_reviews};
 use super::runbook::{RunbookKey, RunbookStanding};
@@ -1385,6 +1386,224 @@ fn the_injected_field_vocabulary_is_one_kebab_token_per_variant() {
     assert_eq!(reaches, BTreeSet::from(["cumulative", "edge-local"]));
     assert_eq!(kinds, BTreeSet::from(["attested", "derived"]));
     assert_eq!(sources, BTreeSet::from(["dispositions", "materialisation"]));
+}
+
+/// The `contract` header line a rendered block states for each condition,
+/// keyed by the token that line opens with.
+///
+/// Structural rather than a substring search over the whole block, and that is
+/// what the assertions below rest on: a test that looked for injected text
+/// *anywhere* would pass on a field attached to the wrong row.
+fn contract_lines(lines: &[String]) -> BTreeMap<&str, &str> {
+    lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("contract "))
+        .filter_map(|rest| Some((rest.split_whitespace().next()?, rest)))
+        .collect()
+}
+
+/// The condition tokens a rendered block names — [`contract_lines`]'s keys, so
+/// the two cannot disagree about what a block carries.
+fn contract_tokens(lines: &[String]) -> BTreeSet<&str> {
+    contract_lines(lines).into_keys().collect()
+}
+
+/// The discharge each condition in a rendered block is given, keyed by the
+/// token of the `contract` line it follows.
+fn discharges(lines: &[String]) -> BTreeMap<&str, &str> {
+    let mut out = BTreeMap::new();
+    let mut current: Option<&str> = None;
+    for line in lines {
+        if let Some(rest) = line.strip_prefix("contract ") {
+            current = rest.split_whitespace().next();
+        } else if let Some(text) = line.strip_prefix("  discharge: ") {
+            out.insert(
+                current.expect("a discharge follows its contract line"),
+                text,
+            );
+        }
+    }
+    out
+}
+
+/// The remedy is the contract's (`VT-2`, design `sec-6`, `sec-3` invariant 4).
+///
+/// Quantified over every row rather than sampled, and
+/// `review-disposition-attested` is why the quantifier matters: it is the only
+/// multi-line discharge, so a test over the easy eight would pass while the row
+/// with two doors rendered one of them.
+#[test]
+fn remedy_equals_discharge_for_every_row() {
+    let bodies = BTreeMap::new();
+    let blocks: Vec<Vec<String>> = Advance::ALL
+        .into_iter()
+        .map(|edge| contract_block(edge, &bodies))
+        .collect();
+
+    for (condition, contract) in CONTRACTS {
+        let mut enforced_by = 0usize;
+        for block in &blocks {
+            let stated = discharges(block);
+            let Some(text) = stated.get(condition.as_str()) else {
+                continue;
+            };
+            // The refusal's remedy and the receipt's discharge are one value
+            // formatted twice, so a row whose remedy grew an arm grows it in
+            // both channels or this fails.
+            assert_eq!(*text, contract.remedy(), "{}", condition.as_str());
+            enforced_by += 1;
+        }
+        assert!(
+            enforced_by > 0,
+            "{} is enforced by some edge and therefore rides some receipt",
+            condition.as_str()
+        );
+    }
+
+    let top = contract_block(Advance::ReviewingLocked, &bodies);
+    let disposition = discharges(&top)["review-disposition-attested"];
+    assert_eq!(disposition.lines().count(), 3, "{disposition}");
+    assert!(disposition.contains("conducted:"), "{disposition}");
+    assert!(disposition.contains("waived:"), "{disposition}");
+}
+
+/// The receipt covers what the edge judges by, not the edge's own rows alone
+/// (`VT-3`, DEC-124 read wide).
+#[test]
+fn receipt_covers_the_enforced_set() {
+    let bodies = BTreeMap::new();
+    for edge in Advance::ALL {
+        let block = contract_block(edge, &bodies);
+        let enforced: BTreeSet<&str> = cumulative_conditions(edge.to())
+            .iter()
+            .map(|condition| condition.as_str())
+            .collect();
+        // Set equality against the function the gate itself calls — not a
+        // count, which would pass on the right number of wrong rows.
+        assert_eq!(contract_tokens(&block), enforced, "{edge:?}");
+    }
+
+    // Equality alone would still hold if the enforced set were the edge's own
+    // boundary, so the inherited majority is asserted too: it is the whole
+    // reason the receipt takes the wider of DEC-124's two readings.
+    for (edge, total, inherited) in [
+        (Advance::ReviewingLocked, 8, 5),
+        (Advance::DraftingReviewing, 6, 4),
+    ] {
+        let block = contract_block(edge, &bodies);
+        let rendered = contract_tokens(&block);
+        let own: BTreeSet<&str> = boundary_conditions(edge)
+            .iter()
+            .map(|condition| condition.as_str())
+            .collect();
+        assert_eq!(rendered.len(), total, "{edge:?}");
+        assert_eq!(rendered.difference(&own).count(), inherited, "{edge:?}");
+    }
+}
+
+/// The bottom edge's receipt is its own boundary and nothing more — and both
+/// its rows reappear above, which is what an accumulating receipt means
+/// (`VT-4`).
+#[test]
+fn bottom_edge_receipt_is_its_own_boundary() {
+    let bodies = BTreeMap::new();
+    let bottom = contract_block(Advance::ExploringInquiring, &bodies);
+    assert_eq!(
+        contract_tokens(&bottom),
+        BTreeSet::from(["governing-context-recorded", "initial-concerns-recorded"])
+    );
+
+    let top = contract_block(Advance::ReviewingLocked, &bodies);
+    assert!(
+        contract_tokens(&bottom).is_subset(&contract_tokens(&top)),
+        "the bottom edge's conditions ride every receipt above it"
+    );
+}
+
+/// The block injects every structural field, so the prose may carry none of
+/// them (`EX-3`, DEC-123).
+#[test]
+fn the_block_injects_what_the_prose_may_not_restate() {
+    let bodies = BTreeMap::new();
+    let bottom = contract_block(Advance::ExploringInquiring, &bodies);
+    assert_eq!(
+        bottom.first().map(String::as_str),
+        Some("contracts exploring-inquiring")
+    );
+
+    // An attested row: kind, coverage, the observed conjunct, reach. The
+    // observed set is the entire live half of this row — its `Artefact`
+    // coverage is inert by construction — so a header naming only the act
+    // would tell a reader the wrong thing about what keeps it current.
+    assert_eq!(
+        contract_lines(&bottom)["governing-context-recorded"],
+        "governing-context-recorded attested artefact observes(governance-edges) cumulative"
+    );
+
+    // A derived row names the run-owned state it is recomputed from, and has
+    // no coverage to name.
+    let middle = contract_block(Advance::InquiringDrafting, &bodies);
+    assert_eq!(
+        contract_lines(&middle)["blocking-inquiries-dispositioned"],
+        "blocking-inquiries-dispositioned derived engine(dispositions) cumulative"
+    );
+
+    // Reach is injected because it is what says whether discharging once is
+    // the end of it — the one row that is not cumulative says so.
+    let upper = contract_block(Advance::DraftingReviewing, &bodies);
+    assert_eq!(
+        contract_lines(&upper)["drafting-readiness-attested"],
+        "drafting-readiness-attested attested artefact edge-local"
+    );
+
+    // `observes(…)` renders exactly where a rule names facts and nowhere else,
+    // asserted against `CONTRACTS` rather than as a literal, so a second member
+    // joins the render for free.
+    let rendered: BTreeMap<&str, &str> = [&bottom, &middle, &upper]
+        .into_iter()
+        .flat_map(|block| contract_lines(block))
+        .collect();
+    for (condition, contract) in CONTRACTS {
+        let Some(line) = rendered.get(condition.as_str()) else {
+            continue;
+        };
+        let observed = match contract.derivation {
+            DerivationRule::Attested(rule) => !rule.binding.observed.is_empty(),
+            DerivationRule::Engine(_) => false,
+        };
+        assert_eq!(line.contains("observes("), observed, "{line}");
+    }
+}
+
+/// A declared receipt elides the body and only the body (`EX-5`'s pure half).
+///
+/// The rule [`fragment_section`] follows, for the reason its doc gives: a
+/// caller that declared a stale receipt, or lost the bytes it claimed, must
+/// still be able to tell what it is missing.
+///
+/// [`fragment_section`]: crate::commands::design
+#[test]
+fn a_declared_block_keeps_every_header_and_places_no_body() {
+    let edge = Advance::DraftingReviewing;
+    let enforced = cumulative_conditions(edge.to());
+    let held = contract_block(edge, &BTreeMap::new());
+    let bodies: BTreeMap<Condition, String> = enforced
+        .iter()
+        .map(|condition| (*condition, format!("narrative for {}", condition.as_str())))
+        .collect();
+    let delivered = contract_block(edge, &bodies);
+
+    assert_eq!(contract_lines(&held), contract_lines(&delivered));
+    assert_eq!(discharges(&held), discharges(&delivered));
+    assert_eq!(
+        delivered.len(),
+        held.len() + enforced.len(),
+        "one body per contract, and nothing else moved"
+    );
+    for condition in &enforced {
+        let body = format!("narrative for {}", condition.as_str());
+        assert!(delivered.contains(&body), "{body} is placed");
+    }
 }
 
 /// The act wire types carry the **claim** and nothing the engine authors
