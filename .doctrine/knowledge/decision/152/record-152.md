@@ -19,18 +19,43 @@ ordinary subagent has been collateral since.
 
 ## Why not a floor
 
-A repo-root floor is the intuitive middle, and it buys nothing here:
+A repo-root floor — `Jail(<main_root>)` — was the recommended option, and it
+was rejected on its effects, not its price. The price is low: `Target::Jail`
+already carries exactly one path and `bwrap_core_argv` (jail.rs:537) has no
+worktree-specific logic in it, so the floor is the existing variant handed a
+different argument.
 
-- **No threat model asks for it.** RFC-005 states one, for *dispatch workers*
-  only, and already concedes the trust basis is weak — `agent_id` absence is
-  "an unauthenticated tell… a named residual" (`rfc-005.md:636`).
-- **The harness already has a native Edit/Write floor** for subagents against
-  the shared checkout, before any hook runs.
-- **RSK-225 outranks it.** Writable `mcp__*` tools bypass the wall entirely on
-  the Claude arm — the MCP server is a stdio child of the top-level harness,
-  outside every subagent's bwrap, resolving paths against the primary repo
-  root. Proven under *both* verdicts. A floor on Bash while `mcp__*` walks
-  around it is posture, not containment.
+What decided it:
+
+- **In this environment the floor walls off nothing that matters.** Development
+  runs inside an outer bubblewrap jail; `$HOME` and `/tmp` are already
+  jail-local and disposable. The floor's whole additional catch is throwaway
+  state. **This premise is environment-dependent** — see the caveat below.
+- **It has a standing cost.** `Jail(p)` mounts `--tmpfs /tmp`
+  (jail.rs:547-548), so a floored subagent gets a fresh empty `/tmp` and cannot
+  see the orchestrator's. The session scratchpad lives there; losing it burns
+  tokens on every delegation.
+- **The objection to pass-through is disposed of by opt-in, not by the jail.**
+  The wall ships in the binary to consumer projects that have no outer jail.
+  But it is activated by hooks the project chooses to install, so an
+  unconfined non-worktree subagent there is no worse off than in a project
+  that never installed doctrine.
+
+Two adjacent facts that support the posture without being what decided it: the
+harness already denies subagent `Edit`/`Write` against the shared checkout
+natively, before any hook runs; and `RSK-225` — writable `mcp__*` tools resolve
+against the primary repo root, outside every subagent's bwrap, proven under
+*both* verdicts — means a `Bash` floor is posture rather than containment
+anyway.
+
+## The environment caveat
+
+Leg 1 is the decisive one and it does not travel. On an unjailed host, `$HOME`
+and `/tmp` are not disposable, and a repo-root floor *would* stop an accidental
+write that pass-through allows. Someone reading this record on such a host will
+find its reasoning apparently intact while its load-bearing premise is false.
+What makes pass-through safe to ship there is the hook opt-in, and nothing
+else.
 
 ## The residual this leaves
 
