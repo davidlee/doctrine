@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 208
+slug = "entity-id-allocation-from-inside-an-execution-capsule"
+title = "Entity id allocation from inside an execution capsule"
+record_kind = "question"
+status = "open"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = ["area:architecture", "cluster:capsule"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = ""
+why_matters = ""
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "sits on top of the existing fail-open allocation path"
+target = "ISS-319"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule-side entity minting is ungoverned by the container spec"
+target = "SPEC-030"
