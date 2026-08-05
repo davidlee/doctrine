@@ -1,0 +1,42 @@
+memory_uid = "mem_019fd1b1c96574e2beaa2fec6374509c"
+memory_key = "mem.pattern.design-run.leaf-rule-binds-tests"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "design_run tests may not name crate:: either"
+summary = "A crate:: path inside a #[cfg(test)] block in src/design_run/ breaks the e2e_design_* binaries, and --bin doctrine compiles clean"
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = ["src/design_run/"]
+globs = []
+commands = []
+tags = ["design-run", "testing", "layering", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "08fc3a2eace14da1b58c25cc7dee928830efb668"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e5ce836a47d30c22a2896a0cd7b45effd8874ddfa6d620b3a69033e1869b7f65"
+base_commit = "9f8102c1986746e79a46ff2ca3f30897dc99ff97"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
