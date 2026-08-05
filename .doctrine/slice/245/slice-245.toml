@@ -1,0 +1,34 @@
+id = 245
+slug = "inline-terminal-diagram-rendering"
+title = "Inline terminal diagram rendering"
+status = "proposed"
+created = "2026-08-05"
+updated = "2026-08-05"
+tags = ["area:cli", "area:graph", "area:render"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "fulfils"
+target = "IDE-046"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "renderer sited outside SPEC-027 to preserve its no-external-renderer responsibility"
+target = "SPEC-027"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
