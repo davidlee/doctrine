@@ -59,7 +59,7 @@ use crate::design_run::attestation::{
 use crate::design_run::delegation::Delegation;
 use crate::design_run::gate::ObservedFact;
 use crate::design_run::ids::{DesignId, Fingerprint, IdKind};
-use crate::design_run::render::envelope::{self, Detail};
+use crate::design_run::render::envelope::{self, Detail, OutstandingBySeverity};
 use crate::design_run::run::{Admission, DerivedInput, ObservedReview, Resolution};
 use crate::design_run::snapshot::{self, CheckpointGroup, DesignSnapshot};
 use crate::design_run::submission::{
@@ -1717,8 +1717,40 @@ fn baseline(run: &DesignSnapshot, declared: Option<u64>) -> u64 {
 
 /// Project one turn. The shell never applies a bound — it receives an
 /// already-bounded envelope and chooses a rendering (DEC-064).
-fn project(run: &DesignSnapshot, known: u64, detail: Detail) -> Result<TurnEnvelope> {
-    envelope::project(run, known, detail).map_err(|refused| refusal(&refused))
+///
+/// The severity summary is read *here*, on every projection, because it is a fact
+/// about a ledger the run only names — never state the run stores (SL-244
+/// `EX-1`). A stored count would be stale on the next `design show`, which is the
+/// surface the lamp exists for.
+fn project(root: &Path, run: &DesignSnapshot, known: u64, detail: Detail) -> Result<TurnEnvelope> {
+    envelope::project(run, known, detail, outstanding_by_severity(root, run)?)
+        .map_err(|refused| refusal(&refused))
+}
+
+/// The run's own pass, counted by severity — `review`'s answer in the leaf's
+/// record (SL-244 `D4`).
+///
+/// **A run holding no pass reads nothing at all.** That is the common case below
+/// `reviewing`, and skipping the read there is what keeps the lamp from charging
+/// every projection a disk read for a ledger that does not exist.
+///
+/// **An unreadable ledger fails loud** (the owner's 2026-08-05 ruling on `Q1`).
+/// The render vocabulary is two-valued — silence, or the counts — and silence
+/// means *nothing outstanding*. So where the run names a pass Doctrine cannot
+/// read, this errors naming the reference rather than borrowing the spelling of
+/// good news. This is the one path that diverges from the gate's, which reads the
+/// same failure as refusal through `review::observe_pass`.
+fn outstanding_by_severity(root: &Path, run: &DesignSnapshot) -> Result<OutstandingBySeverity> {
+    let Some(pass) = run.review.pass.as_ref() else {
+        return Ok(OutstandingBySeverity::default());
+    };
+    let counts = crate::review::read_pass_facts(root, pass.review.as_str())?.outstanding;
+    Ok(OutstandingBySeverity {
+        blocker: counts.blocker,
+        major: counts.major,
+        minor: counts.minor,
+        nit: counts.nit,
+    })
 }
 
 fn run_show(args: ShowArgs) -> Result<()> {
@@ -1731,7 +1763,7 @@ fn run_show(args: ShowArgs) -> Result<()> {
     } else {
         Detail::Normal
     };
-    let turn = project(&run, known, detail)?;
+    let turn = project(&root, &run, known, detail)?;
     match args.format {
         ShowFormat::Prompt => emit(&envelope::prompt(&turn)),
         ShowFormat::Status => emit(&envelope::status(&turn)),
@@ -1765,7 +1797,7 @@ fn run_resume(args: ResumeArgs) -> Result<()> {
     }
 
     let known = baseline(&run, args.known_revision);
-    let turn = project(&run, known, Detail::Normal)?;
+    let turn = project(&root, &run, known, Detail::Normal)?;
     let mut lines = envelope::resume(&turn);
     lines.extend(fragment_lines(&run, &args.known_fragment));
     lines.extend(fragment_section(&run, &args.known_fragment)?);

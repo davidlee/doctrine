@@ -159,6 +159,31 @@ pub(crate) struct GlobalTotals {
     pub(crate) changes_since_baseline: usize,
 }
 
+/// What the run's review pass still holds, counted by severity (SL-244 `EX-2`).
+///
+/// **A fixed record rather than a map.** The ledger's severity vocabulary is
+/// closed at four, so a map would let an absent key and a zero count spell one
+/// fact two ways and make every reader choose between them. Four fields cannot.
+///
+/// *Outstanding* is `status ∉ {verified, withdrawn}` — deliberately **wider** than
+/// the predicate holding the run's `reviewing → locked` edge, which excludes
+/// `answered` as well. The two filters stay separately spelled in `review`; the
+/// divergence is the point, and `VT-4` asserts it there because this tier cannot
+/// reach the ledger to make the comparison.
+///
+/// The shell counts, the leaf renders. The counting lives in `review` (it reads a
+/// `ReviewDoc` and must not teach this tier the ledger's vocabulary), this record
+/// lives here (it is rendered here and must be nameable without importing
+/// `review` — ADR-001), and the command tier pairs them, exactly as it pairs
+/// `PassFacts` into [`ObservedReview`](crate::design_run::run::ObservedReview).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub(crate) struct OutstandingBySeverity {
+    pub(crate) blocker: usize,
+    pub(crate) major: usize,
+    pub(crate) minor: usize,
+    pub(crate) nit: usize,
+}
+
 /// One active-path entry, root → cursor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct PathEntry {
@@ -312,6 +337,24 @@ pub(crate) struct TurnEnvelope {
     /// *the review has gone stale* are different facts, and only the second is
     /// this one. The first is what the section rows and the gate already say.
     pub(crate) pass_stale: bool,
+    /// What the run's pass still holds, by severity (SL-244 `sec-3`, `DEC-125`).
+    ///
+    /// The second warning lamp, and a warning for the same reason the first one is:
+    /// the counts inform whether another review round is worth its cost, and a
+    /// guard on them would bar the very disposition that clears them.
+    ///
+    /// Shell-read on every projection and **never stored** (`EX-1`). It arrives as
+    /// a [`project`] argument rather than on `DerivedInput`, because `DerivedInput`
+    /// is assembled on the apply path alone and this must light on a plain
+    /// `design show` too — a lamp that only works on the turn a caller happens to
+    /// apply something is not a lamp.
+    ///
+    /// All-zero on a run holding no pass: there is no ledger to read, and the
+    /// rendering elides itself, which is the same silence a ledger with nothing
+    /// outstanding produces. That conflation is deliberate — both mean *nothing is
+    /// outstanding here*, and what distinguishes them (has anyone reviewed this at
+    /// all) is what the section rows and [`Self::pass_stale`] already say.
+    pub(crate) outstanding: OutstandingBySeverity,
     pub(crate) declaration_example: &'static str,
     pub(crate) omitted: Omitted,
     pub(crate) truncated: bool,
@@ -323,12 +366,27 @@ pub(crate) struct TurnEnvelope {
 ///
 /// `known_revision` is the caller's declared baseline; the delta is the
 /// half-open range `(known_revision, current]`.
+///
+/// `outstanding` is shell-read, for the reason [`TurnEnvelope::outstanding`]
+/// gives: a fact about what an asset the run merely *names* says is one Doctrine
+/// reads, and the pure layer never opens a ledger. It is an argument here — beside
+/// `known_revision` and `detail` — rather than a field injected into the returned
+/// envelope, because eviction and the budget check run *inside*
+/// [`project_within`], and a post-hoc field would be unmeasured and could push the
+/// rendering past the ceiling this function just certified.
 pub(crate) fn project(
     run: &DesignSnapshot,
     known_revision: u64,
     detail: Detail,
+    outstanding: OutstandingBySeverity,
 ) -> Result<TurnEnvelope, Refusal> {
-    project_within(run, known_revision, detail, ENVELOPE_NORMAL_BUDGET_BYTES)
+    project_within(
+        run,
+        known_revision,
+        detail,
+        outstanding,
+        ENVELOPE_NORMAL_BUDGET_BYTES,
+    )
 }
 
 /// [`project`], against an explicit ceiling.
@@ -340,9 +398,10 @@ pub(crate) fn project_within(
     run: &DesignSnapshot,
     known_revision: u64,
     detail: Detail,
+    outstanding: OutstandingBySeverity,
     budget: usize,
 ) -> Result<TurnEnvelope, Refusal> {
-    let mut envelope = assemble(run, known_revision, detail);
+    let mut envelope = assemble(run, known_revision, detail, outstanding);
     if detail == Detail::Full {
         return Ok(envelope);
     }
@@ -411,7 +470,12 @@ fn evict_one(envelope: &mut TurnEnvelope) -> bool {
 }
 
 /// Build the envelope with every per-field cap applied, before the ladder runs.
-fn assemble(run: &DesignSnapshot, known_revision: u64, detail: Detail) -> TurnEnvelope {
+fn assemble(
+    run: &DesignSnapshot,
+    known_revision: u64,
+    detail: Detail,
+    outstanding: OutstandingBySeverity,
+) -> TurnEnvelope {
     let (cursor, cursor_stale) = effective_cursor(run);
     let candidates = frontier_candidates(run, cursor.as_ref());
 
@@ -476,6 +540,7 @@ fn assemble(run: &DesignSnapshot, known_revision: u64, detail: Detail) -> TurnEn
         // `integrated_current` is `false` in both cases, and they are not the
         // same fact.
         pass_stale: run.review.pass.is_some() && !run.review_standing().integrated_current,
+        outstanding,
         declaration_example: DECLARATION_EXAMPLE,
         truncated: omitted.any(),
         omitted,
@@ -1304,7 +1369,18 @@ fn more(omitted: usize) -> String {
 )]
 mod tests {
     use super::{
-        Detail, ENVELOPE_NORMAL_BUDGET_BYTES, project, project_within, prompt, rendered_bytes,
+        Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, project, project_within,
+        prompt, rendered_bytes,
+    };
+
+    /// The projection argument for a run whose ledger holds nothing — the honest
+    /// input wherever the summary is not the test's subject, and the same value a
+    /// run below `reviewing` gets from the shell without a disk read.
+    const NOTHING_OUTSTANDING: OutstandingBySeverity = OutstandingBySeverity {
+        blocker: 0,
+        major: 0,
+        minor: 0,
+        nit: 0,
     };
     use crate::design_run::Stage;
     use crate::design_run::attestation::{ReviewPolicy, Reviewer};
@@ -1369,7 +1445,8 @@ mod tests {
 
         // The positive control, and it is load-bearing: without it, a lamp that
         // is stuck on renders the same assertion below as a lamp that works.
-        let current = project(&run, 0, Detail::Normal).expect("the fixture run projects");
+        let current = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+            .expect("the fixture run projects");
         assert!(
             !current.pass_stale,
             "the fixture's pass covers current content"
@@ -1393,7 +1470,8 @@ mod tests {
             "the fixture is set up: the pass no longer covers current content"
         );
 
-        let stale = project(&run, 0, Detail::Normal).expect("a stale pass still projects");
+        let stale = project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+            .expect("a stale pass still projects");
         assert!(stale.pass_stale, "the lamp lights");
         assert!(
             prompt(&stale)
@@ -1407,7 +1485,7 @@ mod tests {
         // them is asserted rather than commented.
         let unreviewed = run_holding(&[(SECTION_A, "sha256:a")]);
         assert!(
-            !project(&unreviewed, 0, Detail::Normal)
+            !project(&unreviewed, 0, Detail::Normal, NOTHING_OUTSTANDING)
                 .expect("a run with no pass projects")
                 .pass_stale,
             "a run that never opened a pass has no stale one"
@@ -1442,7 +1520,8 @@ mod tests {
         attest(&mut run, "att-a", "sec-a", Reviewer::Adversarial);
 
         let settled = |run: &DesignSnapshot| {
-            let envelope = project(run, 0, Detail::Normal).expect("the fixture run projects");
+            let envelope = project(run, 0, Detail::Normal, NOTHING_OUTSTANDING)
+                .expect("the fixture run projects");
             let row = envelope
                 .sections
                 .iter()
@@ -1480,7 +1559,14 @@ mod tests {
     #[test]
     fn the_eviction_ladder_fires_and_counts_every_drop() {
         let run = wide_run(40);
-        let roomy = project_within(&run, 0, Detail::Normal, ENVELOPE_NORMAL_BUDGET_BYTES).unwrap();
+        let roomy = project_within(
+            &run,
+            0,
+            Detail::Normal,
+            NOTHING_OUTSTANDING,
+            ENVELOPE_NORMAL_BUDGET_BYTES,
+        )
+        .unwrap();
         assert_eq!(roomy.frontier.len(), super::ENVELOPE_FRONTIER_NODES);
         assert!(
             rendered_bytes(&roomy) <= ENVELOPE_NORMAL_BUDGET_BYTES,
@@ -1489,7 +1575,7 @@ mod tests {
 
         // A ceiling below the assembled size forces the ladder.
         let tight = rendered_bytes(&roomy) - 200;
-        let cut = project_within(&run, 0, Detail::Normal, tight).unwrap();
+        let cut = project_within(&run, 0, Detail::Normal, NOTHING_OUTSTANDING, tight).unwrap();
         assert!(rendered_bytes(&cut) <= tight, "the ceiling is enforced");
         assert!(cut.truncated, "and the drop is not silent");
         assert!(
@@ -1503,7 +1589,7 @@ mod tests {
     #[test]
     fn the_no_drop_set_alone_over_the_ceiling_is_refused() {
         let run = wide_run(40);
-        let refused = project_within(&run, 0, Detail::Normal, 1).unwrap_err();
+        let refused = project_within(&run, 0, Detail::Normal, NOTHING_OUTSTANDING, 1).unwrap_err();
         assert!(
             matches!(refused, Refusal::EnvelopeIrreducible { .. }),
             "{refused:?}"

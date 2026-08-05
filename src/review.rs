@@ -1686,13 +1686,6 @@ pub(crate) struct PassFacts {
     pub(crate) undisposed_blockers: Vec<String>,
     /// What the ledger still holds, by severity — the warning lamp's input, wider
     /// than [`Self::undisposed_blockers`] on purpose (SL-244 `EX-2`).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-244 PHASE-07 T3 lands the projection seam that reads it"
-        )
-    )]
     pub(crate) outstanding: OutstandingCounts,
 }
 
