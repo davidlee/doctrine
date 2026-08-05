@@ -887,6 +887,68 @@ impl Advance {
         Advance::ReviewingLocked,
     ];
 
+    /// The kebab token this edge is spelled with on the wire — the contract
+    /// receipt's block header and the value `--known-contracts` takes
+    /// (design `sec-5`, DEC-124's no-digest ruling reaching the wire).
+    ///
+    /// Literals rather than the two stage tokens joined at runtime, for the
+    /// reason every other `as_str` in this module is a literal match: the token
+    /// is a CLI contract, and deriving it would let a stage rename silently
+    /// move a name a caller has already declared. That the two agree *today* is
+    /// `an_edge_token_names_the_two_stages_it_joins`'s to hold.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T3 renders the block header")
+    )]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Advance::ExploringInquiring => "exploring-inquiring",
+            Advance::InquiringDrafting => "inquiring-drafting",
+            Advance::DraftingReviewing => "drafting-reviewing",
+            Advance::ReviewingLocked => "reviewing-locked",
+        }
+    }
+
+    /// The edge a caller's declared receipt names, if any.
+    ///
+    /// The inverse of [`Advance::as_str`] over [`Advance::ALL`], so the two
+    /// cannot drift: a token this returns `None` for is one no edge answers to,
+    /// which is what the receipt's fail-open-to-delivery rule turns on. A
+    /// lenient parse would elide bodies for a caller holding nothing.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T6 wires --known-contracts")
+    )]
+    pub(crate) fn parse(token: &str) -> Option<Self> {
+        Advance::ALL.into_iter().find(|edge| edge.as_str() == token)
+    }
+
+    /// The stage this edge arrives at.
+    ///
+    /// [`cumulative_conditions`] is keyed by the destination stage and stays so,
+    /// while the receipt's renderer holds an edge — so the edge→destination
+    /// mapping needs exactly one home, and this is it.
+    ///
+    /// PHASE-01 refused `from()`/`to()` accessors added *purely to reconstitute
+    /// the `(Stage, Stage)` pair this type exists to replace*, for a legality
+    /// check that [`Advance::between`] already answered. This is the other case:
+    /// a real one-way consumer, pinned against `between` so the destination and
+    /// the forward graph cannot disagree. No `from()` is added, because
+    /// [`Advance::from_stage`] already supplies the origin to every caller that
+    /// has one.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-244 PHASE-06 T3 resolves the enforced set")
+    )]
+    pub(crate) const fn to(self) -> Stage {
+        match self {
+            Advance::ExploringInquiring => Stage::Inquiring,
+            Advance::InquiringDrafting => Stage::Drafting,
+            Advance::DraftingReviewing => Stage::Reviewing,
+            Advance::ReviewingLocked => Stage::Locked,
+        }
+    }
+
     /// The forward graph, written once.
     ///
     /// Pure, total, and `const`: the four adjacent forward moves of design §5.4,

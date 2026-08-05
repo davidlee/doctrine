@@ -11,7 +11,7 @@
     reason = "test code — the repo's panic-avoidance denials target production paths"
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::Stage;
 use super::admission::admit_act;
@@ -168,6 +168,57 @@ fn advance_from_stage_is_none_at_locked() {
             }
         );
     }
+}
+
+/// The edge's wire token round-trips, and no two edges share one (SL-244
+/// PHASE-06 T1).
+///
+/// `--known-contracts` takes this token, so `parse` is the inverse of `as_str`
+/// or a caller can declare a receipt no edge answers to. Driven off
+/// [`Advance::ALL`] rather than a literal list: the vocabulary and the test are
+/// then the same statement, and a fifth edge cannot arrive untested.
+#[test]
+fn every_edge_token_round_trips_and_no_two_edges_share_one() {
+    for edge in Advance::ALL {
+        assert_eq!(Advance::parse(edge.as_str()), Some(edge), "{edge:?}");
+    }
+
+    let tokens: BTreeSet<&'static str> = Advance::ALL.iter().map(|edge| edge.as_str()).collect();
+    assert_eq!(tokens.len(), Advance::ALL.len());
+
+    // A token no edge answers to is `None`, not a near-match: the receipt's
+    // fail-open rule turns on this answer, and a lenient parse would elide
+    // bodies for a caller that declared nothing real.
+    assert_eq!(Advance::parse("exploring"), None);
+    assert_eq!(Advance::parse("exploring-locked"), None);
+    assert_eq!(Advance::parse(""), None);
+}
+
+/// The token names the two stages the edge joins, and `to` names the second of
+/// them (SL-244 PHASE-06 T1, `D3`).
+///
+/// One test for both because they are one claim. `from_stage` supplies the
+/// origin, so the relationship is pinned without `Advance` growing a `from()` —
+/// the accessor PHASE-01 refused, and this is why it is still not needed.
+#[test]
+fn an_edge_token_names_the_two_stages_it_joins() {
+    let mut checked = 0usize;
+    for stage in Stage::ALL {
+        let Some(edge) = Advance::from_stage(stage) else {
+            continue;
+        };
+        assert_eq!(
+            edge.as_str(),
+            format!("{}-{}", stage.as_str(), edge.to().as_str()),
+            "{edge:?}"
+        );
+        // `to` is pinned against the forward graph itself, not against a second
+        // list of destinations: the edge leaving `stage` and arriving at
+        // `edge.to()` must be the edge we started from.
+        assert_eq!(Advance::between(stage, edge.to()), Some(edge));
+        checked += 1;
+    }
+    assert_eq!(checked, Advance::ALL.len());
 }
 
 #[test]
