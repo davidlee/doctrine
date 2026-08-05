@@ -142,9 +142,39 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-04 completed · 7e2b768d
+fresh-as-of: 2026-08-05 · PHASE-05 completed · eff3c8e3
 
 ### Produced
+
+- **PHASE-05 COMPLETE — the condition model.** Fourteen tasks, in `D4`'s order
+  (`T9` ahead of `T5`–`T8`, because both resolve `ActKind → ActRequirement` and
+  the generated `CONTRACTS` table is the only route). The movement: one
+  `macro_rules!` takes the nine-row vocabulary once and emits `Condition`,
+  `Condition::ALL`, `CONTRACTS` and `boundary_conditions` plus a per-row const
+  assertion (`3ed419d1`, `902a3139`); the eight acts that table names persist in
+  two new snapshot groups replaced **by act** (`a91d04a2`), with wire types that
+  carry the claim and nothing the engine fills (`fbb4685e`); admission owns the
+  rule/record correspondence and raises every fault rather than the first
+  (`d8fdc1ec`, `85526479`); `apply` runs admit → mutate → re-observe →
+  construct → evaluate (`99c93cf3`); the shell projects the governance edge set
+  (`8c76d2a8`); the fixtures acquire their acts while the incumbent scan still
+  runs (`56b6df0c`, `b129d5ca`); `satisfied` returns a diagnosis instead of a
+  boolean (`6087abe2`, `2d93b629`, `00494bce`); `Evidence` and its five
+  dependents retire and two feeds re-source (`3c338165`); the change log carries
+  the disposition's arm (`33968c29`); the ladder runs on acts end to end
+  (`29437777`); and close-out (`ed4f0764`, `eff3c8e3`).
+  **Every PHASE-05 `VT` row PASSes**; `doctrine check gate` exit 0; clippy clean
+  at every commit. Measured at close: whole binary 4330 green,
+  `design_run::` 121, `e2e_design_review` 138, `e2e_design_state` 163,
+  `e2e_design_delegation` 128.
+  Findings `F1`–`F63` on the sheet. The three agent criteria each found
+  something and that is the argument for running them — `VA-1` a task whose e2e
+  edits were never tabled (`F61`), `VA-2` one second spelling and one orphan to
+  adjudicate (`F62`), `VA-3` a clause the plan said lands live and which did not
+  until close-out wrote it (`F63`). Four durable memories recorded (the
+  clippy-skips-macro-generated-bodies fact, the unconstructible-variant dead_code
+  blind spot, the flatten/retirement trap, the per-compilation-unit `expect`
+  trap) and six friction observations.
 
 - **PHASE-04 COMPLETE** — all eleven tasks landed, in `F1`'s order rather than
   the sheet's listing order (the `int-` retirement cannot precede the mint that
@@ -291,6 +321,38 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 
 ### Open
 
+- **PHASE-05's one deferred assertion, with its attribution.** A `Conducted`
+  disposition **admitted** over a ledger that has concluded lands with
+  `IMP-392`: `PassFacts::concluded` is hard-`false` (`review.rs:1615-1621`,
+  which says so in as many words) because no verb sets the marker and no field
+  holds it, so no `Conducted` arm is admissible on the live path and `Waived` is
+  the deliberately available exit meanwhile. The *refusal* is asserted at the
+  unit tier against a synthetic observation, three cases including a concluded
+  marker on some other ledger. Sheet `F63`. `EX-7`'s prediction below held for
+  the second clause and **not** for the third — see the amendment on that bullet.
+- **PHASE-05 broke the snapshot shape once, deliberately (`EX-14`), and the bill
+  is outstanding.** The act groups arrived and the evidence rows and
+  `LockAcceptance` left, so `SL-243`'s run needs a five-act hand repair at its
+  next forward move. Priced and accepted with the user 2026-08-04. The benign
+  half is measured at sheet `F48`: the retired `[gate.*]` keys on live runs are
+  *ignored* on read, not a second break.
+- **A user-visible render change shipped in PHASE-05**: `SectionRow` no longer
+  carries `clearances=`, which retired with the store it read (`EX-11`). Stated
+  in the criterion rather than discovered in a diff, and it takes an uncapped
+  list out of the envelope budget; the act list that replaces it in `resume` is
+  bounded at eight by construction (`D5`).
+- **`VT-8`'s PASS is not by itself evidence, and `/audit` should read `F58`
+  before `F47`.** The row read PASS from `T10` onward on a keyword scan over
+  `T8`'s tokens, then on a structural impossibility that `F57` showed was not
+  one. What backs it now is `T13`'s chokepoint guard on `Fixture::payload` plus
+  the ladder `lock_admits_with_all_four_present` already drove — argued as a
+  deletion and a guard rather than a second ladder test. Two hand-rolled payloads
+  in `e2e_design_state.rs` bypass the chokepoint by construction, stated not fixed.
+- **`review.findings` is write-only after PHASE-05 and is left standing.** Its
+  one reader retired with the evidence model; the blocking-findings derivation
+  sources from the observed `RV` pass. Adjudicated at `VA-2` (sheet `F62`) as
+  outside what that criterion forbids, and noted on `IMP-392` — where the removal
+  is now a plain deletion rather than a migration of a live consumer.
 - **`EX-7` is SETTLED: the finding set is readable today, so `IMP-392` narrows
   to the concluded-pass marker alone.** Evidence in tree: `FindingStatus` is
   `{Open, Answered, Contested, Verified, Withdrawn}`, `parse_finding_status` and
@@ -301,6 +363,13 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   blocker holding the edge; the contest/re-dispose cycle clearing) land live in
   PHASE-05 rather than waiting on `IMP-392`; only the first (`Conducted` over an
   unconcluded RV refused at admission) stays deferred.
+  **Amended 2026-08-05 at PHASE-05 `T14`.** The prediction held for the second
+  clause — `waiver_clears_over_live_findings_and_dismisses_none`'s second leg
+  asserts `Cause::BlockersUndisposed` over the arm that reads the ledger — and
+  **not** for the third: every test of the `Conducted` arm approached it from a
+  failure and `cleared()` disposes by `Waived`, so that arm's positive case was
+  asserted nowhere until `a_re_disposed_blocker_clears_the_edge_again`. A
+  criterion saying a clause *lands live* is not evidence that it did.
 - **`VT-4` was amended mid-phase, and `/audit` should read the amendment rather
   than the original.** Its clause *and the gate reads that as unmet* presumed
   `review-disposition-attested`, a condition PHASE-05 owns along with the act

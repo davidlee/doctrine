@@ -27,7 +27,15 @@ with a **document-section reference**, so one model serves both.
 - The design run resolving and deriving over an `RV` — it references none today
   (`IntegratedReview.id` is a `DesignId`, not a canonical ref).
 - Removing `Finding` and its `fnd-` declaration path, with the e2e suites that
-  encode it migrated deliberately rather than green-chased.
+  encode it migrated deliberately rather than green-chased. **Cheaper than when
+  this was written (`SL-244` PHASE-05, 2026-08-05).** The store's one reader was
+  `ReviewStanding::findings_disposed`, and it retired with the evidence model —
+  the blocking-findings derivation now sources from the observed `RV` pass
+  (`gate.rs`, `review::observe_pass`). So `review.findings` is write-only: this
+  is a plain deletion of a wire route and its two change-log rows, not a
+  migration of a live consumer. Left standing there deliberately — retiring a
+  snapshot group was on no criterion of that phase — and adjudicated at its
+  `VA-2` sweep rather than opening a second item.
 - The derived outstanding-findings summary **by severity** that `DEC-126`'s
   `review-disposition-attested` is informed by.
 
