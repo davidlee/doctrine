@@ -2370,4 +2370,81 @@ mod tests {
             design_run::gate::ObservedFacts::default()
         );
     }
+
+    /// `VT-1` — every condition has a narrative asset, the corpus has no
+    /// orphan, and the publication manifest names exactly the same set.
+    ///
+    /// Three enumerations that must agree: the generated condition vocabulary,
+    /// the `install/` corpus on disk, and the manifest's rows. The vocabulary
+    /// is the authority and the other two are checked against it, so a retired
+    /// condition fails from either side — a file left behind, or a row naming
+    /// something no longer generated.
+    ///
+    /// Read from **disk** rather than the embed, on
+    /// `assert_unprojected_install_assets_are_published`'s terms: `install/`
+    /// is a `debug-embed` RustEmbed root with no rerun-if-changed, so an
+    /// incremental build over a corpus edit would false-green a gate that read
+    /// the compiled embed.
+    ///
+    /// The reverse reachability direction — that every asset here is published
+    /// at all — is already held by that existing gate and needs no test here.
+    ///
+    /// This test's subject is the corpus while its host is a command that reads
+    /// assets one key at a time; `IMP-399` carries the extraction of this
+    /// module's four asset-reading section builders, to be judged on its own
+    /// merits rather than on this one test's placement.
+    #[test]
+    fn every_condition_has_an_asset_and_no_orphan() {
+        use design_run::gate::Condition;
+
+        const PREFIX: &str = "design-prompts/conditions/";
+
+        let expected: std::collections::BTreeSet<String> = Condition::ALL
+            .into_iter()
+            .map(Condition::contract_asset_key)
+            .collect();
+        // The hollow-pass guard: a set-equality test over an empty prefix
+        // filter is green on both sides. The corpus must be the vocabulary's
+        // size, and the vocabulary must not be empty.
+        assert_eq!(
+            expected.len(),
+            Condition::ALL.len(),
+            "one key per condition"
+        );
+        assert!(!expected.is_empty(), "the vocabulary is non-empty");
+
+        let corpus: std::collections::BTreeSet<String> =
+            crate::asset_source::install_asset_keys_from_disk()
+                .into_iter()
+                .filter(|key| key.starts_with(PREFIX))
+                .collect();
+        assert_eq!(
+            corpus, expected,
+            "the narrative corpus is set-equal to the generated vocabulary"
+        );
+
+        let manifest = crate::publication::PublicationManifest::admit(
+            &crate::asset_source::publication_manifest_bytes_from_disk(),
+        )
+        .expect("shipped publication manifest admits from disk");
+        let published: std::collections::BTreeSet<String> = manifest
+            .entries()
+            .iter()
+            .map(|entry| entry.address().as_str().to_owned())
+            .filter(|address| address.starts_with(PREFIX))
+            .collect();
+        assert_eq!(
+            published, expected,
+            "the manifest's rows for the prefix are set-equal to the vocabulary"
+        );
+
+        // Address and backing diverge in general (storage independence), so the
+        // backing side is asserted rather than inferred from the addresses.
+        for key in &expected {
+            assert!(
+                manifest.declares_backing(key),
+                "{key} is published by backing, not only addressed"
+            );
+        }
+    }
 }

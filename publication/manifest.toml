@@ -27,6 +27,15 @@
 # not that a project may not disagree with it, but that the override seam does
 # not exist yet (DEC-102 ruling (b); IMP-372 carries the resolution). Declaring
 # it customizable would promise an override no code delivers.
+#
+# SL-244 PHASE-06 added the store's third family — one narrative contract per
+# gate condition, under `design-prompts/conditions/`. Each is the prose half of
+# a condition whose structural half is a const table in the binary, delivered by
+# the stage-entry receipt. They are `fixed` for the runbooks' reason, in the
+# runbooks' words: not that a project may not disagree with them, but that the
+# override seam does not exist yet (DEC-102 ruling (b); IMP-372 carries the
+# resolution). The set is bounded by the generated condition vocabulary and is
+# asserted set-equal to it, so a row here naming a retired condition fails.
 
 [[entry]]
 address       = "reference/LICENSE"
@@ -90,6 +99,87 @@ title         = "Boot snapshot footer"
 licence       = "MIT"
 provenance    = "declared"
 customization = "customizable"
+
+[[entry]]
+address       = "design-prompts/conditions/blocking-inquiries-dispositioned.md"
+backing       = "design-prompts/conditions/blocking-inquiries-dispositioned.md"
+kind          = "guidance"
+title         = "Gate contract: blocking-inquiries-dispositioned"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/drafting-readiness-attested.md"
+backing       = "design-prompts/conditions/drafting-readiness-attested.md"
+kind          = "guidance"
+title         = "Gate contract: drafting-readiness-attested"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/governing-context-recorded.md"
+backing       = "design-prompts/conditions/governing-context-recorded.md"
+kind          = "guidance"
+title         = "Gate contract: governing-context-recorded"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/initial-concerns-recorded.md"
+backing       = "design-prompts/conditions/initial-concerns-recorded.md"
+kind          = "guidance"
+title         = "Gate contract: initial-concerns-recorded"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/materialisation-current.md"
+backing       = "design-prompts/conditions/materialisation-current.md"
+kind          = "guidance"
+title         = "Gate contract: materialisation-current"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/review-disposition-attested.md"
+backing       = "design-prompts/conditions/review-disposition-attested.md"
+kind          = "guidance"
+title         = "Gate contract: review-disposition-attested"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/section-attestations-current.md"
+backing       = "design-prompts/conditions/section-attestations-current.md"
+kind          = "guidance"
+title         = "Gate contract: section-attestations-current"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/user-acceptance-attested.md"
+backing       = "design-prompts/conditions/user-acceptance-attested.md"
+kind          = "guidance"
+title         = "Gate contract: user-acceptance-attested"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
+
+[[entry]]
+address       = "design-prompts/conditions/user-accepts-sufficiency.md"
+backing       = "design-prompts/conditions/user-accepts-sufficiency.md"
+kind          = "guidance"
+title         = "Gate contract: user-accepts-sufficiency"
+licence       = "MIT"
+provenance    = "declared"
+customization = "fixed"
 
 [[entry]]
 address       = "design-prompts/delegation.md"
