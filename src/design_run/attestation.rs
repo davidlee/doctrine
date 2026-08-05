@@ -586,6 +586,22 @@ pub(crate) enum ReviewDisposition {
     },
 }
 
+impl ReviewDisposition {
+    /// The token the arm is named by — stored value, rendered name (STD-001).
+    ///
+    /// The change log names the arm rather than the whole disposition, so the
+    /// reader of a row learns *which choice was made* without holding the
+    /// snapshot. It matches the `serde` spelling because a row and a stored act
+    /// disagreeing about what to call the same arm is a way to mislead a reader
+    /// for free.
+    pub(crate) const fn arm(&self) -> &'static str {
+        match self {
+            ReviewDisposition::Conducted { .. } => "conducted",
+            ReviewDisposition::Waived { .. } => "waived",
+        }
+    }
+}
+
 /// A disposition and the pass it was given over (design `sec-4`).
 ///
 /// The pass reference sits **beside** the arm rather than inside `Conducted`,

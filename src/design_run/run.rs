@@ -32,7 +32,7 @@ use super::admission::admit_act;
 use super::attestation::{
     AcceptanceAttestation, ActKind, AgentActKind, AgentDeclaration, Attestation, CheckpointAct,
     ContentCoverage, CoveredSet, DisposedPass, IntentState, IntentSubject, RecordedAct,
-    RecoveryIntent, ReviewPass, ReviewRef, Reviewer,
+    RecoveryIntent, ReviewDisposition, ReviewPass, ReviewRef, Reviewer,
 };
 use super::bounds::DESIGN_ID_BYTES;
 use super::change_log::{ChangeEvent, ChangeRow, PayloadKey, PayloadTerm};
@@ -376,7 +376,7 @@ pub(crate) fn apply(
     // one submission with no caller-computed digest (design `sec-4`).
     record_declaration(&mut next, request, derived)?;
     if let Some(declared) = request.checkpoint_act.as_ref() {
-        record_act(&mut next, declared, derived, payload_digest)?;
+        pending.extend(record_act(&mut next, declared, derived, payload_digest)?);
     }
 
     // Before the stage move, so a lock may be accepted and taken in one
@@ -389,6 +389,8 @@ pub(crate) fn apply(
     // by act kind and replaces, so a payload carrying both settles the way the
     // group's own contract already settles two acts of one kind.
     if let Some(declared) = request.acceptance.as_ref() {
+        // Carries no disposition, so it owes no `review_disposed` row — the
+        // `Option` is discarded here rather than defended against.
         record_act(
             &mut next,
             &CheckpointActDeclaration {
@@ -558,12 +560,17 @@ fn record_declaration(
 
 /// Construct the checkpoint act this batch carries, admit it, and record it
 /// (design `sec-4`, build order step 4).
+///
+/// Returns the disposition row this act owes the change log, if any (`EX-13`) —
+/// the row is derived from the record that was just admitted rather than from
+/// the declaration, so a disposition that never became an act cannot leave a row
+/// claiming it did.
 fn record_act(
     next: &mut DesignSnapshot,
     declared: &CheckpointActDeclaration,
     derived: &DerivedInput,
     payload_digest: &str,
-) -> Result<(), Refusal> {
+) -> Result<Option<Pending>, Refusal> {
     if declared.acceptance.basis.trim().is_empty() {
         return Err(Refusal::AcceptanceBasisMissing);
     }
@@ -601,8 +608,28 @@ fn record_act(
         disposition,
     };
     admit_against(RecordedAct::Checkpoint(&record), rule, derived)?;
+    let row = match record.disposition.as_ref() {
+        None => None,
+        Some(disposed) => {
+            let mut terms = vec![PayloadTerm::label(
+                PayloadKey::Disposition,
+                disposed.disposition.arm(),
+            )?];
+            // Present only on the arm that has one. A `Conducted` row rendering
+            // an empty reason would read as a waiver with nothing stated, which
+            // is the one thing admission refuses.
+            if let ReviewDisposition::Waived { ref reason } = disposed.disposition {
+                terms.push(PayloadTerm::prose(PayloadKey::Reason, reason.clone()));
+            }
+            Some(Pending::about(
+                ChangeEvent::ReviewDisposed,
+                &record.id,
+                terms,
+            ))
+        }
+    };
     next.acts.record(record);
-    Ok(())
+    Ok(row)
 }
 
 /// Check one constructed record against the rule it is written against.

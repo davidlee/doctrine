@@ -75,6 +75,14 @@ pub(crate) enum ChangeEvent {
     SectionFingerprintChanged,
     ReviewAttested,
     ReviewInvalidated,
+    /// The run's review pass was disposed of, on one of `DEC-125`'s two arms
+    /// (`T12`, `EX-13`).
+    ///
+    /// The row exists so the *choice* is legible in the log rather than only
+    /// inside the snapshot: `sec-4` makes both arms defensible by **authority
+    /// and visibility, not prohibition**, and this is the visibility half for
+    /// the arm that clears the edge over live findings.
+    ReviewDisposed,
     FindingRaised,
     FindingDisposed,
     AcceptanceAttested,
@@ -92,7 +100,7 @@ impl ChangeEvent {
     /// Every event, in the sketch's declaration order — the closed vocabulary,
     /// single-sourced so an exhaustive table test cannot silently miss a variant
     /// (STD-001).
-    pub(crate) const ALL: [ChangeEvent; 21] = [
+    pub(crate) const ALL: [ChangeEvent; 22] = [
         ChangeEvent::NodeCreated,
         ChangeEvent::NodeLifecycle,
         ChangeEvent::NodeReparented,
@@ -104,6 +112,7 @@ impl ChangeEvent {
         ChangeEvent::SectionFingerprintChanged,
         ChangeEvent::ReviewAttested,
         ChangeEvent::ReviewInvalidated,
+        ChangeEvent::ReviewDisposed,
         ChangeEvent::FindingRaised,
         ChangeEvent::FindingDisposed,
         ChangeEvent::AcceptanceAttested,
@@ -133,6 +142,7 @@ impl ChangeEvent {
             ChangeEvent::SectionFingerprintChanged => "section_fingerprint_changed",
             ChangeEvent::ReviewAttested => "review_attested",
             ChangeEvent::ReviewInvalidated => "review_invalidated",
+            ChangeEvent::ReviewDisposed => "review_disposed",
             ChangeEvent::FindingRaised => "finding_raised",
             ChangeEvent::FindingDisposed => "finding_disposed",
             ChangeEvent::AcceptanceAttested => "acceptance_attested",
@@ -185,6 +195,20 @@ impl ChangeEvent {
             ChangeEvent::ReviewAttested | ChangeEvent::ReviewInvalidated => &[
                 (PayloadKey::Section, ValueKind::Token),
                 (PayloadKey::Attestation, ValueKind::Token),
+            ],
+            // The arm, and the waiver's reason when it is the arm taken — which
+            // is the whole of what `EX-13` asks the log to carry. The disposed
+            // pass's `RV` is deliberately NOT a term: it is the run's current
+            // pass by construction (a disposition naming another is refused at
+            // admission), and a third term would push this event's saturated
+            // payload past [`super::render`]'s budget and make *this* the widest
+            // event, moving arithmetic the projection-bounds sketch is pinned
+            // to. Stored whole on the act; the change log is a bounded
+            // rendering, exactly as [`ChangeEvent::StepDischarged`] argues for
+            // its skip reason.
+            ChangeEvent::ReviewDisposed => &[
+                (PayloadKey::Disposition, ValueKind::Label),
+                (PayloadKey::Reason, ValueKind::Prose),
             ],
             ChangeEvent::FindingRaised | ChangeEvent::FindingDisposed => {
                 &[(PayloadKey::Section, ValueKind::Token)]

@@ -45,7 +45,7 @@ mod runbook_fixture;
 )]
 mod design_run;
 
-use design_run::attestation::{ActKind, AgentAct};
+use design_run::attestation::{ActKind, AgentAct, ReviewDisposition};
 use design_run::bounds::{DESIGN_ID_BYTES, DESIGN_STAGE_LABEL_BYTES};
 use design_run::change_log::{ChangeEvent, ChangeRow, PayloadTerm, ValueKind};
 use design_run::ids::{DesignId, IdKind};
@@ -821,6 +821,12 @@ const REVISED_SECTION_BODY: &str = "## Draft two\n";
 /// an `act_invalidated` row (SL-244 `T11`, `EX-11`).
 const REACCEPTED_SECTION_BODY: &str = "## Draft three\n";
 
+/// Why [`every_event_fixture`] waives its review pass. Named because the test
+/// that reads it asserts the stored row carries this reason **whole**, and a
+/// re-typed literal there would be asserting against bytes nothing declared.
+const WAIVER_REASON: &str = "the adversarial pass is not worth its cost on a run this size, and the sections have been \
+     read by the person accepting them";
+
 /// Drive the run through every material event kind, and return the fixture.
 fn every_event_fixture() -> Fixture {
     let fixture = Fixture::start();
@@ -999,6 +1005,61 @@ fn every_event_fixture() -> Fixture {
             "reason": "the summary does not answer the question",
         } }),
     ));
+    // review_disposed (SL-244 `T12`, `EX-13`). A disposition binds to the run's
+    // current review pass, and a pass exists only from `reviewing` onwards — so
+    // this member of the vocabulary cannot be reached without the two crossings
+    // below, and the fixture's earlier "no stage move" scope note is narrowed
+    // rather than abandoned: what stays another suite's is the LOCK gate, which
+    // this ladder still never attempts.
+    //
+    // The `Waived` arm, deliberately: it is the arm whose reason `EX-13` says
+    // must be legible in the log, and it is answered entirely at admission, so
+    // this fixture acquires no `RV` ledger to observe.
+    for step in runbook_fixture::INQUIRING_STEPS {
+        fixture.apply(&fixture.payload(
+            &runbook_fixture::discharge_label(step),
+            &runbook_fixture::discharge_body(step),
+        ));
+    }
+    fixture.apply(&fixture.payload(
+        "sufficiency",
+        &json!({"checkpoint_act": design_act::checkpoint_act(
+            ActKind::SufficiencyAccepted,
+            "there is nothing outstanding to interrogate",
+        )}),
+    ));
+    fixture.apply(&format!(
+        "{{{},\"stage\":{{\"to\":\"drafting\"}}}}",
+        fixture.envelope("to-drafting")
+    ));
+    for step in runbook_fixture::DRAFTING_STEPS {
+        fixture.apply(&fixture.payload(
+            &runbook_fixture::discharge_label(step),
+            &runbook_fixture::discharge_body(step),
+        ));
+    }
+    // `drafting → reviewing` owes `materialisation-current`, which the evaluator
+    // derives from the authored watermark — so the ladder materialises the
+    // sections it has drafted rather than claiming the condition.
+    run(&fixture.root, &["design", "materialise", SLICE, "-p", "."]);
+    fixture.apply(&fixture.payload(
+        "ready",
+        &json!({"agent_declaration": design_act::agent_declaration(
+            AgentAct::DraftingReady,
+            "the section is drafted and ready to review",
+        )}),
+    ));
+    fixture.apply(&format!(
+        "{{{},\"stage\":{{\"to\":\"reviewing\"}}}}",
+        fixture.envelope("to-reviewing")
+    ));
+    fixture.apply(&fixture.payload(
+        "waive",
+        &json!({"checkpoint_act": design_act::review_disposed(
+            "the user waives the integrated pass",
+            ReviewDisposition::Waived { reason: WAIVER_REASON.to_owned() },
+        )}),
+    ));
     fixture
 }
 
@@ -1029,6 +1090,44 @@ fn every_material_event_kind_persists_a_change_row() {
     assert!(
         missing.is_empty(),
         "no change row persisted for: {missing:?}"
+    );
+}
+
+/// SL-244 `EX-13` — the disposition row is legible on its own. It is subject to
+/// the act it reports, names the arm taken, and on the waiving arm carries the
+/// reason the pass was declined.
+///
+/// All three, because each alone is the fact the snapshot already held: a row
+/// that only said *a disposition happened* would leave the user's choice
+/// readable exclusively from state, which is the visibility half `sec-4` makes
+/// both arms defensible by.
+#[test]
+fn a_waived_disposition_row_names_its_arm_and_carries_its_reason() {
+    let log = every_event_fixture().read().change_log;
+    let row = log
+        .rows
+        .iter()
+        .find(|row| row.event == ChangeEvent::ReviewDisposed)
+        .expect("waiving the pass persists a disposition row");
+
+    assert_eq!(
+        row.subject.as_ref().map(DesignId::to_string),
+        Some(format!(
+            "{}{}",
+            IdKind::CheckpointAct.prefix(),
+            ActKind::ReviewDisposed.as_str()
+        )),
+        "the row names the act record it reports"
+    );
+    let terms: Vec<(&str, &str)> = row
+        .terms
+        .iter()
+        .map(|term| (term.key().as_str(), term.value()))
+        .collect();
+    assert_eq!(
+        terms,
+        vec![("disposition", "waived"), ("reason", WAIVER_REASON)],
+        "the arm, then the reason — in the event's declared term order"
     );
 }
 
