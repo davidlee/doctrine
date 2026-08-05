@@ -1,0 +1,43 @@
+memory_uid = "mem_019fd03e13397240b4eb05af218f5cf5"
+memory_key = "mem.pattern.serde.flatten-forbids-deny-unknown-fields"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Retiring a wire field on a flatten-carrying request is a silent no-op, not a refusal"
+summary = "A struct with #[serde(flatten)] cannot carry deny_unknown_fields, so callers of a deleted field learn nothing — sweep fixtures for stale keys when you retire one."
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = ["src/design_run/submission.rs", "tests/e2e_design_review.rs", "tests/e2e_design_delegation.rs", "tests/e2e_design_state.rs"]
+globs = []
+commands = []
+tags = ["serde", "wire-types", "retirement", "test-fixtures", "design-run"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "57d951a1e74ae76abf0ae9f8ff1466f003f29221"
+ref_name = "refs/heads/edge"
+checkout_state_id = "146adf8bc1bb0a6d201c9a4f6e8e4037b0f76355091c243f47d7763190bfb532"
+base_commit = "2943777793d4794af94661004054e1d4c3ddad93"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

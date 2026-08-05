@@ -1,0 +1,43 @@
+memory_uid = "mem_019fd03e57d87e239a0e2023bb1990bb"
+memory_key = "mem.pattern.rust.expect-dead-code-is-per-compilation-unit"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "expect(dead_code) is per compilation unit — an e2e reader leaves it unfulfilled"
+summary = "A #[path]-included e2e binary reading an accessor marked expect(dead_code) fails that binary on an unfulfilled expectation while the src build stays correct — assert through serde instead."
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = []
+globs = ["tests/e2e_design_*.rs", "src/design_run/**"]
+commands = []
+tags = ["rust", "clippy", "dead-code", "e2e-tests", "lint-expectations"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "57d951a1e74ae76abf0ae9f8ff1466f003f29221"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7dbb5dcc040bd12337fab08c13c906e6546f73b5ba2bc0e4f8bf1d33c3fb4ae7"
+base_commit = "2943777793d4794af94661004054e1d4c3ddad93"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
