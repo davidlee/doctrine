@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd1d9-69b5-71e1-be89-2503da9773a4"
+recorded_at = "2026-08-05T12:15:14.357635323Z"
+kind = "friction"
+summary = "/audit: review list has no --target filter, so finding a slice's existing reviews means scanning the whole ledger index"
+detail = "Opening an audit starts with 'what reviews already exist on this slice?'. `doctrine review list` takes only --tag; --target is refused with a tip suggesting --tag. The fallback is listing all reviews and eyeballing the target column — 40+ rows here, and the answer (RV-344, design facet) was two screens up. `doctrine inspect SL-244` shows the reviews edge but not the facet/status a reviewer needs to decide whether to reuse or open fresh. One --target flag on review list would collapse it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

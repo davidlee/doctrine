@@ -172,6 +172,11 @@ selector = "tests/e2e_claude_install.rs"
 intent = "design-target"
 note = "PHASE-06 T8: the design-prompts consumer guard. Adding the conditions/ corpus made src/commands/design.rs a second consumer of the store name, so this suite's allowed-consumer list is an argued edit of the guard, not a green-chase — one of the two coupling guards that fired and were repaired rather than widened."
 
+[[selector]]
+selector = "src/publication.rs"
+intent = "design-target"
+note = "sec-6: PHASE-08 T7 adds the reachability gate for reference/design-run-stages.md here — EX-4's publication and VT-5's 'asserted at the surface a client repo would actually use'. Declared at audit (RV-345 F-3); the row was invisible while PHASE-08's boundary was truncated."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"

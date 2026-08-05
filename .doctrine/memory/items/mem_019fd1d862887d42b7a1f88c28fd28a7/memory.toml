@@ -1,0 +1,42 @@
+memory_uid = "mem_019fd1d862887d42b7a1f88c28fd28a7"
+memory_key = "mem.pattern.plan.verification-subject-must-outlive-the-phase"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A VA criterion over gitignored runtime state leaves no evidence an audit can re-derive"
+summary = "If a VA-/VT- criterion's subject is runtime state, decide at authoring time how the evidence survives to audit — a scratch harness over a live run does not."
+created = "2026-08-05"
+updated = "2026-08-05"
+
+[scope]
+paths = [".doctrine/slice", ".doctrine/state"]
+globs = []
+commands = []
+tags = ["verification", "audit", "plan"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "31a9d0793dc00ee8bf7357a3c6f2989d82695fc1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a43a9d4dbf1ed46a2ef9228a6bc90c01e04f19355c64e5ff2c8d7b976aedb6af"
+base_commit = "8398ba7edd48534bcee9a67c510d2d3b94af1fe5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

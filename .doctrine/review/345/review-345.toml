@@ -1,0 +1,240 @@
+id    = 345
+slug  = "sl-244-reconciliation-audit-gate-conditions-carry-their-own-contract"
+title = "SL-244 reconciliation audit — gate conditions carry their own contract"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-244"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-08's boundary row was truncated to its last commit, so conformance and verify-vt both reported gaps that were not there"
+detail = """
+Expected: the recorded source delta for PHASE-08 spans the phase, so `slice conformance` and `slice verify-vt` read the phase.
+
+Observed: `.doctrine/state/slice/244/boundaries.toml` carried `code_start_oid = e8cc2dc1` for PHASE-08 — the parent of its LAST commit — against a phase whose code runs `21ac1e7d..3aed3918` (T1..T8, seven commits). Six of seven were outside the registry, including `28489006` (which added `install/design-run-stages.md`) and `e8cc2dc1` itself (which added the `publication/manifest.toml` row and the `src/publication.rs` reachability test).
+
+Two consequences, both reassuring for the wrong reason:
+- `slice conformance 244` reported `undelivered: install/design-run-stages.md` — the phase objective, sitting delivered on disk, read as a dropped deliverable.
+- `slice verify-vt 244` reported PHASE-08 VT-5 `UNATTRIBUTABLE — keyword present but src/publication.rs not modified by this slice`, i.e. the one criterion asserting the artefact is reachable by address could not be attributed.
+
+This is the second occurrence of the failure mode SL-244 itself recorded at PHASE-06 as `mem.pattern.doctrine.conformance-needs-a-correct-boundary-row` ("a clean read can mean nothing was checked"), which prescribes reading the row at the flip and correcting it before believing conformance. The memory was written and the practice was not adopted at the next phase close — so the defect is the loop, not the row.
+
+Corrected in-audit: `slice record-delta 244 PHASE-08 --start b8df2efa --end 3aed3918`. After correction: undelivered 2 -> 1, conformant 40 -> 41, and all 40 VT rows across all eight phases PASS."""
+disposition = "fix-now"
+response = """
+Corrected in-audit. `slice record-delta 244 PHASE-08 --start b8df2efa695d8d3640cc99c3a7ab73be22229aa9 --end 3aed3918148d09dc37ad50ac4fdc400fad91593c` rewrote the row to the phase actual span. Post-fix: `undelivered` 2 -> 1 (`install/design-run-stages.md` gone), `conformant` 40 -> 41, and `slice verify-vt 244` returns PASS on all 40 VT rows with no UNATTRIBUTABLE.
+
+The other seven boundary rows were checked against the commit log and are correct: PHASE-01 `d50777cd..3baaa564`, PHASE-02 `37fcf657..847b2eec`, PHASE-03 `76fd3e10..69a82423`, PHASE-04 `481e5d34..29c12e05`, PHASE-05 `6b8ef87a..9c4a4c24`, PHASE-06 `35fe509f..bafcb80c`, PHASE-07 `a9803d26..e462c0fd`. PHASE-08 was the only truncation.
+
+No brief item: the registry is runtime state, `record-delta` is the sanctioned repair, and both surfaces now read true. What is NOT fixed by the row is the loop — the memory prescribing the check existed and was not run at the PHASE-08 flip. That is carried to the synthesis as a standing risk rather than a second finding, because the practice change belongs to the phase-close ritual and not to this slice artefacts."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "SPEC-029 was declared a design target and promised a revision in design.md sec-6; no revision landed"
+detail = """
+Expected: `.doctrine/spec/tech/029/**` carries this slice edit. The selector was declared `intent = "design-target"` with the note "SPEC-029 owns the gate table and is revised by this slice regardless; under DEC-127 it cites the published diagram address rather than holding a copy", and `design.md` sec-6 § Where the citation points repeats the obligation in as many words.
+
+Observed: `slice conformance 244` reports `.doctrine/spec/tech/029/**` as the sole remaining `undelivered` selector. `git log -- .doctrine/spec/tech/029/` shows no commit in this slice. The spec is materially behind the container it governs:
+
+- Its `responsibilities` list omits every mechanism this slice added — the const contract table keyed by the closed `Advance` relation, the attested-act ledger (`CheckpointAct` / `AgentDeclaration`) that replaced the existential evidence scan, the per-run `ReviewPolicy`, the `ReviewPass` RV minted on entry to `reviewing`, the condition contract corpus and the stage-entry receipt.
+- It carries no citation of `reference/design-run-stages.md`, which is the specific DEC-127 obligation sec-6 recorded.
+- D1 ("the gate table is a `const fn` table, not a matcher") survives intact and is NOT the falsified part — the macro emits a const table. The gap is omission, not contradiction.
+
+One correction to the design as written: `design.md:19` characterises SPEC-029 as describing "evidence as payload-claimed". It does not — grep for `claim` in `spec-029.md` returns one unrelated hit (line 124, about test seams), against a positive control of three hits for `gate table`. The claimed-evidence model was only ever described in SL-233 design prose and in source, which is this slice premise. So the spec revision owed is additive, and the reconciliation should not go looking for wrong text to delete."""
+disposition = "verified"
+response = """
+Observation confirmed; remediation delegated to `/reconcile` and recorded in this ledger `## Reconciliation Brief` under Governance/spec (REV). Not fixed here — a spec revision is not an audit-scope code fix, and SPEC-029 is a governance surface whose write route is a REV, not a direct edit.
+
+Scope of the owed revision, as the brief states it: add the mechanisms this slice built to the `responsibilities` list (the const contract table keyed by `Advance`; the attested-act ledger replacing the existential evidence scan; the per-run `ReviewPolicy`; the `ReviewPass` RV minted on entry to `reviewing`; the condition contract corpus and the stage-entry receipt), and add the DEC-127 citation of `reference/design-run-stages.md`. D1 stands unchanged.
+
+The `design.md:19` mischaracterisation (SPEC-029 "describes evidence as payload-claimed" — it does not) is carried to the brief Per-slice section as a direct edit, so the reconciler does not go hunting for text that is not there."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "src/publication.rs is the slice's one undeclared code path — PHASE-08 EX-4's reachability gate has no selector"
+detail = """
+Expected: every code path this slice edits is covered by a selector, so the conformance `undeclared` cell carries only authored `.doctrine/**` noise.
+
+Observed: after F-1 corrected the PHASE-08 boundary, `src/publication.rs` is the ONE non-`.doctrine` path in `undeclared (69)`. Commit `e8cc2dc1` (PHASE-08 T7) added 24 lines there — the test discharging EX-4 ("published at reference/design-run-stages.md, reachable by `doctrine library show`") and VT-5 ("reachable by address ... asserted at the surface a client repo would actually use"). Both criteria name that file explicitly; the registry never learned it.
+
+The fix is the selector registry, which is what `slice conformance` reads — not prose. `design.md` carries no design-targets mirror section for this slice (the registry in `slice-244.toml` is the only home), so there is no prose half to keep in step.
+
+Note the interaction with F-1: while the boundary was truncated this path did not appear at all, so the gap was invisible until the registry was correct. That is the same "clean read means nothing was checked" property, one layer out."""
+disposition = "fix-now"
+response = """
+Fixed in-audit at the surface that is load-bearing. `slice selector add 244 src/publication.rs --intent design-target` with a note citing PHASE-08 EX-4/VT-5 and this finding. Conformance now reads `undeclared 68 / undelivered 1 / conformant 42`, and `src/publication.rs` appears in the conformant cell matched by its own selector.
+
+The registry is the load-bearing change because `slice conformance` reads `slice-244.toml`, not prose. There is no `design.md` mirror to update — this slice authored no design-targets section, so the registry is the sole home and no prose half can drift from it."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "The slice ships a binary that cannot read its own locked design run — ISS-315 is live, and the compat pattern the slice invented was applied at one retirement and not the other"
+detail = """
+Expected: a closed serde vocabulary that retires a member keeps a read path for the history already written under it. The slice establishes exactly that pattern at PHASE-05 T11: `ChangeEvent::ActInvalidated` carries `#[serde(alias = "evidence_invalidated")]` with a doc comment naming the rename (`change_log.rs:65-73`), and the same reasoning was re-learned the hard way at `7e2b768d` when the `RecoveryIntent` subject alias was dropped and restored ("a snapshot routinely outlives the binary that wrote it", pinned by `a_snapshot_written_before_the_intent_subject_key_still_parses`).
+
+Observed: `./target/debug/doctrine design show 244` fails outright —
+
+  Error: parse .doctrine/state/slice/244/design.toml
+    TOML parse error at line 4927: unknown variant `integrated_review_recorded`
+
+PHASE-04 `EX-2` retired `ChangeEvent::IntegratedReviewRecorded` with the write path (`4943333a`), correctly — but the change log is append-only HISTORY, and SL-244 own run holds one such row from when it declared `int-1`. `ChangeEvent` deserialises strictly, so one unrecognised row fails the whole snapshot. `EX-2` is right about the write vocabulary and silent about the read vocabulary; the two are not the same set.
+
+Blast radius measured rather than assumed. Every live run was read with the built binary: SL-243 revision 28, SL-245 revision 9 and SL-246 revision 10 all parse; only SL-244 fails, because it is the only run that ever declared an integrated review. So this is one gitignored runtime snapshot — and it is the snapshot of the design run governing the slice now under audit, which is what makes it worth a `major` rather than a nit.
+
+Filed as ISS-315 during PHASE-04 with three candidate resolutions and explicitly NOT decided in-slice, on the ground that what a closed vocabulary owes its own history is a governance question rather than a phase edit. The audit agrees with that routing and disagrees with leaving the near-sibling asymmetry unstated: the slice holds both the defect and its own worked precedent, five hundred lines apart in the same file."""
+disposition = "tolerated"
+response = """
+Accepted drift, with the rationale stated and the owner named — ISS-315, already filed during PHASE-04 with three candidate resolutions.
+
+Why tolerated rather than fix-now. The cheap-looking repair (re-add the variant as a deserialize-only member) is not a comment fix: it decides what a closed change-event vocabulary owes its own history, and the three candidates differ in kind (a permanent read-only variant, a `#[serde(other)] Unknown` sink that renders as unknown, or a snapshot migration). ADR-007 and SPEC-029 both have a stake in that answer. Picking one inside an audit would be exactly the improvisation `/consult` exists to prevent.
+
+Why tolerated rather than blocker. Blast radius was measured, not assumed: of the four live design runs, SL-243, SL-245 and SL-246 all parse with the built binary and only SL-244 own fails, because it is the only run that ever declared an `int-` integrated review. The subject is one gitignored, disposable runtime snapshot. No authored artefact is at risk, and nothing downstream of this audit needs to read it — the slice design, plan, notes and this ledger are all authored and readable.
+
+What the finding adds beyond ISS-315, and what carries forward: the slice holds its OWN worked precedent five hundred lines from the defect. `ChangeEvent::ActInvalidated` keeps `#[serde(alias = "evidence_invalidated")]` for exactly this reason, and `7e2b768d` restored the `RecoveryIntent` subject alias after removing it broke the same class of read. So whichever resolution ISS-315 takes, the general rule it should record is already demonstrated twice in-tree: retiring a serde member from the WRITE vocabulary does not retire it from the READ vocabulary. Noted on the ledger; ISS-315 is the write surface for it, not this slice artefacts, so no brief item."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "68 of 69 undeclared rows are .doctrine/** — 65 the slice's own knowledge captures inside code boundaries, 3 foreign commits inside PHASE-07's span"
+detail = """
+Expected: the `undeclared` cell is a scope-creep signal a reader can act on.
+
+Observed: it is 69 rows, and after F-3 exactly one is code. The other 68 split two ways:
+
+(a) ~65 are this slice authored knowledge output — DEC-140..144, QUE-206, IMP-398/400/401, ISS-316, seven memories, ten observation records, and the slice own `notes.md` / `plan.toml` / `slice-244.toml` edits. They ride commits INSIDE a phase code boundary rather than a post-flip harvest commit. That was deliberate from PHASE-04 on: "a handover is exactly where uncommitted authored state goes missing, so it was committed when written rather than held to the phase flip" (notes.md § Open). The consequence is that the noise floor is high enough to hide a real row — which F-3 demonstrates, since one code path sat in this cell unnoticed.
+
+(b) 3 are FOREIGN work: `.doctrine/slice/245/notes.md`, `.doctrine/slice/246/slice-246.md`, `.doctrine/slice/246/slice-246.toml`, from commits `56e376bd`, `01a660c9` and `a48afbbb` (SL-245/SL-246 design work by a concurrent agent on the shared `edge` tree). They fall inside PHASE-07 boundary `a9803d26..e462c0fd` because they are INTERLEAVED with PHASE-07 own commits — no single `[start, end]` range excludes them, so `record-delta` cannot repair this one the way it repaired F-1.
+
+Neither is scope creep. Raised because the audit must state which rows it read and dismissed, and because (b) is a structural limit of a one-range-per-phase registry on a shared branch, not an error anyone made."""
+disposition = "aligned"
+response = """
+Read and dismissed as noise, with both halves attributed so a later reader does not re-derive them.
+
+(a) The ~65 self-authored rows are correct behaviour for a slice that captures knowledge as it goes. The alternative — holding DECs, memories and observations to a post-flip harvest commit — is what PHASE-01/02 did and what PHASE-04 deliberately stopped doing, on the ground that a handover is where uncommitted authored state goes missing. The audit endorses that trade: losing a decision record is worse than a noisy conformance cell.
+
+(b) The three foreign rows (`.doctrine/slice/245/notes.md`, `.doctrine/slice/246/slice-246.{md,toml}` from `56e376bd`, `01a660c9`, `a48afbbb`) are a concurrent agent SL-245/SL-246 work interleaved with PHASE-07 on the shared `edge` branch. This is expected on this repo — see `mem_019ebb0f21d075a1aa1bcd1a790169de`, "concurrent design work on the shared main worktree is expected". `record-delta` cannot repair it: the registry holds one `[start, end]` range per phase and the foreign commits sit between PHASE-07 own, so any range excluding them also excludes real work.
+
+No change owed to any slice artefact. The residual — that a high noise floor can hide a genuine row, which F-3 demonstrated — is carried to the synthesis as a standing risk about the conformance signal, not about this slice."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "run.rs:411-415 says the review-policy acceptance is bound through AcceptanceAttestation::bind; no bind call is made on that path"
+detail = """
+Expected: a doc comment describes the code beneath it.
+
+Observed: `src/design_run/run.rs:411-415` reads "the fence here is authority and visibility rather than prohibition: the basis is required, the acceptance is bound through the one route that carries `AcceptanceAuthority::User`, and the change is logged." The block below (416-434) does three things: refuses an empty `basis` with `Refusal::AcceptanceBasisMissing`, assigns `next.run.review_policy`, and pushes a `ReviewPolicyChanged` row with old/new. `declared.acceptance` is validated and then DISCARDED. There is no `AcceptanceAttestation::bind` call on this path — the four production call sites are `commands/design.rs:930`, `run.rs:598` (the `CheckpointAct` constructor), `fixture.rs:98`, and none is reached from here.
+
+This is PHASE-03 `EX-5` departure (b), which `notes.md` § Open records honestly and hands to the audit: "no call is made, because nothing can hold what it returns until PHASE-05 act groups arrive ... /audit should decide whether PHASE-05 act record adopts the attestation (sheet D2)."
+
+The audit decision: PHASE-05 DOES adopt it — `CheckpointActDeclaration` carries an `AcceptanceDeclaration` and `run.rs:594-601` routes it through `bind` at construction, so the mechanism PHASE-03 lacked now exists. The policy path was simply not migrated onto it, and no criterion in PHASE-05 asked for that migration. What survives is not the gap (the acceptance has nowhere to be stored — `ReviewPolicy` is a scalar on the run header, not a record) but the COMMENT, which now asserts a route the code visibly does not take. A reader auditing DEC-088 authority guarantees would take that sentence at face value.
+
+Two separable things, and only one is a defect: the missing bind is an argued departure whose observable purpose (basis required, refused when empty, change logged) is delivered; the comment is wrong and cheap to correct."""
+disposition = "fix-now"
+response = """
+Fixed in-audit at both sites, and the class was swept rather than the instance.
+
+`src/design_run/run.rs:410-421` now states what the block does — the declaration is required, its basis must be non-empty, the change is logged with both values — and states explicitly that the declared acceptance is NOT bound, with the reason (`ReviewPolicy` is a scalar on the run header, not a record, so a bound attestation has nowhere to live) and the pointer to where a declaration DOES become one (`checkpoint_act`).
+
+The sibling was found by sweeping for the same claim: `ReviewPolicyDeclaration` own doc comment at `src/design_run/submission.rs:554-567` made the identical assertion ("Loosening the policy must be done in the user name, through `AcceptanceAttestation::bind` single route"). Corrected in the same shape. `cargo clippy --workspace` clean; `cargo doc` reports no unresolved link in either file.
+
+PHASE-03 EX-5 adjudication, which the slice notes explicitly deferred to `/audit` (sheet D2): the departure is ALIGNED. EX-5 observable purpose — the `AcceptanceDeclaration` is a required wire field, an empty basis is refused through `AcceptanceBasisMissing`, and the change is logged — is delivered in full. PHASE-05 act records DO adopt the attestation (`run.rs` `CheckpointAct` constructor routes through `bind`), so the mechanism PHASE-03 lacked now exists; the policy path was simply never migrated onto it, and no PHASE-05 criterion asked for that. Migrating it would mean giving the policy a record to live in, which is a design change and not an audit repair. Recorded in the synthesis as an available future simplification, not as owed work."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "PHASE-02 VA-1's evidence is recorded but no longer reproducible — the harness was a deleted scratch test and the snapshot shape has since moved"
+detail = """
+Expected: an audit can re-derive a verification criterion evidence from the tree.
+
+Observed: PHASE-02 `VA-1` ("the generification is a type change, not a semantic one: an existing snapshot round-trips unchanged, checked against a real one rather than a constructed fixture") was discharged by a scratch harness that parsed and re-serialised `.doctrine/state/slice/{243,244}/design.toml` before and after, run twice and deleted (phase sheet D2). Runs live in gitignored state, so neither the subject nor the harness is in the tree. The slice says so plainly: "`/audit` either accepts that record or re-runs the harness; it cannot read the proof off the diff."
+
+Re-running is now foreclosed as well as expensive: PHASE-05 `EX-14` deliberately moved the snapshot shape (act groups arrived, evidence rows and `LockAcceptance` left), so a `ContentCoverage<Fingerprint>` round-trip over todays runs no longer isolates PHASE-02 change. The window in which this criterion was checkable closed three phases ago.
+
+Raised not to reopen the claim — the criterion insistence on a REAL snapshot rather than a fixture was the right call and is why it caught what a fixture would not — but because "checked against a real one" and "gitignored, disposable" are in tension by construction, and this is the second criterion in the slice (with PHASE-08 VT-5, see F-1) whose evidence turned out not to be readable off the tree at audit time. The recorded outcome (`diff -r before after` empty, with `slice/243` carrying the stored `[review.acceptance.covered.covered]` the criterion protects) is accepted on the record."""
+disposition = "tolerated"
+response = """
+The recorded outcome is accepted on the record, and the reason it cannot be re-derived is stated rather than papered over.
+
+Accepted: phase sheet D2 Outcome — the harness parsed and re-serialised `.doctrine/state/slice/{243,244}/design.toml` before and after the generification, `diff -r before after` empty, with `slice/243` carrying the stored `[review.acceptance.covered.covered]` the criterion protects. That is a real observation over real snapshots, which is more than a fixture would have proved.
+
+Not re-run: PHASE-05 EX-14 moved the snapshot shape deliberately, so a round-trip today no longer isolates PHASE-02 change. The window closed three phases ago and no repair reopens it.
+
+The general point is carried to the synthesis, not to a brief item: a criterion whose subject is gitignored runtime state cannot leave tree-readable evidence, and the honest options are (i) accept a recorded outcome, as here, or (ii) keep the harness as a committed test with a fixture built from a real snapshot captured as a test asset. PHASE-02 chose neither at authoring time, and the criterion insistence on "a real one rather than a constructed fixture" is what made (ii) unavailable. Worth a durable memory; not worth reopening a green phase."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "The boundary-span advisory prescribes --commit, the one mode that truncates the multi-commit range it fires on — this is F-1's root cause and it is a tooling defect, not an agent slip"
+detail = """
+Root-cause pass on F-1, done rather than assumed.
+
+The solo binding records `(stamped code_start_oid, HEAD)` at the `completed` flip (`src/state.rs:466-525`). PHASE-08 sheet stamped `code_start_oid = b8df2efa` correctly, so the binding wrote `(b8df2efa, 07cba2b2)` — right start, end polluted by the three trailing `chore` commits between the last code commit and the flip. `advise_boundary_span` then fired, as designed.
+
+What it printed (`span_advisory`, `src/state.rs:747-749`):
+
+  correct with: doctrine slice record-delta 244 PHASE-08 --commit <this phase own code tip>
+
+`--commit S` records exactly `S` own patch, `[S^, S]` — the documented SAFE DEFAULT. Applied as printed with the phase code tip `3aed3918`, it yields `(e8cc2dc1, 3aed3918)`, which is precisely the row found in the registry. Hypothesis confirmed by arithmetic: `3aed3918^ == e8cc2dc1`, and the automatic binding could not have produced that end oid because HEAD at flip time was `07cba2b2`.
+
+The defect is exact and total: `span_advisory` returns `None` when `commits.len() < 2`, so it fires ONLY on multi-commit spans — and `--commit` is correct ONLY on single-commit spans. There is no input for which the printed remedy is right.
+
+It is also a trade DOWN. A too-wide boundary over-reports into the `undeclared` cell, where a reader sees the foreign rows and dismisses them. A too-narrow boundary under-reports silently: real deliverables read `undelivered`, criteria read `UNATTRIBUTABLE`, and nothing anywhere says the range was truncated.
+
+This reframes F-1. The practice memory SL-244 recorded at PHASE-06 gets step 3 right ("`--commit` for a single-commit phase; `--start`/`--end` for a multi-commit one"), and the CLI contradicts it at the exact moment an agent is reading the CLI. Filed as ISS-317 with three candidate resolutions; the load-bearing one is having `record-delta --commit S` refuse or warn when the sheet stamped `code_start_oid` is an ancestor of `S^`, since that fact is already on the sheet and would have caught this wherever the mistake was made."""
+disposition = "follow-up"
+response = """
+Owned future work, filed as ISS-317 (issue, open) with the observation, the arithmetic, the asymmetry argument and three candidate resolutions. Related to IMP-175 (the other end of the same boundary-accuracy problem — the advisory exists because of it) and to `mem.pattern.doctrine.conformance-needs-a-correct-boundary-row`, whose step 3 the CLI contradicts.
+
+`follow-up` and not `fix-now`, and the reason is scope rather than size. The defect is in `src/state.rs` phase-binding advisory — pre-existing, from the SL-154 / IMP-175 line of work, and untouched by SL-244. SL-244 subject is the design-run gate contract; `src/state.rs` is not in its selector registry and not in its design. Repairing it inside this audit would be an undeclared code change to a subsystem this slice never opened, which is the scope creep conformance exists to catch.
+
+`follow-up` and not `tolerated`: nothing about this is accepted. It is a live trap that will truncate the next multi-commit phase boundary someone repairs.
+
+What SL-244 owes and has paid: its own row is corrected (F-1), and the root cause is now written down where the next reader of that advisory will find it rather than re-deriving it from a puzzling conformance diff."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Four criterion departures the slice explicitly handed to /audit, each verified against the tree"
+detail = """
+Not a defect claim — the ledger entry exists so these adjudications survive the conversation rather than living only in synthesis prose. `notes.md` § Open and the PHASE-08 sheet each say "for `/audit`" in as many words; an audit that leaves them unanswered has skipped a step the slice asked for.
+
+**PHASE-01 EX-2 (a) — `can_advance` is DELETED, not kept as a one-line alias.** Verified: `grep -rn "fn can_advance" src/` returns nothing. The clause purpose is *so the forward graph is written once*, and it is — `Advance::between(from, to).is_some()` is inlined at its sole production caller. `VA-1` enumerated the other two sites and the phase disposed of both, leaving a zero-caller `pub(crate) fn` that this repo clippy denies. Delivered, not departed from in substance.
+
+**PHASE-01 EX-2 (b) — `boundary_runbook` is re-keyed to `Advance` and drops its `Option`.** Verified at `gate.rs:1025`: `pub(crate) const fn boundary_runbook(edge: Advance) -> RunbookKey`. The two callers that genuinely ask about an arbitrary pair now spell it `Advance::between(..).map(boundary_runbook)` (`run.rs:1610`, `commands/design.rs:2044`), and the selector uses `from_stage` per EX-4 (`commands/design.rs:2117`). The alternative was `Advance` growing `from()`/`to()` accessors to reconstitute the pair the type exists to replace. Behaviour-preserving; either half is a one-line reversion.
+
+**PHASE-03 VT-1 — "the standing names the missing lane" is delivered through a `Cause`, not through `ReviewStanding`.** Verified: `ReviewStanding` is `Copy` and passed by value into `satisfied` and `advance`, so a `Vec` there breaks both signatures. `DesignSnapshot::sections_unreviewed() -> Vec<(DesignId, ActorClass)>` (`snapshot.rs:531`) is the derivation, and the evaluator calls it directly at `gate.rs:1359` to build `Cause::SectionsUnreviewed { subjects }`. So the missing lane IS named, at the refusal rather than on the standing — which is the surface a caller reads. One correction to the record: `notes.md` calls it `Refusal::SectionsUnreviewed`; it is `Cause::SectionsUnreviewed`, a member of the `Vec<Cause>` an `Unmet` carries.
+
+**PHASE-08 D2 / EX-2(3) — the discharging act rides a list beneath the condition table, not a fifth column.** Verified in the rendered artefact. EX-2 requires "a condition table whose every column is a projection of the CONTRACTS row", and every remaining column is. `review-disposition-attested` discharge is three lines and does not survive a markdown cell, and `VT-4` asserts byte equality between what this artefact renders and what the receipt injects — a cell would have broken the equality the criterion rests on.
+
+All four: the letter moved, the purpose held, and each was argued before execution rather than explained after."""
+disposition = "aligned"
+response = """
+All four adjudicated ALIGNED against the tree, not against the argument. Each was checked at the named file and line rather than accepted from the notes: `can_advance` absent from `src/`; `boundary_runbook` const over `Advance` with its two pair-asking callers spelling `between(..).map(..)`; `sections_unreviewed` called by the evaluator at `gate.rs:1359` and surfacing as `Cause::SectionsUnreviewed { subjects }`; the discharge list rendered beneath the condition table with every remaining column a `CONTRACTS` projection.
+
+One correction owed to the record and routed to the brief: `notes.md` names the third as `Refusal::SectionsUnreviewed`. It is `Cause::SectionsUnreviewed` — a member of the `Vec<Cause>` an `Unmet` carries, not a `Refusal` variant. Small, and worth fixing because a future reader greps for the name they were given.
+
+No other change owed. These are the phases doing what the plan asked: departing from a criterion letter deliberately, recording the departure with its reason BEFORE executing, and naming the reversion cost. That is the behaviour a criterion-departure protocol is supposed to produce, and the audit should say so as clearly as it names defects."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -409,10 +409,16 @@ pub(crate) fn apply(
 
     // Beside the acceptance and in the same shape, because it is the same kind of
     // act: a user judgement about the run as a whole. The policy is mutable on
-    // purpose — see `ReviewPolicyDeclaration` — so the fence here is authority and
-    // visibility rather than prohibition: the basis is required, the acceptance is
-    // bound through the one route that carries `AcceptanceAuthority::User`, and
-    // the change is logged.
+    // purpose — see `ReviewPolicyDeclaration` — so the fence here is visibility
+    // rather than prohibition: the declaration is required and its basis must be
+    // non-empty, and the change is logged with both values.
+    //
+    // The declared acceptance is NOT bound into an `AcceptanceAttestation` here,
+    // and this is stated rather than implied (RV-345 F-6). `ReviewPolicy` is a
+    // scalar on the run header, not a record, so there is nowhere for a bound
+    // attestation to live: what the fence delivers is the required basis and the
+    // change row, not a stored `AcceptanceAuthority::User`. `CheckpointAct` is
+    // where a declaration does become a bound attestation (see `checkpoint_act`).
     if let Some(declared) = request.review_policy.as_ref() {
         if declared.acceptance.basis.trim().is_empty() {
             return Err(Refusal::AcceptanceBasisMissing);

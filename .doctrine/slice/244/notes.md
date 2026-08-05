@@ -142,9 +142,25 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1–T6 of 7 done) · e462c0fd
+fresh-as-of: 2026-08-05 · audit (RV-345 resolved, 9 findings terminal) · a891463b
 
 ### Produced
+
+- **AUDIT DONE — `RV-345`, reconciliation facet, nine findings, all terminal, no
+  blockers.** Two fixed in-audit (`F-1` the PHASE-08 boundary row, via
+  `record-delta --start/--end`; `F-3` the `src/publication.rs` selector; `F-6`'s
+  comment corrections in `run.rs` / `submission.rs`), one delegated to
+  `/reconcile` (`F-2`, the owed `SPEC-029` revision), one to a new backlog item
+  (`F-8` → `ISS-317`), two tolerated with named owners (`F-4` → `ISS-315`,
+  `F-7`), three read-and-dismissed (`F-5`, `F-9`). The ledger's `## Synthesis`
+  and `## Reconciliation Brief` carry the closure story and the handoff.
+- **Post-audit conformance**: 42 conformant / 1 undelivered
+  (`.doctrine/spec/tech/029/**`, which is `F-2`) / 68 undeclared, of which zero
+  are code. `slice verify-vt 244`: 40 rows, all PASS. `doctrine check gate`:
+  exit 0, 116 suites, zero clippy warnings.
+- **minted: `ISS-317`** — the phase-binding boundary-span advisory prescribes
+  `record-delta --commit`, the one mode that truncates the multi-commit range it
+  fires on. Root cause of `F-1`; pre-existing, outside this slice's surface.
 
 - **PHASE-08 DONE — the stage machine ships, published and pinned.**
   `install/design-run-stages.md` is the corpus's **first generated asset**,
@@ -370,6 +386,16 @@ fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1–T6 of 7 done) · e462c0fd
 
 ### Learned
 
+- `mem.pattern.plan.verification-subject-must-outlive-the-phase` — **AUDIT.** A
+  `VA-`/`VT-` criterion whose subject is gitignored runtime state leaves no
+  evidence an audit can re-derive; decide at authoring time how it survives.
+  From `RV-345` `F-7` (PHASE-02 `VA-1`).
+- `mem.pattern.doctrine.conformance-needs-a-correct-boundary-row` — **AUDIT,
+  amended.** The memory was already right; what it lacked is that the CLI's own
+  boundary-span advisory prescribes the opposite of its step 3. Appended the
+  trap, the asymmetry (too-wide over-reports visibly, too-narrow under-reports
+  silently) and the explicit `--start/--end` repair form. From `RV-345` `F-8`.
+
 Tree facts read off the source, still load-bearing for the phases that consume
 them. Cited by phase so a reader knows why each is here.
 
@@ -512,6 +538,17 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 
 ### Open
 
+- **AUDIT (`RV-345`) — what leaves this slice unresolved, in priority order.**
+  (1) `ISS-317`, the boundary-repair trap — the highest-value thing the audit
+  found and the only one that is not about SL-244. (2) `F-2`, the owed
+  `SPEC-029` revision, handed to `/reconcile` as a REV in the ledger's
+  `## Reconciliation Brief`. (3) `ISS-315`, which leaves this slice's own design
+  run unreadable by the binary it shipped (`design show 244` fails; the other
+  three live runs parse). The four criterion departures this file held open for
+  `/audit` (PHASE-01 ×2, PHASE-03 `VT-1`, PHASE-08 `D2`) are all `aligned` —
+  `RV-345` `F-9` carries the verification at file and line. One correction owed
+  to this file: the PHASE-03 entry below names `Refusal::SectionsUnreviewed`; the
+  type is `Cause::SectionsUnreviewed`.
 - **PHASE-05's one deferred assertion, with its attribution.** A `Conducted`
   disposition **admitted** over a ledger that has concluded lands with
   `IMP-392`: `PassFacts::concluded` is hard-`false` (`review.rs:1615-1621`,

@@ -47,3 +47,34 @@ registry range is the whole input, and nothing else validates it.
 
 [[mem_019f1b67752c7470aa529e0d0b87a547]] — `code_start_oid` binds to HEAD at the
 `in_progress` flip; never rewrite that commit.
+
+## The repair itself has a trap (ISS-317)
+
+Step 3 above says `--commit` for a single-commit phase, `--start`/`--end` for a
+multi-commit one. **The CLI's own advisory tells you the opposite**, and it is
+the line you are reading at the moment of the flip:
+
+```
+warning: PHASE-NN boundary spans 7 commits — any that are not this phase's are
+attributed to it; review before audit:
+  …
+correct with: doctrine slice record-delta 244 PHASE-NN --commit <this phase's own code tip>
+```
+
+`--commit S` records exactly `[S^, S]`. So following that line on a multi-commit
+phase replaces a range that was too WIDE with one that is one commit long. And
+the advisory returns early when the span is under two commits — so it fires
+**only** in the case where its own remedy is wrong.
+
+It is also a trade down. Too wide over-reports: foreign paths land in
+`conformance`'s `undeclared` cell where a reader sees and dismisses them. Too
+narrow under-reports **silently**: real deliverables read `undelivered`,
+`verify-vt` reports `UNATTRIBUTABLE`, and nothing says the range was truncated.
+
+Observed on SL-244 PHASE-08 (seven commits → one), found at audit as `RV-345`
+`F-1`/`F-8`. Until `ISS-317` lands, repair a polluted end with the explicit form:
+
+    doctrine slice record-delta NNN PHASE-NN --start <parent of first code commit> --end <own code tip>
+
+The sheet's stamped `code_start_oid` is the `--start` you want; it is already
+correct in the common case, since only the END is polluted by post-flip commits.

@@ -557,14 +557,19 @@ const WRITER_ACT_AGENT_DECLARATION: &str = "agent_declaration";
 /// The acceptance is **required rather than optional**, and that is the whole
 /// fence: the policy is mutable on purpose — a user may legitimately change their
 /// mind, and a rule nobody can revise is one they route around by hand-editing
-/// runtime state — so what the design buys is not prohibition but authority and
-/// visibility. Loosening the policy must be done in the user's name, through
-/// [`AcceptanceAttestation::bind`]'s single route, and it leaves a change row.
+/// runtime state — so what the design buys is not prohibition but visibility.
+/// Loosening the policy is refused without a declaration carrying a non-empty
+/// basis, and it leaves a change row naming both values.
 ///
 /// Stated plainly because the design should not imply more than it delivers: the
-/// review policy is a declaration of intent, not a security boundary.
+/// review policy is a declaration of intent, not a security boundary. In
+/// particular this declaration is **not** bound into an
+/// [`AcceptanceAttestation`] — the policy is a scalar on the run header with no
+/// record to hold one (RV-345 F-6). [`super::attestation::CheckpointAct`] is the
+/// act that does bind, and it is the one that carries
+/// `AcceptanceAuthority::User`.
 ///
-/// [`AcceptanceAttestation::bind`]: super::attestation::AcceptanceAttestation::bind
+/// [`AcceptanceAttestation`]: super::attestation::AcceptanceAttestation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ReviewPolicyDeclaration {
     pub(crate) policy: ReviewPolicy,
