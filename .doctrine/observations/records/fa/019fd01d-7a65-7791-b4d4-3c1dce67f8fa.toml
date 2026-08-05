@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd01d-7a65-7791-b4d4-3c1dce67f8fa"
+recorded_at = "2026-08-05T04:10:20.64529723Z"
+kind = "friction"
+summary = "/execute: memory retrieve --path takes a repo root, not a file path, and fails obscurely"
+detail = "Retrieving scope-bound memories for the files T12 touches, I ran `doctrine memory retrieve --path src/design_run/change_log.rs`. Two frictions: (1) --path cannot be repeated, so per-file retrieval is N invocations; (2) given a FILE path it errors 'Failed to read src/design_run/change_log.rs/.doctrine/memory/items — Not a directory (os error 20)', i.e. it treats the argument as a corpus root. The /execute skill step 3 says 'run /retrieve-memory against those paths', which reads as file paths. Cost: two wasted invocations plus a fallback to `memory search` with hand-built keywords. Either the flag is misnamed (--root) or it should accept a file and resolve upward."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
