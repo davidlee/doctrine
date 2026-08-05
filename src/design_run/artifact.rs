@@ -13,12 +13,15 @@
 //! change.
 
 use super::Stage;
-use super::gate::{Advance, cumulative_conditions};
+use super::gate::{
+    Advance, Condition, boundary_conditions, boundary_runbook, cumulative_conditions,
+};
 
 /// Render the shipped stage-machine document.
 pub(crate) fn render_artifact() -> String {
     let mut out = String::from(ARTIFACT_HEADER);
     out.push_str(&diagram());
+    out.push_str(&edge_table());
     out
 }
 
@@ -53,6 +56,48 @@ fn diagram() -> String {
     }));
     out.push_str(DIAGRAM_CLOSE);
     out
+}
+
+/// One row per forward edge: what it guards, what it discharges, and — the
+/// column this document exists for — what it **inherits**.
+///
+/// The inherited set is the enforced set minus the edge's own boundary rows,
+/// computed rather than listed: an edge's own rows are local knowledge an agent
+/// standing there already has, and the remainder is the part that refuses it for
+/// something it did two stages ago.
+fn edge_table() -> String {
+    let mut out = String::from(EDGES_OPEN);
+    out.extend(Advance::ALL.into_iter().map(|edge| {
+        let enforced = cumulative_conditions(edge.to());
+        let own = boundary_conditions(edge);
+        format!(
+            "| {} | {} | {} | {} | {} |\n",
+            edge.as_str(),
+            boundary_runbook(edge).name(),
+            conditions(own.iter().copied()),
+            conditions(
+                enforced
+                    .iter()
+                    .copied()
+                    .filter(|condition| !own.contains(condition))
+            ),
+            enforced.len(),
+        )
+    }));
+    out
+}
+
+/// A cell listing condition tokens, or the placeholder where there are none —
+/// an empty markdown cell reads as a rendering fault rather than as a fact.
+fn conditions(rows: impl Iterator<Item = Condition>) -> String {
+    let cell = rows
+        .map(|condition| format!("`{}`", condition.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if cell.is_empty() {
+        return NO_CONDITIONS.to_owned();
+    }
+    cell
 }
 
 /// The artefact's fixed preamble — the shipped-generated-asset banner, the title
@@ -91,6 +136,26 @@ stateDiagram-v2
 /// The diagram section's fixed close (the fenced block's terminator).
 const DIAGRAM_CLOSE: &str = "```\n";
 
+/// Fixed prose and header opening the derived edge table.
+const EDGES_OPEN: &str = "
+## The edges
+
+Each edge is guarded by its own conditions **and** by every cumulative condition
+below it, re-derived against current content. A condition discharged two stages
+ago is enforced again here; that is what the inherited column lists, and it is
+the fact no single edge's view carries.
+
+| edge | runbook | own conditions | inherited | enforces |
+| --- | --- | --- | --- | --- |
+";
+
+/// The placeholder for a cell that lists no conditions.
+const NO_CONDITIONS: &str = "—";
+
+/// The edge table's inherited column, by index — the cell `VT-3` reads back.
+#[cfg(test)]
+const INHERITED_COLUMN: usize = 3;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +174,31 @@ mod tests {
             .map(str::trim)
             .filter(|line| line.contains("-->") && !line.starts_with("[*]"))
             .map(str::to_owned)
+            .collect()
+    }
+
+    /// One markdown row's cells, keyed by the token in its first column.
+    fn row(rendered: &str, key: &str) -> Vec<String> {
+        let prefix = format!("| {key} |");
+        let line = rendered
+            .lines()
+            .find(|line| line.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the artefact carries a row for `{key}`"));
+        line.trim_matches('|')
+            .split('|')
+            .map(|cell| cell.trim().to_owned())
+            .collect()
+    }
+
+    /// The condition tokens one cell lists — the no-conditions placeholder reads
+    /// back as the empty set, which is what makes the floor assertions below
+    /// distinguishable from a cell that failed to render at all.
+    fn cell_tokens(cell: &str) -> Vec<String> {
+        if cell == NO_CONDITIONS {
+            return Vec::new();
+        }
+        cell.split(", ")
+            .map(|token| token.trim_matches('`').to_owned())
             .collect()
     }
 
@@ -148,6 +238,56 @@ mod tests {
             drawn.len(),
             Advance::ALL.len(),
             "the diagram's transition set is Advance's four values and nothing else"
+        );
+    }
+
+    /// `VT-3` — the column the artefact exists for, and the one a hand-render
+    /// gets wrong.
+    #[test]
+    fn inherited_column_is_the_enforced_set() {
+        let rendered = render_artifact();
+
+        for edge in Advance::ALL {
+            let own = boundary_conditions(edge);
+            let expected: Vec<String> = cumulative_conditions(edge.to())
+                .into_iter()
+                .filter(|condition| !own.contains(condition))
+                .map(|condition| condition.as_str().to_owned())
+                .collect();
+            let cells = row(&rendered, edge.as_str());
+            assert_eq!(
+                cells
+                    .get(INHERITED_COLUMN)
+                    .map(String::as_str)
+                    .map(cell_tokens),
+                Some(expected),
+                "`{}` inherits exactly the enforced set minus its own rows",
+                edge.as_str()
+            );
+        }
+
+        // The floor: a rendering that dropped the column entirely would satisfy
+        // the equality above on the empty set for every edge.
+        let locked = row(&rendered, Advance::ReviewingLocked.as_str());
+        assert_eq!(
+            locked
+                .get(INHERITED_COLUMN)
+                .map(String::as_str)
+                .map(cell_tokens)
+                .unwrap_or_default()
+                .len(),
+            5,
+            "the top edge inherits five of the eight it enforces"
+        );
+        let first = row(&rendered, Advance::ExploringInquiring.as_str());
+        assert!(
+            first
+                .get(INHERITED_COLUMN)
+                .map(String::as_str)
+                .map(cell_tokens)
+                .unwrap_or_default()
+                .is_empty(),
+            "the bottom edge inherits nothing"
         );
     }
 }
