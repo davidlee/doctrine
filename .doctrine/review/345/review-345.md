@@ -267,3 +267,83 @@ is a design change with its own cost; recorded here so that whoever revisits
   three criteria this slice amended mid-flight (PHASE-04 `VT-4`, PHASE-06
   `VT-5`→`VT-6`, PHASE-07 `VT-2`→`VT-4`) all appended rather than renumbered and
   each carries its dated rationale and a `DEC-` id.
+
+## Reconciliation Outcome
+
+Reconciled 2026-08-05 from the brief above. Every brief item is resolved; no
+finding disposition was mutated (they stay `verified`), and nothing was escalated
+to design.
+
+### Direct edits applied
+
+- **`design.md:19` + its first table row** — the `SPEC-029` characterisation now
+  reads *owns the gate table and is **silent** on how a condition is satisfied*,
+  with the payload-claimed model attributed where it actually lived (`SL-233`
+  design prose and source). The bullet's count is corrected with it: **three**
+  stated responsibilities move and **two** additions land, which is what makes
+  the revision additive. Verified independently before writing —
+  `grep -in claim spec-029.{md,toml}` returns id-claiming and one test-seam hit,
+  against a positive control of 3+1 for `gate table`. (`F-2`.)
+- **`notes.md` § Open, PHASE-03 `EX-5`(b)** — *"`/audit` should decide whether
+  PHASE-05's act record adopts the attestation"* now reads settled: it does, at
+  `run.rs:594-601`, and what was defective was the comment, fixed in-audit at
+  both sites. (`F-6`.)
+- **`notes.md` § Open, `ISS-315`** — marked confirmed-live and `tolerated` with
+  the measured blast radius (one live run of four) and the twice-demonstrated
+  in-tree rule: retiring a serde member from the write vocabulary does not retire
+  it from the read vocabulary. (`F-4`.)
+- **`notes.md`, three departure entries** (PHASE-01 `EX-2` ×2, PHASE-03 `VT-1`,
+  PHASE-08 `D2`) — each marked `aligned` at its own site, carrying the verified
+  locus rather than the argument. (`F-9`.)
+- **`notes.md`** — `Refusal::SectionsUnreviewed` → `Cause::SectionsUnreviewed`,
+  and the § Open header bullet's now-stale "correction owed" flag retired.
+  (`F-9`.)
+- **`notes.md` § Open** — new entry recording the PHASE-08 boundary truncation,
+  its two spurious signals, the `record-delta --start/--end` repair with the
+  post-fix numbers, and `ISS-317` as root cause. (`F-1`, `F-8`.)
+
+### REVs completed
+
+- **`REV-048`** (`reconcile-sl-244`): `done`, approved and applied; its one
+  `modify SPEC-029` row surfaced for manual landing and was landed in both tiers.
+  `SPEC-029` `responsibilities` gains five rows — the gate contract table keyed
+  by `Advance`; two-kind satisfaction over the attested-act ledger with no
+  claimed tier; the per-run `ReviewPolicy` and its lanes; the `ReviewPass` `RV`
+  minted through the journalled-intent seam; and the published condition corpus
+  plus stage-entry receipt. The `## Responsibilities` summary mirrors them, and a
+  third ownership boundary states the `DEC-127` direction — the private spec
+  cites `reference/design-run-stages.md`, never the reverse. No requirement
+  status moved. `spec validate SPEC-029` clean. Rationale and narrative in
+  `revision-048.md`. (Covers `F-2`.)
+
+### Withdrawn / tolerated / owned elsewhere
+
+- `F-4` — tolerated; owner `ISS-315`. What a closed change-event vocabulary owes
+  its own history is a governance question with three live candidates, not a
+  reconcile edit.
+- `F-8` — follow-up; owner `ISS-317`. A defect in `src/state.rs`'s phase-binding
+  advisory, pre-existing and outside `SL-244`'s selectors and design; repairing it
+  here would be the undeclared cross-subsystem edit conformance exists to catch.
+- `F-7` — tolerated; the evidence is recorded and not re-derivable, and the
+  pattern that produced it (a `VA-` row whose subject is gitignored state) is
+  carried as a standing risk rather than a write.
+- `F-1`, `F-3`, `F-6` — repaired in-audit through their own verbs (runtime
+  registry, selector registry, source comments); not reconcile surfaces.
+- `F-5`, `F-9` — read-and-dismissed; `F-9`'s one correction owed to the record is
+  applied above.
+
+Reconcile pass complete — handoff to `/close`.
+
+### One residual `/close` should read correctly
+
+`slice conformance 244` still reports `undelivered (1): .doctrine/spec/tech/029/**`
+after `REV-048` landed the amendment. This is **not** an undischarged target: it is
+structural. Every recorded delta binds to a `PHASE-NN`, reconcile writes land after
+the last phase completes, and there is no reconcile-stage row to bind them to — so a
+governance design target routed through a `REV` (as `ADR-013` and `/reconcile`
+require) can never register as conformant. Both workarounds are wrong: extending
+PHASE-08's boundary falsifies the phase record, and `slice selector rm` is the
+repair for a *spurious* row, which this is not — the target was declared and
+delivered. Recorded as `IMP-292` **Defect 4**, alongside the three sibling
+conformance-signal defects it belongs with. `/close` should treat the cell as
+explained, not as a dropped deliverable.

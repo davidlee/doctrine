@@ -28,7 +28,10 @@ support a deliberately weaker reconstruction.
 ## Responsibilities
 
 Mirrors the structured `responsibilities` list. In summary, the container owns:
-the pure run model; the schema-versioned snapshot with revision compare-and-swap,
+the pure run model; the gate contract table and the two kinds — derived and
+attested — a condition may be satisfied by; the per-run review policy and the
+review pass it mints; the published condition corpus and stage diagram; the
+schema-versioned snapshot with revision compare-and-swap,
 submission idempotency, and bounded receipt eviction; the authored-design
 watermark and its three observation points, the third of which bounds what the
 guard warrants rather than extending it; the reserve-then-journal creation protocol;
@@ -36,7 +39,7 @@ the reserved-materialisation seam in the entity engine's fresh-creation path;
 the design prompt pack; the canonical turn envelope and its bounded projections;
 and the command family carrying the sparse mutation contract.
 
-Two ownership boundaries are worth stating because they were contested:
+Three ownership boundaries are worth stating because they were contested:
 
 - **The prompt pack belongs here, not to the cascade spec.** The cascade owns
   composition, precedence, and seal; this container owns one closed,
@@ -48,6 +51,13 @@ Two ownership boundaries are worth stating because they were contested:
   a managed design run as a legitimate provenance for records created through
   the reserve-then-journal protocol; it does not acquire any of this container's
   mechanism.
+- **The stage machine's public face is the published diagram, not this
+  document.** This spec is repo-private; an installed client project has no copy
+  of it and no source to read. So the reachable rendering — generated from the
+  contract table and addressed as `reference/design-run-stages.md` — is the one a
+  reader is sent to, and this spec cites that address rather than holding a
+  second copy of the table (`DEC-127`). The direction matters: the private
+  document points at the public one, never the reverse.
 
 ## Concerns
 

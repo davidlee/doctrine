@@ -189,11 +189,13 @@ fresh-as-of: 2026-08-05 · audit (RV-345 resolved, 9 findings terminal) · a8914
   into a crate with no such path. Both are on the sheet as `F2`/`F3`; the second
   generalises — **any** `cfg(test)` block in this leaf is bound by the same rule
   as its shipped code.
-  **One planned departure for `/audit`:** the discharging act rides a list
-  beneath the condition table rather than a fifth column in it (sheet `D2`,
-  a letter-departure from `EX-2`(3)). `review-disposition-attested`'s remedy is
-  three lines and no markdown cell survives it; flattening would forfeit the
-  byte equality `VT-4` rests on.
+  **One planned departure, adjudicated `aligned` by `RV-345` `F-9`:** the
+  discharging act rides a list beneath the condition table rather than a fifth
+  column in it (sheet `D2`, a letter-departure from `EX-2`(3)).
+  `review-disposition-attested`'s remedy is three lines and no markdown cell
+  survives it; flattening would forfeit the byte equality `VT-4` rests on. The
+  audit verified in the rendered artefact that every *remaining* column is a
+  `CONTRACTS` projection, which is what the criterion is for.
 
 - **PHASE-07 IN FLIGHT — both lamps are built and rendered; `T7` (close-out) is
   all that is left.** The movement: the currency lamp (`c7dcaf62`); the count in
@@ -541,14 +543,40 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 - **AUDIT (`RV-345`) — what leaves this slice unresolved, in priority order.**
   (1) `ISS-317`, the boundary-repair trap — the highest-value thing the audit
   found and the only one that is not about SL-244. (2) `F-2`, the owed
-  `SPEC-029` revision, handed to `/reconcile` as a REV in the ledger's
-  `## Reconciliation Brief`. (3) `ISS-315`, which leaves this slice's own design
-  run unreadable by the binary it shipped (`design show 244` fails; the other
-  three live runs parse). The four criterion departures this file held open for
+  `SPEC-029` revision — **discharged by `/reconcile` as `REV-048`** (`done`;
+  five responsibilities added, the `DEC-127` citation landed, no requirement
+  status moved). (3) `ISS-315`, which leaves this slice's own design run
+  unreadable by the binary it shipped (`design show 244` fails; the other three
+  live runs parse). The four criterion departures this file held open for
   `/audit` (PHASE-01 ×2, PHASE-03 `VT-1`, PHASE-08 `D2`) are all `aligned` —
-  `RV-345` `F-9` carries the verification at file and line. One correction owed
-  to this file: the PHASE-03 entry below names `Refusal::SectionsUnreviewed`; the
-  type is `Cause::SectionsUnreviewed`.
+  `RV-345` `F-9` carries the verification at file and line, and each entry below
+  now reads settled. The `Refusal::SectionsUnreviewed` misnaming it flagged is
+  corrected in place (`Cause::SectionsUnreviewed`).
+- **PHASE-08's boundary row was truncated to its last commit, and the tool told
+  it to be.** The registry carried `code_start_oid = e8cc2dc1` — the *parent of
+  the phase's last commit* — against a phase whose code runs
+  `21ac1e7d..3aed3918`, so six of seven commits sat outside it. Two signals went
+  spurious and both read as reassuring: `slice conformance 244` called
+  `install/design-run-stages.md` **undelivered** (the phase's headline
+  deliverable, sitting on disk), and `slice verify-vt 244` returned PHASE-08
+  `VT-5` **UNATTRIBUTABLE** — the one criterion asserting the artefact is
+  reachable by address. With the row truncated, the slice's one genuinely
+  undeclared code path (`src/publication.rs`, `RV-345` `F-3`) was invisible too.
+  Repaired in-audit with
+  `slice record-delta 244 PHASE-08 --start b8df2efa --end 3aed3918`; post-fix
+  `undelivered` 2→1, `conformant` 40→41, and all 40 `VT` rows PASS. The other
+  seven boundary rows were checked against the log and are correct.
+  **The root cause is not an agent slip — it is `ISS-317`.** The check *was* run:
+  the phase-binding's boundary-span advisory fired at the flip and was acted on,
+  and it prescribes `record-delta --commit <tip>`, which records exactly
+  `[S^, S]`. The advisory returns early under two commits, so it fires *only*
+  where its own remedy is wrong; there is no input for which the printed command
+  is correct. Trading a visible error (a too-wide boundary over-reports into a
+  cell readers dismiss) for an invisible one (a too-narrow boundary silently
+  drops deliverables and criteria) is why this is the highest-value thing the
+  audit found. `mem.pattern.doctrine.conformance-needs-a-correct-boundary-row`
+  was right all along — its step 3 distinguishes the two modes — and the CLI
+  contradicts it at the moment an agent is reading the CLI.
 - **PHASE-05's one deferred assertion, with its attribution.** A `Conducted`
   disposition **admitted** over a ledger that has concluded lands with
   `IMP-392`: `PassFacts::concluded` is hard-`false` (`review.rs:1615-1621`,
@@ -659,6 +687,15 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   here** — what a closed vocabulary owes its own history is a governance
   question. No authored artefact is at risk (this is a runtime-state read), and
   `PHASE-05` does not depend on reading the run.
+  **`RV-345` `F-4`: confirmed live and `tolerated`, owner `ISS-315`.** Still
+  reproducible against the built binary at audit; blast radius *measured* rather
+  than assumed — of four live design runs, `SL-243`, `SL-245` and `SL-246` all
+  parse and only `SL-244`'s fails, because it is the only run that ever declared
+  an `int-` integrated review. The rule the resolution should record is already
+  demonstrated twice in-tree — `ChangeEvent::ActInvalidated`'s
+  `serde(alias = "evidence_invalidated")`, and the `RecoveryIntent` subject alias
+  restored at `7e2b768d` — **retiring a serde member from the write vocabulary
+  does not retire it from the read vocabulary.**
 - **PHASE-04's `VA-1` is evidence on the tree, and it sits in
   `tests/e2e_design_review.rs` rather than the sheet's
   `tests/e2e_design_checkpoint.rs`.** Two crash points, mirroring the pair the
@@ -705,8 +742,13 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   PHASE-05**, and carry the slice-tagged `cfg_attr(not(test), expect(dead_code, …))`
   naming it — the same class as `Advance::ALL`, expected to go live rather than be
   silenced further.
-- **PHASE-01 departed from the letter of `EX-2` twice, and `/audit` adjudicates
-  both.** (a) `can_advance` is **deleted**, not kept as a one-line alias: the
+- **PHASE-01 departed from the letter of `EX-2` twice; `RV-345` `F-9`
+  adjudicated both `aligned`**, checked against the tree rather than the
+  argument — `grep -rn "fn can_advance" src/` returns nothing, and
+  `boundary_runbook` is `const fn boundary_runbook(edge: Advance) -> RunbookKey`
+  at `gate.rs:1025` with its two pair-asking callers spelling
+  `Advance::between(..).map(..)` (`run.rs:1610`, `commands/design.rs:2044`).
+  (a) `can_advance` is **deleted**, not kept as a one-line alias: the
   clause's purpose is *so the forward graph is written once*, and it is —
   `Advance::between(from, to).is_some()` is inlined at `advance`, its sole
   production caller. `VA-1` enumerates the other two sites and this phase
@@ -724,14 +766,18 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
 - **`Advance::ALL` has no production reader until PHASE-06/08** and carries the
   tree's slice-tagged `cfg_attr(not(test), expect(dead_code, …))` naming them.
   Expected to become live, not to be silenced further.
-- **PHASE-03 departed from the letter of two criteria, and `/audit` adjudicates
-  both.** (a) `VT-1` says *the standing names the missing lane*; `ReviewStanding`
+- **PHASE-03 departed from the letter of two criteria; `RV-345` adjudicated both
+  `aligned`** — `VT-1` at `F-9` (the evaluator calls `sections_unreviewed` at
+  `gate.rs:1359`, so the missing lane *is* named, at the refusal rather than on
+  the `Copy` standing), `EX-5` at `F-6` (see the settlement on (b) below).
+  (a) `VT-1` says *the standing names the missing lane*; `ReviewStanding`
   is `Copy` and passed by value into `satisfied` and `advance`, so carrying a
   `Vec` there breaks both signatures — signatures PHASE-05 rewrites regardless.
   Instead `DesignSnapshot::sections_unreviewed() -> Vec<(DesignId, ActorClass)>`
   is the derivation and `sections_attested` is defined *through* it, exactly as
   `ContentCoverage::is_current` is defined through `diff`. PHASE-05's
-  `Refusal::SectionsUnreviewed { subjects }` reads it directly. Confirmed by the
+  `Cause::SectionsUnreviewed { subjects }` — a member of the `Vec<Cause>` an
+  `Unmet` carries, not a `Refusal` variant — reads it directly. Confirmed by the
   user before execution (sheet D1). (b) `EX-5` says the change rides *the
   attestation via `AcceptanceAttestation::bind`*; no call is made, because
   nothing can hold what it returns until PHASE-05's act groups arrive, and the
@@ -739,8 +785,15 @@ memories; PHASE-01 confirmed them rather than teaching anything new.
   `user-acceptance-attested`. What is delivered is what the criterion is
   observably for: the `AcceptanceDeclaration` is a REQUIRED field (a payload
   omitting it is refused at the wire), an empty basis is refused through the
-  incumbent `AcceptanceBasisMissing`, and the change is logged. `/audit` should
-  decide whether PHASE-05's act record adopts the attestation (sheet D2).
+  incumbent `AcceptanceBasisMissing`, and the change is logged. **SETTLED by
+  `RV-345` `F-6`: PHASE-05's act record does adopt it** — `CheckpointActDeclaration`
+  carries an `AcceptanceDeclaration` and `run.rs:594-601` routes it through
+  `AcceptanceAttestation::bind` at construction, so the departure is `aligned`.
+  The policy path was not migrated onto that mechanism and no criterion asked for
+  it: `ReviewPolicy` is a scalar on the run header, not a record, so a bound
+  attestation has nowhere to live. What was defective was the *comment* at
+  `run.rs:411-415`, which asserted a bind the code did not make — corrected
+  in-audit at both that site and its `ReviewPolicyDeclaration` sibling.
 - **`live_reviews` (`run.rs`) is `pub(super)` for its test, not for a caller.**
   `VT-4` names it; it has no production caller outside `apply`. Widening
   `invalidation_rows` instead would have meant widening `Pending` too. The

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd1f5-3044-7951-910b-84d041cbb2f4"
+recorded_at = "2026-08-05T12:45:34.660192531Z"
+kind = "friction"
+summary = "/reconcile: a governance design target discharged by a REV can never read conformant"
+detail = "SL-244 declared .doctrine/spec/tech/029/** a design-target selector; REV-048 landed the owed amendment during reconcile. Every source-delta row binds to a PHASE-NN and reconcile runs after the last phase completes, so the write is outside every boundary and slice conformance keeps reporting it undelivered. Cost: a re-check of the cell, a check of record-delta/reconcile-phases for a reconcile-stage binding (there is none), and a judgement call that both available workarounds (widen the last boundary / rm the selector) falsify the record. Captured as IMP-292 defect 4."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

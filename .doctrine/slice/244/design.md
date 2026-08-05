@@ -16,16 +16,19 @@ not-applicable checks and the reason each was set aside — is recorded in
   why clearance is never stored, and why this design cannot answer with a flag.
 - `STD-001` — single-source named constants. Reaches further here than usual:
   the kebab condition token is load-bearing in four places.
-- `SPEC-029` — owns the gate table and describes evidence as payload-claimed.
-  The certain revision candidate of this slice, and **five** of its stated
-  responsibilities move. Listed here rather than left as an adjective, because
+- `SPEC-029` — owns the gate table and is **silent** on how a condition is
+  satisfied: the payload-claimed model lived in `SL-233`'s design prose and in
+  source, never in the spec. The certain revision candidate of this slice —
+  **three** of its stated responsibilities move and **two** additions land, so
+  the revision it owes is additive rather than a correction. Listed here rather
+  than left as an adjective, because
   `/reconcile` authors the `REV` under `ADR-013` and needs a work-list, and
   because this subsystem's recurring failure is exactly a design bullet nobody
   carried through (`DEC-125`'s *"fourth instance"*):
 
   | responsibility | what moves it |
   |---|---|
-  | evidence is payload-claimed | `sec-3` — the `Claimed` tier empties; satisfaction is derived or attested |
+  | how a condition is satisfied — **unstated** | `sec-3` — the spec gains it: satisfaction is derived or attested, and there is no `Claimed` tier |
   | a const-fn forward-boundary gate table | `sec-3` — keyed by the closed `Advance`, not `(Stage, Stage)`; `can_advance` moves into that type |
   | the design prompt pack, addressed by stable identity **with content binding** | `sec-5` — a third family joins the store addressed by a **bare** token with deliberately no digest (`DEC-124`) |
   | the snapshot | `sec-4` — six changes, three of them migrations |

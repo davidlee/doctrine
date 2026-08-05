@@ -61,3 +61,33 @@ Also confirmed at the same audit: **defect 1 reproduces exactly.** All 6 undecla
 cells were `.doctrine/**` authored metadata (`dispatch/228/funnel.toml`,
 `slice/228/{benchmark.md,evidence/…,notes.md,plan.toml,slice-228.toml}`) — zero
 genuine source scope-creep.
+
+## Defect 4 — a governance design target discharged at reconcile is undeliverable by construction (SL-244 reconcile, RV-345 F-2)
+
+Fourth defect under the same acceptance sketch, again on the **undelivered** side,
+and it is a whole class rather than a beat-specific edge.
+
+A slice may declare a spec / ADR / policy path as a design-target selector, which
+is exactly what `SL-244` did with `.doctrine/spec/tech/029/**`. The `/reconcile`
+skill and `ADR-013` then route governance truth through a `REV` — so the write
+that discharges that target lands during **reconcile**, after the last phase is
+`completed`. Every recorded delta is a phase boundary (`slice record-delta` binds
+`[start, end]` to a `PHASE-NN`, and there is no reconcile-stage row to bind), so a
+reconcile-stage write is outside every boundary and the cell reads `undelivered`
+forever.
+
+Evidence (`SL-244`): `REV-048` landed the owed `SPEC-029` amendment in both tiers,
+`spec validate SPEC-029` clean, and `slice conformance 244` still reports
+`undelivered (1): .doctrine/spec/tech/029/**` at close.
+
+The two available workarounds are both wrong, which is what makes it structural.
+Extending the last phase's boundary to swallow the reconcile commit falsifies the
+phase record. Removing the selector (`slice selector rm`) is the sanctioned repair
+for a *spurious* undelivered row, but this one is not spurious — the target was
+genuinely declared and genuinely delivered, and dropping it erases the promise
+audit checks against. What is missing is a stage the registry can attribute a
+reconcile write to, or a conformance rule that treats a target discharged by a
+`done` `REV` as delivered.
+
+Consequence, same as defects 1–3: `/close` reads a red cell that is correct in
+mechanism and wrong in meaning, and the reader is trained to discount the signal.
