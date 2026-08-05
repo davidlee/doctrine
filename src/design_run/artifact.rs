@@ -14,7 +14,8 @@
 
 use super::Stage;
 use super::gate::{
-    Advance, Condition, boundary_conditions, boundary_runbook, cumulative_conditions,
+    Advance, CONTRACTS, Condition, Contract, DerivationRule, boundary_conditions, boundary_runbook,
+    cumulative_conditions,
 };
 
 /// Render the shipped stage-machine document.
@@ -22,6 +23,7 @@ pub(crate) fn render_artifact() -> String {
     let mut out = String::from(ARTIFACT_HEADER);
     out.push_str(&diagram());
     out.push_str(&edge_table());
+    out.push_str(&condition_table());
     out
 }
 
@@ -87,6 +89,55 @@ fn edge_table() -> String {
     out
 }
 
+/// One row per condition, and beneath it the act each one is discharged by.
+///
+/// Every column is a projection of the same `CONTRACTS` row a contract receipt
+/// injects its header from, so the two cannot disagree about what a condition
+/// requires.
+///
+/// The discharging act rides a list rather than a fifth column: one row's remedy
+/// is three lines, and a multi-line cell does not survive a markdown table.
+/// Flattening it would forfeit the byte equality with what the receipt injects,
+/// which is the only thing making *the same obligation, said once* checkable.
+fn condition_table() -> String {
+    let mut out = String::from(CONDITIONS_OPEN);
+    out.extend(CONTRACTS.iter().map(|(condition, contract)| {
+        format!(
+            "| `{}` | {} | {} | {} |\n",
+            condition.as_str(),
+            contract.derivation.kind().as_str(),
+            binding(contract),
+            contract.reach.as_str(),
+        )
+    }));
+    out.push_str(DISCHARGE_OPEN);
+    out.extend(CONTRACTS.iter().map(|(condition, contract)| {
+        format!("- `{}` — {}\n", condition.as_str(), contract.remedy())
+    }));
+    out
+}
+
+/// What a contract binds to, and therefore what invalidates a discharge of it —
+/// the subject the derivation names, in the receipt's own field order.
+fn binding(contract: &Contract) -> String {
+    match contract.derivation {
+        DerivationRule::Engine(source) => format!("engine({})", source.as_str()),
+        DerivationRule::Attested(rule) => {
+            let mut fields = vec![rule.binding.coverage.as_str().to_owned()];
+            if !rule.binding.observed.is_empty() {
+                let observed: Vec<&str> = rule
+                    .binding
+                    .observed
+                    .iter()
+                    .map(|fact| fact.as_str())
+                    .collect();
+                fields.push(format!("observes({})", observed.join(",")));
+            }
+            fields.join(" ")
+        }
+    }
+}
+
 /// A cell listing condition tokens, or the placeholder where there are none —
 /// an empty markdown cell reads as a rendering fault rather than as a fact.
 fn conditions(rows: impl Iterator<Item = Condition>) -> String {
@@ -149,6 +200,30 @@ the fact no single edge's view carries.
 | --- | --- | --- | --- | --- |
 ";
 
+/// Fixed prose and header opening the derived condition table.
+const CONDITIONS_OPEN: &str = "
+## The conditions
+
+`kind` says who authors the state a condition is derived over: a `derived` row is
+recomputed from the run's own state, an `attested` one from acts an actor
+recorded. `binding` says what invalidates it — the subject the derivation names,
+plus any canonical fact outside the run that must also still match. `reach` says
+whether discharging it once is the end of it: an `edge-local` row is judged by the
+edge that names it, a `cumulative` one by every edge above it as well.
+
+| condition | kind | binding | reach |
+| --- | --- | --- | --- |
+";
+
+/// Fixed prose opening the discharge list.
+const DISCHARGE_OPEN: &str = "
+### Discharging them
+
+What each condition requires of you. A refusal names the conditions that failed;
+these are the acts that clear them.
+
+";
+
 /// The placeholder for a cell that lists no conditions.
 const NO_CONDITIONS: &str = "—";
 
@@ -158,6 +233,9 @@ const INHERITED_COLUMN: usize = 3;
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use super::super::prompt::contract_block;
     use super::*;
 
     /// Every arrow inside the mermaid block, minus mermaid's entry marker — the
@@ -289,5 +367,82 @@ mod tests {
                 .is_empty(),
             "the bottom edge inherits nothing"
         );
+    }
+
+    /// `VT-2`, condition half.
+    #[test]
+    fn every_condition_appears_exactly_once() {
+        let rendered = render_artifact();
+
+        for condition in Condition::ALL {
+            let prefix = format!("| `{}` |", condition.as_str());
+            assert_eq!(
+                rendered
+                    .lines()
+                    .filter(|line| line.starts_with(&prefix))
+                    .count(),
+                1,
+                "`{}` has exactly one condition row",
+                condition.as_str()
+            );
+        }
+
+        assert_eq!(
+            rendered
+                .lines()
+                .filter(|line| line.starts_with("| `"))
+                .count(),
+            Condition::ALL.len(),
+            "the condition table's key set is the vocabulary and nothing else"
+        );
+    }
+
+    /// `VT-4` — this table and the contract receipt are two renderings of one
+    /// `CONTRACTS` row, and they may not disagree.
+    #[test]
+    fn diagram_and_contract_headers_agree() {
+        let rendered = render_artifact();
+
+        for (condition, _) in CONTRACTS {
+            let edge = Advance::ALL
+                .into_iter()
+                .find(|edge| boundary_conditions(*edge).contains(&condition))
+                .unwrap_or_else(|| panic!("`{}` guards an edge", condition.as_str()));
+            let block = contract_block(edge, &BTreeMap::new());
+
+            let header = format!("contract {} ", condition.as_str());
+            let position = block
+                .iter()
+                .position(|line| line.starts_with(&header))
+                .unwrap_or_else(|| {
+                    panic!("the receipt injects a header for `{}`", condition.as_str())
+                });
+            let injected: Vec<&str> = block
+                .get(position)
+                .map(|line| line.split(' ').skip(2).collect())
+                .unwrap_or_default();
+            let discharge = block
+                .get(position + 1)
+                .and_then(|line| line.strip_prefix("  discharge: "))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "the receipt injects a discharge for `{}`",
+                        condition.as_str()
+                    )
+                });
+
+            let cells = row(&rendered, &format!("`{}`", condition.as_str()));
+            assert_eq!(
+                cells.get(1..).unwrap_or_default().join(" "),
+                injected.join(" "),
+                "`{}`'s kind, binding and reach are what the receipt injects",
+                condition.as_str()
+            );
+            assert!(
+                rendered.contains(&format!("- `{}` — {discharge}", condition.as_str())),
+                "`{}`'s discharge is the receipt's, verbatim",
+                condition.as_str()
+            );
+        }
     }
 }
