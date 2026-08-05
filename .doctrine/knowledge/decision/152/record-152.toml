@@ -11,13 +11,22 @@ updated = "2026-08-05"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-context      = ""
-choice       = ""
-alternatives = []
-rationale    = ""
-consequences = []
-decided_by   = ""
-decided_on   = ""
+context      = "SL-247. The PreToolUse confinement wall's fourth arm (`resolve_target`, jail.rs:377 — agent_id present, not nominated, cwd not a project worktree) resolves `Reject`, denying Bash and Edit/Write to every ordinary subagent. No authority states a threat model for a non-dispatch, non-worktree subagent: the `Reject` arm was a dispatch-motivated fail-closed choice that incidentally caught them."
+choice       = "An ordinary (un-nominated, non-worktree) subagent passes through unconfined — no repo-root floor, no write filter. The wall's remit is the worktree population only."
+alternatives = [
+  "A repo-root floor: pass through but deny writes outside the repo root and to `.git`. Rejected — no threat model justifies it, it costs a new policy surface on a code path RFC-025's mechanism census marks DELETE, and the writable `mcp__*` bypass (RSK-225) already falsifies any containment claim on the Claude arm.",
+  "Broaden the nomination allowlist to cover ordinary subagents. Rejected — `PRIVILEGED_AGENT_TYPES` (jail.rs:122) is deliberately fused as both nomination-eligibility and `decide_agent`'s privileged deny-set (jail.rs:113-121, RV-258 F-1), so broadening it to win a PassThrough would simultaneously forbid jailed callers from spawning that type. This inverts SL-247's `OQ-2`, which read nomination as the machinery-reusing option.",
+  "Carry the policy in `JailPolicy`. Rejected — its layout precondition confines it to `.worktrees/<name>`, it is consulted only under `Target::Jail`, and `deny_unknown_fields` makes any schema change breaking.",
+]
+rationale    = "The wall is a guard-rail against mostly-accidental holes in the primary tree, not adversarial containment (user, settling SL-247 `OQ-4`); RSK-225 already makes the stronger claim untrue on the Claude arm. Accident-prevention is owed to the worktree population, which has a worktree to stay inside. A non-worktree subagent has no such boundary to keep, and fencing it to the repo root buys nothing against accident beyond the harness's own native Edit/Write floor. On a surface marked wholesale DELETE by RFC-025, the smallest patch is the correct engineering answer, not a compromise."
+consequences = [
+  "Ordinary subagents regain Bash and Edit/Write — the acute leg of IMP-401. IMP-269 and IMP-342 plausibly discharge with it; confirm at reconcile (SL-247 `OQ-3`), do not assume.",
+  "The fourth arm's fail-closed posture — a subagent whose cwd or topology cannot be resolved is currently rejected, never silently jailed-nowhere (pretooluse.rs:94-97) — flips to fail-open unless the design keeps a discriminator. Carried into `inq-5`.",
+  "`Jail(wt)` behaviour is unchanged and stays proven by the existing suites (the behaviour-preservation gate).",
+  "What the wall guarantees must be restated where the posture is documented — SL-247 objective 4.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-05"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
