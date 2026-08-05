@@ -1100,6 +1100,29 @@ const fn authority_label(authority: Authority) -> &'static str {
 
 // ── renderings (DEC-064: one model, three renderings) ─────────────────────
 
+/// Whether the ledger holds nothing at all — the silence condition (`EX-3`).
+const fn is_empty(outstanding: &OutstandingBySeverity) -> bool {
+    outstanding.blocker == 0
+        && outstanding.major == 0
+        && outstanding.minor == 0
+        && outstanding.nit == 0
+}
+
+/// The severity summary, one line, **all four counts including the zeroes**.
+///
+/// Zeroes are rendered rather than filtered because the record is fixed at four
+/// for the reason `EX-2` gives: an absent severity and a zero count would be one
+/// fact with two spellings. Eliding a zero *within* the line would put that
+/// ambiguity back one level down, in the rendering, after the record spent a
+/// design decision removing it. The line as a whole still elides — that is a
+/// different fact (*nothing is outstanding*), and it has one spelling too.
+fn outstanding_line(outstanding: &OutstandingBySeverity) -> String {
+    format!(
+        "review_outstanding blocker={} major={} minor={} nit={}",
+        outstanding.blocker, outstanding.major, outstanding.minor, outstanding.nit
+    )
+}
+
 /// The budgeted rendering — `design show --format prompt`, the projection that
 /// enters an agent's context and the only one R1 is about.
 pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
@@ -1132,6 +1155,12 @@ pub(crate) fn prompt(envelope: &TurnEnvelope) -> Vec<String> {
     // section of its own.
     if envelope.pass_stale {
         lines.push("review_pass STALE".to_owned());
+    }
+    // The sibling lamp, and the same rule: all four counts or no line at all.
+    // Rendering `blocker=0 major=0 minor=0 nit=0` on every turn of every run that
+    // never opened a pass is the passive cost `EX-3` forbids.
+    if !is_empty(&envelope.outstanding) {
+        lines.push(outstanding_line(&envelope.outstanding));
     }
     if let Some(obligation) = envelope.next_obligation.as_ref() {
         lines.push(format!("next_obligation {obligation}"));
@@ -1227,6 +1256,21 @@ pub(crate) fn status(envelope: &TurnEnvelope) -> Vec<String> {
             totals.changes_since_baseline
         ),
     ];
+    // Both lamps reach this rendering too (SL-244 `F2`). The decision review
+    // terminates on — *is another round worth its cost* — is the human's
+    // (`RFC-026` E3), and this is the human's surface. Rendering a lamp to the
+    // agent and withholding it from the reader who acts on it would be DEC-064's
+    // divergence with extra steps.
+    if envelope.pass_stale {
+        lines.push("  review_pass  STALE — it no longer covers current content".to_owned());
+    }
+    if !is_empty(&envelope.outstanding) {
+        let counts = &envelope.outstanding;
+        lines.push(format!(
+            "  outstanding  {} blocker, {} major, {} minor, {} nit",
+            counts.blocker, counts.major, counts.minor, counts.nit
+        ));
+    }
     if let Some(obligation) = envelope.next_obligation.as_ref() {
         lines.push(format!("  next         {obligation}"));
     }
@@ -1370,7 +1414,7 @@ fn more(omitted: usize) -> String {
 mod tests {
     use super::{
         Detail, ENVELOPE_NORMAL_BUDGET_BYTES, OutstandingBySeverity, project, project_within,
-        prompt, rendered_bytes,
+        prompt, rendered_bytes, resume, status,
     };
 
     /// The projection argument for a run whose ledger holds nothing — the honest
@@ -1502,6 +1546,136 @@ mod tests {
             ),
             Ok(Stage::Locked),
             "a stale pass warns; it does not bar the crossing"
+        );
+    }
+
+    /// `VT-2` — the severity summary renders, and costs nothing when there is
+    /// nothing to say.
+    ///
+    /// The *wider than the gate* clause is not here: it lives in `src/review.rs`
+    /// as `severity_summary_is_wider_than_the_gate` (`VT-4`, the owner's
+    /// 2026-08-05 ruling on `Q2`), because this tier is leaf-tier and cannot
+    /// import `review` to ask the gate's predicate the same question.
+    ///
+    /// **The no-passive-cost property is asserted by differencing, not by a golden
+    /// file.** An all-zero projection and a populated one differ by *exactly one
+    /// line*, and the zero rendering is the populated one with that line removed.
+    /// That is the assertion a golden byte-count would only approximate, and it
+    /// catches the failure that matters: a render that always emits the line, with
+    /// four zeroes in it, on every turn of every run that never opened a pass.
+    #[test]
+    fn severity_summary_renders_and_elides_when_empty() {
+        let (run, _) = cleared();
+        let counted = OutstandingBySeverity {
+            blocker: 1,
+            major: 0,
+            minor: 2,
+            nit: 0,
+        };
+
+        let quiet = prompt(&project(&run, 0, Detail::Normal, NOTHING_OUTSTANDING).unwrap());
+        let loud = prompt(&project(&run, 0, Detail::Normal, counted).unwrap());
+
+        assert!(
+            !quiet
+                .iter()
+                .any(|line| line.starts_with("review_outstanding")),
+            "an empty ledger renders no line at all"
+        );
+        assert_eq!(
+            loud.iter()
+                .filter(|line| line.as_str() == "review_outstanding blocker=1 major=0 minor=2 nit=0")
+                .count(),
+            1,
+            "and a populated one renders all four counts, zeroes included: {loud:?}"
+        );
+
+        // The difference is that one line and nothing else — the passive cost
+        // measured rather than claimed.
+        let without: Vec<&String> = loud
+            .iter()
+            .filter(|line| !line.starts_with("review_outstanding"))
+            .collect();
+        assert_eq!(without, quiet.iter().collect::<Vec<&String>>());
+    }
+
+    /// `EX-3` — the summary is not evictable, and there is no rung to choose.
+    ///
+    /// Scalars are unevictable *by construction*: [`evict_one`] only pops lists.
+    /// Asserted anyway, because the property being protected is a value judgement
+    /// a future ladder edit could quietly reverse — a warning must never be
+    /// dropped in favour of the material it warns about. Under a ceiling tight
+    /// enough to force the ladder, the lamps survive and the lists do not.
+    #[test]
+    fn the_lamps_survive_a_ceiling_that_evicts_the_lists() {
+        let counted = OutstandingBySeverity {
+            blocker: 3,
+            major: 1,
+            minor: 0,
+            nit: 0,
+        };
+        let run = wide_run(40);
+        let roomy = project_within(
+            &run,
+            0,
+            Detail::Normal,
+            counted,
+            ENVELOPE_NORMAL_BUDGET_BYTES,
+        )
+        .unwrap();
+
+        let tight = rendered_bytes(&roomy) - 200;
+        let cut = project_within(&run, 0, Detail::Normal, counted, tight).unwrap();
+        assert!(cut.omitted.any(), "the ladder ran");
+        assert!(
+            prompt(&cut)
+                .iter()
+                .any(|line| line == "review_outstanding blocker=3 major=1 minor=0 nit=0"),
+            "and the summary is still there, whole"
+        );
+    }
+
+    /// `DEC-064` — the two lamps reach the same set of renderings, together.
+    ///
+    /// `prompt` and `status` are two renderings of one model, and the reader each
+    /// serves needs both facts: the agent composing the next turn, and the human
+    /// deciding whether another review round is worth its cost — which is the
+    /// decision `RFC-026` E3 says terminates review at all. A lamp in one
+    /// rendering and not the other is how the two surfaces start disagreeing about
+    /// what the run is.
+    ///
+    /// `resume` is deliberately excluded: it is SL-233 scope §4's seven fields in
+    /// that order, a shape `resume_returns_the_seven_scope_fields_without_optional_flags`
+    /// pins, and widening that contract is not this slice's to do.
+    #[test]
+    fn both_lamps_reach_prompt_and_status_and_neither_reaches_resume() {
+        let (mut run, _) = cleared();
+        let moved = run_holding(&[(SECTION_A, "sha256:moved"), (SECTION_B, "sha256:b")]);
+        run.review.pass = Some(pass_over(&moved, PASS));
+        let counted = OutstandingBySeverity {
+            blocker: 1,
+            major: 0,
+            minor: 0,
+            nit: 0,
+        };
+        let envelope = project(&run, 0, Detail::Normal, counted).unwrap();
+
+        for (rendering, lines) in [("prompt", prompt(&envelope)), ("status", status(&envelope))] {
+            let joined = lines.join("\n");
+            assert!(
+                joined.contains("STALE") || joined.contains("stale"),
+                "{rendering} carries the currency lamp: {joined}"
+            );
+            assert!(
+                joined.contains("blocker"),
+                "{rendering} carries the severity summary: {joined}"
+            );
+        }
+
+        let resumed = resume(&envelope).join("\n");
+        assert!(
+            !resumed.contains("blocker=") && !resumed.contains("review_pass"),
+            "resume keeps its seven-field shape: {resumed}"
         );
     }
 
