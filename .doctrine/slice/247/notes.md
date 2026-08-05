@@ -53,16 +53,30 @@ the finding must not be.
   PassThrough would simultaneously forbid jailed callers from spawning that
   type. This **inverts** `slice-247.md`'s `OQ-2`, which read nomination as the
   machinery-reusing option.
+- **The `mcp__*` punch-through is a scoped grant, not a leak** (user,
+  2026-08-06). Dispatch workers are given just enough tool surface to commit,
+  and tool availability is definable per agent definition or per `Agent`
+  invocation. So objective 4's statement of the guarantee is **composite** —
+  bwrap for `Bash`, pathcheck for `Edit`/`Write`, tool-surface scoping at the
+  agent definition for `mcp__*` — and that last one is a design lever this
+  slice should name even if it does not pull it.
 - **`JailPolicy` is ruled out** as a carrier — layout precondition confines it
   to `.worktrees/<name>`, it is consulted only under `Target::Jail`, and
   `deny_unknown_fields` makes any schema change breaking.
 
 ### Risks
 
-- **`R1` (from scope, ✓ confirmed)** — `agent_type` is absent from the
-  Bash/Edit/Write `PreToolUse` payload (`pretooluse.rs:98-107`), so an ordinary
-  subagent and a misplaced dispatch worker are indistinguishable at deny-time.
-  Role must be resolved at `SubagentStart` or not at all.
+- **`R1` (from scope, ✗ CORRECTED 2026-08-06)** — the ✓ was wrong. It cited
+  `pretooluse.rs:98-107`, which is our `PreToolUseInput` struct: evidence that
+  the code does not *parse* `agent_type`, not that the harness does not *send*
+  it. `docs/claude/hooks.md:592` lists `agent_type` beside `agent_id` as the
+  pair added whenever a hook fires inside a subagent, and
+  `mem.fact.claude.pretooluse-agent-carries-spawner-id` (verified) preserves a
+  probe log carrying it. Narrow residual doubt: that probe was on matcher
+  `Agent`, so Bash/Edit/Write is corroborated by docs but not by our own log.
+  Role is therefore probably resolvable at deny-time — but the route dies on
+  POL-002 anyway (it needs a closed set of agent-type names in the engine), so
+  the correction changes the record, not the design. See DEC-154 § notes.
 - **`R2` (new)** — no e2e coverage of the `pretooluse` verb exists at all, so
   the live-probe verification leg carries unusual weight (`inq-8`).
 - **`A1` (from scope)** — dispatch is out of scope but not out of the blast
@@ -85,7 +99,10 @@ fresh-as-of: 2026-08-05 · design/inquiring · e771a5da
 
 ### Produced
 
-- DEC-152 — disposes `inq-1`.
+- DEC-152 — disposes `inq-1`. Minted hollow; facets filled and then corrected
+  2026-08-06 (the floor was cheap, and the rationale that decided it is
+  environment-dependent — see the record).
+- DEC-154 — disposes `inq-5`.
 - ISS-318 — design-run defect found while driving this slice.
 - Observation records `019fd226-…` and `019fd22a-…` (RFC-011 instrumentation).
 - `research/` (runtime, gitignored — not a durable sink; its findings are
@@ -101,7 +118,7 @@ fresh-as-of: 2026-08-05 · design/inquiring · e771a5da
 
 ### Open
 
-- `inq-5`, `inq-7`, `inq-8` — blocking, live in the design run. Read them
+- `inq-7`, `inq-8` — blocking, live in the design run. Read them
   there (`doctrine design resume 247`), not from a copy here.
 - Slice `OQ-3` — whether IMP-269 and IMP-342 close as duplicates of this
   slice. Settle at reconcile, not before.

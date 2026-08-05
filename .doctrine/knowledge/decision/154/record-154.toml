@@ -1,0 +1,48 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 154
+slug = "unconfirmable-worktree-topology-keeps-the-deny"
+title = "Unconfirmable worktree topology keeps the deny"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-05"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-247 `inq-5`. DEC-152 grants pass-through to the `resolve_target` arm that today resolves `Reject`. That arm is doing two jobs, not one: refusing ordinary subagents (the defect being fixed) AND catching the subagent whose worktree topology cannot be confirmed. `cwd_is_project_worktree` (pretooluse.rs:210) collapses three failures — `is_linked_worktree` erroring, an absent `CLAUDE_PROJECT_DIR` anchor, and either `common_git_dir` call erroring — into the same `false` that means *ordinary subagent*. Its own doc comment states the intent being lost: \"Fail-closed: any git error, or an absent anchor, ⇒ `false` (⇒ Reject)\"."
+choice       = "The topology input to `resolve_target` becomes three-valued. Confirmed worktree ⇒ `Jail(cwd)`; confirmed NOT a worktree ⇒ `PassThrough` (DEC-152); topology UNKNOWN ⇒ `Reject`, as today. `cwd_is_project_worktree` stops swallowing its errors."
+alternatives = [
+  "Blanket pass-through — no discriminator, carry the fail-open flip as a named risk. Rejected: a mis-seated dispatch worker is today denied loudly and dead in the water; under blanket pass-through it runs UNCONFINED and its Bash reaches the primary tree. The anchor leg is the sharp one — an absent `CLAUDE_PROJECT_DIR` fails for the whole worker population at once, not occasionally.",
+  "Split on cwd-resolvability instead: `Reject` iff the payload `cwd` is absent or will not canonicalize. Rejected as insufficient rather than wrong — it is nearly free (the shell already encodes that case as an empty `PathBuf` via `canonicalize(c).ok().unwrap_or_default()`, so no signature changes and no test churn), but it catches approximately nothing: the accident lives in the topology check, not in cwd resolution.",
+  "Discriminate on role from the payload's `agent_type`. Rejected on POL-002: it needs a closed set of agent-type names, which is host-project convention living in the engine. This kills the route independently of whether `agent_type` rides the Bash/Edit/Write payload — a question SL-247's `R1` answers wrongly, citing the Rust struct (which proves only that the code does not parse it) against `docs/claude/hooks.md:592` and a verified SL-206 probe log that both say the harness sends it.",
+]
+rationale    = "Unknown is not the same claim as no, and the arm that conflates them is the arm being changed. Keeping `Unknown ⇒ Reject` preserves exactly the posture the code already documents, while DEC-152's grant applies only where the topology is positively known not to be a worktree. Cost was the user's stated condition and was measured before deciding: 7 `resolve_target` test call sites (all in jail.rs) plus one shell call site, three swallowed error sites, ~25 lines of source and 2-3 new cases. Cheap enough to be worth building on a surface RFC-025's census marks DELETE."
+consequences = [
+  "`resolve_target`'s `cwd_is_project_worktree: bool` becomes three-valued. The 7 existing unit call sites churn mechanically (`true`→confirmed, `false`→confirmed-not) and no behaviour moves for the `Orchestrator`, `Jail` or nomination arms — but this brushes the LETTER of SL-247's behaviour-preservation gate (\"existing suites stay green unchanged\"). Flagged here so it does not surface as a surprise at plan time.",
+  "RESIDUAL: an ordinary subagent whose cwd is not in a git repo at all also reads `Unknown` and is denied — the defect being fixed, recurring rarely. The answer if it ever bites is NOT to widen the deny but to move the check to spawn time: a `doctrine` verb that asserts the spawner is correctly seated before launch establishes the fact positively, where an orchestrator or a human can read the error. Infer-at-deny and assert-at-spawn are different seams doing complementary work.",
+  "The `agent_type` field's availability at deny-time is recorded as a FACT for the capsule successor (ADR-020) and used by nothing here — POL-002 blocks the route, not the observation.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "pretooluse.rs:203-225 — `cwd_is_project_worktree`, the three collapse sites and the doc comment stating the fail-closed intent.",
+  "pretooluse.rs:407-411 — the shell's `canonicalize(c).ok().unwrap_or_default()`, which already encodes unresolvable-cwd as an empty path.",
+  "jail.rs:377 — `resolve_target`'s four arms and the boolean this decision widens.",
+]
+contradicts = []
+notes    = [
+  "Corrects SL-247 `R1`. `agent_type` is not absent from the PreToolUse payload — `docs/claude/hooks.md:592` lists it beside `agent_id` as the pair added whenever a hook fires inside a subagent, and `mem.fact.claude.pretooluse-agent-carries-spawner-id` (verified) preserves a probe log carrying it. The triage's ✓ cited the Rust struct, which is evidence about our parser, not about the harness. Residual doubt is narrow: the probe was on matcher `Agent`, so Bash/Edit/Write specifically is corroborated by docs but not yet by our own log.",
+  "The `mcp__*` punch-through (RSK-225) is a SCOPED GRANT, not an unguarded leak: dispatch workers are given just enough tool surface to commit, and tool availability is definable per agent definition or per Agent invocation. This makes SL-247 objective 4's statement of the guarantee composite — bwrap for Bash, pathcheck for Edit/Write, tool-surface scoping at the agent definition for `mcp__*` — and makes that last one a design lever the slice should name even if it does not pull it.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-247"
