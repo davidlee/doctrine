@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd03f-27c0-7940-a114-6fe9b502c92a"
+recorded_at = "2026-08-05T04:47:07.713022328Z"
+kind = "friction"
+summary = "/execute: a task's stated Touches list is never checked against what the task actually touched"
+detail = "SL-244 PHASE-05 T11's sheet entry named three e2e suites in its Touches line and said to delete the retired `evidence` claims from them; the commit touched none of the three for that purpose and the claims survived into T13. Nothing caught it: the claims had stopped meaning anything (the request type carries a flatten envelope so it cannot deny unknown fields), so the suites stayed green and the deletion was invisible in both directions — absent from the diff and absent from the test results. The sheet is the only record of the intent, and /execute reads it to start a task but never re-reads it to close one. A one-line close-out beat — 'name the files your Touches line predicted and the ones you changed; argue any difference in Findings' — would have caught this at T11 rather than two tasks later. Same class as F3 and D4 (the sheet asserting something no step verifies)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

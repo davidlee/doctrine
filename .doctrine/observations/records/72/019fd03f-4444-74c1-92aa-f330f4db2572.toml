@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd03f-4444-74c1-92aa-f330f4db2572"
+recorded_at = "2026-08-05T04:47:15.012571542Z"
+kind = "friction"
+summary = "slice verify-vt has no --phase filter and its rows are ambiguous across phases"
+detail = "Checking two criteria (VT-8, VT-10) on SL-244 PHASE-05 meant running `doctrine slice verify-vt 244` over the whole slice. `--phase PHASE-05` is rejected, and the output prints bare `VT-N` rows under a `PHASE-NN:` header, so every phase restarts the numbering — a grep for 'VT-8' returns rows from several phases with nothing on the line to tell them apart, and reading the right one means finding the header by eye and counting down. Two cheap fixes, either would do: accept the --phase selector the phase-scoped skills already speak, or qualify each row with its phase so a line is self-describing. Cost here was a wasted invocation plus a second grep; the real cost is that an agent scanning output can misattribute a PASS to the wrong phase, which is exactly the mistake F47 warns about for VT-8."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
