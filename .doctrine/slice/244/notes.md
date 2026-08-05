@@ -142,9 +142,30 @@ entirely (unification dissolves the promotion leg), so nothing is outstanding.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-05 · PHASE-06 complete · 930d811d
+fresh-as-of: 2026-08-05 · PHASE-07 in flight (T1 of 7 done) · 725482c2
 
 ### Produced
+
+- **PHASE-07 IN FLIGHT — `T1`, the currency lamp, landed (`c7dcaf62`).**
+  `TurnEnvelope::pass_stale` derives through `review_standing()` — one
+  comparison, two readers — guarded by `pass.is_some()` so *no pass* and *stale
+  pass* stay different facts, and renders as a bare `review_pass STALE` line in
+  `prompt()` only when true. `VT-1` PASSes in three clauses over
+  `fixture::cleared()`, three negative controls run and reverted. design_run unit
+  130 → 131; `doctrine check gate` exit 0.
+  **Two user rulings opened the phase**, both on the sheet as `D5`/`D6`:
+  an unreadable or unparseable pass ledger **fails loud** rather than rendering a
+  third quiet state (so the reader splits — a `Result` parse under
+  `observe_pass`'s `.ok()` wrapper, because the gate path still needs
+  `PHASE-04` `EX-5`'s absence-is-refusal posture and the projection path needs
+  the error); and `VT-2` splits with a `VT-4` appended in `src/review.rs`, the
+  `DEC-141` amendment class, because `envelope.rs` is leaf-tier and cannot import
+  `review` to compare the two predicates.
+  **One design-text repair is owed at reconcile:** `design.md:770` says both
+  warnings arrive on `DerivedInput`, which is assembled only on the apply path
+  while the envelope is also projected by `design show` and `design resume`. The
+  counts ride a `project` parameter instead. The ruling (shell-read, never
+  stored) is untouched; only the carrier was wrong.
 
 - **PHASE-06 COMPLETE — the contract corpus and the stage-entry receipt.** Ten
   tasks. The movement: the injected field vocabulary (`b36f7044`); the pure
@@ -301,6 +322,17 @@ fresh-as-of: 2026-08-05 · PHASE-06 complete · 930d811d
 
 Tree facts read off the source, still load-bearing for the phases that consume
 them. Cited by phase so a reader knows why each is here.
+
+**PHASE-07 (general, past this slice)** — *staleness is made from the side that
+went stale.* `fixture::pass_over` and `attest` share a doc sentence — "a test
+that wants a stale X opens one here and then moves a section, which is how
+staleness actually happens" — and it holds for an attestation and fails for the
+review pass. Moving a section stales the section's attestations and every act
+covering it as well (`DEC-066`), so a test that stales the pass that way cannot
+assert anything about the crossing: three unrelated rows refuse first. Re-open
+the *pass* over the digests the run has moved past instead. The general form: a
+content-bound record with many co-bound neighbours must be staled at the record,
+not at the content, or the fixture stops narrowing.
 
 **PHASE-06 (general, past this slice)** — a fragment's prose is *elidable* and
 the turn envelope's `DECLARATION_EXAMPLE` is not: a caller declaring the
