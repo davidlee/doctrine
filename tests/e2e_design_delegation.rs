@@ -31,6 +31,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 mod common;
+/// The wire-shaped act payloads a ladder submits (SL-244 `T8`), shared with the
+/// other design suites that cross an edge.
+mod design_act;
 /// Opted into for [`design_fixture::seed_slice_record`] alone — SL-244 `T8`'s
 /// governance act projects the slice's own edge set, and one seeder shared with
 /// the other design suites beats three copies.
@@ -225,7 +228,7 @@ impl Fixture {
         fixture.apply(&fixture.payload(
             "governance",
             &json!({
-                "checkpoint_act": checkpoint_act(
+                "checkpoint_act": design_act::checkpoint_act(
                     ActKind::GovernanceConfirmed,
                     "the governing artefacts are the ones found",
                 ),
@@ -238,13 +241,13 @@ impl Fixture {
         fixture.apply(&fixture.payload(
             "graph",
             &json!({
-                "agent_declaration": agent_declaration(
+                "agent_declaration": design_act::agent_declaration(
                     AgentAct::BlockingSetDeclared {
                         blocking: [DesignId::parse(OBLIGATION).unwrap()].into(),
                     },
                     "the obligation blocks drafting until it is settled",
                 ),
-                "checkpoint_act": checkpoint_act(
+                "checkpoint_act": design_act::checkpoint_act(
                     ActKind::GraphReviewed,
                     "the blocking set is right",
                 ),
@@ -353,34 +356,6 @@ impl Fixture {
             &["design", "apply", SLICE, "-p", ".", "--input", body],
         )
     }
-}
-
-/// A checkpoint act as a payload field, built from the wire type (SL-244 `T8`).
-///
-/// `serde_json::to_value` over [`CheckpointActDeclaration`] rather than a JSON
-/// literal, for the reason the [`WRITER_ACTS`] rows already give: [`ActKind`]
-/// carries no `as_str`, and re-typing a serde-derived kebab token in a test is
-/// the drift `STD-001` forbids.
-fn checkpoint_act(act: ActKind, basis: &str) -> Value {
-    serde_json::to_value(CheckpointActDeclaration {
-        act,
-        acceptance: AcceptanceDeclaration {
-            basis: basis.to_owned(),
-            turn: None,
-        },
-        disposition: None,
-    })
-    .unwrap()
-}
-
-/// An agent declaration as a payload field, on the same terms.
-fn agent_declaration(act: AgentAct, basis: &str) -> Value {
-    serde_json::to_value(AgentActDeclaration {
-        act,
-        basis: basis.to_owned(),
-        turn: None,
-    })
-    .unwrap()
 }
 
 /// The spine section's body, which must open with its own heading.
@@ -568,7 +543,7 @@ fn delegated_worker_cannot_advance_the_run() {
     fixture.apply(&fixture.payload(
         "sufficiency",
         &json!({
-            "checkpoint_act": checkpoint_act(
+            "checkpoint_act": design_act::checkpoint_act(
                 ActKind::SufficiencyAccepted,
                 "the obligation is understood well enough to draft",
             ),

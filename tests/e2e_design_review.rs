@@ -30,6 +30,13 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 mod common;
+/// The wire-shaped act payloads a ladder submits (SL-244 `T8`), shared with the
+/// other design suites that cross an edge.
+mod design_act;
+/// Opted into for [`design_fixture::seed_slice_record`] alone — SL-244 `T8`'s
+/// governance act projects the slice's own edge set, and one seeder shared with
+/// the other design suites beats three copies.
+mod design_fixture;
 mod runbook_fixture;
 
 /// The pure model, from source. `design_run` is a leaf with crate out-degree
@@ -44,7 +51,8 @@ mod design_run;
 
 use design_run::Stage;
 use design_run::attestation::{
-    IntentState, IntentSubject, RecoveryIntent, ReviewPolicy, ReviewRef,
+    ActKind, AgentAct, AgentActKind, CoveredSet, IntentState, IntentSubject, RecoveryIntent,
+    ReviewDisposition, ReviewPolicy, ReviewRef,
 };
 use design_run::change_log::ChangeEvent;
 use design_run::gate::Condition;
@@ -185,7 +193,11 @@ impl Fixture {
     fn at_the_reviewing_edge() -> (Fixture, String) {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
-        std::fs::create_dir_all(root.join(common::SLICE_DIR).join(SLICE_NUMBER)).unwrap();
+        // SL-244 `T8`: the `governance-confirmed` act projects the slice's own
+        // outbound edge set, so the tree needs an authored record to project
+        // from — a slice directory with nothing in it is an UNOBSERVABLE fact,
+        // which reads as changed and refuses the act.
+        design_fixture::seed_slice_record(&root, SLICE_NUMBER);
         let out = run(&root, &["design", "start", SLICE, "-p", "."]);
         let uid = out
             .split_whitespace()
@@ -217,6 +229,43 @@ impl Fixture {
         for step in runbook_fixture::EXPLORING_STEPS {
             fixture.apply(&fixture.payload(step, &runbook_fixture::discharge_body(step)));
         }
+        // SL-244 `T8` (`D2`) — both mechanisms live at once. The `evidence`
+        // claims below are what clears the gate *today*; the acts are what will
+        // clear it once `T10` flips the evaluator, and they land now so that
+        // flip is a change of mechanism with no change of fixture.
+        //
+        // `exploring → inquiring` owes two conditions' acts and `ApplyRequest`
+        // holds one checkpoint act, so it owes two submissions.
+        fixture.apply(&fixture.payload(
+            "governance",
+            &json!({"checkpoint_act": design_act::checkpoint_act(
+                ActKind::GovernanceConfirmed,
+                "the governing artefacts are the ones found",
+            )}),
+        ));
+        // DEC-121's two acts by two actors, in one submission — `T6`'s build
+        // order: the declaration is constructed and fingerprinted before the act
+        // that confirms it, so no caller computes a digest.
+        //
+        // The blocking set is **empty**, and that is a claim rather than a gap:
+        // this suite declares no inquiries at all, because its subject is the
+        // FOURTH boundary. An empty inquiry map is an observable fact — it stays
+        // empty for the run's whole life, since `fnd-1` is a review finding and
+        // findings are not nodes — so the coverage these two acts carry is still
+        // current at the lock.
+        fixture.apply(&fixture.payload(
+            "graph",
+            &json!({
+                "agent_declaration": design_act::agent_declaration(
+                    AgentAct::BlockingSetDeclared { blocking: BTreeSet::new() },
+                    "nothing blocks: this run interrogates no questions",
+                ),
+                "checkpoint_act": design_act::checkpoint_act(
+                    ActKind::GraphReviewed,
+                    "the empty blocking set is right",
+                ),
+            }),
+        ));
         fixture.apply(&fixture.payload(
             "draft",
             &json!({
@@ -231,6 +280,14 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
+        // `inquiring → drafting` owes `user-accepts-sufficiency`.
+        fixture.apply(&fixture.payload(
+            "sufficiency",
+            &json!({"checkpoint_act": design_act::checkpoint_act(
+                ActKind::SufficiencyAccepted,
+                "there is nothing outstanding to interrogate",
+            )}),
+        ));
         fixture.apply(&fixture.payload(
             "to-drafting",
             &json!({"stage": {"to": Stage::Drafting.as_str()}}),
@@ -241,6 +298,19 @@ impl Fixture {
                 &runbook_fixture::discharge_body(step),
             ));
         }
+        // `drafting → reviewing` owes `drafting-readiness-attested`, which is an
+        // AGENT act. Recorded before the entry payload is *built*, not merely
+        // before it is applied: `payload` pins the revision it is built at, so a
+        // submission between the two would leave `entry` stale — and the two
+        // crash tests re-apply `entry` after a fault, which is where that would
+        // surface.
+        fixture.apply(&fixture.payload(
+            "ready",
+            &json!({"agent_declaration": design_act::agent_declaration(
+                AgentAct::DraftingReady,
+                "the three sections are drafted and ready to review",
+            )}),
+        ));
         let entry = fixture.payload(
             "to-reviewing",
             &json!({
@@ -287,6 +357,47 @@ impl Fixture {
         self.payload(submission, &body)
     }
 
+    /// The two checkpoint acts the `reviewing → locked` crossing owes, each in
+    /// its own submission — `ApplyRequest` holds one (SL-244 `T8`).
+    ///
+    /// Keyed by **condition** rather than by component, for the reason
+    /// [`refuses_without`] is: since DEC-126's fold two components clear
+    /// `review-disposition-attested`, so omitting either must withhold its act,
+    /// or the component under test would be repaired by the other one's.
+    ///
+    /// Called at each lock site rather than folded into [`Fixture::lock_payload`]
+    /// because *when* an act is given is load-bearing and invisible today.
+    /// `DesignAccepted` carries `EverySection` coverage, so it must be given
+    /// after the last section edit a test makes — and nothing reads these acts
+    /// until `T10`, so a builder that hid the moment would hide the one thing
+    /// worth seeing.
+    fn record_lock_acts(&self, tag: &str, omit: Option<Component>) {
+        let cleared = |condition: Condition| omit.map(Component::condition) != Some(condition);
+        if cleared(Condition::ReviewDispositionAttested) {
+            // The `Waived` arm, necessarily: `Conducted` requires the ledger to
+            // be concluded, and no verb sets that marker until IMP-392, so a
+            // conducted ladder is unreachable this phase (sheet `A3`).
+            self.apply(&self.payload(
+                &format!("{tag}-dispose"),
+                &json!({"checkpoint_act": design_act::review_disposed(
+                    "the pass is disposed of at the close of review",
+                    ReviewDisposition::Waived {
+                        reason: "no adversarial reviewer was engaged on this run".to_owned(),
+                    },
+                )}),
+            ));
+        }
+        if cleared(Condition::UserAcceptanceAttested) {
+            self.apply(&self.payload(
+                &format!("{tag}-accept"),
+                &json!({"checkpoint_act": design_act::checkpoint_act(
+                    ActKind::DesignAccepted,
+                    "User accepted the design at the close of review",
+                )}),
+            ));
+        }
+    }
+
     /// Edit a covered section so the minted pass no longer covers current
     /// content — the only way the currency lamp can now be falsified (F2).
     ///
@@ -313,6 +424,14 @@ impl Fixture {
                 "reason": "reopening the draft after the review pass",
             }}),
         ));
+        // **No second `DraftingReady` here**, and the omission is measured
+        // rather than forgotten (SL-244 `T8`). The re-crossing does evaluate
+        // `drafting-readiness-attested` — `EdgeLocal` governs which edges ask a
+        // row, not when an act expires — but the act given at the first crossing
+        // still satisfies it: its `Artefact` coverage is inert by construction,
+        // exactly as the incumbent evidence claim persists across this same
+        // re-entry today. An act nothing owes and nothing asserts is the fixture
+        // ceremony `F33` already refused once.
         self.apply(&self.payload(
             &format!("{tag}-in"),
             &json!({"stage": {"to": Stage::Reviewing.as_str()}}),
@@ -500,6 +619,9 @@ fn refuses_without(missing: Component) {
     if missing == Component::Integrated {
         fixture.stale_the_pass();
     }
+    // After the edit above, so `DesignAccepted`'s `EverySection` coverage is
+    // taken over the content the lock is attempted on (SL-244 `T8`).
+    fixture.record_lock_acts("lock", Some(missing));
     let stderr = fixture.refuse(&fixture.lock_payload("lock", Some(missing)));
     let token = missing.condition().as_str();
     assert!(
@@ -553,6 +675,7 @@ fn lock_refuses_without_a_user_acceptance_attestation() {
 #[test]
 fn lock_admits_with_all_four_present() {
     let fixture = Fixture::reviewing();
+    fixture.record_lock_acts("lock", None);
     let stdout = fixture.apply(&fixture.lock_payload("lock", None));
     assert_eq!(fixture.stage(), Stage::Locked);
 
@@ -602,6 +725,7 @@ fn section_edit_invalidates_only_that_sections_attestation() {
 
     // The gate consequence of `only`: two of three attestations are still live,
     // and that is still not "current section attestations".
+    fixture.record_lock_acts("lock", Some(Component::Attestations));
     let stderr = fixture.refuse(&fixture.lock_payload("lock", Some(Component::Attestations)));
     let token = Condition::SectionAttestationsCurrent.as_str();
     assert!(
@@ -634,6 +758,7 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
     // attestation is not a substitute for it: with the pass staled by an edit,
     // the mixed section review does not lock.
     fixture.stale_the_pass();
+    fixture.record_lock_acts("no-integrated", Some(Component::Integrated));
     let stderr =
         fixture.refuse(&fixture.lock_payload("no-integrated", Some(Component::Integrated)));
     let token = Condition::ReviewDispositionAttested.as_str();
@@ -646,6 +771,9 @@ fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in() {
     // the same mixed section review locks. Since DEC-125's mint, that — not a
     // declaration — is how the condition is cleared again.
     fixture.re_enter_reviewing("reopen");
+    // After the re-entry, so the disposition is given over the pass it disposes
+    // of — the re-entry minted a second one (SL-244 `T8`).
+    fixture.record_lock_acts("lock", None);
     fixture.apply(&fixture.lock_payload("lock", None));
     assert_eq!(fixture.stage(), Stage::Locked);
 }
@@ -869,6 +997,107 @@ fn a_mint_interrupted_after_its_id_journal_resumes_the_reserved_pass() {
     );
 }
 
+// ── SL-244 T8: the ladder's acts are recorded, not merely submitted ────────
+
+/// `T8`'s control for this suite — the acts the ladder adds are *recorded*, in
+/// the shape the crossing they belong to will read after `T10`.
+///
+/// Necessary because `T8` is additive by design (`D2`): the incumbent evidence
+/// scan clears the gate until `T10`, so nothing else here would fail if a
+/// `checkpoint_act` key deserialised into nothing. The suite would stay green
+/// and the fixture would be inert JSON — which is precisely the state `T10` is
+/// supposed to be able to flip into without touching a fixture.
+///
+/// It asserts three things and deliberately not a fourth. The **act set**, by
+/// kind, because a ladder that crosses four edges owes an act at each. The
+/// **disposition arm**, because `Waived` is the only reachable one this phase
+/// and a `Conducted` record here would be a silent deferral. And
+/// `DesignAccepted`'s **coverage currency**, because that is the one placement
+/// question this suite can get wrong today and not find out until `T10` — the
+/// act is given after the last section edit or it is worthless. What it does not
+/// assert is the whole record: the engine slots are `T5`/`T6`'s to pin, and the
+/// unit suite already does so by payload.
+#[test]
+fn the_ladder_records_an_act_at_every_edge_it_crosses() {
+    let fixture = Fixture::reviewing();
+    // The edit is what gives the coverage assertion teeth. Recorded acts are
+    // taken over the state at the moment they are given, so an acceptance given
+    // *before* this edit would carry a covered map the edit invalidates — and
+    // nothing today would say so. Swapping these two lines is the control.
+    fixture.stale_the_pass();
+    fixture.record_lock_acts("lock", None);
+    let held = fixture.read();
+
+    let acts: BTreeSet<ActKind> = held.acts.acts.iter().map(|act| act.act).collect();
+    assert_eq!(
+        acts,
+        BTreeSet::from([
+            ActKind::GovernanceConfirmed,
+            ActKind::GraphReviewed,
+            ActKind::SufficiencyAccepted,
+            ActKind::ReviewDisposed,
+            ActKind::DesignAccepted,
+        ]),
+        "one user act per condition, across all four crossings"
+    );
+    let declared: BTreeSet<AgentActKind> = held
+        .declarations
+        .declarations
+        .iter()
+        .map(|declaration| declaration.act.kind())
+        .collect();
+    assert_eq!(
+        declared,
+        BTreeSet::from([
+            AgentActKind::BlockingSetDeclared,
+            AgentActKind::DraftingReady,
+        ]),
+        "and the two the agent authors — the one a `GraphReviewed` confirms, and \
+         the drafting judgement that stands alone"
+    );
+
+    let disposed = held
+        .acts
+        .acts
+        .iter()
+        .find(|act| act.act == ActKind::ReviewDisposed)
+        .and_then(|act| act.disposition.as_ref())
+        .expect("the disposition act carries its disposition");
+    assert!(
+        matches!(disposed.disposition, ReviewDisposition::Waived { .. }),
+        "the reachable arm: `Conducted` needs a concluded ledger, and no verb \
+         sets that marker until IMP-392 — got {:?}",
+        disposed.disposition
+    );
+    assert_eq!(
+        disposed.pass,
+        held.review
+            .pass
+            .as_ref()
+            .expect("a run in `reviewing` holds a pass")
+            .review,
+        "given over the pass the run is actually on, which the caller never names"
+    );
+
+    let accepted = held
+        .acts
+        .acts
+        .iter()
+        .find(|act| act.act == ActKind::DesignAccepted)
+        .expect("the acceptance act is recorded");
+    let Some(CoveredSet::Sections(ref covered)) = accepted.covered else {
+        panic!(
+            "the acceptance covers every section, got {:?}",
+            accepted.covered
+        );
+    };
+    assert!(
+        covered.is_current(&held.sections.fingerprints()),
+        "and covers the content it was given over — the placement `T10` will be \
+         the first to check, asserted here where it is still cheap"
+    );
+}
+
 // ── ISS-310: the required lanes are the run's, and the policy is mutable ──
 
 /// The deliberate hole, end to end: sections reviewed only adversarially do not
@@ -898,6 +1127,10 @@ fn loosening_the_policy_clears_the_gate() {
         .collect();
     fixture.apply(&fixture.payload("attest", &json!({"declare": adversarial})));
 
+    // Once, ahead of both lock attempts: nothing between them edits a section,
+    // so the acceptance act's `EverySection` coverage is still current at the
+    // second (SL-244 `T8`).
+    fixture.record_lock_acts("lock", Some(Component::Attestations));
     let token = Condition::SectionAttestationsCurrent.as_str();
     let stderr = fixture
         .refuse(&fixture.lock_payload("lock-under-human-only", Some(Component::Attestations)));
