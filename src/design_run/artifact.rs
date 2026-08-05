@@ -322,6 +322,49 @@ mod tests {
             .collect()
     }
 
+    /// The entity-id prefixes a shipped asset may not cite.
+    const REPO_PRIVATE_PREFIXES: [&str; 14] = [
+        "ADR", "CHR", "DEC", "IDE", "IMP", "ISS", "POL", "PRD", "REQ", "RSK", "RV", "SL", "SPEC",
+        "STD",
+    ];
+
+    /// Whether `text` cites a per-repo sequential id — a prefix on a word
+    /// boundary, followed by a hyphen and a digit.
+    fn cites_a_repo_private_id(text: &str) -> bool {
+        REPO_PRIVATE_PREFIXES.iter().any(|prefix| {
+            text.match_indices(prefix).any(|(at, _)| {
+                let starts_a_word = text
+                    .get(..at)
+                    .and_then(|before| before.chars().next_back())
+                    .is_none_or(|char| !char.is_ascii_alphanumeric());
+                let rest = text.get(at + prefix.len()..).unwrap_or_default();
+                starts_a_word
+                    && rest
+                        .strip_prefix('-')
+                        .and_then(|digits| digits.chars().next())
+                        .is_some_and(|char| char.is_ascii_digit())
+            })
+        })
+    }
+
+    /// `VA-1`, discharged with evidence rather than with a reading.
+    ///
+    /// Per-repo sequential ids do not dangle in a client project — they resolve
+    /// to an unrelated record, silently, which is worse than a broken link. The
+    /// in-tree generated artefact this one is modelled on cites two in its own
+    /// banner, so this is a live defect class and not a hypothetical.
+    #[test]
+    fn the_artefact_cites_no_repo_private_id() {
+        assert!(
+            cites_a_repo_private_id("<!-- GENERATED ARTIFACT — SL-228 D7. -->"),
+            "the detector fires on a known citation, or the assertion below is unfalsified"
+        );
+        assert!(
+            !cites_a_repo_private_id(&render_artifact()),
+            "the shipped artefact cites no per-repo sequential id"
+        );
+    }
+
     /// `VT-1` — the golden. A vocabulary addition, a reach change, a binding
     /// change or a new edge all move the render and fail here until the file is
     /// re-rendered, which is what makes *ensured up to date* structural rather
