@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd06f-83d2-7873-bf78-edc4809097cf"
+recorded_at = "2026-08-05T05:39:57.010901841Z"
+kind = "friction"
+summary = "phase-plan: no read verb for a slice's plan — 'doctrine slice plan <id>' is a scaffolder that refuses, costing a wasted call before falling back to raw grep/Read"
+detail = "Routed /phase-plan for SL-244 PHASE-06. Step 2 of the skill is 're-read the phase's plan.toml entry'. The obvious command shape 'doctrine slice plan 244' is a WRITER (scaffold) and returns 'Refusing to overwrite existing .../plan.toml'. There is no 'slice plan show'. Read path is grep for the PHASE-NN offset then Read a line window on the authored TOML — which also cuts against the read-via-show guardrail. Already captured as mem_019facc24ac576e0a4d9ace5b2eeb12f; this is a second live instance, so the memory is not preventing the cost."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
