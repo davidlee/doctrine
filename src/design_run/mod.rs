@@ -74,6 +74,7 @@
 )]
 
 pub(crate) mod admission;
+pub(crate) mod artifact;
 pub(crate) mod attestation;
 pub(crate) mod bounds;
 pub(crate) mod change_log;
