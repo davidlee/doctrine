@@ -1,0 +1,50 @@
+memory_uid = "mem_019fd64176c97681902a5680f1bc3c78"
+memory_key = "mem.fact.capsule.bwrap-ro-bind-dereferences-source"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "bwrap dereferences ro-bind sources — verify confinement claims by execution"
+summary = "bwrap resolves the SOURCE path of --ro-bind, so a declared root that is a symlink binds its target; lexical path checks do not confine it"
+created = "2026-08-06"
+updated = "2026-08-06"
+
+[scope]
+paths = ["scripts/spike-capsule/capsule/sandbox.sh", "src/worktree/jail.rs"]
+globs = []
+commands = []
+tags = ["capsule", "confinement", "bubblewrap", "security"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "8210e871e2f62bdf19c6f547d4cbb3eadda3a1e5"
+tree = "1ce6e68478991605eabe93c917ffc4957f453a13"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "8210e871e2f62bdf19c6f547d4cbb3eadda3a1e5"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-346"
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
