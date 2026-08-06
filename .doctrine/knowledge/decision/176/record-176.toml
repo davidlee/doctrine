@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 176
+slug = "kind-coverage-in-governance-pinned-by-canary"
+title = "Kind coverage in governance is pinned by a canary"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 objective 4 is a prose-heavy governance amendment whose completion is easy to assert and easy to leave half-done. Its R4 names the precedent: SL-222's PHASE-09 objective promised 'facet_write [value]/[estimate] machinery deletes' while its exit criteria checked only a grep-gate, a tripwire suite and a green build; the deletion never happened, the audit did not catch it, and nothing has owned it since. SL-249's exploring pass found a second instance on this exact spec — SL-159 scoped a governance-axis Revision for EVD+HYP that never landed, and SL-197 added CPT with no governance axis at all."
+choice       = "Objective 4's exit criteria carry two layers: a project-local canary test asserting that every kind in kinds::RECORD is named in SPEC-019 and PRD-010, plus the agent-verified prose criteria the slice card already proposes."
+alternatives = [
+  "Prose criteria alone (agent-verified: 'SPEC-019 enumerates seven kinds', 'a facet contract exists per kind'). Rejected as the sole layer: both prior failures were failures of OMISSION, and an agent verifying a claim it was handed does not notice the claim nobody made.",
+  "Enforce kind-coverage in the engine as a `doctrine validate` rule. Rejected under POL-002: 'every record kind must be named in a spec' is a host-project convention, and baking it into the platform is exactly the coupling POL-002 forbids.",
+]
+rationale    = "The canary is the only proposed criterion that would have caught either prior failure, and it costs about ten lines because both seams already exist: src/test_support.rs::repo_root() is a runtime repo-root resolver (built because the jail shares a target dir across worktrees, which is why compile-time env!(CARGO_MANIFEST_DIR) is banned by its own guard test), and src/kinds/mod.rs:57 holds `pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON, EVD, HYP, CPT]` as the canonical prefix list. Both are pub(crate) and the crate has no [lib] target, so this is an in-crate unit test rather than one under tests/ — the whole of the complication. One wrinkle to handle at write time rather than discover later: a bare `contains` on a three-character prefix can pass falsely, since e.g. 'CON' matches inside any uppercase token containing it. Assert on the paired form the specs already write — assumption (`ASM`) — so the check means what it says."
+consequences = [
+  "Adding a record kind without governance becomes a red test rather than a silent omission — the ISS-316 drift class is closed structurally, not by vigilance.",
+  "The canary lives in doctrine's own suite as dogfooding, not in the engine. POL-002 is respected by placement, and this must not later migrate into `validate`.",
+  "The criterion names an observable, discharging SL-249's R4 in the form R4 demanded: 'Its criteria must name observables, not intent.'",
+  "The canary reads the live authored corpus, which no existing test does (existing spec-reading tests build temp fixtures). Reading one fixed file avoids the worktree fragility ISS-024 records for corpus scanners.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 175
+slug = "prd-010-kind-set-is-a-stale-enumeration"
+title = "PRD-010 kind set is a stale enumeration, not a violated rule"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's exploring pass found that PRD-010 section 4 carries the four-kind framing as a constraint, not merely an enumeration, and the design triage recorded this as 'a live contradiction of an active PRD constraint'. That characterisation drove objective 4's REV from one entity to two and framed the PRD half as amending a violated rule."
+choice       = "The characterisation was too strong. PRD-010's clause is two parts — a stale enumeration and an extension rule — and only the enumeration is stale. The REV refreshes the enumeration (four to seven, with prefixes) and preserves the extension rule verbatim."
+alternatives = [
+  "Treat the clause as violated and rewrite the constraint. Rejected on the evidence below: the rule was complied with.",
+  "Leave PRD-010 alone and amend only SPEC-019. Rejected: the enumeration is still stale and still misleads, which is how SL-249 itself was misled.",
+]
+rationale    = "The clause reads: 'The kind set is exactly the four initial kinds — assumption (ASM), decision (DEC), question (QUE), constraint (CON), three-character per-kind prefixes — and may not be extended without a reserved id.' The trailing clause contemplates extension and states its precondition; the word 'initial' anticipates growth. SL-159 and SL-197 met the precondition: EVIDENCE_KIND, HYPOTHESIS_KIND and CONCEPT_KIND are registered KindRef rows in the corpus-wide KINDS table, each with its own three-character prefix, directory and independent reservation namespace, and integrity.rs carries an explicit collision check confirming the additions clash with no existing corpus prefix. So the extension rule was honoured; what was never updated is the sentence in front of it. The distinction matters because it changes the amendment from a reversal into a refresh, and because a REV that claims a rule was broken when it was followed would itself be inaccurate governance."
+consequences = [
+  "The PRD half of objective 4's REV is smaller than the triage stated — a refresh of an enumeration, with the extension rule preserved verbatim.",
+  "SL-249's R1 ('the SPEC-019 amendment is authorship, not annotation') remains true, but the PRD half is lighter than R1 implies.",
+  "The two-entity scope for the REV stands: the stale enumeration still misleads, and it misled this slice.",
+  "The correction is itself an instance of the class SL-249 studies — a governance statement whose front half went stale while its back half stayed true, and which nobody re-read as a whole.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
