@@ -79,12 +79,19 @@ stays published for anyone who prefers the plugin.
 
 ## Scope & Objectives
 
-1. **Hook activation by direct write.** Every hook currently in
-   `plugins/doctrine/hooks/hooks.json` — `SessionStart`, `WorktreeCreate`,
-   `SubagentStart` / `SubagentStop` (`dispatch-orchestrator`), `PreToolUse`
-   (`Bash`, `Edit|Write`) — activated through the existing `boot.rs` merge core
-   into `.claude/settings*.json`, at **both scopes behind a flag, defaulting to
+1. **Hook activation by direct write.** All **nine** hook entries currently in
+   `plugins/doctrine/hooks/hooks.json`, across five events — `SessionStart`
+   (`boot --emit`), `WorktreeCreate` (`worktree create-fork`), `SubagentStart` /
+   `SubagentStop` (`dispatch-orchestrator` → `worktree nominate` /
+   `denominate`), and six `PreToolUse` matchers (`Bash`, `Edit|Write`, `Agent`,
+   `Workflow` → `worktree pretooluse`; `Read|Edit|Write`, `Bash` → `memory
+   surface`) — activated through the existing `boot.rs` merge core into
+   `.claude/settings*.json`, at **both scopes behind a flag, defaulting to
    project `settings.json`** (`OQ-1`, settled).
+
+   Every command is already `${DOCTRINE_BIN:-doctrine} <verb>`; none resolves
+   through `${CLAUDE_PLUGIN_ROOT}`, so the command strings port into a settings
+   file verbatim (verified 2026-08-06, `plugins/doctrine/hooks/hooks.json`).
 2. **One Claude skills channel.** Settle `OQ-2` (npx delegate vs the SPEC-010
    symlink channel for Claude) and make the survivor the only Claude path.
 3. **The doctor leg.** A check that walks the diagnosis order the trust memory
