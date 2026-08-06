@@ -362,3 +362,91 @@ rather than a re-read:
    design argues the stale copy is inert because the value is invariant. That
    holds only while nothing else ever writes `worktree.baseRef`.
 5. `QUE-209` (REV granularity) remains deferred to reconciliation, untouched.
+
+## RV-348 round 2 — responder pass
+
+Round 2 raised six findings against `design.md` at run revision 41 — 1 blocker,
+3 major, 2 minor — after verifying `F-1`…`F-11` terminal. **All six upheld**,
+none contested; each re-derived against `src/boot.rs` before disposing.
+Remediated at revisions 42 (adopt) / 43 (materialise), round-tripped
+byte-identically.
+
+The round scored four for four against the *self-authored* probe list above,
+which is the useful signal: the list was written by the same context that wrote
+the defects, so it located the weak surface correctly and could not see through
+it. Probe 4 in particular ("that holds only while nothing else ever writes
+`worktree.baseRef`") is `F-14` at one remove — the author reached the edge of
+the defect and stopped at the wrong side of it.
+
+### The blocker: an ordering that did not buy what it claimed
+
+`F-12`. `sec-3` ordered write-before-evict and said that guaranteed activation
+lands before removal. It does not, because `RefreshOutcome::PrintedFallback` is
+an **`Ok` value** (`src/boot.rs:1159-1178`, out through `:1611`): a malformed
+*target* yields no write, the `?` does not short-circuit, and the sweep then
+succeeds against a perfectly readable sibling. Zero activation, produced by the
+ordering that exists to prevent it.
+
+Distinct from `F-4` and not covered by its fix: there the sibling could not be
+read; here the sweep **succeeding** is the defect. The general shape worth
+keeping: *a fail-soft return type defeats sequencing arguments written as
+though it were fail-hard.* `?` sequences errors, not failures.
+
+### The pattern both rounds found, now named in the design
+
+The raiser's synthesis: the mechanism is right nearly every time, and the
+sentence attached to the mechanism overclaims by one degree — "nine entries",
+"no change to `corpus.rs`", "a compiler-checked rename", "cannot disagree with
+the live one", "this works because hooks are shell form". Accepted without
+qualification. It is expensive because an implementer reads a discharged-analysis
+sentence as discharged. This round the remediation fixed sentences as well as
+mechanisms (`F-14`, `F-16` are pure-sentence findings and are treated as such).
+
+### Where the remediation went past the ledger
+
+- **`F-13` handed back a better shape than the finding asked for.** Threading
+  `ClaudeSettingsScope` into the shared merge core to reach `.codex/hooks.json`
+  would have made the type stop denoting what its name says — the same ADR-001
+  objection `sec-3` raises one section earlier, pointed the other way. The axis
+  is now `CommandForm { Baked, Portable }`; Codex answers `Baked` on its own
+  file's gitignore status, not on a borrowed scope.
+- **`F-14` resolved harder than raised.** The finding left the merge direction
+  open; `docs/claude/settings.md:56-57` settles it — Local overrides Project for
+  scalars, so a stranded `worktree.baseRef` override **still governs** and
+  doctrine's fresh value is the inert one, the exact inverse of the deleted
+  claim. Key still not swept (no-clobber), but now read and reported.
+- **`F-15` was a type-shape finding.** `Removed` and `Unreadable` are not
+  mutually exclusive *about a file*, so the fold needed a different type from the
+  per-spec sum. `EvictOutcome` stays per-spec (gaining `NotAttempted` for
+  `F-12`); `SweepReport { removed, unreadable, skipped }` is the per-file fold,
+  with no absorbing state. The rider prints every true line, not the worst one.
+- **`F-13` and `F-17` converged on `src/boot.rs:3953`** from opposite directions
+  — the untested byte-identical-Codex claim, and the omission from the
+  class-(ii) precision table. Better evidence for the `CommandForm` axis than
+  either finding made alone.
+
+### Ruled, not designed
+
+**Windows is out of scope** (user, 2026-08-06). `${VAR:-default}` is POSIX
+parameter expansion; PowerShell does not provide it and `PreToolUse` hooks fail
+open, so it would degrade silently there. `F-16` is remediated as a *stated
+scope boundary* plus the asymmetry note that matters regardless of platform:
+`PORTABLE_EXEC`'s two consumers do not carry the same guarantee — `.mcp.json` is
+expanded by the client at load, the hook by whichever shell the platform picks.
+
+### What a further pass should probe
+
+1. **`SweepReport`'s three fields against the seven-spec loop.** The fold is new
+   and the rider is now multi-line; probe for a state where two lines print and
+   contradict each other, and for `dry_run` interaction (a skipped sweep under
+   `--dry-run` is not the same fact as a skipped sweep under a failed write).
+2. **The `CommandForm` wire, end to end.** Six signatures widen. Probe for a
+   consumer still reading a rendered command, and for whether
+   `RefreshOutcome::Refreshed(command)`'s payload now varies by form in a way a
+   test asserts on.
+3. **`install_baseref` reading the sibling** is new I/O on a path that had none.
+   Probe its failure mode when the sibling is malformed — the hook leg has
+   `PrintedFallback` for that, this leg does not obviously.
+4. **`F-12`'s guard at `dry_run`.** Under `--dry-run` nothing is written, so
+   every write "did not land" by the file-system test but did by the plan's.
+   The design gates on the *outcome*, not on the write; confirm that is right.

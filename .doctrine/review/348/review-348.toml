@@ -513,7 +513,7 @@ an exemption."""
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected write-before-evict to guarantee activation lands before removal; observed PrintedFallback is an Ok value, so a malformed target file still triggers the sweep and destroys the working activation"
 detail = """
@@ -537,10 +537,29 @@ What the operator sees makes it worse, not better. The PrintedFallback message i
 Note this is NOT the F-4 case and is not fixed by EvictOutcome::Unreadable. F-4 was the sibling being unreadable. This is the TARGET being unreadable and the sibling being perfectly readable — the sweep succeeds, which is the problem.
 
 Expected: eviction gated on the write having actually landed — Wired / Refreshed / None all mean the canonical set is present in the target, PrintedFallback means it is not, and only the first three earn the right to sweep. A one-line guard, and it restores the property sec-3 already claims. Observed: an unconditional sweep behind a ? that cannot see the failure it is meant to be sequenced after."""
+disposition = "fixed"
+response = """
+UPHELD, and re-derived rather than accepted on the report. Fixed at run revision 43 (adopted 42, materialised 43).
+
+The mechanism is exactly as stated. `plan_hook` returns `RefreshOutcome::PrintedFallback` for both `None` conditions — malformed JSON (`src/boot.rs:1159-1168`) and a wrongly-typed `hooks`/`hooks.<event>` (`:1170-1178`) — and `install_hook_to_file` carries it out through `Ok(annotate_fallback(...))` at `:1611`. A bare `?` cannot see it. So the sweep was sequenced after a write that did not happen, against a sibling that reads fine, and therefore succeeded. Confirmed by reading, not conceded.
+
+The finding is right that this is not `F-4` and not covered by `EvictOutcome::Unreadable`: there the sibling could not be read; here the sibling is perfectly readable and the sweep *succeeding* is the defect.
+
+Remedy, in `sec-3`:
+
+1. The guard, in `install_claude_hook` — the sweep runs only when `written` is not `PrintedFallback`. `Wired` / `Refreshed` / `None` all mean the canonical set is present in the target and earn the right to sweep; `PrintedFallback` does not.
+2. `EvictOutcome` gains a fourth state, `NotAttempted` — deliberately not `Nothing`, because "we chose not to sweep" and "there was nothing to sweep" are different facts and the operator needs the first to understand why both files still carry entries.
+3. The rider gains its line, and it is written to read as the warning it is rather than as cleanup: "did not sweep ... could not be written, so there is nothing to replace it with".
+4. The "Write before evict" paragraph is rewritten. It no longer claims ordering buys the property; it states that a failed write is an `Ok` value, that ordering alone therefore does not buy it, and that the guard is what does. The overclaim was the real defect and it is named as such in the text.
+
+New criterion in `sec-7`: `a_failed_target_write_does_not_trigger_the_sweep` — malformed target, well-formed sibling holding the owned entries, install at `Project`; assert the sibling entries **survive**, the outcome is `NotAttempted`, and the installer says why. Worth noting what makes this test unusual and why it is the right one: the failure it catches is a *successful* sweep, so the assertion that goes red without the guard is the one on surviving entries.
+
+On the framing in the round-2 synthesis — that the mechanism is right and the sentence attached to it overclaims by one degree: accepted without qualification. That is what happened here, and it is the same defect shape as `F-1`'s counts and `F-3`'s "compiler-checked rename". The remediation has tried to fix the sentences as well as the mechanisms this round; `F-14` and `F-16` below are the same class and are treated the same way.
+"""
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected the scope-dependent command form to reach plan_hook; observed scope threaded nowhere between install_claude_hook and the merge core, and no answer for what the Codex arm passes to a Claude-only enum"
 detail = """
@@ -563,10 +582,27 @@ Worth stating plainly: the underlying invariant is NOT Claude-specific. .codex/h
 Consequences if unsettled: (a) an implementer either widens install_hook_to_file with a Claude type or reverse-derives the scope, and neither is what sec-3's own layering argument would choose; (b) the byte-identical-Codex-output claim in sec-7 depends on an unstated Local pass that nothing tests; (c) src/corpus.rs:520 calls the pub(crate) fallback_for(&spec) in its PrintedFallback arm and now needs a scope there too — available as write.scope from the HookWrite the remediation added, but sec-3's corpus.rs paragraph covers only "matches write.written for its four existing arms".
 
 Expected: the scope (or the baked/portable axis it selects) threaded explicitly through install_hook_to_file / annotate_fallback / install_codex_hook, with the Codex value named and justified. Observed: the rendering function specified, and the wire that feeds it left out."""
+disposition = "fixed"
+response = """
+UPHELD on both halves. Fixed at run revision 43.
+
+The wire gap is real and verified: `install_hook_to_file` (`src/boot.rs:1595-1612`) takes `rel_path`, not the scope; it is the sole path from either arm's installer to `plan_hook` (`:1603`); and it calls `annotate_fallback(plan.outcome, rel_path, spec)` (`:1611`) which calls `fallback_for(spec)` (`:1587`). The design specified the rendering function and stopped one layer above the wire that feeds it. `src/corpus.rs:520` is the sixth site, as the finding says.
+
+The second half is the better half, and the finding's own suggestion is what the design now adopts. Threading `ClaudeSettingsScope` through the shared merge core to reach `.codex/hooks.json` would have made the type stop denoting what its name says — the identical objection `sec-3` raises against putting the settings path into `install_config`, in the other direction, on the same ADR-001 authority. Being handed that objection back pointed the right way was the useful part of this finding.
+
+So the axis is `CommandForm { Baked, Portable }`, in `boot.rs` with the core that consumes it:
+
+- Claude maps onto it via `ClaudeSettingsScope::command_form()`, which lives with the scope in `install_config` — `Project` to `Portable`, `Local` to `Baked`.
+- Codex answers `Baked` **on its own file's tracking status**, not on a borrowed scope: `.codex/hooks.json` is gitignored (`.gitignore:9`), so `baked` iff `gitignored` already holds there for the same reason it holds for `settings.local.json`. Your verification of that gitignore is what makes this honest rather than convenient.
+
+`sec-2` now carries the wire as a table naming every signature that widens — `install_hook_to_file`, `plan_hook`, `annotate_fallback`, `fallback_for`, plus the two arm installers and `corpus.rs`'s call site — and states that deriving the form back out of `rel_path` inside `install_hook_to_file` is the rejected alternative, for your reason: it would make the core reverse-engineer a decision its caller already made.
+
+Consequence (b) is closed too. The byte-identical-Codex claim had no test; `sec-7` now carries `the_codex_arm_renders_the_baked_form`, paired explicitly with the `:3953` assertion that `F-17` restored to the class-(ii) table. The two findings landed on the same site from opposite directions, which is worth noting on the record.
+"""
 
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected the unswept worktree.baseRef copy to be provably inert; observed the claim rests on the value being invariant, which BaseRefOutcome::Conflict exists precisely to allow it not to be"
 detail = """
@@ -593,10 +629,29 @@ Also note the reporting regression the same change causes independently of any s
 Not a blocker: it requires the operator to have exercised a documented override, and the mechanism is otherwise sound. Major because the design asserts a safety property ("cannot disagree") that its own codebase contradicts, on a key whose disagreement changes dispatch semantics silently — and because "it is inert" is the whole of the argument for not sweeping.
 
 Expected: either the sweep reaches worktree.baseRef under the scope flip, or the section states the merge precedence, states that a pre-existing Conflict override is stranded, and says the installer reports it. The design's own standard, from sec-6: R10 is engineered because both settings files are doctrine's to write. This key is now in both files and doctrine writes it. Observed: an inertness claim resting on invariance that BaseRefOutcome::Conflict exists to deny."""
+disposition = "fixed"
+response = """
+UPHELD, and the probe settles it harder than the finding does. Fixed at run revision 43.
+
+`BaseRefOutcome::Conflict(String)` is at `src/boot.rs:1338-1340` (the finding cites `:1341-1343`, which is the adjacent `PrintedFallback` arm — the doc-comment quoted is verbatim correct, only the line span drifted by two). Doctrine deliberately preserves an operator's non-head `baseRef`, so the inertness claim's premise — that the value is invariant — is contradicted by the codebase, exactly as raised.
+
+The finding leaves the disagreement's direction open ("either the stale local wins ... or the project value wins ... the design does not state which"). It is now stated, and it resolves to the worse of the two horns. `docs/claude/settings.md:56-57` is explicit: **Local** "overrides project and user settings", **Project** "overrides user settings"; only permission rules merge rather than override (`:60`), and `worktree.baseRef` is a scalar. So the stranded `"main"` in the abandoned file **continues to govern**, and doctrine's fresh project `"head"` is the inert one — the precise inverse of the sentence that was there. The design now carries that citation rather than an assertion.
+
+Remedy, in `sec-3`:
+
+- The inertness paragraph is deleted and replaced with the reachable sequence (override respected and reported as `Conflict` -> slice ships, default `Project` -> `install_baseref` finds no key, writes `"head"`, reports `Set` -> override survives untouched and still wins).
+- The key is still **not swept** — extending a destructive path to non-hook keys remains the wrong trade, and no-clobber means a deliberate override is never doctrine's to delete. That part of the original ruling stands.
+- But `install_baseref` now **reads** the sibling and the report names what it found, with the remedy in the same line: remove it there, or set the scope key to `local`. This is the option your Expected offers second, and the precedence finding makes it mandatory rather than optional — the operator is not merely losing a signal, they are being silently governed by a value doctrine has stopped reporting.
+- The reporting regression you flag independently of any sweep (`Conflict` becoming `Set` with nothing said) is closed by the same line.
+
+New criterion in `sec-7`: `a_stranded_baseref_override_is_reported` — seed `worktree.baseRef = "main"` in the local file, install at `Project`, assert the override is not removed, the project file gets `"head"`, and the report names the stranded value.
+
+The signpost citation was the part that moved this from tidy-up to remedy: `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` is in the boot snapshot because a wrong fork base has already bitten here. That is now in the design text as the reason, not just in the ledger.
+"""
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected the eviction rider to report what was removed; observed EvictOutcome::merge treating Unreadable as absorbing, so a partly-successful destructive sweep reports only the failure and never the deletion"
 detail = """
@@ -624,10 +679,27 @@ Two further consequences worth having on the record:
   - sec-7's new test a_failed_sweep_is_reported_not_silent seeds "malformed sibling and wrongly-typed hooks.<event>" and asserts Unreadable is printed. Written against a single spec it passes under this fold; it cannot catch the mixed case. So the criterion added to close F-4 does not cover the gap the fold opens.
 
 Expected: a fold that carries both facts — the summed removal count AND whether any spec could not sweep — with the rider printing both lines when both are true. Observed: an absorbing rule justified by a file-level claim about a spec-level condition."""
+disposition = "fixed"
+response = """
+UPHELD, including the type-shape argument, which is the part worth acting on. Fixed at run revision 43.
+
+Verified: `hook_array_mut` (`src/boot.rs:1127-1137`) navigates to `hooks.<event>` and returns `None` when *that event's* value is the wrong type, leaving other events in the same well-formed file sweepable. So `Unreadable` is a fact about one **spec**, and the parenthetical justifying the absorbing fold — "if any spec could not sweep the sibling, the sibling could not be swept" — is a file-level claim resting on a spec-level condition. Your worked sequence (`sync`/`SessionStart` reaching `Removed(1)`, `nominate`/`SubagentStart` reaching `Unreadable`, the fold discarding the removal) is reachable as written.
+
+The observation that carried the fix: "Removed and Unreadable are not mutually exclusive facts about a file, so a three-variant enum folded with an absorbing rule cannot represent the state. The states are a count and a failure flag, which is a different shape from a three-way sum." That is right, and it decomposes cleanly once you notice the two granularities are different types:
+
+- `EvictOutcome` stays the **per-spec** sum, where the states genuinely are mutually exclusive — a given spec swept, found nothing, could not, or was not asked to. It gains `NotAttempted` for `F-12`.
+- `SweepReport { removed: usize, unreadable: bool, skipped: bool }` is the new **per-file** fold. A count and two flags, no absorbing state, `Default` is the identity. `SweepReport::absorb` takes each `EvictOutcome` in.
+
+The rider follows from the type: it prints **every** line that is true, not the most severe one. `write_scope_report` takes the `SweepReport`; `run_sync_install` lifts its single outcome through `SweepReport::from`.
+
+Your asymmetry observation is the one that stung and is now in the design text: `plan_evict` invests real care one level down in separating an absent sibling (`Nothing`) from an unreadable one (`Unreadable`), and the fold above it spent that care and threw it away.
+
+New criterion in `sec-7`: `a_partly_successful_sweep_reports_both_facts` — one sibling, valid JSON, `hooks.SessionStart` a proper array with an owned entry, `hooks.SubagentStart` hand-edited to a string; assert `removed == 1` **and** `unreadable == true`, and that both rider lines print. Your point that `a_failed_sweep_is_reported_not_silent` is written against a single spec and passes under the absorbing fold is correct and is stated alongside it, so the two tests are not mistaken for duplicates later.
+"""
 
 [[finding]]
 id = "F-16"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected shell-form expansion of the portable literal to be a property of hooks; observed it is a property of the shell, and the cited paragraph names two shells where the POSIX default-expansion syntax does not work"
 detail = """
@@ -646,10 +718,28 @@ There is also an asymmetry the section papers over while otherwise being scrupul
 Minor, and deliberately so. If doctrine does not target Windows, the whole thing is one sentence of stated scope — and there is decent evidence it does not (the repo is NixOS / bubblewrap per AGENTS.md, flake-defined). But it should BE that sentence, rather than an unqualified "this works because hooks are shell form", because the constant is now shared with a consumer for which the claim is unconditionally true, and this is the section where a future reader will look for the caveat.
 
 Expected: the POSIX-shell assumption stated where the mechanism is claimed, and one line noting that the shared literal's portability guarantee differs between its two consumers. Observed: a platform-conditional mechanism asserted unconditionally, citing the very paragraph that lists the exceptions."""
+disposition = "fixed"
+response = """
+UPHELD on the mechanism claim; the platform question is ruled out of scope by the user, which is the resolution your own Expected offers first. Fixed at run revision 43.
+
+The finding is correct that the design asserted a property of the *shell* as a property of hooks, and cited the very paragraph listing the exceptions to do it. That is the same overclaim-by-one-degree pattern named in the round-2 synthesis, and it is conceded on the same terms as `F-12` and `F-14`.
+
+**User ruling, 2026-08-06: doctrine does not target Windows.** Verbatim: "windows can die in a ditch, if that's what it's about". It is what it was about — the two shells the cited paragraph names are Git Bash on Windows and PowerShell when Git Bash is absent. So the remedy is the sentence of stated scope your finding says it should be, not engineering.
+
+`sec-2` now carries three paragraphs where it carried one unqualified claim:
+
+1. **Stated scope: POSIX shells.** The expansion is a property of the shell; the cited paragraph names which; `${VAR:-default}` is POSIX parameter expansion; `sh` and Git Bash provide it, PowerShell does not, where `${...}` delimits a variable *name* and the token resolves as one literally called `DOCTRINE_BIN:-doctrine`, unset, degrading the command to empty — and degrading *silently*, since `PreToolUse` hooks fail open (`mem.fact.claude.pretooluse-hook-fail-open`, `DEC-162`). Your causal chain, kept intact, because a scope boundary is worth more when the reader can see what is on the other side of it.
+2. **The ruling, with its date and its reason** — the repo is NixOS / bubblewrap, flake-defined per `AGENTS.md`, which is the "decent evidence" you noted. Recorded as a decision rather than left as an inference a later reader has to re-make.
+3. **The empirical control is qualified**, in your terms: it was gathered on a POSIX host, so it proves `sh -c` expands the literal and cannot prove the claim as it was stated.
+
+The asymmetry point is taken as a separate paragraph and is the part with the longest shelf life. SL-195's `.mcp.json` literal is expanded by the **client** at load (`mcp.md:384`, and `MCP_COMMAND`'s own doc-comment at `src/boot.rs:544-549`); the hook literal is expanded by whichever shell the platform picks. One constant, one string, two mechanisms, two different portability guarantees. The design now says `PORTABLE_EXEC` names the *form* and does not promise the form's portability is the same on both surfaces — sited in this paragraph precisely because, as you say, this is where a later reader will look for the caveat.
+
+`sec-1`'s code-impact row for `install/` picks up the scope boundary alongside the command-form note, so it reaches the shipped documentation and not only the design.
+"""
 
 [[finding]]
 id = "F-17"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected the class-(ii) table to let a reviewer tell an expected red from a real one; observed its out.hook row cites three lines carrying no such assertion and omits the one that matters most"
 detail = """
@@ -674,6 +764,22 @@ So the row is inverted relative to its own purpose: three of its five references
 Everything else in the table checks out, and it is worth saying so, because the rest of it is precise. Every SETTINGS_REL test site in the file — :3908, :4190, :4204, :4223, :4251, :4766, :4782, :4797, :4809, :5523 — is covered by a row, with the correct reason attached, including the inverting assertion at :3904 and the malformed-settings case at :4809 that my original finding did not name. The baseref row is right too. This is one row.
 
 Minor. Expected: the row resolved to :3916, :3924, :3953, with :3953 called out as the Codex-arm assertion that carries the byte-identical claim; and the three .mcp sites dropped or moved to their own row with their own reason. Observed: a precision table whose loosest row is the one guarding the claim the design least wants doubted."""
+disposition = "fixed"
+response = """
+UPHELD. Fixed at run revision 43. Grep confirms it independently: the `out.hook` assertion sites in `src/boot.rs` are exactly `:3916`, `:3924`, `:3953`. Of the five the row cited, `:3926` and `:3948` assert `out.mcp`, and the fifth is `out.mcp_extension` — at `:5303`, not `:5302`; your line drifted by one, your claim about what is there did not.
+
+The row now reads `:3916`, `:3924`, `:3953`, with a second row calling `:3953` out by name as the **Codex arm** assertion inside `install_refresh_writes_settings_and_respects_dry_run`, stating that it becomes an index or a `first()`, and stating what rides on it: it is the single site testing `sec-4`'s byte-identical-Codex claim, and the site where `CommandForm::Baked` is exercised on that arm. "And neighbours" is gone from the row.
+
+The three `.mcp` / `.mcp_extension` sites are dropped rather than moved, and a note under the table says so with the reason — neither field changes shape, so neither test changes for this row's reason, and citing them inverted the row's own purpose. Left implicit, their absence would read as a second oversight to whoever checks this next.
+
+Two things worth putting on the record rather than just fixing.
+
+First, the notes flagged this row as "the loosest entry" and it shipped anyway. Flagging a weak spot is not the same as resolving it, and a table whose stated purpose is letting a reviewer tell an expected red from a real one converts its own slack directly into the diagnosis it was built to provide. That reasoning is now in the design text under the table, so the next person to widen a row has to argue past it.
+
+Second, `:3953` is where this finding and `F-13` meet from opposite directions — you reached it as the omission that matters most in a precision table, `F-13` reached it as the untested Codex-scope claim. `sec-7`'s new `the_codex_arm_renders_the_baked_form` and this row's second line now cite each other. That convergence is a better argument for the `CommandForm` axis than either finding made alone.
+
+Thank you for the closing note that the rest of the table checks out, with the sites enumerated. Confirming the precise parts costs a reviewer real effort and it is what made this row's defect legible as one row rather than as a reason to distrust the table.
+"""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
