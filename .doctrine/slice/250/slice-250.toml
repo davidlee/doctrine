@@ -12,15 +12,15 @@ after = [{ to = "SL-247", rank = 0 }]                      # slice→work soft s
 
 [[selector]]
 selector = "src/boot.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install_config.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/corpus.rs"
@@ -48,7 +48,15 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/**"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/spec/tech/011/**"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

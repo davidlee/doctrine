@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 34 · 18db44891
+fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 · 6e454608d
 
 ### Produced
 
@@ -49,6 +49,19 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 34 ·
   `inquire.scope`). Six passages contradicted them and were corrected: the
   Scope items 1–3, the merge-core Non-Goal, `R5`, `R10`, `OQ-1`, and the closure
   criteria. Research baseline restamped twice.
+- **The `drafting` draft — seven sections, materialised to `design.md`** (956
+  lines). `sec-1` activation architecture · `sec-2` the ordered matcher set and
+  the seven specs · `sec-3` scope key + abandoned-scope sweep · `sec-4` the write
+  seam and the retirement act · `sec-5` the skills channel and the extracted link
+  trichotomy · `sec-6` cutover and docs · `sec-7` verification. The run holds the
+  section set; do not restate it here.
+- **Design-target selectors recorded** (runbook step `draft.selectors`,
+  discharged): `src/boot.rs`, `src/install.rs`, `src/install_config.rs`,
+  `src/commands/cli.rs`, `install/**`, `.doctrine/spec/tech/011/**`. The
+  scope-relevant-only entries (`src/corpus.rs`, `src/doctor_checks.rs`,
+  `src/commands/doctor.rs`, `plugins/doctrine/hooks/**`, `.claude-plugin/**`,
+  `.doctrine/spec/tech/010/**`) are deliberately NOT design targets — each is
+  read or verified, none is edited.
 
 ### Learned
 
@@ -82,6 +95,40 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 34 ·
   it looks like it applied. Already recorded as
   `mem_019fd03e13397240b4eb05af218f5cf5`; hit again this session while probing
   for the disposition schema. Read `src/design_run/submission.rs`, don't probe.
+- **The plugin-step fork, settled by the user (2026-08-06): delete them.** No DEC
+  covered what happens to the ~150 lines that *perform* plugin activation
+  (`select_marketplace_source`, `marketplace_action`, `claude_plugin_*`,
+  `enable_key`, `parse_registered_source`, `refresh_failure_is_fatal`, plus their
+  tests). Option (b) — keep them behind an opt-in — was rejected on `DEC-163`'s
+  own argument: a re-enterable plugin path re-creates `R8`'s double-fire, and
+  `R8` is the one risk doctrine cannot detect or reconcile. Written up in `sec-4`.
+  Consequence: `--dev` (`src/commands/cli.rs:126`) goes with them — its sole
+  consumer is `select_marketplace_source`. `[install] repo` survives; the npx
+  delegate still reads it.
+- **Correctness catch: the scope must resolve INSIDE `install_claude_hook`**, not
+  be passed to it. Its second caller is `run_sync_install` (`src/corpus.rs:506`)
+  — exactly the routine flagless install `DEC-163` argues about. As a parameter,
+  `memory sync install` could omit it and re-create the entry in the abandoned
+  file on every run, reintroducing `R10` as the treadmill `DEC-163` set out to
+  prevent. Resolving inside makes that unspellable and `corpus.rs` needs no
+  change at all. In `sec-3`.
+- **`A3` is already satisfied** — `.gitignore:4` carries `!/.claude/settings.json`
+  beside `/.claude/*`. No edit needed; the project settings file is already
+  tracked here.
+- **`.doctrine/skills/*` needs no `ensure_gitignored` call** — `install/
+  manifest.toml:46` already lists it. But `ensure_gitignored`'s doc-comment still
+  claims "`skills install` reuses this", which is stale and will send the next
+  reader looking for a call site that should not exist. Flagged in `sec-5`.
+- **Two DRY fixes on live code, beyond the DECs.** (1) Four of five ownership
+  predicates in `boot.rs` are the same suffix-strip shape; four more were coming
+  — they collapse onto one `is_doctrine_command(cmd, args)` helper.
+  `is_doctrine_boot_command` is deliberately left alone (equivalent, but guards a
+  spec nothing ships). (2) `SETTINGS_REL` → `SETTINGS_LOCAL_REL`: once doctrine
+  writes either of two settings files, "the settings file" is an ambiguity
+  someone will misread.
+- **The vestigial "Hooks plugin leg" comment** at `src/install.rs:2295-2300`
+  documents code that no longer exists. Not captured as a backlog item — it dies
+  with `sec-4`'s deletion pass.
 - **`R6` withdrawn on a false premise** (recorded on `slice-250.md`). It assumed
   retirement blinds `SpawnSeamSymmetry`; but the Non-Goals keep `plugins/` and
   `R9` needs the plugin working as the managed-policy escape hatch, so
@@ -93,9 +140,9 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 34 ·
 - **The inquiry set is CLOSED.** All eight blocking nodes dispositioned; two
   remain deferred to IMP-407. The run is at `drafting` — its live state is the
   section set, not the question set. Read it with `doctrine design resume 250`.
-- **Next: draft the design sections.** Every decision the drafting stage needs is
-  settled and recorded (`DEC-161`…`DEC-167`, `DEC-171`); `slice-250.md` has been
-  reconciled against them, so scope and decisions no longer disagree.
+- **The draft is complete and materialised; the drafting runbook is discharged.**
+  Next is the user's read of `design.md` and the advance to `reviewing`. Nothing
+  in the draft is provisional on an unsettled question.
 - **At reconcile:** `QUE-209` — does the REV widen `REQ-186` or add new
   requirements for the newly-governed hook set and the scope key? Deferred here
   by the user at the sufficiency gate; the REV is authored at reconcile, which is

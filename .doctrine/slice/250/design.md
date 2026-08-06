@@ -1,0 +1,956 @@
+<!-- doctrine:section sec-1 -->
+# Activation after retirement
+
+## Current behaviour
+
+A Claude project acquires doctrine's behaviour through three disjoint channels
+today, and only one of them is a direct write:
+
+| what | activates via | written by |
+|---|---|---|
+| nine hook entries across five events | `enabledPlugins` + marketplace registration → `plugins/doctrine/hooks/hooks.json` | Claude Code, from per-user state |
+| the memory-sync `SessionStart` hook | direct merge into `.claude/settings.local.json` | `HookSpec::sync` → `install_claude_hook` (`src/corpus.rs:506`) |
+| skills | the same directory-source plugin | Claude Code |
+
+`install_refresh`'s Claude arm writes **no** hook at all — `let hook =
+RefreshOutcome::None` (`src/boot.rs:1290`). SL-152 PHASE-06 removed the write
+because it double-fired against the plugin. The merge core stayed; only the
+Claude caller left. That vacated seam is where this slice lands.
+
+## Target behaviour
+
+Two direct-write channels, both project-inspectable, both doctrine's to author:
+
+```
+  doctrine install ──┬─→ boot::wire ──→ install_refresh(Claude)
+                     │                    ├─ 6 × HookSpec ──→ .claude/settings{,.local}.json
+                     │                    │                     (scope-selected; sibling swept)
+                     │                    ├─ install_baseref  (unchanged, beside the core)
+                     │                    └─ install_mcp     (unchanged, .mcp.json)
+                     │
+                     ├─→ install_skills_direct ─→ .doctrine/skills/<id>   (canonical tree)
+                     │                          └→ .claude/skills/<id> ─→ ../../.doctrine/skills/<id>
+                     │
+                     └─→ install_for_other ────→ npx skills add <repo>   (non-Claude, unchanged)
+
+  doctrine memory sync install ─→ install_claude_hook(HookSpec::sync)  (same scope, same sweep)
+```
+
+What leaves: doctrine's automated `claude plugin marketplace add` and
+`claude plugin install` steps. What stays: `plugins/` as the canonical skill
+source, `plugins/doctrine/hooks/hooks.json` as the published plugin's payload,
+and `.claude-plugin/marketplace.json` published — the managed-policy escape
+hatch `R9` names, installed by hand and documented as such.
+
+## Why the three legs are separable
+
+The hook leg and the skills leg share no code and no file. They are sequenced
+together only because both are Claude activation and both are pointless while
+the plugin still supplies them. The merge core (`plan_hook` and friends) is
+JSON-entry surgery over a settings file; the skills channel is a canonical tree
+plus proven-ownership symlinks. They meet only at the install command that runs
+both, and at the cutover note that tells a user to take them together.
+
+This matters for phasing: the hook leg can land, be verified live, and be used
+before the skills leg starts.
+
+## Code impact
+
+| path | change |
+|---|---|
+| `src/boot.rs` | `HookSpec` gains an ordered matcher set; five new specs; one shared ownership-predicate helper; scope resolution + the abandoned-scope sweep; `RefreshReport.hook` becomes a collection; new path/matcher/event constants |
+| `src/install_config.rs` | the `ClaudeSettingsScope` enum and its `[install]` key |
+| `src/install.rs` | `reconcile_link` extracted from two byte-identical blocks; the restored direct skills channel; removal of the automated plugin steps |
+| `src/corpus.rs` | none — `install_claude_hook` absorbs the scope, so `memory sync install` inherits it |
+| `plugins/doctrine/hooks/hooks.json` | none — it stays the published plugin's payload |
+| `install/` | the cutover note, the escape-hatch instructions, the new config key |
+| `.doctrine/spec/tech/011/` | `REQ-186`, via the REV at reconciliation |
+
+## What this section does not settle
+
+Whether the removal of the automated plugin steps also deletes their helper
+functions (`select_marketplace_source`, `marketplace_action`,
+`claude_plugin_install`, `enable_key`, `parse_registered_source`,
+`refresh_failure_is_fatal`) or retains them behind an opt-in. Carried into the
+write-seam section.
+<!-- doctrine:section sec-2 -->
+# The merge core: an ordered matcher set
+
+Settles `R5` per `DEC-161`. Ownership stays proven by `command` alone;
+`HookSpec` carries the matchers.
+
+## The type
+
+```rust
+pub(crate) struct HookSpec {
+    command: String,
+    is_ours: fn(&str) -> bool,
+    event: &'static str,
+    /// The matcher tokens this spec's entries carry, in emission order.
+    /// One-element for every spec that shipped before SL-250.
+    matchers: &'static [&'static str],
+}
+```
+
+`is_ours` stays a bare `fn` pointer rather than becoming a closure: the four new
+predicates differ only in their argument string, and a `Box<dyn Fn>` would
+change `HookSpec`'s shape for every existing caller to buy nothing.
+
+## The invariant, restated
+
+Before: *exactly one canonical, doctrine-sole entry per spec, per file.*
+After: *exactly the canonical entry **set**, in matcher order, each
+doctrine-sole, per file.*
+
+Entry identity becomes the set. A hand-edit that deletes one of the four
+`worktree pretooluse` entries is healed on the next install, because the owned
+set no longer matches and the whole set is rewritten. That stays inside
+never-clobber: only doctrine-owned hooks are dropped.
+
+## `desired_entry` → `desired_entries`
+
+```rust
+fn desired_entries(spec: &HookSpec) -> Vec<Value> {
+    spec.matchers
+        .iter()
+        .map(|matcher| serde_json::json!({
+            "matcher": matcher,
+            "hooks": [ { "type": "command", "command": spec.command } ],
+        }))
+        .collect()
+}
+```
+
+`fallback_for` renders the whole set, so the manual-repair snippet a malformed
+settings file prints is complete rather than one sixth of the answer.
+
+## `plan_hook`'s normalize
+
+The no-write short-circuit generalises from a single-element slice pattern to a
+positional match over the owned set:
+
+```rust
+let owned = owned_positions(arr, spec.is_ours);
+let canonical_set = owned.len() == spec.matchers.len()
+    && owned.iter().zip(spec.matchers).all(|(&(ei, hi), matcher)| {
+        entry_is_canonical(arr, ei, hi, &spec.command, matcher) && hook_is_sole(arr, ei)
+    });
+if canonical_set {
+    return HookPlan { outcome: RefreshOutcome::None, new_json: None };
+}
+```
+
+`entry_is_canonical` takes the command and the expected matcher rather than the
+whole spec, because the matcher it compares against is now positional.
+`owned_positions` returns array order, so the zip requires the owned entries to
+appear **in matcher order**. They always do after a doctrine write; a reordering
+hand-edit falls through to the rewrite, which is the healing property, not a
+defect.
+
+The write branch inserts the set contiguously at the first owned slot:
+
+```rust
+Some(&(first, _)) => {
+    let survives = entry_has_foreign_hook(arr, first, spec.is_ours);
+    drop_owned_hooks(arr, spec.is_ours);
+    let ins = (first + usize::from(survives)).min(arr.len());
+    for (k, entry) in desired_entries(spec).into_iter().enumerate() {
+        arr.insert(ins + k, entry);
+    }
+    RefreshOutcome::Refreshed(command)
+}
+```
+
+`ins + k` is always in bounds: `ins <= len` before the loop, and the array has
+grown by exactly `k` by the time the `k`-th insert runs. The `None` branch
+appends the set at the tail. Position relative to foreign entries is preserved
+the same way the current single insert preserves it.
+
+`drop_owned_hooks`, `owned_positions`, `entry_has_foreign_hook`, `hook_is_sole`
+and `hook_array_mut` are **unchanged**. The matcher set is a strict
+generalisation with N=1 as the existing case, which is what makes the
+behaviour-preservation gate hold by construction.
+
+## The six specs
+
+| event | command args | matchers | predicate |
+|---|---|---|---|
+| `SessionStart` | `prompt resolve --role orchestrator` | `startup\|clear` | `is_doctrine_emit_command` (exists) |
+| `SessionStart` | `memory sync` | `startup\|clear` | `is_doctrine_sync_command` (exists) |
+| `WorktreeCreate` | `worktree create-fork` | `*` | `is_doctrine_create_fork_command` (exists) |
+| `SubagentStart` | `worktree nominate` | `dispatch-orchestrator` | new |
+| `SubagentStop` | `worktree denominate` | `dispatch-orchestrator` | new |
+| `PreToolUse` | `worktree pretooluse` | `Bash`, `Edit\|Write`, `Agent`, `Workflow` | new |
+| `PreToolUse` | `memory surface` | `Read\|Edit\|Write`, `Bash` | new |
+
+Seven rows, six new-or-changed specs plus the already-shipping `sync` — the
+nine plugin entries collapse onto six as `DEC-162` records, with `sync` riding
+along because it shares the file and the scope dial.
+
+The `SessionStart` emit spec is the **canonical current** command on the
+canonical matcher, not the plugin's stale `boot --emit` on `*`. It is
+`boot_emit`'s hook, not `HookSpec::boot`'s: `is_doctrine_boot_command` requires
+the trailing arg to be literally `boot` (`src/boot.rs:891`), which `boot --emit`
+fails, while `is_doctrine_emit_command` already recognises `LEGACY_EMIT_ARGS`
+(`:934`). So writing the canonical form retires the stale entry by the healing
+property, with no migration step. `HookSpec::boot` stays dead.
+
+The Codex arm already ships an emit spec on `SESSION_MATCHER_CODEX`. Rather than
+a second constructor, `boot_emit` takes its matcher set:
+
+```rust
+fn boot_emit(exec: &Path, matchers: &'static [&'static str]) -> Self
+```
+
+Two callers, two constants. The two share `is_doctrine_emit_command`, which is
+safe because they write different files (`.codex/hooks.json` vs the Claude
+settings file) and ownership is only ever evaluated within one file.
+
+## The ownership predicates
+
+Four of the five existing predicates are the same shape — strip a fixed arg
+suffix, then a space, then check the program's file name. That shape is written
+out four times today and would be written out four more. One helper:
+
+```rust
+/// Whether `cmd` is `<doctrine> <args>` — the shared suffix-strip ownership
+/// shape. Poison-tolerant via `is_doctrine_program`.
+fn is_doctrine_command(cmd: &str, args: &str) -> bool {
+    cmd.trim()
+        .strip_suffix(args)
+        .and_then(|program| program.strip_suffix(' '))
+        .is_some_and(is_doctrine_program)
+}
+```
+
+Each predicate becomes a one-liner over it, preserving the `fn(&str) -> bool`
+signature:
+
+```rust
+fn is_doctrine_nominate_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, WORKTREE_NOMINATE_ARGS)
+}
+```
+
+`is_doctrine_sync_command`, `is_doctrine_create_fork_command` and
+`is_doctrine_emit_command` collapse onto it identically —
+`is_doctrine_emit_command` as `[RESOLVE_EMIT_ARGS, LEGACY_EMIT_ARGS].iter()
+.any(|args| is_doctrine_command(cmd, args))`.
+
+`is_doctrine_boot_command` is deliberately **left alone**. Its `rsplit_once`
+form is behaviourally equivalent on every input, but it carries a documented
+NOTE about what breaks if the command grows a second arg, and it guards a spec
+nothing ships. Collapsing it would spend behaviour-preservation risk on dead
+code.
+
+## Constants (STD-001)
+
+```rust
+const SETTINGS_LOCAL_REL: &str = ".claude/settings.local.json";  // was SETTINGS_REL
+const SETTINGS_PROJECT_REL: &str = ".claude/settings.json";
+
+const EVENT_SESSION_START: &str = "SessionStart";
+const EVENT_WORKTREE_CREATE: &str = "WorktreeCreate";
+const EVENT_SUBAGENT_START: &str = "SubagentStart";
+const EVENT_SUBAGENT_STOP: &str = "SubagentStop";
+const EVENT_PRE_TOOL_USE: &str = "PreToolUse";
+
+const SESSION_MATCHERS: &[&str] = &[SESSION_MATCHER];
+const SESSION_MATCHERS_CODEX: &[&str] = &[SESSION_MATCHER_CODEX];
+const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
+const SUBAGENT_MATCHERS: &[&str] = &["dispatch-orchestrator"];
+const PRETOOLUSE_MATCHERS_WORKTREE: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
+const PRETOOLUSE_MATCHERS_SURFACE: &[&str] = &["Read|Edit|Write", "Bash"];
+```
+
+Renaming `SETTINGS_REL` is mechanical and compiler-checked, and it is worth the
+test-file churn: once doctrine writes either of two settings files, a constant
+named "the settings file" is an ambiguity that will be misread.
+
+The event names are literals inline today. Naming them is STD-001's ask and
+removes the chance of a typo producing a silently-inert hook under a
+misspelled event key.
+<!-- doctrine:section sec-3 -->
+# Scope selection and the abandoned-scope sweep
+
+`DEC-163` (a sticky key, no flag) and `DEC-164` (writing one scope evicts the
+other) are one mechanism: doctrine writes exactly one of two files, and the
+merge core's one-canonical-entry-set invariant extends from *within a file* to
+*across the pair doctrine writes*.
+
+## The key
+
+```toml
+# .doctrine/doctrine.toml
+[install]
+claude-settings-scope = "project"   # or "local"
+```
+
+Read through the existing `load_doctrine_toml` seam; `[install]` already exists
+(`InstallConfig`, `src/install_config.rs`) carrying `repo`, so this is a second
+field on a live table rather than a new config surface.
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ClaudeSettingsScope {
+    /// `.claude/settings.json` — committed, reviewable, travels with the repo.
+    #[default]
+    Project,
+    /// `.claude/settings.local.json` — private to one checkout.
+    Local,
+}
+```
+
+An absent key and an absent `[install]` table both yield `Project`, which is the
+flip `OQ-1` settled.
+
+**Layering.** The enum lives in `install_config` — it is config vocabulary, and
+that module is a pure leaf with no IO. The mapping onto a path stays in
+`boot.rs`, which owns the path constants:
+
+```rust
+const fn settings_rel(scope: ClaudeSettingsScope) -> &'static str {
+    match scope {
+        ClaudeSettingsScope::Project => SETTINGS_PROJECT_REL,
+        ClaudeSettingsScope::Local => SETTINGS_LOCAL_REL,
+    }
+}
+```
+
+Putting the path in `install_config` would give a pure leaf domain knowledge it
+does not otherwise have (ADR-001, and the module's own doc).
+
+## Where the scope is resolved
+
+**Inside `install_claude_hook`, not at its call sites.**
+
+```rust
+pub(crate) fn install_claude_hook(
+    root: &Path,
+    spec: &HookSpec,
+    dry_run: bool,
+) -> anyhow::Result<HookWrite> {
+    let scope = crate::dtoml::load_doctrine_toml(root)?.install.claude_settings_scope;
+    let written = install_hook_to_file(root, settings_rel(scope), spec, dry_run)?;
+    let evicted = evict_hook_from_file(root, settings_rel(scope.sibling()), spec, dry_run)?;
+    Ok(HookWrite { scope, written, evicted })
+}
+```
+
+This is the decisive factoring. `install_claude_hook` has two callers — the
+six-spec loop in `install_refresh` and `memory sync install`
+(`src/corpus.rs:506`) — and the second is exactly the routine, flagless install
+`DEC-163` argues about. If the scope were a parameter, `run_sync_install` could
+forget it and re-create the entry in the abandoned file on every memory-sync
+install. Resolving inside makes that unspellable, and `memory sync install`
+inherits both the scope and the sweep with no change to `corpus.rs` at all.
+
+The cost is one small TOML read per spec. That is not worth a parameter whose
+omission is the defect.
+
+**Write before evict.** Activation lands before removal, so an interrupted run
+leaves the hook firing twice rather than not at all — the same reasoning
+`DEC-167` applies to the human cutover, at file granularity.
+
+## The sweep
+
+Drop-only. `plan_hook` minus the insert:
+
+```rust
+/// The abandoned-scope half of DEC-164: drop this spec's owned entries from
+/// `existing_json` without inserting. Same ownership predicate, so a foreign
+/// entry is never at risk; same fail-soft, so malformed JSON is left untouched.
+fn plan_evict(existing_json: Option<&str>, spec: &HookSpec) -> EvictPlan {
+    let Some(mut value) = parse_settings(existing_json) else { return EvictPlan::NOTHING };
+    let Some(arr) = hook_array_mut(&mut value, spec.event) else { return EvictPlan::NOTHING };
+    let count = owned_positions(arr, spec.is_ours).len();
+    if count == 0 { return EvictPlan::NOTHING; }
+    drop_owned_hooks(arr, spec.is_ours);
+    EvictPlan { count, new_json: serde_json::to_string_pretty(&value).ok() }
+}
+```
+
+`parse_settings(existing_json) -> Option<Value>` is the fail-soft parse both
+planners now share — absent or empty yields an empty object, malformed yields
+`None`. Extracting it is what keeps `plan_evict` from being a second copy of
+`plan_hook`'s prologue.
+
+Three properties fall out of reusing the predicate rather than writing a new
+one:
+
+- **Never-clobber is untouched.** Eviction is gated by exactly the predicate
+  that protects foreign entries during a normal merge.
+- **It inherits the healing property.** Because `DEC-161` keeps ownership
+  command-only, a stale-matcher entry in the abandoned file is still recognised
+  as ours and still evicted. Under the rejected `(command, matcher)` ownership
+  it would have been orphaned in the file doctrine is walking away from —
+  the worst possible place for an unreachable double-fire.
+- **It never inserts.** The file being left is only ever made smaller.
+
+`evict_hook_from_file(root, rel_path, spec, dry_run)` is `install_hook_to_file`
+with `plan_evict` in place of `plan_hook`; both write atomically through
+`fsutil::write_atomic`, and neither creates a file that does not exist — a sweep
+of an absent sibling is a clean no-op.
+
+## The announcement
+
+`DEC-163` drops the `--scope` flag, so discoverability has to come from the
+installer. One line, early, before any hook line:
+
+```
+  claude: hooks → .claude/settings.json  ([install] claude-settings-scope in .doctrine/doctrine.toml)
+```
+
+and a rider only when something was actually removed:
+
+```
+  claude: evicted 2 stale hook entries from .claude/settings.local.json
+```
+
+Both ride the existing `writeln!(stdout, …)` seam in `boot::wire` —
+`print_stdout` is denied (`Cargo.toml:228`) and no new output surface is needed.
+
+## Reporting shape
+
+`RefreshReport.hook: RefreshOutcome` becomes a collection, since one Claude
+refresh now performs six merges:
+
+```rust
+struct RefreshReport {
+    /// One outcome per spec, in emission order. The Codex arm carries exactly one.
+    hooks: Vec<RefreshOutcome>,
+    /// The scope written and the total entries swept from the sibling.
+    /// `None` on the Codex arm, which has one settings file.
+    claude_scope: Option<(ClaudeSettingsScope, usize)>,
+    baseref: BaseRefOutcome,
+    mcp: RefreshOutcome,
+    append_system: AppendSystemOutcome,
+    extension: ExtOutcome,
+    mcp_extension: ExtOutcome,
+    spike_warning: bool,
+}
+```
+
+`wire`'s existing `match report.hook { … }` becomes the same match inside a
+`for` — the four `RefreshOutcome` arms and their message strings are unchanged,
+which keeps the Codex arm's output byte-identical.
+
+## What this leaves for `R8`
+
+Nothing. The sweep reaches only the two settings files. The plugin's entries
+load through `enabledPlugins` plus per-user marketplace registration — state
+this slice reads and writes nothing of by Non-Goal — so `R8` stays
+documentation and cannot be otherwise (`DEC-167`). The asymmetry is the point:
+`R10` is engineered because both settings files are doctrine's to write; `R8` is
+documented because the plugin's activation state is not.
+<!-- doctrine:section sec-4 -->
+# The write seam, and the retirement act
+
+## Where the six specs are written
+
+`install_refresh`'s Claude arm (`src/boot.rs:1284`), whose `hook` field has been
+`RefreshOutcome::None` since SL-152 PHASE-06:
+
+```rust
+Harness::Claude => {
+    let specs = claude_hook_specs(exec);
+    let mut hooks = Vec::with_capacity(specs.len());
+    let mut evicted = 0usize;
+    let mut scope = ClaudeSettingsScope::default();
+    for spec in &specs {
+        let write = install_claude_hook(root, spec, dry_run)?;
+        scope = write.scope;
+        evicted += write.evicted;
+        hooks.push(write.written);
+    }
+    let baseref = install_baseref(root, dry_run)?;   // unchanged, rides BESIDE the core
+    let mcp = install_mcp(root, dry_run)?;           // unchanged, .mcp.json
+    Ok(RefreshReport { hooks, claude_scope: Some((scope, evicted)), baseref, mcp, .. })
+}
+```
+
+```rust
+/// The Claude hook registry — the single enumeration of what doctrine activates.
+/// Order is emission order in the settings file and in the installer's output.
+fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
+    vec![
+        HookSpec::boot_emit(exec, SESSION_MATCHERS),
+        HookSpec::sync(exec),
+        HookSpec::create_fork(exec),
+        HookSpec::nominate(exec),
+        HookSpec::denominate(exec),
+        HookSpec::pretooluse(exec),
+        HookSpec::memory_surface(exec),
+    ]
+}
+```
+
+One list, in one place. It is what a later conformance check would read to keep
+the published `hooks.json` honest — that check is IMP-407's, but the registry it
+needs is this slice's, and building it as a function rather than seven scattered
+calls is what makes IMP-407 cheap.
+
+`HookSpec::create_fork`'s `expect(dead_code)` comes off: it acquires a
+production caller here. `HookSpec::boot` keeps its own — nothing ships it
+(`DEC-162`).
+
+`install_baseref` and `install_mcp` are untouched. They are the worked example
+of a non-hook key riding *beside* the merge core as a separate pure planner plus
+shell, and nothing about six specs changes that.
+
+**Failure isolation.** `wire` already isolates one harness's failure from the
+others. The six-spec loop uses `?`, so a mid-loop failure aborts the Claude arm
+with some hooks written and some not. That is the correct shape: the loop's only
+failure modes are IO on a file doctrine has just successfully created, every
+write is atomic and independently idempotent, and a re-run completes the set.
+Swallowing per-spec errors would hide a half-activated install, which is the
+failure class this whole slice exists to stop being silent about.
+
+## Removing the plugin activation
+
+This is the act the slice is named for. `doctrine install` stops touching
+Claude's plugin machinery.
+
+Deleted from `src/install.rs`:
+
+- the `run()` Claude branch's steps 1 and 2 — marketplace add/refresh and plugin
+  install/update, with their prompts (`:445`–`:518`);
+- the trailing "Claude Code requires the doctrine plugin" reminder and the
+  `skipped_marketplace` / `skipped_plugin` tracking that feeds it;
+- `claude_plugin_add_marketplace`, `claude_plugin_install`, `claude_plugin_update`,
+  `claude_plugin_has`, `claude_cmd_stdout`;
+- `MarketplaceSource` + `as_arg`, `select_marketplace_source`, the `--dev`
+  manifest precondition checks, `enable_key`, `parse_registered_source`,
+  `RegisteredSource`, `MarketplaceAction`, `marketplace_action`,
+  `refresh_failure_is_fatal`;
+- their tests: `enable_key_is_qualified_doctrine`,
+  `parse_registered_source_reads_directory_and_github`,
+  `parse_registered_source_absent_or_sibling_is_none`,
+  `marketplace_action_add_skip_refresh`, `refresh_failure_is_fatal_only_on_refresh`,
+  and the `--dev` precondition cases.
+
+Deleted from the CLI: `InstallArgs.dev` (`src/install.rs:187`) and the `--dev`
+flag (`src/commands/cli.rs:126`, threaded at `:1500`/`:1511`). Its sole consumer
+is `select_marketplace_source`; with the marketplace step gone the flag has no
+remaining meaning, and keeping a flag that selects between two sources for a
+registration nobody performs is worse than removing it.
+
+`DOCTRINE_MARKETPLACE` survives only if something still reads it; if not, it
+goes with the rest.
+
+**`[install] repo` survives.** Its other consumer is `delegate_argv` on the npx
+path (`install_for_other`), which `OQ-2` left unchanged for non-Claude agents.
+
+## What deliberately survives
+
+| artefact | why |
+|---|---|
+| `plugins/` | the canonical skill source for every channel (IMP-400 `OQ-1`) |
+| `plugins/doctrine/hooks/hooks.json` | the published plugin's payload — `R9`'s managed-policy escape hatch |
+| `.claude-plugin/marketplace.json` | published, not projected — the sanctioned ADR-019 posture |
+| `SpawnSeamSymmetry` (`src/doctor_checks.rs:673`) | its input is `hooks.json`, which survives; the check needs **no** change |
+| pre-existing `enabledPlugins` entries and marketplace registrations | migration is out of scope; IMP-400 stays open carrying it |
+
+`R6` is withdrawn on exactly this: retirement was thought to blind
+`SpawnSeamSymmetry`, but the file it parses is authored, shipped, and kept. What
+retirement actually leaves behind is un-policed drift between that manifest and
+the `claude_hook_specs` registry — already live, and IMP-407's Leg 2.
+
+## Consequence for the install flow
+
+The Claude branch of `run()` reduces to what it should always have been: agent
+defs, the probe def, workflows, and skills. The plugin prompts disappear from
+the interactive flow, which removes two of the questions a cold install asks.
+
+The manual commands move into `install/` as `R9`'s documented escape hatch —
+not as vestigial text, but as the named remedy for a
+`strictPluginOnlyCustomization` environment where direct-written hooks are
+blocked and only plugin-sourced ones load.
+<!-- doctrine:section sec-5 -->
+# The Claude skills channel
+
+`OQ-2b`: rebuild the binary-sourced canonical tree plus proven-ownership
+symlinks — the channel SPEC-010 responsibilities 3–6 already describe, deleted
+at `347197e8` with no amendment.
+
+## What survived the deletion, and what did not
+
+Every helper the channel needs is **live in `src/install.rs` today**, because the
+agents and workflows legs use them:
+
+| helper | line | used by |
+|---|---|---|
+| `install_base` | `:1816` | agents, workflows |
+| `relative_path` / `relative_target` | `:1844` / `:1877` | agents, workflows |
+| `classify_link`, `Link`, `ForeignReason`, `foreign_reason` | `:1918` | agents, workflows |
+| `write_link`, `staging_path` | `:1964` | agents, workflows |
+| `Entry`, `discover`, `select_for_install`, `PluginAssets` | `:1670`, `:1731` | the npx delegate path |
+
+Only the orchestration went: `install_for_claude`, `claude_dir`,
+`canonical_dir`, `claude_links`, `materialise_canonical`, `copy_skill`, and the
+`Canonical` struct. Recoverable verbatim from `git show 347197e8^:src/skills.rs`.
+
+**They return to `src/install.rs`, not to a new module.** Every helper above is
+private to that file; a `skills_claude` module would have to widen six
+private items to `pub(crate)` to buy separation for ~150 lines. `install.rs` is
+already long, but splitting it is a distinct chore over the whole file, not a
+boundary to draw around one leg.
+
+## `DEC-166`: the extracted trichotomy
+
+The link-reconcile block is byte-identical at `src/install.rs:2179-2191`
+(agents) and `:2279-2291` (workflows). Skills would be the third copy, not the
+fourth-copy *risk* `T3` framed. One helper, taking exactly the inputs the
+existing block already has:
+
+```rust
+/// Reconcile one managed link by proven ownership, reporting the action.
+/// The single trichotomy: agents, workflows and skills all call this.
+fn reconcile_link(
+    name: &str,
+    dest: &Path,
+    target: &Path,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    match classify_link(name, dest, target) {
+        Link::Create { .. } => {
+            write_link(dest, target)?;
+            writeln!(out, "  linked    {name}")?;
+        }
+        Link::Relink { .. } => {
+            write_link(dest, target)?;
+            writeln!(out, "  relinked  {name}")?;
+        }
+        Link::KeepForeign { reason, .. } => {
+            writeln!(out, "  kept      {name} ({})", foreign_reason(&reason))?;
+        }
+    }
+    Ok(())
+}
+```
+
+The boundary is deliberate and `DEC-166` fixes it: no materialise callback, no
+trait, no absorption of the agents leg's `"claude" => claude_agents_dir, _ =>
+pi_agents_dir` branching. The three legs' materialise phases are genuinely
+unlike — single file with a hymns bake, single file plain, whole directory tree
+— and a generic driver would be absorbing precisely the part that varies, for
+three callers.
+
+Two call sites shrink from thirteen lines to one; skills gets the third for free.
+
+## The restored channel
+
+```rust
+/// The canonical skills tree (project-local, or under `$HOME` with `global`).
+fn skills_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".doctrine/skills"))
+}
+
+/// The Claude skills link dir. The only Claude-specific element in the leg.
+fn claude_skills_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/skills"))
+}
+
+/// Refresh the canonical tree once, then reconcile links into it from every
+/// target directory. Parameterised over `link_dirs` per `OQ-9`/`DEC-166`:
+/// materialise runs ONCE, the link phase loops.
+pub(crate) fn install_skills_direct(
+    root: &Path,
+    selected: &[&Entry],
+    link_dirs: &[PathBuf],
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let canon_dir = skills_canonical_dir(root, global)?;
+    writeln!(out, "agent claude (direct):")?;
+    for entry in selected {
+        let canon = canon_dir.join(&entry.id);
+        writeln!(out, "  skill     {} → {}", entry.id, canon.display())?;
+        if dry_run { continue; }
+        materialise_canonical(entry, &canon)?;
+        for link_dir in link_dirs {
+            let dest = link_dir.join(&entry.id);
+            let target = relative_target(link_dir, &canon_dir, &entry.id);
+            reconcile_link(&entry.id, &dest, &target, out)?;
+        }
+    }
+    Ok(())
+}
+```
+
+Called from `run()`'s Claude branch with **one** entry:
+`&[claude_skills_dir(root, args.global)?]`. Shipping `.agents/skills` as the
+second target is IMP-406's, and it is then a call-site change, not a mechanism
+change — which is exactly the scope `OQ-9` set.
+
+The name is `install_skills_direct`, not `install_for_claude`: once `link_dirs`
+is a parameter nothing in the body is Claude-specific, and a Claude-named
+function would mislead IMP-406's author the way `claude_links` misled `T3`'s
+reading of the recovered code.
+
+## Two changes from the recovered code
+
+**The double classify goes.** `install_for_claude` computed a `Vec<Link>` up
+front via `claude_links`, then re-classified each one at mutation time inside
+the loop — the second classify being the correct one (a stale plan is a race).
+The restored leg classifies once, at mutation time, which is what
+`reconcile_link` does and what the agents and workflows legs already do. The
+up-front vector had no other consumer.
+
+**`Canonical` goes.** It existed to carry a plan between `build_plan` and
+`execute` in the old plan/execute split. The consolidated `install::run()`
+dispatch has no such split, and the struct degenerates to `entry.id` plus a path
+derived from it.
+
+`materialise_canonical` and `copy_skill` return **verbatim**. Their
+remove-then-rename swap, `.tmp-<id>` staging, and `symlink_metadata`-not-`exists`
+leftover clearing are the pass-2 F4 reasoning SPEC-010 responsibility 5 records;
+re-deriving any of it would be re-litigating a settled design.
+
+## Gitignore
+
+No call needed. `install/manifest.toml:46` already lists `.doctrine/skills/*`,
+so the install manifest's gitignore leg lands the entry. `ensure_gitignored`'s
+doc-comment still claims `skills install` reuses it — that claim is stale and
+should be corrected to name the manifest, or the comment will send the next
+reader looking for a call site that should not exist.
+
+## Governance
+
+Nothing here amends SPEC-010. `OQ-2b` restores what its responsibilities 3–6
+already describe, and `DEC-166`'s parameterisation sits below spec altitude —
+one target driven still "reconciles a relative agent symlink into it". The
+pre-existing divergence closes by conformance, verified at close (`DEC-171`).
+<!-- doctrine:section sec-6 -->
+# Cutover and documentation
+
+## The prescribed order (`DEC-167`)
+
+1. Run the install that writes the settings hooks.
+2. Disable the doctrine plugin by hand.
+
+Between the two acts every hook fires twice. That is the intended cost. The
+reverse order leaves the repo with **no** activation, and absence is the more
+dangerous state: `isolation: worktree` teardown is conditional on
+`WorktreeCreate` firing, so an inert hook changes dispatch's semantics without
+saying so. Order toward the degraded state, never the absent one.
+
+## The two notes are not symmetrical
+
+**`R10` — a description, not an instruction.** Doctrine sweeps the abandoned
+scope and reports what it removed, so the note exists only so a user who sees
+`evicted 2 stale hook entries from .claude/settings.local.json` does not read it
+as doctrine eating a hook they placed by hand. It should say what the sweep
+touches (doctrine-owned entries, in the other of doctrine's two settings files,
+never anything foreign) and what it does not.
+
+**`R8` — pure documentation, and it cannot be otherwise.** The plugin's entries
+load through `enabledPlugins` plus per-user marketplace registration, which this
+slice reads and writes nothing of by Non-Goal. The ownership sweep cannot reach
+them. So: *when you take the new activation, disable the doctrine plugin, or
+every hook fires twice.*
+
+The asymmetry is worth stating in the user-facing text, not just here: `R10` is
+engineered because both settings files are doctrine's to write; `R8` is
+documented because the plugin's activation state is not.
+
+## What `install/` acquires
+
+- **Activation, plainly stated.** Which file doctrine writes, which hooks it
+  contains, and that Claude Code hot-reloads settings files — `hooks` explicitly
+  included — so no restart is needed (`R1`, which inverted into an argument
+  *for* the change: the plugin path needs `/reload-plugins`, whose reliability
+  the memory corpus already doubts).
+- **The scope key.** `[install] claude-settings-scope`, its two values, its
+  default, and why a collaborator on a client project might set `local`.
+  Mirrored into `install/doctrine.toml.example` (`:73`, which already carries a
+  commented `[install]` block) and `install/doctrine.toml` (`:24`).
+- **The cutover note** — the two risks above, in the prescribed order.
+- **`R9`'s escape hatch.** For a `strictPluginOnlyCustomization` environment,
+  where managed settings block hooks from user and project sources so they may
+  come only from plugins: install the doctrine plugin by hand —
+  `claude plugin marketplace add davidlee/doctrine` then
+  `claude plugin install doctrine@doctrine --scope project`. These are the two
+  commands `sec-4` removes from the installer; they become the documented remedy
+  rather than an automated default.
+
+  The honest framing matters here. Direct-write sheds two plugin-only failure
+  modes (orphaned marketplace registration, plugin blocklist) but keeps
+  `disableAllHooks`, `allowManagedHooksOnly` and folder trust, and **acquires**
+  `strictPluginOnlyCustomization`. Fewer failure modes, not a subset — the docs
+  must say so rather than overclaim.
+
+## This repo's own cutover
+
+`.gitignore:4` already carries `!/.claude/settings.json` alongside `/.claude/*`,
+so the project settings file is already tracked here — `A3` is satisfied and
+needs no edit. That is a benefit-realisation fact, not an activation one: Claude
+Code reads the file regardless of whether git tracks it (`DEC-167`).
+
+`R3` is downgraded — the human hand-repairs their own activation across the
+cutover. What the design owes is only that the moment activation flips is
+*stated*: it flips on the first `doctrine install` (or `doctrine boot install`)
+run from a binary carrying this slice. There is no compatibility window in which
+both channels are tolerated by design; there is only the interval between the
+two cutover acts, which double-fires.
+
+## Backlog disposition at close
+
+- **IMP-400** — reduced to its migration leg and left **open**, not closed.
+  Migration (`OQ-4`) is out of scope, and the doctor leg is IMP-407's. Two
+  counts, not one.
+- **IMP-407** — confirmed still open and still sequenced `after` this slice,
+  carrying `R2`, `R7`, `OQ-5`, and the manifest-vs-registry conformance leg
+  `R6`'s withdrawal surfaced.
+- **IMP-406** — the `.agents/skills` neutral target, sequenced `after`; this
+  slice ships only the parameterisation.
+- **CHR-045** (*bump `plugin.json` version when the skill set changes*) — **no
+  longer moot**: the manifest survives as `R9`'s escape hatch, so a stale
+  published plugin is still a real defect. Resolve or explicitly retain.
+- **IMP-234, CHR-037** — assessed for overlap.
+<!-- doctrine:section sec-7 -->
+# Verification
+
+## The behaviour-preservation gate
+
+The existing `boot.rs` and `install.rs` suites are the proof, and they must stay
+green **unchanged** except where a rename touches them:
+
+- `corpus.rs`'s memory-sync hook and the Codex arm are the N=1 case of the
+  matcher set, so `DEC-161`'s shape satisfies the gate by construction rather
+  than by testing. Any red here means the generalisation narrowed something.
+- `SETTINGS_REL` → `SETTINGS_LOCAL_REL` is a compiler-checked rename; the test
+  bodies change only in that identifier.
+- `check_spawn_seam_symmetry_passes_the_shipped_hooks_config`
+  (`src/doctor_checks.rs:1983`) passes **unmodified**. Its input survives this
+  slice, so "needs no change" is the criterion — the same posture as `corpus.rs`.
+
+The one deliberate output change: `wire`'s Claude arm now prints six hook lines
+where it printed none. The Codex arm's output stays byte-identical, because the
+`RefreshOutcome` match arms and their strings are unchanged — only the loop
+around them is new.
+
+## New test cases
+
+**Matcher set (`src/boot.rs`)**
+
+- `plan_hook_emits_one_entry_per_matcher` — a four-matcher spec into empty
+  settings yields four entries, in matcher order, each with the one command.
+- `plan_hook_is_a_no_op_on_the_canonical_set` — re-planning the above returns
+  `RefreshOutcome::None` and no JSON. The idempotence property the whole core
+  rests on.
+- `plan_hook_heals_a_partial_hand_edit` — delete one of four entries; the plan
+  rewrites all four. Entry identity is the set.
+- `plan_hook_heals_a_stale_matcher` — an owned entry on a retired matcher is
+  recognised (command-only ownership) and rewritten onto the canonical set. This
+  is the property `DEC-161` chose the shape *for*; it is the test that would go
+  red under the rejected `(command, matcher)` ownership.
+- `plan_hook_preserves_foreign_entries_around_a_matcher_set` — foreign entries
+  before and after the owned block survive, and the set inserts at the first
+  owned slot.
+- `plan_hook_preserves_a_foreign_hook_sibling` — the existing single-matcher
+  case, re-run with N>1: an entry carrying both an owned and a foreign hook
+  keeps the foreign one and the set inserts after it.
+- `single_matcher_specs_are_unchanged` — `HookSpec::sync` produces byte-identical
+  JSON to the pre-slice output. The gate, asserted rather than assumed.
+
+**Ownership predicates**
+
+- `is_doctrine_command_recognises_each_new_spec` — the four new arg strings,
+  each with a spaced program path and each with the `/proc/self/exe`
+  ` (deleted)` poison suffix.
+- `predicates_are_pairwise_disjoint` — no predicate matches another spec's
+  command. This is what stops the seven specs clobbering one another in one
+  file, and with seven specs sharing `SessionStart` and `PreToolUse` it is no
+  longer self-evident. Worth asserting over the registry rather than by hand, so
+  an eighth spec cannot join without being checked.
+
+**Scope and sweep**
+
+- `absent_key_defaults_to_project_scope` — an absent key and an absent
+  `[install]` table both yield `Project` (`src/install_config.rs`).
+- `scope_key_selects_the_settings_file` — `local` writes
+  `.claude/settings.local.json`, `project` writes `.claude/settings.json`.
+- `writing_one_scope_evicts_the_other` — **the `R10` behavioural criterion.**
+  Seed an owned entry in `settings.local.json`, install at project scope, assert
+  the entry is gone from local, present in project, and the eviction count is
+  reported.
+- `eviction_spares_foreign_entries` — a foreign hook in the abandoned file
+  survives the sweep. Never-clobber, on the destructive path.
+- `eviction_heals_a_stale_matcher_in_the_abandoned_file` — a stale-matcher owned
+  entry in the file being left is still evicted. The healing property, applied
+  where it matters most: an orphan there is unreachable by any later install.
+- `eviction_never_inserts` — the abandoned file only ever shrinks; a sweep of an
+  absent sibling creates nothing.
+- `memory_sync_install_honours_the_scope_key` — drives `run_sync_install`, not
+  `install_claude_hook`, so it proves the resolution-inside-the-installer
+  decision rather than restating it.
+- `plan_evict_is_fail_soft_on_malformed_json` — malformed settings are left
+  untouched, no write, no panic.
+
+**Skills channel (`src/install.rs`)**
+
+- `install_skills_direct_materialises_and_links` — canonical tree at
+  `.doctrine/skills/<id>`, relative symlink at `.claude/skills/<id>` whose value
+  is `../../.doctrine/skills/<id>`.
+- `install_skills_direct_is_idempotent` — a second run relinks without churn.
+- `install_skills_direct_keeps_a_foreign_skill_dir` — a real directory at the
+  link path is kept and warned, never replaced.
+- `install_skills_direct_heals_a_dangling_owned_link` — a link whose value
+  equals our target but whose canonical is missing is healed, not recreated as
+  foreign.
+- `install_skills_direct_links_every_target_dir` — driven with **two** link
+  dirs. This slice ships one, but the loop is the deliverable `OQ-9` scopes, and
+  an untested loop driven with N=1 is indistinguishable from a hard-coded target.
+- `reconcile_link` — the agents and workflows legs' existing link tests are the
+  extraction's proof; they must pass unchanged.
+
+## Verification by human (`VH`)
+
+**A cold install activates.** In a scratch project with no plugin registration
+and no marketplace entry, `doctrine install` leaves hooks that actually fire.
+This is the claim the whole slice rests on and no test can make it: `/hooks` is
+the only surface reporting which hooks are live and which file each came from,
+and it is interactive-only.
+
+Evidence to capture: the `/hooks` output showing all seven entries sourced from
+`.claude/settings.json`, plus one observed effect per event class — a session
+boot emitting, a `WorktreeCreate` fork, and a `PreToolUse` surfacing.
+
+A `VH` leg is the honest mode here. `R7` is the reason, and it moved to IMP-407
+with the doctor leg: doctrine can verify plausibility, not activation.
+
+## Verification by agent (`VA`)
+
+**SPEC-010 conformance.** Responsibilities 3–6 confirmed true of the restored
+code — derived canonical `.doctrine/skills/<id>` tree, relative agent symlink
+reconciled by proven ownership, `.tmp-<id>` staging with remove-then-rename, and
+the self-enforced `.doctrine/skills/*` gitignore. `DEC-171` makes this a
+conformance claim rather than a REV amendment, which is the stronger of the two:
+an amendment edits text to fit what was built, a conformance claim checks the
+built thing against text written before it.
+
+The evidence must be re-derivable at audit, so it belongs in the reconciliation
+brief with file/line citations — not in a runtime artefact that disappears.
+
+## Governance
+
+The REV amends **SPEC-011 / `REQ-186`** alone. It reads:
+
+> `boot install` merges a `<exec> boot` SessionStart hook into Claude
+> settings.local.json, refreshing a stale owned copy and preserving every
+> foreign hook and key.
+
+Invalidated on three axes: not one hook (seven specs across five events), not
+`settings.local.json` (a scope-selected project default), and a new obligation
+the requirement says nothing about (the abandoned-scope sweep).
+
+`QUE-209` — whether the REV widens `REQ-186` or adds new requirements for the
+newly-governed hook set and the scope key — is **deferred to reconciliation**,
+where the REV is authored and requirement granularity is the natural call. The
+draft does not settle it.
+
+RFC-018 (*Claude harness field notes*) takes anything empirical the slice
+learns, including the `strictPluginOnlyCustomization` asymmetry.
