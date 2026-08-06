@@ -74,10 +74,34 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design reviewing, RV-346 round 4 remediated · dbe96d22
+fresh-as-of: 2026-08-06 · design reviewing rev 73, pre-round-5 remediation landed · 9397c87c
 
 ### Produced
 
+- **Pre-round-5 remediation** (`12c6c4095`, `ceab419bb`) — author-side, no review
+  round. Found by reading the whole design cold rather than by an adversary, which
+  is the first time this slice's defects have come from that direction.
+  - `sec-2` — invariant 12's **mechanism**, which round 4 left unnamed: the parent
+    enumerates `/proc/self/fd` before the fork and marks everything above 2
+    `FdFlags::CLOEXEC` via `rustix::io::fcntl_setfd`. No flag in the profile
+    reaches this channel.
+  - `sec-2` — a declared readable input keeps its **resolved host path as its
+    inner path**; the derived inner `PATH` already assumed it and no section said
+    it. An entry *beneath* a profile-owned mount is lawful where one *naming* it
+    is refused.
+  - `sec-3` — `backend` documents an unchecked obligation exactly as
+    `AcceptedBase` does: `provision` executes through a backend without
+    establishing it ever passed the suite.
+  - `sec-6`, `sec-8` — `doctrine-control` needs **its own rustix edge with
+    `std`**, not just `fs` (see Learned).
+  - `sec-7`, `sec-3` — **table B row B4 retargeted** from `/tmp` to
+    `/capsule/tmp`; its control could not fail (see Learned). The two scratch
+    areas are now named *transient* and *retained*.
+  - Numeral sweep across `design.md`, `slice-248.md` — the `F-28` class recurring
+    in the artefacts round 4's own rewrite did not touch.
+- Friction observation `019fd72b` — hand-editing `design.md` under a managed run
+  needs an `adopt_authored` round-trip whose per-section fingerprints nothing
+  surfaces (`design show` truncates to 12 hex; the refusal reports counts only).
 - Design run `dr-019fd432` — stage `drafting`, revision 56, materialised.
   Sections `sec-1` (governing context), `sec-2` (platform backend contract),
   `sec-3` (transaction and provisioning), `sec-4` (interpretation policy),
@@ -148,6 +172,39 @@ fresh-as-of: 2026-08-06 · design reviewing, RV-346 round 4 remediated · dbe96d
 
 ### Learned
 
+- **A control that cannot *fail* is the mirror of one that cannot be *built*, and
+  `SharedRoot` produced both in turn.** Table B's `B4` wrote to `/tmp` — which is
+  `--tmpfs`, anonymous and fresh per `execute`, backed by nothing under the
+  transaction root. `SharedRoot` re-points a placement's root, so it reaches every
+  *declared* writable entry and cannot reach `/tmp` at all: both arms saw an empty
+  tmpfs, making the row `Unproven` and `Admission::Admitted` unreachable. The
+  earlier `SharedRoot` draft had failed the opposite way (a control the system
+  refused to build). Same `F-25` lesson a third time — a rule checked in one
+  direction only is half a rule — and it survived four review rounds because two
+  different areas both answered to "the writable temporary area".
+- **rustix's `std` feature reaches the root package only by unification.**
+  `Cargo.toml` declares `default-features = false, features = ["fs"]`; `std`
+  arrives from `crossterm`, and from `which`/`tempfile` which are dev-only.
+  `doctrine-control` depends on none of the three, so it must declare its own
+  edge — without `std`, `rustix::fd::AsFd` is a `no_std` polyfill that
+  `std::fs::File` does not implement and every call site fails `E0277`.
+  Reproduced on a minimal package; confirmed with `cargo tree -i rustix -e
+  features`. A dependency claim about the root package does not transfer to a
+  second workspace member.
+- **`rustix` 1.1.4 carries no `close_range`** (verified with a positive control on
+  `statvfs` first), and `libc` is not a direct dependency, so the descriptor sweep
+  is enumerate-and-mark in the parent rather than a post-fork close — where
+  allocation between `fork` and `exec` is unsafe anyway. Rust opens its own files
+  `O_CLOEXEC`, so the sweep exists for *inherited* descriptors; a test asserting
+  it must open a deliberately non-CLOEXEC fd or it passes against a backend that
+  swept nothing.
+- **`design.md` under a managed run is written by `design materialise`**, not by
+  hand. A hand edit diverges the watermark and is refused; re-adoption needs
+  `adopt_authored` with the document sha256 plus a complete per-section map, where
+  a section fingerprint is `sha256(region after the marker line, minus exactly one
+  trailing newline)` (`src/commands/design.rs:316`,
+  `src/design_run/document.rs`). The unedited sections reproducing their known
+  fingerprints is the positive control that the derivation is right.
 - `POL-001` bans "load-bearing" plus tired physical metaphors — *plumbing, wiring,
   scaffolding, lever, seam, substrate, cut, sharp, spine* — across all English,
   including code comments and entity names. Three occurrences were corrected in
@@ -273,6 +330,45 @@ fresh-as-of: 2026-08-06 · design reviewing, RV-346 round 4 remediated · dbe96d
   namespace-local pid would make the probe hold for an arithmetic reason.
 
 ### Open
+
+- **Round 5 is not released, and the subject is now stable.** `RV-346` remains
+  `await=raiser` with all 28 findings disposed. The pre-round-5 remediation above
+  landed deliberately *before* releasing it: `F-28` was itself a stale-numeral
+  finding, and spending a round-5 slot on another one wastes the pass's most
+  expensive attention. Sections `sec-2`, `sec-3`, `sec-6`, `sec-7` and `sec-8`
+  moved; `sec-1`, `sec-4`, `sec-5`, `sec-9` did not.
+
+- **What round 5 should now target**, superseding the priority list below — two
+  of its three items are closed and the surface has changed:
+  1. **The descriptor mechanism** (`sec-2`). Round 4 raised the missing *row*
+     (`F-26`), not the missing *implementation*. The parent-side CLOEXEC sweep
+     has never been reviewed by anyone.
+  2. **`sec-6`'s rustix edge**, and `sec-6` generally — still the only section
+     with no clean external pass, and now the source of a third build-level trap.
+  3. **B4's retargeting and the transient/retained split** (`sec-7`, `sec-3`).
+     A control that could not fail was live for four rounds; the adversary should
+     ask whether any *other* row's control is unfalsifiable rather than merely
+     unremoved.
+  4. **The next mutant.** Unchanged as the highest-value line, and now with a
+     sharper prompt than "build a backend the suite would pass": B4 shows the
+     suite can also fail by a control that *changes nothing*.
+
+- **A judgement deliberately left for the reviewer.** Table A row 1 and B1–B4
+  overlap on `/capsule/tmp` and `/agent` under the same `SharedRoot` delta. The
+  design now argues the overlap is intended — the two tables discharge different
+  requirements, and the non-overlap rule binds a row's *control* to a unique
+  mechanism, not its payload to untouched ground. Row 1 was **not** narrowed,
+  because doing so would undo `F-27`'s round-4 strengthening. Worth an external
+  ruling rather than an author's.
+
+- **`design.md` is 4139 lines, against the ~1000 the scope's own decomposition
+  yardstick names** (`slice-248.md` "Why this slice exists at this size"). Larger
+  than `SL-244`, which that yardstick cites as the uncomfortable case at 3459 over
+  8 phases. At 6–9 phases this is 460–690 lines per phase. Not a design defect and
+  **not to be resolved by editing the design** — it is a `/plan` decision between
+  more phases, splitting `sec-6`+`sec-7` into a second slice, or accepting that
+  the phase-sizing metric no longer means what it did. Named here so `/plan`
+  meets it deliberately rather than at phase 4.
 
 - **The stage has moved to `reviewing`** (revision 64, 2026-08-06). All 9
   sections exist and are materialised. `sections_outstanding_review` is 9 — the
