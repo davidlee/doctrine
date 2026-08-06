@@ -1,0 +1,42 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 178
+slug = "one-settle-verb-reach-derived-from-facet-names"
+title = "One settle verb, reach derived from facet names"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's settled OQ-2 gives resolving a question its own verb rather than an `edit --answer` flag, and leaves open what that verb is called and whether ASM to validated, DEC to accepted and CON to waived take the same treatment. The gap it closes is in the code: `set_record_status` (src/knowledge.rs:1719) documents itself as having no resolution coupling — `status` and `updated`, nothing else — so `knowledge status QUE-198 answered` moves the token and leaves `answer`, `answered_by` and `answered_on` empty."
+choice       = "One kind-blind verb, `knowledge settle <ID> <state> --by <who> [--answer|--reason <text>]`, dispatching its flags off the kind the id already resolves. A state is settleable exactly when the kind's facet carries `<state>_by` and `<state>_on`. That rule derives {QUE answered, ASM validated, ASM invalidated, CON waived} and nothing else; every other state stays on `knowledge status`, which remains the uncoupled escape hatch."
+alternatives = [
+  "A verb per kind — `knowledge answer` / `knowledge validate` / `knowledge waive`. Rejected: three verbs where one derives, coverage hand-listed rather than derived, and `validate` collides with the existing sense in `memory validate` and `doctrine validate`.",
+  "Narrow it to QUE alone. Rejected: ASM and CON carry the identical uncoupled gap, and closing one instance of a class this slice has twice refused to patch instance-by-instance would need a second slice to widen.",
+]
+rationale    = "The reach question has a derived answer rather than a judgement call. Laying the status vocabularies (src/knowledge.rs:177-196) against the facet field names gives an exact correspondence: QUE `answered` against `answered_by`/`answered_on`, ASM `validated`/`invalidated` against `validated_by`/`invalidated_by`, CON `waived` against `waived_by`/`waived_on`. DEC `accepted` has no `accepted_by`, and EVD/HYP/CPT carry no by/on pair at all — DEC-174 confirmed that for EVD and HYP, DEC-172 for CPT. So the rule is total over the seven kinds with nothing hand-listed, and it is the move `accepted_status` (:253) already makes for DEC-088: derived from the kind's own vocabulary rather than invented per kind, so a kind that later gains the token follows without an edit. The exclusion of DEC is the load-bearing corroboration: name correspondence drops it for free, and governance would have dropped it anyway, because `accepted` is owned by DEC-088's content-bound attested path through apply_record_effects (src/commands/design.rs:1086) and a hand verb writing it would be a second unattested route to the state that machinery exists to guard. Naming needs no invention either — `settle` is already this corpus's word, carried in the routing table's `capturing or settling an epistemic record`."
+consequences = [
+  "`settle` and `status` divide cleanly and the division is statable: `settle` couples the transition to its evidence, `status` moves the token alone and stays available for the unsettleable states and for correcting a mis-set one.",
+  "Coverage is pinned by a test over the per-kind facet field table — the same table objective 1's subverbs and DEC-177's doctor tripwire need, now with a third consumer.",
+  "The `_on` value comes from `clock::today()`, as `set_record_status` already does, so settle takes the actor and the outcome text but never a date.",
+  "The outcome-text flag is per-kind and derived like the rest: `--answer` for QUE, `--reason` for CON's `waiver_reason`, none for ASM, whose facet carries no post-hoc text field.",
+  "Facet-bearing work, so it sits in the later phase under DEC-165 and gates nothing in the phase-1 data-loss fix.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
