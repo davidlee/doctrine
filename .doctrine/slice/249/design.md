@@ -118,9 +118,16 @@ by name).
   attestation applied at step 5. No verb this slice adds may offer a second
   route.
 - **`DEC-168`** — the facet-and-prose write happens at step 5
-  (`apply_record_effects`), not by pre-filling the scaffold. Forced by
-  crash-resume: `materialise_record_at` re-scaffolds from a journal carrying only
-  id, title and slug.
+  (`apply_record_effects`), not by pre-filling the scaffold. *Its recorded
+  rationale is wrong and the ruling stands anyway — see `D8a`.* The ruling says
+  crash-resume forces it, because `materialise_record_at` re-scaffolds from a
+  journal carrying only id, title and slug. `RV-349` `F-1` established that the
+  journal carries only the reserved **id**: on the resume arm, `execute_mint`
+  takes `title` and `slug` from the `MintKind` in the plan rebuilt from the retry
+  request. Step 4 could therefore reach the payload exactly as step 5 does, so
+  nothing forces the siting. What binds here is the conclusion on its real
+  grounds: step 5 is the existing, already-idempotent effects step, and putting
+  the content write there keeps a record's effects resumed as one unit.
 - **`ADR-013`** — the governance amendment routes through a REV landing at
   reconcile, over **two** entities (`SPEC-019`, `PRD-010` — `DEC-175`).
 - **`ADR-004` / `SPEC-018`** — `link`/`unlink` own relations; `edit` does not
@@ -128,7 +135,9 @@ by name).
 - **`ADR-001`** — leaf ← engine ← command, no cycles. The pure write seam is a
   leaf; the CLI verbs and the design-run wire are both consumers of it.
 - **`STD-001`** — no magic strings. Every field name, status token and kind
-  prefix in this design must have exactly one spelling with one owner.
+  prefix in this design must have exactly one spelling with one owner. It is also
+  why `D8`'s retry digest reuses the payload term `acceptance_digest` already
+  binds rather than defining a second one.
 - **`POL-002`** — platform independence: no host-project convention (cargo
   layout, `just` recipes) leaks into engine rules. `DEC-176`'s canary is a
   project-local test, never a `validate` rule.
@@ -153,10 +162,16 @@ by name).
   inside `Declaration`, where the guard already holds.
 - **Serde's `skip_serializing_if` is total over `Declaration`**, so a
   fully-populated value serialises to exactly the wire key set — the pin
-  `DEC-169` uses instead of a proc macro.
+  `DEC-169` uses instead of a proc macro. The same totality is what makes `D8`'s
+  digest cover the payload without an enumeration to maintain.
 - **A `toml_edit` root insert-if-missing is safe; a subtable-nested one is not**
   (`mem_019ee9fd51d87aa38a2dfb31ad6c4eec`, which scopes its own proof and says
   so). `[facet]` fields are subtable-nested, which is why F-1 stands.
+- **`[facet]`, `status` and `updated` are keys of one file.** `record-NNN.toml`
+  carries all three, and both mutating cores (`facet_write::set_facet_mixed`,
+  `dep_seq::apply_status`) already take a held `&mut DocumentMut`. There is no
+  two-file transaction anywhere in this design, which is what makes `settle` a
+  single atomic write (`RV-349` `F-2`, § 5.4 path B).
 
 ## Pressures in tension
 
@@ -281,6 +296,13 @@ only how it is kept honest, and there are two independent pins:
   fields the typed facet retained equals `facet_fields(kind)` exactly. *Retained*
   means present in that kind's variant struct; every other field is discarded on
   read.
+- **P3 — each row is a set.** Assert every row's names are unique — one
+  comparison of the row's length against its deduplicated length. Both other pins
+  compare *sets*, so two identical `(kind, field)` entries collapse into one and
+  neither notices, while every consumer that iterates the row sees the field
+  twice: a duplicated flag name (clap refuses at construction, but at runtime,
+  not in a test), a doubled write, a doubled `settle` coverage row. `RV-349`
+  `F-3` round two.
 
 The equality is the load-bearing word, and `RV-349`'s `F-3` — that the pins as
 first drafted could not see ownership *multiplicity* — is why. An inclusion pin
@@ -298,10 +320,14 @@ is the oracle, and the test compares against what it actually retained.
 
 `confidence`, legitimately owned by both assumption and evidence, is not a
 special case. It is retained for both kinds and both rows list it, so both
-equalities hold.
+equalities hold. That is the case P3 must not break: multiplicity *across* rows
+is legitimate and P3 says nothing about it; multiplicity *within* one row is
+always damage.
 
-P1 and P2 together make the table total *and* exactly partitioned, without any
-name being typed twice, and without a third pin.
+P1, P2 and P3 together make the table total, exactly partitioned, and free of
+duplicate ownership, without any name being typed twice. Three pins, each one
+comparison — which is still cheaper than the per-kind serde oracle the first
+review round proposed, and that route would have needed P3 anyway.
 
 ## What each consumer takes from it
 
@@ -638,14 +664,55 @@ one. Nothing is rolled back to repair a runtime failure, which is `DEC-083`'s
 rule: the retry is refused, the corpus is untouched, and the caller either
 re-sends what it journalled or opens a new submission.
 
+**What is digested is not a new question.** `RV-349` `F-1` round two is right
+that a guard whose material is undefined proves nothing, and the answer is that
+the material already exists and must not be re-invented. `plan_checkpoints`
+computes `sha256(serde_json::to_string(declaration))` as the `payload` term
+`acceptance_digest` binds. That term is the whole `Declaration` — and therefore,
+after this slice, `dispose.create.kind`, `title`, `slug`, `body` and `facet`,
+total by construction rather than by an enumeration someone must keep current.
+The intent journals **that same digest**, computed unconditionally rather than
+only when an acceptance rides. Three properties follow and each is the reason to
+reuse it rather than define a second one:
+
+- it is exactly the material the acceptance is bound to, so "the payload changed"
+  and "the acceptance no longer describes this content" are one comparison, not
+  two that can disagree;
+- `facet` is a `BTreeMap` and `Declaration`'s serde form is field-ordered, so a
+  semantically identical retry digests identically — a legitimate re-send is not
+  refused for key order;
+- a new key on `Declaration` joins the digest automatically, which is the same
+  totality argument `DEC-169` makes about the wire-key table.
+
+`acceptance_digest` folds in the run revision, which is unchanged on the retry
+that matters (the snapshot never persisted, so the revision never moved). The
+intent's digest is over the payload term alone.
+
 This makes the *non-journalling* sound rather than merely convenient. The payload
 still need not be stored, because what recovery needs is not the payload but the
 guarantee that the payload has not changed — and a digest is the cheap form of
-that guarantee. It also keeps `DEC-168`'s siting: the rejected alternative,
-pre-filling the scaffold inside `create_record`, would have needed the payload
-itself at step 4, which `materialise_record_at` reaches from the journal alone
-(id, title, slug) — so it would have forced the payload into the journal. Step 5
-needs no such widening, and the digest is bytes, not content.
+that guarantee.
+
+**A correction `DEC-168`'s rationale needs.** The draft — and the ruling as
+recorded — argued that step 5 is *forced*, because the rejected alternative of
+pre-filling the scaffold inside `create_record` would need the payload at step 4,
+and `materialise_record_at` reaches only the journal there. That is false about
+the code, and `RV-349` `F-1` round two caught it. On the resume path
+`execute_mint` takes only the reserved id from the journal; `title` and `slug`
+come from the `MintKind` in the plan **rebuilt from the retry request**
+(`src/commands/design.rs`, the `state() < Materialised` arm). The journal carries
+neither. So step 4 could reach the payload exactly as step 5 does, and nothing
+forces the siting.
+
+`DEC-168`'s conclusion survives on grounds that are real rather than mechanical:
+step 5 is `apply_record_effects`, which already exists, is already idempotent,
+and is already where status and the `shapes` edge land — so the facet and prose
+write joins effects that are resumed as a unit, rather than splitting the record's
+content across two steps with different resume semantics. That is a design
+preference with a stated reason, not a constraint. The ruling should be corrected
+to say so; the correction is carried to reconcile with the objective 4 REV, since
+this slice has no verb for amending a knowledge record — which is, precisely, the
+hole it exists to close.
 
 The guard lands in **Phase A**, with the first payload-bearing write. Phase A is
 what introduces content that can diverge, so it is what owes the binding.
@@ -858,7 +925,12 @@ Each is a property a test asserts, not a habit. `I1`–`I9` are the drafting set
   `facet_fields(kind)` — an equality, not an inclusion. A field on the wrong row
   is retained by nobody and so fails its own row's equality; a field on an extra
   row fails there. `I3` catches what `I2` cannot, and the equality is what makes
-  it catch ownership multiplicity as well as placement (`RV-349` `F-3`).
+  it catch cross-kind misplacement (`RV-349` `F-3`).
+- **I3b — no row repeats a name.** Every `facet_fields(kind)` row's length equals
+  its deduplicated length. `I2` and `I3` both compare sets, which collapse a
+  duplicate silently while every consumer that *iterates* the row sees the field
+  twice (`RV-349` `F-3` round two). Multiplicity across rows stays legitimate —
+  `confidence` is on two — and `I3b` says nothing about it.
 - **I4 — one writer per concern.** `status`/`updated` only through
   `dep_seq::apply_status` (reached by `set_record_status` or by
   `apply_settlement`, never re-implemented); `[facet]` only through
@@ -896,6 +968,11 @@ Each is a property a test asserts, not a habit. `I1`–`I9` are the drafting set
   under a `submission_id` whose intent is journalled, carrying a payload whose
   digest differs, is refused before any resumed effect — so an acceptance can
   never be applied to content it was not bound to (`RV-349` `F-1`, `DEC-088`).
+  The digest material is named, not left to the plan: it is
+  `sha256(serde_json::to_string(declaration))`, the same `payload` term
+  `acceptance_digest` already binds, so the guard is total over the `Declaration`
+  by construction and a semantically identical retry digests identically
+  (§ 5.3).
 
 ## Assumptions
 
@@ -904,12 +981,17 @@ Each is a property a test asserts, not a habit. `I1`–`I9` are the drafting set
   trigger, not a quiet edit.
 - **A2 (confirmed)** — `Declaration` carries `deny_unknown_fields` and
   `CreateRecord` sits inside it, so the payload extension needs no serde fight.
-- **A3 (to verify in phase)** — *every* kind's scaffold template seeds *every*
-  field of that kind present and empty. `knowledge-decision.toml` is confirmed
-  (`DEC-170`); the other six are assumed on the strength of the shared authoring
-  convention and are cheap to check. **If any template omits a field, F-1 turns
-  every existing record of that kind into one the writer refuses** — so this is
-  the first thing Phase B verifies, not something to discover at the first write.
+- **A3 (verified in review, no longer an assumption)** — *every* kind's scaffold
+  template seeds *every* field of that kind, present and empty. All seven
+  `install/templates/knowledge-*.toml` were read during `RV-349`: assumption 8,
+  decision 7, constraint 6, question 5, evidence 3, hypothesis 2, and concept an
+  empty `[facet]` table, present and annotated *"seeded for scaffold-order
+  invariant"*. That is the 31-slot inventory § 2 derives from the typed model,
+  matched exactly, including the degenerate concept case that makes the F-1
+  posture well-defined for a kind with no fields. The verification is a fact
+  about today's templates, so it is kept as a **standing** pin rather than a
+  discharged one: `R5`'s test (templates vs `facet_fields`) still ships, because
+  what was assumed was never one reading but the invariant across future edits.
 - **A4** — `RawFacet` can gain `Serialize` as a derive-only change. It is a
   private struct with no manual `Deserialize`, so nothing observable moves. `A4`
   does **not** widen under `I3`'s equality: the per-kind oracle is
@@ -986,6 +1068,18 @@ now answered; two resolve later, and *later* is the right place for them.
   others. SL-249 adds a caller and one parameter, not a duplicate. No refactor
   phase enters the plan.
 
+## Answered in review
+
+- **`A3` — do all seven scaffold templates seed every field of their kind?**
+  Yes, verified by reading all seven during `RV-349` rather than assumed:
+  assumption 8, decision 7, constraint 6, question 5, evidence 3, hypothesis 2,
+  and concept an empty `[facet]` table, present and annotated *"seeded for
+  scaffold-order invariant"*. That is § 2's 31-slot inventory matched exactly,
+  and it makes the F-1 posture well-defined for every kind including the
+  degenerate one. It moves from § 6 to § 5.5 as a fact; `R5` keeps its test,
+  because what was ever at stake was the invariant across future template edits
+  rather than one reading of them.
+
 ## Open, and resolving at REV authorship
 
 Both belong to reconcile, when the REV is actually written. Recording the
@@ -1011,13 +1105,12 @@ recommendation now so the authorship is not re-derived:
 
 ## Unknowns
 
-- **`A3` — do all seven scaffold templates seed every field of their kind?**
-  Confirmed for `knowledge-decision.toml` only. Not a judgement call, just an
-  unchecked fact, and the first thing Phase B checks: an omission makes F-1
-  refuse every write to every existing record of that kind.
 - **Can `ADR-013`'s apply path auto-apply a prose-heavy amendment?** Carried
   unverified from the scope card. It affects how the REV lands at reconcile, not
-  what it says. Worth probing before reconcile rather than at it.
+  what it says. Worth probing before reconcile rather than at it. It now carries
+  a second passenger: `D8a`'s correction to `DEC-168`'s rationale rides the same
+  REV, for want of a verb to amend a knowledge record — which this slice is
+  building.
 
 ## Deliberately not asked here
 
@@ -1063,10 +1156,12 @@ beside them, and they are recorded here because implementation depends on them.
   through `validate_facet`, as an **equality**) are independent and between them
   total: P1 catches a field missing from the table, P2 catches one on the wrong
   row *or* on an extra row. *Alternative:* per-consumer tables. Rejected — three
-  copies of the fact this slice exists to make writable. *Amended by `RV-349`
-  `F-3`* — P2 was drafted as an inclusion, which could not see ownership
-  multiplicity; the equality closes it without a third pin and without new serde
-  derives (§ 5.1).
+  copies of the fact this slice exists to make writable. *Amended twice by
+  `RV-349` `F-3`* — P2 was drafted as an inclusion, which could not see a field
+  placed on a kind that does not own it; the equality closes that. Round two then
+  showed both pins compare *sets*, so a name repeated within one row collapses
+  and neither notices, which P3 (row length equals deduplicated length) closes.
+  Three one-comparison pins, and still no new serde derives.
 - **D2 — `KeyPosture` on the writer, not a guard at each call site.** A call-site
   guard has to be repeated by every future caller and is the parallel
   implementation `AGENTS.md` forbids. The parameter also keeps `doctrine risk
@@ -1102,31 +1197,70 @@ beside them, and they are recorded here because implementation depends on them.
 
 Three more, each forced by a finding on `RV-349` rather than chosen freely.
 
-- **D8 — the recovery intent binds its payload by digest.** `RecoveryIntent`
-  gains a `#[serde(default)]` payload digest, written at step 1; a resumed mint
-  whose rebuilt plan digests differently is refused before any effect (§ 5.3,
-  `I12`). *Alternatives:* (a) journal the payload itself — rejected, it is the
-  widening `DEC-168` avoided and a digest answers the only question recovery
+- **D8 — the recovery intent binds its payload by digest, and the digest is the
+  one that already exists.** `RecoveryIntent` gains a `#[serde(default)]` payload
+  digest, written at step 1; a resumed mint whose rebuilt plan digests
+  differently is refused before any effect (§ 5.3, `I12`). The material is
+  `sha256(serde_json::to_string(declaration))` — the `payload` term
+  `plan_checkpoints` already computes for `acceptance_digest` — computed
+  unconditionally rather than only when an acceptance rides. Naming it matters:
+  `RV-349` `F-1` round two was right that an undefined digest domain makes `I12`
+  circular, and defining a *second* domain beside the acceptance's would let the
+  two disagree about what "the same payload" means. *Alternatives:* (a) journal
+  the payload itself — rejected, a digest answers the only question recovery
   asks; (b) rebuild the acceptance from the retry rather than the intent —
   rejected, `DEC-088` binds an acceptance to the content the *user* saw, so
   honouring a fresh one silently re-accepts on the user's behalf; (c) accept the
   window as pre-existing and document it — rejected, because this slice is what
   makes the divergent content the record's whole substance. Lands in Phase A,
   with the first payload-bearing write.
+- **D8a — `DEC-168`'s rationale is corrected; its conclusion is not.** The ruling
+  records step 5 as *forced*, on the ground that pre-filling the scaffold would
+  need the payload at step 4 where only the journal is reachable. `RV-349` `F-1`
+  round two showed that is false about the code: the resume arm takes only the
+  reserved id from the journal and `title`/`slug` from the plan rebuilt from the
+  retry, so step 4 reaches the payload exactly as step 5 does. Step 5 remains
+  right, on stated grounds rather than mechanical ones — `apply_record_effects`
+  already exists, is already idempotent, and already carries status and the
+  `shapes` edge, so the content write joins effects resumed as a unit instead of
+  splitting the record across two steps with different resume semantics. The
+  correction to the record itself rides the objective 4 REV at reconcile: this
+  slice has no verb for amending a knowledge record, which is the hole it exists
+  to close.
 - **D9 — the coverage canary reads both tiers and asserts an absence.**
   `DEC-176`'s ruling stands; its observable is strengthened. `RV-349` `F-5`
   showed the canary as written — every `kinds::RECORD` prefix appears in
   `SPEC-019`'s prose — passes on a spec that adds one sentence naming the three
-  new kinds while leaving nine four-kind statements standing. So the canary reads
+  new kinds while leaving the four-kind statements standing. So the canary reads
   the authored `.toml` **and** `.md` of both `SPEC-019` and `PRD-010`, asserts
   each kind in its paired form (`assumption (ASM)`, per `DEC-176`'s own
-  substring-collision note), and asserts the stale four-kind enumeration is
-  absent. The absence assertion pins the specific enumeration phrase, not the
-  word *four* — a spec may legitimately say "four" about something else, and a
-  test that forbids a common word is a test someone will disable. The
-  agent-verified prose criteria for the per-kind contracts and lifecycle verbs
-  stay: a canary proves the enumeration moved, not that the contracts are right.
-  Still a project-local test, never a `validate` rule (`POL-002`).
+  substring-collision note), and asserts **the word `four` does not occur in
+  either entity's two tiers at all**.
+
+  That blanket form replaces the narrower one this design first proposed —
+  pinning a single stale enumeration phrase — and `RV-349` `F-3`'s round-two
+  contest is why. The objection to a blanket ban was that a spec may legitimately
+  say "four" about something unrelated; the corpus refutes it. Counting the
+  actual sites: `SPEC-019` carries the count in twenty-odd places across both
+  tiers — two structured `responsibilities` entries (*"Bind four `record_kind`s"*,
+  *"all four prefixes"*), plus *"four-kind discrimination"*, *"four subtypes"*,
+  *"all four kinds"*, *"the four record kinds"*, and consequence counts
+  (*"four `priority::partition` entries"*, *"four VT-1 drift canaries"*) that are
+  themselves derived from the kind count and equally stale at seven. `PRD-010`
+  adds *"the four initial record kinds"*, *"exactly the four initial kinds"* and
+  *"each of the four kinds"*. Every occurrence is kind-derived; not one is
+  independent. Pinning one phrase would have closed one of two dozen
+  contradictions and reported green on the rest — the `R4` recurrence again, one
+  level subtler. A future author with a legitimate "four" meets a red test whose
+  message says why the word is banned in these two documents, which is the right
+  conversation to force in a spec whose entire failure mode is a stale count.
+
+  The agent-verified prose criteria for the per-kind contracts and lifecycle
+  verbs stay: a canary proves the enumeration moved, not that the contracts are
+  right. Scope is the two entities' authored tiers — `spec-019.toml`/`.md` and
+  `spec-010.toml`/`.md` — not the directories, which carry stray working files
+  (`handover.md`) that are not part of either entity. Still a project-local test,
+  never a `validate` rule (`POL-002`).
 - **D10 — edit preservation gets its own fixture test.** `RV-349` `F-6` showed
   `I1`'s named oracle cannot serve: `render_record_toml` is `#[cfg(test)]`, has
   no production caller, and omits relation tables, so a green round-trip suite
@@ -1159,16 +1293,27 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   as strengthened by `D9`. This is the risk the slice has already recurred on
   once (`SL-159`), so the canary is not belt-and-braces; it is the control — and
   `RV-349` `F-5` showed the first draft's canary would have passed a spec that
-  still called the kind set four, which is the recurrence wearing a green test.
+  still called the kind set four, which is the recurrence wearing a green test —
+  and its round-two contest showed the first *fix* would have closed one of about
+  two dozen such statements and reported green on the rest, which is the same
+  recurrence one level subtler. The mitigation is only as strong as the count of
+  sites it actually covers, which is why `D9` now bans the word outright in those
+  two entities rather than pinning a phrase.
 
 ## New, from drafting
 
-- **`R5` — a template omits a seeded facet field (`A3`).** If any of the six
-  unverified `knowledge-*.toml` templates omits a field, F-1 makes every existing
-  record of that kind refuse every write. Impact is total for that kind and
-  invisible until the first write. *Mitigation:* Phase B's first act is a test
-  asserting every template seeds exactly `facet_fields(kind)` — which is a third
-  application of the table as oracle, and cheap because the table exists.
+- **`R5` — a template omits a seeded facet field (`A3`). Discharged for today,
+  retained as a standing pin.** All seven `knowledge-*.toml` templates were read
+  during `RV-349` and each seeds exactly its kind's field set, concept included
+  (an empty `[facet]` table, present and annotated). So the *current* exposure is
+  nil, and `A3` is no longer an assumption (§ 5.5). The risk itself does not
+  retire with it: what was ever at stake is the invariant across future template
+  edits, and F-1's posture means a dropped seed converts every existing record of
+  that kind into one the writer refuses, invisibly until the first write.
+  *Mitigation unchanged and still shipping:* a test asserting every template
+  seeds exactly `facet_fields(kind)` — a third application of the table as
+  oracle, cheap because the table exists. Its position moves from "Phase B's
+  first act, to find out" to "Phase B's first act, to keep true".
 - **`R6` — the phase boundary erodes under convenience.** Phase A is small and
   the facet work is adjacent; the temptation to "just add the table while we're
   here" is exactly how `DEC-165`'s ordering is lost, and with it the property
@@ -1242,6 +1387,7 @@ separate fixture (`I11`, `D10`).
 | `I1` model round-trip | existing suite, unchanged |
 | `I2` table totality | `RawFacet` serde key set vs `⋃ facet_fields` |
 | `I3` partition | per kind: write **every union field**, read through `validate_facet`, assert retained set **equals** `facet_fields(kind)` |
+| `I3b` no repeated name | per kind: row length equals deduplicated row length |
 | `I4` one writer | type-level for facets (`plan_facet_edits` is the sole constructor); test for status and body |
 | `I5` `accepted` unreachable | assert the derived settleable set excludes every `DEC` state |
 | `I6` F-1 | write to a record with a hand-deleted key → refusal naming the record, file byte-identical |
@@ -1250,7 +1396,7 @@ separate fixture (`I11`, `D10`).
 | `I9` wire-key totality | fully-populated `Declaration` serde key set vs the table |
 | `I10` no silent wire key | matrix over (key × subject kind): each cell is observably effectful **or** refused; a cell that is neither fails |
 | `I11` edit preservation | fixture record with comments, unknown sibling keys, `[[relation]]`, `[relationships]` → `apply_facet_edits` → only the intended `[facet]` values differ; second application is a no-op |
-| `I12` retry binding | journal an intent, retry the same `submission_id` with a changed payload → refused before any effect, record and run unchanged; same payload → resumes and completes |
+| `I12` retry binding | journal an intent, retry the same `submission_id` with a changed payload → refused before any effect, record and run unchanged; byte-identical payload → resumes and completes; semantically identical payload rebuilt from scratch → also resumes, pinning that the digest is over `Declaration`'s serde form and not over incidental ordering |
 
 Plus the oracle tests the tables earn: clap args vs `facet_fields` (`D3`),
 templates vs `facet_fields` (`R5`), and `settlements`' state set vs the by/on
@@ -1291,9 +1437,11 @@ Restated from the scope card with what drafting and review changed:
 - A populated `[facet]` key inert at its record's kind is reported by `doctor`,
   and `knowledge list` still succeeds on that corpus. *Test-verified.*
 - Every kind in `kinds::RECORD` is named, in its paired form, in both authored
-  tiers of `SPEC-019` and `PRD-010`, **and** the stale four-kind enumeration is
-  absent from both. *Test-verified by `DEC-176`'s canary as strengthened by
-  `D9` — a project-local test, never a `validate` rule (`POL-002`).*
+  tiers of `SPEC-019` and `PRD-010`, **and** the word `four` occurs in neither
+  entity's two tiers. *Test-verified by `DEC-176`'s canary as strengthened by
+  `D9` — a project-local test, never a `validate` rule (`POL-002`). The negative
+  half is a blanket ban rather than a phrase pin because all ~24 occurrences
+  across the two entities are kind-derived and none is independent (`D9`).*
 - The per-kind contracts and lifecycle vocabularies for `EVD`, `HYP` and `CPT`
   are present and coherent in `SPEC-019`. *Agent-verified — a canary proves the
   enumeration moved, not that the contracts are right.*
@@ -1314,36 +1462,37 @@ carries its facet — which the mint test asserts directly.
 
 ## The pass that has run
 
-`RV-349` — one external adversarial pass over this document at design-run
-revision 48, briefed on eight lines of attack, five of them lifted from this
-section's drafted form. Six findings, all upheld on evidence, all integrated
-above:
+`RV-349` — one external adversarial pass over this document, two rounds. Round
+one at revision 48, briefed on eight lines of attack, five of them lifted from
+this section's drafted form: six findings, all upheld on evidence. Round two
+verified three and contested three; every contest was upheld too.
 
-| finding | severity | what it changed |
-|---|---|---|
-| `F-1` | blocker | § 5.3's recovery argument rewritten; `D8`, `I12`, and a Phase A payload-digest guard |
-| `F-2` | major | § 5.4 path B and § 5.2 rewritten to one document, one write; `D6` superseded |
-| `F-3` | major | `P2` becomes an equality; `D1` amended; `I3` restated |
-| `F-4` | major | `I10` added — the wire table's *mapping*, not just its inventory |
-| `F-5` | major | `D9` — the coverage canary reads both tiers and asserts an absence |
-| `F-6` | major | `D10`, `I11` — edit preservation gets its own fixture; `I1`'s scope narrowed |
+| finding | severity | round 1 | round 2 |
+|---|---|---|---|
+| `F-1` | blocker | § 5.3's recovery argument rewritten; `D8`, `I12`, a Phase A payload-digest guard | contested and upheld: the digest domain was undefined, and the *new* text repeated a false claim about the journal. `D8` names its material; `D8a` corrects `DEC-168`'s rationale |
+| `F-2` | major | § 5.4 path B and § 5.2 rewritten to one document, one write; `D6` superseded | verified |
+| `F-3` | major | `P2` becomes an equality; `D1` amended; `I3` restated | contested and upheld: set comparison collapses a name repeated within a row. `P3` / `I3b` |
+| `F-4` | major | `I10` added — the wire table's *mapping*, not just its inventory | verified |
+| `F-5` | major | `D9` — the canary reads both tiers and asserts an absence | contested and upheld: pinning one phrase closed one of ~24 kind-derived "four"s. `D9`'s absence assertion is now a blanket ban in those two entities |
+| `F-6` | major | `D10`, `I11` — edit preservation gets its own fixture; `I1`'s scope narrowed | verified |
 
-Two of the six landed on joints this section had already named as weak, which is
-the outcome that says the self-assessment was honest but insufficient: naming a
-weak joint is not the same as fixing it, and `F-3` in particular was answered by
-a *simpler* pin rather than the third pin the drafted note proposed.
+Round two is the round worth reading twice, because all three contests were
+against *fixes*, not against the original design — and each found the fix
+conceding too much or too little. `F-1`'s fix restated, in new prose, the same
+false claim about `materialise_record_at` that the finding was already
+correcting. `F-3`'s fix reached for the cheaper pin and stopped one case short.
+`F-5`'s fix narrowed a blanket check to a phrase on a stated principle, and the
+corpus refuted the principle: there are no legitimate "four"s in these two
+documents. Two of the three were errors of confidence in a correction, which is
+a failure mode worth naming rather than filing.
 
-The two that did not come from this section's own list are the two worth
-noticing. `F-1` found a false premise about code — the claim that a
-submission-keyed retry pins the payload — which no amount of internal re-reading
-would have surfaced, because the design was consistent with itself and wrong
-about the source. `F-2` found a factual error of the same class in the opposite
-direction: an atomicity problem the design worked to mitigate did not exist,
-because the two writes it was ordering target one file.
+The review also retired an assumption rather than a defect: `A3` — all seven
+templates seed every field of their kind — was verified by reading them, so
+§ 5.5 records a fact where it recorded a hedge, and `R5` becomes a standing pin
+rather than a thing to find out.
 
 Cleared without a finding, on the reviewer's own record: `DEC-177`'s tripwire
-remains justified for hand-edits and out-of-band writers; `KeyPosture`, the
-templates and the live corpus are consistent on seeding; the Phase A/B boundary
+remains justified for hand-edits and out-of-band writers; the Phase A/B boundary
 is otherwise coherent; `D4`'s `body` reuse is carried by objective 3's refusal;
 `ADR-013` REV routing and `ADR-004` relation deferral are correctly applied; and
 four specific code claims this design makes — `Declaration`'s
@@ -1352,29 +1501,32 @@ four specific code claims this design makes — `Declaration`'s
 
 ## Where a further pass should press
 
-In the order I would press, now that the six are integrated.
+In the order I would press, with the two rounds' answers already in.
 
-1. **`D8`'s digest, at the plan.** The guard is designed here and sized nowhere.
-   What exactly is digested — the `Declaration`, the `MintPlan`, the disposition
-   payload — decides whether a legitimate no-op retry (same content, different
-   key order in a `BTreeMap`) is refused. The wrong choice converts a recovery
-   path into a dead end, which is the failure mode `R9` is deliberately *not*
-   accepting. This is the highest-value thing left to get wrong.
-2. **`I10`'s cell semantics.** "Observably effectful or refused" is easy to say
+1. **`I10`'s cell semantics.** "Observably effectful or refused" is easy to say
    and needs a definition per key before the test is written: some keys are
    effectful only in combination, and a cell asserting the wrong side of the
    disjunction is a test that passes while the mapping is wrong — which is what
-   `F-4` found in the first place, one level up.
-3. **Whether `settle` still earns a separate verb.** `DEC-178`'s case for it was
+   `F-4` found in the first place, one level up. This is the largest thing still
+   undefined.
+2. **Whether `settle` still earns a separate verb.** `DEC-178`'s case for it was
    partly that the transition is a coupled multi-write. After `F-2` it is one
    write of one document, which is what `knowledge edit question` will also be.
    The remaining case — that a disposition is part of resolving and not a field
    one may forget — is `DEC-062`'s and stands on its own, but it is now the
    *whole* case rather than the larger half of one.
-4. **`D9`'s absence assertion, once the REV prose exists.** Pinning a specific
-   enumeration phrase is right in principle and unwritable until the phrase is
-   known. If the REV rewrites the section rather than editing the sentence, the
-   assertion has nothing to pin and the canary quietly loses half its strength.
+3. **`D8a`'s correction has no home yet.** `DEC-168`'s recorded rationale is
+   known-false and the fix is routed to the objective 4 REV at reconcile, which
+   is a governance vehicle carrying a knowledge-record correction because no
+   other vehicle exists until this slice ships. Someone should check that the REV
+   is a legitimate place for it rather than the only place — and if it is not,
+   the correction needs its own follow-up rather than a convenient ride.
+4. **Every other claim this design makes about the code.** Two of six findings
+   were false premises about the source, and one of three contests was a false
+   premise *inside a correction*. The base rate is the argument: this design's
+   remaining unverified code claims — `entity::write_body`'s behaviour on an
+   absent file, `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the
+   tripwire's precedent — have not been checked by anyone in either round.
 5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
    recommendation (§ 6). If a reviewer thinks either should have been ruled here,
    the counter-argument is that both are about what the REV *says*, and the REV
@@ -1385,6 +1537,6 @@ In the order I would press, now that the six are integrated.
    too big — a reviewer who disagrees is disagreeing about priority, which is the
    user's call and is already recorded.
 7. **Anything Phase A touches that reads `facet_fields`.** `R6` says the boundary
-   erodes under convenience, and review just added work to Phase A. The cheapest
+   erodes under convenience, and review added work to Phase A twice. The cheapest
    review is still a grep.
 
