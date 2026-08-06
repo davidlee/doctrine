@@ -147,12 +147,19 @@ writing it.
   committed activation is auditable and shareable; local activation avoids
   imposing hooks on every collaborator of a client project. Possibly both, by
   scope flag.
+  **SETTLED 2026-08-06 (user):** both, by scope flag, defaulting to project
+  `settings.json`. The `boot.rs` merge core gains a scope argument rather than a
+  second write path. Carried by SL-250 as its `OQ-1`.
 - **`OQ-3` — is `npx skills` acceptable as the Claude path too**, or does Claude
   keep the direct symlink channel while others keep `npx`? SPEC-010 currently
-  splits them deliberately.
+  splits them deliberately. Carried by SL-250 as its `OQ-2`.
 - **`OQ-4` — migration.** Existing installs carry `enabledPlugins` entries and a
   registered marketplace. Does retire mean *remove* those (touching per-user
   state doctrine did not solely author), or leave them and stop writing new ones?
+  **DEFERRED 2026-08-06 (user): out of scope for SL-250.** That slice retires
+  only the *writing* of new plugin activation and leaves pre-existing per-user
+  state untouched. This question stays open here and keeps IMP-400 open after
+  SL-250 closes.
 - **`OQ-5` — what is lost.** `/reload-plugins` re-registers plugin hooks with no
   restart (`mem.fact.claude.reload-plugins-registers-hooks`). Is there an
   equivalent for settings-file hooks, or does direct-write mean a restart on

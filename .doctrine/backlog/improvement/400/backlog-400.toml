@@ -5,10 +5,10 @@ id = 400
 slug = "retire-the-claude-plugin-channel"
 title = "Retire the Claude plugin channel"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "started"
+resolution = ""
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-06"
 tags = ["area:cli", "area:install", "harness:claude"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
