@@ -74,7 +74,7 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
+fresh-as-of: 2026-08-06 · design reviewing, RV-346 round 4 remediated · dbe96d22
 
 ### Produced
 
@@ -83,16 +83,32 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
   `sec-3` (transaction and provisioning), `sec-4` (interpretation policy),
   `sec-5` (operational config: the `[capsule]` table, capsule root, capacity),
   `sec-6` (crate topology, export set, layering enforcement), `sec-7` (the
-  conformance suite: eight properties, controls, admission).
+  conformance suite: the properties, controls, admission — the count lives in
+  its Table A and nowhere else, which is `F-28`'s class fix).
 - Sections `sec-8` (code impact and verification alignment) and `sec-9` (risks,
   residuals, open questions) — drafted at `d08468bc`, amended by round 3.
   Drafting is complete: 9 of 9.
-- `RV-346` — design facet, raiser codex / responder claude. **24 findings, 23
+- `RV-346` — design facet, raiser codex / responder claude. **28 findings, 27
   upheld, one rejected.** Round 1: nine on `sec-2`/`sec-3`. Round 2: five
   remediations verified, four contested, eight new (`F-10`…`F-17`). Round 3:
-  seven on `sec-8`/`sec-9` (`F-18`…`F-24`), four of them blockers. `await=raiser`,
-  all 24 answered; the rolling ledger for this design, not a one-shot. Its
-  `## Brief` now carries round 3's ten lines of attack (`de73c958`).
+  seven on `sec-8`/`sec-9` (`F-18`…`F-24`), four blockers. Round 4: four on
+  `sec-2`/`sec-6`/`sec-7` (`F-25`…`F-28`), three blockers. `await=raiser`, all 28
+  answered; the rolling ledger for this design, not a one-shot. Its `## Brief`
+  carries rounds 3 and 4's lines of attack (`de73c958`, `6e454608d`).
+- **Round 4's remediation** — the largest of the four. `sec-2` gains the
+  **channel ledger** (the closed enumeration of ways authority crosses
+  `execute`, each channel naming its row), invariants 12–13, a typed
+  `SourceExport` admission rule and the positive-control discipline; `sec-7`
+  gains the **payload-strength rule**, table A rows 10 and 11, and restated
+  payloads for rows 1, 5 and 7; `sec-6`, `sec-8`, `sec-9` swept. `DEC-156` and
+  `DEC-160` corrected a third time. Run adopted at revision 68, materialised at
+  69, watermark `dbe96d22`.
+- `DEC-156` **corrected a third time** — nine → eleven. Not arithmetic this
+  time: the rows are now derived from **authority channels**, not from
+  `SPEC-030` clauses. A clause names what a capsule must not *have*; a row must
+  name the mechanism by which it *gets* it, and clause 2 reaches four mechanisms
+  while naming none. The tenth row was human-authorised; the eleventh is what
+  the mandated class fix produced — the first blank cell the ledger showed.
 - Round 3's remediation (`79d06645`) — amended `sec-2`, `sec-6`, `sec-7`,
   `sec-8`, `sec-9`; corrected `DEC-156` and `DEC-160`; added `Cargo.lock` and
   `justfile` to the design-target selectors.
@@ -264,6 +280,12 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
   it, disposing the review pass, and the user's `design-accepted` are the three
   remaining conditions on the lock.
 
+- **Round 4 ran and its four findings are remediated** (`await=raiser`). The
+  narrowing was right: three blockers, all in the sections named below, none in
+  the four sections the brief told it to skip. What follows is the round-3
+  statement kept for provenance — its lines 1, 2 and 4 are now closed by
+  `F-25`…`F-28`, and line 3 is what actually delivered.
+
 - **What a further review pass would probe** (`review.passes`, written after
   `RV-346` round 3). A round 4 is worth running, and it is not a re-read of what
   has already been read three times. Its targets, in priority order:
@@ -290,14 +312,19 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
   What a pass would **not** buy: another read of `sec-1`, `sec-3`, `sec-4` or
   `sec-5`, which have been through rounds 1 and 2 and were not amended by round
   3.
-- **`sec-6` and `sec-7` still have no clean external pass.** Round 3 was scoped
-  to `sec-8`/`sec-9`, with those two in scope only where they bore on the new
-  sections — and even so it found `F-18` and `F-19` in `sec-7`. `sec-7` was
-  self-reviewed earlier (12 findings, 4 blockers, `ae77e077`) and that pass
-  introduced a defect of its own, so self-review narrows an external pass rather
-  than replacing it. `sec-2` and `sec-7` both changed materially in round 3 and
-  are unreviewed *as amended*.
-- **`sec-9` carries four residuals**, as amended by round 3:
+- **Five sections are now unreviewed as amended: `sec-2`, `sec-6`, `sec-7`,
+  `sec-8`, `sec-9`.** Round 4 read `sec-2`, `sec-6` and `sec-7` — closing the
+  gap that `sec-6` had never had an external pass — and the remediation then
+  amended all five. `sections_outstanding_review` is 9 and
+  `review_pass` is **STALE**: the round-4 pass concluded against fingerprints
+  that no longer exist, which is the run correctly refusing to let a concluded
+  pass vouch for text written after it.
+- **The round-4 remediation added design surface no one has read**, and it is
+  larger than round 3's: `sec-2`'s channel ledger and invariants 12–13, the
+  typed `SourceExport` admission rule and its four tests, `sec-7`'s
+  payload-strength rule with rows 1, 5 and 7 restated under it, table A rows 10
+  and 11 with their removals and hazards, and `sec-9` residual 5.
+- **`sec-9` carries five residuals**, as amended by round 4:
   1. *The resolution-time race.* Declared paths are resolved at provisioning and
      could be re-pointed afterwards. Not capsule-reachable — and that dismissal
      now rests on `sec-2` invariant 11 proven by row 9, **not** on invariant 4,
@@ -306,8 +333,9 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
   2. *Out-of-crate backends.* `sec-7`'s sealing rests on `pub(crate)`, which
      holds only while every backend lives in `doctrine-control`. A backend
      shipping from outside makes the weakening vocabulary public API and it
-     needs a newtype over a private enum. `ConformanceBackend` now carries two
-     methods, which widens what such a backend would expose.
+     needs a newtype over a private enum. `ConformanceBackend` carries two
+     methods and `PropertyRemoval` now seven variants — the surface grows every
+     round, so the cost of deferring the seal rises rather than staying fixed.
   3. *Any host that cannot run the backend* — no longer macOS-only (`F-20`).
      The conformance test asserts `Admitted` unconditionally, so `cargo test`
      fails wherever the backend is unavailable, **including under any
@@ -316,9 +344,31 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
      open and owed by whichever slice first runs the suite there.
   4. *The `just check` cost* — the executed suite joins the fast inner loop;
      measurement is a phase obligation, and the lawful adjustment is a `--skip`
-     on `test:` alone, never `#[ignore]`.
-- **`RV-346` is `await=raiser`** with all 24 findings answered. Round 4 has not
+     on `test:` alone, never `#[ignore]`. Round 4 added two arms and two
+     controls.
+  5. *The channel ledger cannot prove its own completeness* — new in round 4,
+     and created by round 4's own fix. It turns an unthought-of channel into a
+     readable blank cell and does nothing more. It names three channels it lists
+     but does not row: `argv` (closed by construction, not by probe), process
+     reachability (split across row 7 and `B5`), and **process credentials**
+     (uid/gid mapping, supplementary groups, capabilities, no-new-privs), which
+     `SPEC-030` states no clause for. That last one is where the next reviewer
+     should start.
+- **`RV-346` is `await=raiser`** with all 28 findings answered. Round 5 has not
   been requested.
+- **Three phase obligations were created by round 4's remediation**, each a
+  place the design reasons where it previously measured, and each recorded in
+  the design rather than left in this file:
+  1. `EVD-013`'s teardown 2×2 was measured against row 7's *old* payload. The
+     escaping payload should still be reaped by the pid namespace — `setsid`
+     changes session, not namespace — but that is reasoning from a measurement
+     made against different code, which `R1` forbids. If `--die-with-parent`
+     turns out not to be required, row 7's control is wrong.
+  2. Row 5's abstract-unix-socket leg is reasoned, not executed. If it is denied
+     by a different mechanism than the TCP leg, it is a twelfth row rather than
+     a second assertion in row 5.
+  3. The `DescriptorsClosed` and `EnvCleared` bubblewrap deltas are the only two
+     in that table not covered by `EVD-013`.
 - `QUE-208` — capsule-side entity id allocation. **Parked deliberately** 2026-08-06;
   does not block this slice. Live for the ingestion slice, unavoidable by the
   recovery slice. Its own first settling condition — whether v0 permits capsules to

@@ -218,7 +218,9 @@ pub enum NetworkPosture { Denied, Permitted }
   another, so mount order can never decide what is visible;
 - a resolved host path that **overlaps a `ForbiddenScopes` member in either
   direction** — equal to it, an ancestor of it, *or a descendant of it* — with
-  the single carve-out below;
+  the two typed carve-outs below;
+- a `source` whose host path does not descend from `<capsule_root>/export/`, or
+  whose carried base identity is not the placement's accepted base;
 - a resolved host path that is the filesystem root.
 
 **Overlap is bidirectional, and the descendant half is the half that matters.**
@@ -238,15 +240,54 @@ scope exists to deny. Provenance cannot carry the argument, so the geometry does
 fn overlaps(a: &Path, b: &Path) -> bool { a == b || a.starts_with(b) || b.starts_with(a) }
 ```
 
-**The carve-out is the transaction's own writable state, and it is typed rather
-than described.** `TransactionRoot` is minted by `sec-3` step 9, by the call that
-exclusively created that directory. `try_new` accepts a writable entry that is a
-descendant of *this placement's* `root` and refuses every other overlap with
-`capsule_root`. So the capsule area is closed to a placement except through the
-one transaction root the placement carries, and a sibling transaction — which is
-a descendant of `capsule_root` but not of this `root` — is refused by the same
-test that admits `capsule/` and `agent/`. Readable entries get no carve-out at
-all: nothing under the capsule root is ever a declared readable input.
+**Both carve-outs are typed rather than described**, and neither is a carve-out
+in the `readable`/`writable` vectors at all — each is a distinct field whose type
+can only have been minted by the provisioning step that exclusively created the
+directory it names. That is what makes them safe to admit: the vectors stay
+carve-out-free, so no declared entry of any kind is ever admitted beneath a
+forbidden scope.
+
+*The transaction's own writable state.* `TransactionRoot` is minted by `sec-3`
+step 9. `try_new` accepts a writable entry that is a descendant of *this
+placement's* `root` and refuses every other overlap with `capsule_root`. So the
+capsule area is closed to a placement except through the one transaction root
+the placement carries, and a sibling transaction — a descendant of
+`capsule_root` but not of this `root` — is refused by the same test that admits
+`capsule/` and `agent/`.
+
+*The source export.* `SourceExport` is minted by `sec-3` step 8, by the publish
+-or-adopt protocol, and carries the base OID it is an export **of**. `try_new`
+accepts the `source` field when it descends from `<capsule_root>/export/` and
+its carried identity equals the placement's accepted base; every other value
+refuses. So a sibling export — an export of a *different* base, which is a
+descendant of `capsule_root` and a perfectly well-typed `SourceExport` — is
+refused here, and not only later at `sec-3` invariant 3.
+
+**This second rule is `RV-346` `F-25`, and the class it belongs to is worth more
+than the rule.** The design's own layout puts the export at
+`<capsule_root>/export/<base-oid>`; `capsule_root` is a `ForbiddenScopes` member;
+overlap is bidirectional. So the validator refused the design's only lawful
+source placement, and `sec-7` row 9's fixture — which builds its own per-run
+export — could not have been constructed either. Every conformance row would
+have failed before running, for a reason that has nothing to do with any
+property under test.
+
+It is the over-denial mirror of `F-10`, which was the under-denial defect in the
+same rule, and the two together are the general lesson: **a refusal rule is half
+a specification until the lawful case is asserted positively.** `F-10` was found
+because nothing proved the rule denied enough. `F-25` was possible because
+nothing proved it admitted enough. Only one of those two failure directions had
+a test.
+
+So the discipline, stated once and applied to every refusal rule in this
+section: **each refusal is paired with a positive case that the refusal must not
+capture**, and the pair is what gets written, never the refusal alone. The
+placement tests below are ordered to make the pairing visible. The one that
+already existed —
+`a_writable_entry_under_this_placements_own_transaction_root_is_admitted`,
+annotated *asserted positively so a fix that refuses everything under the capsule
+root cannot pass* — had exactly the right instinct, and `F-25` is what it costs
+to have that instinct once rather than as a rule.
 
 ```rust
 /// One run inside a capsule.
@@ -336,39 +377,113 @@ Exited { code: 1 }, .. })`. The spike states the same rule as a shell idiom
 
 ### The properties, stated once
 
-The contract's meaning is the eight properties `sec-7` proves. They are named
-here because the trait's shape is answerable to them, and `sec-7` is where each
+The contract's meaning is the properties `sec-7` proves. They are named here
+because the trait's shape is answerable to them, and `sec-7` is where each
 acquires a probe, a control and a decoy.
+
+**The count is stated in exactly one place — `sec-7`'s Table A — and no other
+section restates it as a numeral.** That is not fastidiousness; it is the fix
+for a defect this design has now had twice. The count has moved twice under
+external review, and both times the correction reached the sections that were
+being reviewed and missed the ones that were not: `RV-346` `F-28` found `sec-2`
+still instructing eight properties, still asserting one-to-one correspondence,
+and still reporting `DEC-156` as *corrected to eight*, three rounds after the
+first correction and one after the second. Those were not historical framing —
+they were current implementation instructions contradicting `sec-7`. A numeral
+repeated across five sections is a constant with five definitions (`STD-001`),
+so the numeral now lives where the rows do.
 
 | # | property | what the contract owes it |
 |---|---|---|
 | 1 | fresh mutable state | `CapsulePlacement.root`, distinct per transaction |
-| 2 | explicit input set | `readable` is a declared list; there is no implicit floor |
+| 2 | bounded input set | `readable` is a declared list; there is no implicit floor |
 | 3 | denial of canonical state and credentials | absence from `readable`/`writable`, not read-only presence |
 | 4 | bounded host filesystem visibility | the same absence, generalised to everything undeclared |
 | 5 | explicit network posture | `NetworkPosture`, `Denied` by default |
 | 6 | deterministic working directory | `working_directory`, with no inherit value |
 | 7 | process-tree teardown | that no descendant outlives the `execute` call, observed by the parent |
 | 8 | trusted observation of resource limits and termination | `timeout`, `file_size_cap`, and every `Termination` variant being correctly distinguished |
+| 9 | immutable input set | that a declared readable path cannot be written through |
+| 10 | closed descriptor set | that no open file descriptor crosses `execute` except the ones the contract deliberately owns |
+| 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv`, with nothing inherited from the trusted-side process |
 
-The eight rows stand in **one-to-one correspondence** with `SPEC-030` §
-Platform backend contract's eight clauses. Nothing is merged, and that is a
-correction rather than the original shape: an earlier draft folded rows 7 and 8
-together, on the reasoning that teardown and observation are one question — what
-the trusted parent can establish about a process it did not trust.
+#### The rows are derived from channels, not from clauses
 
-`RV-346` `F-2` refuted it, and the refutation turns `DEC-156`'s own principle on
-that record's arithmetic. The two are independent enforcement claims: a backend
-can reap every descendant and still misclassify a timeout as a signal, or
-classify termination perfectly and leave a grandchild alive. A control removing
-both axes at once cannot establish which guard produced the paired result, which
-is exactly what one-property-removed exists to prevent — so a seven-row suite
-would have admitted a backend failing one of the eight clauses.
+This is the correction `RV-346` `F-26` forced, and it is the one worth reading
+before the arithmetic below.
 
-`DEC-156` stated the count as seven and has been **corrected to eight**
-(2026-08-06, authorised by the human author). Only the number moved; every
-argument in that record stands. `sec-7` builds eight rows, each with its own
-probe and its own one-axis control.
+`SPEC-030` § Platform backend contract states eight clauses, and the natural way
+to build a conformance suite is one row per clause. That is what this design did,
+and it is **wrong in a way that is invisible from inside the suite**. A clause is
+a requirement written in the vocabulary of what the capsule must not *have*. A
+row has to be written in the vocabulary of the mechanism by which a capsule
+*gets* it. Those two vocabularies are not in correspondence, and where a clause
+names an outcome reachable by more than one mechanism, one row per clause leaves
+every mechanism but one unproven.
+
+Clause 2 — *an explicit base and input set* — is the whole of the problem. It
+says nothing about the channels by which input arrives, so a row written against
+it proves whichever channel its author happened to picture. Rows 2, 9, 10 and 11
+are all clause 2, and each was found by someone constructing the backend the
+existing rows would wrongly pass rather than by re-reading them.
+
+So the design keeps a **channel ledger**: the closed enumeration of ways
+authority crosses `execute`, each naming the row that proves it. A channel with
+no row is then a visible hole rather than an absent thought — which is the only
+structural defence available, because nothing inside a suite can notice a
+mechanism nobody wrote down.
+
+| channel | how authority would cross | proven by |
+|---|---|---|
+| the mount set — presence | a path the capsule was not given is readable | rows 3, 4 |
+| the mount set — extent | a path it *was* given reaches further than declared | row 2 |
+| the mount set — mutability | a path it was given read-only can be written | row 9 |
+| open file descriptors | one inherited across `execute` is already-open authority no mount test sees | row 10 |
+| the environment | a value inherited from the trusted-side process, rather than computed for the capsule | row 11 |
+| the network | a socket to anything off-host or trusted-side | row 5 |
+| the process tree | a descendant that outlives the call, or a trusted-side process reachable from inside | row 7, and `sec-7` B5 |
+| `argv` | not a channel: it is typed, computed trusted-side, and never capsule-influenced | by construction (`Argv`) |
+| the working directory | an inherited cwd makes the capsule's view depend on trusted-side state | row 6 |
+| the clock and resource bounds | the capsule reports its own limits rather than the parent observing them | row 8 |
+
+**Two channels on this ledger had no executed row until `RV-346` round 4**, and
+they had none for the same reason: each was believed closed by something that is
+not enforcement. Descriptors were closed by nobody having thought of them.
+The environment was closed by `CapsuleEnv` being a closed *type* — which stops a
+caller passing text in, and says nothing about what a backend inherits, as this
+section's own note that `--clearenv` stops inheritance only already conceded.
+Both had shape assertions over the argv. `DEC-156` is explicit that shape
+assertions are necessary and never sufficient, and these two are what that rule
+was warning about.
+
+#### The arithmetic, and what correspondence survives
+
+The rows cover every clause and three clauses are covered more than once, so
+there is **no one-to-one correspondence** and the design does not claim one. The
+correspondence that does hold is the ledger above: every channel has a row, and
+every row removes exactly one mechanism.
+
+`DEC-156` has taken this correction three times, each authorised by the human
+author rather than by an agent mid-run:
+
+- **seven → eight** (`F-2`): rows 7 and 8 had been merged, on the reasoning that
+  teardown and observation are one question — what the trusted parent can
+  establish about a process it did not trust. They are independent: a backend can
+  reap every descendant and still misclassify a timeout as a signal, or classify
+  termination perfectly and leave a grandchild alive. A control removing both
+  axes at once cannot say which guard produced the paired result.
+- **eight → nine** (`F-19`): clause 2's boundedness and immutability are two
+  claims, and a backend binding exactly the declared inputs *writable* passed
+  every row.
+- **nine → eleven** (`F-26`, and the channel ledger that finding required):
+  descriptors and the environment are two further clause-2 channels, neither
+  with an executed row.
+
+The pattern across all three is one pattern, and it is `sec-9`'s `R3` in its
+sharpest form: **every count correction has come from an adversary building the
+backend the suite would wrongly pass, and none from anyone reading the rows.**
+The channel ledger exists so that the next such gap is at least visible as a
+blank cell rather than as nothing at all.
 
 ### The bubblewrap backend
 
@@ -600,9 +715,20 @@ live.
    repository, other capsules, and the credential store are never in `readable`.
    `DEC-157` makes this structural for the repository by provisioning from an
    export instead.
-5. **Credential denial has no second route.** The environment is a closed
-   vocabulary whose values are computed trusted-side, so absence from the mount
-   set is the whole of it rather than most of it.
+5. **Credential denial is claimed per channel, and only where a row proves it.**
+   The channel ledger above is the statement of this invariant: for each way
+   authority can cross `execute`, a named row establishes that it does not. It
+   is written that way because the version it replaces was **false**, and
+   instructively so. That version read *credential denial has no second route —
+   the environment is a closed vocabulary whose values are computed
+   trusted-side, so absence from the mount set is the whole of it rather than
+   most of it*, which enumerates two channels and asserts completeness over
+   them. `RV-346` `F-26` executed the third: an inherited file descriptor is an
+   already-open credential that no mount test and no environment test can see,
+   and a backend preserving one satisfied every row the suite then had. A
+   completeness claim is only as good as the enumeration behind it, so this
+   invariant now points at an enumeration that is written down and rowed rather
+   than at a sentence that sounded exhaustive.
 6. **No package store is ever bound whole.** Every readable input is a declared
    path or a member of a declared closure. There is no configuration — and no
    fallback taken on missing configuration — under which `/nix/store` or an
@@ -630,6 +756,25 @@ live.
    backend binding exactly the declared set and binding it writable satisfies
    1–10 and violates `DEC-157`. `sec-7` row 9 is where it is proven, with the
    writable binding as its control (`RV-346` `F-19`).
+12. **No descriptor crosses `execute` that the contract did not open.** The
+   capsule receives the three standard streams and nothing else; every other
+   descriptor held by the trusted-side process is closed or marked
+   close-on-exec before the capsule starts. Like invariant 11, this has no pure
+   test that could establish it — whether a descriptor survived an `exec` is a
+   property of the running capsule, not of the argv — so it is executed only, in
+   `sec-7` row 10, with an inheritable decoy as its control (`RV-346` `F-26`).
+13. **The capsule's environment is computed, never inherited.** Its content is
+   exactly the `CapsuleEnv` the placement carries. `CapsuleEnvVar` being a
+   closed enum establishes that no *caller* can add to it; it establishes
+   nothing about what a *backend* passes through, and those are different
+   claims with different failure modes. Executed in `sec-7` row 11.
+
+**Invariants 11, 12 and 13 are one shape repeated**, and the repetition is the
+point rather than an accident of drafting. Each names a property that no pure
+test can reach, that an argv shape assertion appears to cover and does not, and
+that a backend can violate while satisfying every other invariant here. Each was
+found by execution rather than by reading. A fourth of the same shape is more
+likely than not, and the channel ledger is where it would show up first.
 
 ### Verification alignment
 
@@ -672,6 +817,22 @@ equal-or-ancestor test admits:
   capsule root cannot pass
 - `a_readable_entry_under_this_placements_own_transaction_root_refuses` — the
   carve-out is writable-only
+
+The source-export carve-out, its refusals and — the `F-25` class — the lawful
+case each refusal must not capture:
+
+- `the_lawful_source_export_for_this_base_is_admitted` — the positive control,
+  and the one whose absence let `F-25` stand. It fails against a validator that
+  refuses everything beneath `capsule_root`, which is what this design specified
+  until round 4
+- `a_source_export_of_a_different_base_refuses` — a well-typed `SourceExport`
+  under the export directory, carrying the wrong identity
+- `a_source_outside_the_export_directory_refuses` — including one under this
+  placement's own transaction root, which the *other* carve-out would otherwise
+  seem to admit
+- `a_readable_entry_naming_the_export_directory_refuses` — the export reaches a
+  capsule only as `source`, never as a declared readable input, so the two
+  carve-outs cannot be composed into a third
 - `a_sibling_directory_whose_name_extends_a_forbidden_scope_is_admitted`
   (`/var/lib/doctrine-other` against `/var/lib/doctrine`) — the control that
   fails if overlap is implemented as a textual prefix test
@@ -689,9 +850,20 @@ Environment vocabulary:
 - `working_directory_has_no_inherit_value` (a type-level property, asserted by
   construction rather than by test)
 
-Read-only attachment (invariant 11) has no pure test that could establish it —
-whether a mount is writable is a property of the running capsule, not of the
-argv — so it is executed only, in `sec-7` row 9.
+**The three executed-only invariants have no pure test here, and the reason is
+the same for each**: they are properties of the running capsule rather than of
+the argv, so a pure suite can assert the flag that ought to produce them and
+never the thing itself. Invariant 11 (read-only attachment) is `sec-7` row 9;
+invariant 12 (descriptor closure) is row 10; invariant 13 (a computed
+environment) is row 11.
+
+The environment case is the one to be careful about, because it is the one this
+design got wrong. The two pure tests above are real and they prove something
+worth proving — that no *caller* can put arbitrary text into `CapsuleEnv`. Read
+quickly, they look like they cover the environment. They do not touch inheritance
+at all, and inheritance is the channel a backend controls. A pure test over a
+closed type and an argv assertion over `--clearenv` were the whole of the
+environment's proof for four rounds.
 
 Executed, and the reason the shape assertions are not enough: all of `sec-7`.
 
@@ -1997,7 +2169,7 @@ crates/doctrine-control/
                               #   AcceptedBase, PhaseIdentity            (sec-3)
   src/provision.rs            # provision, export publication, root
                               #   ownership, rollback                    (sec-3)
-  src/conformance.rs          # the eight-property table                 (sec-7)
+  src/conformance.rs          # the property table (count: sec-7 Table A) (sec-7)
 ```
 
 `ADR-001`'s rule applies inside the new crate exactly as it does inside the root
@@ -2268,7 +2440,7 @@ written for something else fail.
 
 
 <!-- doctrine:section sec-7 -->
-## The conformance suite: the nine properties, their controls, and admission
+## The conformance suite: the properties, their controls, and admission
 
 `REQ-459` criterion 1 asks for a shared conformance suite, `DEC-156` fixes its
 discipline, and `DEC-160` fixes where it lives and who calls it. This section is
@@ -2353,6 +2525,13 @@ pub(crate) enum PropertyRemoval {
     /// the mechanism unique to input immutability, and the only removal that
     /// changes how an existing mount is bound rather than which mounts exist.
     InputsWritable,
+    /// Row 10. The fixture's decoy descriptor is left inheritable across
+    /// `exec` instead of close-on-exec. Changes no mount, no environment
+    /// variable and no argv byte — the mechanism unique to descriptor closure.
+    DescriptorsClosed,
+    /// Row 11. The trusted-side environment is not cleared before the
+    /// capsule's own is applied. Changes no mount and no descriptor.
+    EnvCleared,
 }
 
 pub(crate) enum Bound { FileSize, Wall }
@@ -2426,6 +2605,14 @@ no lazy implementation that yields a green verdict.
 | `ResourceBound(FileSize)` | `RLIMIT_FSIZE` not set on the child |
 | `ResourceBound(Wall)` | the `timeout -k` wrapper omitted |
 | `InputsWritable` | every `--ro-bind` carrying a readable entry or the source export becomes `--bind` |
+| `DescriptorsClosed` | the fixture's decoy descriptor is passed with `--file-descriptor`-style inheritance instead of being closed on exec |
+| `EnvCleared` | `--clearenv` omitted, the explicit `--setenv` list unchanged |
+
+**The last two deltas are reasoned, not measured**, and are the only rows in
+this table of which that is true — `EVD-013` covers the five above them. Under
+`R1` that difference is recorded rather than smoothed over: measuring both is a
+phase obligation, and a delta that turns out not to produce its row's control
+failure means the row is wrong, not that the measurement is inconvenient.
 
 `ProcessVisibility` enumerates rather than subtracting because **there is no
 `--share-pid`**: `--share-net` is bubblewrap's only re-share flag and its help
@@ -2548,15 +2735,17 @@ struct Row {
 /// properties, so one enum spans both rather than a `Property` key that cannot
 /// hold half of what the verdict reports.
 enum RowId {
-    /// An enforcement claim of `SPEC-030` § Platform backend contract. Nine
-    /// over eight clauses — see Table A on why clause 2 carries two.
+    /// An enforcement claim of `SPEC-030` § Platform backend contract. One
+    /// per channel rather than one per clause — see Table A, and `sec-2`'s
+    /// channel ledger for why clause 2 carries four.
     Property(Property),
     /// One of `REQ-450` criterion 1's five freshness axes.
     Axis(Axis),
 }
 
 enum Property {
-    FreshMutableState, ExplicitInputSet, ImmutableInputSet,
+    FreshMutableState, BoundedInputSet, ImmutableInputSet,
+    ClosedDescriptorSet, ClosedEnvironment,
     CanonicalAndCredentialDenial, BoundedFilesystemVisibility, NetworkPosture,
     WorkingDirectory, ProcessTreeTeardown, ResourceAndTerminationObservation,
 }
@@ -2665,34 +2854,105 @@ repairs**: the first says the guard is broken, the second says the row is. This
 is `SL-241`'s rule — a guard never seen to fire is not known to work
 (`probe-guards.sh`, `EX-10`) — turned on the suite itself.
 
-### Table A — the nine properties
+### Table A — the properties
 
-`SPEC-030` § Platform backend contract states eight clauses; this table has
-nine rows, because its second clause — *an explicit base and input set* —
-carries two independently failable enforcement claims. See below the table.
+**This table is where the count lives** (`sec-2`). `SPEC-030` § Platform backend
+contract states eight clauses and this table has **eleven** rows, because clause
+2 — *an explicit base and input set* — is a claim about inputs that names none
+of the channels inputs arrive by. Rows 2, 9, 10 and 11 are all clause 2. `sec-2`
+§ The rows are derived from channels, not from clauses carries the argument and
+the channel ledger; this table is its realisation.
 
 | # | property | shape | probe holds when | delta | control fails when |
 |---|---|---|---|---|---|
-| 1 | fresh mutable state | `Sequential`: A writes `/capsule/out/sentinel`, B reads it | absent in B | `SharedRoot` | present in B |
-| 2 | explicit input set | `Single`: exec a binary from each bound path, then exec the decoy | declared exec 0, decoy `NotExecutable` | `Widened` (decoy's directory) | decoy execs 0 |
+| 1 | fresh mutable state | `Sequential`: A writes a sentinel into **every** writable location the placement declares — `/capsule/out`, `/capsule/tmp`, `/agent` — B reads all three | all absent in B | `SharedRoot` | any present in B |
+| 2 | bounded input set | `Single`: exec a binary from each bound path, then exec the decoy | declared exec 0, decoy `NotExecutable` | `Widened` (decoy's directory) | decoy execs 0 |
 | 3 | denial of canonical state and credentials | `Single`: read the decoy credential, then the decoy repository's secret blob | both reads fail | `Widened` (both decoys) | both reads succeed |
 | 4 | bounded host filesystem visibility | `Single`: read the undeclared decoy; enumerate `/` | read fails, `/` holds only the profile's own entries | `Widened` (the undeclared decoy) | read succeeds |
-| 5 | explicit network posture | `Single`: connect to the trusted-side loopback listener | refused | `NetworkPermitted` | connected |
+| 5 | explicit network posture | `Single`: connect to the trusted-side TCP loopback listener, **then** to a trusted-side abstract unix socket | both refused | `NetworkPermitted` | both connected |
 | 6 | deterministic working directory | `Single`: `pwd`, the arm run from two different trusted-side cwds | both equal `working_directory` | `Removed(WorkingDirectory)` | `pwd` tracks the trusted-side cwd |
-| 7 | process-tree teardown | `Single`: orphan a descendant, then exit | no descendant outlives the `execute` call | `Removed(Teardown)` | the descendant survives |
+| 7 | process-tree teardown | `Single`: fork a descendant that **leaves the original session and process group** (`setsid`) before its parent exits | no descendant outlives the `execute` call, established trusted-side | `Removed(Teardown)` | the escaped descendant survives |
 | 8 | trusted observation of resource limits and termination | `Single` ×5, one per `Termination` variant | each variant correctly distinguished | `Removed(ResourceBound(..))` | the capped and timed-out payloads run to completion |
 | 9 | immutable input set | `Single`: write through each readable mount, then write into `/source` | every write fails | `Removed(InputsWritable)` | the writes succeed |
+| 10 | closed descriptor set | `Single`: the parent opens a decoy secret and marks it **inheritable**; the payload enumerates `/proc/self/fd` and reads every descriptor above 2 | no descriptor above 2 is readable, and the decoy's bytes appear nowhere in `stdout` | `Removed(DescriptorsClosed)` | the decoy's bytes are read |
+| 11 | closed environment | `Single`: the parent sets a decoy variable in **its own** environment; the payload dumps its whole environment | the dump is exactly `CapsuleEnv`, and the decoy is absent | `Removed(EnvCleared)` | the decoy is present |
 
-#### Row 9 exists because clause 2 has two halves that fail apart
+#### The payload must be the property's strongest negation, not a representative one
 
-Clause 2 asks for *an explicit base and input set*. Row 2 proves the set is
-**bounded** — only declared paths reach a capsule. Row 9 proves it is
-**immutable** — a declared path cannot be written through. Neither implies the
-other, and the failure that motivated the split is concrete: a backend binding
-exactly the declared paths and binding them writable satisfies row 2 in full
-while handing every capsule mutable shared host state, including the per-base
-export that `DEC-157` makes the immutable input and that every concurrent
-transaction on that base shares.
+`RV-346` `F-27` is the rule's instance and the rule is worth more than the fix.
+Row 7 read *orphan a descendant, then exit*, which is a **representative**
+instance of the property's negation — a descendant that outlives its parent. It
+is not the **strongest** one. A backend that reaps by killing the original
+process group passes that probe, because a plain orphan is still in the group;
+a descendant that has called `setsid` survives it. The row's title claimed *no
+descendant outlives the `execute` call* and its payload proved only *no
+descendant in the original process group does*, so the row was weaker than the
+property it was named after, and the gap was invisible because both readings use
+the same words.
+
+Codex reproduced the mechanism without namespaces: a process-group kill removed
+the same-group control and a `setsid` descendant remained alive until cleaned up
+explicitly.
+
+So each row's payload is written as the **hardest instance of the property's
+negation the property admits**, and where a property has several distinguishable
+negation mechanisms the payload exercises each of them. Applying that rule to
+the whole table rather than to row 7 alone moved three rows, which is the return
+on stating it as a rule:
+
+- **Row 1** wrote a sentinel to `/capsule/out` only. A backend giving each
+  transaction a fresh output area while sharing the agent home or the temporary
+  area passed. The payload now writes to every writable location the placement
+  declares.
+- **Row 5** attempted a TCP loopback connection only. A backend that denies by
+  packet filter rather than by network namespace blocks TCP and leaves an
+  abstract unix socket — a distinct mechanism in the same channel — reachable.
+  The payload now attempts both. Under `--unshare-all` a fresh network namespace
+  denies both, so bubblewrap's arm is unaffected; the row now discriminates
+  between mechanisms that were previously indistinguishable to it.
+- **Row 7** as above.
+
+**Row 7's containment has to move with its payload**, and this is the part a
+weaker reading would miss. `sec-7`'s hazard containment reaps the control arm's
+survivor with a process-group kill — which is precisely the mechanism row 7 now
+exists to defeat, so the harness would leak the very process its own control
+creates. Containment for this row is therefore the outer `timeout -k` plus a
+sweep that does not stop at the original process group: the fixture records the
+capsule's session id trusted-side before the arm runs and kills the session on
+the way out. A control arm the harness cannot clean up is a suite that leaks
+processes on every run.
+
+#### Clause 2 is four rows, one per channel
+
+Clause 2 asks for *an explicit base and input set*, and every one of its four
+rows was added after someone built the backend the previous rows admitted. Rows
+2 and 9 are the mount channel: **bounded** — only declared paths reach a capsule
+— and **immutable** — a declared path cannot be written through. Row 10 is the
+descriptor channel and row 11 the environment channel. No two of the four imply
+each other.
+
+**Rows 10 and 11 are `RV-346` `F-26` and the channel ledger it forced.** The
+finding built the tenth mutant the brief asked for: a backend identical to a
+conforming one on every observation the suite then made, but preserving one
+inherited file descriptor across `execute`. It passes rows 2, 3, 4 and 9 —
+every one of them reasons about *paths*, and an already-open descriptor is not a
+path — and it hands the capsule an open credential file or a preconnected socket.
+Codex isolated the mechanism from its own sandbox before raising it: a direct
+child given an inheritable descriptor read the decoy secret and exited 0, while
+the bubblewrap-shaped profile exposed no bytes. So `BubblewrapBackend` closes
+descriptors and the *suite* was what failed — the distinction `DEC-156` requires
+of every finding at this altitude, and the one round 3's `F-20` got wrong.
+
+Row 11 was not raised by the review. It came out of writing the channel ledger
+that `F-26` required, which is the return on fixing the class instead of the
+instance: the environment sat in the ledger with no executed row against it. Its
+proof was `CapsuleEnvVar` being a closed enum — which binds *callers* and says
+nothing about a backend — plus an argv assertion that `--clearenv` is present.
+`sec-2`'s own note that `--clearenv` stops inheritance only is the concession
+that inheritance is a separate channel; nothing executed ever checked it. A
+backend that omits it passes every other row while handing the capsule whatever
+the trusted-side process holds, which on a developer machine or a CI runner is
+routinely a credential.
 
 `RV-346` `F-19` found this by executing the mutant rather than reading the
 profile — `bwrap --ro-bind / / --bind HOST HOST` followed by a capsule write
@@ -2703,18 +2963,26 @@ transaction-local paths that are *supposed* to be writable. The suite had no row
 that wrote to something it had asked to be read-only, so the one guard `DEC-157`
 depends on was the one guard never seen to fire.
 
-This is the same arithmetic correction `DEC-156` already took once, applied to a
-different clause. There it was two clauses wrongly merged into one row; here it
-is one clause wrongly assumed to be one claim. `DEC-156`'s count moves eight →
-nine, authorised by the human author rather than taken mid-run, and its
-correspondence sentence changes with it: the suite's rows cover every clause,
-and one clause is covered twice because one control can only remove one
-mechanism.
+`DEC-156`'s count moves **nine → eleven**, authorised by the human author rather
+than taken mid-run — the third such correction, on the same terms as the first
+two. Its correspondence sentence stays withdrawn and is now generalised: the
+rows cover every clause, three clauses are covered more than once, and the
+structure that *is* one-to-one is the channel ledger, because one control can
+only remove one mechanism.
 
-Row 9's mechanism is unique to it — the read-onlyness of a bind that exists
-under both arms — so it satisfies the rule rows 3 and 4 are held to. Its delta
-changes no mount's presence and no path, only how an existing mount is attached,
-which is why it is a `PropertyRemoval` and not a `Widened`.
+**Each of the three new rows has a mechanism unique to it**, which is the rule
+rows 3 and 4 are held to and the reason each is separately controllable:
+
+- Row 9's is the read-onlyness of a bind that exists under both arms. Its delta
+  changes no mount's presence and no path, only how an existing mount is
+  attached, which is why it is a `PropertyRemoval` and not a `Widened`.
+- Row 10's is descriptor closure at `exec`. Its delta leaves the mount set, the
+  environment and the argv identical and changes only whether the decoy
+  descriptor is marked close-on-exec, so a row-10 failure cannot be produced by
+  any other guard in the table.
+- Row 11's is the clearing of inherited environment. Its delta leaves every
+  mount and every descriptor identical and changes only whether the trusted-side
+  environment is cleared before the capsule's own is applied.
 
 **Its hazard is that the control arm really does write to host state**, and
 containment is structural rather than careful: the readable entries in this
@@ -2724,11 +2992,34 @@ never one adopted from a shared capsule root. A control arm that could corrupt
 the export other transactions adopt would be a suite that damages the property
 it is testing.
 
-Row 5's two arms are measured, not assumed: against a trusted-side listener on
-`127.0.0.1`, the capsule is refused under `--unshare-all`
-(`ConnectionRefusedError`) and connects under `--share-net`. A fresh network
-namespace has its own loopback, so the distinction holds offline and in CI with
-no external contact — which is what `DEC-156` requires of this row's hazard.
+**Rows 10 and 11 carry their hazard the same way — the decoy is the fixture's,
+never the host's.** Row 10's control arm really does hand a capsule an open
+descriptor, so the descriptor is opened onto a fixture-created decoy file under
+the fixture's own root, never onto anything the trusted side holds for real.
+Row 11's control arm really does leak the trusted-side environment, so the
+assertion is over a decoy variable the fixture sets in its own child before
+`execute`, and the row asserts the *decoy's* absence rather than dumping and
+diffing whatever the operator's shell happens to carry. Both are the same
+structural containment row 9 uses: the control arm exercises the real mechanism
+against a target the suite made for itself.
+
+Row 11's assertion is set-equality against `CapsuleEnv`, not a search for known
+credential names. A denylist of variable names would pass a backend leaking a
+variable nobody thought to list, which is the defect this row exists to close
+restated one level down.
+
+**Row 5's TCP arm is measured; its abstract-socket arm is not.** Against a
+trusted-side listener on `127.0.0.1`, the capsule is refused under
+`--unshare-all` (`ConnectionRefusedError`) and connects under `--share-net`. A
+fresh network namespace has its own loopback, so that distinction holds offline
+and in CI with no external contact — which is what `DEC-156` requires of this
+row's hazard. The abstract unix socket leg is reasoned, not executed: abstract
+sockets are scoped to the network namespace, so `--unshare-all` should deny it
+by the same mechanism. Under `R1` that is a claim this design does not get to
+make on bubblewrap's behalf without running it, so **executing both legs is a
+phase obligation**, and if the abstract leg turns out to be denied by a
+different mechanism than the TCP leg it is a twelfth row rather than a second
+assertion in this one.
 
 #### Rows 3 and 4 share a mechanism and are still independent
 
@@ -2774,6 +3065,19 @@ The converse is a hazard rather than a defect: row B5's control does remove the
 pid namespace and so breaks teardown as a side effect, leaking a descendant.
 `DEC-156` provides the containment; `EVD-013` is why it is needed on B5's arm
 and not only on row 7's.
+
+**The 2×2 was measured against the old payload, and one cell needs re-measuring
+under the new one.** `EVD-013` established that both the pid namespace and
+`--die-with-parent` are required for a descendant that merely outlives its
+parent. `RV-346` `F-27`'s payload escapes the session as well, and the mechanism
+by which bubblewrap reaps it is the pid namespace collapsing rather than any
+process-group relationship — `setsid` changes a descendant's session, not its pid
+namespace, so the namespace should still take it. *Should* is the operative word:
+that is reasoning about the new payload from a measurement made against the old
+one, which is exactly the altitude error `R1` forbids. **Re-running the 2×2
+against the escaping payload is a phase obligation**, and if `--die-with-parent`
+turns out not to be required for it, row 7's control is wrong and this
+subsection's argument — not just its number — has to be redone.
 
 #### Row 6 observes a value, and the trusted-side cwd is the thing to vary
 
@@ -2947,9 +3251,25 @@ what a later slice would reach for.
 |---|---|---|
 | 3 | reaching real canonical state or credentials | decoys only, inside the fixture's own root; the operator's repository and credentials are named by no arm and bound under neither |
 | 5 | contacting the network | a trusted-side loopback listener, never the internet — measured refused under `--unshare-all`, so the row holds offline |
-| 7, B5 | a leaked process | `timeout -k` outside the sandbox plus a process-group kill in teardown (`sandbox.sh:288`); the control's orphan is what the reaper exists for (`EVD-013`) |
+| 7, B5 | a leaked process | `timeout -k` outside the sandbox plus a **session** kill in teardown, not a process-group kill — see below (`EVD-013`) |
 | 8 | filling the disk, or hanging | the unbounded write goes to the capsule's size-capped tmpfs; the wall payload sleeps a small fixed multiple of the bound |
 | 9 | the control arm writing to real host state | its readable entries are fixture-owned decoys under the fixture's own root, and its `/source` is an export this run built for itself — never one a real transaction adopts |
+| 10 | the control arm handing a capsule a live descriptor | the descriptor is opened onto a fixture-created decoy file under the fixture's own root; no descriptor the trusted side holds for real is ever marked inheritable |
+| 11 | the control arm leaking the trusted-side environment | the assertion is over a decoy variable the fixture sets in its own child, so nothing the operator's shell carries is read, compared or reported |
+
+**Row 7's containment changed in round 4 and the reason generalises.** It read
+*a process-group kill in teardown (`sandbox.sh:288`)*, which was containment for
+the payload row 7 used to have. `RV-346` `F-27` strengthened that payload to a
+descendant that leaves the original session — precisely so a process-group-only
+backend cannot pass — and a process-group kill therefore cannot reap the
+survivor its own control arm creates. The fixture records the capsule's session
+id trusted-side before the arm runs and kills the session on the way out.
+
+The general rule, because this will recur: **when a row's payload is
+strengthened, its containment is part of the payload.** A harness reaping by the
+mechanism the row exists to defeat is not containment, and the failure is
+silent — a leaked process per run, discovered by a developer whose machine is
+slowly filling with them rather than by a red test.
 
 ### The verdict
 
@@ -3091,7 +3411,7 @@ Pure, over the verdict algebra:
 Executed, table A — each asserts `RowVerdict::Proven`, so each runs both arms:
 
 - `fresh_mutable_state_is_proven`
-- `explicit_input_set_is_proven`
+- `bounded_input_set_is_proven`
 - `denial_of_canonical_state_and_credentials_is_proven`
 - `bounded_filesystem_visibility_is_proven`
 - `explicit_network_posture_is_proven`
@@ -3099,6 +3419,13 @@ Executed, table A — each asserts `RowVerdict::Proven`, so each runs both arms:
 - `process_tree_teardown_is_proven`
 - `resource_and_termination_observation_is_proven`
 - `immutable_input_set_is_proven`
+- `closed_descriptor_set_is_proven`
+- `closed_environment_is_proven`
+
+One title per row, and the list is asserted to be exactly the row set by
+`every_row_id_is_covered_by_exactly_one_table` above — so a row added without a
+title, or a title outliving its row, is a red test rather than a silent gap.
+That assertion is what makes the count safe to state in one place.
 
 Executed, the claims that need naming beyond their row:
 
@@ -3110,8 +3437,18 @@ Executed, the claims that need naming beyond their row:
 - `not_executable_is_preceded_by_a_liveness_execution_in_the_same_capsule`
 - `the_working_directory_does_not_track_the_trusted_side_cwd` — row 6 from two
   trusted-side cwds
-- `no_descendant_outlives_the_execute_call` — row 7's probe arm
+- `the_descendant_escapes_the_original_session_before_its_parent_exits` — row
+  7's payload precondition, asserted directly so a payload that silently stops
+  escaping cannot weaken the row without failing (`F-27`)
+- `no_descendant_outlives_the_execute_call` — row 7's probe arm, established
+  trusted-side against the escaped descendant
+- `a_process_group_only_reaper_fails_row_seven` — the `F-27` mutant itself, as a
+  stub backend: it reaps the original process group and nothing else, and the
+  row must report `Violated`. Without this, the strengthened payload is a claim
+  no test defends
 - `the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness`
+  — by session kill, not by process-group kill, which is the containment that
+  had to move with the payload
 - `a_probe_arm_placement_is_byte_identical_to_what_provision_returned` —
   invariant 4, which nothing else would catch
 - `the_shared_root_delta_repoints_only_the_second_placement`
@@ -3123,6 +3460,21 @@ Executed, the claims that need naming beyond their row:
   differs by attachment alone, which is what makes it a single delta
 - `the_writable_inputs_control_writes_only_to_this_runs_own_export`
 - `the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed`
+- `no_descriptor_above_two_is_readable_in_the_capsule` — row 10's probe arm,
+  enumerated from `/proc/self/fd` rather than guessed at by number
+- `the_inheritable_decoys_bytes_appear_nowhere_in_the_capsules_output` — row
+  10 stated as the thing that actually matters, so a backend that leaves the
+  descriptor open but unreadable is still distinguished from one that closes it
+- `the_descriptor_control_changes_no_mount_no_env_and_no_argv_byte` — that row
+  10's delta is a single axis, the same assertion row 9 carries
+- `a_descriptor_leaking_backend_fails_row_ten` — the `F-26` mutant as a stub:
+  identical on every other observation, one inherited descriptor, must report
+  `Violated`
+- `the_capsule_environment_equals_capsule_env_exactly` — row 11's probe arm, set
+  equality rather than a denylist of known credential names
+- `a_trusted_side_variable_does_not_appear_in_the_capsule` — the decoy half
+- `an_environment_passthrough_backend_fails_row_eleven` — the row 11 mutant as a
+  stub
 
 Executed, table B: the twelve titles `sec-3`'s `Verification alignment` already
 names, driven by this harness rather than restated here.
@@ -3176,7 +3528,7 @@ New, the second crate — a bin-only package, no lib target (`sec-6`):
 | `crates/doctrine-control/src/backend/bubblewrap.rs` | the Linux profile, its twelve flag constants and its argv | `sec-2` |
 | `crates/doctrine-control/src/transaction.rs` | `CapsuleTransaction`, `TransactionId`, `AcceptedBase`, `PhaseIdentity` | `sec-3` |
 | `crates/doctrine-control/src/provision.rs` | `provision`, export publication, root ownership, rollback | `sec-3` |
-| `crates/doctrine-control/src/conformance.rs` | the nine-property table, the fixture, the verdict, and the second caller | `sec-7` |
+| `crates/doctrine-control/src/conformance.rs` | the property table, the fixture, the verdict, and the second caller | `sec-7` |
 
 Modified — and this is the whole of it, which is `sec-6` invariant 2 stated as a
 diff rather than as a claim:
@@ -3297,16 +3649,21 @@ unit it tests, which reaches `pub(crate)` items and does run under `cargo test`.
 
 | evidence | lives in | kind |
 |---|---|---|
-| `sec-2`'s argv, closure and placement-validation tests (≈33 titles) | `backend.rs`, `backend/bubblewrap.rs` | pure |
+| `sec-2`'s argv, closure and placement-validation tests (≈37 titles) | `backend.rs`, `backend/bubblewrap.rs` | pure |
 | `sec-3`'s export, clone, rollback and ownership tests (≈22) | `provision.rs`, `transaction.rs` | pure and trusted-side |
 | `sec-4`'s parse, normalization, hash and restriction tests (≈42) | `src/interpretation.rs`, root package | pure |
 | `sec-5`'s capacity, configuration and root-resolution tests (≈33) | `config.rs`, `capacity.rs`, `host.rs` | pure, over a fixture `HostFacts` |
 | `sec-6`'s export-set and two-tree gate assertions (7) | `tests/architecture_layering.rs` | integration, root package |
 | `sec-7`'s classification and verdict-algebra tests (≈20) | `conformance.rs` | pure |
-| `sec-7`'s tables A (nine rows), B (five) and C (four) | `conformance.rs` | executed, one fixture per run |
+| `sec-7`'s tables A, B (five) and C (four) | `conformance.rs` | executed, one fixture per run |
 
 The counts are indicative for phase sizing; each section's own list is the
 authority, and two titles are named by two sections and belong to one test.
+`sec-2`'s figure moved by four in round 4 — the source-export carve-out's
+refusals and the lawful case each must not capture (`F-25`) — and table A's
+executed cost by two arms plus two controls (`F-26` and the channel ledger).
+Neither is a large phase-sizing move; both are recorded because a count nobody
+adjusts is a count nobody is reading.
 
 `sec-6`'s assertions land in `tests/architecture_layering.rs` rather than a new
 file because the export set is the cross-crate half of the same rule the file
@@ -3356,19 +3713,31 @@ reconciliation brief, alongside `DEC-136`'s handoff note (`sec-1`, `sec-4`).
 |---|---|---|
 | `REQ-449` | `satisfied` | `sec-4`'s refusal, normalization, hash and restriction tests; criterion 3 by `sec-7` table C's read-once row |
 | `REQ-461` | `satisfied` | `sec-5`'s pure tests for the arithmetic and the configuration, **plus** table C's unconditional row — `SystemHost`'s figure agrees with a `statvfs` the test performs itself on the same path. The wrong-path discriminator is a second, conditional row |
-| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A in full, row 9 included; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet |
+| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A in full — every channel in `sec-2`'s ledger rowed, rows 9, 10 and 11 included; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet |
 | `REQ-450` | contributing `--change`, stays `pending` | criterion 1 by table B. Criteria 2 and 3 need candidate identity and harvest from later slices |
-| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only: canonical state and credentials by row 3, arbitrary undeclared paths by row 4, the shared object store by rows 3 and 9 together — reachable-but-not-writable is not denial — and egress by row 5 |
+| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only, and it is a claim per channel rather than per row: canonical state and credentials in the mount channel by row 3, arbitrary undeclared paths by row 4, the shared object store by rows 3 and 9 together — reachable-but-not-writable is not denial — egress by row 5, and credentials reaching the capsule *already open* or *already in the environment* by rows 10 and 11, which are the two channels this table cited nothing for before round 4 |
 
-**Two of those rows moved in `RV-346` round 3.** `REQ-461` could not have been
-`satisfied` as the table first read it (`F-24`): its only executed evidence was
-a row that skips wherever the capsule root and the repository share a
-filesystem, and the pure tests run against a fixture `HostFacts` that cannot
-observe whether the real probe is ever called. `sec-7` splits that claim into an
-unconditional leg and a discriminating one, and closure now rests on the first.
-`REQ-459` criterion 1 was **not** discharged before row 9 existed (`F-19`) —
-table A admitted a backend binding every declared input writable — so *in full*
+**Rows of this table have moved in each of the last two rounds, and always in
+the same direction.** `REQ-461` could not have been `satisfied` as the table
+first read it (`F-24`): its only executed evidence was a row that skips wherever
+the capsule root and the repository share a filesystem, and the pure tests run
+against a fixture `HostFacts` that cannot observe whether the real probe is ever
+called. `sec-7` splits that claim into an unconditional leg and a discriminating
+one, and closure now rests on the first.
+
+`REQ-459` criterion 1 has now been claimed *in full* three times against three
+different tables. It was false before row 9 (`F-19`, table A admitted a backend
+binding every declared input writable) and false again before rows 10 and 11
+(`F-26`, table A admitted a backend leaking an inherited descriptor, and the
+channel ledger then found the environment unrowed as well). Each time the phrase
 was a true statement about a table that was missing a row.
+
+That is worth stating plainly rather than quietly fixing a third time: **the
+phrase *in full* is only as strong as the enumeration it quantifies over**, and
+until round 4 this design had no written enumeration for it to quantify over at
+all. `sec-2`'s channel ledger is now that enumeration, and *in full* above means
+*every channel in the ledger has a row* — a claim that can be checked against
+something, and that fails visibly if a channel is added without one.
 
 Coverage records name the discharging test per criterion (`doctrine coverage
 record`), and the reconciliation brief reports `REQ-448`, `REQ-450` and
@@ -3383,7 +3752,7 @@ The design's own account of what it did not settle. The slice's scope authored
 `R1`–`R3` and its assumptions `A1`–`A3`; the pre-design triage added `R4`–`R5`
 and `A4`. This section adjudicates each against the design that now exists —
 one of them is retired, one changes subject, one is discharged — adds the two
-the design itself created, and records the four residuals a reader implementing
+the design itself created, and records the five residuals a reader implementing
 from this document would otherwise meet unannounced.
 
 ### The authored risks, as they now stand
@@ -3419,14 +3788,28 @@ property* — is a rule a later row can be added in violation of. A property wit
 no unique mechanism cannot be controlled independently, and the rows must then
 be re-cut rather than the control widened.
 
-`R3` has now been realised twice rather than merely feared, and both times by
-the external pass rather than by the author. `F-2` found two clauses merged into
-one row, and `F-19` found one clause carrying two claims of which only one had a
-row — a suite that admitted a backend binding every declared input writable.
-Neither was a careless omission; both read as complete until someone executed
-the mutant the suite did not have. The standing form of this risk is that **the
-gap in a property suite is invisible from inside it**, and the only reliable
-detector is an adversary constructing the backend the suite would wrongly pass.
+`R3` has now been realised **three times** rather than merely feared, and every
+time by the external pass rather than by the author. `F-2` found two clauses
+merged into one row. `F-19` found one clause carrying two claims of which only
+one had a row — a suite that admitted a backend binding every declared input
+writable. `F-26` found a clause-2 channel with no row at all, and writing the
+fix found a second one beside it. None was a careless omission; each read as
+complete until someone executed the mutant the suite did not have.
+
+The standing form of this risk is that **the gap in a property suite is
+invisible from inside it**, and the only reliable detector is an adversary
+constructing the backend the suite would wrongly pass. Three data points now say
+the same thing about *where* the gaps are: all four missing rows were clause 2,
+and clause 2 is the clause that names an outcome without naming the mechanisms
+that reach it.
+
+`sec-2`'s **channel ledger** is round 4's structural answer, and it is worth
+being exact about what it does and does not buy. It does not make the suite
+complete. It changes the failure from *nobody thought of this channel* to *this
+channel has no row*, which is a blank cell in a table someone can read. That is
+a real improvement over the previous state, where the enumeration existed only
+in whichever author's head last wrote a row, and it is strictly weaker than a
+proof. The residual below states what it leaves open.
 
 **`R4` — the `bwrap_core_argv` parity contract. Retired.** Its premise was that
 this slice widens the shared bubblewrap builder. `DEC-155` gives the capsule
@@ -3501,7 +3884,7 @@ mis-describes.
 impure surface `REQ-449`'s resolution needs; it was, at point of use, and
 `sec-6` exports it on that basis.
 
-### The four residuals
+### The five residuals
 
 Each of these is a thing this design knows and does not fix. They are recorded
 here rather than solved because solving them needs either a second backend, a
@@ -3527,14 +3910,23 @@ Closing the race properly still means binding against an open descriptor rather
 than a path, and whether the backend contract can express that at all — for
 bubblewrap and for any later backend — is unanswered. Recorded, not solved.
 
-**2. Out-of-crate backends break `sec-7`'s sealing.** `ConformanceBackend` and
-its weakening vocabulary are `pub(crate)`, which is what stops a production
-backend from carrying a way to weaken itself. That holds only while every
-backend lives inside `doctrine-control`. A backend shipping from another crate
-would make the weakening vocabulary public API, and the shape that survives it
-is a newtype over a private enum — deliberately not built here, because
-building an extension point for a second backend that does not exist is how the
-first one gets designed wrong.
+**2. Out-of-crate backends break `sec-7`'s sealing, and the surface grows each
+round.** `ConformanceBackend` and its weakening vocabulary are `pub(crate)`,
+which is what stops a production backend from carrying a way to weaken itself.
+That holds only while every backend lives inside `doctrine-control`. A backend
+shipping from another crate would make the weakening vocabulary public API, and
+the shape that survives it is a newtype over a private enum — deliberately not
+built here, because building an extension point for a second backend that does
+not exist is how the first one gets designed wrong.
+
+What has changed is the size of what would be exposed. `ConformanceBackend`
+carries two methods, and `PropertyRemoval` now carries seven variants, two of
+them added in round 4. The trend is the point: every count correction widens
+this residual, so the cost of deferring the seal rises with each round rather
+than staying fixed. It is still the right deferral — the sealing shape is
+decided by the second backend's needs and there is no second backend — but a
+later slice inheriting this should expect a larger vocabulary than this one
+described, not the same one.
 
 **3. A host that cannot run the backend cannot run this project's tests.**
 `sec-7`'s admission test asserts `Admitted` unconditionally, because
@@ -3571,7 +3963,32 @@ runs this suite in CI owes that decision.
 **4. The executed suite's cost lands on the fast inner loop.** `sec-8` rules
 `default-members` and states the measurement obligation and the one lawful
 adjustment. What stays open is the measurement itself, which is a phase
-obligation.
+obligation. Round 4 added two arms and two controls, which moves the figure
+without changing its shape.
+
+**5. The channel ledger is an enumeration, and no one can prove it complete.**
+This residual is created by round 4's own fix and would be dishonest to omit.
+`sec-2` now lists the ways authority crosses `execute` and names the row proving
+each, which is what turned an unthought-of channel into a readable blank cell.
+It cannot establish that the list is exhaustive — an enumeration asserting its
+own completeness is the exact shape of the invariant `F-26` refuted, one level
+up.
+
+Three channels are on the ledger but rowed by something other than a table A
+row, and each is a place a later reader should look first. `argv` is closed by
+construction rather than by execution — `Argv` is typed and computed
+trusted-side — which is a real argument and is still not a probe. Process
+reachability is split between row 7 and table B's `B5`, so no single row carries
+it. And the ledger says nothing about **process credentials** — uid and gid
+mapping, supplementary groups, capabilities, and whether a capsule can regain
+privilege through a setuid binary in its own readable set. Under
+`--unshare-all`'s user namespace bubblewrap makes that hard, which is a fact
+about bubblewrap and not about the contract, and `SPEC-030` states no clause
+that would make it a row. It is named here so the next reviewer starts from a
+list that admits its own edge rather than from prose that sounds finished.
+
+The honest statement of the ledger's value: it makes the *next* gap cheaper to
+find and does not make it less likely to exist.
 
 ### Open questions, and where each belongs
 

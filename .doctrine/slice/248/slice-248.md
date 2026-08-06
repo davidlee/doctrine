@@ -87,16 +87,23 @@ reference — never `plan.toml` or the phase sheets, which is where RFC-027's
 churn would land.
 
 **REQ-459 — platform backend contract.** The shared property-conformance suite,
-**nine** properties over SPEC-030's eight clauses: fresh mutable state; a bound
-input set no wider than what was declared; those declared inputs bound
-*immutably*; no writable canonical repo / shared object store / control-plane
-state / credentials; bounded host filesystem visibility; explicit network
-posture; deterministic working directory; process-tree teardown; and trusted
-observation of resource limits and termination. The ninth row is DEC-156's
-second correction: boundedness and immutability are two claims of one clause and
-they fail apart, so a backend binding exactly the declared inputs *writable*
-passed every earlier row while handing capsules mutable shared host state. Each
-property carries a one-property-removed control (DEC-156). Plus the
+**one row per authority channel** rather than one per SPEC-030 clause. The
+channel ledger (`design.md` `sec-2`) is the closed enumeration of ways authority
+crosses `execute` — the mount set by presence, extent and mutability; open file
+descriptors; the environment; the network; the process tree; the working
+directory; observed resource bounds — each naming the row that proves it. The
+row count lives in `sec-7`'s Table A and is deliberately stated nowhere else,
+including here.
+
+Deriving rows from clauses is what this design did and it was wrong three times
+over: a clause is written in the vocabulary of what a capsule must not *have*, a
+row in the vocabulary of the mechanism by which it *gets* it, and SPEC-030's
+clause 2 — *an explicit base and input set* — names an outcome reachable by four
+mechanisms while naming none of them. Every count correction DEC-156 has taken
+was clause 2, and each was found by an adversary building the backend the suite
+would wrongly pass, never by re-reading rows. Each property carries a
+one-property-removed control, and each payload is the strongest negation of its
+property rather than a representative one (DEC-156). Plus the
 Linux/bubblewrap backend implemented against it, taking SL-241's rig profile as
 its starting point. It is built self-contained and does not extend
 `src/worktree/jail.rs` (DEC-155): the two profiles differ on every structural
