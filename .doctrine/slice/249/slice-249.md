@@ -230,6 +230,11 @@ Also out of scope:
   rule/record check already lives here.
 - `src/design_run/refusal.rs` — the typed fault.
 - `src/commands/design.rs` — `plan_checkpoints`, ISS-318's first instance.
+  *(Amended in review: also `execute_mint` — DEC-086 step 1 journals the payload
+  digest D8 adds, and the step-4 resume arm is where RV-349 F-1 found the
+  design's claim about the journal to be false.)*
+- `src/design_run/attestation.rs` — `RecoveryIntent`, which gains the
+  `#[serde(default)]` payload digest. *(Added in review — RV-349 F-1, D8.)*
 - `.doctrine/spec/tech/019/` — the seven-kind extension and the verb-set
   responsibility (objective 4), landed through a REV.
 - `.doctrine/spec/product/010/` — § 4's kind-set enumeration, the REV's second
@@ -246,6 +251,11 @@ Also out of scope:
   in-place extension. *(Amended: the REV spans **two** entities, SPEC-019 and
   PRD-010 — DEC-175. It also carries SPEC-019's now-false self-description, "it
   is forward-intent: no code is shipped yet", as a third amendment row.)*
+  *(Amended again in review: the REV carries a **fourth** passenger — DEC-168's
+  recorded rationale is known-false (RV-349 F-1 round two; design D8a) and this
+  slice has no verb for amending a knowledge record, which is the hole it exists
+  to close. Whoever authors the REV should check that is a legitimate home for
+  the correction rather than merely the only one available.)*
 - **R2 — RETIRED by DEC-172 and DEC-174.** The risk was that the three
   ungoverned kinds would be transcribed from the current structs, laundering
   implementation into governance. It dissolves the same way for all three: the
@@ -315,7 +325,10 @@ design.)*
   message naming the correct subverb. Test-verified.
 - A `Declaration` key inert at its subject's kind is **refused**, not ignored,
   across the whole field set rather than the two observed instances.
-  Test-verified.
+  Test-verified. *(Sharpened in review — RV-349 F-4: "the whole field set" means
+  every (key × subject kind) cell, asserted by a generated matrix whose oracle is
+  behaviour. A key-set comparison proves inventory, not mapping, and the single
+  `body`-on-`cp-` replay was one cell standing in for the criterion.)*
 - A `form = "create"` checkpoint disposition mints a record whose facet **and
   prose** are populated from the payload, in one act, with no follow-up write.
   Test-verified, and this is the criterion that closes the SL-248 data loss.
@@ -324,12 +337,28 @@ design.)*
   answer cannot be omitted. Test-verified. *(And the settleable set is derived,
   not listed — a test asserts it equals exactly those (kind, state) pairs whose
   facet carries `<state>_by`/`<state>_on`. DEC-178.)*
+- A retry of a journalled mint carrying a changed payload is **refused** before
+  any resumed effect, so no record is accepted under an attestation bound to
+  different content. Test-verified. *(Added in review — RV-349 F-1, the pass's
+  only blocker. The window is pre-existing; this slice is what makes the
+  divergent content the record's whole substance.)*
+- A write through the facet seam preserves comments, unknown sibling keys and
+  relation tables, and is idempotent. Test-verified. *(Added in review — RV-349
+  F-6: the existing round-trip suite exercises a `#[cfg(test)]` emit with no
+  production caller, so it cannot stand in for SPEC-004's edit-preservation
+  requirement, which is what the closure criterion below assumed it did.)*
 - SPEC-019 and PRD-010 enumerate seven record kinds with no residual "four",
   SPEC-019 carries a facet contract for `EVD` / `HYP` / `CPT`, and lists the
   verbs this slice ships. *(Pinned by an in-crate canary asserting every kind in
   `kinds::RECORD` is named in both — DEC-176, the observable R4 demanded. Agent
   verification of the prose sits on top of that, not in place of it.)* ISS-316
-  narrows to its lifecycle-vocabulary half rather than closing.
+  narrows to its lifecycle-vocabulary half rather than closing. *(Strengthened
+  twice in review — RV-349 F-5. The canary reads **both authored tiers** of both
+  entities, not SPEC-019's prose alone: two of the stale sites are in
+  `spec-019.toml`'s structured `responsibilities`. And "no residual four" is
+  enforced as a blanket ban on the word in those two entities, not as a pin on
+  one enumeration phrase — all ~24 occurrences across them are kind-derived and
+  none is independent, so a phrase pin would report green on the other 23.)*
 - A `[facet]` key inert at its record's kind is reported by `doctrine doctor` —
   not refused on read. Test-verified. *(DEC-177.)*
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
