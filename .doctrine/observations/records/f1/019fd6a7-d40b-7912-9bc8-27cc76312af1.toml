@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd6a7-d40b-7912-9bc8-27cc76312af1"
+recorded_at = "2026-08-06T10:39:10.859783604Z"
+kind = "friction"
+summary = "design: research-baseline restamp treadmill — the /design run's own slice-card edits regress explore.research"
+detail = "SL-250 design run dr-019fd692, exploring stage. The explore.research runbook step verifies via 'doctrine verify research-current', which binds the research baseline to slice-250.md. But the design run legitimately EDITS slice-250.md (scope amendment: carving the doctor leg out to IMP-407). So the step regressed after discharge and blocked the exploring->inquiring advance, needing a second '--restamp' plus a retry. Restamped twice in one stage. The re-restamp is also slightly dishonest-feeling: it asserts the artefact is current when what changed was the consumer, not the research. Cost this session: ~3 extra tool calls and one refused advance. Would recur on every stage advance that follows a scope edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

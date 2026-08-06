@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design (pre-design research complete, no design run) · 48880f64
+fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `inquiring` rev 15 · 63a99b51
 
 ### Produced
 
@@ -22,6 +22,13 @@ fresh-as-of: 2026-08-06 · design (pre-design research complete, no design run) 
   probe results, recorded durably.
 - Observation `019fd685-…` — RFC-011 instrumentation: the SPEC-010 / code
   divergence was found only by reading git history during research.
+- Design run `dr-019fd692` — opened, exploring runbook discharged, 10-node
+  inquiry map declared, both exploring-edge gates cleared, now at `inquiring`.
+  **The run holds the live question set; do not restate it here.**
+- IMP-407 — the doctor leg, carved out of this slice (user, 2026-08-06).
+  Carries `R2`, `R7`, `OQ-5`, and a second leg the carve-out surfaced.
+- Observation `019fd6a7-…` — RFC-011: research-baseline restamp treadmill; a
+  design run's own slice-card edits regress its `explore.research` step.
 
 ### Learned
 
@@ -34,15 +41,31 @@ fresh-as-of: 2026-08-06 · design (pre-design research complete, no design run) 
   symlink Claude channel, deleted at `347197e8` with no amendment. Pre-existing
   divergence, independent of this slice; `OQ-2b` closes it. In the observation,
   not yet in a governance sink.
+- **`T1`/`T2`/`T3`** — the three design-surface findings that resize the hook and
+  skills legs. Written up in § Design surface triage below; `T2`'s drift is now
+  IMP-407's Leg 2 and `T3` reframes `OQ-9` as a no-parallel-implementation
+  question rather than a speculative generalisation.
+- **`R6` withdrawn on a false premise** (recorded on `slice-250.md`). It assumed
+  retirement blinds `SpawnSeamSymmetry`; but the Non-Goals keep `plugins/` and
+  `R9` needs the plugin working as the managed-policy escape hatch, so
+  `hooks.json` survives and the check is untouched. Its closure criterion
+  inverted from "input migrates" to "needs no change".
 
 ### Open
 
-- Nothing blocking. Design may start.
-- `OQ-2b`'s scope note: parameterise the mechanism over the target directory.
-  Cited to `git show 347197e8^:src/skills.rs` in `slice-250.md` § `OQ-9`.
+- **The live question set is in design run `dr-019fd692`, not here.** Seven
+  blocking inquiries, one non-blocking, two deferred to IMP-407. Read it with
+  `doctrine design resume 250` — a copy here would start ageing immediately.
 - `R5` — the merge-core ownership widening is the central design problem and the
-  one Non-Goal re-draw. Everything else in the risk register is documented-not-
-  engineered per the less-code posture.
+  one Non-Goal re-draw. Carried as the run's `inq-2`, which is where the two
+  candidate shapes (widen ownership to `(command, matcher)` vs generalise
+  `HookSpec` to a matcher set) are recorded. Everything else in the risk register
+  is documented-not-engineered per the less-code posture.
+- `OQ-2b`'s scope note: parameterise the mechanism over the target directory.
+  Cited to `git show 347197e8^:src/skills.rs` in `slice-250.md` § `OQ-9`; run's
+  `inq-6`, now sharpened by `T3`.
+- `R10` is a **binary** choice since the doctor leg left (run's `inq-5`) — the
+  middle rung it offered no longer exists in this slice.
 - **At close:** IMP-400 does *not* close with this slice — its `OQ-4`
   (migrating existing `enabledPlugins` / marketplace registrations) is out of
   scope and keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.

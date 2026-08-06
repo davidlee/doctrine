@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd6a4-41ca-7312-b9eb-42ad60707094"
+recorded_at = "2026-08-06T10:35:16.810424526Z"
+kind = "friction"
+summary = "/design: doctrine slice notes <id> is a writer, not a reader"
+detail = "Reached for 'doctrine slice notes 248' expecting to read the slice's notes.md; it is a create verb and refused with 'Refusing to overwrite existing ...'. Third instance of the class already recorded for 'slice plan' and 'slice phase' (mem_019facc24ac576e0a4d9ace5b2eeb12f): entity-adjacent prose has a write verb and no read-back verb, so the CLI-first habit costs a wasted call before falling back to Read. Cost here was one command; the pattern is systematic."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
