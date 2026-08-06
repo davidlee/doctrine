@@ -101,12 +101,7 @@ stays published for anyone who prefers the plugin.
    (`OQ-2a`) or the specified canonical-tree-plus-symlink (`OQ-2b`) — is the
    open call. Either way the delegate stays as-is for non-Claude agents and
    SPEC-010's dual-path `D2` survives.
-3. **The doctor leg.** A check that walks the diagnosis order the trust memory
-   establishes and names the *blocking layer* rather than reporting "hooks not
-   working": folder trust → (plugin registration, while any plugin channel
-   survives) → safe-mode / managed policy → blocklist → Doctrine's own hook
-   entries present, canonical, and sole in the file it owns.
-4. **Governance follow-through.** The REV's primary target is **SPEC-011**
+3. **Governance follow-through.** The REV's primary target is **SPEC-011**
    (`REQ-186` and Responsibility 6), which binds the hook-write target to
    `.claude/settings.local.json`. SPEC-010 governs *skills* distribution only —
    it never mentions hooks, `settings.json`, or `enabledPlugins` (research `X2`).
@@ -152,6 +147,12 @@ stays published for anyone who prefers the plugin.
   delegate is unchanged in itself; `OQ-2` resolved to routing Claude *into* it,
   so the change is the removal of Claude's special-case, not a change to the
   delegate.
+- **The doctor leg — carved out to IMP-407 (user, 2026-08-06).** The check that
+  walks the trust-layer diagnosis order and names the *blocking layer*, and the
+  conformance check keeping the published `hooks.json` honest against the
+  `HookSpec` registry, both move to IMP-407 (sequenced `after` this slice).
+  `R2`, `R7` and `OQ-5` travel with it and are no longer this slice's to settle.
+  This slice ships activation; it does not ship the diagnosis of activation.
 - **IMP-245 (Cursor as a doctrine harness).** A second consumer of whatever
   activation model this settles; not built here.
 - **Dispatch or confinement semantics.** No change to the funnel, worker spawn,
@@ -175,14 +176,15 @@ stays published for anyone who prefers the plugin.
   possibly a settings-file scope argument.
 - `src/install.rs`, `src/install_config.rs` — the skills channel planner and the
   `claude install` surface.
-- `src/doctor_checks.rs`, `src/commands/doctor.rs` — the new activation check.
 - `src/corpus.rs` — existing `HookSpec` consumer (memory-sync hook); regression
   surface for any core change.
-- `plugins/doctrine/hooks/hooks.json` — the hooks being relocated.
+- `plugins/doctrine/hooks/hooks.json` — the hooks being relocated. **Not deleted**
+  — it stays as the published plugin's payload (`R9`'s escape hatch), which is
+  why `R6` dissolves and `src/doctor_checks.rs` leaves this slice's surface.
 - `.claude-plugin/marketplace.json` — stays published; verify it still resolves
   after the skills channel settles.
 - `.doctrine/spec/tech/010/` — SPEC-010 amendment (via REV).
-- `install/` — user-facing guidance on activation and the doctor walk.
+- `install/` — user-facing guidance on activation and the cutover gotchas.
 
 ## Risks / Assumptions / Open questions
 
@@ -203,18 +205,23 @@ stays published for anyone who prefers the plugin.
   (`Read|Edit|Write`, `Bash`). One predicate per command would mark all four
   owned and silently drop three. Ownership must widen to `(command, matcher)`,
   or a matcher-set must be planned as one unit. This drove the Non-Goal re-draw.
-- **`R6` — the doctor's existing check reads the file being retired.**
-  `SpawnSeamSymmetry` parses `plugins/doctrine/hooks/hooks.json`
-  (`src/doctor_checks.rs:622`) *precisely because* it is the authored shipped
-  source rather than a tamperable installed copy. Retiring the plugin blinds the
-  check and reds its live-config regression test. Migrating its input is slice
-  work, not fallout.
-- **`R7` — the doctor can verify plausibility, not activation.** `/hooks` is the
-  only surface that reports which hooks are live and which file each came from,
-  and it is interactive-only; there is no programmatic query. Doctrine's doctor
-  can confirm the settings file it wrote is present, canonical, and sole — it
-  cannot confirm the harness loaded it. The closure criteria must not promise
-  otherwise.
+- **`R6` — WITHDRAWN (design run `dr-019fd692`, 2026-08-06): its premise is
+  false.** It read "retiring the plugin blinds `SpawnSeamSymmetry`", which parses
+  `plugins/doctrine/hooks/hooks.json` (`src/doctor_checks.rs:622`) precisely
+  because that is the authored shipped source. But the Non-Goals keep the
+  `plugins/` tree and the published manifest, and `R9`'s mitigation actively
+  *requires* the plugin to keep working as the managed-policy escape hatch —
+  which requires its hooks. **The file survives, the check keeps its input, and
+  nothing reds.** What retirement actually leaves behind is not a blinded check
+  but un-policed drift between the manifest and the `HookSpec` registry — already
+  live (the manifest ships the legacy `boot --emit` on matcher `*` while the code
+  emits `prompt resolve --role orchestrator` on `startup|clear`). That is
+  IMP-407's Leg 2, not this slice's.
+- **`R7` — MOVED to IMP-407 (user, 2026-08-06).** The doctor can verify
+  plausibility, not activation: `/hooks` is the only surface reporting which
+  hooks are live and which file each came from, and it is interactive-only. The
+  constraint binds IMP-407's acceptance criteria; with the doctor leg carved out,
+  this slice's closure criteria no longer make any claim it could over-reach.
 - **`R10` — cross-scope double-fire; the probe's one adverse finding.** Because
   scopes *merge* (`OQ-6`) and doctrine's merge core normalizes ownership only
   **within the single file it writes** (`install_hook_to_file(root, rel_path,
@@ -237,12 +244,13 @@ stays published for anyone who prefers the plugin.
   (user, 2026-08-06): document, do not engineer.** The cutover note tells the
   handful of existing users to disable the plugin when they take the new
   activation; nothing detects or reconciles it for them.
-- **`R2` — POL-002 boundary. Resolved in principle (research, 2026-08-06).**
-  POL-002 forbids depending on host state *silently*, not depending on it: a
-  feature-scoped capability is opt-in, acquired by no default path, and must fail
-  with a message naming what was missing. The doctor verb is exactly that shape.
-  Residual risk is only that no engine code has done this before — SL-250's leg
-  would be the first to read `~/.claude*`, so it sets the precedent.
+- **`R2` — MOVED to IMP-407 (user, 2026-08-06).** The POL-002 boundary on
+  reading per-user `~/.claude*` state was only ever a property of the doctor leg,
+  which is no longer in this slice. Resolved in principle (research, 2026-08-06):
+  POL-002 forbids depending on host state *silently*, not depending on it, and a
+  feature-scoped capability declaration is the fit. **This slice now reads no
+  per-user harness state at all** — it writes project-scoped settings files and
+  nothing else — so the precedent it would have set is deferred with it.
 - **`R9` — the silent-failure premise is narrower than claimed.** Direct-write
   sheds two plugin-only modes (orphaned marketplace registration, blocklist) but
   keeps `disableAllHooks`, `allowManagedHooksOnly`, and folder trust — and
