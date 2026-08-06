@@ -1,13 +1,13 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 136
-slug = "project-interpretation-policy-lives-in-doctrinetoml"
-title = "Project interpretation policy lives in doctrine.toml"
+id = 155
+slug = "capsule-confinement-profile-stands-alone-from-the-worktree-jail"
+title = "Capsule confinement profile stands alone from the worktree jail"
 record_kind = "decision"
 status = "accepted"
-created = "2026-08-03"
-updated = "2026-08-03"
+created = "2026-08-06"
+updated = "2026-08-06"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
@@ -27,24 +27,6 @@ notes       = []
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "answers the interpretation-surface declaration home"
-target = "QUE-201"
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "settles the capsule programme's interpretation-policy location"
-target = "RFC-025"
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "supplies the target capsule interpretation-policy contract"
-target = "REV-046"
 
 [[relation]]
 label = "shapes"

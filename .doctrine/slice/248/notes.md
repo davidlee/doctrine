@@ -119,3 +119,16 @@ fresh-as-of: 2026-08-06 · pre-design (research round complete) · 17860ef3
   denial half (proven by REQ-459's suite) and REQ-450 criterion 1.
 - `IMP-397` / `QUE-204` — egress allowlist and non-Git build inputs, out of scope
   but adjacent to REQ-459's network-posture control.
+- **Correction to land at reconcile: `DEC-136` handoff item 1.** It expects "a direct
+  implementation seam in the existing `doctrine.toml` loader rather than a new
+  configuration subsystem". Not available: `read_doctrine_toml_text` reads disk at
+  `root`, `REQ-449` reads a blob at the contracted base OID, and the shared reader is
+  deliberately tolerant where `REQ-449` must be strict. A separate typed projection
+  (the `reserve.rs` pattern) is required either way. The decision itself — the
+  `[interpretation]` block stays in `.doctrine/doctrine.toml` — stands; only that
+  supporting note is wrong, so this is a record correction, not a Revision.
+- **Follow-Up at close: the `doctrine-control` distribution contract.** The workspace
+  member is cheap in this slice because nothing new ships (`DEC-153` § The cheap path).
+  Whichever slice first ships it as a released binary owes the nix `srcWithDist` graft,
+  the binstall asset name, and `install.sh` / `release.yml` together — see `R5`. Also
+  an `RFC-025` § State-of-play note.
