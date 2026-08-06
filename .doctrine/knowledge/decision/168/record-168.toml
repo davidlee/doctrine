@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 168
+slug = "filled-records-written-at-mint-step-5"
+title = "Filled records are written at mint step 5"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 objective 2 extends the design-run CreateRecord payload so a form=create checkpoint mints a filled record in one act. Two insertion points were available: pre-fill the scaffold inside knowledge::create_record, or write after the record exists at DEC-086 step 5 (apply_record_effects)."
+choice       = "Write at step 5. The facet and prose are applied by apply_record_effects, alongside the acceptance-to-status move and the `shapes` edge that already land there."
+alternatives = [
+  "Pre-fill the scaffold inside create_record. Rejected on coupling and on crash-resume — see rationale.",
+]
+rationale    = "Three counts against pre-filling. (1) Coupling: create_record reaches the shared kind-agnostic materialiser through entity::Inputs { slug, title, date }, a type every entity kind shares; carrying knowledge-specific facet data through it puts kind-specific payload in the shared substrate, and would additionally push per-facet-field placeholders into seven scaffold templates. (2) Crash-resume: materialise_record_at re-scaffolds from the journal, which carries only the reserved id, title and slug, so a crash between reserve and materialise would resume with a hollow record unless the payload were journalled too. (3) Step 5 is already the effects seam and is already idempotent by construction — its own doc states 'Both are idempotent, which is what lets a resumed step 5 simply run again', and set_authored_status writes only on a change while append_edge returns Noop when the edge is present. A facet-and-prose write is idempotent on the same terms, so a resumed step 5 keeps working unchanged."
+consequences = [
+  "The record exists hollow on disk between IntentState::Materialised and IntentState::Applied. This is not a new window — status and the shapes edge already land in it — and the journal's Applied state is what closes it on resume.",
+  "Composes with DEC-165's phase order: phase 1 writes prose at step 5 via entity::write_body (which exists and which memory edit already rides), and the later phase adds the facet write at the same site.",
+  "The write seam is shared with objective 1 rather than reimplemented, satisfying the scope card's requirement that objective 2 rides objective 1's pure seam.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

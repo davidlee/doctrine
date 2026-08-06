@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 170
+slug = "facet-writes-refuse-absent-keys"
+title = "Facet writes refuse absent keys and spell empty as empty string"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's write seam mutates the typed [facet] block of a knowledge record. The codebase already holds two opposing write postures and distinguishes them deliberately: dep_seq::apply_status refuses a missing key ('F-1: the managed keys are scaffold-seeded — edit in place, never create. A missing key means a malformed entity; refuse rather than tail-insert'), while apply_scalar creates one ('an ABSENT key is CREATED — these fields are legitimately absent'). SPEC-019 also specifies the empty-string-to-None seam on the read side only; nothing said how a cleared value is written."
+choice       = "F-1 posture: refuse when the key is absent, never create it. A cleared value is written as an empty string, never by omitting the key."
+alternatives = [
+  "Create the key if missing (the apply_scalar posture). Rejected: facet fields are not legitimately absent.",
+  "Spell a cleared value by omitting the key. Rejected: it manufactures exactly the malformed-entity state the F-1 refusal exists to detect.",
+]
+rationale    = "The posture is chosen by whether the field is scaffold-seeded, and facet fields are: install/templates/knowledge-decision.toml seeds [facet] with every field present and empty, commented 'every field typed; seeded empty (captured later)'. So an absent facet key means the entity has been hand-mangled, and creating it would paper over that. The empty-string spelling follows from the same fact — omitting the key on a clear would produce, by the writer's own hand, the malformed state the refusal detects, and would break the byte-stable round-trip. Guarding against a misapplication: mem_019ee9fd51d87aa38a2dfb31ad6c4eec proves a toml_edit ROOT insert-if-missing is safe because a root key cannot tail-land inside a trailing subtable, which reads like a licence to drop the F-1 guard. It is not — that memory scopes its own proof to root keys and says so explicitly, and [facet] fields are subtable-nested."
+consequences = [
+  "src/facet_write.rs::set_facet_mixed allocates an absent table and inserts missing keys, so riding it for knowledge needs either an F-1 guard at the call site or a posture parameter. Which of the two is an implementation call for the design; the posture itself is settled here.",
+  "A hand-deleted facet field surfaces as a refusal naming the record rather than being silently recreated, so the corpus damage is reported rather than absorbed.",
+  "The write-path half of the empty-string-to-None seam, which SPEC-019 specifies only on the read side, becomes a row the objective 4 REV can state.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

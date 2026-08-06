@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 169
+slug = "wire-key-tables-pinned-by-serde-key-set-test"
+title = "Wire-key tables are pinned by a serde key-set test"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 objective 3 refuses a Declaration key that is inert at its subject's kind — ISS-318's defect class, total over the field set rather than patched at the two observed instances. That refusal needs a correspondence table between Declaration's wire keys and the design-run subject kinds (inq-, sec-, att-, fnd-, cp-). The slice's open question asked whether the table is derived or authored."
+choice       = "The table is authored, and pinned total by a test that serialises a fully-populated Declaration and asserts the resulting JSON key set equals the table's key set."
+alternatives = [
+  "Derive the table from the wire types. Not available: Rust has no reflection over struct fields, so this would need a proc macro — new machinery for one table.",
+  "Author the table with no totality pin. Rejected: a Declaration field added later would silently miss the table, which is ISS-318 recurring inside its own fix.",
+]
+rationale    = "Authoring is forced; the design question is only how the table stays total. Serde already gives the answer without new machinery: every Declaration field carries skip_serializing_if (Sparse::is_omitted or Option::is_none), so a fully-populated value emits exactly the wire keys and nothing else, and resolved_record is #[serde(skip)] so it correctly never appears. Comparing that key set to the table's makes a new field a compile-and-test failure rather than a silent fallthrough. No token is re-typed, since both sides come from the type's own serde form (STD-001). This is the same read-through-serde idiom SL-244 PHASE-05 landed on for a different problem."
+consequences = [
+  "The table is one authored artefact with one consumer (the design wire), as the OQ-1 settlement on SL-249 requires — not the two-consumer framing the scope card originally carried.",
+  "This table is Declaration keys against design-run subject kinds. It is NOT facet keys against record kinds, and it touches no knowledge governance — the fact that lets objective 3 ship in phase 1 under DEC-165.",
+  "The same pin generalises to any wire type whose key set something else must stay total over.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
