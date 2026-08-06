@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 177
+slug = "read-tolerant-inert-keys-caught-by-doctor"
+title = "Read stays tolerant; inert facet keys are caught by doctor"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's OQ-6. Objective 3 refuses a Declaration key that is inert at its design-run subject's kind. The same defect class exists one surface over, on the knowledge read path: `RawFacet` (src/knowledge.rs:612) is a deliberate kind-blind superset of every field of every kind, and `validate_facet` (:755) reads only the fields its `record_kind` owns and discards the rest — so `answer = \"...\"` in a DEC's `[facet]` parses clean and vanishes. The question is whether objective 3's refusal extends there."
+choice       = "It does not. The read path stays tolerant, and the detection duty moves to `doctrine doctor` as a kind-blind key-presence tripwire that warns, naming the record and the inert key. OQ-6 answers no on the refusal and yes on the duty."
+alternatives = [
+  "Extend the refusal into `validate_facet`. Rejected on blast radius — see rationale.",
+  "Rule read-tolerance deliberate and stop, leaving the write side's totality as the whole answer. Rejected: it leaves a silent discard with no canary, which is ISS-318's class surviving inside the slice that widened to cover it.",
+]
+rationale    = "Refusing on read is not local. `read_kind` / `read_all` (src/knowledge.rs:1105, :1114) propagate with `?`, so one hand-mangled record fails `knowledge list` corpus-wide rather than only its own `show`, and `adoptable` (:286) sits on the design-run adoption path — a refusal there could lock a run out of adopting any record. The tool you would reach for to find the damage breaks along with it. That asymmetry is the whole argument: a write-time refusal (DEC-170's F-1) has an operator in the loop at the record it names, whereas a read-time refusal fires at every later reader of an unrelated record. Detection loses nothing that matters, because the only route onto disk is a hand-edit or an out-of-band writer — templates are per-kind and objective 1's per-kind subverbs cannot spell an inert key — so the population is small, human-authored, and exactly what a corpus health scan is for. It also rides existing machinery rather than inventing any: `catalog::scan::check_facet_residue` (src/catalog/scan.rs:270) is already a parse-free key-presence tripwire of this shape, and `doctor_checks::is_facet_diagnostic` already gates `field: Some(\"facet\")` diagnostics through to `doctor`."
+consequences = [
+  "The check binds to the facet-bearing phase, not phase 1, so it gates nothing in DEC-165's data-loss fix.",
+  "It load-bears on the per-kind facet field sets existing as data rather than only as clap flag declarations. Objective 1's subverbs need the same table, so the cost is shared, not additive — but if objective 1's design does not produce one, this ruling's cheapness claim fails and the honest fallback is to rule read-tolerance deliberate and record the gap as a backlog item.",
+  "`validate_facet` is unchanged, so the kind-blind read / kind-aware validate seam SPEC-019 section 5 describes stays true as written and needs no amendment row.",
+  "The `Concept` arm's `let _ = raw;` becomes the tripwire's widest case: under DEC-172's ruling on ConceptFacet, every facet key is inert at CPT, so any populated `[facet]` on a concept warns.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
