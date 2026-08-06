@@ -95,8 +95,10 @@ stays published for anyone who prefers the plugin.
    The merge core's ownership predicate must first be extended from `command`
    to `(command, matcher)` — see `R5`. Without that it cannot represent these
    hooks at all.
-2. **One Claude skills channel.** Settle `OQ-2` (npx delegate vs the SPEC-010
-   symlink channel for Claude) and make the survivor the only Claude path.
+2. **One skills channel for every agent.** Per `OQ-2`, delegate Claude to `npx
+   skills add davidlee/doctrine` as every other agent already does, deleting the
+   Claude special-case rather than resurrecting the removed symlink
+   orchestration. This collapses SPEC-010's dual-path `D2` to a single path.
 3. **The doctor leg.** A check that walks the diagnosis order the trust memory
    establishes and names the *blocking layer* rather than reporting "hooks not
    working": folder trust → (plugin registration, while any plugin channel
@@ -105,12 +107,23 @@ stays published for anyone who prefers the plugin.
 4. **Governance follow-through.** The REV's primary target is **SPEC-011**
    (`REQ-186` and Responsibility 6), which binds the hook-write target to
    `.claude/settings.local.json`. SPEC-010 governs *skills* distribution only —
-   it never mentions hooks, `settings.json`, or `enabledPlugins` — so it enters
-   the REV only if `OQ-2` changes the skills channel (research `X2`). RFC-018
+   it never mentions hooks, `settings.json`, or `enabledPlugins` (research `X2`).
+   **SPEC-010 joins the REV** now that `OQ-2` has resolved: its `D2` / `FR-003`
+   (`REQ-175`) dual-path routing and its "two independent channels" Overview both
+   collapse to a single delegated path. RFC-018
    (*Claude harness field notes*) remains the home for the empirical findings
    this leans on.
 
 ### Constraints
+
+- **Design posture: less code over edge-case handling (user, 2026-08-06.)**
+  Doctrine's user population is the author and a few people he knows personally.
+  Where a gotcha can be *documented* instead of *engineered around*, document it.
+  Do not build enterprise-grade migration, reconciliation, or recovery machinery
+  for states that a short note and a one-line fix will cover. This governs `R8`
+  and `R10` explicitly, and is the tie-breaker on `OQ-2`. It does **not** relax
+  the never-clobber contract — refusing to destroy a user's own content is
+  correctness, not edge-case handling.
 
 - **POL-002** (platform independence from host-project conventions) bounds how
   much Claude-specific per-user knowledge may enter the engine. Layers 1–4 of
@@ -134,8 +147,9 @@ stays published for anyone who prefers the plugin.
   activation**; pre-existing per-user state is left where it is. Carried to
   Follow-Ups, and IMP-400 stays open on that leg.
 - **Non-Claude harness install paths.** The `npx skills add davidlee/doctrine`
-  delegate for other agents is unchanged — unless `OQ-2` resolves to making npx
-  the Claude path too, in which case the change is on Claude's side only.
+  delegate is unchanged in itself; `OQ-2` resolved to routing Claude *into* it,
+  so the change is the removal of Claude's special-case, not a change to the
+  delegate.
 - **IMP-245 (Cursor as a doctrine harness).** A second consumer of whatever
   activation model this settles; not built here.
 - **Dispatch or confinement semantics.** No change to the funnel, worker spawn,
@@ -207,13 +221,20 @@ stays published for anyone who prefers the plugin.
   `memory sync install` path writes `SETTINGS_REL` = `.claude/settings.local.json`
   (`src/boot.rs:531`, `src/corpus.rs:506`), so every existing install already has
   an owned entry in local scope. Flipping the default to project scope without
-  sweeping the other file double-fires the sync hook. Ownership must span both
-  scope files, or the scope switch must evict the owned entry from the scope it
-  leaves. **This lands directly on the `OQ-1` design and must be answered there.**
+  sweeping the other file double-fires the sync hook.
+
+  **Disposition (user, 2026-08-06): document, do not engineer.** No file-spanning
+  ownership, no automatic eviction, no migration pass. The remedy is a documented
+  note — *if you switch scope, delete the old entry from the other settings file*
+  — and, at most, a cheap read-only finding in the doctor leg, which is already
+  walking both files and can compare owned entries for near-zero marginal code.
+  Design decides whether even that earns its keep.
 - **`R8` — mid-migration double-fire.** The settings boot hook was originally
   removed because it double-fired against the plugin. Any state with the plugin
-  still enabled *and* settings hooks written reproduces that. Install ordering is
-  load-bearing even though migrating pre-existing installs is out of scope.
+  still enabled *and* settings hooks written reproduces that. **Disposition
+  (user, 2026-08-06): document, do not engineer.** The cutover note tells the
+  handful of existing users to disable the plugin when they take the new
+  activation; nothing detects or reconciles it for them.
 - **`R2` — POL-002 boundary. Resolved in principle (research, 2026-08-06).**
   POL-002 forbids depending on host state *silently*, not depending on it: a
   feature-scoped capability is opt-in, acquired by no default path, and must fail
@@ -262,18 +283,29 @@ stays published for anyone who prefers the plugin.
   impose hooks on a client project's whole team. Doctrine's existing merge core
   targets `settings.local.json`, so the core gains a scope argument rather than a
   second write path. (IMP-400 `OQ-2`.)
-- **`OQ-2` — the only substantive question left open.** Is `npx skills`
-  acceptable as the Claude path too, or does Claude keep the direct symlink
-  channel while others keep `npx`? Research supplies the cost line the card
-  lacked: the symlink orchestration (`install_for_claude`) was **deleted**, not
-  merely dormant — removed at `347197e8`, with `skills.rs` deleted at `68d2107a`
-  — so "keep the symlink channel" means resurrecting it from history. The
-  proven-ownership helpers (`classify_link`, `write_link`, `relative_target`)
-  survive and are exercised by the agents/workflows paths. Symlinks at
-  `.claude/skills/<id>` are explicitly supported by the harness. The real trade
-  is *rebuild machinery doctrine owns* against *one delegate path for every
-  agent, depending on an external tool absent from the official docs and on Node*.
-  Governance does not settle it: SPEC-010's own rationale supports both readings.
+- **`OQ-2` — provisionally settled by the less-code posture (2026-08-06):
+  delegate Claude to `npx skills` like every other agent.** Subject to the user's
+  veto at design; the reasoning is recorded here so a veto has something to push
+  against.
+
+  Research supplied the cost line the card lacked: the symlink orchestration
+  (`install_for_claude`) was **deleted**, not merely dormant — removed at
+  `347197e8`, `skills.rs` deleted at `68d2107a`. Keeping that channel means
+  resurrecting it from history. Delegating instead **deletes** the Claude
+  special-case in `run_forward_steps` and collapses SPEC-010's dual-path `D2` to
+  a single path for all agents — strictly less code, and a simpler spec.
+
+  Viability confirmed here (2026-08-06): `node` and `npx` are present in the jail
+  and `registry.npmjs.org` is reachable, so the delegate path runs in doctrine's
+  own environment.
+
+  What is given up, and is accepted rather than solved: a Node dependency on the
+  Claude path; an external installer absent from the official Claude docs, whose
+  behaviour is only establishable empirically; and delegate version skew —
+  delegated installs track repo `HEAD`, not the embedded snapshot in the running
+  binary. SPEC-010 already accepts that skew as a known concern for the other
+  agents; this extends it to Claude. Governance does not settle the question —
+  SPEC-010's own rationale supports both readings — so the posture decides.
   (IMP-400 `OQ-3`.)
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
@@ -302,10 +334,11 @@ stays published for anyone who prefers the plugin.
 
 Done is judged by:
 
-- **No cross-scope double-fire.** `R10`: after a scope switch, exactly one owned
-  entry per hook exists across `settings.json` *and* `settings.local.json`
-  together — the merge core's sole-and-canonical guarantee must hold across the
-  pair, not per file.
+- **The gotchas are written down.** `R8` (plugin + settings double-fire during
+  cutover) and `R10` (owned entry left in the other settings scope) are each
+  documented with the one-line manual remedy. Per the less-code posture these are
+  *documentation* criteria, not behavioural ones — nothing detects or reconciles
+  them.
 - **A cold install activates.** In a scratch project with no plugin
   registration, `doctrine install` (or the settled verb) leaves hooks that
   actually fire — demonstrated live, not merely planned. This is the claim the
