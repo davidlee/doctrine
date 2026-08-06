@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 165
+slug = "governance-does-not-gate-the-wire-fix"
+title = "Governance amendment does not gate the wire fix"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's scope card calls objective 4 (extending SPEC-019, and now PRD-010, from four record kinds to seven) a precondition on the ground that a seven-kind write seam cannot derive its per-kind facet field sets from a four-kind spec. The slice's governing motivation is closing a live data-loss hole as fast as possible, so whether that precondition is real decides how long the fix waits."
+choice       = "Objective 4 does not gate objectives 1-3. The design rules on the ungoverned facet contracts now; implementation derives from those rulings; the REV records them at reconcile per ADR-013. Phase order: objective 3 plus the prose half of objective 2 first (no governance input at all), then the facet-bearing surfaces built against the rulings."
+alternatives = [
+  "Keep the scope card's order — land the two-entity REV first, then build everything against ratified governance. Rejected: makes the data-loss fix wait on the slowest, most authorship-heavy work for no mechanical reason.",
+  "Ship all four objectives against the current RecordFacet structs and write the REV afterwards to match. Rejected: this is the 'invention presented as derivation' failure the scope card itself names — governance written to describe whatever shipped.",
+]
+rationale    = "The precondition argument is real but narrower than the card states. It reaches objective 1 and the facet half of objective 2, which genuinely need per-kind field sets. It does not reach objective 3 or the prose half of objective 2: the correspondence table objective 3 needs is Declaration's field set against the design-run subject kinds (inq-/sec-/att-/fnd-/cp-), wholly inside the design-run wire and never touching a record kind, and the prose slot on CreateRecord is kind-blind for the same reason. Those two are also exactly what would have prevented the observed SL-248 loss, which was prose sent as `body` on a cp- subject and silently discarded. Separately, the precondition dissolves on inspection: the rulings objective 4 needs (SL-249's OQ-4 on ConceptFacet emptiness, and the EVD/HYP facet contracts) happen in this design run either way, and ADR-013 lands the REV at reconcile regardless. Objective 4 never mechanically gated anything — the rulings did, and they are taken here."
+consequences = [
+  "The plan must hold an explicit phase boundary: the wire fix may not quietly absorb facet work to save a phase.",
+  "Objective 4's REV lands at reconcile, not mid-slice, so its exit criteria must name observables rather than intent — the SL-222 failure mode, which has already recurred once on this exact spec (SL-159's undelivered governance axis).",
+  "The facet-bearing surfaces load-bear on design rulings rather than on ratified governance at build time; if the REV's authorship later diverges from a ruling, the divergence is a design-vs-REV conflict rather than a silent code-vs-spec one.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

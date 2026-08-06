@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd6c8-ecbf-7b71-9001-a4ba464daf48"
+recorded_at = "2026-08-06T11:15:19.871091649Z"
+kind = "friction"
+summary = "/design: disposing an inquiry with form=create mints a hollow record — the SL-249 defect, hit while designing SL-249"
+detail = "Design run dr-019fd6b6 (SL-249, inquiring). Disposed inq-17 via a create disposition; DEC-165 minted with an empty [facet] and a template-only .md body. The ruling was fully in hand at the moment the checkpoint was written — context, choice, alternatives, rationale, consequences all decided — and there is no wire slot to carry any of it. Filling DEC-165 now means hand-editing record-165.toml and record-165.md, because `doctrine knowledge` has no edit verb. This is IMP-403 lead 2 and lead 1 biting simultaneously, observed from inside the slice scoped to fix them. Cost this instance: two hand-edits plus the re-derivation of prose already written in the conversation."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
