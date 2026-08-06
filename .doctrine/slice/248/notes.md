@@ -74,10 +74,23 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · pre-design (research round complete) · 17860ef3
+fresh-as-of: 2026-08-06 · design drafting, sections 1–4 of 9 · 2c04c30c
 
 ### Produced
 
+- Design run `dr-019fd432` — stage `drafting`, revision 38, materialised.
+  Sections `sec-1` (governing context), `sec-2` (platform backend contract),
+  `sec-3` (transaction and provisioning), `sec-4` (interpretation policy).
+- `RV-346` — design facet, raiser codex / responder claude. Nine findings on
+  `sec-2`/`sec-3`, seven blocking; **all upheld**, eight fixed in revision 35,
+  the ninth (`F-2`) fixed in 37 via the `DEC-156` correction below.
+- `DEC-156` **corrected** — the backend property count moves seven → eight,
+  splitting process-tree teardown from trusted observation of resource limits
+  and termination. Only the number moved; the record's arguments stand. Human
+  authorised.
+- `mem.fact.capsule.bwrap-ro-bind-dereferences-source` — `bwrap` resolves the
+  *source* path of a `--ro-bind`, so a lexically validated allowlist does not
+  confine.
 - `DEC-153` (accepted) — answers `QUE-207`; two binaries split at canonical mutation.
 - `IMP-404` — `SL-112`'s deferred engine/leaf crate extraction, captured.
 - `ISS-319` — fresh-id allocation fails open when the trunk ref is unreachable.
@@ -103,9 +116,45 @@ fresh-as-of: 2026-08-06 · pre-design (research round complete) · 17860ef3
 - `jail.rs:806` — bwrap network is default-open; the capsule posture must invert it.
 - REQ-461 is net-new: no free-space probe in `src/`.
 - Governance sweep found **no revision candidates** for this slice.
+- **`bwrap` dereferences a `--ro-bind` source path.** A declared root that is a
+  symlink binds its target, so lexical path validation confines nothing. Resolve,
+  validate the resolved path, bind the resolved path. Found by `RV-346` `F-1`
+  executing a probe — reading the flags did not contradict the wrong claim.
+  Recorded as a memory; the general form is that a confinement claim owes an
+  executed probe, which the `SL-241` spike already learned twice
+  (`F-P02-2`, `F-P05-17`).
+- **A whole package store is not an explicit input set.** Binding `/nix/store`
+  gives a capsule every package ever realised on the host. The design takes the
+  *closure* instead: `[capsule] closure_roots` expanded through a declared
+  `closure_resolver`, each returned path bound individually. Closure expansion
+  also removes the link-escape class by construction, since a closure is
+  transitively complete.
+- **`trusted_side_forbidden_executables` has a consumer in this slice** — the
+  closure resolver is the only external command provisioning runs outside a
+  capsule, and its basename is checked against the bound policy *after* the
+  phase refinement is applied.
+- The design-run apply envelope is `#[serde(flatten)]`: unknown top-level keys
+  are accepted silently and burn a revision as a no-op. Section bodies must begin
+  with their own ATX heading — the title is derived, never declared
+  (`src/design_run/section.rs`). Section document order is declaration order
+  (`seq` claimed at declare time), not id order.
 
 ### Open
 
+- **Sections `sec-5`–`sec-9` are unwritten**: capacity and `[capsule]` config;
+  crate topology and CLI surface; the eight-property conformance suite; code
+  impact and verification alignment; risks and open questions. The runbook step
+  `draft.selectors` discharges off the code-impact section, so it stays
+  outstanding until `sec-8`.
+- **Residual for `sec-9`: the resolution-time race.** Declared paths are resolved
+  at provisioning, and a declared path could be re-pointed afterwards. Not
+  capsule-reachable — no declared path is writable by a capsule — so it is a
+  control-plane-side race on operator-owned config. Closing it needs the bind
+  performed against an open file descriptor rather than a path. Recorded, not
+  solved.
+- **`RV-346` is `await=raiser`** with all nine findings answered. A second codex
+  pass is expected over `sec-4` and the remediated `sec-2`/`sec-3`; the ledger is
+  the rolling one for this design, not a one-shot.
 - `QUE-208` — capsule-side entity id allocation. **Parked deliberately** 2026-08-06;
   does not block this slice. Live for the ingestion slice, unavoidable by the
   recovery slice. Its own first settling condition — whether v0 permits capsules to
