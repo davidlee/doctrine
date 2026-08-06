@@ -3,7 +3,7 @@ version = 1
 
 id = 318
 slug = "dispositions-on-an-inquiry-subject-are-silently-discarded"
-title = "Dispositions on an inquiry subject are silently discarded"
+title = "Declaration keys inert at the subject's kind are silently ignored"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
@@ -25,3 +25,8 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-247"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-248"
