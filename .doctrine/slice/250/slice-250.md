@@ -313,9 +313,21 @@ stays published for anyone who prefers the plugin.
     `write_link`, `relative_target`, `install_base`). Gives the keep-foreign
     override hatch and single-source dedup for free.
 
-  Governance does not settle it; the less-code posture and the
-  keep-the-binary-self-contained principle now pull in different directions, so
-  this needs a human call. (IMP-400 `OQ-3`.)
+  **A governance asymmetry favours `OQ-2b`.** SPEC-010 *still specifies* the
+  canonical-tree-plus-symlink channel as current behaviour — its responsibilities
+  read "Claude materialises a derived canonical `.doctrine/skills/<id>` tree and
+  reconciles a relative agent symlink into it" — while `install_for_claude` has
+  been deleted since `347197e8`. **The spec and the code are already divergent,
+  independently of this slice.** `OQ-2b` closes that divergence and needs no
+  SPEC-010 amendment for skills at all; `OQ-2a` would need one. Counting
+  governance work, the "more code" option may be the cheaper total.
+
+  The deleted orchestration is recoverable verbatim:
+  `git show 347197e8 -- src/skills.rs`.
+
+  Governance does not settle the choice; the less-code posture and the
+  keep-the-binary-self-contained principle pull in different directions, so this
+  needs a human call. (IMP-400 `OQ-3`.)
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
   Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
