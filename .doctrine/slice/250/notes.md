@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `inquiring` rev 15 · 63a99b51
+fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 34 · 18db44891
 
 ### Produced
 
@@ -29,6 +29,26 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `inquiring` rev 15 �
   Carries `R2`, `R7`, `OQ-5`, and a second leg the carve-out surfaced.
 - Observation `019fd6a7-…` — RFC-011: research-baseline restamp treadmill; a
   design run's own slice-card edits regress its `explore.research` step.
+- **The `inquiring` stage, complete.** All eight blocking inquiries dispositioned,
+  each carrying a settled record; two nodes stay deferred to IMP-407. Both
+  runbook steps discharged, sufficiency accepted, stage advanced to `drafting`.
+  - `DEC-161` — `HookSpec` carries an ordered matcher set; ownership stays
+    command-only (settles `R5`).
+  - `DEC-162` — nine entries, six specs, one scope dial; closes `T2`. Also
+    absorbed `inq-3` by adoption rather than a duplicate record.
+  - `DEC-163` — scope is a sticky `doctrine.toml` key, no `--scope` flag; the
+    installer announces its target.
+  - `DEC-164` — writing one scope evicts the abandoned one and reports it;
+    `R10` engineered, not documented.
+  - `DEC-166` — extract the link-reconcile helper; skills loops targets locally.
+  - `DEC-167` — cutover order: install, then disable the plugin.
+  - `DEC-171` — REV targets SPEC-011 / `REQ-186` alone; SPEC-010 closes by
+    conformance.
+  - `QUE-209` — REV requirement granularity, deferred to reconciliation.
+- **`slice-250.md` reconciled against all eight decisions** (runbook step
+  `inquire.scope`). Six passages contradicted them and were corrected: the
+  Scope items 1–3, the merge-core Non-Goal, `R5`, `R10`, `OQ-1`, and the closure
+  criteria. Research baseline restamped twice.
 
 ### Learned
 
@@ -45,6 +65,23 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `inquiring` rev 15 �
   skills legs. Written up in § Design surface triage below; `T2`'s drift is now
   IMP-407's Leg 2 and `T3` reframes `OQ-9` as a no-parallel-implementation
   question rather than a speculative generalisation.
+- **The link-reconcile duplication already existed, twice.** The trichotomy match
+  is byte-identical in `src/install.rs:2179-2191` (agents) and `:2279-2291`
+  (workflows). `T3` framed skills as a *risk* of a fourth copy; it is really the
+  third, which is what made `DEC-166` a DRY fix on live code rather than a
+  speculative generalisation.
+- **`T2` resolves mechanically, not by choice.** The plugin's `boot --emit` is
+  `boot_emit`'s hook, not `HookSpec::boot`'s — `is_doctrine_boot_command`
+  (`src/boot.rs:891`) requires the trailing arg to be literally `boot`. And
+  `is_doctrine_emit_command` (`:932`) already recognises the legacy args to
+  self-heal. So writing the canonical form retires the stale `*` entry with no
+  migration step.
+- **`design apply` silently swallows unknown payload keys.** `ApplyRequest`
+  carries `#[serde(flatten)]`, which disables `deny_unknown_fields`, so a
+  misspelled or invented top-level key is a no-op that still bumps the revision —
+  it looks like it applied. Already recorded as
+  `mem_019fd03e13397240b4eb05af218f5cf5`; hit again this session while probing
+  for the disposition schema. Read `src/design_run/submission.rs`, don't probe.
 - **`R6` withdrawn on a false premise** (recorded on `slice-250.md`). It assumed
   retirement blinds `SpawnSeamSymmetry`; but the Non-Goals keep `plugins/` and
   `R9` needs the plugin working as the managed-policy escape hatch, so
@@ -53,24 +90,23 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `inquiring` rev 15 �
 
 ### Open
 
-- **The live question set is in design run `dr-019fd692`, not here.** Seven
-  blocking inquiries, one non-blocking, two deferred to IMP-407. Read it with
-  `doctrine design resume 250` — a copy here would start ageing immediately.
-- `R5` — the merge-core ownership widening is the central design problem and the
-  one Non-Goal re-draw. Carried as the run's `inq-2`, which is where the two
-  candidate shapes (widen ownership to `(command, matcher)` vs generalise
-  `HookSpec` to a matcher set) are recorded. Everything else in the risk register
-  is documented-not-engineered per the less-code posture.
-- `OQ-2b`'s scope note: parameterise the mechanism over the target directory.
-  Cited to `git show 347197e8^:src/skills.rs` in `slice-250.md` § `OQ-9`; run's
-  `inq-6`, now sharpened by `T3`.
-- `R10` is a **binary** choice since the doctor leg left (run's `inq-5`) — the
-  middle rung it offered no longer exists in this slice.
+- **The inquiry set is CLOSED.** All eight blocking nodes dispositioned; two
+  remain deferred to IMP-407. The run is at `drafting` — its live state is the
+  section set, not the question set. Read it with `doctrine design resume 250`.
+- **Next: draft the design sections.** Every decision the drafting stage needs is
+  settled and recorded (`DEC-161`…`DEC-167`, `DEC-171`); `slice-250.md` has been
+  reconciled against them, so scope and decisions no longer disagree.
+- **At reconcile:** `QUE-209` — does the REV widen `REQ-186` or add new
+  requirements for the newly-governed hook set and the scope key? Deferred here
+  by the user at the sufficiency gate; the REV is authored at reconcile, which is
+  where requirement granularity is the natural call.
 - **At close:** IMP-400 does *not* close with this slice — its `OQ-4`
   (migrating existing `enabledPlugins` / marketplace registrations) is out of
   scope and keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.
-- **At reconcile:** REV targets are SPEC-011 (`REQ-186` + Responsibility 6) and,
-  narrowly, SPEC-010. RFC-018 takes the harness field notes.
+- **At reconcile:** the REV target is SPEC-011 (`REQ-186`) **alone** — SPEC-010
+  dropped out under `DEC-171`, since `OQ-2b` makes its responsibilities 3–6 true
+  again rather than needing amendment; it is a conformance-verification target
+  instead. RFC-018 takes the harness field notes.
 
 ## Design surface triage (design run `dr-019fd692`, 2026-08-06)
 

@@ -91,30 +91,48 @@ stays published for anyone who prefers the plugin.
    `denominate`), and six `PreToolUse` matchers (`Bash`, `Edit|Write`, `Agent`,
    `Workflow` → `worktree pretooluse`; `Read|Edit|Write`, `Bash` → `memory
    surface`) — activated through the existing `boot.rs` merge core into
-   `.claude/settings*.json`, at **both scopes behind a flag, defaulting to
-   project `settings.json`** (`OQ-1`, settled).
+   `.claude/settings*.json`, at **one scope, remembered as a `doctrine.toml`
+   key, defaulting to project `settings.json`** (`OQ-1`, settled; `DEC-163`).
+
+   **Design-run settlements (2026-08-06).** The nine entries collapse onto
+   **six `HookSpec`s**, one of which (`create_fork`) already exists
+   (`DEC-162`) — confirming `T1`. Ownership stays proven by `command` alone and
+   `HookSpec` instead carries an **ordered matcher set** (`DEC-161`); the
+   earlier "extend the predicate to `(command, matcher)`" reading is
+   **withdrawn** — see `R5`. There is **no `--scope` flag**: the key is the only
+   selector, and the installer announces its target and that key early
+   (`DEC-163`). Writing one scope **evicts** this spec's owned entries from the
+   other and reports it (`DEC-164`).
 
    Every command is already `${DOCTRINE_BIN:-doctrine} <verb>`; none resolves
    through `${CLAUDE_PLUGIN_ROOT}`, so the command strings port into a settings
    file verbatim (verified 2026-08-06, `plugins/doctrine/hooks/hooks.json`).
-   The merge core's ownership predicate must first be extended from `command`
-   to `(command, matcher)` — see `R5`. Without that it cannot represent these
-   hooks at all.
-2. **One Claude skills channel, sourced from the embed.** `OQ-2` is reopened —
-   the `npx` delegate is disfavoured on measured footprint (research `P5`), so
-   Claude keeps a binary-sourced direct-write channel. Which one — plain copy
-   (`OQ-2a`) or the specified canonical-tree-plus-symlink (`OQ-2b`) — is the
-   open call. Either way the delegate stays as-is for non-Claude agents and
-   SPEC-010's dual-path `D2` survives.
-3. **Governance follow-through.** The REV's primary target is **SPEC-011**
-   (`REQ-186` and Responsibility 6), which binds the hook-write target to
-   `.claude/settings.local.json`. SPEC-010 governs *skills* distribution only —
-   it never mentions hooks, `settings.json`, or `enabledPlugins` (research `X2`).
-   SPEC-010 enters the REV only to the extent `OQ-2` changes the Claude channel;
-   with the `npx` delegate disfavoured, its dual-path `D2` likely survives and
-   the amendment is narrow. RFC-018
-   (*Claude harness field notes*) remains the home for the empirical findings
-   this leans on.
+   The `SessionStart` string is the **canonical current** form, not the
+   plugin's stale copy (`DEC-162`, closing `T2`).
+2. **One Claude skills channel, sourced from the embed.** `OQ-2` settled as
+   **`OQ-2b`** — rebuild `install_for_claude`: binary-sourced, derived canonical
+   `.doctrine/skills/<id>` tree plus proven-ownership relative symlinks. The
+   `npx` delegate was disfavoured on measured footprint (research `P5`) but
+   stays as-is for non-Claude agents, so SPEC-010's dual-path `D2` survives.
+
+   **Design-run settlement (`DEC-166`).** The byte-identical link-reconcile block
+   in the agents and workflows legs is extracted to one helper, which the rebuilt
+   skills channel consumes as its third caller; the multi-target capability is a
+   **local loop** over link dirs, not a generic driver. The loop takes a list but
+   this slice drives it with **one** entry — shipping `.agents/skills` is
+   IMP-406's (`OQ-9`).
+3. **Governance follow-through.** *Re-targeted by `DEC-171`.* The REV's **only**
+   amendment target is **SPEC-011 / `REQ-186`**, which binds the hook write to a
+   single `<exec> boot` entry in `.claude/settings.local.json` — invalidated here
+   on three axes (six specs across five events, a scope-selected project default,
+   and the abandoned-scope sweep). SPEC-010 governs *skills* distribution only —
+   it never mentions hooks, `settings.json`, or `enabledPlugins` (research `X2`)
+   — and **does not enter the REV**: `OQ-2b` restores exactly what its
+   responsibilities 3–6 already describe, so its pre-existing divergence closes
+   by **conformance**, verified at close, not by amendment. Whether the REV
+   widens `REQ-186` or adds new requirements is deferred to reconciliation
+   (`QUE-209`). RFC-018 (*Claude harness field notes*) remains the home for the
+   empirical findings this leans on.
 
 ### Constraints
 
@@ -165,13 +183,23 @@ stays published for anyone who prefers the plugin.
 - **Dispatch or confinement semantics.** No change to the funnel, worker spawn,
   import belts, or the `worker_commit` gate. `WorktreeCreate` is in scope only
   as a hook to *activate differently*, not to redefine.
-- **Redesigning the merge core.** *Re-drawn 2026-08-06 on research `X1`.* Three
-  extensions are now explicitly **in** scope, because the hooks cannot be moved
-  without them: new `HookSpec` constructors, a settings-scope argument, and
-  widening the ownership predicate from `command` to `(command, matcher)`. What
-  stays out is replacing the plan/normalize/never-clobber architecture. The
+- **Redesigning the merge core.** *Re-drawn 2026-08-06 on research `X1`;
+  amended by the design run's `DEC-161` / `DEC-164`.* Four extensions are
+  explicitly **in** scope, because the hooks cannot be moved without them: new
+  `HookSpec` constructors, a settings-scope argument, generalising `HookSpec`
+  from one matcher to an **ordered matcher set**, and a **drop-only sweep** of
+  the scope being left.
+
+  **The ownership predicate is NOT widened.** The earlier draft put "widening
+  the ownership predicate from `command` to `(command, matcher)`" in scope;
+  `DEC-161` rejects that and keeps ownership command-only, because widening
+  orphans an entry whose matcher later moves into a permanent silent
+  double-fire, where command-only ownership heals it.
+
+  What stays out is replacing the plan/normalize/never-clobber architecture. The
   behaviour-preservation gate applies — `corpus.rs`'s memory-sync hook and the
-  Codex arm must stay green unchanged.
+  Codex arm must stay green unchanged; `DEC-161`'s shape satisfies it by
+  construction, since the existing specs are the N=1 case.
 - **SL-247's `OQ-2`/`OQ-3`** — whether a worktree-local `.claude/` binds for an
   in-session `isolation: worktree` subagent. SL-247 routed those to this slice's
   settings-scope question (`OQ-1`); with that now settled as *both scopes behind
@@ -179,10 +207,17 @@ stays published for anyone who prefers the plugin.
 
 ## Affected surface
 
-- `src/boot.rs` — `HookSpec` constructors, `plan_hook` / `install_claude_hook`;
-  possibly a settings-file scope argument.
-- `src/install.rs`, `src/install_config.rs` — the skills channel planner and the
-  `claude install` surface.
+- `src/boot.rs` — `HookSpec`'s ordered matcher set (`DEC-161`), six specs'
+  constructors and predicates (`DEC-162`), `plan_hook` / `desired_entry` /
+  `install_claude_hook`, the settings-scope argument, and the drop-only sweep of
+  the abandoned scope (`DEC-164`). New named constants for
+  `.claude/settings.json` and the new matcher tokens (STD-001).
+- `src/dtoml.rs` — the sticky settings-scope key (`DEC-163`), riding the existing
+  `load_doctrine_toml` seam beside `[dispatch]`.
+- `src/install.rs`, `src/install_config.rs` — the rebuilt skills channel
+  (`OQ-2b`), the extracted link-reconcile helper replacing the byte-identical
+  blocks at `:2179-2191` and `:2279-2291` (`DEC-166`), the local target loop, and
+  the early scope announcement on the existing `writeln!(stdout, …)` seam.
 - `src/corpus.rs` — existing `HookSpec` consumer (memory-sync hook); regression
   surface for any core change.
 - `plugins/doctrine/hooks/hooks.json` — the hooks being relocated. **Not deleted**
@@ -190,7 +225,12 @@ stays published for anyone who prefers the plugin.
   why `R6` dissolves and `src/doctor_checks.rs` leaves this slice's surface.
 - `.claude-plugin/marketplace.json` — stays published; verify it still resolves
   after the skills channel settles.
-- `.doctrine/spec/tech/010/` — SPEC-010 amendment (via REV).
+- `.doctrine/spec/tech/011/` — **the REV's only amendment target**: `REQ-186`
+  (`DEC-171`). Requirement granularity — one widened requirement or several new
+  ones — is deferred to reconciliation (`QUE-209`).
+- `.doctrine/spec/tech/010/` — **read, not amended.** `OQ-2b` restores what its
+  responsibilities 3–6 already describe, so it is a conformance-verification
+  target rather than a REV target (`DEC-171`).
 - `install/` — user-facing guidance on activation and the cutover gotchas.
 
 ## Risks / Assumptions / Open questions
@@ -210,8 +250,20 @@ stays published for anyone who prefers the plugin.
   `PreToolUse` entries share the command `worktree pretooluse` (matchers `Bash`,
   `Edit|Write`, `Agent`, `Workflow`) and two share `memory surface`
   (`Read|Edit|Write`, `Bash`). One predicate per command would mark all four
-  owned and silently drop three. Ownership must widen to `(command, matcher)`,
-  or a matcher-set must be planned as one unit. This drove the Non-Goal re-draw.
+  owned and silently drop three. This drove the Non-Goal re-draw.
+
+  **SETTLED (design run `dr-019fd692`, 2026-08-06): `DEC-161` — the matcher set,
+  not the widened predicate.** The fork was *widen ownership to
+  `(command, matcher)`* versus *generalise `HookSpec` to an ordered matcher set
+  while ownership stays command-only*. The second wins on what happens when a
+  matcher set later changes: widening orphans the stale entry into a permanent
+  silent double-fire, while command-only ownership still recognises and refreshes
+  it. That is not hypothetical — `T2`'s live drift between the published
+  `hooks.json` and the code is exactly that shape, and
+  `is_doctrine_emit_command` already recognises both arg forms so it self-heals.
+  Widening would also *narrow* the predicate for four already-shipping specs,
+  putting the behaviour-preservation gate at risk; the matcher set is a strict
+  generalisation with N=1 as the existing case.
 - **`R6` — WITHDRAWN (design run `dr-019fd692`, 2026-08-06): its premise is
   false.** It read "retiring the plugin blinds `SpawnSeamSymmetry`", which parses
   `plugins/doctrine/hooks/hooks.json` (`src/doctor_checks.rs:622`) precisely
@@ -239,25 +291,45 @@ stays published for anyone who prefers the plugin.
   an owned entry in local scope. Flipping the default to project scope without
   sweeping the other file double-fires the sync hook.
 
-  **Disposition (user, 2026-08-06): document, do not engineer.** No file-spanning
-  ownership, no automatic eviction, no migration pass. The remedy is a documented
-  note — *if you switch scope, delete the old entry from the other settings file*.
+  ~~**Disposition (user, 2026-08-06): document, do not engineer.**~~
+  ~~No file-spanning ownership, no automatic eviction, no migration pass.~~
+  **SUPERSEDED (design run `dr-019fd692`, 2026-08-06) — see `DEC-164`.** The
+  choice narrowed to a binary once the doctor leg left for IMP-407 (the middle
+  rung, a read-only finding from a leg already walking both files, went with it),
+  and design took the engineered side.
 
-  **Amended 2026-08-06, on carving the doctor leg out to IMP-407.** The original
-  disposition offered a middle rung — "at most, a cheap read-only finding in the
-  doctor leg, which is already walking both files". **That rung no longer exists
-  in this slice**, because the leg that would have carried it is gone. The choice
-  is now binary: pure documentation, or a drop-only normalize against the scope
-  being left at write time. Design decides (`inq-5`). Note the stake is not
-  hypothetical — the default flip from `settings.local.json` to `settings.json`
-  double-fires the memory-sync hook for every existing install, this repo
-  included.
+  **`R10` is ENGINEERED.** Writing one scope sweeps the sibling file for this
+  spec's owned entries, drop-only, and reports the eviction in the installer's
+  target line (`DEC-163`). The decisive fact: scopes *merge*, so the same
+  doctrine hook in both files is never a configuration anyone chose — it is
+  always the defect, and the merge core's one-canonical-entry invariant simply
+  extends to the pair of files doctrine now writes. Documentation was rejected
+  because the failure is silent (a hook firing twice reads as mild slowness), the
+  leg that would have reported it left with IMP-407, and the default flip
+  guarantees the defect for **every existing install, this repo included**. The
+  sweep is reuse-only — `drop_owned_hooks` / `owned_positions` already exist and
+  it is `plan_hook` minus the insert — and is gated by the same ownership
+  predicate that protects foreign entries, so never-clobber is untouched.
 - **`R8` — mid-migration double-fire.** The settings boot hook was originally
   removed because it double-fired against the plugin. Any state with the plugin
   still enabled *and* settings hooks written reproduces that. **Disposition
   (user, 2026-08-06): document, do not engineer.** The cutover note tells the
   handful of existing users to disable the plugin when they take the new
   activation; nothing detects or reconciles it for them.
+
+  **This stays documentation, and cannot be otherwise (`DEC-167`).** Unlike
+  `R10`, the plugin's entries load through `enabledPlugins` plus per-user
+  marketplace registration — state this slice reads and writes nothing of by
+  Non-Goal — so the ownership sweep cannot reach them. The asymmetry is the
+  point: `R10` is engineered because both settings files are doctrine's to
+  write; `R8` is documented because the plugin's activation state is not.
+
+  **Prescribed order (`DEC-167`): install first, then disable the plugin.**
+  Between the two acts everything double-fires, which is wasteful and harmless.
+  The reverse order leaves the repo with *no* activation, and an inert
+  `WorktreeCreate` hook does not degrade dispatch — `isolation: worktree`
+  teardown is conditional on it firing, so absence changes dispatch's semantics
+  without saying so. Order toward the degraded state, never the absent one.
 - **`R2` — MOVED to IMP-407 (user, 2026-08-06).** The POL-002 boundary on
   reading per-user `~/.claude*` state was only ever a property of the doctor leg,
   which is no longer in this slice. Resolved in principle (research, 2026-08-06):
@@ -301,12 +373,22 @@ stays published for anyone who prefers the plugin.
   `SETTINGS_REL`'s own rationale for choosing the gitignored file — "the absolute
   exec path belongs out of git" — evaporates once commands are the portable
   `${DOCTRINE_BIN:-doctrine}` form, which the probe confirmed works (`OQ-7`).
-- **`OQ-1` — SETTLED (user, 2026-08-06): both, by scope flag, defaulting to
+- **`OQ-1` — SETTLED (user, 2026-08-06): both scopes reachable, defaulting to
   project `settings.json`.** Committed activation is reviewable and travels with
   the repo; `settings.local.json` stays available for a collaborator who must not
   impose hooks on a client project's whole team. Doctrine's existing merge core
   targets `settings.local.json`, so the core gains a scope argument rather than a
   second write path. (IMP-400 `OQ-2`.)
+
+  **Refined by `DEC-163` (design run, 2026-08-06): a sticky key, NOT a flag.**
+  The selector is a `doctrine.toml` key read through the existing
+  `load_doctrine_toml` seam (`[dispatch]` is the precedent table); there is **no
+  `--scope` flag**. A per-invocation flag would let any routine flagless install
+  revert a local-scope choice and re-create the entry in the other file, turning
+  `R10` from a one-time cutover into a treadmill. In its place the installer
+  announces early **where it will write and which key changes it** —
+  discoverability was the flag's only remaining job. All six specs ride the one
+  dial; there is no per-entry scope routing (`DEC-162`).
 - **`OQ-2` — SETTLED (user, 2026-08-06): `OQ-2b`, rebuild `install_for_claude`.**
   Binary-sourced, canonical tree plus proven-ownership relative symlinks — the
   channel SPEC-010 already specifies. Recovered from `git show 347197e8 --
@@ -407,18 +489,28 @@ stays published for anyone who prefers the plugin.
 - **`OQ-8` — SETTLED BY PROBE (2026-08-06): the target shape is valid.** Two
   entries with a byte-identical command string on different matchers both fired,
   each receiving its own tool. `R5` is therefore purely doctrine's own
-  limitation, not the harness's: widening ownership to `(command, matcher)`
-  yields a file Claude Code honours.
+  limitation, not the harness's — the multi-entry file the fix must produce is
+  one Claude Code honours. *(The probe framed this as validating a widened
+  `(command, matcher)` ownership; `DEC-161` took the ordered-matcher-set route
+  instead. The probe's finding is unaffected — it validates the on-disk shape,
+  which both candidates emit identically, not the ownership rule behind it.)*
 
 ## Verification / closure intent
 
 Done is judged by:
 
-- **The gotchas are written down.** `R8` (plugin + settings double-fire during
-  cutover) and `R10` (owned entry left in the other settings scope) are each
-  documented with the one-line manual remedy. Per the less-code posture these are
-  *documentation* criteria, not behavioural ones — nothing detects or reconciles
-  them.
+- **`R8` is written down; `R10` is demonstrated.** *Split 2026-08-06 by
+  `DEC-164` / `DEC-167` — they are no longer one criterion.*
+  - `R8` (plugin + settings double-fire during cutover) stays a **documentation**
+    criterion: the note names the remedy *and* the prescribed order — install
+    first, then disable the plugin. Nothing detects or reconciles it, and nothing
+    can (`DEC-167`).
+  - `R10` (owned entry left in the other settings scope) is now a **behavioural**
+    criterion: switching scope evicts this spec's owned entries from the file
+    being left and reports the eviction. Verified by test, not by prose.
+- **The scope target is announced.** The installer states early where it will
+  write and which `doctrine.toml` key changes it (`DEC-163`) — this is what
+  replaces the `--scope` flag, so it is a criterion rather than a nicety.
 - **A cold install activates.** In a scratch project with no plugin
   registration, `doctrine install` (or the settled verb) leaves hooks that
   actually fire — demonstrated live, not merely planned. This is the claim the
