@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd6d8-f538-7791-a0d4-3e03ed7a822c"
+recorded_at = "2026-08-06T11:32:50.616586285Z"
+kind = "friction"
+summary = "design: the apply payload schema is discoverable only from source, and a wrong key is a silent no-op"
+detail = 'Working /design on SL-250. The turn envelope prints ONE declaration_example (declare + traversal), but the inquiring stage needs four other payload shapes: the cp- checkpoint with a dispose form, discharge, checkpoint_act, and stage. None appears in doctrine design apply --help or in the envelope. I probed with an invented "resolve" key to learn the schema; it returned "revision 17 stage inquiring" as though it had applied, because ApplyRequest carries serde(flatten) which disables deny_unknown_fields. Nothing changed and the revision still advanced, so the probe read as success. Recovered by reading src/design_run/submission.rs for Dispose, CreateRecord, DischargeDeclaration, CheckpointActDeclaration and ActKind. Cost: one wasted apply, two source reads, and a revision bump carrying no content. The silent-swallow itself is already known (mem_019fd03e13397240b4eb05af218f5cf5); the new part is that the envelope teaches one shape while the stage requires five, which is what pushed me to probe rather than look it up.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
