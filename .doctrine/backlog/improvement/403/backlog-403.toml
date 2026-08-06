@@ -25,3 +25,9 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "concerns"
 target = "SL-246"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "leads 1 and 2 — the facet write seam and the design-run capture point"
+target = "SL-249"

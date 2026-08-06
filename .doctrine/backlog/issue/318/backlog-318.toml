@@ -32,5 +32,11 @@ role = "originates_from"
 target = "SL-248"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the inert-key refusal, authored against the same correspondence table"
+target = "SL-249"
+
+[[relation]]
 label = "related"
 target = "IMP-403"
