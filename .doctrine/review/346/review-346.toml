@@ -353,5 +353,40 @@ The one-to-one correspondence claim is not restored in a corrected form — it i
 
 Both of the sections you named have been amended and both are unreviewed as amended, along with sec-7, sec-8 and sec-9."""
 
+[[finding]]
+id = "F-29"
+status = "open"
+severity = "blocker"
+title = "The new crate inherits neither serde nor toml, so the mandated config reader cannot compile"
+detail = "Expected: sec-6 applies its own warning that a second workspace member must declare the dependencies its code uses. Observed: sec-5 mandates a Serde projection and `#[serde(deny_unknown_fields)]` at design.md:1915-1925, while sec-6 and the authoritative touch-set at :2287-2304 and :3669 give `crates/doctrine-control/Cargo.toml` only the doctrine path edge, rustix, and `publish = false`; neither serde nor toml is declared. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/manifest-transfer` has a root package depending on serde/toml and a control member depending only on the root. `cargo check -p control` fails E0433 for both crates; `cargo check -p control --features direct-parser-edges` succeeds after the control member declares them directly. Fix: specify `serde.workspace = true` and `toml.workspace = true` on the new member and include those edges in sec-6/sec-8 manifest instructions; then execute the actual second-member build."
+
+[[finding]]
+id = "F-30"
+status = "open"
+severity = "blocker"
+title = "Arbitrary parent stdin crosses execute outside the descriptor property"
+detail = "Expected: every authority channel into a capsule is explicit and rowed, and descriptor closure leaves only standard streams the contract deliberately owns. Observed: `Execution` at design.md:292-305 has no stdin policy, invariant 12 marks only descriptors above 2, and table A row 10 at :2986 likewise ignores fd 0. An inherited stdin may be a credential file, pipe, terminal, or bidirectional socket, yet all eleven rows can pass. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/stdin-channel` runs the bubblewrap-shaped profile twice. With parent stdin piped, the capsule read all 22 decoy bytes; with stdin replaced by null, it read 0. Both executions succeeded, so this is the subject boundary rather than the reviewer cage. Fix: make stdio part of `Execution` and the channel ledger; default stdin to a trusted null/closed source or a typed owned input, create fresh one-way parent-owned capture for stdout/stderr, and add a control whose only delta inherits decoy stdin. Row 10 over fd >2 cannot discharge this exception."
+
+[[finding]]
+id = "F-31"
+status = "open"
+severity = "blocker"
+title = "Row 10 reads descriptors but admits a backend that leaks write authority"
+detail = "Expected: row 10 proves the closed-descriptor-set property against the strongest negation, so no inherited descriptor can carry authority across execute. Observed: table A at design.md:2986 only enumerates and reads descriptors; the tests at :3610-3618 require unreadability and absence of decoy bytes. The claim at :3612-3614 that absent bytes distinguish an open-but-unreadable descriptor from a closed one is false. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/write-fd-mutant` passes an unlinked host file as an inheritable write-only fd through the bubblewrap-shaped profile. The row-shaped read observation produced 0 bytes, but a write payload mutated 17 host bytes; setting CLOEXEC made the control exit 1 and left the decoy unchanged. A backend that closes readable inherited fds but preserves write-only ones therefore earns Proven from the readable decoy while retaining mutation authority. Fix: exercise every descriptor authority mode under the same closure mechanism, at minimum readable and write-only decoys and a bidirectional/socket case; if one control cannot change every observation, split the property into independently controlled rows."
+
+[[finding]]
+id = "F-32"
+status = "open"
+severity = "blocker"
+title = "Backend admission leaves process credentials wholly ungoverned"
+detail = "Expected: ADR-020 requires independently equivalent filesystem, process, credential, network, and canonical-repository authority properties, and REQ-459 criterion 1 claims the shared suite proves credential denial. Observed: the only process-credential text in the design is residual 5 at design.md:4129-4135, which concedes that uid/gid mapping, supplementary groups, capabilities, and setuid regain have no contract clause and no row. A positive-controlled search for `uid|gid|supplementary groups|capabilities|no-new-privs|setuid` finds the residual and no enforcement or verification elsewhere. Thus a backend retaining host process credentials can pass every row, while sec-8 still claims REQ-459 criterion 1 in full and credits REQ-448 denial. `--unshare-all` is only a bubblewrap mechanism, not the cross-backend property ADR-020 requires; the current outer jail already strips capabilities, so a local zero-capability probe cannot establish the general claim. Fix before lock: obtain the governance ruling SPEC-030 currently lacks, define the observable process-authority posture including uid/gid, supplementary groups, capability sets, and no-new-privs/setuid behavior, then add independently falsifiable controls and rows or withdraw the in-full closure claim until governed evidence exists."
+
+[[finding]]
+id = "F-33"
+status = "open"
+severity = "nit"
+title = "Table C is four tests in its table and sec-8 but three in sec-7s verification tail"
+detail = "Table C lists four named tests at design.md:3295-3300 and sec-8 confirms `C (four)` at :3805, but sec-7 says `Executed, table C: the three titles above` at :3629. This is a stale numeral in implementation instructions, the same drift class the document elsewhere warns against. Fix `three` to `four` or remove the repeated numeral."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
