@@ -95,10 +95,12 @@ stays published for anyone who prefers the plugin.
    The merge core's ownership predicate must first be extended from `command`
    to `(command, matcher)` — see `R5`. Without that it cannot represent these
    hooks at all.
-2. **One skills channel for every agent.** Per `OQ-2`, delegate Claude to `npx
-   skills add davidlee/doctrine` as every other agent already does, deleting the
-   Claude special-case rather than resurrecting the removed symlink
-   orchestration. This collapses SPEC-010's dual-path `D2` to a single path.
+2. **One Claude skills channel, sourced from the embed.** `OQ-2` is reopened —
+   the `npx` delegate is disfavoured on measured footprint (research `P5`), so
+   Claude keeps a binary-sourced direct-write channel. Which one — plain copy
+   (`OQ-2a`) or the specified canonical-tree-plus-symlink (`OQ-2b`) — is the
+   open call. Either way the delegate stays as-is for non-Claude agents and
+   SPEC-010's dual-path `D2` survives.
 3. **The doctor leg.** A check that walks the diagnosis order the trust memory
    establishes and names the *blocking layer* rather than reporting "hooks not
    working": folder trust → (plugin registration, while any plugin channel
@@ -108,9 +110,9 @@ stays published for anyone who prefers the plugin.
    (`REQ-186` and Responsibility 6), which binds the hook-write target to
    `.claude/settings.local.json`. SPEC-010 governs *skills* distribution only —
    it never mentions hooks, `settings.json`, or `enabledPlugins` (research `X2`).
-   **SPEC-010 joins the REV** now that `OQ-2` has resolved: its `D2` / `FR-003`
-   (`REQ-175`) dual-path routing and its "two independent channels" Overview both
-   collapse to a single delegated path. RFC-018
+   SPEC-010 enters the REV only to the extent `OQ-2` changes the Claude channel;
+   with the `npx` delegate disfavoured, its dual-path `D2` likely survives and
+   the amendment is narrow. RFC-018
    (*Claude harness field notes*) remains the home for the empirical findings
    this leans on.
 
@@ -283,30 +285,37 @@ stays published for anyone who prefers the plugin.
   impose hooks on a client project's whole team. Doctrine's existing merge core
   targets `settings.local.json`, so the core gains a scope argument rather than a
   second write path. (IMP-400 `OQ-2`.)
-- **`OQ-2` — provisionally settled by the less-code posture (2026-08-06):
-  delegate Claude to `npx skills` like every other agent.** Subject to the user's
-  veto at design; the reasoning is recorded here so a veto has something to push
-  against.
+- **`OQ-2` — REOPENED (2026-08-06). The npx delegate is disfavoured on measured
+  footprint.** The earlier provisional settlement optimised the wrong axis: it
+  bought *less doctrine code* at the price of a heavier runtime dependency and a
+  worse dev loop. Measured (research `P5`): the delegate lands **35 real skill
+  directories (~320K, copies not symlinks)** in `.claude/skills/` plus a
+  root-level `skills-lock.json`, and requires **a full GitHub clone on every
+  install** — Node, `npx`, network and GitHub all become hard runtime
+  requirements. It **discards the embed**, against SPEC-010's own premise that
+  the binary carries every skill "with no network fetch and no sidecar bundle";
+  and for doctrine dogfooding itself it would install *published `HEAD`* skills
+  while ignoring the live local `plugins/` tree under edit. (It also surfaced
+  that doctrine would pass the wrong agent token: `--agent claude` is rejected,
+  the valid identifier is `claude-code`.)
 
-  Research supplied the cost line the card lacked: the symlink orchestration
-  (`install_for_claude`) was **deleted**, not merely dormant — removed at
-  `347197e8`, `skills.rs` deleted at `68d2107a`. Keeping that channel means
-  resurrecting it from history. Delegating instead **deletes** the Claude
-  special-case in `run_forward_steps` and collapses SPEC-010's dual-path `D2` to
-  a single path for all agents — strictly less code, and a simpler spec.
+  The live options are now the two that keep the binary self-contained:
 
-  Viability confirmed here (2026-08-06): `node` and `npx` are present in the jail
-  and `registry.npmjs.org` is reachable, so the delegate path runs in doctrine's
-  own environment.
+  - **`OQ-2a` — plain copy from the embed** into `.claude/skills/<id>/`. Produces
+    the same on-disk shape npx does, sourced from the binary instead of GitHub.
+    No canonical tree, no symlink reconciliation, no gitignore self-enforcement.
+    The least code of the three. Open question: how it meets never-clobber
+    without reintroducing hash tracking.
+  - **`OQ-2b` — rebuild `install_for_claude`** (derived `.doctrine/skills/<id>`
+    canonical tree + relative symlinks, proven-ownership trichotomy). More code,
+    but it is *specified* in SPEC-010 already, and every helper it needs is live
+    and exercised today by the agents/workflows install paths (`classify_link`,
+    `write_link`, `relative_target`, `install_base`). Gives the keep-foreign
+    override hatch and single-source dedup for free.
 
-  What is given up, and is accepted rather than solved: a Node dependency on the
-  Claude path; an external installer absent from the official Claude docs, whose
-  behaviour is only establishable empirically; and delegate version skew —
-  delegated installs track repo `HEAD`, not the embedded snapshot in the running
-  binary. SPEC-010 already accepts that skew as a known concern for the other
-  agents; this extends it to Claude. Governance does not settle the question —
-  SPEC-010's own rationale supports both readings — so the posture decides.
-  (IMP-400 `OQ-3`.)
+  Governance does not settle it; the less-code posture and the
+  keep-the-binary-self-contained principle now pull in different directions, so
+  this needs a human call. (IMP-400 `OQ-3`.)
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
   Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
