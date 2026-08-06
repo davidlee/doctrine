@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd685-c093-7c53-b9fa-fe6eeb59e27a"
+recorded_at = "2026-08-06T10:01:57.651909766Z"
+kind = "friction"
+summary = "slice: SPEC-010 specifies a Claude skills channel whose code was deleted at 347197e8 — spec/code divergence found only by reading git history during research"
+detail = "SPEC-010's responsibilities still read 'Claude materialises a derived canonical .doctrine/skills/<id> tree and reconciles a relative agent symlink into it', but install_for_claude was removed at 347197e8 (IMP-224) and skills.rs deleted at 68d2107a (IMP-226) without amending the spec. Nothing in the corpus flags it; SL-250's research round surfaced it incidentally while costing OQ-2. A closing slice that changes behaviour a spec describes should leave the spec amended or the divergence recorded."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

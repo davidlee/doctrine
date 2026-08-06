@@ -285,8 +285,15 @@ stays published for anyone who prefers the plugin.
   impose hooks on a client project's whole team. Doctrine's existing merge core
   targets `settings.local.json`, so the core gains a scope argument rather than a
   second write path. (IMP-400 `OQ-2`.)
-- **`OQ-2` — REOPENED (2026-08-06). The npx delegate is disfavoured on measured
-  footprint.** The earlier provisional settlement optimised the wrong axis: it
+- **`OQ-2` — SETTLED (user, 2026-08-06): `OQ-2b`, rebuild `install_for_claude`.**
+  Binary-sourced, canonical tree plus proven-ownership relative symlinks — the
+  channel SPEC-010 already specifies. Recovered from `git show 347197e8 --
+  src/skills.rs`. **Design it parameterised over the target directory** (see
+  `OQ-9`), not hard-coded to `.claude/skills/`.
+
+  The reasoning that got here is retained below.
+
+  **The npx delegate was disfavoured on measured footprint.** The earlier provisional settlement optimised the wrong axis: it
   bought *less doctrine code* at the price of a heavier runtime dependency and a
   worse dev loop. Measured (research `P5`): the delegate lands **35 real skill
   directories (~320K, copies not symlinks)** in `.claude/skills/` plus a
@@ -325,9 +332,19 @@ stays published for anyone who prefers the plugin.
   The deleted orchestration is recoverable verbatim:
   `git show 347197e8 -- src/skills.rs`.
 
-  Governance does not settle the choice; the less-code posture and the
-  keep-the-binary-self-contained principle pull in different directions, so this
-  needs a human call. (IMP-400 `OQ-3`.)
+  (IMP-400 `OQ-3`.)
+- **`OQ-9` — how far does the direct-write channel generalise?** `npx skills
+  --agent universal` lands at **`.agents/skills/<id>/`** (research `P6`), the
+  ecosystem's harness-neutral target; doctrine already maintains its own
+  `.agents/skills/` tree here. So the same binary-sourced mechanism could serve
+  most non-Claude harnesses from the embed, with `npx` kept only as the fallback
+  for harnesses needing bespoke layouts (user, 2026-08-06).
+
+  **In scope for SL-250: only that `OQ-2b`'s mechanism is parameterised over the
+  target directory** — so `.agents/skills/` is a second *target*, not a second
+  mechanism. Actually shipping the neutral target, and deciding which harnesses
+  stop delegating, is follow-up work: it changes SPEC-010's `D2` for non-Claude
+  agents, which this slice holds as a Non-Goal. Captured as a backlog item.
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
   Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
