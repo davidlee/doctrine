@@ -3036,7 +3036,7 @@ struct Row {
 enum RowId {
     /// An enforcement claim of `SPEC-030` § Platform backend contract. One
     /// per channel rather than one per clause — see Table A, and `sec-2`'s
-    /// channel ledger for why clause 2 carries four.
+    /// channel ledger for why clause 2 carries five, and row 13 no clause.
     Property(Property),
     /// One of `REQ-450` criterion 1's five freshness axes.
     Axis(Axis),
@@ -3880,11 +3880,22 @@ Executed, table A — each asserts `RowVerdict::Proven`, so each runs both arms:
 - `immutable_input_set_is_proven`
 - `closed_descriptor_set_is_proven`
 - `closed_environment_is_proven`
+- `owned_standard_streams_is_proven`
+- `confined_process_credentials_is_proven`
 
 One title per row, and the list is asserted to be exactly the row set by
 `every_row_id_is_covered_by_exactly_one_table` above — so a row added without a
 title, or a title outliving its row, is a red test rather than a silent gap.
 That assertion is what makes the count safe to state in one place.
+
+**The last two titles were missing for a round, and the paragraph above is why
+that matters more than the omission.** Round 5 added rows 12 and 13 and did not
+add their titles; a literal reading of this list would have built a suite that
+never ran either row, which is `sec-8`'s *a suite that is never built is green
+by never running* one level down. The assertion that was supposed to prevent it
+is real but not yet written — it protects an implementation from drifting from
+this list, and protects this list from nothing. Until the suite exists, adding a
+row and adding its title are one edit held together by a reader.
 
 Executed, the claims that need naming beyond their row:
 
