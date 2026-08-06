@@ -62,8 +62,9 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
 3. **ISS-318's refusal** — a typed refusal when a `Declaration` carries a key
    inert at its subject's kind, naming the subject, its kind, the key, and the
    kind that would honour it. Total over the field set, not two patches for the
-   two observed instances. The correspondence table this needs is the same
-   key→honouring-kind knowledge (2) needs, so it is authored once.
+   two observed instances. *(The "one table, two consumers" rationale originally
+   written here is superseded by the OQ-1 settlement — see § Settled before
+   design. The table is still authored once; its consumer is the design wire.)*
 
 4. **Extend SPEC-019 to the kinds that actually exist** — ISS-316. The spec is
    emphatically four-kind (`assumption`, `decision`, `question`, `constraint`),
@@ -95,10 +96,51 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
   rules stay ungoverned and stay on ISS-316, which therefore does **not** fully
   close on this slice — it narrows to the lifecycle half.
 
-**Still open for `/design`:** the CLI shape for ~5 facet fields × 7 kinds (OQ-1).
-Candidates are one flat flag set that *refuses* flags inert at the record's kind
-(ISS-318's rule applied to the second call site — one table, two consumers), a
-per-kind subverb, or a repeatable `--facet key=value` validated against the kind.
+- **Per-kind facet subverbs over a kind-blind invariant verb** (was OQ-1). The
+  CLI splits by *tier*, not by kind:
+  - A kind-blind `knowledge edit <ID>` owns the fields every record has —
+    `title`, `tags`, and the `.md` body via `--body` / `--body-mode`. The id's
+    prefix resolves the kind; nothing is stated twice.
+  - Kind-dispatched subverbs own the `[facet]` — one per record kind, carrying
+    only that kind's fields and only its closed enums.
+
+  This matches how the repo already separates `estimate` / `value` / `risk` from
+  the entity verbs, and it is consistent with the settled OQ-2: `knowledge answer
+  QUE-NNN` is already a per-kind verb, so a kind-blind facet surface would sit
+  beside it inconsistently.
+
+  **The decisive fact is the field inventory**, which is larger and far more
+  disjoint than "~5 × 7" suggested: 31 slots, **30 distinct field names, exactly
+  one shared** (`confidence`, on assumption and evidence). Assumption 8, decision
+  7, constraint 6, question 5, evidence 3, hypothesis 2, concept 0. A flat flag
+  set earns its keep when the flags are mostly common across subjects —
+  `memory edit`'s 13 flags all apply to every memory, which is why that precedent
+  does not transfer. Here 30 flags would print on every `--help` while at most 8
+  are legal for the record in hand.
+
+  Also weighed: subverbs make the wrong-field error **unrepresentable** rather
+  than refused, which is the codebase's stated preference (ISS-318's own option 2
+  cites the `AgentAct`/`ActKind` split for exactly this reason); four distinct
+  closed enums (`Confidence`, `Basis`, `ConstraintSource`, `Provenance`) stop
+  having to coexist in one struct; and `CPT`'s empty facet becomes expressible as
+  a subverb with no flags rather than 30 refusals.
+
+  **The accepted cost.** The kind is already in the id prefix, so a subverb
+  states it twice and can disagree — `knowledge edit decision DEC-005` is
+  redundant, and `… decision ASM-003` is wrong. That needs a mismatch refusal, so
+  subverbs *relocate* the check rather than remove it. Accepted because it is one
+  comparison against a value the id already resolves, versus a 30-row
+  correspondence table consulted per flag. The refusal should carry the teaching
+  error the flat option would have given: *"`ASM-003` is an assumption; use
+  `knowledge edit assumption`."*
+
+  **Consequence for objective 3.** The key→honouring-kind table is still built
+  and still authored once, but its consumer is the design wire, not the CLI. The
+  "one table, two consumers" framing in objective 3 above is superseded by this:
+  one table, one consumer, and a CLI that does not need it. Design should not
+  invent a second consumer to preserve the phrasing.
+
+**Nothing substantive remains open for `/design`** beyond OQ-4 and OQ-6 below.
 
 ## Non-Goals
 
@@ -192,11 +234,10 @@ Also out of scope:
   never happened, the audit did not catch it, and nothing owns it since.
   Objective 4 is the same shape — a prose-heavy amendment whose completion is
   easy to assert. **Its criteria must name observables, not intent.**
-- **R3 — surface creep on the flat-flag shape.** ~5 fields × 7 kinds is a large
-  flag set on one verb; `memory edit` already carries 15 and reads as a wall.
-  Mitigated by the refusal rule making the wrong flag an error rather than a
-  silent no-op, but the ergonomics are the point of the slice and a bad shape
-  fails it.
+- **R3 — RESOLVED by the OQ-1 settlement.** The surface-creep risk on a wide flat
+  flag verb is dissolved by per-kind subverbs; the residual is that seven
+  subverbs plus a kind-blind `edit` plus a settle verb is itself a surface to
+  keep coherent. Design owns the naming.
 - **A1 — the read model is sound and stays put.** `RecordFacet`, `validate_facet`
   and `render_facet` are assumed correct and unchanged; this is additive on the
   write side. If the write path forces a change to the read model, that is a
@@ -205,7 +246,6 @@ Also out of scope:
   fight.** `Declaration` has it; `ApplyRequest` cannot (it carries a
   `#[serde(flatten)]` envelope). `CreateRecord` sits inside `Declaration`, so the
   extension is assumed safe — worth confirming in design, not at execution.
-- **OQ-1** — flat flags with refusal, per-kind subverb, or `--facet key=value`?
 - **OQ-4** — is `ConceptFacet`'s emptiness a designed property or an omission?
   Raised by ISS-316; no governance answers it. Research found corroborating code
   evidence (`validate_facet`'s concept arm explicitly discards raw input) and a
@@ -222,11 +262,13 @@ design.)*
 
 ## Verification / closure intent
 
-- The `knowledge edit` verb round-trips every facet field of all seven kinds:
+- Every facet field of all seven kinds round-trips through its kind's subverb:
   write → `knowledge show` reflects it → re-parse is stable. Test-verified.
-- A flag or key inert at the record's / subject's kind is **refused**, not
-  ignored — proved at both call sites (`knowledge edit`, `design apply`) against
-  one table. Test-verified.
+- A subverb naming a kind the id's prefix contradicts is **refused**, with a
+  message naming the correct subverb. Test-verified.
+- A `Declaration` key inert at its subject's kind is **refused**, not ignored,
+  across the whole field set rather than the two observed instances.
+  Test-verified.
 - A `form = "create"` checkpoint disposition mints a record whose facet **and
   prose** are populated from the payload, in one act, with no follow-up write.
   Test-verified, and this is the criterion that closes the SL-248 data loss.
