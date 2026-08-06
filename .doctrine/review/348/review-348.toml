@@ -513,7 +513,7 @@ an exemption."""
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected write-before-evict to guarantee activation lands before removal; observed PrintedFallback is an Ok value, so a malformed target file still triggers the sweep and destroys the working activation"
 detail = """
@@ -559,7 +559,7 @@ On the framing in the round-2 synthesis — that the mechanism is right and the 
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the scope-dependent command form to reach plan_hook; observed scope threaded nowhere between install_claude_hook and the merge core, and no answer for what the Codex arm passes to a Claude-only enum"
 detail = """
@@ -602,7 +602,7 @@ Consequence (b) is closed too. The byte-identical-Codex claim had no test; `sec-
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the unswept worktree.baseRef copy to be provably inert; observed the claim rests on the value being invariant, which BaseRefOutcome::Conflict exists precisely to allow it not to be"
 detail = """
@@ -651,7 +651,7 @@ The signpost citation was the part that moved this from tidy-up to remedy: `mem.
 
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the eviction rider to report what was removed; observed EvictOutcome::merge treating Unreadable as absorbing, so a partly-successful destructive sweep reports only the failure and never the deletion"
 detail = """
@@ -699,7 +699,7 @@ New criterion in `sec-7`: `a_partly_successful_sweep_reports_both_facts` — one
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected shell-form expansion of the portable literal to be a property of hooks; observed it is a property of the shell, and the cited paragraph names two shells where the POSIX default-expansion syntax does not work"
 detail = """
@@ -739,7 +739,7 @@ The asymmetry point is taken as a separate paragraph and is the part with the lo
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected the class-(ii) table to let a reviewer tell an expected red from a real one; observed its out.hook row cites three lines carrying no such assertion and omits the one that matters most"
 detail = """
