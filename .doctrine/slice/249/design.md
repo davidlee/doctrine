@@ -1560,135 +1560,109 @@ carries its facet — which the mint test asserts directly.
 <!-- doctrine:section sec-14 -->
 # 10. Review Notes
 
-## The pass that has run
+## The pass
 
-`RV-349` — one external adversarial pass over this document, seven rounds,
-sixteen findings, every one upheld on evidence. Round one at revision 48, briefed on eight
-lines of attack, five of them lifted from this section's drafted form: six
-findings. Round two verified three and contested three. Round three verified two,
-contested one, and raised `F-7` against the fix for the one it contested. Round
-four verified two, contested `F-5` a third time, and raised `F-9` and `F-10`.
-Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
-`F-13`. Round six verified two, contested three, and raised `F-14` and `F-15`.
-Round seven verified five and raised `F-16`, and ruled on a question this section
-had asked of it: whether `D9`, rewritten six times for a single test asserting a
-spec says "seven" and not "four", had become disproportionate to what it
-protects. The reviewer's answer was no — the final test is compact, every clause
-closes a demonstrated failure, and a simpler one would knowingly surrender
-coverage. That is recorded because the question was real and the answer is not
-self-evident: six rewrites of one assertion is the kind of thing a later reader
-should be able to find a ruling on rather than re-litigate.
+`RV-349` is the record: findings, severities, contests, dispositions and rounds
+live there, and it is authoritative. This section deliberately does not mirror
+it.
 
-| finding | severity | what it was, and how it settled |
-|---|---|---|
-| `F-1` | blocker | The recovery argument's premise was false: a retry under a journalled submission is not pinned to its payload. Contested once, because the *fix* both left the digest domain undefined and repeated a different false claim about the journal. Settled at `D8` (digest material named as the term `acceptance_digest` already binds), `D8a` (`DEC-168`'s rationale corrected), `I12`. Verified round three. |
-| `F-2` | major | `settle` ordered two writes "across two files" that are one file. `D6` superseded; one validated atomic write. Verified round two. |
-| `F-3` | major | `P1`/`P2` could not see ownership multiplicity. Contested once: the equality fix still compared sets, so a name repeated within a row collapsed. Settled at `P3` / `I3b`. Verified round three. |
-| `F-4` | major | `I9` proves wire-key inventory, not mapping. Settled at `I10`, a generated behavioural matrix. Verified round two. |
-| `F-5` | major | The coverage canary passed a still-four-kind spec. **Contested four times** — the phrase pin closed 1 of 32; the blanket ban was case-sensitive, miscited its own finding and understated the count; the count was right but its classification was not; and the allowlist that fixed the classification could not match the phrase it named. Settled at `D9` as it now stands. |
-| `F-6` | major | `I1`'s named oracle is `#[cfg(test)]` with no production caller, so it proves the read model and not the writer. Settled at `D10` / `I11`. Verified round two. |
-| `F-7` | major | `D9`'s ban was case-sensitive; `spec-019.md:34` is `### Four kinds, one engine`. Case-folded, word-boundary. Verified round four. |
-| `F-8` | major | Self-raised: the scope card's own `F-5` amendment carried the understated count, so card and design disagreed about one criterion's evidence. Corrected; left on the ledger rather than fixed silently. Verified round four, with the reviewer's ruling that driving both roles is a legitimate use of the protocol. |
-| `F-9` | major | `D9` claimed all 32 occurrences were kind-derived. One is not — `spec-019.md:330`'s *"four coupled sites"* counts integration points and stays correct at seven — so the ban was knowingly overbroad and would have forced the REV to damage accurate prose. Contested twice more, because the allowlist that fixed it did not do what it said and then could not match what it named. Settled at `D9` with the 31/1 classification stated, the allowlist held to a count identity, and the match whitespace-collapsed. |
-| `F-10` | minor | This section undercounted the findings and omitted `F-8`. |
-| `F-11` | major | `D9`'s allowlist was presence-checked, so a *second* `"four coupled sites"` anywhere would inherit the exemption with no allowlist edit and no red test. Replaced by the identity: total occurrences equal the sum of the allowlist's expected counts. |
-| `F-12` | major | The scope card still carried the superseded blanket ban and the 32/0 classification — `F-8` recurring, in the same artefact, one round later. The card is amended by hand every round and had gone stale again. |
-| `F-13` | major | § 9 required `SPEC-019` to carry `EVD`/`HYP`/`CPT` **lifecycle vocabularies**, which the scope card explicitly defers to `ISS-316`. A criterion written in round one had quietly widened the slice. Narrowed to the facet contracts and the verb set. |
-| `F-14` | major | The allowlist's declared phrase occurs **zero** times: `spec-019.md` wraps the exempt sentence mid-phrase, line 330 ending *"…touches four"*. The identity would have been red on authoring, greenable only by rewording the sentence the exemption exists to protect. Every phrase match is now over whitespace-collapsed text. |
-| `F-15` | minor | This section named `F-8`, `F-12` and `F-13` under *the artefact nobody re-reads* and omitted the fourth instance — `F-5` sitting contested on the ledger for four rounds, answered in substance and never answered in the record. |
-| `F-16` | minor | This section undercounted `F-5`'s contests. Twice now it has miscounted the record of a finding about miscounting. |
+It used to. `RV-349` `F-17` is why it no longer does — a hand-maintained copy of
+ledger history, living inside the artefact the ledger reviews, goes stale every
+round by construction, and was twice the subject of its own findings for
+miscounting itself. The fix is not more care. It is to stop keeping the copy, and
+to keep here only what the ledger cannot: what the pass changed in the design,
+what it cleared, and what it taught.
 
-**What this pass actually found.** Two defects in the design as drafted were
-false premises about the source — `F-1` and `F-2`, one in each direction: an
-unsafe path the design believed was safe, and an unsafe path the design was
-carefully mitigating that did not exist. Almost everything after round one was a
-defect in a *fix*: `F-3`, `F-5` twice more, `F-7`, `F-9`, `F-11`, and `F-8` /
-`F-12` in the scope card.
+## What it changed
 
-Two shapes recur, and neither is carelessness.
+Every substantive change is recorded where it binds, not summarised here:
 
-The first is a **claim of totality asserted rather than enumerated** — *the pins
-are total together*, *the retry carries the same payload*, *every occurrence is
-kind-derived*, *the allowlist expires*, *the declared phrase is found*. Eight of
-the fifteen. Each was cheap to check and none was checked, because the
-surrounding argument was sound and the claim felt like part of it. `D9` took six
-rounds to reach a form where the reader evaluates an identity and a 31/1
-classification instead of trusting a claim; that arrangement, not any one fix, is
-what the findings were about. `F-14` is the sharpest instance because the claim
-was about the *mechanism itself*: an exemption whose phrase never matched, so the
-check would have failed on the exception it was built to permit.
+- the recovery argument and the retry-payload guard — § 5.3, `D8`, `D8a`, `I12`;
+- `settle` as one validated atomic write — § 5.2, § 5.4 path B, `D6` superseded;
+- the facet table's three pins — § 5.1, `D1`, `I3`, `I3b`;
+- the wire table's mapping, distinct from its inventory — `I10`;
+- edit preservation as its own proof — `D10`, `I11`;
+- the coverage canary's final form — `D9`;
+- § 9's criterion narrowed back inside the slice's non-goals.
 
-The second is **the artefact nobody re-reads**, five instances. `F-8` and `F-12`
-are one defect a round apart: the scope card is amended by hand at the end of
-each round and went stale twice, so the card and the design disagreed about one
-criterion's evidence. `F-13` is its mirror — a criterion that widened the slice
-past its own non-goals because nothing compared it back to the card. And `F-5`
-sat `contested` on this review's own ledger for four rounds, its substance
-answered through `F-9`'s fix and its record never updated: the pass found the
-shape in the instrument it was being conducted with. `F-15` and `F-16` are the
-fifth, and they landed here — this section miscounted its own record of the pass
-twice, the second time while carrying a paragraph about exactly that failure. The
-`review.scope` runbook step exists for this class and fires once at the end of a
-stage, which is the wrong cadence for a review that ran seven rounds and rewrote
-one criterion six times. Mechanising that comparison is a note for whoever next
-designs at this length; there is no fix for it inside this slice, and claiming to
-remember next time would be the same failure again.
+The architecture that came out of drafting is unchanged. What the pass rewrote
+was the *evidence*: what the code does, what the pins cover, what the tests would
+catch, and what the specs actually say.
+
+## What it cleared
+
+On the reviewer's record, without a finding: `DEC-177`'s tripwire remains
+justified for hand-edits and out-of-band writers; the Phase A/B boundary is
+coherent; `D4`'s `body` reuse is carried by objective 3's refusal; `ADR-013` REV
+routing and `ADR-004` relation deferral are correctly applied; the seven scaffold
+templates seed exactly their kinds' field sets; and four code claims this design
+makes — `Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s missing-key
+creation, `skip_serializing_if` totality, `append_edge → Noop` — match the
+source.
+
+`D9`'s proportionality was put to the reviewer directly, because a single test
+asserting a spec says "seven" and not "four" had been rewritten more times than
+anything else in this design, and that is the profile of a fix that has outgrown
+what it protects. The ruling was that it has not: the final test is compact, each
+clause closes a demonstrated failure, and a simpler one would knowingly surrender
+coverage. Recorded so a later reader finds a ruling rather than re-deriving one.
+
+## What it taught
+
+Two shapes recur across this pass, and neither is carelessness. Both are worth
+carrying into the plan.
+
+**A totality asserted rather than enumerated.** *The pins are total together.
+The retry carries the same payload. Every occurrence is kind-derived. The
+allowlist expires. The declared phrase is found.* Each was cheap to check, each
+was part of an argument that was otherwise sound, and that is exactly why none
+was checked — the claim inherited the credibility of the reasoning around it.
+Where this design now states such a thing, it states the enumeration or the
+identity beside it, so a reader evaluates rather than trusts.
+
+**The artefact nobody re-reads.** The scope card drifted from the design twice;
+a criterion widened past the card's own non-goals because nothing compared it
+back; a finding sat contested on the ledger for four rounds while its substance
+was being fixed elsewhere; and this section drifted from the ledger repeatedly.
+In every instance the artefact was the one updated last, after the substantive
+work, by hand. The `review.scope` runbook step is the comparison that should
+catch this and it fires once at the end of a stage — the wrong cadence for a
+review with many rounds. Mechanising it is a note for whoever next designs at
+this length. There is no fix inside this slice, and resolving to remember would
+be the same failure again.
 
 `R4` says objective 4's completion is easy to assert. This pass is that failure
-mode caught sixteen times inside the design that guards against it.
-
-The review also retired an assumption rather than a defect: `A3` — all seven
-templates seed every field of their kind — was verified by reading them, so
-§ 5.5 records a fact where it recorded a hedge, and `R5` becomes a standing pin
-rather than a thing to find out.
-
-Cleared without a finding, on the reviewer's own record: `DEC-177`'s tripwire
-remains justified for hand-edits and out-of-band writers; the Phase A/B boundary
-is otherwise coherent; `D4`'s `body` reuse is carried by objective 3's refusal;
-`ADR-013` REV routing and `ADR-004` relation deferral are correctly applied; and
-four specific code claims this design makes — `Declaration`'s
-`deny_unknown_fields`, `set_facet_mixed`'s missing-key creation,
-`skip_serializing_if` totality, `append_edge → Noop` — match the source.
+mode, found repeatedly inside the design that guards against it.
 
 ## Where a further pass should press
 
-In the order I would press, with the two rounds' answers already in.
-
-1. **`I10`'s cell semantics.** "Observably effectful or refused" is easy to say
-   and needs a definition per key before the test is written: some keys are
-   effectful only in combination, and a cell asserting the wrong side of the
-   disjunction is a test that passes while the mapping is wrong — which is what
-   `F-4` found in the first place, one level up. This is the largest thing still
-   undefined.
-2. **Whether `settle` still earns a separate verb.** `DEC-178`'s case for it was
-   partly that the transition is a coupled multi-write. After `F-2` it is one
-   write of one document, which is what `knowledge edit question` will also be.
-   The remaining case — that a disposition is part of resolving and not a field
-   one may forget — is `DEC-062`'s and stands on its own, but it is now the
-   *whole* case rather than the larger half of one.
+1. **`I10`'s cell semantics.** "Observably effectful or refused" needs a
+   definition per key before the test is written: some keys are effectful only in
+   combination, and a cell asserting the wrong side of the disjunction is a test
+   that passes while the mapping is wrong — which is what `F-4` found one level
+   up. The largest thing still undefined.
+2. **Whether `settle` still earns a separate verb.** `DEC-178`'s case was partly
+   that the transition is a coupled multi-write. It is now one write of one
+   document, which is what `knowledge edit question` will also be. The remaining
+   case — a disposition is part of resolving, not a field one may forget — is
+   `DEC-062`'s and stands on its own, but it is now the *whole* case rather than
+   the larger half of one.
 3. **`D8a`'s correction has no home yet.** `DEC-168`'s recorded rationale is
-   known-false and the fix is routed to the objective 4 REV at reconcile, which
-   is a governance vehicle carrying a knowledge-record correction because no
-   other vehicle exists until this slice ships. Someone should check that the REV
-   is a legitimate place for it rather than the only place — and if it is not,
-   the correction needs its own follow-up rather than a convenient ride.
-4. **Every other unenumerated totality claim in this design.** The base rate is
-   the argument, and it is now measured: eight of sixteen findings were an
-   asserted totality that one command or one counterexample would have refuted.
-   This design's
-   remaining unverified code claims — `entity::write_body`'s behaviour on an
-   absent file, `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the
-   tripwire's precedent — were checked by nobody in any of the four rounds, and
-   each is one command away from being either evidence or a finding.
+   known-false and the fix rides the objective 4 REV at reconcile — a governance
+   vehicle carrying a knowledge-record correction because no other exists until
+   this slice ships. Someone should check that is a legitimate home rather than
+   the only one available.
+4. **Every other unenumerated totality claim here.** The remaining unverified
+   code claims — `entity::write_body`'s behaviour on an absent file,
+   `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the tripwire's
+   precedent — were checked by nobody in any round, and each is one command from
+   being either evidence or a finding.
 5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
-   recommendation (§ 6). If a reviewer thinks either should have been ruled here,
-   the counter-argument is that both are about what the REV *says*, and the REV
-   does not exist yet.
-6. **`R8`.** `src/knowledge.rs` gains tables and three verbs and is already
-   carrying the CLI. The design says explicitly that splitting it is out of
-   scope. That is a judgement about sequencing, not about whether the module is
-   too big — a reviewer who disagrees is disagreeing about priority, which is the
-   user's call and is already recorded.
+   recommendation (§ 6). The counter-argument to ruling them here is that both
+   are about what the REV *says*, and the REV does not exist yet.
+6. **`R8`.** `src/knowledge.rs` gains tables and three verbs and already carries
+   the CLI. Splitting it is out of scope — a judgement about sequencing, not
+   about whether the module is too big.
 7. **Anything Phase A touches that reads `facet_fields`.** `R6` says the boundary
    erodes under convenience, and review added work to Phase A twice. The cheapest
    review is still a grep.
