@@ -63,9 +63,12 @@ activation to a surface the project can inspect and doctor.
   relative agent symlink (proven-ownership, never-clobber, stage-then-rename),
   while every other agent delegates to `npx skills add davidlee/doctrine`. So
   the skills leg is closer to "make an existing direct-write channel the only
-  Claude channel" than to new construction — **subject to verifying that channel
-  is exercised**: neither `.claude/skills/` nor `.doctrine/skills/` exists in
-  this repo, which is served by the directory-source plugin.
+  Claude channel" than to new construction. Neither `.claude/skills/` nor
+  `.doctrine/skills/` exists in *this* repo today — it is served by the
+  directory-source plugin — but **this is how the repo used to work** (user,
+  2026-08-06): the symlink channel served this repo before IMP-224 (closed
+  2026-07-03) moved it onto the plugin. It is a channel being returned to, not
+  speculative machinery.
 
 ### What "retire" means (settled)
 
@@ -80,20 +83,16 @@ stays published for anyone who prefers the plugin.
    `plugins/doctrine/hooks/hooks.json` — `SessionStart`, `WorktreeCreate`,
    `SubagentStart` / `SubagentStop` (`dispatch-orchestrator`), `PreToolUse`
    (`Bash`, `Edit|Write`) — activated through the existing `boot.rs` merge core
-   into `.claude/settings*.json`, with the scope question (`OQ-2`) settled at
-   design.
-2. **One Claude skills channel.** Settle `OQ-3` (npx delegate vs the SPEC-010
-   symlink channel for Claude), verify the surviving channel is live rather than
-   dead code, and make it the only Claude path.
+   into `.claude/settings*.json`, at **both scopes behind a flag, defaulting to
+   project `settings.json`** (`OQ-1`, settled).
+2. **One Claude skills channel.** Settle `OQ-2` (npx delegate vs the SPEC-010
+   symlink channel for Claude) and make the survivor the only Claude path.
 3. **The doctor leg.** A check that walks the diagnosis order the trust memory
    establishes and names the *blocking layer* rather than reporting "hooks not
    working": folder trust → (plugin registration, while any plugin channel
    survives) → safe-mode / managed policy → blocklist → Doctrine's own hook
    entries present, canonical, and sole in the file it owns.
-4. **Migration.** Settle and implement `OQ-4` — whether retire *removes* the
-   `enabledPlugins` entry and marketplace registration (per-user state Doctrine
-   did not solely author) or merely stops writing new ones.
-5. **Governance follow-through.** SPEC-010 names the Claude plugin channel
+4. **Governance follow-through.** SPEC-010 names the Claude plugin channel
    explicitly, so this is a spec change, not just an install change: amend it
    through a REV. RFC-018 (*Claude harness field notes*) remains the home for
    the empirical findings this leans on.
@@ -110,17 +109,19 @@ stays published for anyone who prefers the plugin.
   planner.
 - **Never-clobber survives.** The proven-ownership contract on skill links and
   the owner-locked hook merge are both safety contracts, not conveniences.
-- **Bootstrap hazard.** This repo activates Doctrine *through the very channel
-  being retired*. Changing it alters the working session's own hook surface
-  mid-slice; sequencing must account for that.
 
 ## Non-Goals
 
 - **Deleting the `plugins/` tree or unpublishing
-  `.claude-plugin/marketplace.json`.** `OQ-1` settled the opposite: the tree
-  stays canonical and the marketplace stays published.
+  `.claude-plugin/marketplace.json`.** IMP-400 `OQ-1` settled the opposite: the
+  tree stays canonical and the marketplace stays published.
+- **Migrating existing installs.** Whether retire *removes* an existing
+  `enabledPlugins` entry or marketplace registration is explicitly out of this
+  slice (user, 2026-08-06). Retire here means **stop writing new plugin
+  activation**; pre-existing per-user state is left where it is. Carried to
+  Follow-Ups, and IMP-400 stays open on that leg.
 - **Non-Claude harness install paths.** The `npx skills add davidlee/doctrine`
-  delegate for other agents is unchanged — unless `OQ-3` resolves to making npx
+  delegate for other agents is unchanged — unless `OQ-2` resolves to making npx
   the Claude path too, in which case the change is on Claude's side only.
 - **IMP-245 (Cursor as a doctrine harness).** A second consumer of whatever
   activation model this settles; not built here.
@@ -132,8 +133,8 @@ stays published for anyone who prefers the plugin.
   them is not.
 - **SL-247's `OQ-2`/`OQ-3`** — whether a worktree-local `.claude/` binds for an
   in-session `isolation: worktree` subagent. SL-247 routed those to this slice's
-  `OQ-2`; they are *inputs* to settling the settings-file scope question, and are
-  answered only to the extent that question requires.
+  settings-scope question (`OQ-1`); with that now settled as *both scopes behind
+  a flag*, they are answered only to the extent the flag's semantics require.
 
 ## Affected surface
 
@@ -160,29 +161,34 @@ stays published for anyone who prefers the plugin.
 - **`R2` — POL-002 boundary.** A doctor that reads `~/.claude.json`,
   `known_marketplaces.json`, and system managed-settings is harness-specific by
   nature. Placing it wrongly imports host-harness knowledge into the engine.
-- **`R3` — bootstrap ordering.** Retiring the channel that currently activates
-  Doctrine in this repo can leave the working session (and dispatch workers)
-  without hooks partway through. Needs an explicit cutover order, and possibly a
-  period where both channels are tolerated.
-- **`R4` — migration touches state Doctrine did not solely author.** Removing an
-  `enabledPlugins` entry or a marketplace registration edits per-user files that
-  may carry other consumers' entries. The owner-locked discipline that governs
-  hook entries has no established analogue here.
+- **`R3` — bootstrap ordering.** *Downgraded (user, 2026-08-06): "I can manually
+  fiddle it."* Retiring the channel that currently activates Doctrine in this
+  repo can leave the working session (and dispatch workers) without hooks partway
+  through. The human will hand-repair their own activation across the cutover, so
+  this does not buy a both-channels-tolerated compatibility window. Design should
+  still say plainly *when* activation flips, so the moment is expected rather than
+  discovered.
+- **`R4` — migration touches state Doctrine did not solely author.**
+  *Downgraded (user, 2026-08-06): already the case — the current plugin form
+  depends on exactly that per-user state.* Retire adds no new exposure, and with
+  migration out of scope this slice does not write those files at all.
 - **`A1`** — the empirical findings recorded on IMP-400 are verified against the
   2.1.198 native binary and are not re-derived during design.
-- **`A2`** — the SPEC-010 symlink channel is *specified*; whether any real
-  install exercises it is unverified and is a research-round question, not an
-  assumption to build on.
-- **`OQ-1`** — `settings.json` (project, committable, reviewable, travels with
-  the repo) vs `settings.local.json` (per-user, uncommitted, imposes nothing on
-  collaborators)? Possibly both by scope flag. Doctrine's existing merge core
-  targets `settings.local.json`; IMP-400's intent names `settings.json`. These
-  are different products, not a naming detail. (IMP-400 `OQ-2`.)
+- **`A2`** — *settled (user, 2026-08-06).* The SPEC-010 symlink channel is not
+  speculative: it is how this repo worked before IMP-224 moved it onto the
+  plugin. Research confirms the mechanism's current shape, not its viability.
+- **`OQ-1` — SETTLED (user, 2026-08-06): both, by scope flag, defaulting to
+  project `settings.json`.** Committed activation is reviewable and travels with
+  the repo; `settings.local.json` stays available for a collaborator who must not
+  impose hooks on a client project's whole team. Doctrine's existing merge core
+  targets `settings.local.json`, so the core gains a scope argument rather than a
+  second write path. (IMP-400 `OQ-2`.)
 - **`OQ-2`** — is `npx skills` acceptable as the Claude path too, or does Claude
   keep the direct symlink channel while others keep `npx`? SPEC-010 currently
   splits them deliberately. (IMP-400 `OQ-3`.)
-- **`OQ-3`** — does retire *remove* existing `enabledPlugins` / marketplace
-  registrations, or only stop writing new ones? (IMP-400 `OQ-4`.)
+- **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
+  `enabledPlugins` / marketplace registrations. Not settled, not carried: see
+  Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
 - **`OQ-4`** — is there a reload equivalent for settings-file hooks, or does
   direct-write mean a restart on every hook change? (IMP-400 `OQ-5`; the
   evidence side of `R1`.)
@@ -205,10 +211,16 @@ Done is judged by:
   suites stay green unchanged (behaviour-preservation gate).
 - **Governance reconciled.** SPEC-010 amended through a REV to describe the
   surviving channel set; RFC-018 updated with anything new the slice learns.
-- **Backlog dispositioned.** IMP-400 closed; CHR-045 (*bump plugin.json version
+- **Backlog dispositioned.** IMP-400 reduced to its migration leg and left open
+  (not closed — migration is out of scope); CHR-045 (*bump plugin.json version
   when the skill set changes*) resolved or explicitly retained; IMP-234 and
   CHR-037 assessed for overlap.
 
 ## Summary
 
 ## Follow-Ups
+
+- **Migration of existing installs** — whether to remove pre-existing
+  `enabledPlugins` entries and marketplace registrations, and under what
+  ownership discipline. Deferred out of this slice; IMP-400 stays open carrying
+  it (IMP-400 `OQ-4`).
