@@ -258,10 +258,38 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
 
 ### Open
 
-- **Drafting is complete; the stage has not moved.** All 9 sections exist,
-  materialised, `changes_since_baseline` non-zero. `sections_outstanding_review`
-  is 9 — the run's own review state, distinct from `RV-346`. The next lifecycle
-  move is the stage declaration to `reviewing`.
+- **The stage has moved to `reviewing`** (revision 64, 2026-08-06). All 9
+  sections exist and are materialised. `sections_outstanding_review` is 9 — the
+  run's own per-section attestation state, distinct from `RV-346` — and clearing
+  it, disposing the review pass, and the user's `design-accepted` are the three
+  remaining conditions on the lock.
+
+- **What a further review pass would probe** (`review.passes`, written after
+  `RV-346` round 3). A round 4 is worth running, and it is not a re-read of what
+  has already been read three times. Its targets, in priority order:
+
+  1. **`sec-7` and `sec-2` as amended.** Both changed materially in round 3 —
+     `ConformanceBackend::execute_observed` and its `HostPid` callback, table A
+     row 9 with its `InputsWritable` control, invariant 11 — and neither has been
+     read since. Round 3 was scoped to `sec-8`/`sec-9` and still found two
+     blockers in `sec-7`, which is the empirical case for this being first.
+  2. **`sec-6`, which has never had a clean external pass at all.** The crate
+     topology, the five-item export set, and the two-tree layering gate are
+     load-bearing for every other section's file placement, and `R6`/`R7` — the
+     double compilation and the package/build divergence — were both created
+     there.
+  3. **The nine-row table against a tenth mutant.** `R3`'s standing form is that
+     the gap in a property suite is invisible from inside it; `F-2` and `F-19`
+     were both found by an adversary constructing the backend the suite would
+     wrongly pass, not by re-reading the rows. The probe is *build the next such
+     backend*, not *check the nine rows are well-written*.
+  4. **Table C's split capacity claim**, added in round 3 and unread: whether the
+     unconditional leg really discriminates, given `F-24` showed the previous
+     arrangement did not.
+
+  What a pass would **not** buy: another read of `sec-1`, `sec-3`, `sec-4` or
+  `sec-5`, which have been through rounds 1 and 2 and were not amended by round
+  3.
 - **`sec-6` and `sec-7` still have no clean external pass.** Round 3 was scoped
   to `sec-8`/`sec-9`, with those two in scope only where they bore on the new
   sections — and even so it found `F-18` and `F-19` in `sec-7`. `sec-7` was
@@ -296,10 +324,13 @@ fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
   recovery slice. Its own first settling condition — whether v0 permits capsules to
   mint entities at all — is upstream of every option in it.
 - `ISS-319` — separable defect; fixable independently of `QUE-208`.
-- `SL-248` `OQ-3` — the shape of the cutover point (flag day / dual-run / atomic
-  release). Belongs to the cutover slice, not this one.
+- The shape of the cutover point (flag day / dual-run / atomic release). Belongs
+  to the cutover slice, not this one. Not a scope `OQ` on `SL-248` — an earlier
+  note labelled it `OQ-3`, which is taken: the scope's `OQ-3` is the three
+  cross-cutting requirements.
 - `SL-248` `OQ-4` — what replaces `review/*` and `phase/*` refs; REV-046 § ADR-012
-  leaves it a target-design question.
+  leaves it a target-design question. Now carried in the scope (`review.scope`,
+  2026-08-06), which previously did not state it while `design.md` `sec-9` cited it.
 - REQ-448, REQ-450, REQ-460 close in no single slice. This slice's share: REQ-448's
   denial half (proven by REQ-459's suite) and REQ-450 criterion 1.
 - `IMP-397` / `QUE-204` — egress allowlist and non-Git build inputs, out of scope
