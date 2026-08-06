@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 179
+slug = "edit-verbs-already-share-their-machinery"
+title = "The edit verbs already share their machinery"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 adds a fourth entity-family `edit` verb beside `memory edit` (13 flags, full transaction), `backlog edit` (status + resolution) and `spec edit` (descent scalars). The research round bounded extracting their shared read-mutate-write transaction as in scope only if it stayed cheap, and the user's steer subordinated it to closing the data-loss hole. The question was whether SL-249 extracts or adds a fourth bespoke verb."
+choice       = "Neither, because the premise is false. The shared machinery is already extracted and all three verbs already ride it: `dep_seq::apply_status` / `apply_scalar` / `append` for edit-preserving TOML key writes, and `entity::write_body` for the prose tier. SL-249 adds a fifth caller of the same leaves. No new abstraction is introduced and no refactor phase is planned."
+alternatives = [
+  "Extract a generic edit transaction over the four verbs. Rejected: there is nothing left to extract that is not already a leaf, and what remains differs irreducibly per kind — see rationale.",
+  "Add a fourth bespoke verb and record the duplication as debt. Rejected on the same finding: naming it debt would assert a duplication that measurement does not support.",
+]
+rationale    = "Inspection rather than impression. `src/memory.rs` imports `entity::write_body` and delegates its status move to `dep_seq::apply_status`; `src/backlog.rs` calls `dep_seq::set_authored_status` and `dep_seq::append`; `src/spec.rs` calls `dep_seq::apply_scalar` twice for its descent scalars. So the read-mutate-write transaction is not triplicated — it is one set of leaf writers with three callers. What is bespoke in each verb is its clap arg set and the mapping from those args to field names, and that is irreducibly per-kind: memory's 13 flags, backlog's status/resolution pair and spec's descent scalars have no field in common, so a shared abstraction over them could only be a dispatch table with one row per verb, which is a worse spelling of what the compiler already does. SL-249's own seam confirms the shape from the other side: `plan_facet_edits` is pure and knowledge-specific, `apply_facet_edits` is a thin shell over the existing `facet_write`, and the only new leaf-level thing is a `KeyPosture` parameter on a writer that already existed. The apparent duplication was in the CLI surface, where duplication is the point — each verb states its own domain's fields."
+consequences = [
+  "No refactor phase enters the plan, so the phase set is exactly DEC-165's split and nothing competes with the data-loss fix for phase 1.",
+  "SL-249's contribution to shared machinery is one parameter (`KeyPosture` on `set_facet_mixed`), not a new abstraction — which is what keeps `doctrine risk set` behaviour-preserving by construction rather than by test.",
+  "If a fifth entity family later wants field mutation, the cheap path is another caller of dep_seq/facet_write/write_body, not a framework. This record is the reason not to reach for one.",
+  "The `edit`-verb family stays uniform at the CLI grammar level (SPEC-013's `<kind> <verb>`) while staying bespoke at the flag level, which is the split OQ-1 already chose for knowledge's own subverbs.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

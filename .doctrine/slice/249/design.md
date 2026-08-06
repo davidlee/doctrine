@@ -791,3 +791,282 @@ rather than remove it, when relocation is one comparison.
 - **Large prose.** `--body -` reads stdin, as `memory edit` does. No size rule is
   invented here.
 
+<!-- doctrine:section sec-10 -->
+# 6. Open Questions & Unknowns
+
+Three inquiry nodes stayed open through the blocking set, deliberately. One is
+now answered; two resolve later, and *later* is the right place for them.
+
+## Answered in drafting
+
+- **`inq-12` — extract the shared edit transaction, or add a fourth bespoke
+  verb?** Neither: `DEC-179`. The transaction is already extracted — `memory`,
+  `backlog` and `spec` all ride `dep_seq` and `entity::write_body` — and what
+  remains bespoke is each verb's flag set, which has no field in common with the
+  others. SL-249 adds a caller and one parameter, not a duplicate. No refactor
+  phase enters the plan.
+
+## Open, and resolving at REV authorship
+
+Both belong to reconcile, when the REV is actually written. Recording the
+recommendation now so the authorship is not re-derived:
+
+- **`inq-7` — does this REV explicitly discharge `SL-159`'s undelivered
+  governance axis, and where is the lineage recorded?** Recommendation: yes, by
+  name. `DEC-174` already elevates `SL-159`'s `EVD`/`HYP` rulings with citation
+  and `DEC-172` does the same for `SL-197`'s `CPT`, so the REV is already paying
+  the debt in substance; saying so explicitly is what lets `ISS-316` narrow
+  honestly rather than absorb a second slice's obligation in silence. The
+  countervailing consideration is that a REV claiming to discharge another
+  slice's axis is asserting something about work it did not do — which is why
+  this wants the REV's author to look at it, not a design-time ruling.
+- **`inq-9` — should the REV give `src/facet_write.rs` a spec source anchor, and
+  to which spec?** Recommendation: `SPEC-004`, as shared substrate. The module is
+  the entity engine's edit-preserving `[facet]` write mechanism, kind-agnostic,
+  now serving backlog risk facets and knowledge facets both; `SPEC-019` is a
+  consumer, and anchoring a shared writer to one consumer is how the next
+  consumer ends up outside governance. This slice makes the anchor more
+  necessary, not less — it adds `KeyPosture`, a behavioural axis with no
+  governing sentence anywhere.
+
+## Unknowns
+
+- **`A3` — do all seven scaffold templates seed every field of their kind?**
+  Confirmed for `knowledge-decision.toml` only. Not a judgement call, just an
+  unchecked fact, and the first thing Phase B checks: an omission makes F-1
+  refuse every write to every existing record of that kind.
+- **Can `ADR-013`'s apply path auto-apply a prose-heavy amendment?** Carried
+  unverified from the scope card. It affects how the REV lands at reconcile, not
+  what it says. Worth probing before reconcile rather than at it.
+
+## Deliberately not asked here
+
+- **The missing-key mirror of the doctor tripwire.** Cheap to build and out of
+  scope: adding a facet field to an existing kind would make every prior record
+  trip it, so it needs a migration story this slice does not owe (§ 5.5).
+- **`src/knowledge.rs` carries both the typed model and the CLI**, since there is
+  no `src/commands/knowledge.rs`. This design adds to both halves and makes the
+  module larger. Splitting it is a real improvement and a different slice; doing
+  it here would put a layering refactor in front of the data-loss fix.
+
+<!-- doctrine:section sec-11 -->
+# 7. Decisions, Rationale & Alternatives
+
+Twelve rulings were taken on the design run `dr-019fd6b6` and each carries its
+own context, alternatives and rationale as a durable record. They are cited here,
+not restated — the reasoning lives in the record, and a summary that drifts from
+it is worse than a pointer.
+
+| record | ruling | where it binds |
+|---|---|---|
+| `DEC-165` | the governance amendment does not gate the wire fix | § 5.1 phase boundary, § 5.4 |
+| `DEC-168` | filled records are written at DEC-086 step 5 | § 5.3, § 5.4 path C |
+| `DEC-169` | wire-key tables are pinned by a serde key-set test | § 5.3, I9 |
+| `DEC-170` | facet writes refuse absent keys; empty is `""` | § 5.2 `KeyPosture`, I6 |
+| `DEC-172` | concept records carry no facet by design | § 5.5 edge cases |
+| `DEC-173` | concept gets no facet subverb | § 5.2 refusals |
+| `DEC-174` | `EVD`/`HYP` contracts are elevated from `SL-159` unchanged | objective 4 |
+| `DEC-175` | `PRD-010`'s kind-set clause is a stale enumeration | objective 4, § 2 |
+| `DEC-176` | kind coverage in governance is pinned by a canary | § 9 |
+| `DEC-177` | read stays tolerant; inert keys are caught by `doctor` | § 5.4 path E |
+| `DEC-178` | one settle verb, reach derived from facet names | § 5.2, I5 |
+| `DEC-179` | the edit verbs already share their machinery | § 6, and the plan's phase set |
+
+## Decided in drafting
+
+These are design-local: they follow from the rulings above rather than standing
+beside them, and they are recorded here because implementation depends on them.
+
+- **D1 — one authored table, two pins.** `facet_fields(kind)` is authored because
+  Rust has no reflection and `DEC-169` already refused a proc macro for one
+  table. P1 (union ≡ `RawFacet`'s serde key set) and P2 (per-kind round-trip
+  through `validate_facet`) are independent and between them total: P1 catches a
+  field missing from the table, P2 catches one on the wrong row. *Alternative:*
+  per-consumer tables. Rejected — three copies of the fact this slice exists to
+  make writable.
+- **D2 — `KeyPosture` on the writer, not a guard at each call site.** A call-site
+  guard has to be repeated by every future caller and is the parallel
+  implementation `AGENTS.md` forbids. The parameter also keeps `doctrine risk
+  set` on its existing posture by construction.
+- **D3 — the table is the CLI args' oracle, not their source.** `facet_fields`
+  is runtime, clap's derive is compile-time; generating six commands through the
+  builder API would introduce a second idiom for the sake of not typing thirty
+  names once. A per-kind test comparing `Command::get_arguments()` to the table
+  closes the drift instead (§ 5.5).
+- **D4 — the wire's prose key is `body`.** *Alternative:* `prose`, on the ground
+  that `body` is the key that ate SL-248's content. Rejected: that was a level
+  error, not a naming collision, and `entity::write_body` / `memory edit --body`
+  already own the spelling. Objective 3 is what makes the level error loud.
+- **D5 — the create payload is validated at admission**, by the same
+  `plan_facet_edits` the CLI runs, before any id is reserved. A bad payload
+  therefore costs no hollow record and no burned id.
+- **D6 — `settle` writes evidence before the status token.** Not atomic across
+  two files and not pretending to be; ordered so the surviving state after a
+  crash is a record that says who settled it and when while still sitting at its
+  open status, rather than a settled status with an empty answer.
+- **D7 — `settle` refuses a state-to-itself transition.** Keeps `answered_on`
+  meaning *when it was answered*. Amending an answer is `knowledge edit
+  question --answer`, which is the verb for changing a field.
+
+<!-- doctrine:section sec-12 -->
+# 8. Risks & Mitigations
+
+## Carried from the scope card
+
+- **`R1` — the amendment is authorship, not annotation**, now across two entities
+  (`SPEC-019`, `PRD-010` — `DEC-175`) plus a third amendment row for SPEC-019's
+  false self-description. *Mitigation:* `DEC-176`'s canary makes coverage an
+  observable rather than a claim, and `DEC-172`/`DEC-174` reduce the authorship
+  to elevation-with-citation rather than fresh judgement. What is left is prose,
+  and prose is what `R4` warns about.
+- **`R2a` — `SL-246` ordering.** `SL-249`'s REV lands first; `SL-246` then
+  derives its per-kind field lists from governance. *Mitigation:* nothing here
+  changes it, but note that `SL-246` can now derive from `facet_fields` in code
+  ahead of the REV if it needs to — the table is the same fact, earlier.
+- **`R3` residual — surface coherence.** Six subverbs, a kind-blind `edit`, and
+  `settle`. *Mitigation:* `D3`'s oracle test keeps the flag names honest, and the
+  refusal catalogue (§ 5.2) is the surface's teaching layer.
+- **`R4` — objective 4's completion is easy to assert.** *Mitigation:* `DEC-176`.
+  This is the risk the slice has already recurred on once (`SL-159`), so the
+  canary is not belt-and-braces; it is the control.
+
+## New, from drafting
+
+- **`R5` — a template omits a seeded facet field (`A3`).** If any of the six
+  unverified `knowledge-*.toml` templates omits a field, F-1 makes every existing
+  record of that kind refuse every write. Impact is total for that kind and
+  invisible until the first write. *Mitigation:* Phase B's first act is a test
+  asserting every template seeds exactly `facet_fields(kind)` — which is a third
+  application of the table as oracle, and cheap because the table exists.
+- **`R6` — the phase boundary erodes under convenience.** Phase A is small and
+  the facet work is adjacent; the temptation to "just add the table while we're
+  here" is exactly how `DEC-165`'s ordering is lost, and with it the property
+  that the data-loss fix ships first. *Mitigation:* the plan states the boundary
+  as an exit criterion, not a preference — Phase A's exit asserts that no symbol
+  from the facet table is referenced by anything it ships.
+- **`R7` — adding a facet field later is a corpus migration, not an edit.**
+  F-1's posture means a new field must be seeded into every existing record of
+  that kind or every write to them refuses. *Mitigation:* state it as a
+  consequence in the objective 4 REV, where whoever adds a kind or a field will
+  be reading. This risk is created by `DEC-170` and is worth the trade; it is
+  not worth leaving undocumented.
+- **`R8` — `src/knowledge.rs` grows on both axes.** The module holds the typed
+  model, the read seam, the CLI, and now the tables and three more verbs.
+  *Mitigation:* none taken here, deliberately (§ 6). Splitting it in front of the
+  data-loss fix inverts the slice's priority. Recorded so the next reader knows
+  it was seen rather than missed.
+
+## Assumptions restated as risk
+
+`A1` — if the write path forces a change to `RecordFacet` or `validate_facet`,
+the behaviour-preservation gate is at stake and the correct move is `/consult`,
+not a quiet edit. Nothing in this design foresees one: the write path reads the
+model's shape through a table and never mutates the model.
+
+<!-- doctrine:section sec-13 -->
+# 9. Quality Engineering & Validation
+
+## The gate that constrains everything else
+
+This slice touches shared machinery — the entity engine's write leaves and the
+design-run wire — so the behaviour-preservation gate applies: the existing suites
+are the proof and must stay green **unchanged**. Two of them matter most and
+neither may be edited to accommodate this work:
+
+- the knowledge round-trip suite (`render_facet` byte-stability, `I1`);
+- `doctrine risk set`'s suite, which is what `KeyPosture::Create` exists to keep
+  true (`I8`).
+
+An edit to either is a signal that the design is wrong, not that the test is.
+
+## Test surface by invariant
+
+| invariant | test shape |
+|---|---|
+| `I1` round-trip | existing suite, unchanged |
+| `I2` table totality | `RawFacet` serde key set vs `⋃ facet_fields` |
+| `I3` partition | per kind: write every table field, read through `validate_facet`, assert present |
+| `I4` one writer | type-level for facets (`plan_facet_edits` is the sole constructor); test for status and body |
+| `I5` `accepted` unreachable | assert the derived settleable set excludes every `DEC` state |
+| `I6` F-1 | write to a record with a hand-deleted key → refusal naming the record, file byte-identical |
+| `I7` refusal is inert | every refusal case asserts the file's bytes before and after |
+| `I8` `risk set` | existing suite, unchanged |
+| `I9` wire-key totality | fully-populated `Declaration` serde key set vs the table |
+
+Plus the three oracle tests the tables earn: clap args vs `facet_fields` (`D3`),
+templates vs `facet_fields` (`R5`), and `settlements`' state set vs the by/on
+derivation (§ 5.2).
+
+## The criteria that close the slice
+
+Restated from the scope card with what drafting changed:
+
+- Every facet field of the **six** facet-bearing kinds round-trips through its
+  kind's subverb; `knowledge edit concept` is refused, naming the kind-blind
+  verb. *Test-verified.*
+- A subverb naming a kind the id contradicts is refused with the correct subverb
+  named. *Test-verified.*
+- A `Declaration` key inert at its subject's kind is refused across the whole
+  field set — and specifically, a `body` on a `cp-` subject is refused naming
+  `dispose.create.body`. *Test-verified, and this is the SL-248 replay.*
+- A `form = "create"` disposition mints a record whose facet **and** prose are
+  populated in one act with no follow-up write. *Test-verified; the criterion
+  that closes the data loss.*
+- `settle` populates the captured field, the actor and the date and moves the
+  status in one act; omitting the captured field is a refusal; the settleable set
+  is derived, not listed. *Test-verified.*
+- A populated `[facet]` key inert at its record's kind is reported by `doctor`,
+  and `knowledge list` still succeeds on that corpus. *Test-verified.*
+- Every kind in `kinds::RECORD` is named in `SPEC-019` and `PRD-010`.
+  *Test-verified by `DEC-176`'s canary — a project-local test, never a `validate`
+  rule (`POL-002`).*
+- `IMP-403` leads 1 and 2 are demonstrably closed; leads 3–5 carry their own
+  follow-up items.
+
+## What evidence changes
+
+The `answer`/`answered_by`/`answered_on` population on `QUE` is the slice's
+headline measurement at 0 of 38. It is **not** a closure criterion: this slice
+closes the hole, it does not backfill the corpus, and a criterion that moved with
+authoring behaviour would measure the wrong thing. The honest post-slice
+measurement is that a record minted through a create disposition after Phase B
+carries its facet — which the mint test asserts directly.
+
+<!-- doctrine:section sec-14 -->
+# 10. Review Notes
+
+Where a reviewer should press, in the order I would press.
+
+1. **`D1`'s two pins — are they actually total together?** P1 compares sets, so a
+   field listed under two kinds is invisible to it (and `confidence` legitimately
+   is). P2 is per-kind and would not notice a field that appears on an extra row
+   *and* validates there. The claim is that no facet field validates for a kind
+   that does not own it, which holds because `validate_facet`'s arms read
+   disjoint field sets — but that is an argument about the current code, not a
+   property the pins enforce. If a reviewer wants a third pin, this is where it
+   goes.
+2. **`D6`'s ordering argument.** It assumes a crash between two writes is the
+   failure mode worth optimising for. If the more likely failure is a refusal
+   *inside* `set_record_status` after the facet write has landed — a foreign-kind
+   state, say — then the record ends with settlement evidence it never earned.
+   The mitigation would be validating the state token before writing anything;
+   worth deciding explicitly rather than inheriting.
+3. **`DEC-177`'s scope, revisited against `D5`.** The doctor tripwire exists
+   because the read path stays tolerant. But `D5` now validates facet payloads at
+   admission, and the CLI validates at `plan_facet_edits` — so the only remaining
+   producer of an inert key is a hand-edit. A reviewer might reasonably ask
+   whether the tripwire still earns its place. I think it does, precisely because
+   hand-edits are the population that gets no other feedback, but the argument is
+   weaker than it was when the ruling was taken.
+4. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
+   recommendation (§ 6). If a reviewer thinks either should have been ruled here,
+   the counter-argument is that both are about what the REV *says*, and the REV
+   does not exist yet.
+5. **`R8`.** `src/knowledge.rs` gains tables and three verbs and is already
+   carrying the CLI. The design says explicitly that splitting it is out of
+   scope. That is a judgement about sequencing, not about whether the module is
+   too big — a reviewer who disagrees is disagreeing about priority, which is the
+   user's call and is already recorded.
+6. **Anything phase A touches that reads `facet_fields`.** `R6` says the boundary
+   erodes under convenience. The cheapest review is a grep.
+
