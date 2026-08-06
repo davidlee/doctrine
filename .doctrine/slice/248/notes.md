@@ -74,7 +74,7 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design drafting, sections 1–7 of 9 · ae77e077
+fresh-as-of: 2026-08-06 · design drafting, 9 of 9 sections · 79d06645
 
 ### Produced
 
@@ -84,11 +84,23 @@ fresh-as-of: 2026-08-06 · design drafting, sections 1–7 of 9 · ae77e077
   `sec-5` (operational config: the `[capsule]` table, capsule root, capacity),
   `sec-6` (crate topology, export set, layering enforcement), `sec-7` (the
   conformance suite: eight properties, controls, admission).
-- `RV-346` — design facet, raiser codex / responder claude. **17 findings, all
-  upheld, none contested back.** Round 1: nine on `sec-2`/`sec-3`. Round 2:
-  codex verified five remediations, contested four, raised eight new
-  (`F-10`…`F-17`) across `sec-2`–`sec-5`. `await=raiser`, all 17 answered;
-  the ledger is the rolling one for this design, not a one-shot.
+- Sections `sec-8` (code impact and verification alignment) and `sec-9` (risks,
+  residuals, open questions) — drafted at `d08468bc`, amended by round 3.
+  Drafting is complete: 9 of 9.
+- `RV-346` — design facet, raiser codex / responder claude. **24 findings, 23
+  upheld, one rejected.** Round 1: nine on `sec-2`/`sec-3`. Round 2: five
+  remediations verified, four contested, eight new (`F-10`…`F-17`). Round 3:
+  seven on `sec-8`/`sec-9` (`F-18`…`F-24`), four of them blockers. `await=raiser`,
+  all 24 answered; the rolling ledger for this design, not a one-shot. Its
+  `## Brief` now carries round 3's ten lines of attack (`de73c958`).
+- Round 3's remediation (`79d06645`) — amended `sec-2`, `sec-6`, `sec-7`,
+  `sec-8`, `sec-9`; corrected `DEC-156` and `DEC-160`; added `Cargo.lock` and
+  `justfile` to the design-target selectors.
+- `DEC-156` **corrected a second time** — eight → nine, human-authorised. Its
+  one-to-one-with-the-clauses sentence is **withdrawn**: nine rows over eight
+  `SPEC-030` clauses, because clause 2 carries two claims. `DEC-160` swept
+  consequentially again (three citations) and gained a caveat on its
+  nested-bubblewrap claim.
 - `EVD-013` — the teardown 2×2 (see Learned). Linked `concerns` → `SL-248`,
   `DEC-156`.
 - `sec-3` amended — its freshness control named a provision its own refusal test
@@ -218,34 +230,67 @@ fresh-as-of: 2026-08-06 · design drafting, sections 1–7 of 9 · ae77e077
   (`--batch-check='%(objectname)'`).
 - Loopback is denied under `--unshare-all` and reached under `--share-net`
   (measured), so a network-posture row holds offline and in CI.
+- **A property suite's gap is invisible from inside it.** `R3` has now been
+  realised twice, both times by the external pass: `F-2` (two clauses merged
+  into one row) and `F-19` (one clause carrying two claims, only one with a
+  row). Neither read as incomplete. The only reliable detector is an adversary
+  *constructing the backend the suite would wrongly pass* — `F-19` executed
+  `bwrap --ro-bind / / --bind HOST HOST` and changed the host marker at exit 0.
+- **`default-members` is a package-selection default, not a build-command one.**
+  It also selects for `cargo package` / `cargo publish`. And `publish = false`
+  does not make a bare `cargo publish` *skip* a member — it fails the whole
+  command — so keeping a workspace member unreleased needs the manifest key
+  **and** a `-p` on the recipe. Both measured.
+- **`cargo fmt` ignores `default-members`** and walks every workspace member.
+  Only `lint`, `build` and `test` take the default set.
+- **Cargo `include` accepts gitignore-style negation** (`!/src/lib.rs`), so
+  excluding one file from a published tarball costs one line, not an
+  enumeration — measured; `cargo package` completes with a warning.
+- **A sandboxed reviewer measures its own cage.** `F-20`'s netlink failure was
+  codex's `workspace-write` seccomp filter, not this jail. A confinement claim
+  from an agent needs a positive control run outside that agent's sandbox
+  before it is believed — the same discipline `F-1` established, pointed the
+  other way.
+- **A host-namespace pid is the right value to hand a capsule** in a
+  process-isolation probe: under the probe arm the number names nothing in the
+  observer's own namespace, under the shared-namespace control it resolves. A
+  namespace-local pid would make the probe hold for an arithmetic reason.
 
 ### Open
 
-- **Sections `sec-8`–`sec-9` are unwritten**: code impact and verification
-  alignment; risks and open questions. The runbook step `draft.selectors`
-  discharges off the code-impact section, so it stays outstanding until `sec-8`.
-- **`sec-6` and `sec-7` have never been externally reviewed** and should ride
-  the next codex pass together. `sec-7` was self-reviewed instead (12 findings,
-  4 blockers, all remediated at `ae77e077`) at the user's direction, on the
-  reasoning that newly introduced machinery is where the next round's bugs sit.
-  That pass found a defect it had itself introduced (`PidProbe`, undefined), so
-  treat self-review as narrowing the external pass, not replacing it.
-- **`sec-9` now owes four residuals**, not one:
+- **Drafting is complete; the stage has not moved.** All 9 sections exist,
+  materialised, `changes_since_baseline` non-zero. `sections_outstanding_review`
+  is 9 — the run's own review state, distinct from `RV-346`. The next lifecycle
+  move is the stage declaration to `reviewing`.
+- **`sec-6` and `sec-7` still have no clean external pass.** Round 3 was scoped
+  to `sec-8`/`sec-9`, with those two in scope only where they bore on the new
+  sections — and even so it found `F-18` and `F-19` in `sec-7`. `sec-7` was
+  self-reviewed earlier (12 findings, 4 blockers, `ae77e077`) and that pass
+  introduced a defect of its own, so self-review narrows an external pass rather
+  than replacing it. `sec-2` and `sec-7` both changed materially in round 3 and
+  are unreviewed *as amended*.
+- **`sec-9` carries four residuals**, as amended by round 3:
   1. *The resolution-time race.* Declared paths are resolved at provisioning and
-     could be re-pointed afterwards. Not capsule-reachable — no declared path is
-     writable by a capsule — so it is a control-plane-side race on operator-owned
-     config. Closing it needs the bind performed against an open file descriptor
-     rather than a path. Recorded, not solved.
+     could be re-pointed afterwards. Not capsule-reachable — and that dismissal
+     now rests on `sec-2` invariant 11 proven by row 9, **not** on invariant 4,
+     which never covered it (`F-19`). Closing it needs the bind performed
+     against an open file descriptor rather than a path. Recorded, not solved.
   2. *Out-of-crate backends.* `sec-7`'s sealing rests on `pub(crate)`, which
      holds only while every backend lives in `doctrine-control`. A backend
      shipping from outside makes the weakening vocabulary public API and it
-     needs a newtype over a private enum.
-  3. *macOS development hosts.* The conformance test asserts `Admitted`
-     unconditionally — conditioning it would reintroduce the green skip
-     `DEC-156` forbids — so `cargo test` fails on a host without bubblewrap.
-     Accepted, not hidden.
-  4. *The `just check` gap* above.
-- **`RV-346` is `await=raiser`** with all 17 findings answered.
+     needs a newtype over a private enum. `ConformanceBackend` now carries two
+     methods, which widens what such a backend would expose.
+  3. *Any host that cannot run the backend* — no longer macOS-only (`F-20`).
+     The conformance test asserts `Admitted` unconditionally, so `cargo test`
+     fails wherever the backend is unavailable, **including under any
+     confinement layer that denies network-namespace setup** (an agent sandbox,
+     a seccomp-filtered CI runner). What CI should do instead is explicitly
+     open and owed by whichever slice first runs the suite there.
+  4. *The `just check` cost* — the executed suite joins the fast inner loop;
+     measurement is a phase obligation, and the lawful adjustment is a `--skip`
+     on `test:` alone, never `#[ignore]`.
+- **`RV-346` is `await=raiser`** with all 24 findings answered. Round 4 has not
+  been requested.
 - `QUE-208` — capsule-side entity id allocation. **Parked deliberately** 2026-08-06;
   does not block this slice. Live for the ingestion slice, unavoidable by the
   recovery slice. Its own first settling condition — whether v0 permits capsules to
