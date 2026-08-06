@@ -2874,8 +2874,9 @@ its argument and runs fully confined makes every control arm show the property
 still holding, which the harness reports as `Unproven` — not admitted. There is
 no lazy implementation that yields a green verdict.
 
-`BubblewrapBackend`'s mapping, each delta measured rather than reasoned about
-(`EVD-013`):
+`BubblewrapBackend`'s mapping. Which of these are measured and which are
+reasoned is stated **below** the table rather than in this caption, because the
+caption used to claim all of them were measured and that was never true:
 
 | removal | bubblewrap delta |
 |---|---|
@@ -2890,11 +2891,32 @@ no lazy implementation that yields a green verdict.
 | `StdioOwned` | the child is spawned with the trusted-side process's own descriptors 0, 1 and 2 instead of the parent-owned null source and capture endpoints |
 | `CredentialsConfined` | `--unshare-all` replaced by `--unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup --unshare-net` — the user namespace and its uid/gid map dropped, every other namespace kept |
 
-**The last four deltas are reasoned, not measured**, and are the only rows in
-this table of which that is true — `EVD-013` covers the five above them. Under
-`R1` that difference is recorded rather than smoothed over: measuring both is a
-phase obligation, and a delta that turns out not to produce its row's control
-failure means the row is wrong, not that the measurement is inconvenient.
+**Exactly one of these deltas is measured: `Teardown`.** `EVD-013` is the
+pid-namespace × `--die-with-parent` 2×2 that settles row 7's control, and it
+measures nothing else. Its adjacent fact — that bubblewrap has no `--share-pid`
+— tells us how `ProcessVisibility`'s delta must be *expressed*, which is not the
+same as having seen that delta produce its row's control failure. **The other
+nine are reasoned**, and the design cites no measurement for any of them.
+
+The previous version of this paragraph claimed *the last four deltas are
+reasoned, not measured, and are the only rows in this table of which that is
+true — `EVD-013` covers the five above them*. It was wrong twice. There are
+**six** rows above the last four, not five. And `EVD-013` covers one of them, so
+the sentence attributed measurement to `WorkingDirectory`,
+`ResourceBound(FileSize)`, `ResourceBound(Wall)` and `InputsWritable` that no
+record in this project holds. The caption above the table asserted the same
+thing more broadly over all ten. This is the `in full` class again at a smaller
+scale — a claim quantifying over evidence that does not reach that far — and it
+is worth more than its correction, because the reasoned-versus-measured split is
+the whole of what `R1` asks this design to be honest about, and it was the part
+stated least carefully.
+
+Under `R1` the difference is recorded rather than smoothed over: **measuring the
+nine is a phase obligation**, materially larger than the four this paragraph
+used to claim, and a delta that turns out not to produce its row's control
+failure means the row is wrong rather than that the measurement is inconvenient.
+`CredentialsConfined` is already known to be such a delta — see the caveat below
+it — which is the argument for measuring the rest before trusting any of them.
 
 `ProcessVisibility` and `CredentialsConfined` both enumerate rather than
 subtracting, because **there is no `--share-pid` and no `--share-user`**:
@@ -2911,14 +2933,40 @@ through the same `--unshare-all`. A removal that dropped both would establish
 neither, which is `F-2`'s objection and the reason each removal names its flag
 list in full rather than saying *fewer namespaces*.
 
-`CredentialsConfined`'s bubblewrap delta is the one place this table names a flag
-set the phase must confirm rather than one `EVD-013` measured. `no_new_privs` in
-particular is bubblewrap's default rather than a flag the profile passes, so the
-row's assertion on it is an assertion about a default — and a default is exactly
-the kind of thing that is true until a version bump. The phase landing row 13
-owes the measured flag list, and if dropping `--unshare-user` turns out to move
-`no_new_privs` or a capability set as a side effect, the delta is not single-axis
-and the row must be re-cut.
+**`CredentialsConfined`'s delta has now been measured, and it does not work.**
+Executed against bubblewrap 0.11.2 while preparing `RV-346` round 6. Both arms —
+`--unshare-all`, and the enumeration above with `--unshare-user` dropped —
+produced a byte-identical credential report: same uid, same gid, same non-empty
+supplementary groups, `CapPrm` and `CapEff` both zero, `NoNewPrivs` 1. The cage
+was established rather than assumed (`F-20`): both arms created a **new** user
+namespace with an identical `uid_map`, differing only in inode. Unprivileged
+`bwrap` must create a user namespace to perform its own mounts and does so
+whether or not the flag is passed, so **`--unshare-user` is a no-op here** and
+the delta changes nothing observable. That conclusion is independent of this
+project's outer jail.
+
+Row 13 as specified can therefore only read `Unproven`, and
+`Admission::Admitted` is unreachable — which is `sec-7`'s `B4` class exactly, in
+the row added one round after `B4` was found. Three further results from the same
+session bear on the row's *probe* rather than its control: the profile passes no
+`--uid` and no `--gid`, so the capsule's uid is the host's and not a mapped
+identity; `--unshare-all` does not clear supplementary groups, and cannot, since
+a user namespace may not `setgroups`; and `no_new_privs` is bubblewrap's default
+rather than a flag the profile passes, so it is set under every namespace
+combination and carries no signal for any namespace-shaped delta. Two of row
+13's four holding conditions are false against this design's own backend and a
+third is uninformative.
+
+**What is deliberately not decided here.** Row 13's property is right and
+`F-32`'s argument for it stands untouched — invariant 4's denial-by-absence does
+rest on a credential posture the contract never required. What is wrong is the
+mechanism chosen to falsify it, and choosing a replacement is a design decision
+about a mechanism that will not let you drop the namespace the confinement rests
+on. It is carried to `RV-346` round 6 as its first line of attack rather than
+settled mid-run. Until it is settled, row 13 is a specified row with a control
+known not to fire — which by `Admission`'s own algebra means this suite does not
+yet admit anything, and `sec-8`'s *all thirteen rows* is a claim about the table
+rather than about a passing suite. `sec-9` `R1` carries the evidence half.
 
 ### The arm is the unit of execution, not the capsule
 
@@ -4277,15 +4325,33 @@ from this document would otherwise meet unannounced.
 
 ### The authored risks, as they now stand
 
-**`R1` — evidence altitude. Stands, unchanged, and binds this document.**
-`SL-241` is Linux, bubblewrap, one client shape, `n = 1` on the real-agent leg:
-feasibility evidence, and not performance, portability or production-readiness
-evidence. Every measured claim in `sec-2`, `sec-3`, `sec-5` and `sec-7` is
-attributed where it was measured, and none is generalised past it. The "16/16"
-summary stays forbidden — fifteen rows reached model level, the env-file row is
-unproven beyond the Rust fixture, structural `n/a` cells are not omissions, and
-four `fail` rows are successful mutant detections. `R1` is also why `REQ-459`
+**`R1` — evidence altitude. Stands, and has now been realised inside this
+document rather than only guarded against.** `SL-241` is Linux, bubblewrap, one
+client shape, `n = 1` on the real-agent leg: feasibility evidence, and not
+performance, portability or production-readiness evidence. The "16/16" summary
+stays forbidden — fifteen rows reached model level, the env-file row is unproven
+beyond the Rust fixture, structural `n/a` cells are not omissions, and four
+`fail` rows are successful mutant detections. `R1` is also why `REQ-459`
 criterion 2 cannot close here (`sec-8`).
+
+This risk used to assert that *every measured claim in `sec-2`, `sec-3`, `sec-5`
+and `sec-7` is attributed where it was measured, and none is generalised past
+it*. That was false where it mattered most. `sec-7`'s delta table captioned all
+ten of its rows as *each delta measured rather than reasoned about (`EVD-013`)*
+and then attributed measurement to five of them below, when `EVD-013` measures
+exactly one — `Teardown`'s pid-namespace × `--die-with-parent` 2×2 — and the
+arithmetic of *the five above* was wrong as well, there being six. Four deltas
+were carried as measured on evidence that never touched them. The assertion is
+therefore withdrawn as a statement of fact about this document and restated as
+the obligation it should always have been: **an evidence citation names what the
+record measured, and a claim that quantifies over several rows is checked
+against the record row by row before it is written.** `sec-7` now states the
+split under its table with the count of what remains reasoned, which is nine.
+
+The general shape is the one `sec-8` learned about *in full* and `sec-2` about
+the channel ledger: a quantifier is only as strong as the enumeration under it,
+and this document's recurring defect is asserting one before checking the
+enumeration supports it. Three sections have now paid for it independently.
 
 **`R2` — behaviour preservation. Stands, with a different subject.** As
 authored it named `src/worktree/jail.rs` as the shared machinery this slice
