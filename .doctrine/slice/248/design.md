@@ -308,7 +308,7 @@ Exited { code: 1 }, .. })`. The spike states the same rule as a shell idiom
 
 ### The properties, stated once
 
-The contract's meaning is the seven properties `sec-7` proves. They are named
+The contract's meaning is the eight properties `sec-7` proves. They are named
 here because the trait's shape is answerable to them, and `sec-7` is where each
 acquires a probe, a control and a decoy.
 
@@ -320,28 +320,27 @@ acquires a probe, a control and a decoy.
 | 4 | bounded host filesystem visibility | the same absence, generalised to everything undeclared |
 | 5 | explicit network posture | `NetworkPosture`, `Denied` by default |
 | 6 | deterministic working directory | `working_directory`, with no inherit value |
-| 7 | process-tree teardown and trusted observation | `timeout`, `file_size_cap`, and every `Termination` variant |
+| 7 | process-tree teardown | that no descendant outlives the `execute` call, observed by the parent |
+| 8 | trusted observation of resource limits and termination | `timeout`, `file_size_cap`, and every `Termination` variant being correctly distinguished |
 
-**This table is under correction, and the correction is a governance question.**
-`SPEC-030` § Platform backend contract lists eight clauses; row 7 above merges
-*process-tree teardown* with *trusted observation of resource limits and
-termination*, on the argument that they are one question — what the trusted
-parent can establish about a process it did not trust.
+The eight rows stand in **one-to-one correspondence** with `SPEC-030` §
+Platform backend contract's eight clauses. Nothing is merged, and that is a
+correction rather than the original shape: an earlier draft folded rows 7 and 8
+together, on the reasoning that teardown and observation are one question — what
+the trusted parent can establish about a process it did not trust.
 
-`RV-346` `F-2` refutes that argument and is **upheld**: the two are independent
-enforcement claims, and a backend can satisfy either while failing the other. It
+`RV-346` `F-2` refuted it, and the refutation turns `DEC-156`'s own principle on
+that record's arithmetic. The two are independent enforcement claims: a backend
 can reap every descendant and still misclassify a timeout as a signal, or
 classify termination perfectly and leave a grandchild alive. A control removing
-both axes at once cannot say which guard produced the paired result, which is
-exactly what `DEC-156`'s one-property-removed discipline forbids — so a
-seven-row suite would admit a backend that fails one of the eight clauses.
+both axes at once cannot establish which guard produced the paired result, which
+is exactly what one-property-removed exists to prevent — so a seven-row suite
+would have admitted a backend failing one of the eight clauses.
 
-The obstacle is that `DEC-156` states the count as **seven**, in an accepted
-record. The count is arithmetic in a decision whose *principle* — one control per
-property — is what refutes it, so the correction owed is to `DEC-156`'s number
-rather than to its reasoning. `sec-9` carries this as the open governance item;
-until it is settled the table stands at seven with this notice attached, and
-`sec-7` is not drafted against either count.
+`DEC-156` stated the count as seven and has been **corrected to eight**
+(2026-08-06, authorised by the human author). Only the number moved; every
+argument in that record stands. `sec-7` builds eight rows, each with its own
+probe and its own one-axis control.
 
 ### The bubblewrap backend
 
@@ -546,7 +545,8 @@ the same discipline applies here for the same reason.
 `timeout -k <grace> <secs>` wraps the `bwrap` exec from outside, and the
 per-file cap is set on the child before it (`setrlimit(RLIMIT_FSIZE)`, the typed
 equivalent of the spike's `ulimit -f`). Neither is reachable from inside the
-namespace, which is what makes property 7 an observation rather than a report.
+namespace, which is what makes property 8 an observation rather than a report;
+the reaping that property 7 asserts is the same parent's responsibility.
 The whole-tree disk figure is computed trusted-side after the run, because a
 per-file limit does not catch a capsule that writes many small files
 (`sandbox.sh:311-317`).
