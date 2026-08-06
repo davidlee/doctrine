@@ -66,16 +66,34 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
    written here is superseded by the OQ-1 settlement — see § Settled before
    design. The table is still authored once; its consumer is the design wire.)*
 
-4. **Extend SPEC-019 to the kinds that actually exist** — ISS-316. The spec is
-   emphatically four-kind (`assumption`, `decision`, `question`, `constraint`),
-   repeating "four" at nine sites; the corpus has seven. `EVD`, `HYP` and `CPT`
-   appear nowhere in it, so their facets, per-kind lifecycle vocabularies and
-   supersession rules are ungoverned, and whether `ConceptFacet`'s emptiness is
-   designed or omitted is unrecorded. This is a precondition, not a tidy-up: a
-   write seam covering seven kinds cannot derive its per-kind field sets from a
-   four-kind spec, and inventing them would be, in ISS-316's phrase, *invention
-   presented as derivation*. The same pass registers the verbs this slice adds
-   (R1), so SPEC-019 ends coherent on both axes.
+4. **Extend SPEC-019 — and PRD-010 — to the kinds that actually exist** —
+   ISS-316. The spec is emphatically four-kind (`assumption`, `decision`,
+   `question`, `constraint`), repeating "four" at nine sites; the corpus has
+   seven. `EVD`, `HYP` and `CPT` appear nowhere in it, so their facets, per-kind
+   lifecycle vocabularies and supersession rules are ungoverned, and whether
+   `ConceptFacet`'s emptiness is designed or omitted is unrecorded. The same pass
+   registers the verbs this slice adds (R1), so SPEC-019 ends coherent on both
+   axes.
+
+   *(Amended in design.* **PRD-010 is the second amendment target** — the design
+   triage found it carries the four-kind framing too, in § 4. DEC-175 rules how:
+   the clause is a stale *enumeration* plus an *extension rule*, and only the
+   enumeration is stale, because "may not be extended without a reserved id"
+   names a precondition SL-159 and SL-197 met. So the PRD half is a refresh, not
+   a reversal.
+
+   **The "precondition, not a tidy-up" claim is withdrawn.** DEC-165 rules that
+   objective 4 does not gate objectives 1–3. The precondition argument reaches
+   objective 1 and the facet half of objective 2, which do need per-kind field
+   sets — but not objective 3 or the prose half of objective 2, which live wholly
+   inside the design-run wire and are together exactly what would have prevented
+   the SL-248 loss. And it dissolves even there: the rulings objective 4 needs are
+   taken in this design run either way, and ADR-013 lands the REV at reconcile
+   regardless of build order. The *rulings* gated; objective 4 never did.
+
+   **Completion is an observable, not an assertion** — DEC-176 gives it a
+   ~10-line in-crate canary asserting every kind in `kinds::RECORD` is named in
+   SPEC-019 and PRD-010. That is R4's demand discharged.*)
 
 ### Settled before design
 
@@ -89,6 +107,14 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
   and `answer`/`answered_by`/`answered_on` at 0 of 38 is the corpus evidence
   that an optional flag is not enough. Design owns the verb's name and whether
   the other kinds' resolving transitions take the same treatment.
+
+  *(Answered in design — DEC-178. The verb is a kind-blind `knowledge settle
+  <ID> <state> --by <who> [--answer|--reason <text>]`, and its reach is derived
+  rather than declared: a state is settleable exactly when its kind's facet
+  carries `<state>_by` and `<state>_on`. That yields `QUE` answered, `ASM`
+  validated, `ASM` invalidated and `CON` waived, and excludes `DEC` `accepted` —
+  which DEC-088 reserves to the design run's attested path anyway. `knowledge
+  status` stays as the uncoupled token move.)*
 
 - **Facets only, not lifecycle vocabularies** (was OQ-5). Objective 4's spec pass
   writes the `EVD` / `HYP` / `CPT` facet contracts, because the write seam
@@ -105,9 +131,12 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
     only that kind's fields and only its closed enums.
 
   This matches how the repo already separates `estimate` / `value` / `risk` from
-  the entity verbs, and it is consistent with the settled OQ-2: `knowledge answer
-  QUE-NNN` is already a per-kind verb, so a kind-blind facet surface would sit
-  beside it inconsistently.
+  the entity verbs. ~~and it is consistent with the settled OQ-2: `knowledge
+  answer QUE-NNN` is already a per-kind verb, so a kind-blind facet surface
+  would sit beside it inconsistently.~~ *(That second argument is withdrawn:
+  DEC-178 makes the settle verb kind-blind, so it no longer supports this
+  conclusion. The conclusion stands on the field inventory below, which this
+  section already calls the decisive fact.)*
 
   **The decisive fact is the field inventory**, which is larger and far more
   disjoint than "~5 × 7" suggested: 31 slots, **30 distinct field names, exactly
@@ -123,7 +152,11 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
   cites the `AgentAct`/`ActKind` split for exactly this reason); four distinct
   closed enums (`Confidence`, `Basis`, `ConstraintSource`, `Provenance`) stop
   having to coexist in one struct; and `CPT`'s empty facet becomes expressible as
-  a subverb with no flags rather than 30 refusals.
+  a subverb with no flags rather than 30 refusals. *(That last clause is
+  superseded by DEC-173: concept gets **no** facet subverb at all, because a verb
+  accepting nothing can only ever be invoked wrongly, and the kind-blind
+  `knowledge edit CPT-001` already reaches everything a concept has. Six facet
+  subverbs, not seven.)*
 
   **The accepted cost.** The kind is already in the id prefix, so a subverb
   states it twice and can disagree — `knowledge edit decision DEC-005` is
@@ -141,6 +174,8 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
   invent a second consumer to preserve the phrasing.
 
 **Nothing substantive remains open for `/design`** beyond OQ-4 and OQ-6 below.
+*(Both now answered — DEC-172 and DEC-177. Design run `dr-019fd6b6` took eleven
+rulings in all; each amendment they force on this card is marked in place.)*
 
 ## Non-Goals
 
@@ -197,25 +232,30 @@ Also out of scope:
 - `src/commands/design.rs` — `plan_checkpoints`, ISS-318's first instance.
 - `.doctrine/spec/tech/019/` — the seven-kind extension and the verb-set
   responsibility (objective 4), landed through a REV.
+- `.doctrine/spec/product/010/` — § 4's kind-set enumeration, the REV's second
+  entity (DEC-175).
 
 ## Risks, assumptions, open questions
 
-- **R1 — the SPEC-019 amendment is authorship, not annotation.** Both spec
-  divergences are now in scope (objective 4), which means this slice writes
-  governance as well as code. The verb-set responsibility enumerates `new` /
-  `show` / `list` / `status` plus uniform `link`/`unlink`/`supersede`, and must
-  grow `edit` and the settle verb; the four-kind enumeration must become seven.
-  A REV at reconcile is the mechanism (governance changes route through a
-  Revision, ADR-013), not a quiet in-place extension.
-- **R2 — the three ungoverned kinds need rulings, not transcription.** `EVD` and
-  `HYP` have facets in code (`datum`/`provenance`/`confidence`;
-  `proposition`/`predicts`) that the spec can adopt. `CPT` does not: its facet is
-  an empty struct on the stated ground that *every concept rides its attributed
-  prose body*, and whether that is a designed property or an omission is an open
-  question ISS-316 raises and nobody has answered. Per-kind lifecycle
-  vocabularies and supersession rules for all three are likewise unwritten.
-  Transcribing the code would launder the current implementation into
-  governance — the anti-pattern the spec exists to prevent.
+- **R1 — the amendment is authorship, not annotation.** Both spec divergences are
+  now in scope (objective 4), which means this slice writes governance as well as
+  code. The verb-set responsibility enumerates `new` / `show` / `list` / `status`
+  plus uniform `link`/`unlink`/`supersede`, and must grow `edit` and `settle`;
+  the four-kind enumeration must become seven. A REV at reconcile is the
+  mechanism (governance changes route through a Revision, ADR-013), not a quiet
+  in-place extension. *(Amended: the REV spans **two** entities, SPEC-019 and
+  PRD-010 — DEC-175. It also carries SPEC-019's now-false self-description, "it
+  is forward-intent: no code is shipped yet", as a third amendment row.)*
+- **R2 — RETIRED by DEC-172 and DEC-174.** The risk was that the three
+  ungoverned kinds would be transcribed from the current structs, laundering
+  implementation into governance. It dissolves the same way for all three: the
+  contracts are not code awaiting transcription but rulings in closed slices'
+  designs that the code implements — `CPT` by SL-197's D2, `EVD` and `HYP` by
+  SL-159's §5.3/D5. The REV therefore **elevates with citation** rather than
+  inventing. Retained for its finding: the rulings were never ungoverned so much
+  as *under*-governed, living where every later reader had to rediscover them.
+  Per-kind lifecycle vocabularies and supersession rules remain unwritten and
+  stay on ISS-316.
 - **R2a — SL-246 is an ordering dependency, not a collision.** Downgraded by the
   research round: SL-246's notes record A3 — *the SPEC-019 four-of-seven gap
   stays outside this slice; the design labels any EVD/HYP/CPT field list as
@@ -237,7 +277,10 @@ Also out of scope:
 - **R3 — RESOLVED by the OQ-1 settlement.** The surface-creep risk on a wide flat
   flag verb is dissolved by per-kind subverbs; the residual is that seven
   subverbs plus a kind-blind `edit` plus a settle verb is itself a surface to
-  keep coherent. Design owns the naming.
+  keep coherent. Design owns the naming. *(Residual narrowed: **six** subverbs,
+  not seven — DEC-173 — and the settle verb is named and bounded by DEC-178. The
+  surface is `knowledge edit <ID>`, six `knowledge edit <kind> <ID>` subverbs,
+  and `knowledge settle <ID> <state>`.)*
 - **A1 — the read model is sound and stays put.** `RecordFacet`, `validate_facet`
   and `render_facet` are assumed correct and unchanged; this is additive on the
   write side. If the write path forces a change to the read model, that is a
@@ -246,24 +289,28 @@ Also out of scope:
   fight.** `Declaration` has it; `ApplyRequest` cannot (it carries a
   `#[serde(flatten)]` envelope). `CreateRecord` sits inside `Declaration`, so the
   extension is assumed safe — worth confirming in design, not at execution.
-- **OQ-4** — is `ConceptFacet`'s emptiness a designed property or an omission?
-  Raised by ISS-316; no governance answers it. Research found corroborating code
-  evidence (`validate_facet`'s concept arm explicitly discards raw input) and a
-  DEC-149 render-side aside, so the REV can *rule* with support rather than
-  invent — but it must rule, because `edit`'s behaviour for a `CPT` falls out of
-  the answer.
-- **OQ-6** — does the inert-key refusal extend to the *read* path? Research found
-  the same defect class one tier deeper: `validate_facet` silently discards a
-  field belonging to another kind. There is a real argument for read-tolerance (a
-  hand-edited corpus should not become unreadable), so this wants a deliberate
-  ruling rather than consistency by reflex.
+  *(**Confirmed** in design: `Declaration` carries `deny_unknown_fields` and
+  `CreateRecord` sits inside it.)*
+- **OQ-4 — ANSWERED by DEC-172.** Designed, not omitted, and the answer already
+  existed as SL-197's design-local D2: a structured `definition` field would
+  duplicate the `.md` Definition section and give two sources of truth. The REV
+  elevates that ruling rather than authoring a fresh judgement, and retires the
+  "currently empty" hedge in both the code doc and the concept template.
+- **OQ-6 — ANSWERED by DEC-177.** No, the refusal does not extend to
+  `validate_facet`. `read_kind`/`read_all` propagate with `?`, so refusing on
+  read would fail `knowledge list` corpus-wide on one hand-mangled record and
+  could lock a design run out of `adoptable`. The detection duty moves to
+  `doctrine doctor` as a key-presence tripwire in the shape
+  `catalog::scan::check_facet_residue` already ships.
 *(OQ-2, OQ-3 and OQ-5 settled by the user before design — see § Settled before
 design.)*
 
 ## Verification / closure intent
 
-- Every facet field of all seven kinds round-trips through its kind's subverb:
-  write → `knowledge show` reflects it → re-parse is stable. Test-verified.
+- Every facet field of the six facet-bearing kinds round-trips through its kind's
+  subverb: write → `knowledge show` reflects it → re-parse is stable.
+  Test-verified. *(Six, not seven — DEC-173. `knowledge edit concept` is refused
+  with a message naming the kind-blind verb.)*
 - A subverb naming a kind the id's prefix contradicts is **refused**, with a
   message naming the correct subverb. Test-verified.
 - A `Declaration` key inert at its subject's kind is **refused**, not ignored,
@@ -272,13 +319,19 @@ design.)*
 - A `form = "create"` checkpoint disposition mints a record whose facet **and
   prose** are populated from the payload, in one act, with no follow-up write.
   Test-verified, and this is the criterion that closes the SL-248 data loss.
-- Settling a question through the dedicated verb populates
+- Settling a question through `knowledge settle` populates
   `answer`/`answered_by`/`answered_on` and moves the lifecycle in one act; the
-  answer cannot be omitted. Test-verified.
-- SPEC-019 enumerates seven record kinds with no residual "four", carries a facet
-  contract for `EVD` / `HYP` / `CPT`, and lists the verbs this slice ships.
-  Verified by agent against the spec text and `knowledge new --help`. ISS-316
+  answer cannot be omitted. Test-verified. *(And the settleable set is derived,
+  not listed — a test asserts it equals exactly those (kind, state) pairs whose
+  facet carries `<state>_by`/`<state>_on`. DEC-178.)*
+- SPEC-019 and PRD-010 enumerate seven record kinds with no residual "four",
+  SPEC-019 carries a facet contract for `EVD` / `HYP` / `CPT`, and lists the
+  verbs this slice ships. *(Pinned by an in-crate canary asserting every kind in
+  `kinds::RECORD` is named in both — DEC-176, the observable R4 demanded. Agent
+  verification of the prose sits on top of that, not in place of it.)* ISS-316
   narrows to its lifecycle-vocabulary half rather than closing.
+- A `[facet]` key inert at its record's kind is reported by `doctrine doctor` —
+  not refused on read. Test-verified. *(DEC-177.)*
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
   gate for shared machinery).
 - IMP-403 leads 1 and 2 are demonstrably closed; leads 3–5 are recorded as

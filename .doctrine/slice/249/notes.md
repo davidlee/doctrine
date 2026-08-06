@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 19 `inquiring` · f729c3ec5
+fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 26 `inquiring` · 1b6758d01
 
 ### Produced
 
@@ -19,9 +19,15 @@ fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 19 `inquiring` 
   the `body`-on-checkpoint instance from SL-248's run.
 - `IMP-403` — lead 2 corroborated with the SL-248 evidence; related to `ISS-318`.
 - `ISS-316` — absorbed as objective 4, narrowed to its lifecycle-vocabulary half.
-- Design run `dr-019fd6b6` (runtime tier) — 17-node inquiry map, 9 resolved.
+- Design run `dr-019fd6b6` (runtime tier) — 17-node inquiry map, 11 resolved,
+  blocking set discharged.
 - `DEC-165` `DEC-168` `DEC-169` `DEC-170` `DEC-172` `DEC-173` `DEC-174`
-  `DEC-175` `DEC-176` — the nine rulings taken this run.
+  `DEC-175` `DEC-176` `DEC-177` `DEC-178` — the eleven rulings taken this run.
+- Scope card amended in place against those rulings (`inquire.scope`): objective
+  4 grows PRD-010 and drops its precondition claim, OQ-1's second argument and
+  its concept-subverb clause withdrawn, OQ-2 answered, R1 spans two entities, R2
+  retired, R3's residual narrowed to six subverbs, OQ-4/OQ-6 answered, A2
+  confirmed, closure intent restated.
 - `HYP-001` — the corpus's first hypothesis record; references `IMP-403`.
 - Friction observation `019fd6c8-ecbf-7b71-9001-a4ba464daf48`.
 
@@ -57,23 +63,30 @@ fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 19 `inquiring` 
 
 ### Open
 
-- `inq-11` (blocking) — the settle verb's name, and whether the other kinds'
-  resolving transitions take the same treatment.
-- `inq-16` (blocking) — does the inert-key refusal extend to `validate_facet`'s
-  read path? (was slice-card `OQ-6`; its `needs` on `inq-15` is now cleared).
-- `inq-7` `inq-9` `inq-12` (non-blocking) — SL-159 lineage; a spec anchor for
-  `facet_write.rs`; extract-or-fourth-bespoke `edit` transaction.
+- **Blocking set discharged.** `inq-16` → `DEC-177`, `inq-11` → `DEC-178`. All
+  three invalidated acts re-taken over the current 17 nodes and current again:
+  `blocking-set-declared` (eleven nodes, `inq-17` added), `graph-reviewed`,
+  `governance-confirmed` (restated with `DEC-175`'s correction to the PRD-010
+  reading, not a repeat of the rev-10 statement). Both `inquiring` runbook steps
+  discharged attested.
+- **The one gate left before drafting:** `sufficiency-accepted` — the user's
+  separate judgement that the right questions were asked, not merely that the
+  raised ones were closed.
+- `inq-7` `inq-9` `inq-12` (non-blocking, still open) — SL-159 lineage; a spec
+  anchor for `facet_write.rs`; extract-or-fourth-bespoke `edit` transaction.
 - `inq-1` `inq-2` `inq-3` — framing parents, resolved by their children.
-- **User steer on `inq-12`, not yet in a durable record:** the refactor is
-  contingent on cost and added design complexity; the governing motivation is
-  closing the data-loss hole soonest, so a fourth bespoke verb is the acceptable
-  outcome if extraction is not demonstrably cheap. Same steer is the tie-breaker
-  generally — where two answers are defensible, prefer the one that lands the fix
-  sooner.
-- **Acts to re-take before the drafting edge:** `governance-confirmed`,
-  `blocking-set-declared`, `graph-reviewed` were invalidated when `inq-17` joined
-  the map at rev 14. The gate will refuse and name them; the blocking set needs
-  restating over the current 17 nodes.
+- **Rider carried by `DEC-177` and `DEC-178` both:** they load-bear on the
+  per-kind facet field sets existing as *data*, not only as clap flag
+  declarations. Objective 1's subverbs need the same table, so the cost is
+  shared — but if objective 1's design does not produce one, `DEC-177` falls back
+  to plain read-tolerance plus a backlog item and `DEC-178` to a hand-listed
+  coverage set. Watch for this when drafting objective 1.
+- **User steer on `inq-12`, in the `graph-reviewed` basis (rev 23), not yet in a
+  durable record:** the refactor is contingent on cost and added design
+  complexity; the governing motivation is closing the data-loss hole soonest, so
+  a fourth bespoke verb is the acceptable outcome if extraction is not
+  demonstrably cheap. Same steer is the tie-breaker generally — where two answers
+  are defensible, prefer the one that lands the fix sooner.
 - `R1` — the amendment is owed a REV (ADR-013). Now two entities, but the PRD
   half is a refresh not a reversal (`DEC-175`).
 - `R2a` — ordering dependency: SL-249's REV lands before `SL-246` derives its
