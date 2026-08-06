@@ -415,23 +415,23 @@ Two declared lists, and one declared host capability:
 ```toml
 [capsule]
 # Bound exactly as declared. Directories or single files.
-readable_roots = ["/bin/sh", "/usr/bin/env"]
+readable-roots = ["/bin/sh", "/usr/bin/env"]
 
-# Expanded through `closure_resolver`; every path it returns is bound read-only.
-closure_roots = [".doctrine/capsule-toolchain"]
+# Expanded through `closure-resolver`; every path it returns is bound read-only.
+closure-roots = [".doctrine/capsule-toolchain"]
 
 # The host capability that performs the expansion. Absent on hosts that need none.
-closure_resolver = ["nix-store", "--query", "--requisites"]
+closure-resolver = ["nix-store", "--query", "--requisites"]
 ```
 
-- **`readable_roots`** is bound as declared. A single-file entry is what covers
+- **`readable-roots`** is bound as declared. A single-file entry is what covers
   shebang interpreters, which the kernel resolves before `PATH` exists and which
   cost the spike two separate findings (`sandbox.sh:171-188`, `/usr/bin/env` and
   `/bin/sh`). Binding the interpreter file rather than `/bin` is portable by
   construction; binding the directory is a posture that silently widens on a host
   where `/bin` holds hundreds of binaries.
-- **`closure_roots`** entries are resolved through their symlinks to a realised
-  path, then handed one at a time to `closure_resolver`. Each path the resolver
+- **`closure-roots`** entries are resolved through their symlinks to a realised
+  path, then handed one at a time to `closure-resolver`. Each path the resolver
   returns is bound read-only, individually. On NixOS a project builds its
   toolchain out of band — `nix build .#capsuleToolchain -o .doctrine/capsule-toolchain`
   — and declares that one stable symlink; the store paths behind it change on
@@ -441,13 +441,13 @@ closure_resolver = ["nix-store", "--query", "--requisites"]
   one would report a confinement success that is really a configuration failure.
 
 Every entry of both lists is **probed at provisioning**. An absent entry, an
-unrealised `closure_roots` path, or a declared `closure_roots` with no
-`closure_resolver` each refuse, naming the entry and the config key — `POL-002`
+unrealised `closure-roots` path, or a declared `closure-roots` with no
+`closure-resolver` each refuse, naming the entry and the config key — `POL-002`
 facet 3, and the same shape `jail.rs:302-393` already uses for jail policy.
 
 #### The resolver is a query, never a build — and the contract enforces it
 
-`closure_resolver` runs **trusted-side**, which is the one place this design
+`closure-resolver` runs **trusted-side**, which is the one place this design
 executes an external command outside a capsule, so its limits are stated rather
 than assumed.
 
@@ -457,18 +457,18 @@ than assumed.
    `flake.nix` — a repository-controlled file, and one this project's own
    `interpreted_paths` names — and evaluating it trusted-side is precisely the
    hazard `trusted_side_forbidden_executables` exists to deny. Provisioning
-   therefore never realises a toolchain: a `closure_roots` entry that does not
+   therefore never realises a toolchain: a `closure-roots` entry that does not
    already resolve to an existing realised path refuses, and the operator builds
    it out of band.
 2. **The resolver's executable is checked against the transaction's own
    forbidden list.** After `sec-4` resolves the policy, provisioning refuses when
-   the normalized basename of `closure_resolver[0]` appears in
+   the normalized basename of `closure-resolver[0]` appears in
    `trusted_side_forbidden_executables`. This is `SPEC-030`'s rule applied to
    this slice's only external-command step — *"the trusted transaction plan …
    refuses any external-command step whose normalized executable matches the
    list"* — and it makes `REQ-449`'s forbidden list a live constraint in this
    slice rather than a field with no consumer until launch exists. A project that
-   forbids `nix-store` must declare a different resolver or no `closure_roots`.
+   forbids `nix-store` must declare a different resolver or no `closure-roots`.
 3. **Its output is data, not trust.** One absolute path per line. A relative
    path, an empty line, a non-existent path, or output exceeding a named bound
    refuses; the resolver's own nonzero exit refuses, naming it.
@@ -482,12 +482,12 @@ The capsule's inner `PATH` is *derived*: the host `PATH` entries that lie beneat
 **any** bound path, after closure expansion, in host `PATH` order, deduplicated.
 Nothing else. Several bound paths contributing is the ordinary case:
 
-- A conventional host declaring `readable_roots = ["/usr/bin", "/opt/toolchain",
+- A conventional host declaring `readable-roots = ["/usr/bin", "/opt/toolchain",
   "/bin/sh"]` against `PATH=/home/u/.local/bin:/usr/bin:/opt/toolchain/bin`
   derives `PATH=/usr/bin:/opt/toolchain/bin`. `/home/u/.local/bin` is beneath no
   bound path and is dropped. `/bin/sh` is a file, so no `PATH` entry can be
   beneath it; it is declared for the shebang reason above.
-- A NixOS host declaring one `closure_roots` entry derives the `…/bin`
+- A NixOS host declaring one `closure-roots` entry derives the `…/bin`
   directories of the closure members that are on the host `PATH`, and drops
   `~/.cargo/bin` and every store path outside the closure.
 
@@ -517,7 +517,7 @@ same reason. Note what this does *not* do: it does not follow links found
 create them. It closes the class that matters, which is a declared entry
 resolving somewhere other than where it reads.
 
-A `closure_roots` entry pays nothing for this: a closure is transitively complete,
+A `closure-roots` entry pays nothing for this: a closure is transitively complete,
 so every target a closure member links to is itself a closure member and is
 already bound. Closure expansion narrows the visible set *and* removes the
 link-escape class, which is why it is the preferred form rather than a NixOS
@@ -580,13 +580,13 @@ live.
    fallback taken on missing configuration — under which `/nix/store` or an
    equivalent host-wide artefact store becomes readable in its entirety.
 7. **Provisioning realises nothing.** The only external command it runs outside
-   a capsule is `closure_resolver`, on an already-realised path, and its
+   a capsule is `closure-resolver`, on an already-realised path, and its
    executable is checked against the transaction's own
    `trusted_side_forbidden_executables`.
 8. **Every termination fact is the parent's observation.** No `Termination`
    variant is derivable from capsule-written state.
 9. **The default is refusal.** Empty argv, empty mounts, both declared lists
-   empty, an absent or unrealised declared entry, `closure_roots` with no
+   empty, an absent or unrealised declared entry, `closure-roots` with no
    resolver, an unresolvable capsule root, a reserved or overlapping inner
    destination, a resolved path inside a forbidden scope: each refuses. There is
    no arrangement of missing configuration that produces an unconfined
@@ -798,10 +798,10 @@ pub struct ProvisionRequest {
 1. **Read `[capsule]`** from `.doctrine/doctrine.toml` at `root` — capsule root,
    resource bounds, the two declared readable lists and the closure resolver
    (`sec-2`, `sec-5`). Unresolvable capsule root refuses, naming the key; both
-   readable lists empty refuses; `closure_roots` with no `closure_resolver`
+   readable lists empty refuses; `closure-roots` with no `closure-resolver`
    refuses, naming both keys.
-2. **Probe each declared entry.** A `readable_roots` entry that does not exist
-   refuses; a `closure_roots` entry that does not resolve through its symlinks to
+2. **Probe each declared entry.** A `readable-roots` entry that does not exist
+   refuses; a `closure-roots` entry that does not resolve through its symlinks to
    an existing realised path refuses. Provisioning never realises one (`sec-2`).
 3. **Probe capacity** by `statvfs` on the capsule root. Below one expected size,
    refuse; between one and two, warn and continue; unknown, report and continue
@@ -812,11 +812,11 @@ pub struct ProvisionRequest {
 5. **Apply the refinement**, when one was supplied — the pure monotonic
    restriction algebra of `sec-4`. Any widening refuses.
 6. **Admit the closure resolver against the policy just bound.** Refuse when the
-   normalized basename of `closure_resolver[0]` appears in the policy's
+   normalized basename of `closure-resolver[0]` appears in the policy's
    `trusted_side_forbidden_executables`. This step is *after* 5 and not before,
    because a phase refinement may add a forbidden entry, and the entry it adds
    must bind the transaction it was supplied for.
-7. **Expand the closures.** One resolver invocation per `closure_roots` entry,
+7. **Expand the closures.** One resolver invocation per `closure-roots` entry,
    each output line validated as an existing absolute path. Every returned path
    becomes an individual read-only input — never their common parent, which is
    how a closure collapses back into a whole store.
@@ -1296,4 +1296,429 @@ Read-once (`REQ-449` criterion 3), which is an executed test in `sec-7`'s
 environment rather than a pure one:
 
 - `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy`
+
+<!-- doctrine:section sec-5 -->
+## Operational configuration: the `[capsule]` table, the capsule root, and capacity
+
+`REQ-461` asks provisioning to compare available space against a configurable
+expected capsule size, warn conspicuously below a threshold, halt on exhaustion,
+and to do none of pre-reservation, backpressure, eviction or rescue-archive
+construction. `DEC-158` settles the mechanism (`statvfs`), the home (a new
+`[capsule]` table), the two tiers, and the capsule root's default.
+
+This section builds that table in full. It is the one place the operator's
+configuration enters this slice: `sec-2`'s two declared readable lists and its
+closure resolver are read here, `sec-3`'s `ResourceBounds` are read here, and
+`sec-3` step 1 and step 3 are this section's callers.
+
+### Current behaviour
+
+Doctrine reads two operational tables from `.doctrine/doctrine.toml` today, both
+through `dtoml`'s tolerant text read (`src/dtoml.rs:87`) and both by serde
+projection out of an otherwise-ignored document:
+
+| table | reader | shape |
+|---|---|---|
+| `[dispatch]` | `src/dispatch_config.rs:51` | `#[serde(rename_all = "kebab-case", default)]` |
+| `[reservation]` | `src/reserve.rs:63-92` | tolerant outer `ReservationDoc`, pure `parse_*(text)`, thin loader |
+
+Neither is a precedent for *capacity*, because nothing in Doctrine has ever
+looked at free space. The spike does not either: `capsule_disk`
+(`lib/measure.sh:58`) is a `du` of a finished tree, and there is no `df`,
+`statvfs` or equivalent anywhere in the rig. `REQ-461` asks for a check *before*
+provisioning, against a number the project supplies, which is net-new.
+
+What the spike does supply is measurements, and they are the only real data this
+design has for sizing a default (`R1` altitude — one host, two fixtures):
+
+- a Node-shaped capsule was bounded at 256 MiB and 300s and did not overrun;
+- a Rust workspace peaked at **4.4 GiB and 352s**, overran both, and was
+  re-bounded to 8 GiB and 900s "with headroom over the measurement, not to it"
+  (`lib/fixtures.sh:70-92`);
+- the kill grace between `SIGTERM` and `SIGKILL` was 5s
+  (`capsule/sandbox.sh:68`).
+
+### Why a new table, and why kebab-case
+
+`DEC-158` rules out both incumbent homes: `[interpretation]` is hashed into the
+work contract, so an operational edit to a capacity threshold would move the
+canonical hash; `[dispatch]` is the worktree arm's configuration, which this
+slice sits beside rather than replaces.
+
+The key spelling is **kebab-case**, which puts this table with `[dispatch]` and
+`[reservation]` rather than with `[interpretation]`. `[interpretation]`'s
+snake_case is not a house style — `SPEC-030` fixes those key spellings verbatim
+(`trusted_side_forbidden_executables`, `interpreted_paths`), and a governed
+contract vocabulary is not free to be renamed. `[capsule]` has no such
+constraint and is operational configuration in exactly the sense the other two
+are, so it follows the convention both of their readers already declare.
+
+**This amends `sec-2`.** That section's sample was written snake_case
+(`readable_roots`, `closure_roots`, `closure_resolver`); the keys are
+`readable-roots`, `closure-roots` and `closure-resolver`, and `sec-2`'s sample
+and prose are corrected to match. Named here rather than silently, because it
+changes text a review round has already read.
+
+### The table, in full
+
+```toml
+[capsule]
+# Where capsules live. Absent ⇒ the platform data directory (below).
+root = "/var/lib/doctrine/capsules"
+
+# The readable inputs (sec-2). At least one of the two lists must be non-empty.
+readable-roots = ["/bin/sh", "/usr/bin/env"]
+closure-roots = [".doctrine/capsule-toolchain"]
+closure-resolver = ["nix-store", "--query", "--requisites"]
+
+# Capacity, advisory (REQ-461). Warn below expected × multiplier; refuse below
+# expected.
+expected-capsule-size-mib = 4096
+capacity-warn-multiplier = 2
+
+# The execution bounds sec-2's `Execution` carries, enforced trusted-side.
+execution-timeout-seconds = 300
+execution-kill-grace-seconds = 5
+file-size-cap-mib = 256
+```
+
+| key | default | absent means |
+|---|---|---|
+| `root` | the platform data directory (below) | resolve it; refuse if nothing resolves |
+| `readable-roots` | `[]` | nothing bound as declared |
+| `closure-roots` | `[]` | no closure expansion |
+| `closure-resolver` | none | no host capability declared |
+| `expected-capsule-size-mib` | `4096` | the default sizing applies |
+| `capacity-warn-multiplier` | `2` | warn below twice expected (`REQ-461` criterion 2) |
+| `execution-timeout-seconds` | `300` | the spike's light-fixture bound |
+| `execution-kill-grace-seconds` | `5` | the spike's grace |
+| `file-size-cap-mib` | `256` | the spike's light-fixture per-file cap |
+
+Sizes are configured in **mebibytes and seconds, spelled in the key**, rather
+than as suffixed strings. A `"4GiB"` spelling would need a parser, a refusal
+vocabulary for malformed units, and tests for both, to buy nothing this slice's
+callers need; the unit in the key name is unambiguous to a human writing it and
+costs no code. Both are converted once, at construction, into the typed
+`ByteCount` and `Duration` the rest of the design uses.
+
+**The defaults are a guess with a stated basis, and every project should
+override them.** `POL-002` facet 1 forbids the platform resting on a host
+project's conventions, and a capsule's size is dominated by the *project's*
+build output, which Doctrine cannot know. `4096` sits at the upper order of the
+two measured points without asserting that a Rust workspace is the platform's
+shape. This repository's own `[capsule]` should set `8192`, for the reason
+`lib/fixtures.sh:70-92` records. The tension is real and worth naming: a Node
+project on a laptop with 3 GiB free is refused by a default sized for something
+larger, and the answer is the key, not a cleverer default.
+
+`capacity-warn-multiplier` is a plain integer ≥ 1. A multiplier below one would
+invert the tiers — warning at a level below the one that refuses — so it
+refuses at construction rather than producing an unreachable warning.
+
+### Reading it
+
+```rust
+/// A byte quantity. Defined here because this section owns the arithmetic that
+/// can overflow; `sec-2`'s `file_size_cap` and `disk_used` are this type.
+pub struct ByteCount(u64);
+
+/// The validated `[capsule]` table.
+///
+/// Private fields and one fallible constructor, for `sec-2`'s reason: a public
+/// literal would let a caller assemble a configuration that never went through
+/// the readable-list rule or the root resolution.
+pub struct CapsuleConfig {
+    /// Absolute and resolved. `sec-2`'s `ForbiddenScopes::capsule_root`.
+    root: PathBuf,
+    readable_roots: Vec<PathBuf>,
+    closure_roots: Vec<PathBuf>,
+    closure_resolver: Option<Argv>,
+    capacity: CapacityPolicy,
+    bounds: ResourceBounds,
+}
+
+pub struct CapacityPolicy {
+    expected_capsule_size: ByteCount,
+    warn_multiplier: u32,
+}
+
+/// The resource choices `sec-3`'s transaction binds and `sec-2`'s `Execution`
+/// carries.
+pub struct ResourceBounds {
+    timeout: Duration,
+    kill_grace: Duration,
+    file_size_cap: ByteCount,
+}
+```
+
+```rust
+/// PURE. Projects and validates everything that does not need the host.
+pub fn parse_capsule_config(text: &str) -> Result<UnrootedCapsuleConfig, ConfigRefusal>;
+
+/// Resolves the capsule root, which is the only part that needs the host.
+pub fn root_capsule_config(
+    parsed: UnrootedCapsuleConfig,
+    host: &dyn HostFacts,
+) -> Result<CapsuleConfig, ConfigRefusal>;
+```
+
+The split is the project's pure/imperative rule applied at the one place this
+table touches the host: every list rule, every bound, and the multiplier are
+decided from text alone and are testable without a filesystem; only the root
+default reads the environment.
+
+**Serde projection here, an explicit table walk in `sec-4`, and the difference
+is not inconsistency.** `sec-4` walks `[interpretation]`'s keys by hand because
+`REQ-449` criterion 1 demands six *distinguishable* refusals and serde would
+hand back a formatted string for four of them. `[capsule]` has no such
+requirement. What it does need is that a mistyped key be refused rather than
+silently defaulted — `execution-timeout-secconds` quietly restoring a 300s bound
+on a project that configured 900 is the hazard — and
+`#[serde(deny_unknown_fields)]` supplies exactly that, naming the offending key
+in its own message. So this reader is `src/reserve.rs:78-103`'s shape with
+unknown keys denied, plus a validating constructor. Two readers, two
+requirements, one of them met by a derive.
+
+Refusals, each a named variant carrying the key:
+
+| refusal | condition |
+|---|---|
+| `MalformedTable { detail }` | not valid TOML, wrong value type, or an unknown key |
+| `NoReadableInputs` | `readable-roots` and `closure-roots` both empty (`sec-2`) |
+| `ClosureRootsWithoutResolver` | `closure-roots` non-empty, `closure-resolver` absent |
+| `EmptyResolverArgv` | `closure-resolver = []` |
+| `RelativeCapsuleRoot { path }` | a configured `root` that is not absolute |
+| `UnresolvableCapsuleRoot` | no `root`, and no platform data directory resolves |
+| `ZeroBound { key }` | any bound or size configured as `0` |
+| `WarnMultiplierBelowOne { found }` | `capacity-warn-multiplier < 1` |
+
+`NoReadableInputs` and `ClosureRootsWithoutResolver` are `sec-2` invariant 9's
+first three refusals, discharged here because this is where the lists are read.
+The remaining probes in that invariant — an entry that does not exist, a
+`closure-roots` entry that is not realised — need the filesystem and stay at
+`sec-3` step 2.
+
+### The capsule root
+
+`DEC-158`: not `${HOME}/capsules`, which is the spike's host convention;
+not the repository's runtime state tier, which is characterised as disposable
+scratch and would contradict `DEC-133`/`DEC-137`'s holding that a harvested
+capsule is live work. An owned path derived from the platform's data directory,
+outside the repository, overridable by `root`, and where nothing resolves,
+provisioning refuses naming the key rather than falling back.
+
+```rust
+/// The subdirectory of the platform data directory that Doctrine owns.
+const CAPSULE_ROOT_LEAF: &str = "doctrine/capsules";
+const XDG_DATA_HOME: &str = "XDG_DATA_HOME";
+```
+
+Resolution order, through `HostFacts` so it is testable: `XDG_DATA_HOME` if set
+and absolute; else `HOME` joined with `.local/share`; else refuse. Both reads
+are `var_os` — this repository bans `std::env::var` through
+`disallowed_methods` (`src/tty.rs:41`), and `src/install.rs:1818` is the
+precedent for the `HOME` read and its refusal message.
+
+Two things this deliberately is not. It is **not a new dependency**: a
+platform-directory crate would buy macOS and Windows arms for a slice whose
+backend is Linux, against a `Cargo.toml` whose `rustix` note records "ZERO new
+compiled crates" as the standing posture. And it is **not a fallback chain that
+ends in a guess** — the last arm refuses. A capsule root silently landing in a
+temporary directory is how large live work ends up somewhere a reboot removes.
+
+The resolved root is what populates `sec-2`'s `ForbiddenScopes::capsule_root`,
+so no capsule can bind a path that contains it. Note the shape of that rule: it
+denies a placement path equal to or above the capsule root, which is what keeps
+a declared readable entry from reaching the whole capsule area, while leaving
+the transaction's *own* subdirectories bindable. What keeps one transaction out
+of a sibling's is `sec-2` invariant 1 — provisioning computes every path in a
+placement, and it computes only paths under the root it created in `sec-3`
+step 9.
+
+### `HostFacts`
+
+The impure inputs provisioning is given, named as one contract so every pure
+step above it is testable against a fixture rather than a filesystem:
+
+```rust
+pub trait HostFacts {
+    /// Available bytes at `path`, or why the probe could not answer.
+    fn available_bytes(&self, path: &Path) -> Result<ByteCount, CapacityUnknown>;
+    /// Fully resolve a path through its symlink components (sec-2's rule 1).
+    fn resolve(&self, path: &Path) -> io::Result<PathBuf>;
+    fn path_exists(&self, path: &Path) -> bool;
+    fn env_var(&self, name: &str) -> Option<OsString>;
+}
+```
+
+**It carries no clock**, which corrects the sketch in `sec-3`'s signature
+comment. Provisioning needs no wall-clock read — the transaction id comes from a
+collision-resistant source, not a timestamp — and `src/clock.rs` is already this
+project's single home for wall-clock reads, with the pure/imperative rule that
+the value is passed in rather than a clock handed down. A `now()` here would be
+a second one.
+
+`SystemHost` is the production implementation. A fixture implementation in tests
+supplies available bytes, resolutions and environment values from a table, which
+is what makes the tier boundaries below assertable without a disk of a
+particular size.
+
+### Capacity
+
+```rust
+pub enum CapacityVerdict {
+    /// At or above expected × multiplier.
+    Ample { available: ByteCount },
+    /// At or above expected, below expected × multiplier — warn and continue.
+    Low { available: ByteCount, expected: ByteCount, threshold: ByteCount },
+    /// Below expected — refuse.
+    Insufficient { available: ByteCount, expected: ByteCount },
+    /// The probe could not produce a usable figure — report and continue.
+    Unknown { reason: CapacityUnknown },
+}
+
+/// PURE, given the probe's answer.
+pub fn assess_capacity(
+    probe: Result<ByteCount, CapacityUnknown>,
+    policy: &CapacityPolicy,
+) -> CapacityVerdict;
+```
+
+**The probe.** `rustix::fs::statvfs(path)`
+(`rustix-1.1.4/src/fs/abs.rs:288`), available bytes as `f_bavail × f_frsize`.
+`rustix` is already a direct dependency for `flock`
+(`src/worktree/claim_lock.rs`), at `default-features = false, features =
+["fs"]`, so the probe adds no compiled weight. `f_bavail` is the count available
+to an unprivileged process, which is the honest figure — `f_bfree` includes the
+reserved blocks a capsule cannot have. `f_frsize` is the fragment size and is
+the unit `f_bavail` counts in; `f_bsize` is the preferred I/O size and is the
+wrong multiplier.
+
+**The probe runs against the capsule root, not the repository.** They are
+different filesystems on any host that separates `/home` from `/var`, and the
+figure that matters is where the transaction root will be written. On a root
+that does not exist yet, the probe runs against its nearest existing ancestor;
+a root whose ancestors do not exist either is a configuration error caught at
+`sec-3` step 1.
+
+**`CapacityUnknown` is a named outcome, not an error swallowed into ample.**
+`POL-002` facet 3 lands here (`DEC-158`): filesystems are diverse and not every
+field is meaningful on every one. Three constructors —
+`ProbeFailed { errno }` when `statvfs` itself fails, `UnusableFigure` when
+`f_frsize` is zero, and `FigureOverflows` when the product exceeds `u64`.
+Capacity is advisory under `REQ-461`, so unknown does not refuse; it is
+reported, and it is *distinguishable in the report* from a probe that returned
+an ample figure, because those two are the same to a silent implementation and
+opposite to an operator.
+
+**The tiers, exactly.** With `expected = expected-capsule-size-mib × 1 MiB` and
+`threshold = expected × capacity-warn-multiplier`, saturating at `u64::MAX`
+rather than overflowing:
+
+| available | verdict | provisioning |
+|---|---|---|
+| `≥ threshold` | `Ample` | continues silently |
+| `expected ≤ a < threshold` | `Low` | warns conspicuously, continues |
+| `< expected` | `Insufficient` | refuses at `sec-3` step 3 |
+| unusable probe | `Unknown` | reports, continues |
+
+`REQ-461` criterion 2's "may warn below twice the expected capsule size without
+reserving that space" is the default multiplier and the whole of the reservation
+story: nothing is written, claimed or held at `Low`. The next capsule provisioned
+sees the same free space this one did.
+
+**The warning is structured, not a sentence.** `REQ-461` criterion 1 says
+conspicuous; a formatted line is neither machine-readable nor greppable by an
+operator triaging a stalled queue. It carries named fields — `available_bytes`,
+`expected_bytes`, `threshold_bytes`, `capsule_root`, and the config key to
+change — through the same reporting the refusals use, so a warning and a refusal
+about the same condition differ in severity and not in vocabulary.
+
+**Exhaustion mid-provision halts identically.** A write that fails `ENOSPC`
+after the probe passed is the same condition observed later, and it produces the
+same refusal class rather than a distinct one an operator has to learn: the
+probe is advisory precisely because it can be overtaken. What follows is
+`sec-3`'s rollback of the transaction root this call created, on the creation
+token that call holds — which matters most here, since a partial tree left
+behind is on a disk that was already short.
+
+### What V0 does not do
+
+`REQ-461`'s negative half is a requirement, not an omission, and each of its
+four names a mechanism that would be visible in this design if it were present:
+
+- **no pre-reservation** — nothing is written or claimed at `Low`, and
+  `CapacityPolicy` holds no reserved figure;
+- **no throughput backpressure** — `assess_capacity` is a function of one
+  probe and one policy; it does not know how many capsules exist, and nothing
+  queues or delays on its verdict;
+- **no automatic eviction** — there is no delete capability in this slice at
+  all beyond `sec-3`'s token-guarded rollback of a directory that call created
+  before it held any work (`DEC-156`, `DEC-133`, `DEC-137`);
+- **no rescue-archive construction** — nothing is copied or compressed anywhere
+  on the refusal path.
+
+The whole-tree disk figure is **observed and not capped**. `sec-2`'s
+`Observation.disk_used` is computed trusted-side after a run, as the spike's is
+(`capsule/sandbox.sh:311-317`); the enforced bound is `file_size_cap`, per file,
+through `RLIMIT_FSIZE`. Capping a tree needs either polling or a filesystem
+quota, and both are the backpressure `REQ-461` scopes out of V0.
+
+### Invariants
+
+1. **Capacity never deletes.** No verdict, and no refusal path in this section,
+   removes anything. The single removal in provisioning is `sec-3`'s rollback,
+   guarded by a creation token.
+2. **An unusable probe is reported, never read as ample.** `Unknown` is a
+   distinct verdict with a reason, and it is distinguishable in the report from
+   `Ample`.
+3. **The configuration cannot silently default.** An unknown key refuses. There
+   is no arrangement of missing configuration that produces a capsule root
+   inside the repository, an empty readable set, or a bound of zero.
+4. **The capsule root is absolute, resolved, and forbidden to capsules.** It is
+   `ForbiddenScopes::capsule_root`, so `sec-2`'s validating constructor refuses
+   any placement path that contains it.
+5. **Capacity is advisory in one direction only.** It may refuse before work
+   starts; it may never permit what another rule refuses, and it is not consulted
+   after `sec-3` step 3.
+
+### Verification alignment
+
+Pure, against a fixture `HostFacts` — the tiers are arithmetic and need no disk:
+
+- `available_at_the_threshold_is_ample_and_one_byte_below_it_is_low`
+- `available_at_expected_is_low_and_one_byte_below_it_is_insufficient`
+- `insufficient_refuses_and_names_the_capsule_root_and_the_config_key`
+- `low_warns_with_named_fields_and_provisioning_continues`
+- `low_reserves_nothing_so_a_second_assessment_sees_the_same_figure`
+- `unknown_is_reported_and_is_not_ample`
+- `unknown_carries_which_of_the_three_reasons_produced_it`
+- `threshold_saturates_rather_than_overflowing_on_a_large_multiplier`
+
+Configuration:
+
+- `unknown_key_refuses_naming_the_key`
+- `both_readable_lists_empty_refuses`
+- `closure_roots_without_a_resolver_refuses_naming_both_keys`
+- `empty_resolver_argv_refuses`
+- `relative_configured_root_refuses`
+- `zero_valued_bound_refuses_naming_the_key`
+- `warn_multiplier_below_one_refuses`
+- `absent_optional_keys_take_the_named_default_constants`
+- `sizes_in_the_key_unit_convert_once_into_bytes_and_seconds`
+
+Capsule root resolution:
+
+- `configured_root_wins_over_the_environment`
+- `xdg_data_home_is_used_when_set_and_absolute`
+- `home_supplies_the_default_when_xdg_data_home_is_unset`
+- `relative_xdg_data_home_is_ignored_rather_than_joined`
+- `neither_variable_set_refuses_naming_the_config_key`
+- `the_resolved_root_is_the_forbidden_scope_a_placement_is_validated_against`
+
+Executed, in `sec-7`: nothing in this section is a confinement property, so the
+suite carries no capacity row. The one executed claim it owes is that the probe
+reads the filesystem the capsule root is on rather than the repository's — a
+single test that runs only where the two differ, and reports skipped rather than
+passed where they do not.
 
