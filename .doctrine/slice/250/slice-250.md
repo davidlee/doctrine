@@ -432,8 +432,15 @@ Done is judged by:
 - **Safety contracts intact.** Foreign hook entries and pinned skill
   directories/links survive every path; the existing `boot.rs` and `install.rs`
   suites stay green unchanged (behaviour-preservation gate).
-- **Governance reconciled.** SPEC-010 amended through a REV to describe the
-  surviving channel set; RFC-018 updated with anything new the slice learns.
+- **Governance reconciled.** *Re-targeted 2026-08-06 (`DEC-171`).* The REV amends
+  **SPEC-011 / `REQ-186`** alone — it binds the hook write to one `<exec> boot`
+  entry in `settings.local.json`, and this slice invalidates it on three axes
+  (six specs across five events, a scope-selected project default, and the
+  abandoned-scope sweep). **SPEC-010 does not enter the REV**: `OQ-2b` restores
+  exactly what its responsibilities 3–6 already describe, so the pre-existing
+  divergence closes by conformance, not amendment. Its criterion is therefore a
+  **verification**, not an edit — SPEC-010 responsibilities 3–6 confirmed true of
+  the restored code. RFC-018 updated with anything new the slice learns.
 - **Backlog dispositioned.** IMP-400 reduced to its migration leg and left open
   (not closed — migration is out of scope); IMP-407 (*doctor leg*) confirmed
   still open and still `after` this slice; CHR-045 (*bump plugin.json version
