@@ -12,11 +12,8 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/knowledge.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/knowledge.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
 
 [[selector]]
 selector = "src/design_run/**"
@@ -24,11 +21,42 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/design.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
 
 [[selector]]
 selector = ".doctrine/spec/tech/019/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/facet_write.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+
+[[selector]]
+selector = "src/design_run/submission.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+
+[[selector]]
+selector = "src/design_run/admission.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+
+[[selector]]
+selector = "src/design_run/refusal.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
 
 [[relation]]
 label = "references"
