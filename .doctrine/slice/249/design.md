@@ -324,3 +324,154 @@ implementation `AGENTS.md` forbids.
 The plan must hold the boundary: Phase A may not absorb facet work to save a
 phase.
 
+<!-- doctrine:section sec-6 -->
+# 5.2 Interfaces & Contracts
+
+## The CLI surface
+
+Three shapes, splitting by *tier* as `OQ-1` settled — invariant fields
+kind-blind, `[facet]` kind-dispatched — plus the coupled transition.
+
+```
+doctrine knowledge edit <ID> [--title T] [--tags a,b] [--body B|-] [--body-mode replace|append]
+doctrine knowledge edit <kind> <ID> [--<field> V]…          # six kinds; flags = that kind's fields
+doctrine knowledge settle <ID> <state> --by WHO [--<text-field> V]
+```
+
+Flag names are the field's own name, kebab-cased — `--validation-plan`,
+`--waiver-reason`, `--decided-by`. No flag name is authored: the subverb builds
+its arg set from `facet_fields(kind)`, and a test asserts clap's arg names equal
+the table's, so the two cannot drift. This refines `DEC-178`'s illustrative
+`--reason` to `--waiver-reason`; the ruling's substance is untouched.
+
+`--body` / `--body-mode` (`replace` | `append`, `-` reads stdin) are lifted from
+`memory edit` unchanged, and ride `entity::write_body`, which that verb already
+uses. Nothing new on the prose tier.
+
+## What `settle` derives, and the one thing it does not
+
+`DEC-178` derives *coverage*: a state is settleable when the kind's facet carries
+`<state>_by` and `<state>_on`. That is mechanical over `facet_fields` and yields
+exactly four transitions.
+
+It does not derive *which field holds the outcome*. `QUE`'s is `answer`, `CON`'s
+is `waiver_reason`, and no naming rule connects either to its state token without
+contrivance. So one small annotation is authored beside the table:
+
+```rust
+/// A resolving transition: its state, and the field whose content the
+/// transition exists to capture. The actor/date pair is NOT here — it is
+/// derived from the state token (DEC-178).
+pub(crate) struct Settlement {
+    pub(crate) state: &'static str,
+    pub(crate) captures: Option<&'static str>,
+}
+pub(crate) fn settlements(kind: RecordKind) -> &'static [Settlement];
+```
+
+Four rows: `QUE` answered/`answer`, `ASM` validated/none, `ASM`
+invalidated/none, `CON` waived/`waiver_reason`. Pinned two ways — every
+`captures` name must appear in `facet_fields(kind)`, and the set of `state`
+tokens must equal the set the by/on derivation yields. The second pin is the one
+that matters: it means the annotation can add detail to the derived set but
+cannot quietly extend it.
+
+Stating this plainly rather than claiming full derivation: `DEC-178`'s reach
+ruling stands, and the honest scope of "derived" is the coverage, not the whole
+row.
+
+## The pure seam
+
+```rust
+/// A caller's raw field assignment, before the table has seen it.
+pub(crate) struct RawEdit<'a> { pub(crate) field: &'a str, pub(crate) value: RawValue }
+pub(crate) enum RawValue { Text(String), List(Vec<String>) }
+
+/// One validated mutation, ready to write.
+pub(crate) struct FacetEdit { pub(crate) field: &'static FacetField, pub(crate) value: RawValue }
+
+/// Validate raw assignments against the kind's table: every field is owned by
+/// this kind, every `Closed` value parses to a variant, every `List` value is a
+/// list. Pure — no clock, no disk, no io.
+pub(crate) fn plan_facet_edits(kind: RecordKind, given: Vec<RawEdit>)
+    -> Result<Vec<FacetEdit>, FacetEditRefusal>;
+
+/// Apply planned edits to a record's TOML, edit-preservingly (SPEC-004).
+pub(crate) fn apply_facet_edits(path: &Path, edits: &[FacetEdit]) -> anyhow::Result<()>;
+```
+
+The split is the project's pure/imperative rule: `plan_facet_edits` holds every
+decision and is exhaustively testable without a filesystem; `apply_facet_edits`
+is the thin shell over `facet_write::set_facet_mixed`. `settle` is
+`plan_facet_edits` plus `set_record_status` in one act — it composes the two
+seams rather than introducing a third.
+
+A cleared value is `RawValue::Text(String::new())`, written as `""`. `DEC-170`
+forbids clearing by omission, and `plan_facet_edits` has no way to express it.
+
+## The write posture
+
+`set_facet_mixed` gains one parameter:
+
+```rust
+pub(crate) enum KeyPosture {
+    /// Create the key if absent — the posture `doctrine risk set` has today.
+    Create,
+    /// F-1: refuse if absent; the key is scaffold-seeded, so its absence is
+    /// damage (DEC-170).
+    RequirePresent,
+}
+```
+
+`risk set` passes `Create` and behaves exactly as it does now — the
+behaviour-preservation gate holds by construction. Knowledge passes
+`RequirePresent`.
+
+## The wire
+
+```rust
+pub(crate) struct CreateRecord {
+    pub(crate) kind: String,
+    pub(crate) title: String,
+    pub(crate) slug: Option<String>,
+    pub(crate) acceptance: Option<AcceptanceDeclaration>,
+    /// The record's `.md` prose (phase A).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) body: Option<String>,
+    /// The record's `[facet]` fields, by field name (phase B).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) facet: BTreeMap<String, RawValue>,
+}
+```
+
+**On calling it `body`.** The tempting alternative is a distinct name — `prose` —
+on the reasoning that `body` is the key that ate SL-248's content. Rejected: the
+loss was a **level** error, not a naming collision. `Declaration::body` is the
+body of a *section*; `CreateRecord::body` is the body of a *record*; in both
+cases it is the `.md` content of the thing the subject names, which is what
+`entity::write_body` and `memory edit --body` already call it. A fourth spelling
+for one concept costs more than it buys, and objective 3 is what makes the level
+error loud — see the refusal below.
+
+`facet` is a `BTreeMap<String, RawValue>` rather than a typed per-kind struct
+because `CreateRecord.kind` is a runtime token; the map is validated by
+`plan_facet_edits` against `facet_fields(kind)` at admission, which is the same
+check the CLI runs, not a second one.
+
+## Refusals
+
+Every refusal below is typed and names its remedy. The first four are new; the
+fifth is `ISS-318`'s.
+
+| condition | message shape |
+|---|---|
+| subverb names a kind the id contradicts | `ASM-003` is an assumption; use `knowledge edit assumption` |
+| `knowledge edit concept …` | concept records carry no facet fields; use `knowledge edit CPT-001` (`DEC-173`) |
+| state has no settlement | `accepted` is not a settle transition for a decision; use `knowledge status` |
+| facet key absent on write | malformed record 042: `[facet]` is missing `choice` — restore the key and retry; the file is left untouched (`DEC-170`) |
+| `Declaration` key inert at subject's kind | `body` is inert at `cp-4`; it is honoured for `sec-` subjects. To carry a record's prose, use `dispose.create.body` |
+
+That last message is the whole of the SL-248 recovery: the six dispositions that
+sent prose as `body` would each have been refused, at submission, with the key
+they were reaching for named in the refusal.
+
