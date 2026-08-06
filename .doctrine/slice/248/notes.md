@@ -74,20 +74,27 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design drafting, sections 1–4 of 9 · 2c04c30c
+fresh-as-of: 2026-08-06 · design drafting, sections 1–6 of 9 · 80f8e02b
 
 ### Produced
 
-- Design run `dr-019fd432` — stage `drafting`, revision 38, materialised.
+- Design run `dr-019fd432` — stage `drafting`, revision 44, materialised.
   Sections `sec-1` (governing context), `sec-2` (platform backend contract),
-  `sec-3` (transaction and provisioning), `sec-4` (interpretation policy).
+  `sec-3` (transaction and provisioning), `sec-4` (interpretation policy),
+  `sec-5` (operational config: the `[capsule]` table, capsule root, capacity),
+  `sec-6` (crate topology, export set, layering enforcement).
 - `RV-346` — design facet, raiser codex / responder claude. Nine findings on
   `sec-2`/`sec-3`, seven blocking; **all upheld**, eight fixed in revision 35,
-  the ninth (`F-2`) fixed in 37 via the `DEC-156` correction below.
+  the ninth (`F-2`) fixed in 37 via the `DEC-156` correction below. A second
+  round covering `sec-5`, `sec-4`, and verification of all nine remediations
+  is in flight.
 - `DEC-156` **corrected** — the backend property count moves seven → eight,
   splitting process-tree teardown from trusted observation of resource limits
   and termination. Only the number moved; the record's arguments stand. Human
   authorised.
+- `DEC-160` **corrected** — same count, swept consequentially. The record cited
+  `DEC-156`'s arithmetic in two places and the first correction did not reach
+  it; nothing in its own reasoning depends on the row count.
 - `mem.fact.capsule.bwrap-ro-bind-dereferences-source` — `bwrap` resolves the
   *source* path of a `--ro-bind`, so a lexically validated allowlist does not
   confine.
@@ -138,14 +145,49 @@ fresh-as-of: 2026-08-06 · design drafting, sections 1–4 of 9 · 2c04c30c
   with their own ATX heading — the title is derived, never declared
   (`src/design_run/section.rs`). Section document order is declaration order
   (`seq` claimed at declare time), not id order.
+- **The root package has no lib target**, so nothing outside it can reach any of
+  its 94 modules today. `crates/cordage` is the workspace-split precedent but
+  points the other way (`doctrine → cordage`); `doctrine-control → doctrine` is
+  new. Three consequences confirmed by execution on a minimal reproduction, not
+  by reading: a package may declare the same module in both its bin and lib
+  targets and builds cleanly; `pub use` of a `pub(crate)` item is `E0364`, so the
+  visibility promotion is compiler-required; and the exported set must be closed
+  over `#[cfg(test)]` imports too — `git.rs:2896` reaches `crate::kinds`, and
+  omitting it fails the *library's own test build* with `E0432` while
+  `cargo build` stays green.
+- **`dtoml` cannot cross a crate boundary.** Seventeen `crate::` references
+  (`conduct`, `verify`, `estimate`, `value`, `dispatch_config`,
+  `install_config`) cascade into engine-tier `coverage`. Its two lowest-altitude
+  items — `DOCTRINE_TOML` and `read_doctrine_toml_text`, used 35 times across 33
+  files — move to an out-edge-free leaf module and are re-exported under their
+  existing names, so no call site changes.
+- **The layering gate has two distinct holes, not one.** It walks `src` alone
+  (`tests/architecture_layering.rs:1148`, and `check`'s filter pins the same
+  path at `:558`), *and* `CratePathCollector` (`:216`) only sees paths beginning
+  `crate::`, so a `doctrine::…` import from a second crate produces no edge even
+  if the tree were walked. Only the first is fixable by parameterisation.
+- **Capacity has no precedent to ride.** Nothing in `src/` and nothing in the
+  spike probes free space; `capsule_disk` (`lib/measure.sh:58`) is a post-hoc
+  `du`. The only sizing evidence is two spike measurements — 256 MiB/300s for a
+  Node fixture, a 4.4 GiB/352s peak for a Rust workspace re-bounded to 8 GiB/900s
+  (`lib/fixtures.sh:70-92`) — at `R1` altitude, one host.
+- **`[capsule]` is kebab-case.** The repo's operational tables are kebab
+  (`dispatch_config.rs:51`, `reserve.rs:63`); `[interpretation]`'s snake_case is
+  fixed verbatim by `SPEC-030` and is not a house style. `sec-2` and `sec-3` were
+  amended from their first-draft snake spelling.
+- **`src/clock.rs` is the single home for wall-clock reads**, under the
+  pure/imperative rule that the value is passed in. `HostFacts` therefore carries
+  no clock, correcting `sec-3`'s first signature comment; provisioning needs no
+  timestamp.
 
 ### Open
 
-- **Sections `sec-5`–`sec-9` are unwritten**: capacity and `[capsule]` config;
-  crate topology and CLI surface; the eight-property conformance suite; code
-  impact and verification alignment; risks and open questions. The runbook step
-  `draft.selectors` discharges off the code-impact section, so it stays
-  outstanding until `sec-8`.
+- **Sections `sec-7`–`sec-9` are unwritten**: the eight-property conformance
+  suite; code impact and verification alignment; risks and open questions. The
+  runbook step `draft.selectors` discharges off the code-impact section, so it
+  stays outstanding until `sec-8`. `sec-7` inherits more from `sec-2` than any
+  other section and should not start before the second codex pass on the
+  remediated `sec-2` returns.
 - **Residual for `sec-9`: the resolution-time race.** Declared paths are resolved
   at provisioning, and a declared path could be re-pointed afterwards. Not
   capsule-reachable — no declared path is writable by a capsule — so it is a
