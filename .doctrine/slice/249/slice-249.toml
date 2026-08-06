@@ -26,6 +26,10 @@ intent = "scope-relevant"
 selector = "src/commands/design.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = ".doctrine/spec/tech/019/**"
+intent = "scope-relevant"
+
 [[relation]]
 label = "references"
 role = "implements"
@@ -35,6 +39,10 @@ target = "SPEC-019"
 label = "references"
 role = "implements"
 target = "SPEC-029"
+
+[[relation]]
+label = "related"
+target = "SL-246"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

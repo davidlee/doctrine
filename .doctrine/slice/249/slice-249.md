@@ -65,17 +65,34 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
    two observed instances. The correspondence table this needs is the same
    key→honouring-kind knowledge (2) needs, so it is authored once.
 
-**Design question deliberately left open for `/design`** (recorded here so it is
-not settled by default): the CLI shape for ~5 facet fields × 7 kinds. Candidates
-are one flat flag set that *refuses* flags inert at the record's kind (which is
-ISS-318's rule applied to the second call site — one table, two consumers), a
-per-kind subverb, or a repeatable `--facet key=value` validated against the kind.
+4. **Extend SPEC-019 to the kinds that actually exist** — ISS-316. The spec is
+   emphatically four-kind (`assumption`, `decision`, `question`, `constraint`),
+   repeating "four" at nine sites; the corpus has seven. `EVD`, `HYP` and `CPT`
+   appear nowhere in it, so their facets, per-kind lifecycle vocabularies and
+   supersession rules are ungoverned, and whether `ConceptFacet`'s emptiness is
+   designed or omitted is unrecorded. This is a precondition, not a tidy-up: a
+   write seam covering seven kinds cannot derive its per-kind field sets from a
+   four-kind spec, and inventing them would be, in ISS-316's phrase, *invention
+   presented as derivation*. The same pass registers the verbs this slice adds
+   (R1), so SPEC-019 ends coherent on both axes.
 
-Second open question: whether settling a question goes through `edit --answer` or
-a dedicated verb that *requires* the answer. DEC-062's precedent inside the
-design run — a disposition is part of resolving rather than a field one may
-forget — argues for the latter, and `answer` is the worst-populated axis in the
-corpus.
+### Settled before design
+
+- **Prose rides the wire too** (was OQ-3). The `CreateRecord` extension carries
+  the record's `.md` prose as well as the structured facet. The SL-248 loss was
+  *prose*; a facet-only extension would not have prevented it, and shipping one
+  would leave the hole this slice exists to close.
+- **Settling a question gets its own verb** (was OQ-2), rather than an optional
+  `edit --answer` flag. DEC-062's argument inside the design run applies
+  unchanged — a disposition is part of *resolving*, not a field one may forget —
+  and `answer`/`answered_by`/`answered_on` at 0 of 38 is the corpus evidence
+  that an optional flag is not enough. Design owns the verb's name and whether
+  the other kinds' resolving transitions take the same treatment.
+
+**Still open for `/design`:** the CLI shape for ~5 facet fields × 7 kinds (OQ-1).
+Candidates are one flat flag set that *refuses* flags inert at the record's kind
+(ISS-318's rule applied to the second call site — one table, two consumers), a
+per-kind subverb, or a repeatable `--facet key=value` validated against the kind.
 
 ## Non-Goals
 
@@ -125,19 +142,33 @@ Also out of scope:
   rule/record check already lives here.
 - `src/design_run/refusal.rs` — the typed fault.
 - `src/commands/design.rs` — `plan_checkpoints`, ISS-318's first instance.
+- `.doctrine/spec/tech/019/` — the seven-kind extension and the verb-set
+  responsibility (objective 4), landed through a REV.
 
 ## Risks, assumptions, open questions
 
-- **R1 — spec divergence.** SPEC-019 §"Front the family through one `doctrine
-  knowledge` command namespace" enumerates the verb set as `new` / `show` /
-  `list` / `status` plus uniform `link`/`unlink`/`supersede`. Adding `edit`
-  diverges from the spec as written, so this slice owes SPEC-019 a REV at
-  reconcile rather than a quiet extension.
-- **R2 — ISS-316 is directly in the path.** SPEC-019 governs four record kinds;
-  the corpus has seven (hypothesis, evidence, concept arrived later). A facet
-  write seam must cover all seven, so this slice either resolves ISS-316's gap or
-  ships a verb wider than its governing spec. `/design` decides which; it is not
-  a discovery to be made mid-execution.
+- **R1 — the SPEC-019 amendment is authorship, not annotation.** Both spec
+  divergences are now in scope (objective 4), which means this slice writes
+  governance as well as code. The verb-set responsibility enumerates `new` /
+  `show` / `list` / `status` plus uniform `link`/`unlink`/`supersede`, and must
+  grow `edit` and the settle verb; the four-kind enumeration must become seven.
+  A REV at reconcile is the mechanism (governance changes route through a
+  Revision, ADR-013), not a quiet in-place extension.
+- **R2 — the three ungoverned kinds need rulings, not transcription.** `EVD` and
+  `HYP` have facets in code (`datum`/`provenance`/`confidence`;
+  `proposition`/`predicts`) that the spec can adopt. `CPT` does not: its facet is
+  an empty struct on the stated ground that *every concept rides its attributed
+  prose body*, and whether that is a designed property or an omission is an open
+  question ISS-316 raises and nobody has answered. Per-kind lifecycle
+  vocabularies and supersession rules for all three are likewise unwritten.
+  Transcribing the code would launder the current implementation into
+  governance — the anti-pattern the spec exists to prevent.
+- **R2a — SL-246 shares this dependency.** SL-246 (*Entity reads carry their
+  knowledge records*, at `design`) needs a bounded per-kind "deciding fields"
+  list and hits the same four-vs-seven hole; ISS-316 originates from it. This
+  slice resolving SPEC-019 unblocks SL-246, but two slices editing one spec
+  concurrently is a collision. Sequence or partition explicitly — do not let both
+  design rounds assume ownership.
 - **R3 — surface creep on the flat-flag shape.** ~5 fields × 7 kinds is a large
   flag set on one verb; `memory edit` already carries 15 and reads as a wall.
   Mitigated by the refusal rule making the wrong flag an error rather than a
@@ -152,11 +183,16 @@ Also out of scope:
   `#[serde(flatten)]` envelope). `CreateRecord` sits inside `Declaration`, so the
   extension is assumed safe — worth confirming in design, not at execution.
 - **OQ-1** — flat flags with refusal, per-kind subverb, or `--facet key=value`?
-- **OQ-2** — does settling a question get its own verb (DEC-062's argument) or an
-  `edit --answer` flag?
-- **OQ-3** — does the facet payload on `CreateRecord` accept the `.md` prose too,
-  or only the structured facet? The SL-248 loss was *prose*, so a facet-only
-  extension would not have prevented it.
+- **OQ-4** — is `ConceptFacet`'s emptiness a designed property or an omission?
+  Raised by ISS-316, unanswered. Objective 4 cannot write the concept kind's
+  contract without ruling on it, and the answer decides whether `edit` has
+  anything structured to write for a `CPT` at all.
+- **OQ-5** — do the per-kind lifecycle vocabularies for `EVD` / `HYP` / `CPT`
+  belong to this slice's spec pass, or only their facets? The vocabularies are
+  ungoverned too, but they are further from the write seam and could reasonably
+  stay on ISS-316.
+
+*(OQ-2 and OQ-3 settled by the user before design — see § Settled before design.)*
 
 ## Verification / closure intent
 
@@ -165,9 +201,15 @@ Also out of scope:
 - A flag or key inert at the record's / subject's kind is **refused**, not
   ignored — proved at both call sites (`knowledge edit`, `design apply`) against
   one table. Test-verified.
-- A `form = "create"` checkpoint disposition mints a record whose facet is
-  populated from the payload, in one act, with no follow-up write. Test-verified,
-  and this is the criterion that closes the SL-248 data loss.
+- A `form = "create"` checkpoint disposition mints a record whose facet **and
+  prose** are populated from the payload, in one act, with no follow-up write.
+  Test-verified, and this is the criterion that closes the SL-248 data loss.
+- Settling a question through the dedicated verb populates
+  `answer`/`answered_by`/`answered_on` and moves the lifecycle in one act; the
+  answer cannot be omitted. Test-verified.
+- SPEC-019 enumerates seven record kinds with no residual "four", and lists the
+  verbs this slice ships. Verified by agent against the spec text and
+  `knowledge new --help`; ISS-316 closes on it.
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
   gate for shared machinery).
 - IMP-403 leads 1 and 2 are demonstrably closed; leads 3–5 are recorded as

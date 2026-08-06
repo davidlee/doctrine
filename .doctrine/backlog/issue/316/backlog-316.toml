@@ -30,3 +30,9 @@ target = "SPEC-019"
 label = "references"
 role = "originates_from"
 target = "SL-246"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the four-vs-seven kind gap, resolved as objective 4"
+target = "SL-249"
