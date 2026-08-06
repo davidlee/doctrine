@@ -1,0 +1,42 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 174
+slug = "evd-and-hyp-contracts-elevated-unchanged"
+title = "EVD and HYP contracts are elevated unchanged"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 objective 4 must give EVD and HYP facet contracts in SPEC-019. Its R2 named the danger: transcribing the current structs would launder the implementation into governance, the anti-pattern the spec exists to prevent. The research round added that HYP has n=0, so its contract has no usage precedent beyond the code."
+choice       = "Elevate SL-159's design rulings unchanged, with citation — EvidenceFacet { datum, provenance, confidence } and HypothesisFacet { proposition, predicts } — and state in the REV that HYP's contract is unexercised, citing HYP-001 for the candidate reason."
+alternatives = [
+  "Re-derive the contracts from first principles. Rejected: it would re-litigate a closed slice's accepted design with no new evidence, and SL-159's reasoning is sound and specific.",
+  "Widen Provenance with a free-text escape. Rejected on measurement: SL-159's OQ-2 set 'revisit if it feels narrow in use' as the trigger, and usage shows the set is wider than needed, not narrower.",
+  "Omit HYP from the REV until it has usage. Rejected: an ungoverned kind is precisely what this objective exists to end, and the write seam must cover it regardless.",
+]
+rationale    = "R2 dissolves the same way it did for concept (DEC-172): the contracts are not code awaiting transcription, they are rulings in a closed slice's design that the code implements. SL-159 records them with reasons — Provenance is a new closed four-set mirroring Basis; confidence deliberately REUSES the existing Confidence enum rather than minting a parallel one; supports/disputes are deliberately edges rather than facet fields; and HYP's candidate `tested_by` was dropped as D5 because it is derivable from the inbound edges (do not store what the edge yields). Verified against code: Provenance is exactly { Inspection, Experiment, Reproduction, Citation }, so implementation has not drifted from the ruling. Usage confirms rather than challenges the EVD contract: 26 records, 14 with the facet populated and strictly lock-step (all three fields or none), Provenance using two of four variants and Confidence two of three. SL-159's OQ-2 revisit trigger has therefore never fired. HYP's zero records are a gap in evidence, not evidence against the contract, and HYP-001 proposes a testable reason that is about routing rather than about the contract's merits."
+consequences = [
+  "The REV's EVD and HYP rows are elevations with citation, matching DEC-172's shape for concept. All three previously-ungoverned kinds now reach governance the same way, and R2 is retired across the board.",
+  "The REV states HYP's contract as unexercised rather than implying practice has validated it, and cites HYP-001.",
+  "SL-159's OQ-2 (should Provenance carry a free-text escape?) is answered by measurement rather than left hanging: no, on current usage.",
+  "The EVD population rate (54%) against decision (25%) and question (11%) is a further corroboration of IMP-403 lead 2 from an unused direction — evidence records are typically authored by hand with the datum in view, while decisions and questions are minted by design-run checkpoints with no slot to carry content.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
