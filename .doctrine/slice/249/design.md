@@ -1270,9 +1270,24 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   honest is an arithmetic identity rather than a policy:
 
   ```
-  total occurrences of /\bfour\b/i  ==  Σ over allowlist of (phrase, expected count)
-  and for each entry: occurrences of that phrase == its expected count
+  let text = collapse(/\s+/ -> " ") over the tier's bytes      // see below
+  total occurrences of /\bfour\b/i in text
+      ==  Σ over allowlist of (phrase, expected count)
+  and for each entry: occurrences of that phrase in text == its expected count
   ```
+
+  **The whitespace collapse is load-bearing, not hygiene** — `RV-349` `F-14`. In
+  `spec-019.md` the exempt sentence wraps mid-phrase: line 330 ends *"…touches
+  four"* and line 331 begins *"coupled sites — `integrity::KINDS`…"*. A literal
+  `"four coupled sites"` matches **zero** times. So the identity as first written
+  would have been red on the day it was authored — 32 occurrences against an
+  allowlist summing to 0 — and the only way to make it green would have been to
+  reword the very sentence the exemption exists to protect. The mechanism would
+  have defeated its own purpose, silently, and the exception would have looked
+  like the problem. Every phrase match therefore runs over the tier with runs of
+  whitespace collapsed to a single space; the `/\bfour\b/i` count is unaffected by
+  the collapse (32 either way), and saying so is the point — an undefined
+  normalisation is exactly the shape of claim this pass has been finding.
 
   Presence alone is not enough, and `RV-349` `F-11` is why: an entry that merely
   *must occur* keeps its exemption alive when a second `"four coupled sites"`
@@ -1356,13 +1371,17 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   keeps its exemption alive when the exempt phrase is duplicated elsewhere. `D9`
   now bans the word in both tiers, case-insensitively, with an allowlist held to
   an arithmetic identity — total occurrences equal the sum of the allowlist's
-  expected counts — so a duplicate, a new arrival and a stale entry each fail.
+  expected counts, matched over whitespace-collapsed text — so a duplicate, a new
+  arrival and a stale entry each fail. `F-14` is why the collapse is stated
+  rather than assumed: the exempt sentence wraps mid-phrase, a literal match
+  finds it zero times, and the identity would have been red on authoring with no
+  green path but rewording the sentence it exists to protect.
 
-  **The pattern, not the five fixes, is what `R4` is about.** Each attempt
+  **The pattern, not the six fixes, is what `R4` is about.** Each attempt
   asserted a totality — *all the stale ones*, *no legitimate ones*, *every
-  occurrence is kind-derived*, *the allowlist expires* — without enumerating what
-  would have to be true, and each was wrong in a way one command or one
-  counterexample would have shown. The mitigation is only ever as strong as the
+  occurrence is kind-derived*, *the allowlist expires*, *the phrase is found* —
+  without enumerating what would have to be true, and each was wrong in a way one
+  command or one counterexample would have shown. The mitigation is only ever as strong as the
   enumeration behind it, which is why `D9` now carries the 31/1 split explicitly
   and an identity a reader can evaluate, rather than claims a reader has to
   trust.
@@ -1507,7 +1526,7 @@ Restated from the scope card with what drafting and review changed:
   tiers of `SPEC-019` and `PRD-010`, **and** the word `four` — matched
   case-insensitively, on a word boundary — occurs in neither entity's two tiers
   outside the declared allowlist, whose entries' expected counts sum to the total
-  occurrence count. *Test-verified by `DEC-176`'s canary as strengthened by `D9`
+  occurrence count, with every phrase matched over whitespace-collapsed text. *Test-verified by `DEC-176`'s canary as strengthened by `D9`
   — a project-local test, never a `validate` rule (`POL-002`). The negative half
   is a near-blanket ban rather than a phrase pin because 31 of the 32 occurrences
   across the two entities are kind-derived; it is case-folded because the most
@@ -1515,8 +1534,10 @@ Restated from the scope card with what drafting and review changed:
   because the thirty-second (`spec-019.md:330`, "four coupled sites") is a correct
   count of integration points the REV must not be made to damage; and the
   allowlist is held to a count identity rather than to presence, so a duplicated
-  exemption fails instead of widening silently (`RV-349` `F-5`, `F-7`, `F-9`,
-  `F-11`).*
+  exemption fails instead of widening silently; and the match is over
+  whitespace-collapsed text, because the exempt sentence wraps mid-phrase and a
+  literal match finds it zero times (`RV-349` `F-5`, `F-7`, `F-9`, `F-11`,
+  `F-14`).*
 - The per-kind **facet** contracts for `EVD`, `HYP` and `CPT` are present and
   coherent in `SPEC-019`, and the verb set names what this slice ships.
   *Agent-verified — a canary proves the enumeration moved, not that the contracts
@@ -1541,14 +1562,14 @@ carries its facet — which the mint test asserts directly.
 
 ## The pass that has run
 
-`RV-349` — one external adversarial pass over this document, five rounds, thirteen
+`RV-349` — one external adversarial pass over this document, six rounds, fifteen
 findings, every one upheld on evidence. Round one at revision 48, briefed on eight
 lines of attack, five of them lifted from this section's drafted form: six
 findings. Round two verified three and contested three. Round three verified two,
 contested one, and raised `F-7` against the fix for the one it contested. Round
 four verified two, contested `F-5` a third time, and raised `F-9` and `F-10`.
 Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
-`F-13`.
+`F-13`. Round six verified two, contested three, and raised `F-14` and `F-15`.
 
 | finding | severity | what it was, and how it settled |
 |---|---|---|
@@ -1560,11 +1581,13 @@ Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
 | `F-6` | major | `I1`'s named oracle is `#[cfg(test)]` with no production caller, so it proves the read model and not the writer. Settled at `D10` / `I11`. Verified round two. |
 | `F-7` | major | `D9`'s ban was case-sensitive; `spec-019.md:34` is `### Four kinds, one engine`. Case-folded, word-boundary. Verified round four. |
 | `F-8` | major | Self-raised: the scope card's own `F-5` amendment carried the understated count, so card and design disagreed about one criterion's evidence. Corrected; left on the ledger rather than fixed silently. Verified round four, with the reviewer's ruling that driving both roles is a legitimate use of the protocol. |
-| `F-9` | major | `D9` claimed all 32 occurrences were kind-derived. One is not — `spec-019.md:330`'s *"four coupled sites"* counts integration points and stays correct at seven — so the ban was knowingly overbroad and would have forced the REV to damage accurate prose. Contested once more, because the allowlist that fixed it did not do what it said. Settled at `D9` with the 31/1 classification stated and the allowlist held to a count identity. |
+| `F-9` | major | `D9` claimed all 32 occurrences were kind-derived. One is not — `spec-019.md:330`'s *"four coupled sites"* counts integration points and stays correct at seven — so the ban was knowingly overbroad and would have forced the REV to damage accurate prose. Contested twice more, because the allowlist that fixed it did not do what it said and then could not match what it named. Settled at `D9` with the 31/1 classification stated, the allowlist held to a count identity, and the match whitespace-collapsed. |
 | `F-10` | minor | This section undercounted the findings and omitted `F-8`. |
 | `F-11` | major | `D9`'s allowlist was presence-checked, so a *second* `"four coupled sites"` anywhere would inherit the exemption with no allowlist edit and no red test. Replaced by the identity: total occurrences equal the sum of the allowlist's expected counts. |
 | `F-12` | major | The scope card still carried the superseded blanket ban and the 32/0 classification — `F-8` recurring, in the same artefact, one round later. The card is amended by hand every round and had gone stale again. |
 | `F-13` | major | § 9 required `SPEC-019` to carry `EVD`/`HYP`/`CPT` **lifecycle vocabularies**, which the scope card explicitly defers to `ISS-316`. A criterion written in round one had quietly widened the slice. Narrowed to the facet contracts and the verb set. |
+| `F-14` | major | The allowlist's declared phrase occurs **zero** times: `spec-019.md` wraps the exempt sentence mid-phrase, line 330 ending *"…touches four"*. The identity would have been red on authoring, greenable only by rewording the sentence the exemption exists to protect. Every phrase match is now over whitespace-collapsed text. |
+| `F-15` | minor | This section named `F-8`, `F-12` and `F-13` under *the artefact nobody re-reads* and omitted the fourth instance — `F-5` sitting contested on the ledger for four rounds, answered in substance and never answered in the record. |
 
 **What this pass actually found.** Two defects in the design as drafted were
 false premises about the source — `F-1` and `F-2`, one in each direction: an
@@ -1577,23 +1600,31 @@ Two shapes recur, and neither is carelessness.
 
 The first is a **claim of totality asserted rather than enumerated** — *the pins
 are total together*, *the retry carries the same payload*, *every occurrence is
-kind-derived*, *the allowlist expires*. Seven of the thirteen. Each was cheap to
-check and none was checked, because the surrounding argument was sound and the
-claim felt like part of it. `D9` took five rounds to reach a form where the
-reader evaluates an identity and a 31/1 classification instead of trusting a
-claim; that arrangement, not any one fix, is what the findings were about.
+kind-derived*, *the allowlist expires*, *the declared phrase is found*. Eight of
+the fifteen. Each was cheap to check and none was checked, because the
+surrounding argument was sound and the claim felt like part of it. `D9` took six
+rounds to reach a form where the reader evaluates an identity and a 31/1
+classification instead of trusting a claim; that arrangement, not any one fix, is
+what the findings were about. `F-14` is the sharpest instance because the claim
+was about the *mechanism itself*: an exemption whose phrase never matched, so the
+check would have failed on the exception it was built to permit.
 
-The second is **the artefact nobody re-reads**. `F-8` and `F-12` are the same
-defect one round apart: the scope card is amended by hand at the end of each
-round and went stale both times, so the card and the design disagreed about the
-evidence for one criterion — twice. `F-13` is its mirror, a criterion that
-widened the slice past its own non-goals because nothing compared it back to the
-card. The `review.scope` runbook step exists for exactly this and fired only
-because a reviewer looked; a design of this size wants the comparison mechanised,
-which is a note for whoever next writes one.
+The second is **the artefact nobody re-reads**, four instances. `F-8` and `F-12`
+are one defect a round apart: the scope card is amended by hand at the end of
+each round and went stale twice, so the card and the design disagreed about one
+criterion's evidence. `F-13` is its mirror — a criterion that widened the slice
+past its own non-goals because nothing compared it back to the card. And `F-5`
+sat `contested` on this review's own ledger for four rounds, its substance
+answered through `F-9`'s fix and its record never updated: the pass found the
+shape in the instrument it was being conducted with. The `review.scope` runbook
+step exists for exactly this and fires once at the end of a stage, which is the
+wrong cadence for a review that ran six rounds and rewrote one criterion six
+times. Mechanising that comparison is a note for whoever next designs at this
+length; there is no fix for it inside this slice, and claiming to remember next
+time would be the same failure again.
 
 `R4` says objective 4's completion is easy to assert. This pass is that failure
-mode caught thirteen times inside the design that guards against it.
+mode caught fifteen times inside the design that guards against it.
 
 The review also retired an assumption rather than a defect: `A3` — all seven
 templates seed every field of their kind — was verified by reading them, so
@@ -1631,7 +1662,7 @@ In the order I would press, with the two rounds' answers already in.
    is a legitimate place for it rather than the only place — and if it is not,
    the correction needs its own follow-up rather than a convenient ride.
 4. **Every other unenumerated totality claim in this design.** The base rate is
-   the argument, and it is now measured: seven of thirteen findings were an
+   the argument, and it is now measured: eight of fifteen findings were an
    asserted totality that one command or one counterexample would have refuted.
    This design's
    remaining unverified code claims — `entity::write_body`'s behaviour on an
