@@ -354,11 +354,15 @@ design.)*
   verification of the prose sits on top of that, not in place of it.)* ISS-316
   narrows to its lifecycle-vocabulary half rather than closing. *(Strengthened
   twice in review — RV-349 F-5. The canary reads **both authored tiers** of both
-  entities, not SPEC-019's prose alone: two of the stale sites are in
+  entities, not SPEC-019's prose alone: three of the stale sites are in
   `spec-019.toml`'s structured `responsibilities`. And "no residual four" is
-  enforced as a blanket ban on the word in those two entities, not as a pin on
-  one enumeration phrase — all ~24 occurrences across them are kind-derived and
-  none is independent, so a phrase pin would report green on the other 23.)*
+  enforced as a blanket ban on the word in those two entities — matched
+  case-insensitively, on a word boundary — not as a pin on one enumeration
+  phrase. All 32 occurrences (`spec-019.md` 25, `spec-019.toml` 3,
+  `spec-010.md` 4, `spec-010.toml` 0) are kind-derived and none is independent,
+  so a phrase pin reports green on the other 31; and a case-sensitive ban passes
+  over `spec-019.md`'s `### Four kinds, one engine`, the most prominent of them
+  (RV-349 F-7).)*
 - A `[facet]` key inert at its record's kind is reported by `doctrine doctor` —
   not refused on read. Test-verified. *(DEC-177.)*
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
