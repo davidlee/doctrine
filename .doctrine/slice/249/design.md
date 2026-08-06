@@ -475,3 +475,93 @@ That last message is the whole of the SL-248 recovery: the six dispositions that
 sent prose as `body` would each have been refused, at submission, with the key
 they were reaching for named in the refusal.
 
+<!-- doctrine:section sec-7 -->
+# 5.3 Data, State & Ownership
+
+## The authored tables, and who owns each
+
+Three correspondences exist in this design. Each has exactly one owner, one
+spelling, and a pin that fails loudly rather than a convention that erodes.
+
+| table | owner | pinned by |
+|---|---|---|
+| facet key → owning kind, with shape | `src/knowledge.rs`, beside `validate_facet` | P1 union vs `RawFacet`'s serde key set; P2 per-kind round-trip through `validate_facet` |
+| resolving state → captured field | `src/knowledge.rs`, beside the above (four rows) | every `captures` name ∈ `facet_fields(kind)`; state set ≡ the by/on derivation |
+| `Declaration` wire key → honouring subject kind | `src/design_run/submission.rs` | key set of a fully-populated `Declaration`'s serde form (`DEC-169`) |
+
+The third is not the first two. It is `Declaration`'s ~16 wire keys against the
+design-run *subject* kinds (`inq-`, `sec-`, `att-`, `fnd-`, `cp-`), touches no
+record kind, and needs no knowledge governance — which is the fact that lets
+Phase A ship without objective 4 (`DEC-165`, `DEC-169`).
+
+## Who may write `[facet]`
+
+Exactly two callers, both through `apply_facet_edits`:
+
+1. the six `knowledge edit <kind>` subverbs and `settle`, at the CLI;
+2. `apply_record_effects` at DEC-086 step 5, for a `form = "create"` disposition.
+
+`doctrine risk set` remains a third caller of `facet_write` itself, on the
+`[facet]` of a *backlog* entity with the `Create` posture — a different table in
+a different kind's file. No other code path writes a knowledge `[facet]`, and
+`plan_facet_edits` is the only way to construct a `FacetEdit`, so that is
+enforced by the type rather than by convention.
+
+## Who owns status
+
+`set_record_status` owns the token, unchanged and uncoupled. `settle` **calls**
+it; it does not write `status` itself, so there remains one writer and one
+vocabulary check.
+
+The exception is the one `DEC-088` reserves: a decision reaches `accepted` only
+through `apply_record_effects`, bound to a content-derived digest. `settle` has
+no route there — not by a guard, but because `accepted` is not in the derived
+settleable set at all (`DEC-178`). The reservation is upheld by the shape of the
+derivation rather than by a check someone could later relax.
+
+## Where the payload lives during a mint
+
+`CreateRecord`'s `body` and `facet` are **not** journalled, and do not need to
+be. Recovery here is submission-keyed retry: the caller re-submits the same
+`submission_id`, `plan_checkpoints` rebuilds the `MintPlan` from that request,
+and `execute_mint` resumes at the first incomplete step against the id the
+journal already names. The payload is present on the retry because the retry
+carries it.
+
+This is what makes `DEC-168`'s siting sound rather than merely convenient. The
+rejected alternative — pre-filling the scaffold inside `create_record` — would
+have needed the payload at step 4, which `materialise_record_at` reaches from the
+journal alone (id, title, slug), so it would have forced the payload into the
+journal. Step 5 needs no such widening.
+
+The window `DEC-168` names stays open and is not new: between
+`IntentState::Materialised` and `IntentState::Applied` the record exists hollow
+on disk. Status and the `shapes` edge already land in that window. A facet and
+prose write joins them on the same terms, and is idempotent on the same terms —
+the same payload written twice produces the same bytes.
+
+## Storage tiers
+
+Nothing here changes the tiering, and it is worth stating which tier each new
+thing lands in:
+
+- **Code** — the three tables. Not data files: they are the typed model's own
+  partition and travel with it (`POL-002` — no host-project state).
+- **Authored** — `record-NNN.toml`'s `[facet]` and `record-NNN.md`. Both are
+  committed and diffable; both are written edit-preservingly, so a hand-authored
+  record and a verb-written one are byte-indistinguishable.
+- **Runtime** — the design run's own state, including the checkpoint
+  dispositions. Disposable; the records it mints are not.
+- **Derived** — nothing added. The doctor tripwire computes its findings per
+  scan and stores none.
+
+## Scaffold seeding is the precondition for all of it
+
+`install/templates/knowledge-*.toml` seed `[facet]` with every field of that kind
+present and empty. That fact is what makes F-1 correct (`DEC-170`), what makes an
+absent key mean damage rather than absence, and what makes the empty-string
+clear spelling a round-trip rather than a mutation. The templates are therefore
+load-bearing for the write posture, and the objective 4 REV should say so — a
+future template edit that drops a seeded field would silently convert every
+record of that kind into one the writer refuses.
+
