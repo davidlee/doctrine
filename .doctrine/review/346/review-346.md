@@ -232,3 +232,111 @@ about the subject — establish which cage produced the failure before raising i
    `no-new-privs` — for which `SPEC-030` states no clause at all. A capsule that
    inherited the host uid with capabilities retained would satisfy all eleven
    rows. The design nominates this as where the next reviewer should start.
+
+### Round 6 — verification of round 5, and one row that cannot fail
+
+**Subject.** `.doctrine/slice/248/design.md` at design-run revision 75,
+watermark `ec973c1e`, plus two author-side commits made after it and before this
+brief: `48bc59a44` and `9ffe8a1d6`. Round 5's five findings (`F-29`…`F-33`) are
+all remediated and answered. This is primarily a **verification pass** — the
+remediations are the subject, not the sections around them.
+
+**What round 5 changed.** `Execution` gains a `stdio` field over a closed
+`CapsuleStdio` vocabulary; `sec-2` gains invariants 14 and 15 and two channel
+ledger entries; `sec-7` gains table A rows 12 and 13, `PropertyRemoval`'s
+`StdioOwned` and `CredentialsConfined`, and a widened row 10; `sec-8`'s
+`REQ-459` claim drops *in full* for *over the channels the ledger names*;
+`sec-9` gains a `SPEC-030` Revision as deferred follow-up. `DEC-156` moves
+eleven → thirteen, and the ceremony around moving it is retired.
+
+**What the two post-revision commits did, and why you are being told.** A
+pre-brief sweep found **eight** places where round 5's correction reached the
+sections under review and missed ones that were not — `F-28`'s class, repeated
+inside the section that documents `F-28`. They are fixed: `sec-2`'s properties
+table stopped at row 11; `sec-2` still read *rows 2, 9, 10 and 11 are clause 2*;
+`sec-2` had no `CapsuleStdio` pure test while `sec-8` claimed it did; a test
+title asserted the opposite of its own row; `sec-9`'s `R3` was stale in three
+ways; `DEC-156`'s record still ended at eleven; the `RowId` comment still said
+*clause 2 carries four*; and `sec-7`'s executed table A list had no title for
+rows 12 or 13, so a literal implementation would have built a suite that never
+ran either new row. **Do not re-spend the round finding these.** The question
+worth your time is the one below at 6.
+
+**Standing discipline, unchanged.** Build-level and confinement claims are
+verified by **execution on a minimal reproduction**. A negative read is not
+evidence, and a probe that fails in your own sandbox has not yet said anything
+about the subject — establish which cage produced the result before raising it
+(`F-20`).
+
+**Lines of attack.**
+
+1. **Row 13's control cannot fail, and this is the strongest line in the
+   brief.** `CredentialsConfined`'s delta (`sec-7`) is *`--unshare-all` replaced
+   by `--unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup
+   --unshare-net`* — the user namespace dropped, every other kept. Executed here
+   against bubblewrap 0.11.2, both arms produced a byte-identical credential
+   report: same uid, same gid, same non-empty supplementary groups, `CapPrm` and
+   `CapEff` both zero, `NoNewPrivs` 1. The cage was then established rather than
+   assumed: both arms created a **new** user namespace with an identical
+   `uid_map`, differing only in inode. Unprivileged `bwrap` needs a user
+   namespace to perform its own mounts and creates one whether or not
+   `--unshare-user` is passed, so the flag is a no-op and the delta changes
+   nothing observable — independent of this project's outer jail. Row 13 can
+   therefore only read `Unproven`, and `Admission::Admitted` is unreachable.
+   That is **`B4`'s class exactly**, in the row round 5 added to answer `F-32`,
+   one round after the brief told you to sweep every table for it. Confirm or
+   refute the reproduction, then rule on the remedy: what delta makes a
+   credential posture falsifiable under a mechanism that will not let you drop
+   the namespace it rests on?
+
+2. **Row 13's probe conditions look unmet by the design's own backend.** It
+   holds when *uid and gid are the mapped capsule identity, supplementary groups
+   are empty, both capability sets are empty, and `no_new_privs` is set*. The
+   profile at `sec-2` passes no `--uid` and no `--gid`, so the capsule's uid is
+   the host's, not a mapped identity. `--unshare-all` does not clear
+   supplementary groups — measured here as non-empty under every arm, including
+   with `--uid`/`--gid` supplied, since a userns cannot `setgroups`. And
+   `no_new_privs` is bubblewrap's default rather than a flag the profile passes,
+   so that leg is inert with respect to any namespace delta. Two of four
+   conditions look false against the reference backend and one looks
+   uninformative. Settle each by execution.
+
+3. **Row 12's second leg may not be well defined (`sec-2`, `sec-7`).**
+   `CapsuleStdio::EmptyInputCapturedOutput` makes 1 and 2 *one-way endpoints the
+   parent created and reads*, and the stated reason for one-way is that a socket
+   pair would carry *bytes back into the trusted side*. But a one-way capture
+   pipe carries bytes into the trusted side too — that is what it is for. The
+   property that actually distinguishes a socket pair is that the capsule can
+   **read** descriptor 1. Row 12 then holds when *the write-back does not reach
+   the parent*, while the parent reads `stdout` by construction. Is the row
+   observing a distinction that exists? Should the probe assert that descriptor
+   1 is not readable rather than that a write does not arrive?
+
+4. **`F-31`'s rule, turned on the rest of the tables.** The remediation states
+   it generally — *a row must observe the property, not a consequence of the
+   property that happens to be convenient to observe* — and applies it to row 10
+   alone. Round 5 punished exactly that shape in `F-29`. Sweep tables A, B and C
+   for other rows whose holding condition is a consequence with innocent
+   explanations rather than the property itself. Row 3's *both reads fail* and
+   row 9's *every write fails* are the obvious candidates: a read that fails
+   because the path is absent, and a read that fails because the payload was
+   built wrong, are not distinguished by the observation.
+
+5. **`F-29`'s remediation is a table, and the design says not to trust it.**
+   `sec-6` now enumerates four edges — `doctrine`, `rustix`, `serde`, `toml` —
+   and instructs the phase to derive the list from the crate's own `use`
+   statements and treat disagreement as the table being stale. Build the
+   manifest against what `sec-2`, `sec-4`, `sec-5` and `sec-7` actually specify
+   the modules calling, and report what the table is still missing. `sec-7`'s
+   conformance harness is the least-read consumer.
+
+6. **Whether the drift is fixable structurally, which is the standing
+   question.** Eight instances in one round, after `F-28` raised the same class
+   and after the count was moved to a single source to prevent it. The
+   single-source rule worked for the *numeral* and did nothing for the row
+   contents, the invariant list, the test titles, or the record. The design's
+   own proposed guard — `every_row_id_is_covered_by_exactly_one_table` — is a
+   test that does not exist yet, so it protected nothing. Is there a structural
+   answer available at design altitude, or is the honest ruling that a document
+   of this size maintains parallel enumerations by reader discipline and the
+   design should say so where it currently implies otherwise?
