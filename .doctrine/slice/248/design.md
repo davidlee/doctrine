@@ -1834,25 +1834,37 @@ pub use git::{CaptureError, read_path_at};
 
 Four consequences, none of them free, all of them small:
 
-- **The exported items change visibility.** `read_path_at`, `CaptureError`,
-  `DOCTRINE_TOML` and `read_doctrine_toml_text` are `pub(crate)` today and
-  become `pub`. Nothing else does. This list *is* the export contract, and the
-  gate below asserts it.
+The three claims below were **checked by execution**, not by reading, on a
+minimal package reproducing the arrangement — the `RV-346` `F-1` discipline
+applied to a build-level claim, because each of these would otherwise be
+discovered by whoever implements the phase.
+
+- **The exported items change visibility, and the compiler requires it.**
+  `read_path_at`, `CaptureError`, `DOCTRINE_TOML` and `read_doctrine_toml_text`
+  are `pub(crate)` today and become `pub`. Nothing else does. This is not a
+  stylistic choice: `pub use` of a `pub(crate)` item is `E0364` — *"only public
+  within the crate, and cannot be re-exported outside"* — confirmed by
+  execution. The list *is* the export contract, and the gate below asserts it.
 - **`main.rs` keeps its own module tree.** It continues to declare
   `mod git;` rather than importing `doctrine::git`, so the modules the lib
-  target names compile twice. The alternative — making `main.rs` a thin binary
-  over the library — would require every `pub(crate)` item the command layer
-  reaches to become `pub` (110 in `git.rs` alone, 203 in `memory.rs`), which
-  publishes most of the product as library API to buy a build-time saving. The
-  double compilation is the cheaper of the two, and it is bounded by the module
-  list above.
+  target names compile twice. A package declaring the same module in both its
+  bin and its lib target builds cleanly — confirmed by execution — and the two
+  copies never meet, because the binary touches no library type. The
+  alternative, making `main.rs` a thin binary over the library, would require
+  every `pub(crate)` item the command layer reaches to become `pub` (110 in
+  `git.rs` alone, 203 in `memory.rs`), which publishes most of the product as
+  library API to buy a build-time saving. The double compilation is the cheaper
+  of the two, and it is bounded by the module list above.
 - **The set must be transitively closed over `crate::` paths, including test
   code.** `git` is out-edge-free in the production graph, but its `#[cfg(test)]`
   module imports `crate::kinds` (`src/git.rs:2896`), and the lib target compiles
-  that module under `cargo test`. `kinds` is therefore declared — privately, as
-  a path target rather than an export. This is the trap in the whole
-  arrangement: it is invisible to a production-graph reading and shows up as a
-  build failure the first time the library's own tests run.
+  that module under `cargo test`. Omitting `kinds` from `lib.rs` fails the
+  library's own test build with `E0432: unresolved import crate::kinds` —
+  confirmed by execution, and cleared by declaring the module. `kinds` is
+  therefore declared privately, as a path target rather than an export. This is
+  the trap in the whole arrangement: it is invisible to a production-graph
+  reading, `cargo build` is green while it is present, and it surfaces only when
+  the library's tests first run.
 - **`dtoml` cannot be exported, and does not need to be.** It carries seventeen
   `crate::` references — `conduct`, `verify`, `estimate`, `value`,
   `dispatch_config`, `install_config` — because `DoctrineToml` projects each of
