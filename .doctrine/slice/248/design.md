@@ -216,9 +216,37 @@ pub enum NetworkPosture { Denied, Permitted }
   contracted export;
 - two entries with the same inner path, or one inner path an ancestor of
   another, so mount order can never decide what is visible;
-- a resolved host path equal to, or an ancestor of, any `ForbiddenScopes` member;
-- a resolved host path that is the filesystem root, or that contains the capsule
-  root.
+- a resolved host path that **overlaps a `ForbiddenScopes` member in either
+  direction** — equal to it, an ancestor of it, *or a descendant of it* — with
+  the single carve-out below;
+- a resolved host path that is the filesystem root.
+
+**Overlap is bidirectional, and the descendant half is the half that matters.**
+An earlier draft refused only equality and ancestry, on the reasoning that
+provisioning computes every path in a placement and therefore computes only its
+own. `RV-346` `F-10` refuted it: `readable-roots` entries and closure-resolver
+output are *also* provisioning-computed in that sense, and they can name
+anything. `repository/.git/config`, `credentials/token` and
+`capsule-root/tx/<another-transaction>` are all descendants of a forbidden scope,
+all pass an equal-or-ancestor test, and each is exactly what the corresponding
+scope exists to deny. Provenance cannot carry the argument, so the geometry does.
+
+```rust
+/// True when either path lies on the other's root-ward chain. Both arguments
+/// are already resolved, so this is a component comparison and not a textual
+/// prefix test — `/var/lib/doctrine-other` is not under `/var/lib/doctrine`.
+fn overlaps(a: &Path, b: &Path) -> bool { a == b || a.starts_with(b) || b.starts_with(a) }
+```
+
+**The carve-out is the transaction's own writable state, and it is typed rather
+than described.** `TransactionRoot` is minted by `sec-3` step 9, by the call that
+exclusively created that directory. `try_new` accepts a writable entry that is a
+descendant of *this placement's* `root` and refuses every other overlap with
+`capsule_root`. So the capsule area is closed to a placement except through the
+one transaction root the placement carries, and a sibling transaction — which is
+a descendant of `capsule_root` but not of this `root` — is refused by the same
+test that admits `capsule/` and `agent/`. Readable entries get no carve-out at
+all: nothing under the capsule root is ever a declared readable input.
 
 ```rust
 /// One run inside a capsule.
@@ -623,6 +651,22 @@ first because it was found by execution rather than by reading:
 - `declared_root_that_resolves_into_the_credential_scope_refuses`
 - `declared_root_that_resolves_into_the_capsule_root_refuses`
 - `declared_root_that_resolves_to_the_filesystem_root_refuses`
+
+Descendant mutants, one per forbidden scope — the `F-10` class, which an
+equal-or-ancestor test admits:
+
+- `a_file_inside_the_canonical_repository_refuses` (`…/.git/config`)
+- `a_file_inside_the_control_plane_state_refuses`
+- `a_file_inside_a_credential_location_refuses`
+- `a_sibling_transaction_root_under_the_capsule_root_refuses`
+- `a_writable_entry_under_this_placements_own_transaction_root_is_admitted` —
+  the carve-out, asserted positively so a fix that refuses everything under the
+  capsule root cannot pass
+- `a_readable_entry_under_this_placements_own_transaction_root_refuses` — the
+  carve-out is writable-only
+- `a_sibling_directory_whose_name_extends_a_forbidden_scope_is_admitted`
+  (`/var/lib/doctrine-other` against `/var/lib/doctrine`) — the control that
+  fails if overlap is implemented as a textual prefix test
 - `reserved_inner_destination_supplied_as_a_readable_entry_refuses` — one case
   per reserved path, `/source` included, since shadowing it substitutes the
   contracted export
@@ -781,19 +825,38 @@ state is what the disk figure is about.
 ```rust
 pub fn provision(
     request: &ProvisionRequest,
-    host: &dyn HostFacts,       // clock, statvfs, path existence — the impure inputs
+    host: &dyn HostFacts,       // statvfs, resolution, path existence, environment (sec-5)
     backend: &dyn CapsuleBackend,
 ) -> Result<CapsuleTransaction, ProvisionRefusal>;
 
 pub struct ProvisionRequest {
     pub repository_root: PathBuf,
-    pub base: CommitId,
+    /// The base, as the typed value the trusted boundary mints. Never a bare
+    /// `CommitId` — see `AcceptedBase` below.
+    pub base: AcceptedBase,
     pub phase: PhaseIdentity,
+    /// The transaction id, **allocated by the caller**, not by `provision`.
+    pub id: TransactionId,
     /// An optional phase-refinement document, by path (sec-4).
     pub refinement: Option<PathBuf>,
     pub network: NetworkPosture,
 }
 ```
+
+**`HostFacts` carries no clock**, and the transaction id is an input rather than
+something `provision` mints. Both follow the project's pure/imperative rule that
+the impure value is read in the outer shell and passed in — the same pattern the
+date and uid inputs already use, with `src/clock.rs` as the single home for
+wall-clock reads. `RV-346` `F-9` and `F-14` are what forced this to be stated
+rather than left as "a collision-resistant source": with no allocator named in
+the signature, the collision case could not be reached through the stated API,
+so `provision_onto_an_existing_transaction_root_refuses_and_removes_nothing` was
+a test that could not be written. With the id as a parameter, the test hands the
+same id twice, and no entropy is involved in reaching the branch.
+
+`TransactionId` is minted by the `provision` verb from a collision-resistant
+source (`sec-6`); the type refuses a value that is not a single path component,
+so an id can never carry a separator into the layout.
 
 1. **Read `[capsule]`** from `.doctrine/doctrine.toml` at `root` — capsule root,
    resource bounds, the two declared readable lists and the closure resolver
@@ -871,10 +934,19 @@ a capsule, and step 6 is the check that governs it.
    a partially-built or widened export binds more host object state than
    `DEC-157` permits, and repairing one in place is how a shared artefact
    silently acquires a second writer.
-2. **Otherwise build in a uniquely owned temporary directory** —
-   `export/.building-<transaction-id>/`, whose name cannot collide because the
-   transaction id cannot — with `git init --bare` then a fetch of `base` from the
-   repository root.
+2. **Otherwise build in a temporary directory this call exclusively created** —
+   `export/.building-<transaction-id>/`, created with the same `mkdir` semantics
+   that fail when the path exists — then `git init --bare` and a fetch of `base`
+   from the repository root. An existing path refuses; it is never entered,
+   never cleaned, and never reused.
+
+   The name is *derived* from the transaction id but ownership does not rest on
+   it. `RV-346` `F-8` is why: this step runs before step 9, so at this point
+   nothing has established that this call owns the id — collision-resistant is
+   not collision-free, and a retry with the same id is not even improbable. The
+   exclusive create is what establishes ownership, and it establishes it here,
+   independently of step 9. Two calls holding the same id therefore both refuse
+   rather than one silently building into the other's directory.
 3. **Validate the temporary export** by the same rules as step 1, so what is
    published and what is adopted are checked by one function.
 4. **Publish by no-replace rename.** `renameat2(RENAME_NOREPLACE)` — the loser of
@@ -889,16 +961,22 @@ without either builder repairing or replacing anything.
 
 #### Owning the transaction root (step 9)
 
-The transaction id comes from a collision-resistant source, and the root is
-created with **`mkdir` semantics that fail when the path exists** — never a
-recursive create-if-missing. Provisioning holds a creation token for the root it
-made, and rollback (below) refuses to remove a path unless that token says this
-call created it.
+The root is created with **`mkdir` semantics that fail when the path exists** —
+never a recursive create-if-missing. Provisioning holds a creation token for the
+root it made, and rollback (below) refuses to remove a path unless that token
+says this call created it. The token is minted by the create, not by the id:
+exclusivity is a fact the filesystem establishes, and the id's entropy only
+makes the refusing case rare rather than impossible.
 
 Without this the rollback rationale inverts: on an id collision or a retry with
 the same id, a recursive create would enter an existing transaction root, and the
 failure path would then delete another transaction's work — the exact automated
 deletion of live work `REQ-461` criterion 3 and `DEC-133`/`DEC-137` forbid.
+
+The same reasoning governs step 8's temporary export directory, which is created
+the same way and holds its own token. Both are reachable in test by handing
+`provision` an id that is already in use, since the id is a request field rather
+than something the call mints (`F-9`).
 
 **Capsule identity on the clone, pinned by `-c`.** `git clone -c` takes effect
 after init and before the fetch, so it covers the clone's own reflog writes.
@@ -945,9 +1023,10 @@ tidiness is what a later slice would reach for.
    distinct clones, distinct processes, distinct temporary areas. The export is
    shared and read-only — not shared *mutable* state, so `REQ-450` criterion 1
    is untouched.
-5. **The transaction id is allocated trusted-side, from a collision-resistant
-   source, and its root is created exclusively.** A call that did not create the
-   root holds no token over it.
+5. **The transaction id is allocated trusted-side and supplied to `provision`;
+   every directory keyed by it is created exclusively.** A call that did not
+   create a path holds no token over it, and that holds for the temporary export
+   directory as much as for the transaction root.
 6. **A refused provision leaves no transaction, and removes nothing it did not
    create.** Either a `CapsuleTransaction` is returned, or the root this call
    exclusively created is gone and nothing else changed.
@@ -1000,7 +1079,11 @@ Test titles:
 - `capsule_identity_persists_into_the_clone_config`
 - `a_failing_execution_in_the_three_step_clone_refuses_at_that_step`
 - `failed_provision_removes_only_the_root_it_created`
-- `provision_onto_an_existing_transaction_root_refuses_and_removes_nothing`
+- `provision_onto_an_existing_transaction_root_refuses_and_removes_nothing` —
+  reached by handing the same `TransactionId` twice, deterministically, since it
+  is a request field
+- `provision_onto_an_existing_temporary_export_directory_refuses_and_removes_nothing`
+- `a_transaction_id_carrying_a_path_separator_refuses_at_construction`
 - `failed_provision_leaves_an_existing_export_intact`
 
 `REQ-450` criteria 2 and 3 need candidate identity and harvest from later
@@ -1131,8 +1214,24 @@ Applied per field, after presence is established.
 | `interpreted_paths` | each entry non-empty, not absolute, no `\`, no NUL, no lexical `..` component | `InvalidPathPattern { entry, reason }` |
 | | no two entries equal | `DuplicateEntry { field, entry }` |
 | `verification` | at least one row | `EmptyVerificationSequence` |
+| | each row is a table | `MalformedVerificationRow { row }` |
+| | each row holds `argv` | `RowKeyMissing { row, key }` |
+| | each row holds **no key but** `argv` | `UnknownRowKey { row, key }` |
+| | each row's `argv` is an array of strings | `MalformedVerificationRow { row }` |
 | | each row's `argv` non-empty | `EmptyArgv { row }` |
 | | each argument non-empty | `EmptyArgument { row, index }` |
+
+**The walk is recursive, and the row is where an earlier draft stopped
+walking.** `RV-346` `F-11`: the explicit key walk covered the `interpretation`
+table and then validated rows only for non-emptiness, so a row spelled
+`{ argv = [...], extra = true }` had no defined refusal and would have been
+projected silently out of the typed value — the exact silent-acceptance that
+`REQ-449` criterion 1's unknown-key refusal exists to prevent, one level down.
+Strictness that stops at the first level is not strictness; it is a strict
+outer table wrapping a tolerant inner one. Each row is therefore walked against
+its own known key set — `argv`, and nothing else — with `RowKeyMissing` and
+`UnknownRowKey` distinguished for the same reason `KeyMissing` and `UnknownKey`
+are at the table level.
 
 `SPEC-030` says arguments are "non-empty UTF-8 strings". TOML strings are UTF-8
 by construction, so the only executable half of that rule is non-emptiness —
@@ -1206,15 +1305,31 @@ superset is strictly narrower. That is why rules 2 and 3 are superset checks in
 the same direction rather than one of each.
 
 Rule 4's failure is diagnosed rather than reported as one opaque mismatch,
-because the three cases have different fixes:
+because the three cases have different fixes. The diagnosis is an **ordered**
+classification, and the order is what makes it deterministic:
 
-- a base row appears nowhere in the refinement → `VerificationRowRemoved { index }`
-- every base row appears, but not in base order → `VerificationRowReordered { index }`
-- the refinement's row at index *i* differs from the base's → `VerificationRowReplaced { index }`
+1. some base row appears nowhere in the refinement → `VerificationRowRemoved { index }`
+2. otherwise, every base row appears and the base is a *subsequence* of the
+   refinement — so the additions are interleaved rather than appended →
+   `VerificationRowInserted { index }`, `index` being the first refinement
+   position not consumed by the base subsequence
+3. otherwise, every base row appears but the base is not a subsequence — the
+   rows moved relative to each other → `VerificationRowReordered { index }`
+4. otherwise → `VerificationRowReplaced { index }`
 
-Anything the refinement adds must come **after** the base sequence; a row
-inserted before or between base rows fails the prefix test and is reported as
-`VerificationRowReordered`.
+`RV-346` `F-17` is why the classification is ordered and why case 2 exists. The
+earlier statement tested for a prefix and then fell through to `Replaced`, and
+called an insertion `Reordered` in the prose — but inserting a row before or
+between base rows leaves the base rows in their original *relative* order, so
+neither the reordering test nor the replacement test describes what happened.
+Three predicates over the same pair of sequences were producing two
+contradictory answers. Prefix and subsequence are now distinct checks in a fixed
+order: prefix decides *acceptance*, subsequence decides *which refusal*.
+
+The refusal is the same in every case — anything the refinement adds must come
+**after** the base sequence, so only a strict prefix match is accepted. The
+diagnosis exists to tell the operator which edit to undo, and it is worth
+getting right for that reason alone rather than for a security one.
 
 ### Invariants
 
@@ -1259,6 +1374,10 @@ the validation table plus the block/key/schema cases:
 - `unknown_key_refuses_naming_the_key`
 - `unsupported_schema_version_refuses_naming_the_version`
 - `empty_verification_sequence_refuses`
+- `unknown_key_inside_a_verification_row_refuses_naming_the_row_and_the_key`
+- `verification_row_missing_argv_refuses_naming_the_row`
+- `verification_row_that_is_not_a_table_refuses`
+- `argv_that_is_not_an_array_of_strings_refuses`
 - `explicitly_empty_list_is_accepted_and_is_not_the_same_as_omission`
 - `executable_with_a_slash_refuses` / `..._with_whitespace_...` /
   `..._that_is_dot_or_dotdot_...` / `..._that_is_empty_...`
@@ -1287,7 +1406,11 @@ Restriction, one per refusal plus the two invariants:
 - `refinement_removing_a_project_verification_row_refuses`
 - `refinement_reordering_project_verification_refuses`
 - `refinement_replacing_a_project_verification_row_refuses`
-- `refinement_inserting_a_row_before_a_project_row_refuses_as_reordered`
+- `refinement_inserting_a_row_before_a_project_row_refuses_as_inserted`
+- `refinement_inserting_a_row_between_project_rows_refuses_as_inserted`
+- `refinement_swapping_two_project_rows_refuses_as_reordered`
+- `the_diagnosis_is_classified_in_the_stated_order` — a refinement that both
+  removes a row and reorders the rest reports `Removed`, not `Reordered`
 - `refinement_with_a_different_schema_refuses`
 - `restrict_is_identity_on_its_own_base`
 - property: `restrict_never_weakens_any_axis` over generated policy pairs
@@ -1377,9 +1500,10 @@ expected-capsule-size-mib = 4096
 capacity-warn-multiplier = 2
 
 # The execution bounds sec-2's `Execution` carries, enforced trusted-side.
-execution-timeout-seconds = 300
+# The first two are REQUIRED — there is no measurement to default them from.
+execution-timeout-seconds = 900
+file-size-cap-mib = 512
 execution-kill-grace-seconds = 5
-file-size-cap-mib = 256
 ```
 
 | key | default | absent means |
@@ -1390,30 +1514,57 @@ file-size-cap-mib = 256
 | `closure-resolver` | none | no host capability declared |
 | `expected-capsule-size-mib` | `4096` | the default sizing applies |
 | `capacity-warn-multiplier` | `2` | warn below twice expected (`REQ-461` criterion 2) |
-| `execution-timeout-seconds` | `300` | the spike's light-fixture bound |
-| `execution-kill-grace-seconds` | `5` | the spike's grace |
-| `file-size-cap-mib` | `256` | the spike's light-fixture per-file cap |
+| `execution-timeout-seconds` | **required** | refuse, naming the key |
+| `file-size-cap-mib` | **required** | refuse, naming the key |
+| `execution-kill-grace-seconds` | `5` | the spike's measured grace (`sandbox.sh:68`) |
 
 Sizes are configured in **mebibytes and seconds, spelled in the key**, rather
 than as suffixed strings. A `"4GiB"` spelling would need a parser, a refusal
 vocabulary for malformed units, and tests for both, to buy nothing this slice's
 callers need; the unit in the key name is unambiguous to a human writing it and
 costs no code. Both are converted once, at construction, into the typed
-`ByteCount` and `Duration` the rest of the design uses.
+`ByteCount` and `Duration` the rest of the design uses, **through checked
+arithmetic**: a mebibyte figure above `u64::MAX / 1_048_576` refuses with
+`BoundOverflows { key }` rather than wrapping. `RV-346` `F-12` found that hole —
+overflow was specified for the two multiplications downstream and not for the
+conversion that feeds them, which left construction undefined at the top of the
+range and every downstream saturation argument resting on an unchecked value.
 
-**The defaults are a guess with a stated basis, and every project should
-override them.** `POL-002` facet 1 forbids the platform resting on a host
-project's conventions, and a capsule's size is dominated by the *project's*
-build output, which Doctrine cannot know. `4096` sits at the upper order of the
-two measured points without asserting that a Rust workspace is the platform's
-shape. This repository's own `[capsule]` should set `8192`, for the reason
-`lib/fixtures.sh:70-92` records. The tension is real and worth naming: a Node
-project on a laptop with 3 GiB free is refused by a default sized for something
-larger, and the answer is the key, not a cleverer default.
+**The two enforced bounds are required keys, because there is no measurement to
+default them from.** This is `RV-346` `F-15`, and it lands. The spike used a
+single `disk_cap` for *both* `ulimit -f` and its whole-tree `du`
+(`capsule/sandbox.sh:287,313`), mapping either leg to one outcome, so its 256 MiB
+figure measures neither the largest file a capsule writes nor which limit fired;
+and the 300s figure is not merely unmeasured but *known to fail*, at 352s on a
+Rust workspace. An optional default terminates work, so shipping either number
+as a default would be presenting an unmeasured — in one case falsified — value
+as generally usable. `execution-timeout-seconds` and `file-size-cap-mib` are
+therefore required: absent, provisioning refuses naming the key. The sample above
+shows the heavy fixture's re-bounded figures because those are the ones with
+headroom over a real measurement, but they are a project's choice, not a
+platform default. `execution-kill-grace-seconds` keeps its default of 5, which
+*is* directly measured (`sandbox.sh:68`) and is a window between two signals
+rather than a bound that ends work.
 
-`capacity-warn-multiplier` is a plain integer ≥ 1. A multiplier below one would
-invert the tiers — warning at a level below the one that refuses — so it
-refuses at construction rather than producing an unreachable warning.
+**The advisory default survives that argument, and is re-anchored by it.**
+`expected-capsule-size-mib` denotes whole-tree size, which is exactly the
+quantity the spike's 4.4 GiB peak measured — so unlike the per-file cap, this
+default rests on a measurement of the right thing. It stays, because `REQ-461`
+criterion 2 explicitly contemplates a default here and because the tier it feeds
+warns rather than terminates. `4096` sits at the upper order of the two measured
+points without asserting that a Rust workspace is the platform's shape;
+`POL-002` facet 1 is why the number is not simply the 8192 this repository
+should set for itself. The residual tension is worth naming: a Node project on a
+laptop with 3 GiB free is refused by a default sized for something larger, and
+the answer is the key rather than a cleverer default.
+
+`capacity-warn-multiplier` is a plain integer **strictly greater than 1**.
+`RV-346` `F-13`: at exactly 1 the warning region `expected ≤ available <
+expected × multiplier` is empty, so no amount of free space can ever emit the
+conspicuous warning `REQ-461` criterion 1 requires — the policy would be
+accepted and the requirement silently unmet. A value below or equal to 1
+refuses with `WarnMultiplierNotAboveOne { found }`, which is a stronger check
+than the inversion argument alone would have produced.
 
 ### Reading it
 
@@ -1490,7 +1641,9 @@ Refusals, each a named variant carrying the key:
 | `RelativeCapsuleRoot { path }` | a configured `root` that is not absolute |
 | `UnresolvableCapsuleRoot` | no `root`, and no platform data directory resolves |
 | `ZeroBound { key }` | any bound or size configured as `0` |
-| `WarnMultiplierBelowOne { found }` | `capacity-warn-multiplier < 1` |
+| `BoundMissing { key }` | `execution-timeout-seconds` or `file-size-cap-mib` absent |
+| `BoundOverflows { key }` | a mebibyte figure above `u64::MAX / 1_048_576` |
+| `WarnMultiplierNotAboveOne { found }` | `capacity-warn-multiplier ≤ 1` |
 
 `NoReadableInputs` and `ClosureRootsWithoutResolver` are `sec-2` invariant 9's
 first three refusals, discharged here because this is where the lists are read.
@@ -1513,11 +1666,23 @@ const CAPSULE_ROOT_LEAF: &str = "doctrine/capsules";
 const XDG_DATA_HOME: &str = "XDG_DATA_HOME";
 ```
 
-Resolution order, through `HostFacts` so it is testable: `XDG_DATA_HOME` if set
-and absolute; else `HOME` joined with `.local/share`; else refuse. Both reads
-are `var_os` — this repository bans `std::env::var` through
-`disallowed_methods` (`src/tty.rs:41`), and `src/install.rs:1818` is the
-precedent for the `HOME` read and its refusal message.
+Resolution order, through `HostFacts` so it is testable: `XDG_DATA_HOME` if set,
+non-empty and **absolute**; else `HOME` under the same three conditions, joined
+with `.local/share`; else refuse. Both reads are `var_os` — this repository bans
+`std::env::var` through `disallowed_methods` (`src/tty.rs:41`), and
+`src/install.rs:1818` is the precedent for the `HOME` read and its refusal
+message.
+
+**Both variables are held to the same test, and an earlier draft was not.**
+`RV-346` `F-16`: the draft rejected a relative `XDG_DATA_HOME` and then joined
+`HOME` unconditionally, so `HOME=relative` or `HOME=` produced a relative
+capsule root — contradicting the type's own claim to be absolute and resolved,
+defeating invariant 4, and in the empty case rooting capsules at
+`.local/share/doctrine/capsules` **under the current working directory**, which
+on an ordinary invocation is the repository. A relative default that lands
+inside the repository is the precise outcome `DEC-158` rules out, arrived at
+through a variable nobody validated. An unusable value in either variable is
+skipped rather than joined, and the arm falls through to the refusal.
 
 Two things this deliberately is not. It is **not a new dependency**: a
 platform-directory crate would buy macOS and Windows arms for a slice whose
@@ -1527,13 +1692,20 @@ ends in a guess** — the last arm refuses. A capsule root silently landing in a
 temporary directory is how large live work ends up somewhere a reboot removes.
 
 The resolved root is what populates `sec-2`'s `ForbiddenScopes::capsule_root`,
-so no capsule can bind a path that contains it. Note the shape of that rule: it
-denies a placement path equal to or above the capsule root, which is what keeps
-a declared readable entry from reaching the whole capsule area, while leaving
-the transaction's *own* subdirectories bindable. What keeps one transaction out
-of a sibling's is `sec-2` invariant 1 — provisioning computes every path in a
-placement, and it computes only paths under the root it created in `sec-3`
-step 9.
+and `sec-2`'s overlap test is **bidirectional**: a placement path that is equal
+to, above, *or below* the capsule root is refused, with one typed carve-out for
+writable entries under the placement's own `TransactionRoot`. A sibling
+transaction is below the capsule root and not below this root, so it is refused
+by the same test that admits `capsule/` and `agent/`.
+
+An earlier draft of this paragraph argued the descendant case away — that
+provisioning computes every path in a placement and computes only its own, so
+`sec-2` invariant 1 kept siblings out. `RV-346` `F-10` refuted it, and the
+refutation is worth keeping visible because the reasoning was the appealing
+kind: `readable-roots` entries and closure-resolver output are also computed by
+provisioning in that sense, and they can name any path at all. Provenance was
+doing no work. What denies a sibling is geometry, checked in both directions,
+which is now `sec-2`'s rule.
 
 ### `HostFacts`
 
@@ -1675,9 +1847,12 @@ quota, and both are the backpressure `REQ-461` scopes out of V0.
 3. **The configuration cannot silently default.** An unknown key refuses. There
    is no arrangement of missing configuration that produces a capsule root
    inside the repository, an empty readable set, or a bound of zero.
-4. **The capsule root is absolute, resolved, and forbidden to capsules.** It is
-   `ForbiddenScopes::capsule_root`, so `sec-2`'s validating constructor refuses
-   any placement path that contains it.
+4. **The capsule root is absolute, resolved, and forbidden to capsules in both
+   directions.** It is `ForbiddenScopes::capsule_root`, so `sec-2`'s validating
+   constructor refuses any placement path that contains it *or lies under it*,
+   except writable entries under the placement's own transaction root. No
+   environment value can produce a relative root, and none can produce one
+   inside the repository.
 5. **Capacity is advisory in one direction only.** It may refuse before work
    starts; it may never permit what another rule refuses, and it is not consulted
    after `sec-3` step 3.
@@ -1703,8 +1878,15 @@ Configuration:
 - `empty_resolver_argv_refuses`
 - `relative_configured_root_refuses`
 - `zero_valued_bound_refuses_naming_the_key`
-- `warn_multiplier_below_one_refuses`
-- `absent_optional_keys_take_the_named_default_constants`
+- `absent_execution_timeout_refuses_naming_the_key`
+- `absent_file_size_cap_refuses_naming_the_key`
+- `a_mebibyte_figure_above_the_conversion_ceiling_refuses_naming_the_key`
+- `the_largest_convertible_mebibyte_figure_is_accepted` — the boundary either
+  side, so the check is not off by one
+- `warn_multiplier_of_one_refuses_because_the_warning_region_would_be_empty`
+- `warn_multiplier_of_zero_refuses`
+- `absent_optional_keys_take_the_named_default_constants` — grace and the two
+  capacity keys only; the enforced bounds have no default to take
 - `sizes_in_the_key_unit_convert_once_into_bytes_and_seconds`
 
 Capsule root resolution:
@@ -1713,8 +1895,14 @@ Capsule root resolution:
 - `xdg_data_home_is_used_when_set_and_absolute`
 - `home_supplies_the_default_when_xdg_data_home_is_unset`
 - `relative_xdg_data_home_is_ignored_rather_than_joined`
-- `neither_variable_set_refuses_naming_the_config_key`
+- `relative_home_is_ignored_rather_than_joined`
+- `empty_home_is_ignored_rather_than_joined` — the case that would otherwise
+  root capsules under the working directory
+- `no_resolution_path_yields_a_relative_root` — asserted over every combination
+  of the two variables
+- `neither_variable_usable_refuses_naming_the_config_key`
 - `the_resolved_root_is_the_forbidden_scope_a_placement_is_validated_against`
+- `a_sibling_transaction_under_the_resolved_root_is_refused_by_the_placement`
 
 Executed, in `sec-7`: nothing in this section is a confinement property, so the
 suite carries no capacity row. The one executed claim it owes is that the probe
