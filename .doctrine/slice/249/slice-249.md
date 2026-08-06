@@ -141,9 +141,12 @@ Also out of scope:
 
 ## Affected surface
 
-- `src/knowledge.rs` — the typed facet model and its render/validate seam; the
-  new write path.
-- `src/commands/knowledge.rs` — the CLI seam for the new verb.
+- `src/knowledge.rs` — the typed facet model, its render/validate seam, **and the
+  knowledge CLI** (verb enum + dispatch live here; there is no
+  `src/commands/knowledge.rs`).
+- `src/facet_write.rs` — an existing mixed-type `[facet]` writer with a live
+  consumer, annotated for deletion. Ride it or resolve the marker; do not build a
+  third one.
 - `src/design_run/submission.rs` — `CreateRecord`, `Declaration`, and the
   subject-kind correspondence table.
 - `src/design_run/admission.rs` — where the correspondence refusal belongs; the
@@ -171,12 +174,20 @@ Also out of scope:
   vocabularies and supersession rules for all three are likewise unwritten.
   Transcribing the code would launder the current implementation into
   governance — the anti-pattern the spec exists to prevent.
-- **R2a — SL-246 shares this dependency.** SL-246 (*Entity reads carry their
-  knowledge records*, at `design`) needs a bounded per-kind "deciding fields"
-  list and hits the same four-vs-seven hole; ISS-316 originates from it. This
-  slice resolving SPEC-019 unblocks SL-246, but two slices editing one spec
-  concurrently is a collision. Sequence or partition explicitly — do not let both
-  design rounds assume ownership.
+- **R2a — SL-246 is an ordering dependency, not a collision.** Downgraded by the
+  research round: SL-246's notes record A3 — *the SPEC-019 four-of-seven gap
+  stays outside this slice; the design labels any EVD/HYP/CPT field list as
+  invention rather than deriving it*. It has explicitly handed the amendment off.
+  SL-249's REV lands first; SL-246 then derives its per-kind field lists from
+  governance.
+- **R4 — the seam this slice should ride is annotated for deletion.**
+  `src/facet_write.rs` already implements the mixed-type `[facet]` writer
+  (`set_facet_mixed` / `apply_set_mixed`) and `src/commands/facet.rs:711` already
+  consumes it — but its functions carry `expect(dead_code, reason =
+  "transitional facet writer; migration script is the last consumer, deletes at
+  SL-222 deletion phase")`. Research could not resolve whether that deletion is
+  still planned. This is the highest-leverage unknown in the slice: objective 1's
+  mechanism hangs off it, and building fresh would be a *third* `[facet]` writer.
 - **R3 — surface creep on the flat-flag shape.** ~5 fields × 7 kinds is a large
   flag set on one verb; `memory edit` already carries 15 and reads as a wall.
   Mitigated by the refusal rule making the wrong flag an error rather than a
@@ -192,9 +203,16 @@ Also out of scope:
   extension is assumed safe — worth confirming in design, not at execution.
 - **OQ-1** — flat flags with refusal, per-kind subverb, or `--facet key=value`?
 - **OQ-4** — is `ConceptFacet`'s emptiness a designed property or an omission?
-  Raised by ISS-316, unanswered. Objective 4 cannot write the concept kind's
-  contract without ruling on it, and the answer decides whether `edit` has
-  anything structured to write for a `CPT` at all.
+  Raised by ISS-316; no governance answers it. Research found corroborating code
+  evidence (`validate_facet`'s concept arm explicitly discards raw input) and a
+  DEC-149 render-side aside, so the REV can *rule* with support rather than
+  invent — but it must rule, because `edit`'s behaviour for a `CPT` falls out of
+  the answer.
+- **OQ-6** — does the inert-key refusal extend to the *read* path? Research found
+  the same defect class one tier deeper: `validate_facet` silently discards a
+  field belonging to another kind. There is a real argument for read-tolerance (a
+  hand-edited corpus should not become unreadable), so this wants a deliberate
+  ruling rather than consistency by reflex.
 *(OQ-2, OQ-3 and OQ-5 settled by the user before design — see § Settled before
 design.)*
 
