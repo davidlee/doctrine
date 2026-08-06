@@ -1,0 +1,40 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 172
+slug = "concept-records-carry-no-facet-by-design"
+title = "Concept records carry no facet by design"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "ConceptFacet is an empty struct. ISS-316 raised whether that is a designed property or an omission, and SL-249 carried it as OQ-4 because no governance records an answer and the write seam's behaviour for a CPT depends on one."
+choice       = "Designed, not omitted — and the answer already exists as SL-197's design-local D2. The objective 4 REV elevates that ruling into SPEC-019 rather than authoring a fresh judgement."
+alternatives = [
+  "Rule it an omission and give concept a facet (e.g. a structured `definition`). Rejected: it would contradict a closed slice's accepted design on a rationale nobody has challenged, and would put a structured field in direct competition with the prose body that already holds the definition.",
+  "Leave it unruled and let the write seam special-case CPT silently. Rejected: this is the ungoverned state ISS-316 exists to end, and SL-249's edit behaviour for a CPT cannot be derived without the ruling.",
+]
+rationale    = "SL-197's design D2 states it directly — the empty ConceptFacet is 'intentional, a first in the RecordFacet enum, not an oversight' — and gives a substantive reason rather than an incidental one: IMP-244's concept sections (Definition, Notes, Distinguish from, Examples, Related) are prose in the md body, and a structured `definition` field would duplicate the md Definition section, producing two sources of truth that drift. The empty [facet] header is nonetheless emitted to satisfy the per-kind scaffold-order invariant, and format_facet suppresses it at display time. Three independent corroborations: validate_facet's concept arm explicitly discards raw facet input (`let _ = raw`), DEC-149 already distinguishes 'unfilled' from 'no facet by design' on the render side, and the concept scaffold template carries a bare [facet] header with no fields. The finding that matters procedurally is that the ruling was never ungoverned so much as under-governed — it lived in a per-slice design where every later reader had to rediscover it. That is precisely what a spec is for."
+consequences = [
+  "The REV's concept row is an elevation with citation, not an invention — the cheapest and most honest shape available to it, and it removes SL-249's stated R2 risk of 'transcribing the code into governance' for this kind.",
+  "Both the code doc and install/templates/knowledge-concept.toml describe the facet as 'currently empty'. That hedge is what invites the omission reading and is why ISS-316 raised the question at all; the REV should retire the wording along with the ambiguity.",
+  "CPT's edit behaviour follows from this and is decided separately.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

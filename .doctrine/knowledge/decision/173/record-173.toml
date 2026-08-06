@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 173
+slug = "concept-gets-no-facet-subverb"
+title = "Concept gets no facet subverb"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249's settled OQ-1 splits the knowledge write surface by tier: a kind-blind `knowledge edit <ID>` owns title, tags and the .md body, and kind-dispatched subverbs own the typed [facet]. The scope card anticipated that CPT's empty facet 'becomes expressible as a subverb with no flags rather than 30 refusals'. Once DEC-172 rules the empty facet designed, that anticipation needs revisiting."
+choice       = "Concept gets no facet subverb at all. `knowledge edit concept CPT-001` refuses with a teaching message directing the caller to the kind-blind verb; the six facet-bearing kinds get subverbs."
+alternatives = [
+  "Ship a concept subverb accepting no flags, for surface uniformity. Rejected: a verb that accepts nothing can only ever be invoked wrongly, so uniformity buys a surface whose every use is an error.",
+]
+rationale    = "A CPT's content is its prose body (DEC-172), and the kind-blind `knowledge edit CPT-001` already reaches all of it — title, tags, body. There is nothing left for a facet subverb to own. Refusing the subverb is also consistent with the refusal SL-249 already owes: per-kind subverbs relocate rather than remove the kind-mismatch check, since the id prefix already resolves the kind, so a mismatch message is being built regardless. The concept arm is one more row on a message that already exists, not new machinery."
+consequences = [
+  "The facet subverb set is six, not seven, which slightly eases SL-249's R3 residual about keeping the verb surface coherent.",
+  "The kind-mismatch refusal carries two shapes rather than one: wrong-subverb-for-this-id ('ASM-003 is an assumption; use knowledge edit assumption'), and no-subverb-exists-for-this-kind ('concept records carry no facet fields; use knowledge edit CPT-001').",
+  "If a later change gives concept a facet, the subverb appears then — an addition, not a redefinition.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-06"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"
