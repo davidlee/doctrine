@@ -61,6 +61,12 @@ label = "references"
 role = "originates_from"
 target = "SL-241"
 
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "transaction binds phase identity only; plan and phase-sheet schema face RFC-027 reshaping"
+target = "RFC-027"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

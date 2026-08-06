@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd5f4-66d8-7b43-8861-01b064a9313b"
+recorded_at = "2026-08-06T07:23:11.960606816Z"
+kind = "friction"
+summary = "design apply silently drops body on a checkpoint subject"
+detail = "/design, SL-248 design run. Six checkpoint dispositions with form=create carried a prose 'body' alongside the record's kind/title. All six were admitted and minted DEC-155..DEC-160 with empty bodies; the prose was discarded without a word. Declaration::body is *section* prose — its only consumer is run.rs:1323, guarded on section_digests.get(id) — so on a cp- subject it is accepted and ignored. A create disposition carries kind/title/slug/acceptance by design and record prose is authored separately in the .md, which is fine; the cost is that nothing said so. The codebase already applies rule/record correspondence to the sibling field ('disposition' is present exactly on ReviewDisposed, checked there so the failure is a typed refusal naming the act) and does not apply it to body. Cost here: six records shipped hollow, caught by the operator rather than by the tool, then ~15k tokens of prose re-authored from scratchpad payloads. Same class as the earlier friction on this run: the flattened envelope admits keys that mean nothing at the subject they were sent to."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

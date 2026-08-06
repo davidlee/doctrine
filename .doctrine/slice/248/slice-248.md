@@ -63,8 +63,13 @@ contract, never re-resolved from a capsule checkout. Phase-contract refinement
 that may add forbidden entries and append verification rows but may not remove,
 reorder, widen, or replace — subset validation over normalized typed values,
 never source text. Missing block, missing key, unknown key, unknown schema
-version, or empty verification sequence refuses provisioning. Extends the
-existing `doctrine.toml` parser (DEC-136); does not fork one.
+version, or empty verification sequence refuses provisioning. Keeps the block in
+`.doctrine/doctrine.toml` (DEC-136) and does not fork a second config document;
+the *reader* is a typed projection beside the shared one, because
+`read_doctrine_toml_text` reads disk at `root` while this resolves a blob at the
+contracted base OID, and the shared reader is deliberately tolerant where this
+must be strict. DEC-136's handoff note expecting a direct extension of the
+existing loader is corrected accordingly.
 
 **REQ-450 (partial) — fresh mutable state.** Provisioning from the exact
 accepted commit and only explicit immutable inputs, with fresh mutable phase
@@ -77,9 +82,12 @@ fresh mutable state, explicit input set, no writable canonical repo / shared
 object store / control-plane state / credentials, bounded host filesystem
 visibility, explicit network posture, deterministic working directory,
 process-tree teardown, and trusted observation of resource limits and
-termination. Plus the Linux/bubblewrap backend implemented against it, recast
-from SL-241's rig profile and `src/worktree/jail.rs`'s existing bwrap knowledge.
-The suite is the admission gate for any future backend.
+termination. Plus the Linux/bubblewrap backend implemented against it, taking
+SL-241's rig profile as its starting point. It is built self-contained and does
+not extend `src/worktree/jail.rs` (DEC-155): the two profiles differ on every
+structural axis, and `bwrap_core_argv` carries a byte-parity contract with
+`scripts/pi-spawn-confined.sh` that forbids widening it in place. The suite is
+the admission gate for any future backend.
 
 **REQ-461 — advisory capacity.** Configurable expected capsule size; a
 conspicuous structured warning below threshold (an initial default may warn
@@ -122,16 +130,19 @@ Inherited from SPEC-030 and REV-046, and out of the whole programme:
 
 ## Affected surface
 
-Coarse and provisional; `/design` fixes the touch-set, and `QUE-207`'s answer
-may relocate most of it into a new crate or binary.
+`QUE-207` is answered by `DEC-153`: the trusted side is a `doctrine-control`
+workspace member over a lib target on the root package, and nothing migrates out
+of the agent-facing binary. The touch-set below reflects that answer and the
+inquiry's decisions; `/design` fixes it.
 
 | Area | Paths |
 |---|---|
-| Capsule contract + provisioning | `src/capsule/**` (new) |
-| Interpretation policy parse/normalize/hash | `src/dtoml.rs`, `src/dispatch_config.rs`, `.doctrine/doctrine.toml` |
-| Linux backend | `src/worktree/jail.rs`, `src/worktree/jail_prefix.rs` |
-| CLI surface | `src/commands/**` |
-| Property suite + acceptance tests | `tests/**` |
+| Capsule contract, provisioning, backend, conformance suite | `crates/doctrine-control/**` (new) |
+| Interpretation policy parse/normalize/hash | `src/` (leaf, typed projection beside `dtoml`), `.doctrine/doctrine.toml` |
+| Root lib target + leaf-only export set | `src/lib.rs` (new), `.doctrine/adr/001/layering.toml` |
+| Capacity config | `.doctrine/doctrine.toml` `[capsule]` |
+| Layering / export fitness gates | `tests/architecture_layering.rs` |
+| Acceptance tests driving the conformance suite | `tests/**` |
 
 ## Risks / Assumptions / Open questions
 
@@ -142,12 +153,12 @@ retention (REQ-456–458); (5) cutover. Later slices are deliberately **unminted
 — scoping slice 4 before slice 2 is designed is SL-233's failure at a coarser
 grain. RFC-025 § State of play carries this as provisional, not settled.
 
-**OQ-2 — `QUE-207` is open and gates design.** *Binary and crate topology for
-the control plane*: one `doctrine` binary with environment-derived privilege
-(A), a workspace with `doctrine` + `doctrine-control` over shared crates (B, the
-frame's provisional choice), or a separate control-plane system (C). Under A
-provisioning is a subcommand; under B it is `doctrine-control`'s; under C it is
-a service boundary. It must be answered as a DEC at the top of `/design`.
+**OQ-2 — closed.** `QUE-207` (binary and crate topology for the control plane)
+is answered by `DEC-153`: option B, a workspace with `doctrine` +
+`doctrine-control` over a lib target on the root package, split at canonical
+mutation authority. Provisioning is `doctrine-control`'s verb. The residual —
+the distribution contract owed by whichever slice first *releases* that binary —
+is a close-time Follow-Up, not this slice's (see Risks `R5`).
 
 **OQ-3 — three requirements are cross-cutting and close in no single slice.**
 REQ-448 (control plane as sole canonical mutation authority), REQ-450
