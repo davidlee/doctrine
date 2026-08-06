@@ -1,0 +1,50 @@
+memory_uid = "mem_019fd6cdee957ab0adf551d66639bd9e"
+memory_key = "mem.fact.cargo.default-members-reaches-publish"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Cargo default-members reaches packaging and publishing"
+summary = "default-members is a package-selection default, so it also selects for cargo package/publish; publish=false fails a bare publish rather than skipping the member."
+created = "2026-08-06"
+updated = "2026-08-06"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["cargo", "workspace", "release"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "9da7b8de4b840dfaec3a7a80bae48db9342d3832"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b65cebb73d49f95258f245c135026288c57d6de2498fff9fb31ec4def1aae501"
+base_commit = "149512c8a9b7918b2721f99aa93731a815ca14a0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-346"
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
