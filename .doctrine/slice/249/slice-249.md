@@ -371,7 +371,9 @@ design.)*
   damage accurate prose (F-9); and an allowlist checked for mere presence lets a
   duplicated exempt phrase inherit the exemption silently, so it is held to a
   count identity instead — total occurrences equal the sum of the allowlist's
-  expected counts (F-11).)*
+  expected counts (F-11); and every phrase is matched over whitespace-collapsed
+  text, because the exempt sentence wraps mid-phrase and a literal match finds it
+  zero times, which would have made the identity red on authoring (F-14).)*
 - A `[facet]` key inert at its record's kind is reported by `doctrine doctor` —
   not refused on read. Test-verified. *(DEC-177.)*
 - The existing knowledge suites stay green unchanged (the behaviour-preservation

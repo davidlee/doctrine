@@ -215,3 +215,53 @@ tail-land inside a trailing subtable), which reads at first glance like a
 licence to drop the F-1 refuse. It is not — the memory scopes its own proof to
 root keys and says so. `[facet]` fields are subtable-nested, so the F-1
 in-place-edit posture the research round settled on stands.
+
+## Review pass — RV-349, and what a further pass would probe
+
+Written at the close of the design run's `reviewing` stage, after the pass
+concluded. One external adversarial pass (codex, `RV-349`), conducted over
+multiple rounds against `design.md`, every finding upheld on evidence. The
+ledger is the record; this is the forward-looking half.
+
+**Is another pass warranted? Yes, but not of this artefact.** The pass reached
+the point where each round's findings were about the *record* of the review
+rather than the design — `sec-14`'s accuracy about itself, and the successive
+rules written to keep it accurate. That is a real defect class and it stopped
+paying for itself. The design's substance settled early and has been stable
+since; no round after the first two changed an architectural choice.
+
+**What a further pass should probe** — carried in `design.md` § 10 in full, and
+summarised here so the slice notes stand alone:
+
+1. `I10`'s cell semantics — "observably effectful or refused" needs a per-key
+   definition before the matrix test is written. The largest thing still
+   undefined, and the place a test can pass while the mapping is wrong.
+2. Whether `settle` still earns a separate verb now that `F-2` made it one
+   write of one document. `DEC-062`'s argument survives; `DEC-178`'s
+   coupled-multi-write argument does not.
+3. `D8a`'s correction to `DEC-168`'s rationale rides the objective 4 REV for
+   want of any other vehicle. Someone should check that is legitimate rather
+   than merely available.
+4. The design's remaining unverified code claims — `entity::write_body` on an
+   absent file, `resolve_ref`'s refusal surface, `catalog::scan` as the
+   tripwire's precedent. None was checked in any round; each is one command
+   from being evidence or a finding. This is where a further pass has the best
+   expected yield, because it is the category that produced `F-1`, `F-2` and
+   `F-14`.
+
+**The pass's two durable lessons**, for the plan and for the next design of this
+size:
+
+- *A totality asserted rather than enumerated.* The dominant defect class, in
+  the design and in its own fixes alike. A claim of this kind inherits the
+  credibility of the argument around it and so never attracts the one command
+  that would settle it. Where the design now makes one, it states the
+  enumeration or the identity beside it.
+- *The artefact nobody re-reads.* The scope card drifted from the design more
+  than once; a criterion widened past the card's own non-goals; a finding sat
+  contested on the ledger while its substance was fixed elsewhere; `sec-14`
+  drifted from the ledger repeatedly. In each case the artefact was the one
+  updated last, by hand, after the substantive work. `review.scope` fires once
+  at the end of a stage, which is the wrong cadence for a multi-round review.
+  Mechanising that comparison is the improvement worth making, and it belongs
+  to the design-run tooling rather than to this slice.
