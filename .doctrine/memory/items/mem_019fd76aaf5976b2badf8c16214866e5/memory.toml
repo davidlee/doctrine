@@ -1,0 +1,50 @@
+memory_uid = "mem_019fd76aaf5976b2badf8c16214866e5"
+memory_key = "mem.pattern.rust.fail-soft-ok-defeats-sequencing"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Fail-soft Ok defeats a sequencing guarantee — `?` orders errors, not failures"
+summary = "A failure returned as an Ok variant makes `?` inert, so an ordering argument for two effects buys nothing — guard on the outcome value"
+created = "2026-08-06"
+updated = "2026-08-06"
+
+[scope]
+paths = ["src/boot.rs", "src/corpus.rs"]
+globs = []
+commands = []
+tags = ["rust", "error-handling", "footgun", "design-review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1f737c5d1523bdcec906a5f62ef05c2ab8ceb55f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "cfdcaacee6082822bdd493ae44ba8ae081d7a8d2aa2ecbb0b925c043c1ae1283"
+base_commit = "20c7957f0e3fc515debe58e02c3156546c0dbad3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-348"
+
+[[source]]
+kind = "slice"
+ref = "SL-250"
+
