@@ -1562,14 +1562,22 @@ carries its facet — which the mint test asserts directly.
 
 ## The pass that has run
 
-`RV-349` — one external adversarial pass over this document, six rounds, fifteen
-findings, every one upheld on evidence. Round one at revision 48, briefed on eight
+`RV-349` — one external adversarial pass over this document, seven rounds,
+sixteen findings, every one upheld on evidence. Round one at revision 48, briefed on eight
 lines of attack, five of them lifted from this section's drafted form: six
 findings. Round two verified three and contested three. Round three verified two,
 contested one, and raised `F-7` against the fix for the one it contested. Round
 four verified two, contested `F-5` a third time, and raised `F-9` and `F-10`.
 Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
 `F-13`. Round six verified two, contested three, and raised `F-14` and `F-15`.
+Round seven verified five and raised `F-16`, and ruled on a question this section
+had asked of it: whether `D9`, rewritten six times for a single test asserting a
+spec says "seven" and not "four", had become disproportionate to what it
+protects. The reviewer's answer was no — the final test is compact, every clause
+closes a demonstrated failure, and a simpler one would knowingly surrender
+coverage. That is recorded because the question was real and the answer is not
+self-evident: six rewrites of one assertion is the kind of thing a later reader
+should be able to find a ruling on rather than re-litigate.
 
 | finding | severity | what it was, and how it settled |
 |---|---|---|
@@ -1577,7 +1585,7 @@ Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
 | `F-2` | major | `settle` ordered two writes "across two files" that are one file. `D6` superseded; one validated atomic write. Verified round two. |
 | `F-3` | major | `P1`/`P2` could not see ownership multiplicity. Contested once: the equality fix still compared sets, so a name repeated within a row collapsed. Settled at `P3` / `I3b`. Verified round three. |
 | `F-4` | major | `I9` proves wire-key inventory, not mapping. Settled at `I10`, a generated behavioural matrix. Verified round two. |
-| `F-5` | major | The coverage canary passed a still-four-kind spec. **Contested three times** — the phrase pin closed 1 of 32; the blanket ban miscited its own finding and understated the count; the count was right but its classification was not. Settled at `D9` as it now stands. |
+| `F-5` | major | The coverage canary passed a still-four-kind spec. **Contested four times** — the phrase pin closed 1 of 32; the blanket ban was case-sensitive, miscited its own finding and understated the count; the count was right but its classification was not; and the allowlist that fixed the classification could not match the phrase it named. Settled at `D9` as it now stands. |
 | `F-6` | major | `I1`'s named oracle is `#[cfg(test)]` with no production caller, so it proves the read model and not the writer. Settled at `D10` / `I11`. Verified round two. |
 | `F-7` | major | `D9`'s ban was case-sensitive; `spec-019.md:34` is `### Four kinds, one engine`. Case-folded, word-boundary. Verified round four. |
 | `F-8` | major | Self-raised: the scope card's own `F-5` amendment carried the understated count, so card and design disagreed about one criterion's evidence. Corrected; left on the ledger rather than fixed silently. Verified round four, with the reviewer's ruling that driving both roles is a legitimate use of the protocol. |
@@ -1588,6 +1596,7 @@ Round five verified `F-10`, contested `F-9`, and raised `F-11`, `F-12` and
 | `F-13` | major | § 9 required `SPEC-019` to carry `EVD`/`HYP`/`CPT` **lifecycle vocabularies**, which the scope card explicitly defers to `ISS-316`. A criterion written in round one had quietly widened the slice. Narrowed to the facet contracts and the verb set. |
 | `F-14` | major | The allowlist's declared phrase occurs **zero** times: `spec-019.md` wraps the exempt sentence mid-phrase, line 330 ending *"…touches four"*. The identity would have been red on authoring, greenable only by rewording the sentence the exemption exists to protect. Every phrase match is now over whitespace-collapsed text. |
 | `F-15` | minor | This section named `F-8`, `F-12` and `F-13` under *the artefact nobody re-reads* and omitted the fourth instance — `F-5` sitting contested on the ledger for four rounds, answered in substance and never answered in the record. |
+| `F-16` | minor | This section undercounted `F-5`'s contests. Twice now it has miscounted the record of a finding about miscounting. |
 
 **What this pass actually found.** Two defects in the design as drafted were
 false premises about the source — `F-1` and `F-2`, one in each direction: an
@@ -1609,22 +1618,24 @@ what the findings were about. `F-14` is the sharpest instance because the claim
 was about the *mechanism itself*: an exemption whose phrase never matched, so the
 check would have failed on the exception it was built to permit.
 
-The second is **the artefact nobody re-reads**, four instances. `F-8` and `F-12`
+The second is **the artefact nobody re-reads**, five instances. `F-8` and `F-12`
 are one defect a round apart: the scope card is amended by hand at the end of
 each round and went stale twice, so the card and the design disagreed about one
 criterion's evidence. `F-13` is its mirror — a criterion that widened the slice
 past its own non-goals because nothing compared it back to the card. And `F-5`
 sat `contested` on this review's own ledger for four rounds, its substance
 answered through `F-9`'s fix and its record never updated: the pass found the
-shape in the instrument it was being conducted with. The `review.scope` runbook
-step exists for exactly this and fires once at the end of a stage, which is the
-wrong cadence for a review that ran six rounds and rewrote one criterion six
-times. Mechanising that comparison is a note for whoever next designs at this
-length; there is no fix for it inside this slice, and claiming to remember next
-time would be the same failure again.
+shape in the instrument it was being conducted with. `F-15` and `F-16` are the
+fifth, and they landed here — this section miscounted its own record of the pass
+twice, the second time while carrying a paragraph about exactly that failure. The
+`review.scope` runbook step exists for this class and fires once at the end of a
+stage, which is the wrong cadence for a review that ran seven rounds and rewrote
+one criterion six times. Mechanising that comparison is a note for whoever next
+designs at this length; there is no fix for it inside this slice, and claiming to
+remember next time would be the same failure again.
 
 `R4` says objective 4's completion is easy to assert. This pass is that failure
-mode caught fifteen times inside the design that guards against it.
+mode caught sixteen times inside the design that guards against it.
 
 The review also retired an assumption rather than a defect: `A3` — all seven
 templates seed every field of their kind — was verified by reading them, so
@@ -1662,7 +1673,7 @@ In the order I would press, with the two rounds' answers already in.
    is a legitimate place for it rather than the only place — and if it is not,
    the correction needs its own follow-up rather than a convenient ride.
 4. **Every other unenumerated totality claim in this design.** The base rate is
-   the argument, and it is now measured: eight of fifteen findings were an
+   the argument, and it is now measured: eight of sixteen findings were an
    asserted totality that one command or one counterexample would have refuted.
    This design's
    remaining unverified code claims — `entity::write_body`'s behaviour on an

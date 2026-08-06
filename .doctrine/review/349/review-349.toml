@@ -50,7 +50,7 @@ response = "Upheld. I9 compares a fully-populated Declaration's serde key set ag
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The governance canary can pass a still-four-kind spec"
 detail = "SL-249 design §9 (sec-9, lines 1020-1022) treats DEC-176 as the executable proof for R1, but that ruling only requires all seven kind names and three phrase pairs to occur in SPEC-019 prose. It does not inspect the structured responsibilities surfaced by doctrine spec show, reject residual four-kind framing, or prove the new EVD/HYP/CPT contracts and lifecycle verbs. SPEC-019 and PRD-010 currently carry structured and prose claims, so adding one sentence with the required substrings can make the canary green while the authoritative governance remains internally incoherent. This is weaker than the design objective and the claimed governance correction. Cheapest fix: make the canary inspect both authored tiers for SPEC-019 and PRD-010, assert the exact structured kind set and absence of stale four-kind framing, and retain explicit agent criteria for the semantic contracts and verbs."
@@ -86,7 +86,7 @@ response = "Card corrected to 32 with the per-file breakdown, matching sec-11. S
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D9 misclassifies an independent use of four"
 detail = "Revision 57 sec-11 D9 says all 32 case-insensitive word-boundary occurrences of 'four' are kind-derived and none is independent, and uses that corpus claim to justify the blanket ban. The source contradicts it: .doctrine/spec/tech/019/spec-019.md:330-332 says admitting the record kinds touches 'four coupled sites' and enumerates integrity::KINDS, RELATION_RULES, outbound_for, and the exact-coverage test. Expanding the record-kind set from four to seven does not change that integration-site count. The canary therefore rejects a correct governance statement (or forces it to be reworded) on a premise the corpus disproves; sec-12 R4's 'thirty-two such statements' and sec-13's 'all 32 ... kind-derived' repeat the error. Cheapest fix: state the true split (31 stale kind-count occurrences, one independent occurrence) and either pin an exact exception for the independent sentence or deliberately reword that sentence while acknowledging the blanket test has this known false positive."
@@ -104,7 +104,7 @@ response = "Upheld — sec-14 said seven findings and had no row for F-8, becaus
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Allowlist presence does not make exemptions expire"
 detail = "Revision 59 sec-11 D9 and sec-13 say each allowed phrase must still occur, and claim this makes a stale allowlist entry expire loudly. Presence is not a one-to-one check. If 'four coupled sites' is duplicated, or the original sentence is removed and the phrase appears elsewhere, the entry still occurs and a phrase-based exemption permits every copy; the rationale stored beside the entry is review prose, not an executable bound on which occurrence it excuses. That leaves exactly the classic allowlist widening hole the amendment says it closes. Cheapest fix: key each exception by file plus exact containing phrase (or equivalent stable context), give it expected cardinality one, and assert the observed exempt-occurrence multiset equals the declared exception set before asserting no residual case-folded word-boundary matches."
@@ -131,7 +131,7 @@ response = "Upheld, and this is the one finding in the pass that widened the sli
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The declared allowlist phrase has count zero"
 detail = '''Revision 61 sec-11 D9 declares the phrase "four coupled sites" with expected count one and defines each entry's check as occurrences of that phrase. In the authored corpus, .doctrine/spec/tech/019/spec-019.md:330-331 contains `four` at the end of line 330 and `coupled sites` on line 331. A literal case-insensitive phrase count is therefore 0; only a whitespace-normalized matcher such as /four\s+coupled\s+sites/i returns 1. The post-amendment identity cannot pass as written without reflowing the accurate sentence, recreating the formatting-driven rewrite D9 says it avoids. Cheapest fix: define allowlist entries as case-insensitive regex/token patterns with whitespace normalization (and the existing expected cardinality), or use the exact authored cross-line form explicitly.'''
@@ -140,12 +140,21 @@ response = '''Upheld, and verified before accepting: grep -c 'four coupled sites
 
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Sec-14 omits the stale F-5 ledger instance"
 detail = "Revision 61 sec-14's second recurring shape, 'the artefact nobody re-reads', names F-8, F-12 and F-13 but not the stale F-5 disposition. The current F-5 response says it remained contested for four rounds after being answered in substance and explicitly claims sec-14 records that ledger instance; the F-5 table row instead only summarizes the substantive canary contests and says it settled at D9. The section therefore omits the ledger example the disposition says it incorporated. Cheapest fix: add the stale F-5 status to that recurrence paragraph or its F-5 row, distinguishing the ledger drift from the substantive D9 history."
 disposition = "fixed"
 response = "Upheld. sec-14 named F-8, F-12 and F-13 under 'the artefact nobody re-reads' and omitted F-5's four-round stale contest — which is the instance that matters most, because it happened on this review's own ledger rather than on a document beside it. Corrected: four instances now, with F-5 named and the observation that the pass found the shape in the instrument it was being conducted with. Recording that I omitted it while writing the paragraph about omissions is not irony worth dwelling on; it is the recurrence rate, and sec-14 now states the mitigation honestly — mechanising the comparison is a note for whoever next designs at this length, and claiming to remember next time would be the same failure again."
+
+[[finding]]
+id = "F-16"
+status = "answered"
+severity = "minor"
+title = "Sec-14 undercounts F-5's contests"
+detail = "Revision 63 sec-14 says F-5 was 'contested three times'. Its own chronology says round four was the third F-5 contest, then says round six contested three findings; those were F-5, F-9 and F-11 over F-14, making F-5's whitespace-matching contest the fourth. The F-5 row lists only the phrase-pin, count/citation, and 31/1-classification rounds and omits the final zero-match contest even though F-14 now settles it. That leaves the pass record internally inconsistent immediately beside the corrected stale-ledger account. Cheapest fix: say four contests and add the whitespace-collapsed match as the fourth; align the later 'F-5 twice more' synopsis if it is intended as an exhaustive count."
+disposition = "fixed"
+response = "Upheld. F-5 was contested four times, not three: round two (the phrase pin left the hole open), round three (case-sensitivity, plus the miscitation and understated count), round four (the count was right, the classification was not), round six (the allowlist could not match the phrase it named). Corrected, and the row now names the whitespace-matching contest rather than stopping at the classification one. Worth stating what this is: sec-14 has now miscounted its own record of the pass twice — F-15 omitted an instance from the paragraph enumerating instances, F-16 undercounted the contests of the finding that is itself about undercounting. The section is the artefact I rewrite last, every round, after the substantive work is done, which is precisely the position the scope card was in for F-8 and F-12. Recorded in sec-14 as the fifth instance of that shape rather than as two tidy-ups. Also recorded there: your ruling that D9 is not over-engineered — the final test is compact, each clause closes a demonstrated failure, and a simpler one would knowingly surrender coverage. I asked because six rewrites of one assertion is the kind of thing a later reader should find a ruling on rather than re-litigate, and your answer is more useful in the design than in this response."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
