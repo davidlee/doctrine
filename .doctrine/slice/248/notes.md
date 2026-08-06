@@ -74,20 +74,29 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design drafting, sections 1–6 of 9 · 80f8e02b
+fresh-as-of: 2026-08-06 · design drafting, sections 1–7 of 9 · ae77e077
 
 ### Produced
 
-- Design run `dr-019fd432` — stage `drafting`, revision 44, materialised.
+- Design run `dr-019fd432` — stage `drafting`, revision 56, materialised.
   Sections `sec-1` (governing context), `sec-2` (platform backend contract),
   `sec-3` (transaction and provisioning), `sec-4` (interpretation policy),
   `sec-5` (operational config: the `[capsule]` table, capsule root, capacity),
-  `sec-6` (crate topology, export set, layering enforcement).
-- `RV-346` — design facet, raiser codex / responder claude. Nine findings on
-  `sec-2`/`sec-3`, seven blocking; **all upheld**, eight fixed in revision 35,
-  the ninth (`F-2`) fixed in 37 via the `DEC-156` correction below. A second
-  round covering `sec-5`, `sec-4`, and verification of all nine remediations
-  is in flight.
+  `sec-6` (crate topology, export set, layering enforcement), `sec-7` (the
+  conformance suite: eight properties, controls, admission).
+- `RV-346` — design facet, raiser codex / responder claude. **17 findings, all
+  upheld, none contested back.** Round 1: nine on `sec-2`/`sec-3`. Round 2:
+  codex verified five remediations, contested four, raised eight new
+  (`F-10`…`F-17`) across `sec-2`–`sec-5`. `await=raiser`, all 17 answered;
+  the ledger is the rolling one for this design, not a one-shot.
+- `EVD-013` — the teardown 2×2 (see Learned). Linked `concerns` → `SL-248`,
+  `DEC-156`.
+- `sec-3` amended — its freshness control named a provision its own refusal test
+  forbids; corrected to the placement-level control `sec-7` runs.
+- `sec-6` amended — `conformance`'s layering out-edges, and the no-lib-target
+  ruling for `doctrine-control`.
+- Friction observation `019fd675` — `design apply` silently accepts unknown
+  top-level keys; schema probing cost three no-op revisions.
 - `DEC-156` **corrected** — the backend property count moves seven → eight,
   splitting process-tree teardown from trusted observation of resource limits
   and termination. Only the number moved; the record's arguments stand. Human
@@ -179,24 +188,64 @@ fresh-as-of: 2026-08-06 · design drafting, sections 1–6 of 9 · 80f8e02b
   pure/imperative rule that the value is passed in. `HostFacts` therefore carries
   no clock, correcting `sec-3`'s first signature comment; provisioning needs no
   timestamp.
+- **Capsule teardown needs the pid namespace *and* `--die-with-parent`** —
+  `EVD-013`, the full 2×2. Neither is redundant, because bubblewrap runs its own
+  init as pid 1 (payload reports `pid=2`), so the namespace never collapses when
+  the command exits. The plausible inference — *a pid namespace reaps its
+  members, so `--die-with-parent` is belt-and-braces* — is false, and believing
+  it would have baked a control that cannot fire into the design. Also: there is
+  **no `--share-pid`**; `--share-net` is bubblewrap's only re-share flag.
+- **A control must remove the mechanism *unique* to its property.** Where two
+  rows share a mechanism, removing it cannot establish which guard produced the
+  result — `RV-346` `F-2`'s objection one level down. Corollary: a property with
+  no unique mechanism cannot be controlled independently and the rows must be
+  re-cut.
+- **`tests/` cannot link a bin-only crate** (`E0433`), and adding a lib target
+  does not rescue a `pub(crate)` item (`E0603`) — only `pub` compiles, which
+  would have forced `sec-7`'s weakening vocabulary public. `#[cfg(test)]` units
+  in a bin crate reach `pub(crate)` and do run under `cargo test`. All verified
+  on minimal reproductions, per this slice's standing habit of executing build
+  claims rather than reading them.
+- **`Failed` must not be defined as "not `Held`".** In a probe/control suite a
+  payload that breaks *on the control arm only* then reads as `Failed`, which is
+  exactly what a row needs to report proven — a false green through the hole the
+  token rule exists to close. Liveness must be established before any
+  observation is read; absence is indeterminate, never negative.
+- **The new crate is outside `just check`** (root-package only), so its tests
+  would be green by never running. The phase landing `sec-7` owes the checked-set
+  change.
+- `git cat-file --batch-all-objects` is fatal without a batch mode
+  (`--batch-check='%(objectname)'`).
+- Loopback is denied under `--unshare-all` and reached under `--share-net`
+  (measured), so a network-posture row holds offline and in CI.
 
 ### Open
 
-- **Sections `sec-7`–`sec-9` are unwritten**: the eight-property conformance
-  suite; code impact and verification alignment; risks and open questions. The
-  runbook step `draft.selectors` discharges off the code-impact section, so it
-  stays outstanding until `sec-8`. `sec-7` inherits more from `sec-2` than any
-  other section and should not start before the second codex pass on the
-  remediated `sec-2` returns.
-- **Residual for `sec-9`: the resolution-time race.** Declared paths are resolved
-  at provisioning, and a declared path could be re-pointed afterwards. Not
-  capsule-reachable — no declared path is writable by a capsule — so it is a
-  control-plane-side race on operator-owned config. Closing it needs the bind
-  performed against an open file descriptor rather than a path. Recorded, not
-  solved.
-- **`RV-346` is `await=raiser`** with all nine findings answered. A second codex
-  pass is expected over `sec-4` and the remediated `sec-2`/`sec-3`; the ledger is
-  the rolling one for this design, not a one-shot.
+- **Sections `sec-8`–`sec-9` are unwritten**: code impact and verification
+  alignment; risks and open questions. The runbook step `draft.selectors`
+  discharges off the code-impact section, so it stays outstanding until `sec-8`.
+- **`sec-6` and `sec-7` have never been externally reviewed** and should ride
+  the next codex pass together. `sec-7` was self-reviewed instead (12 findings,
+  4 blockers, all remediated at `ae77e077`) at the user's direction, on the
+  reasoning that newly introduced machinery is where the next round's bugs sit.
+  That pass found a defect it had itself introduced (`PidProbe`, undefined), so
+  treat self-review as narrowing the external pass, not replacing it.
+- **`sec-9` now owes four residuals**, not one:
+  1. *The resolution-time race.* Declared paths are resolved at provisioning and
+     could be re-pointed afterwards. Not capsule-reachable — no declared path is
+     writable by a capsule — so it is a control-plane-side race on operator-owned
+     config. Closing it needs the bind performed against an open file descriptor
+     rather than a path. Recorded, not solved.
+  2. *Out-of-crate backends.* `sec-7`'s sealing rests on `pub(crate)`, which
+     holds only while every backend lives in `doctrine-control`. A backend
+     shipping from outside makes the weakening vocabulary public API and it
+     needs a newtype over a private enum.
+  3. *macOS development hosts.* The conformance test asserts `Admitted`
+     unconditionally — conditioning it would reintroduce the green skip
+     `DEC-156` forbids — so `cargo test` fails on a host without bubblewrap.
+     Accepted, not hidden.
+  4. *The `just check` gap* above.
+- **`RV-346` is `await=raiser`** with all 17 findings answered.
 - `QUE-208` — capsule-side entity id allocation. **Parked deliberately** 2026-08-06;
   does not block this slice. Live for the ingestion slice, unavoidable by the
   recovery slice. Its own first settling condition — whether v0 permits capsules to
