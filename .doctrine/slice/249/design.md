@@ -1568,10 +1568,17 @@ it.
 
 It used to. `RV-349` `F-17` is why it no longer does — a hand-maintained copy of
 ledger history, living inside the artefact the ledger reviews, goes stale every
-round by construction, and was twice the subject of its own findings for
+round by construction, and became the repeated subject of its own findings for
 miscounting itself. The fix is not more care. It is to stop keeping the copy, and
 to keep here only what the ledger cannot: what the pass changed in the design,
 what it cleared, and what it taught.
+
+`F-18` is the same lesson one turn further in, and it is why nothing below counts
+anything. The first rewrite dropped the tables and kept the *arithmetic in the
+prose* — "twice", "four rounds", "in any round" — which is the same mutable fact
+in a form that reads as description rather than as a tally. It was already stale
+when it was written. A section describing an ongoing review may hold shapes and
+consequences; it may not hold quantities.
 
 ## What it changed
 
@@ -1595,15 +1602,15 @@ On the reviewer's record, without a finding: `DEC-177`'s tripwire remains
 justified for hand-edits and out-of-band writers; the Phase A/B boundary is
 coherent; `D4`'s `body` reuse is carried by objective 3's refusal; `ADR-013` REV
 routing and `ADR-004` relation deferral are correctly applied; the seven scaffold
-templates seed exactly their kinds' field sets; and four code claims this design
-makes — `Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s missing-key
-creation, `skip_serializing_if` totality, `append_edge → Noop` — match the
-source.
+templates seed exactly their kinds' field sets; and the code claims checked
+against the source — `Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s
+missing-key creation, `skip_serializing_if` totality, `append_edge → Noop` —
+hold. They are named rather than counted, so the list can grow without this
+paragraph going stale.
 
 `D9`'s proportionality was put to the reviewer directly, because a single test
-asserting a spec says "seven" and not "four" had been rewritten more times than
-anything else in this design, and that is the profile of a fix that has outgrown
-what it protects. The ruling was that it has not: the final test is compact, each
+asserting a spec says "seven" and not "four" had been rewritten again and again,
+and that is the profile of a fix that has outgrown what it protects. The ruling was that it has not: the final test is compact, each
 clause closes a demonstrated failure, and a simpler one would knowingly surrender
 coverage. Recorded so a later reader finds a ruling rather than re-deriving one.
 
@@ -1620,10 +1627,10 @@ was checked — the claim inherited the credibility of the reasoning around it.
 Where this design now states such a thing, it states the enumeration or the
 identity beside it, so a reader evaluates rather than trusts.
 
-**The artefact nobody re-reads.** The scope card drifted from the design twice;
+**The artefact nobody re-reads.** The scope card drifted from the design;
 a criterion widened past the card's own non-goals because nothing compared it
-back; a finding sat contested on the ledger for four rounds while its substance
-was being fixed elsewhere; and this section drifted from the ledger repeatedly.
+back; a finding sat contested on the ledger while its substance was
+being fixed elsewhere; and this section drifted from the ledger repeatedly.
 In every instance the artefact was the one updated last, after the substantive
 work, by hand. The `review.scope` runbook step is the comparison that should
 catch this and it fires once at the end of a stage — the wrong cadence for a
@@ -1655,8 +1662,8 @@ mode, found repeatedly inside the design that guards against it.
 4. **Every other unenumerated totality claim here.** The remaining unverified
    code claims — `entity::write_body`'s behaviour on an absent file,
    `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the tripwire's
-   precedent — were checked by nobody in any round, and each is one command from
-   being either evidence or a finding.
+   precedent — carry no evidence anywhere in this design, and each is one command
+   from being either evidence or a finding.
 5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
    recommendation (§ 6). The counter-argument to ruling them here is that both
    are about what the REV *says*, and the REV does not exist yet.
@@ -1664,6 +1671,6 @@ mode, found repeatedly inside the design that guards against it.
    the CLI. Splitting it is out of scope — a judgement about sequencing, not
    about whether the module is too big.
 7. **Anything Phase A touches that reads `facet_fields`.** `R6` says the boundary
-   erodes under convenience, and review added work to Phase A twice. The cheapest
+   erodes under convenience, and review added work to Phase A. The cheapest
    review is still a grep.
 
