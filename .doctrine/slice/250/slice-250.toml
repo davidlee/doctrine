@@ -13,6 +13,7 @@ after = [{ to = "SL-247", rank = 0 }]                      # slice→work soft s
 [[selector]]
 selector = "src/boot.rs"
 intent = "design-target"
+note = "Ordered matcher set, args-not-command + CommandForm axis, scope resolution, sweep (EvictOutcome/SweepReport), RefreshReport.hook as a collection, install_baseref follows the scope, PORTABLE_EXEC"
 
 [[selector]]
 selector = "src/install.rs"
@@ -24,7 +25,8 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/corpus.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "RV-348 F-2: run_sync_install matches HookWrite and calls the shared announcement writer — a changed path, not a regression surface"
 
 [[selector]]
 selector = "src/doctor_checks.rs"
@@ -57,6 +59,11 @@ intent = "design-target"
 [[selector]]
 selector = ".doctrine/spec/tech/011/**"
 intent = "design-target"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "design-target"
+note = "The [install] module-doc mirror at :44-45 goes stale with the marketplace steps; the scope key itself lives in install_config.rs"
 
 [[relation]]
 label = "fulfils"

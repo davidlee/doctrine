@@ -104,11 +104,35 @@ stays published for anyone who prefers the plugin.
    (`DEC-163`). Writing one scope **evicts** this spec's owned entries from the
    other and reports it (`DEC-164`).
 
-   Every command is already `${DOCTRINE_BIN:-doctrine} <verb>`; none resolves
-   through `${CLAUDE_PLUGIN_ROOT}`, so the command strings port into a settings
-   file verbatim (verified 2026-08-06, `plugins/doctrine/hooks/hooks.json`).
-   The `SessionStart` string is the **canonical current** form, not the
-   plugin's stale copy (`DEC-162`, closing `T2`).
+   The plugin's command strings are already `${DOCTRINE_BIN:-doctrine} <verb>`
+   and none resolves through `${CLAUDE_PLUGIN_ROOT}` (verified 2026-08-06,
+   `plugins/doctrine/hooks/hooks.json`); the `SessionStart` string is the
+   **canonical current** form, not the plugin's stale copy (`DEC-162`, closing
+   `T2`).
+
+   **The command form is a scope-derived axis — added 2026-08-06 during the
+   RV-348 remediation.** The earlier reading ("the strings port verbatim") was
+   about the *plugin's* file and said nothing about doctrine's own writer, which
+   bakes `current_exe()` — an absolute host path. `DEC-163` points the default at
+   a **tracked** file, and SL-195 already closed that exact defect on `.mcp.json`
+   and left the invariant **baked ⟺ gitignored** behind. So `HookSpec` holds its
+   *args* rather than a rendered command and `CommandForm { Baked, Portable }`
+   renders them: committed `Project` writes the portable literal (`MCP_COMMAND` →
+   `PORTABLE_EXEC` — one constant, two surfaces), gitignored `Local` keeps the
+   baked path, and the Codex arm answers `Baked` off its own file's gitignore
+   status rather than a borrowed scope (RV-348 `F-13`). This is **in** scope: it
+   is what the committed default costs.
+
+   **The scope dial also reaches `install_baseref` and the routine sync path.**
+   `install_baseref` takes the same scope — leaving it behind would have doctrine
+   writing *both* settings files per install — and because eviction is spec-keyed
+   while `worktree.baseRef` has no spec, the sibling is **read and a stranded
+   override reported**, not swept: Local overrides Project for scalars, so an
+   operator's stranded value keeps governing while doctrine's fresh one is inert
+   (RV-348 `F-14`). Scope, sweep and that report all print through **one shared
+   announcement writer**, which `run_sync_install` (`memory sync install`) also
+   calls — the highest-frequency install path inherits the slice's one
+   destructive write, so it must not inherit it in silence (RV-348 `F-2`).
 2. **One Claude skills channel, sourced from the embed.** `OQ-2` settled as
    **`OQ-2b`** — rebuild `install_for_claude`: binary-sourced, derived canonical
    `.doctrine/skills/<id>` tree plus proven-ownership relative symlinks. The
@@ -146,12 +170,14 @@ stays published for anyone who prefers the plugin.
   correctness, not edge-case handling.
 
 - **POL-002** (platform independence from host-project conventions) bounds how
-  much Claude-specific per-user knowledge may enter the engine. *No longer a live
-  constraint here (2026-08-06):* the only per-user reads this slice contemplated
-  were the doctor walk's layers 1–4, and that leg is IMP-407's. **This slice
-  reads no `~/.claude*` or managed-settings path at all** — it writes
-  project-scoped settings files and nothing else. POL-002 still governs the
-  slice (the `governed_by` edge stands), but via facet (1)/(2), not facet (3).
+  much Claude-specific per-user knowledge may enter the engine. *Live again on a
+  different facet (2026-08-06, RV-348 remediation.)* The per-user **reads** left
+  with the doctor leg — **this slice reads no `~/.claude*` or managed-settings
+  path at all**, so facet (3) is indeed dead here. But `DEC-163`'s committed
+  default re-opens the facet SL-195 closed: **no absolute host path in a tracked
+  file**. That is what makes the `CommandForm` axis a constraint-driven scope
+  item rather than polish, and it is the one place POL-002 dictates code in this
+  slice.
 - **No parallel implementation.** Hooks go through `HookSpec`; non-hook keys go
   beside it in the `plan_baseref` shape. Skills go through the existing SPEC-010
   planner.
@@ -183,12 +209,18 @@ stays published for anyone who prefers the plugin.
 - **Dispatch or confinement semantics.** No change to the funnel, worker spawn,
   import belts, or the `worker_commit` gate. `WorktreeCreate` is in scope only
   as a hook to *activate differently*, not to redefine.
-- **Redesigning the merge core.** *Re-drawn 2026-08-06 on research `X1`;
-  amended by the design run's `DEC-161` / `DEC-164`.* Four extensions are
-  explicitly **in** scope, because the hooks cannot be moved without them: new
-  `HookSpec` constructors, a settings-scope argument, generalising `HookSpec`
-  from one matcher to an **ordered matcher set**, and a **drop-only sweep** of
-  the scope being left.
+- **Redesigning the merge core.** *Re-drawn 2026-08-06 on research `X1`; amended
+  by `DEC-161` / `DEC-164`, then widened again by the RV-348 remediation.* These
+  extensions are explicitly **in** scope, because the hooks cannot be moved
+  without them: new `HookSpec` constructors; `HookSpec` generalised from one
+  matcher to an **ordered matcher set**; `HookSpec` holding its **args** instead
+  of a rendered command, so the `CommandForm` axis can render per scope and reach
+  the Codex arm; scope **resolved inside** `install_claude_hook` rather than
+  passed to it (as a parameter, `run_sync_install` could omit it and re-create
+  `R10` as a treadmill); a **drop-only sweep** of the scope being left, gated on
+  the write landing and reported as a per-spec `EvictOutcome` folded into a
+  per-file `SweepReport`; `RefreshReport.hook` becoming a collection; and the
+  shared scope-announcement writer both install paths call.
 
   **The ownership predicate is NOT widened.** The earlier draft put "widening
   the ownership predicate from `command` to `(command, matcher)`" in scope;
@@ -197,29 +229,49 @@ stays published for anyone who prefers the plugin.
   double-fire, where command-only ownership heals it.
 
   What stays out is replacing the plan/normalize/never-clobber architecture. The
-  behaviour-preservation gate applies — `corpus.rs`'s memory-sync hook and the
-  Codex arm must stay green unchanged; `DEC-161`'s shape satisfies it by
-  construction, since the existing specs are the N=1 case.
+  behaviour-preservation gate still binds the **Codex arm** — its emitted
+  `.codex/hooks.json` stays byte-identical, which is what `CommandForm::Baked`
+  buys it — and `DEC-161`'s shape satisfies it by construction, since the
+  existing specs are the N=1 case. **`corpus.rs` is no longer on that gate**: it
+  is a changed path (RV-348 `F-2`), not a regression surface.
+- **Windows.** `${DOCTRINE_BIN:-doctrine}` is POSIX parameter expansion, and
+  hooks are shell form — `sh -c` on macOS/Linux, Git Bash on Windows, else
+  PowerShell, where `${…}` delimits a *name* and the token resolves as an unset
+  variable so the command degrades to empty. Silently, since `PreToolUse` hooks
+  fail open. Doctrine does not target Windows (user, 2026-08-06): this is a
+  **stated boundary**, not a portability problem to engineer around (RV-348
+  `F-16`).
 - **SL-247's `OQ-2`/`OQ-3`** — whether a worktree-local `.claude/` binds for an
   in-session `isolation: worktree` subagent. SL-247 routed those to this slice's
   settings-scope question (`OQ-1`); with that now settled as *both scopes behind
-  a flag*, they are answered only to the extent the flag's semantics require.
+  a sticky `[install]` key* (`DEC-163` — there is no flag), they are answered
+  only to the extent that key's semantics require.
 
 ## Affected surface
 
-- `src/boot.rs` — `HookSpec`'s ordered matcher set (`DEC-161`), six specs'
-  constructors and predicates (`DEC-162`), `plan_hook` / `desired_entry` /
-  `install_claude_hook`, the settings-scope argument, and the drop-only sweep of
-  the abandoned scope (`DEC-164`). New named constants for
-  `.claude/settings.json` and the new matcher tokens (STD-001).
-- `src/dtoml.rs` — the sticky settings-scope key (`DEC-163`), riding the existing
-  `load_doctrine_toml` seam beside `[dispatch]`.
-- `src/install.rs`, `src/install_config.rs` — the rebuilt skills channel
-  (`OQ-2b`), the extracted link-reconcile helper replacing the byte-identical
-  blocks at `:2179-2191` and `:2279-2291` (`DEC-166`), the local target loop, and
-  the early scope announcement on the existing `writeln!(stdout, …)` seam.
-- `src/corpus.rs` — existing `HookSpec` consumer (memory-sync hook); regression
-  surface for any core change.
+- `src/boot.rs` — `HookSpec`'s ordered matcher set and its args-not-command shape
+  (`DEC-161`, RV-348 `F-13`), six specs' constructors and one shared ownership
+  predicate (`DEC-162`), `plan_hook` / `desired_entries` / `install_claude_hook`,
+  scope resolution, the `CommandForm` axis threaded to both arms, the drop-only
+  sweep of the abandoned scope with `EvictOutcome` / `SweepReport` (`DEC-164`,
+  RV-348 `F-15`), `RefreshReport.hook` as a collection, and `install_baseref`
+  following the scope and reporting a stranded sibling override (RV-348 `F-14`).
+  New named constants for `.claude/settings.json`, the matcher tokens, and
+  `PORTABLE_EXEC` (`MCP_COMMAND` renamed — STD-001).
+- `src/install_config.rs` — the `ClaudeSettingsScope` enum and its sticky
+  `[install] claude-settings-scope` key, read through the existing
+  `dtoml::load_doctrine_toml` seam (`DEC-163`). *Corrected 2026-08-06: the key
+  lives in the `[install]` table, not beside `[dispatch]` in `src/dtoml.rs`;
+  `dtoml.rs` is touched only for the module doc that mirrors it.*
+- `src/install.rs` — the rebuilt skills channel (`OQ-2b`), the extracted
+  link-reconcile helper replacing the byte-identical blocks at `:2179-2191` and
+  `:2279-2291` (`DEC-166`), the local target loop, the removal of the automated
+  plugin steps and their orphans, and the shared scope-announcement writer on the
+  existing `writeln!(stdout, …)` seam.
+- `src/corpus.rs` — **changed, not merely a regression surface** (RV-348 `F-2`).
+  `run_sync_install` matches the new `HookWrite` return and calls the shared
+  announcement writer, so `memory sync install` reports the scope and the sweep
+  it performs.
 - `plugins/doctrine/hooks/hooks.json` — the hooks being relocated. **Not deleted**
   — it stays as the published plugin's payload (`R9`'s escape hatch), which is
   why `R6` dissolves and `src/doctor_checks.rs` leaves this slice's surface.
@@ -231,7 +283,10 @@ stays published for anyone who prefers the plugin.
 - `.doctrine/spec/tech/010/` — **read, not amended.** `OQ-2b` restores what its
   responsibilities 3–6 already describe, so it is a conformance-verification
   target rather than a REV target (`DEC-171`).
-- `install/` — user-facing guidance on activation and the cutover gotchas.
+- `install/` — user-facing guidance on activation and the cutover gotchas, plus
+  the new `[install] claude-settings-scope` key (mirrored into
+  `install/doctrine.toml.example` and `install/doctrine.toml`), the command-form
+  note and its POSIX-shell boundary, and `R9`'s escape-hatch instructions.
 
 ## Risks / Assumptions / Open questions
 
@@ -366,13 +421,15 @@ stays published for anyone who prefers the plugin.
   symlink channel is how this repo worked before IMP-224 moved it onto the
   plugin — but its orchestration was **deleted**, not left dormant. Only the
   proven-ownership helpers survive. See `OQ-2`.
-- **`A3` — `OQ-1`'s benefit needs a gitignore change to land in this repo.**
-  `.gitignore:4` ignores `/.claude` wholly, so project `settings.json` is
-  untracked *here*. **The user will adjust `.gitignore` as needed (2026-08-06)**,
-  so this is a small in-scope edit, not a constraint. Note also that
-  `SETTINGS_REL`'s own rationale for choosing the gitignored file — "the absolute
-  exec path belongs out of git" — evaporates once commands are the portable
-  `${DOCTRINE_BIN:-doctrine}` form, which the probe confirmed works (`OQ-7`).
+- **`A3` — CLOSED, and it bites (design run, 2026-08-06).** No gitignore change
+  is needed: `.gitignore` already carries `!/.claude/settings.json` beside
+  `/.claude/*`, so the project settings file is **tracked here today**. That is
+  the fact that costs, not the one that saves — because the file is committed,
+  the baked `current_exe()` command form becomes a POL-002 breach and had to go.
+  `SETTINGS_REL`'s own rationale for choosing the gitignored file ("the absolute
+  exec path belongs out of git") does not evaporate; it is **honoured** by
+  emitting the portable `${DOCTRINE_BIN:-doctrine}` form in the committed scope
+  (`OQ-7`, and see the `CommandForm` axis under Scope).
 - **`OQ-1` — SETTLED (user, 2026-08-06): both scopes reachable, defaulting to
   project `settings.json`.** Committed activation is reviewable and travels with
   the repo; `settings.local.json` stays available for a collaborator who must not
@@ -508,9 +565,20 @@ Done is judged by:
   - `R10` (owned entry left in the other settings scope) is now a **behavioural**
     criterion: switching scope evicts this spec's owned entries from the file
     being left and reports the eviction. Verified by test, not by prose.
-- **The scope target is announced.** The installer states early where it will
-  write and which `doctrine.toml` key changes it (`DEC-163`) — this is what
-  replaces the `--scope` flag, so it is a criterion rather than a nicety.
+- **The scope target is announced — on both install paths.** The installer states
+  early where it will write and which `doctrine.toml` key changes it (`DEC-163`)
+  — this is what replaces the `--scope` flag, so it is a criterion rather than a
+  nicety. The same writer serves `memory sync install`, so the routine path
+  reports its scope and any eviction too (RV-348 `F-2`).
+- **No absolute host path in a tracked file.** SL-195's invariant survives the
+  committed default: the `Project` scope emits `${DOCTRINE_BIN:-doctrine}` and
+  the baked path appears only in the gitignored `Local` scope. Verified by test
+  on both arms — including that `.codex/hooks.json` output stays byte-identical
+  under `CommandForm::Baked`.
+- **A stranded `worktree.baseRef` override is reported.** Seeding a non-`head`
+  value in the abandoned scope and installing to the other yields a report naming
+  the file, the value and the remedy — the key is never swept (no-clobber), so
+  the report is the whole of the signal (RV-348 `F-14`).
 - **A cold install activates.** In a scratch project with no plugin
   registration, `doctrine install` (or the settled verb) leaves hooks that
   actually fire — demonstrated live, not merely planned. This is the claim the
@@ -519,11 +587,19 @@ Done is judged by:
 - **`SpawnSeamSymmetry` is untouched and still green.** Its input
   (`plugins/doctrine/hooks/hooks.json`) survives this slice, so the criterion is
   that the check needs **no** change and its live-config regression test passes
-  unmodified — the same behaviour-preservation posture as `corpus.rs` (`R6`,
-  withdrawn).
+  unmodified (`R6`, withdrawn).
 - **Safety contracts intact.** Foreign hook entries and pinned skill
-  directories/links survive every path; the existing `boot.rs` and `install.rs`
-  suites stay green unchanged (behaviour-preservation gate).
+  directories/links survive every path.
+- **The behaviour-preservation gate is two classes, not one.** *Sharpened
+  2026-08-06 — "the existing suites stay green unchanged" was true of the
+  matcher-set design and false of the scope and `CommandForm` work.* Class (i)
+  is preserved by construction and any red is a real narrowing: the Codex arm,
+  `corpus.rs`'s memory-sync **hook semantics**, the `SpawnSeamSymmetry`
+  regression test, and `plan_mcp` (whose only delta is the `MCP_COMMAND` →
+  `PORTABLE_EXEC` rename). Class (ii) is knowingly rewritten — the settings-path
+  and report-shape assertions in `boot.rs` — and the design enumerates every site
+  so an expected red is distinguishable from a real one. Closure requires that
+  enumeration to still match what actually changed.
 - **Governance reconciled.** *Re-targeted 2026-08-06 (`DEC-171`).* The REV amends
   **SPEC-011 / `REQ-186`** alone — it binds the hook write to one `<exec> boot`
   entry in `settings.local.json`, and this slice invalidates it on three axes

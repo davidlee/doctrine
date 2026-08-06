@@ -450,3 +450,43 @@ expanded by the client at load, the hook by whichever shell the platform picks.
 4. **`F-12`'s guard at `dry_run`.** Under `--dry-run` nothing is written, so
    every write "did not land" by the file-system test but did by the plan's.
    The design gates on the *outcome*, not on the write; confirm that is right.
+5. **The class-(ii) test enumeration, as a closure claim.** Added at the scope
+   reconciliation (below): the slice's closure criteria now assert that the
+   design's enumeration of knowingly-rewritten tests still matches what actually
+   changed. That is a claim only an implementer can falsify — a further pass can
+   only check the enumeration is internally exhaustive against the code-impact
+   table, which `F-17` already did once.
+
+### Scope reconciled against the accepted decisions (2026-08-06)
+
+`review.scope` discharged. `slice-250.md` was asserting four things the design
+run and the RV-348 remediation had moved past, all in the same direction — the
+scope described the pre-remediation design:
+
+- **The command form.** The scope said the strings "port into a settings file
+  verbatim". True of the *plugin's* file, silent about doctrine's writer, which
+  bakes `current_exe()`. Now carries the `CommandForm { Baked, Portable }` axis,
+  SL-195's `baked ⟺ gitignored` invariant, and the Codex arm's answer.
+- **POL-002.** The scope had it retired ("no longer a live constraint here") on
+  the strength of the doctor leg leaving. It is live again on the *other* facet —
+  no absolute host path in a tracked file — and that facet is what dictates code.
+- **The merge-core Non-Goal's "four extensions".** Now seven, including the
+  args-not-command shape, scope resolved *inside* `install_claude_hook`,
+  `EvictOutcome`/`SweepReport`, `RefreshReport.hook` as a collection, and the
+  shared announcement writer.
+- **`corpus.rs` on the behaviour-preservation gate.** It is a changed path
+  (`F-2`). The gate's two classes are now stated separately, and the closure
+  criterion for the suites went from "stay green unchanged" — false — to the
+  class (i) / class (ii) split.
+
+Also corrected: `A3` (the gitignore change is already in place, and that is what
+*costs*, not what saves), the config key's home (`[install]` in
+`install_config.rs`, not beside `[dispatch]` in `dtoml.rs`), the SL-247 pointer
+("behind a flag" → behind the sticky key), and `install_baseref` + the Windows
+boundary, neither of which the scope mentioned at all. New closure criteria: no
+absolute host path in a tracked file; the stranded-`baseRef` report; the
+announcement on both install paths.
+
+`review.selectors` discharged with it: `src/corpus.rs` promoted
+`scope-relevant` → `design-target`, `src/dtoml.rs` added as a design target for
+the module-doc mirror.
