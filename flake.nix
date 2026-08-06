@@ -56,6 +56,7 @@
           rust-bin.beta.latest.default
           rust-analyzer
           cargo-edit # `cargo set-version` for the release recipe
+          # tokei
 
           bashInteractive # jailed agents' Bash-tool shell (see CLAUDE_CODE_SHELL below)
 

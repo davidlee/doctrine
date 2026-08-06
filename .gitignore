@@ -1,7 +1,8 @@
 # use flake:
 /.direnv
 /.envrc
-/.claude
+/.claude/*
+!/.claude/settings.json
 /.agents
 /.pi/*
 !/.pi/agents
