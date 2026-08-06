@@ -38,7 +38,18 @@ that mechanism to be **parameterised over the target directory** rather than
 hard-coded to `.claude/skills/`.
 
 So the mechanism should already exist when this item is picked up. The work here
-is a second *target*, not a second mechanism:
+is a second *target*, not a second mechanism.
+
+**The content is paid for once.** The canonical `.doctrine/skills/<id>` tree
+holds the files; every agent directory holds only *relative symlinks* into it.
+So N harnesses cost one copy on disk and one refresh point for currency — adding
+`.agents/skills/` adds links, not kilobytes, and cannot drift from
+`.claude/skills/`. Verified against the pre-deletion source
+(`git show 347197e8^:src/skills.rs`): `canonical_dir` is already agent-neutral
+(`:305`) and `claude_links` already takes `agent_dir` as a parameter (`:439`) —
+it is misnamed, not Claude-bound.
+
+The steps:
 
 1. Point the same materialise-and-reconcile at `.agents/skills/<id>/`.
 2. Decide which harnesses stop delegating — anything that reads the neutral

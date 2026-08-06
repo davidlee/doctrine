@@ -344,7 +344,26 @@ stays published for anyone who prefers the plugin.
   target directory** — so `.agents/skills/` is a second *target*, not a second
   mechanism. Actually shipping the neutral target, and deciding which harnesses
   stop delegating, is follow-up work: it changes SPEC-010's `D2` for non-Claude
-  agents, which this slice holds as a Non-Goal. Captured as a backlog item.
+  agents, which this slice holds as a Non-Goal. Captured as IMP-406.
+
+  **The deleted code is already most of the way there** (verified against
+  `git show 347197e8^:src/skills.rs`, 2026-08-06). One canonical tree, N link
+  sets — the content is stored and refreshed **once**, and each agent directory
+  holds only relative symlinks into it:
+
+  - `canonical_dir(root, global)` → `<base>/.doctrine/skills` — **agent-neutral
+    already** (`:305`);
+  - `claude_dir(root, global)` → `<base>/.claude/skills` (`:290`) — a one-line
+    function, the *only* Claude-specific element;
+  - `claude_links(skills, agent_dir, canon_dir)` (`:439`) — **already takes
+    `agent_dir` as a parameter** and its body is agent-agnostic
+    (`dest = agent_dir.join(id)`, `target = relative_target(agent_dir, canon_dir,
+    id)`). It is misnamed, not Claude-bound.
+
+  So parameterising means renaming `claude_links` → `agent_links`, hoisting
+  `agent_dir` out of `install_for_claude` into a parameter, and looping the link
+  phase over targets while the materialise phase still runs once. `install_base`
+  keeps `--global` coherent (canonical and links both move to `$HOME`).
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
   Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
