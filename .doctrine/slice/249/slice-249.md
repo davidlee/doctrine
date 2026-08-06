@@ -89,6 +89,12 @@ Close the data-loss hole on the path from *ruling known* to *record filled*.
   that an optional flag is not enough. Design owns the verb's name and whether
   the other kinds' resolving transitions take the same treatment.
 
+- **Facets only, not lifecycle vocabularies** (was OQ-5). Objective 4's spec pass
+  writes the `EVD` / `HYP` / `CPT` facet contracts, because the write seam
+  load-bears on them. Their per-kind lifecycle vocabularies and supersession
+  rules stay ungoverned and stay on ISS-316, which therefore does **not** fully
+  close on this slice — it narrows to the lifecycle half.
+
 **Still open for `/design`:** the CLI shape for ~5 facet fields × 7 kinds (OQ-1).
 Candidates are one flat flag set that *refuses* flags inert at the record's kind
 (ISS-318's rule applied to the second call site — one table, two consumers), a
@@ -109,6 +115,8 @@ phases here:
   unfilled facet, and SL-246 owns the composed read.
 - **Lead 5 — skill guidance.** Whether `/knowledge`, `/design` and
   `/record-memory` instruct an agent to fill the facet at all.
+- **The `EVD` / `HYP` / `CPT` lifecycle vocabularies and supersession rules.**
+  Ungoverned, and staying that way here — ISS-316 keeps them.
 
 Also out of scope:
 
@@ -187,12 +195,8 @@ Also out of scope:
   Raised by ISS-316, unanswered. Objective 4 cannot write the concept kind's
   contract without ruling on it, and the answer decides whether `edit` has
   anything structured to write for a `CPT` at all.
-- **OQ-5** — do the per-kind lifecycle vocabularies for `EVD` / `HYP` / `CPT`
-  belong to this slice's spec pass, or only their facets? The vocabularies are
-  ungoverned too, but they are further from the write seam and could reasonably
-  stay on ISS-316.
-
-*(OQ-2 and OQ-3 settled by the user before design — see § Settled before design.)*
+*(OQ-2, OQ-3 and OQ-5 settled by the user before design — see § Settled before
+design.)*
 
 ## Verification / closure intent
 
@@ -207,9 +211,10 @@ Also out of scope:
 - Settling a question through the dedicated verb populates
   `answer`/`answered_by`/`answered_on` and moves the lifecycle in one act; the
   answer cannot be omitted. Test-verified.
-- SPEC-019 enumerates seven record kinds with no residual "four", and lists the
-  verbs this slice ships. Verified by agent against the spec text and
-  `knowledge new --help`; ISS-316 closes on it.
+- SPEC-019 enumerates seven record kinds with no residual "four", carries a facet
+  contract for `EVD` / `HYP` / `CPT`, and lists the verbs this slice ships.
+  Verified by agent against the spec text and `knowledge new --help`. ISS-316
+  narrows to its lifecycle-vocabulary half rather than closing.
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
   gate for shared machinery).
 - IMP-403 leads 1 and 2 are demonstrably closed; leads 3–5 are recorded as
