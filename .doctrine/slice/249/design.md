@@ -1238,24 +1238,42 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   either entity's two tiers at all, matched case-insensitively on a word
   boundary**.
 
-  That blanket form replaces the narrower one this design first proposed —
-  pinning a single stale enumeration phrase — and `RV-349` `F-5`'s round-two
-  contest is why. The objection to a blanket ban was that a spec may legitimately
-  say "four" about something unrelated; the corpus refutes it. Counting the actual
-  sites, case-insensitively: **32** — `spec-019.md` 25, `spec-019.toml` 3,
-  `spec-010.md` 4, `spec-010.toml` 0. They include two structured
-  `responsibilities` entries (*"Bind four `record_kind`s"*, *"all four
-  prefixes"*), *"four-kind discrimination"*, *"four subtypes"*, *"all four
-  kinds"*, *"the four record kinds"*, consequence counts (*"four
-  `priority::partition` entries"*, *"four VT-1 drift canaries"*) that are derived
-  from the kind count and equally stale at seven, and on `PRD-010`'s side *"the
-  four initial record kinds"*, *"exactly the four initial kinds"* and *"each of
-  the four kinds"*. Every occurrence is kind-derived; not one is independent.
-  Pinning one phrase would have closed one of thirty-two contradictions and
-  reported green on the rest — the `R4` recurrence again, one level subtler. A
-  future author with a legitimate "four" meets a red test whose message says why
-  the word is banned in these two documents, which is the right conversation to
-  force in a spec whose entire failure mode is a stale count.
+  …with **one declared exception**, and the exception is the point. `RV-349`
+  `F-5`, `F-7` and `F-9` are three rounds on this one assertion, and what each
+  found was a claim of totality made without enumerating. So here is the
+  enumeration, case-insensitive, word-boundary, which anyone can re-derive in one
+  command:
+
+  **32 occurrences — `spec-019.md` 25, `spec-019.toml` 3, `spec-010.md` 4,
+  `spec-010.toml` 0. Of those, 31 are kind-derived and stale at seven; exactly
+  one is not.**
+
+  The 31 include two structured `responsibilities` entries (*"Bind four
+  `record_kind`s"*, *"all four prefixes"*), *"four-kind discrimination"*,
+  *"four subtypes"*, *"all four kinds"*, *"the four record kinds"*, the
+  consequence counts (*"four `priority::partition` entries (one per kind)"*,
+  *"four VT-1 drift canaries"*) which are stale for the same reason one step
+  removed, and on `PRD-010`'s side *"the four initial record kinds"*, *"exactly
+  the four initial kinds"* and *"each of the four kinds"*.
+
+  The one that is not is `spec-019.md:330` — *"Admitting the record kinds touches
+  **four coupled sites** — `integrity::KINDS`, `RELATION_RULES`, the
+  `outbound_for` dispatch, and the exact-coverage invariant test."* That four
+  counts *integration sites*, is independent of the kind count, and stays correct
+  at seven. A blanket ban would force the REV to reword an accurate sentence to
+  make a test green, which is the tail wagging the dog and the reliable first step
+  towards the test being disabled.
+
+  So the canary bans the word **except** for a small declared allowlist of
+  phrases, one entry today: `"four coupled sites"`. Two properties keep the
+  allowlist from becoming the hole:
+
+  - each entry carries, in the test, the argument for why its `four` is
+    independent of the kind count — an exception has to be *stated* to exist, and
+    stating it is where a bad one gets caught in review;
+  - each entry must still occur, or the test fails. A stale allowlist entry is
+    dead weight that would silently widen the ban's escape hatch, so it expires
+    loudly.
 
   **Case-folding is not a detail** — `RV-349` `F-7`. `spec-019.md:34` is
   `### Four kinds, one engine`, a capitalised section *heading*, and arguably the
@@ -1313,11 +1331,18 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   thirty-two such statements and reported green on the rest, which is the same
   recurrence one level subtler. `F-7` then showed the second fix would have
   passed over the most prominent site of all — a capitalised heading — for want
-  of case-folding. The mitigation is only ever as strong as the count of sites it
-  actually covers, which is why `D9` bans the word outright, in both tiers, case-
-  insensitively, rather than pinning a phrase. Three rounds to get one assertion
-  right is itself the evidence for `R4`: this is the risk that keeps finding a
-  new way to report green.
+  of case-folding. `F-9` then showed the third fix was overbroad in the other
+  direction: of the 32 sites, 31 are kind-derived and one (`spec-019.md:330`,
+  *"four coupled sites"*) is a correct count of integration points that a blanket
+  ban would force the REV to damage. `D9` now bans the word in both tiers,
+  case-insensitively, with one declared and self-expiring allowlist entry.
+
+  **The pattern, not the three fixes, is what `R4` is about.** Each attempt
+  asserted a totality — *all the stale ones*, *no legitimate ones*, *every
+  occurrence is kind-derived* — without enumerating, and each was wrong in a way
+  the enumeration would have shown in one command. The mitigation is only ever as
+  strong as the enumeration behind it, which is why `D9` now carries the 31/1
+  split explicitly rather than a claim a reader has to trust.
 
 ## New, from drafting
 
@@ -1457,12 +1482,16 @@ Restated from the scope card with what drafting and review changed:
   and `knowledge list` still succeeds on that corpus. *Test-verified.*
 - Every kind in `kinds::RECORD` is named, in its paired form, in both authored
   tiers of `SPEC-019` and `PRD-010`, **and** the word `four` — matched
-  case-insensitively, on a word boundary — occurs in neither entity's two tiers.
+  case-insensitively, on a word boundary — occurs in neither entity's two tiers
+  outside the declared allowlist, every entry of which must still occur.
   *Test-verified by `DEC-176`'s canary as strengthened by `D9` — a project-local
-  test, never a `validate` rule (`POL-002`). The negative half is a blanket ban
-  rather than a phrase pin because all 32 occurrences across the two entities are
-  kind-derived and none is independent; it is case-folded because the most
-  prominent of them is a capitalised heading (`RV-349` `F-5`, `F-7`).*
+  test, never a `validate` rule (`POL-002`). The negative half is a near-blanket
+  ban rather than a phrase pin because 31 of the 32 occurrences across the two
+  entities are kind-derived; it is case-folded because the most prominent of them
+  is a capitalised heading; and it carries one allowlist entry because the
+  thirty-second (`spec-019.md:330`, "four coupled sites") is a correct count of
+  integration points that the REV must not be made to damage (`RV-349` `F-5`,
+  `F-7`, `F-9`).*
 - The per-kind contracts and lifecycle vocabularies for `EVD`, `HYP` and `CPT`
   are present and coherent in `SPEC-019`. *Agent-verified — a canary proves the
   enumeration moved, not that the contracts are right.*
@@ -1483,34 +1512,43 @@ carries its facet — which the mint test asserts directly.
 
 ## The pass that has run
 
-`RV-349` — one external adversarial pass over this document, three rounds. Round
-one at revision 48, briefed on eight lines of attack, five of them lifted from
-this section's drafted form: six findings, all upheld on evidence. Round two
-verified three and contested three; every contest was upheld. Round three
-verified two, contested one, and raised a seventh finding against the fix for the
-one it contested.
+`RV-349` — one external adversarial pass over this document, four rounds, ten
+findings. Round one at revision 48, briefed on eight lines of attack, five of
+them lifted from this section's drafted form: six findings, all upheld on
+evidence. Round two verified three and contested three; every contest was upheld.
+Round three verified two, contested one, and raised `F-7` against the fix for the
+one it contested. Round four verified two, contested `F-5` a third time, and
+raised `F-9` and `F-10`.
 
-| finding | severity | round 1 | round 2 | round 3 |
-|---|---|---|---|---|
-| `F-1` | blocker | § 5.3's recovery argument rewritten; `D8`, `I12`, a Phase A payload-digest guard | contested and upheld: the digest domain was undefined, and the *new* text repeated a false claim about the journal. `D8` names its material; `D8a` corrects `DEC-168`'s rationale | verified |
-| `F-2` | major | § 5.4 path B and § 5.2 rewritten to one document, one write; `D6` superseded | verified | — |
-| `F-3` | major | `P2` becomes an equality; `D1` amended; `I3` restated | contested and upheld: set comparison collapses a name repeated within a row. `P3` / `I3b` | verified |
-| `F-4` | major | `I10` added — the wire table's *mapping*, not just its inventory | verified | — |
-| `F-5` | major | `D9` — the canary reads both tiers and asserts an absence | contested and upheld: pinning one phrase closed one of 32 kind-derived "four"s. `D9` becomes a blanket ban | contested again: `D9` cited the wrong finding and the site count was understated |
-| `F-6` | major | `D10`, `I11` — edit preservation gets its own fixture; `I1`'s scope narrowed | verified | — |
-| `F-7` | major | — | — | raised: `D9`'s ban was case-sensitive, and `spec-019.md:34` is `### Four kinds, one engine` |
+| finding | severity | what it was, and how it settled |
+|---|---|---|
+| `F-1` | blocker | The recovery argument's premise was false: a retry under a journalled submission is not pinned to its payload. Contested once, because the *fix* both left the digest domain undefined and repeated a different false claim about the journal. Settled at `D8` (digest material named as the term `acceptance_digest` already binds), `D8a` (`DEC-168`'s rationale corrected), `I12`. Verified round three. |
+| `F-2` | major | `settle` ordered two writes "across two files" that are one file. `D6` superseded; one validated atomic write. Verified round two. |
+| `F-3` | major | `P1`/`P2` could not see ownership multiplicity. Contested once: the equality fix still compared sets, so a name repeated within a row collapsed. Settled at `P3` / `I3b`. Verified round three. |
+| `F-4` | major | `I9` proves wire-key inventory, not mapping. Settled at `I10`, a generated behavioural matrix. Verified round two. |
+| `F-5` | major | The coverage canary passed a still-four-kind spec. **Contested three times** — the phrase pin closed 1 of 32; the blanket ban miscited its own finding and understated the count; the count was right but its classification was not. Settled at `D9` as it now stands. |
+| `F-6` | major | `I1`'s named oracle is `#[cfg(test)]` with no production caller, so it proves the read model and not the writer. Settled at `D10` / `I11`. Verified round two. |
+| `F-7` | major | `D9`'s ban was case-sensitive; `spec-019.md:34` is `### Four kinds, one engine`. Case-folded, word-boundary. Verified round four. |
+| `F-8` | major | Self-raised: the scope card's own `F-5` amendment carried the understated count, so card and design disagreed about one criterion's evidence. Corrected; left on the ledger rather than fixed silently. Verified round four, with the reviewer's ruling that driving both roles is a legitimate use of the protocol. |
+| `F-9` | major | `D9` claimed all 32 occurrences were kind-derived. One is not — `spec-019.md:330`'s *"four coupled sites"* counts integration points and stays correct at seven — so the ban was knowingly overbroad and would have forced the REV to damage accurate prose. Settled at `D9`'s declared, self-expiring allowlist. |
+| `F-10` | minor | This section undercounted the findings and omitted `F-8`. |
 
-Rounds two and three are the ones worth reading twice, because every contest and
-the seventh finding were against *fixes*, not against the original design — and
-each found the fix conceding too much or too little. `F-1`'s fix restated, in new
-prose, the same false claim about `materialise_record_at` that the finding was
-already correcting. `F-3`'s fix reached for the cheaper pin and stopped one case
-short. `F-5`'s fix narrowed a blanket check to a phrase on a stated principle,
-and the corpus refuted the principle; the *replacement* blanket check then passed
-over the most prominent stale site in the document because it did not fold case.
-Errors of confidence in a correction are the failure mode this pass actually
-found, and `D9` took three rounds to converge on one assertion — which is `R4`'s
-whole argument, demonstrated rather than asserted.
+**What this pass actually found.** Two defects in the design as drafted were
+false premises about the source — `F-1` and `F-2`, one in each direction: an
+unsafe path the design believed was safe, and an unsafe path the design was
+carefully mitigating that did not exist. Everything after round one was a defect
+in a *fix*: `F-3`, `F-5` twice more, `F-7`, `F-9`, and `F-8` in the scope card.
+
+The shape they share is worth naming, because it is not carelessness and it will
+recur. Each was a **claim of totality asserted rather than enumerated** — *the
+pins are total together*, *every occurrence is kind-derived*, *the retry carries
+the same payload*. Each was cheap to check and none was checked, because the
+surrounding argument was sound and the claim felt like part of it. `D9` took four
+rounds and now carries a 31/1 split a reader can re-derive in one command instead
+of a claim they must trust; that arrangement, not the specific fix, is what the
+finding was really about. `R4` says objective 4's completion is easy to assert;
+this pass is the same failure mode caught six times in the design that guards
+against it.
 
 The review also retired an assumption rather than a defect: `A3` — all seven
 templates seed every field of their kind — was verified by reading them, so
@@ -1547,13 +1585,13 @@ In the order I would press, with the two rounds' answers already in.
    other vehicle exists until this slice ships. Someone should check that the REV
    is a legitimate place for it rather than the only place — and if it is not,
    the correction needs its own follow-up rather than a convenient ride.
-4. **Every other claim this design makes about the code.** Two of seven findings
-   were false premises about the source, one of three contests was a false
-   premise *inside a correction*, and `F-7` was a third-order one — a fix to a
-   fix. The base rate is the argument: this design's
+4. **Every other unenumerated totality claim in this design.** The base rate is
+   the argument, and it is now measured: six of ten findings were an asserted
+   totality that one command would have refuted. This design's
    remaining unverified code claims — `entity::write_body`'s behaviour on an
    absent file, `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the
-   tripwire's precedent — have not been checked by anyone in either round.
+   tripwire's precedent — were checked by nobody in any of the four rounds, and
+   each is one command away from being either evidence or a finding.
 5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
    recommendation (§ 6). If a reviewer thinks either should have been ruled here,
    the counter-argument is that both are about what the REV *says*, and the REV

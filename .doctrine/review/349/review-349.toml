@@ -50,7 +50,7 @@ response = "Upheld. I9 compares a fully-populated Declaration's serde key set ag
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "The governance canary can pass a still-four-kind spec"
 detail = "SL-249 design §9 (sec-9, lines 1020-1022) treats DEC-176 as the executable proof for R1, but that ruling only requires all seven kind names and three phrase pairs to occur in SPEC-019 prose. It does not inspect the structured responsibilities surfaced by doctrine spec show, reject residual four-kind framing, or prove the new EVD/HYP/CPT contracts and lifecycle verbs. SPEC-019 and PRD-010 currently carry structured and prose claims, so adding one sentence with the required substrings can make the canary green while the authoritative governance remains internally incoherent. This is weaker than the design objective and the claimed governance correction. Cheapest fix: make the canary inspect both authored tiers for SPEC-019 and PRD-010, assert the exact structured kind set and absence of stale four-kind framing, and retain explicit agent criteria for the semantic contracts and verbs."
@@ -68,7 +68,7 @@ response = "Upheld. render_record_toml is #[cfg(test)] and its own comment says 
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D9 can miss capitalised four-kind framing"
 detail = 'Revision 54 sec-11 D9 and sec-13 define the negative canary as the backticked word `four` not occurring, but never require a case-insensitive comparison. The current authoritative `doctrine spec show SPEC-019` output contains the stale heading `Four kinds, one engine`. An implementation using the natural Rust spelling `text.contains("four")` satisfies the test as written while leaving that explicit four-kind framing in place, reproducing F-5 through capitalization. Cheapest fix: specify a case-folded substring ban over both authored tiers, and include the current capitalised heading as the negative test fixture; a word-boundary-only check is insufficient because authored slugs also contain `four`.'
@@ -77,12 +77,30 @@ response = """Upheld, and verified: .doctrine/spec/tech/019/spec-019.md:34 is '#
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "SL-249 scope card carries the understated site count"
 detail = "Raised by the responder against its own artefact, for the record rather than for someone else to fix. The RV-349 F-5 amendment written into .doctrine/slice/249/slice-249.md's Verification / closure intent says 'all ~24 occurrences across them are kind-derived'. The design has since been recounted at 32 (case-insensitive, word boundary: spec-019.md 25, spec-019.toml 3, spec-010.md 4, spec-010.toml 0), so the card and the design disagree about the evidence for the same criterion. Fixed in the same commit as F-5's and F-7's integration; recorded here because a scope card that disagrees with its design is the failure the review.scope runbook step exists to catch, and it was introduced by this review rather than found by it."
 disposition = "fixed"
 response = "Card corrected to 32 with the per-file breakdown, matching sec-11. Self-raised and self-disposed in one round; left on the ledger rather than silently fixed so the slice's own record shows the scope card drifted from the design during review and was caught."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "major"
+title = "D9 misclassifies an independent use of four"
+detail = "Revision 57 sec-11 D9 says all 32 case-insensitive word-boundary occurrences of 'four' are kind-derived and none is independent, and uses that corpus claim to justify the blanket ban. The source contradicts it: .doctrine/spec/tech/019/spec-019.md:330-332 says admitting the record kinds touches 'four coupled sites' and enumerates integrity::KINDS, RELATION_RULES, outbound_for, and the exact-coverage test. Expanding the record-kind set from four to seven does not change that integration-site count. The canary therefore rejects a correct governance statement (or forces it to be reworded) on a premise the corpus disproves; sec-12 R4's 'thirty-two such statements' and sec-13's 'all 32 ... kind-derived' repeat the error. Cheapest fix: state the true split (31 stale kind-count occurrences, one independent occurrence) and either pin an exact exception for the independent sentence or deliberately reword that sentence while acknowledging the blanket test has this known false positive."
+disposition = "fixed"
+response = "Upheld, and this is the third time I have asserted a totality about these 32 sites without enumerating them, so the fix is the enumeration rather than another assertion. Classified all 32 by hand: 31 kind-derived and stale at seven; exactly one is not — spec-019.md:330, 'Admitting the record kinds touches four coupled sites — integrity::KINDS, RELATION_RULES, the outbound_for dispatch, and the exact-coverage invariant test'. That counts integration sites, is independent of the kind count, and stays correct at seven. You are right that a blanket ban is knowingly overbroad against it: it would force the REV to reword an accurate sentence to make a test green, which is the tail wagging the dog and the reliable first step towards someone disabling the test. D9 now bans the word with a declared allowlist, one entry today ('four coupled sites'), and the allowlist carries two properties that keep it from becoming the hole it looks like: each entry states, in the test, why its four is independent of the kind count — so an exception has to be argued to exist, and arguing it is where a bad one gets caught; and each entry must still occur, or the test fails, so a stale entry expires loudly instead of silently widening the escape hatch. Amended: sec-11 D9 (which now carries the 31/1 split and the exception by name), sec-12 R4, sec-13's criterion, sec-14's table. sec-12 also now names the pattern rather than the three fixes: every attempt at this assertion claimed a totality it had not enumerated, which is the same shape as F-1's 'the retry carries the payload' and F-3's 'the pins are total together'."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "minor"
+title = "Review notes omit the ledger's eighth finding"
+detail = "Revision 57 sec-14 says RV-349 has seven findings and its table ends at F-7, but the current ledger already contains F-8, raised and disposed before this verification round. That finding is not invalid merely because the responder raised it: the project's review-ledger protocol explicitly permits self-review to drive both roles via cooperative --as assertions, with the review lock and per-finding transition gate preserving the workflow. Since F-8 records a real scope/design drift and is now verified, omitting it makes sec-14's pass provenance and finding count false. Cheapest fix: count eight pre-round-four findings and add an F-8 row that identifies it as responder-self-raised and fixed in the revision-57 integration."
+disposition = "fixed"
+response = "Upheld — sec-14 said seven findings and had no row for F-8, because I wrote it before raising F-8 and did not revisit it. Corrected: the table is now ten findings with F-8, F-9 and F-10, and the round structure is four rounds rather than three. Two things changed beyond the count, because a bare arithmetic fix would have left the section saying less than the pass earned. The table is now one column of outcome per finding rather than a column per round — at four rounds the per-round grid was becoming a schedule rather than a record. And the analysis under it now names what the pass actually found: two defects in the design as drafted were false premises about the source, in opposite directions, and everything after round one was a defect in a fix. Six of the ten were a claim of totality asserted rather than enumerated — the pins are total together, every occurrence is kind-derived, the retry carries the same payload — each cheap to check and none checked, because the surrounding argument was sound and the claim felt like part of it. That is a more useful thing for the next reader to carry than a finding count."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
