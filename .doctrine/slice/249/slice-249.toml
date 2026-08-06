@@ -58,6 +58,11 @@ selector = "src/doctor_checks.rs"
 intent = "design-target"
 note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
 
+[[selector]]
+selector = "src/design_run/attestation.rs"
+intent = "design-target"
+note = "SL-249 design § 5.3 / D8 / I12 (added in review, RV-349 F-1): RecoveryIntent gains the #[serde(default)] payload digest that binds a resumed mint to the payload its acceptance was given for. Phase A."
+
 [[relation]]
 label = "references"
 role = "implements"
