@@ -92,6 +92,9 @@ stays published for anyone who prefers the plugin.
    Every command is already `${DOCTRINE_BIN:-doctrine} <verb>`; none resolves
    through `${CLAUDE_PLUGIN_ROOT}`, so the command strings port into a settings
    file verbatim (verified 2026-08-06, `plugins/doctrine/hooks/hooks.json`).
+   The merge core's ownership predicate must first be extended from `command`
+   to `(command, matcher)` — see `R5`. Without that it cannot represent these
+   hooks at all.
 2. **One Claude skills channel.** Settle `OQ-2` (npx delegate vs the SPEC-010
    symlink channel for Claude) and make the survivor the only Claude path.
 3. **The doctor leg.** A check that walks the diagnosis order the trust memory
@@ -99,10 +102,13 @@ stays published for anyone who prefers the plugin.
    working": folder trust → (plugin registration, while any plugin channel
    survives) → safe-mode / managed policy → blocklist → Doctrine's own hook
    entries present, canonical, and sole in the file it owns.
-4. **Governance follow-through.** SPEC-010 names the Claude plugin channel
-   explicitly, so this is a spec change, not just an install change: amend it
-   through a REV. RFC-018 (*Claude harness field notes*) remains the home for
-   the empirical findings this leans on.
+4. **Governance follow-through.** The REV's primary target is **SPEC-011**
+   (`REQ-186` and Responsibility 6), which binds the hook-write target to
+   `.claude/settings.local.json`. SPEC-010 governs *skills* distribution only —
+   it never mentions hooks, `settings.json`, or `enabledPlugins` — so it enters
+   the REV only if `OQ-2` changes the skills channel (research `X2`). RFC-018
+   (*Claude harness field notes*) remains the home for the empirical findings
+   this leans on.
 
 ### Constraints
 
@@ -135,9 +141,13 @@ stays published for anyone who prefers the plugin.
 - **Dispatch or confinement semantics.** No change to the funnel, worker spawn,
   import belts, or the `worker_commit` gate. `WorktreeCreate` is in scope only
   as a hook to *activate differently*, not to redefine.
-- **Reworking the merge core.** `HookSpec` / `plan_hook` are ridden as-is;
-  extending them with a constructor or a scope argument is in scope, redesigning
-  them is not.
+- **Redesigning the merge core.** *Re-drawn 2026-08-06 on research `X1`.* Three
+  extensions are now explicitly **in** scope, because the hooks cannot be moved
+  without them: new `HookSpec` constructors, a settings-scope argument, and
+  widening the ownership predicate from `command` to `(command, matcher)`. What
+  stays out is replacing the plan/normalize/never-clobber architecture. The
+  behaviour-preservation gate applies — `corpus.rs`'s memory-sync hook and the
+  Codex arm must stay green unchanged.
 - **SL-247's `OQ-2`/`OQ-3`** — whether a worktree-local `.claude/` binds for an
   in-session `isolation: worktree` subagent. SL-247 routed those to this slice's
   settings-scope question (`OQ-1`); with that now settled as *both scopes behind
@@ -160,14 +170,52 @@ stays published for anyone who prefers the plugin.
 
 ## Risks / Assumptions / Open questions
 
-- **`R1` — developer-loop cost of direct-write hooks.** `/reload-plugins`
-  re-registers plugin hooks with no restart
-  (`mem_019f1b770e75712086168408276a4868`). Whether a settings-file hook has an
-  equivalent is unknown; if not, every hook change costs a restart. This is
-  IMP-400 `OQ-5` and must be answered before committing, not after.
-- **`R2` — POL-002 boundary.** A doctor that reads `~/.claude.json`,
-  `known_marketplaces.json`, and system managed-settings is harness-specific by
-  nature. Placing it wrongly imports host-harness knowledge into the engine.
+- **`R1` — CLOSED, and it inverts (research, 2026-08-06).** Claude Code watches
+  settings files and hot-reloads them, `hooks` explicitly included; only `model`
+  and `outputStyle` are restart-gated. There is no `/reload-plugins` equivalent
+  because none is needed. Direct-write is a **strict developer-loop improvement**
+  over the plugin path, which needs an explicit `/reload-plugins` whose
+  reliability the memory corpus already doubts
+  (`mem_019f1b770e75712086168408276a4868`, flagged CONTRADICTED). Retained as an
+  argument *for* the change, not a risk.
+- **`R5` — the merge core cannot represent the hooks being moved. The slice's
+  central design problem.** Ownership is proven by `command` alone
+  (`src/boot.rs:1039-1056`) and the normalize collapses every owned entry to one
+  canonical entry — by design, documented in the predicate's own comment. Four
+  `PreToolUse` entries share the command `worktree pretooluse` (matchers `Bash`,
+  `Edit|Write`, `Agent`, `Workflow`) and two share `memory surface`
+  (`Read|Edit|Write`, `Bash`). One predicate per command would mark all four
+  owned and silently drop three. Ownership must widen to `(command, matcher)`,
+  or a matcher-set must be planned as one unit. This drove the Non-Goal re-draw.
+- **`R6` — the doctor's existing check reads the file being retired.**
+  `SpawnSeamSymmetry` parses `plugins/doctrine/hooks/hooks.json`
+  (`src/doctor_checks.rs:622`) *precisely because* it is the authored shipped
+  source rather than a tamperable installed copy. Retiring the plugin blinds the
+  check and reds its live-config regression test. Migrating its input is slice
+  work, not fallout.
+- **`R7` — the doctor can verify plausibility, not activation.** `/hooks` is the
+  only surface that reports which hooks are live and which file each came from,
+  and it is interactive-only; there is no programmatic query. Doctrine's doctor
+  can confirm the settings file it wrote is present, canonical, and sole — it
+  cannot confirm the harness loaded it. The closure criteria must not promise
+  otherwise.
+- **`R8` — mid-migration double-fire.** The settings boot hook was originally
+  removed because it double-fired against the plugin. Any state with the plugin
+  still enabled *and* settings hooks written reproduces that. Install ordering is
+  load-bearing even though migrating pre-existing installs is out of scope.
+- **`R2` — POL-002 boundary. Resolved in principle (research, 2026-08-06).**
+  POL-002 forbids depending on host state *silently*, not depending on it: a
+  feature-scoped capability is opt-in, acquired by no default path, and must fail
+  with a message naming what was missing. The doctor verb is exactly that shape.
+  Residual risk is only that no engine code has done this before — SL-250's leg
+  would be the first to read `~/.claude*`, so it sets the precedent.
+- **`R9` — the silent-failure premise is narrower than claimed.** Direct-write
+  sheds two plugin-only modes (orphaned marketplace registration, blocklist) but
+  keeps `disableAllHooks`, `allowManagedHooksOnly`, and folder trust — and
+  *acquires* one: `strictPluginOnlyCustomization` (managed settings only) blocks
+  hooks from user and project sources so they may come only from plugins or
+  managed settings. Under that gate the plugin channel is the safer one. Fewer
+  failure modes, not a subset; the design must say so rather than overclaim.
 - **`R3` — bootstrap ordering.** *Downgraded (user, 2026-08-06): "I can manually
   fiddle it."* Retiring the channel that currently activates Doctrine in this
   repo can leave the working session (and dispatch workers) without hooks partway
@@ -181,38 +229,81 @@ stays published for anyone who prefers the plugin.
   migration out of scope this slice does not write those files at all.
 - **`A1`** — the empirical findings recorded on IMP-400 are verified against the
   2.1.198 native binary and are not re-derived during design.
-- **`A2`** — *settled (user, 2026-08-06).* The SPEC-010 symlink channel is not
-  speculative: it is how this repo worked before IMP-224 moved it onto the
-  plugin. Research confirms the mechanism's current shape, not its viability.
+- **`A2`** — *settled (user, 2026-08-06), then sharpened by research.* The
+  symlink channel is how this repo worked before IMP-224 moved it onto the
+  plugin — but its orchestration was **deleted**, not left dormant. Only the
+  proven-ownership helpers survive. See `OQ-2`.
+- **`A3` — `OQ-1`'s stated benefit does not apply to this repo.** `.gitignore:4`
+  ignores `/.claude` wholly, so project `settings.json` is untracked *here*;
+  "reviewable, travels with the repo" is a claim about client projects. Note also
+  that `SETTINGS_REL`'s own rationale for choosing the gitignored file — "the
+  absolute exec path belongs out of git" — evaporates once commands are the
+  portable `${DOCTRINE_BIN:-doctrine}` form. The settled answer stands; the
+  justification is narrower than it reads.
 - **`OQ-1` — SETTLED (user, 2026-08-06): both, by scope flag, defaulting to
   project `settings.json`.** Committed activation is reviewable and travels with
   the repo; `settings.local.json` stays available for a collaborator who must not
   impose hooks on a client project's whole team. Doctrine's existing merge core
   targets `settings.local.json`, so the core gains a scope argument rather than a
   second write path. (IMP-400 `OQ-2`.)
-- **`OQ-2`** — is `npx skills` acceptable as the Claude path too, or does Claude
-  keep the direct symlink channel while others keep `npx`? SPEC-010 currently
-  splits them deliberately. (IMP-400 `OQ-3`.)
+- **`OQ-2` — the only substantive question left open.** Is `npx skills`
+  acceptable as the Claude path too, or does Claude keep the direct symlink
+  channel while others keep `npx`? Research supplies the cost line the card
+  lacked: the symlink orchestration (`install_for_claude`) was **deleted**, not
+  merely dormant — removed at `347197e8`, with `skills.rs` deleted at `68d2107a`
+  — so "keep the symlink channel" means resurrecting it from history. The
+  proven-ownership helpers (`classify_link`, `write_link`, `relative_target`)
+  survive and are exercised by the agents/workflows paths. Symlinks at
+  `.claude/skills/<id>` are explicitly supported by the harness. The real trade
+  is *rebuild machinery doctrine owns* against *one delegate path for every
+  agent, depending on an external tool absent from the official docs and on Node*.
+  Governance does not settle it: SPEC-010's own rationale supports both readings.
+  (IMP-400 `OQ-3`.)
 - **`OQ-3` — OUT OF SCOPE (user, 2026-08-06).** Whether retire *removes* existing
   `enabledPlugins` / marketplace registrations. Not settled, not carried: see
   Non-Goals and Follow-Ups. (IMP-400 `OQ-4`.)
-- **`OQ-4`** — is there a reload equivalent for settings-file hooks, or does
-  direct-write mean a restart on every hook change? (IMP-400 `OQ-5`; the
-  evidence side of `R1`.)
-- **`OQ-5`** — where does the doctor check live, given POL-002? (The evidence
-  side of `R2`.)
+- **`OQ-4` — SETTLED by research (2026-08-06): yes, and better.** Settings files
+  are watched and hot-reloaded, `hooks` explicitly included. See `R1`.
+  (IMP-400 `OQ-5`.)
+- **`OQ-5` — SETTLED by research (2026-08-06): a feature-scoped POL-002
+  capability declaration.** The doctor leg declares its dependency on Claude's
+  per-user files, no default path acquires it, and absence yields a descriptive
+  finding naming what was missing. See `R2`.
+- **`OQ-6` — do hooks from `settings.json` and `settings.local.json` merge or
+  does one override the other?** Strong inference for merge — the documented rule
+  concatenates and deduplicates array-valued settings across scopes, and exempts
+  exactly two settings, neither of them `hooks`; plugin hooks are documented to
+  "merge with your user and project hooks". But `hooks` is an object of
+  event → array and the docs never name it in the merge rule. If it overrides,
+  writing project scope by default could silently defeat a user's own local
+  hooks, and the scope flag's semantics change. **Settle by experiment, in the
+  first phase, before any merge-core surgery.**
+- **`OQ-7` — does Claude Code shell-expand `${VAR:-default}` inside a
+  `settings.json` hook command**, as it does in `.mcp.json` commands
+  (`src/boot.rs:539-543`)? Every hook command is `${DOCTRINE_BIN:-doctrine}`, so
+  a no here breaks the verbatim port. Minutes to probe; pair it with `OQ-6`.
 
 ## Verification / closure intent
 
 Done is judged by:
 
+- **The two probes land first.** `OQ-6` (hooks merge vs override across settings
+  scopes) and `OQ-7` (`${VAR:-default}` expansion in a settings hook command) are
+  answered by experiment before any merge-core change. Both can invalidate design
+  choices and both cost minutes.
 - **A cold install activates.** In a scratch project with no plugin
   registration, `doctrine install` (or the settled verb) leaves hooks that
   actually fire — demonstrated live, not merely planned. This is the claim the
-  whole slice rests on and should carry a `VH` leg.
+  whole slice rests on and should carry a `VH` leg; `/hooks` is the surface that
+  shows both that they are live and which file they came from.
 - **The doctor names the layer.** Each blocking layer in the diagnosis order
   produces a distinct, accurate diagnosis against fixtures — the per-user layers
-  are fixture-driven since they cannot be mutated in test.
+  are fixture-driven since they cannot be mutated in test. Scoped honestly per
+  `R7`: the doctor reports that what doctrine wrote is present, canonical and
+  sole, not that the harness loaded it.
+- **`SpawnSeamSymmetry` still guards the spawn seams.** Its input migrates with
+  the hooks and its live-config regression test passes against the new
+  authoritative source (`R6`).
 - **Safety contracts intact.** Foreign hook entries and pinned skill
   directories/links survive every path; the existing `boot.rs` and `install.rs`
   suites stay green unchanged (behaviour-preservation gate).
