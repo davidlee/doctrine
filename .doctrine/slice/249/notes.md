@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · stage `design` (pre-run) · f31b6187
+fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 19 `inquiring` · f729c3ec5
 
 ### Produced
 
@@ -19,6 +19,11 @@ fresh-as-of: 2026-08-06 · stage `design` (pre-run) · f31b6187
   the `body`-on-checkpoint instance from SL-248's run.
 - `IMP-403` — lead 2 corroborated with the SL-248 evidence; related to `ISS-318`.
 - `ISS-316` — absorbed as objective 4, narrowed to its lifecycle-vocabulary half.
+- Design run `dr-019fd6b6` (runtime tier) — 17-node inquiry map, 9 resolved.
+- `DEC-165` `DEC-168` `DEC-169` `DEC-170` `DEC-172` `DEC-173` `DEC-174`
+  `DEC-175` `DEC-176` — the nine rulings taken this run.
+- `HYP-001` — the corpus's first hypothesis record; references `IMP-403`.
+- Friction observation `019fd6c8-ecbf-7b71-9001-a4ba464daf48`.
 
 ### Learned
 
@@ -30,26 +35,51 @@ fresh-as-of: 2026-08-06 · stage `design` (pre-run) · f31b6187
   scripts are Python). → `CHR-056`.
 - Two write postures already exist in `dep_seq` and the choice is forced:
   `apply_status` refuses a missing key (scaffold-seeded, F-1), `apply_scalar`
-  creates one. Facet fields are scaffold-seeded blank, so F-1 applies.
+  creates one. Facet fields are scaffold-seeded blank, so F-1 applies. → `DEC-170`.
 - The facet field inventory is 31 slots / 30 distinct names / 1 shared — the fact
   that decided OQ-1.
 - `src/commands/knowledge.rs` does not exist; the knowledge CLI is in
   `src/knowledge.rs`.
+- `src/facet_write.rs` is anchored by **no spec** — no `sources` list names it,
+  and the string appears nowhere in the authored corpus (positive control run).
+  Its only governance is `SPEC-004`'s edit-preservingly clause. → open `inq-9`.
+- `SL-159` scoped a governance-axis REV for EVD+HYP that never landed; `SL-197`
+  added CPT with none. Third instance of the promised-but-uncriterioned pattern.
+  → `DEC-176` (the canary), open `inq-7` (whether this REV discharges it).
+- Objective 3's correspondence table is `Declaration` keys × design-run **subject**
+  kinds, not facet keys × record kinds — the fact that decoupled it from
+  governance. → `DEC-169`, and it is why `DEC-165`'s phase split works.
+- The prior rulings for all three ungoverned kinds already existed in closed
+  slices' designs (`SL-197` D2, `SL-159` §5.3/D5), so the REV elevates rather
+  than invents and `R2` retires. → `DEC-172`, `DEC-174`.
+- Shipped skill `/knowledge` handoffs enumerate only the original four kinds;
+  EVD/HYP/CPT appear in none. → `HYP-001`.
 
 ### Open
 
-- `OQ-4` (slice card) — is `ConceptFacet`'s emptiness designed or an omission?
-  No governance answers it; code corroborates "designed". The REV must rule.
-- `OQ-6` (slice card) — does the inert-key refusal extend to `validate_facet`'s
-  read path, or is read-tolerance deliberate?
-- `R1` — the SPEC-019 amendment is owed a REV (ADR-013), not an in-place edit.
-- `R2` — `EVD`/`HYP`/`CPT` facet contracts need rulings, not transcription of
-  current code.
+- `inq-11` (blocking) — the settle verb's name, and whether the other kinds'
+  resolving transitions take the same treatment.
+- `inq-16` (blocking) — does the inert-key refusal extend to `validate_facet`'s
+  read path? (was slice-card `OQ-6`; its `needs` on `inq-15` is now cleared).
+- `inq-7` `inq-9` `inq-12` (non-blocking) — SL-159 lineage; a spec anchor for
+  `facet_write.rs`; extract-or-fourth-bespoke `edit` transaction.
+- `inq-1` `inq-2` `inq-3` — framing parents, resolved by their children.
+- **User steer on `inq-12`, not yet in a durable record:** the refactor is
+  contingent on cost and added design complexity; the governing motivation is
+  closing the data-loss hole soonest, so a fourth bespoke verb is the acceptable
+  outcome if extraction is not demonstrably cheap. Same steer is the tie-breaker
+  generally — where two answers are defensible, prefer the one that lands the fix
+  sooner.
+- **Acts to re-take before the drafting edge:** `governance-confirmed`,
+  `blocking-set-declared`, `graph-reviewed` were invalidated when `inq-17` joined
+  the map at rev 14. The gate will refuse and name them; the blocking set needs
+  restating over the current 17 nodes.
+- `R1` — the amendment is owed a REV (ADR-013). Now two entities, but the PRD
+  half is a refresh not a reversal (`DEC-175`).
 - `R2a` — ordering dependency: SL-249's REV lands before `SL-246` derives its
   per-kind field lists.
-- Unverified limit: whether `PRD-010` also carries the four-kind framing (if so
-  the REV grows to two entities); whether ADR-013's apply path can auto-apply a
-  prose-heavy amendment.
+- Unverified limit: whether ADR-013's apply path can auto-apply a prose-heavy
+  amendment. (The PRD-010 four-kind limit is now resolved — `DEC-175`.)
 - `CHR-056` — open, not a blocker.
 
 ## Design surface triage
