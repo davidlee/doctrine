@@ -180,14 +180,18 @@ Also out of scope:
   invention rather than deriving it*. It has explicitly handed the amendment off.
   SL-249's REV lands first; SL-246 then derives its per-kind field lists from
   governance.
-- **R4 — the seam this slice should ride is annotated for deletion.**
-  `src/facet_write.rs` already implements the mixed-type `[facet]` writer
-  (`set_facet_mixed` / `apply_set_mixed`) and `src/commands/facet.rs:711` already
-  consumes it — but its functions carry `expect(dead_code, reason =
-  "transitional facet writer; migration script is the last consumer, deletes at
-  SL-222 deletion phase")`. Research could not resolve whether that deletion is
-  still planned. This is the highest-leverage unknown in the slice: objective 1's
-  mechanism hangs off it, and building fresh would be a *third* `[facet]` writer.
+- **R4 — RESOLVED, retained for the lesson.** The facet write mechanism is
+  `src/facet_write.rs`'s `set_facet_mixed` / `apply_set_mixed`: live, unmarked,
+  and already serving the shipped `doctrine risk set`. The
+  `deletes at SL-222 deletion phase` marker covers only three float-valued
+  symbols (the `[estimate]`/`[value]` shape SL-222 retired), and SL-222 scoped
+  *"risk/tags survive"* from the start. Objective 1 rides the seam.
+  **The lesson stands, though:** SL-222's PHASE-09 objective promised
+  *"facet_write [value]/[estimate] machinery deletes"* while its exit criteria
+  checked only a grep-gate, a tripwire suite and a green build. The deletion
+  never happened, the audit did not catch it, and nothing owns it since.
+  Objective 4 is the same shape — a prose-heavy amendment whose completion is
+  easy to assert. **Its criteria must name observables, not intent.**
 - **R3 — surface creep on the flat-flag shape.** ~5 fields × 7 kinds is a large
   flag set on one verb; `memory edit` already carries 15 and reads as a wall.
   Mitigated by the refusal rule making the wrong flag an error rather than a
