@@ -2925,3 +2925,392 @@ reported **partial** in the reconciliation brief, the same shape `sec-3` uses
 for `REQ-450`. Criterion 3 is discharged structurally: there is one suite, it is
 parameterised by backend, and a second backend passing it edits nothing.
 
+<!-- doctrine:section sec-8 -->
+## Code impact and verification alignment
+
+The touch-set in one place, the checked-set ruling `sec-7` deferred here, and the
+evidence rollup — what is net-new, what must stay green unchanged, and which
+requirements this slice can and cannot close. Each section's own `Verification
+alignment` is the authority on its test titles; this restates none of them and
+records only what sits between sections.
+
+### The touch-set
+
+New, in the root package:
+
+| path | what it is | owner |
+|---|---|---|
+| `src/lib.rs` | the lib target and its entire export set — five items behind three private modules | `sec-6` |
+| `src/config_file.rs` | `DOCTRINE_TOML` and `read_doctrine_toml_text`, relocated out of `dtoml` so they can cross a crate boundary; out-edge-free, leaf | `sec-6` |
+| `src/interpretation.rs` | the `[interpretation]` typed projection: parse, normalize, canonical hash, restriction algebra; leaf, beside `dtoml`, the `reserve.rs` shape | `sec-4` |
+
+New, the second crate — a bin-only package, no lib target (`sec-6`):
+
+| path | what it is | owner |
+|---|---|---|
+| `crates/doctrine-control/Cargo.toml` | path dependency on the `doctrine` lib target | `sec-6` |
+| `crates/doctrine-control/src/main.rs` | the two verbs, `provision` and `backend verify` | `sec-6` |
+| `crates/doctrine-control/src/host.rs` | `HostFacts`, `SystemHost` | `sec-5` |
+| `crates/doctrine-control/src/config.rs` | `CapsuleConfig` and the `[capsule]` reader | `sec-5` |
+| `crates/doctrine-control/src/capacity.rs` | `CapacityVerdict`, `assess_capacity` | `sec-5` |
+| `crates/doctrine-control/src/backend.rs` | `CapsuleBackend`, `CapsulePlacement`, `Execution`, `Observation`, `Termination`, `ForbiddenScopes` | `sec-2` |
+| `crates/doctrine-control/src/backend/bubblewrap.rs` | the Linux profile, its twelve flag constants and its argv | `sec-2` |
+| `crates/doctrine-control/src/transaction.rs` | `CapsuleTransaction`, `TransactionId`, `AcceptedBase`, `PhaseIdentity` | `sec-3` |
+| `crates/doctrine-control/src/provision.rs` | `provision`, export publication, root ownership, rollback | `sec-3` |
+| `crates/doctrine-control/src/conformance.rs` | the eight-property table, the fixture, the verdict, and the second caller | `sec-7` |
+
+Modified — and this is the whole of it, which is `sec-6` invariant 2 stated as a
+diff rather than as a claim:
+
+| path | change | why it is small |
+|---|---|---|
+| `src/git.rs` | `read_path_at` and `CaptureError` `pub(crate)` → `pub` | compiler-required: `pub use` of a `pub(crate)` item is `E0364` |
+| `src/dtoml.rs` | two items removed, re-exported from `config_file` under their existing names | all 35 call sites across 33 files are untouched |
+| `src/main.rs` | one `mod config_file;` declaration | the binary's `dtoml` reaches the relocated items through it |
+| `Cargo.toml` | `crates/doctrine-control` joins `[workspace] members`; a `default-members` key is added | see the checked set below |
+| `tests/architecture_layering.rs` | `check`'s module filter takes its source directory as a parameter; the gate runs twice; the export-set assertions are added | `discover_units` and `extract_edges` are already parameterised |
+| `.doctrine/adr/001/layering.toml` | `config_file = "leaf"`, `interpretation = "leaf"`, the edge `dtoml → config_file`, and a second section for the new crate's eight units | unit names are unique per tree, so the new crate's map is not merged |
+| `.doctrine/doctrine.toml` | the `[capsule]` table | this project's own operator configuration, not a platform default |
+
+`src/main.rs` does **not** declare `mod interpretation;`. Nothing in the
+agent-facing binary consumes the policy in this slice — `doctrine-control`
+reaches it through the lib target — and declaring it in both targets to no
+purpose would compile it twice for nothing. It is still classified in
+`layering.toml` and still walked by the gate, which discovers units from the
+file tree rather than from `mod` declarations, so it acquires no exemption by
+being absent from the binary.
+
+### What does not change, and why that is worth stating
+
+**`src/worktree/` is untouched.** Not merely un-imported — unedited. `DEC-155`
+gives the bubblewrap backend its own flag constants and its own profile builder,
+so `bwrap_core_argv` and its byte-parity contract with
+`scripts/pi-spawn-confined.sh` are outside this slice's diff entirely.
+
+That retires the slice's authored risk `R4` — the parity contract as a second
+behaviour-preservation obligation — and narrows `R2`, which named `jail.rs` as
+the shared machinery this slice disturbs. `R2` survives with a different
+subject: the shared machinery this slice actually changes is `dtoml`'s two
+relocated items and the layering gate's directory parameter. Both are covered by
+existing suites, which is the point of doing them behind a re-export and behind
+a parameter. `sec-9` carries the corrected reading.
+
+Also unchanged: every incumbent dispatch, worktree, marker and confinement
+suite; `src/commands/`; `src/dispatch_config.rs`; the release arrangement
+(`flake.nix`, `install.sh`, `release.yml`, the `[package] include` list), which
+`sec-6` defers to whichever slice first releases the second binary.
+
+### The checked set
+
+`sec-7` left one obligation on this section: the new crate's tests are green by
+never running unless something brings it into the checked set. `just check` runs
+`fmt`, `lint`, `build`, `validate`, `test`, and four of those five resolve to a
+bare `cargo` invocation that, with a package at the workspace root and no
+`default-members`, selects the root package alone. `crates/cordage` is outside
+the fast loop today for exactly this reason, and a new crate would inherit that
+by default — including `cargo clippy`, which would leave the new crate unlinted
+under `just gate` as well, since `lint` is root-package-only in both recipes.
+
+**The ruling: `default-members = [".", "crates/doctrine-control"]`.** One key,
+in the workspace `Cargo.toml`, and `fmt`, `lint`, `build` and `test` all reach
+the new crate with no per-recipe flag and no recipe edit. `cordage` stays out of
+the fast loop exactly as today; `test-all`'s `--workspace` is unchanged and
+still covers all three. This is the whole of the checked-set change.
+
+Its consequence is honest and belongs here rather than in a phase note: the
+executed conformance suite joins the fast inner loop. Tables A, B and C are on
+the order of fifty capsule provisions and executions per run — each a local
+clone from an export built once per base and adopted thereafter — plus two
+payloads that sleep a small fixed multiple of a fixture-chosen bound. The
+fixture sets that bound, so the wall clock is bounded by construction rather
+than by the operator's `[capsule]` table, but it is not free.
+
+**If measurement makes the inner loop unusable, the lawful adjustment is a
+filter on `test:` alone** — `cargo test -- --skip <executed module path>` — with
+`test-all` unfiltered, so the commit gate still runs every row. This is not the
+green skip `DEC-156` forbids, and the distinction is worth being exact about:
+`DEC-156` forbids an *admission verdict* reaching `Admitted` without every row
+having run, which `sec-7` makes structural in `Admission`. A test binary that
+some recipe does not invoke produces no verdict at all. What is not available is
+`#[ignore]` on the admission test, which would put the skip inside the default
+run where a reader would take its absence for a pass.
+
+The measurement is a phase obligation, not a design one. The default is
+unfiltered.
+
+### Where the new evidence lives
+
+The new crate has no lib target, so it has no `tests/` directory — a `tests/`
+file cannot link a bin-only package (`E0433`), and `sec-6` declined the lib
+target that would rescue it rather than publish `sec-7`'s weakening vocabulary.
+Every test in `doctrine-control` is therefore a `#[cfg(test)]` module inside the
+unit it tests, which reaches `pub(crate)` items and does run under `cargo test`.
+
+| evidence | lives in | kind |
+|---|---|---|
+| `sec-2`'s argv, closure and placement-validation tests (≈33 titles) | `backend.rs`, `backend/bubblewrap.rs` | pure |
+| `sec-3`'s export, clone, rollback and ownership tests (≈22) | `provision.rs`, `transaction.rs` | pure and trusted-side |
+| `sec-4`'s parse, normalization, hash and restriction tests (≈42) | `src/interpretation.rs`, root package | pure |
+| `sec-5`'s capacity, configuration and root-resolution tests (≈33) | `config.rs`, `capacity.rs`, `host.rs` | pure, over a fixture `HostFacts` |
+| `sec-6`'s export-set and two-tree gate assertions (7) | `tests/architecture_layering.rs` | integration, root package |
+| `sec-7`'s classification and verdict-algebra tests (18) | `conformance.rs` | pure |
+| `sec-7`'s tables A, B and C | `conformance.rs` | executed, one fixture per run |
+
+The counts are indicative for phase sizing; each section's own list is the
+authority, and two titles are named by two sections and belong to one test.
+
+`sec-6`'s assertions land in `tests/architecture_layering.rs` rather than a new
+file because the export set is the cross-crate half of the same rule the file
+already enforces, and because `tests/` can now link the root package's lib
+target — which it could not before this slice, and which is the only reason the
+export set is assertable at all.
+
+### What must stay green unchanged
+
+The behaviour-preservation obligation (AGENTS.md; `R2` as corrected above) has
+four subjects, and each is proven by a suite written for something else:
+
+1. **The 35 `DOCTRINE_TOML` / `read_doctrine_toml_text` call sites.** The
+   relocation is behind re-exports under the existing names, so no call site
+   changes; any behavioural difference fails tests that never heard of this
+   slice.
+2. **The layering gate's verdict over `src`.** Parameterising `check`'s module
+   filter must move no existing classification —
+   `the_existing_layering_gate_is_unchanged_in_verdict_over_the_root_tree` is
+   the assertion, and it is the reason the parameter is added rather than the
+   extractor generalised.
+3. **The incumbent dispatch and confinement suites**, including the pi-spawn
+   byte-parity test, which pass unchanged because nothing they cover is edited.
+4. **The `dtoml` cascade stays inside the binary.** `dtoml` is not exported and
+   must not become exportable; the export-set assertion is what notices if a
+   later change tries.
+
+One new gate arrives with the lib target and is easy to miss: **`cargo test` now
+builds the library's own test targets.** The export set must be transitively
+closed over `crate::` paths in `#[cfg(test)]` code as well as production code —
+`git.rs`'s test module reaches `crate::kinds`, so `kinds` is declared privately
+in `lib.rs` as a path target rather than as an export. `cargo build` is green
+while this is wrong. It surfaces only when the library's tests first compile,
+which is a `just check` away rather than a release away, but only because the
+crate is in the default set.
+
+### Requirement closure
+
+The slice's authored closure intent expects `REQ-449`, `REQ-459` and `REQ-461`
+to move `pending → satisfied`. The design agrees on two of the three and
+**corrects the third**: `sec-7` establishes that `REQ-459` criterion 2 —
+bubblewrap becoming *the supported* backend — needs production acceptance
+evidence this slice does not produce. The correction is owed to the
+reconciliation brief, alongside `DEC-136`'s handoff note (`sec-1`, `sec-4`).
+
+| requirement | this slice | evidence |
+|---|---|---|
+| `REQ-449` | `satisfied` | `sec-4`'s refusal, normalization, hash and restriction tests; criterion 3 by `sec-7` table C's read-once row |
+| `REQ-461` | `satisfied` | `sec-5`'s pure capacity and configuration tests. The executed probe row is corroboration and may report *skipped* where the capsule root and the repository share a filesystem, so closure does not rest on it |
+| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A in full; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet |
+| `REQ-450` | contributing `--change`, stays `pending` | criterion 1 by table B. Criteria 2 and 3 need candidate identity and harvest from later slices |
+| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only, by table A rows 1–5 |
+
+Coverage records name the discharging test per criterion (`doctrine coverage
+record`), and the reconciliation brief reports `REQ-448`, `REQ-450` and
+`REQ-459` as partial in those words rather than leaving a reader to infer it
+from a `pending` status.
+
+<!-- doctrine:section sec-9 -->
+## Risks, residuals, and what stays open
+
+The design's own account of what it did not settle. The slice's scope authored
+`R1`–`R3` and its assumptions `A1`–`A3`; the pre-design triage added `R4`–`R5`
+and `A4`. This section adjudicates each against the design that now exists —
+one of them is retired, one changes subject, one is discharged — adds the two
+the design itself created, and records the four residuals a reader implementing
+from this document would otherwise meet unannounced.
+
+### The authored risks, as they now stand
+
+**`R1` — evidence altitude. Stands, unchanged, and binds this document.**
+`SL-241` is Linux, bubblewrap, one client shape, `n = 1` on the real-agent leg:
+feasibility evidence, and not performance, portability or production-readiness
+evidence. Every measured claim in `sec-2`, `sec-3`, `sec-5` and `sec-7` is
+attributed where it was measured, and none is generalised past it. The "16/16"
+summary stays forbidden — fifteen rows reached model level, the env-file row is
+unproven beyond the Rust fixture, structural `n/a` cells are not omissions, and
+four `fail` rows are successful mutant detections. `R1` is also why `REQ-459`
+criterion 2 cannot close here (`sec-8`).
+
+**`R2` — behaviour preservation. Stands, with a different subject.** As
+authored it named `src/worktree/jail.rs` as the shared machinery this slice
+disturbs. Under `DEC-155` the bubblewrap backend is self-contained, and `sec-8`
+records that `src/worktree/` is not merely un-imported but unedited. The
+obligation survives against what this slice does change: `dtoml`'s two
+relocated items, behind re-exports, and the layering gate's directory
+parameter. Both are proven by suites written for something else, which is why
+they take those shapes.
+
+**`R3` — a property suite is only as good as its adversary. Stands, and is the
+risk `sec-7` exists to answer.** One-property-removed controls against decoy
+targets, liveness established before any observation is read, `Failed` as a
+positive observation rather than the absence of one, and a verdict algebra in
+which a control that still held yields `Unproven`. The residual is structural
+rather than a matter of care: rows 3 and 4 share a denial mechanism and are
+independent only because they reach for different things, and the rule that
+kept them honest — *a row's control removes the mechanism unique to that row's
+property* — is a rule a later row can be added in violation of. A property with
+no unique mechanism cannot be controlled independently, and the rows must then
+be re-cut rather than the control widened.
+
+**`R4` — the `bwrap_core_argv` parity contract. Retired.** Its premise was that
+this slice widens the shared bubblewrap builder. `DEC-155` gives the capsule
+backend its own flag constants and its own profile, so the byte-parity test
+against `scripts/pi-spawn-confined.sh` is outside this slice's diff. Nothing
+here can fail it.
+
+**`R5` — the distribution contract. Stands, deferred, and named as a
+Follow-Up.** `doctrine-control` is built and not released, so the nix
+`srcWithDist` graft, the binstall asset name, `install.sh` and `release.yml`
+move together for whichever slice first ships it. `POL-002` is why that is
+named rather than done here: those four artefacts are this project's own
+release arrangement, and the platform does not acquire a release step because
+one of its slices produced a second binary.
+
+### Two risks this design created
+
+**`R6` — the double compilation is safe only while the binary touches no
+library type.** `src/main.rs` keeps its own module tree and `src/lib.rs`
+declares three of the same modules, so `git`, `config_file` and `kinds` compile
+twice. The two copies never meet today because nothing in the binary names a
+`doctrine::` path. The day something does, `doctrine::git::CaptureError` and
+`crate::git::CaptureError` become distinct types with identical names, and the
+resulting mismatched-type error names one type twice. The alternative —
+`main.rs` as a thin binary over the library — was rejected in `sec-6` because it
+publishes most of the product as library API (110 `pub(crate)` items in `git.rs`
+alone, 203 in `memory.rs`), so this is the accepted side of a considered trade
+rather than an oversight. The mitigation is the rule, not a test: the binary
+does not import from its own library.
+
+**`R7` — the `doctrine` package acquires a public library API.** It has none
+today; `src/lib.rs` is inside the published `include` list, so at the next
+release of `doctrine` the five exported items become semver surface that
+downstream consumers may depend on. The exposure is bounded and asserted —
+`the_root_library_exports_exactly_the_named_set` fails on any accidental
+widening, and every exported item is leaf-tier — which is the design's answer.
+The alternative, excluding the lib target from the published tarball, would
+require replacing the `include` allow-list with an enumeration and would make
+the published crate differ from the built one; that is more fragile than the
+export assertion, and it is rejected on those grounds rather than overlooked.
+
+### Assumptions
+
+`A1` (`SPEC-030` and `ADR-020` win where this design disagrees), `A2` (`REV-046`
+stays proposed and unapplied throughout) and `A3` (the existing
+`.doctrine/doctrine.toml` reader is extended, not forked) stand as authored, with
+one refinement: `A3`'s *extended* is `sec-4`'s typed projection beside the shared
+reader, which is what `DEC-136`'s intent admits and what its handoff note
+mis-describes.
+
+`A4` is **discharged**. `git::read_path_at` was to be verified as the whole
+impure surface `REQ-449`'s resolution needs; it was, at point of use, and
+`sec-6` exports it on that basis.
+
+### The four residuals
+
+Each of these is a thing this design knows and does not fix. They are recorded
+here rather than solved because solving them needs either a second backend, a
+later slice, or a mechanism the backend contract cannot currently express.
+
+**1. The resolution-time race.** Declared readable paths are fully resolved,
+validated and then bound, and the window between validation and bind is real: a
+path re-pointed inside it would bind a target that was never validated. It is
+not capsule-reachable — no declared path is writable by any capsule, which is
+`sec-2` invariant 4 and is proven by table A rows 3 and 4 — so it is a
+control-plane-side race over operator-owned configuration, and an operator who
+can re-point a declared path can also edit the configuration that declares it.
+Closing it properly means binding against an open descriptor rather than a
+path, and whether the backend contract can express that at all — for bubblewrap
+and for any later backend — is itself unanswered. Recorded, not solved.
+
+**2. Out-of-crate backends break `sec-7`'s sealing.** `ConformanceBackend` and
+its weakening vocabulary are `pub(crate)`, which is what stops a production
+backend from carrying a way to weaken itself. That holds only while every
+backend lives inside `doctrine-control`. A backend shipping from another crate
+would make the weakening vocabulary public API, and the shape that survives it
+is a newtype over a private enum — deliberately not built here, because
+building an extension point for a second backend that does not exist is how the
+first one gets designed wrong.
+
+**3. A macOS development host cannot run this project's tests.** `sec-7`'s
+admission test asserts `Admitted` unconditionally, because conditioning it on
+backend availability reintroduces exactly the green skip `DEC-156` forbids. So
+on a host without bubblewrap, `cargo test` fails — and `sec-8` sharpens this by
+putting `doctrine-control` in `default-members`, which brings the failure
+forward into `just check`. It is accepted rather than hidden: the supported
+development environment is Linux with bubblewrap, `DEC-160` verified that nested
+bubblewrap works inside this project's own jail, and `backend verify` is the
+descriptive path — it names what was missing and what would satisfy it
+(`POL-002` facet 3) instead of failing opaquely. No `SPEC-030` requirement is
+met by making the suite conditional, and the cost falls on a development host
+rather than on a capsule.
+
+**4. The executed suite's cost lands on the fast inner loop.** `sec-8` rules
+`default-members` and states the measurement obligation and the one lawful
+adjustment. What stays open is the measurement itself, which is a phase
+obligation.
+
+### Open questions, and where each belongs
+
+None of these blocks this design.
+
+- **`QUE-208` — capsule-side entity id allocation.** Parked 2026-08-06. Nothing
+  in this slice mints an entity from inside a capsule. It becomes live for the
+  ingestion slice and is unavoidable by the recovery slice. Its own first
+  settling condition is upstream of every option in it: whether v0 permits a
+  capsule to mint entities at all.
+- **`ISS-319` — fresh-id allocation fails open when the trunk ref is
+  unreachable.** A separable defect, fixable independently of `QUE-208` and of
+  this slice.
+- **`IMP-397` / `QUE-204` — egress allowlisting and non-Git build-input
+  provisioning.** Out of scope, and adjacent to table A row 5: this slice
+  establishes that the network posture is explicit and denied by default, not
+  what a permitted posture may reach.
+- **`IMP-404` — `SL-112`'s deferred engine/leaf crate extraction.** `src/lib.rs`
+  is a small deliberate instance of the same shape — five leaf items, a curated
+  list, an asserted boundary — and does not discharge it. Whether the export set
+  is a first step toward that extraction or a special case beside it is the
+  extraction's question, not this slice's.
+- **Scope `OQ-1`** — the five-slice decomposition is provisional and later
+  slices are deliberately unminted. **Scope `OQ-3`** — the three cross-cutting
+  requirements; this slice's named share is `sec-8`'s closure table. **Scope
+  `OQ-4`** — what replaces `review/*` and `phase/*` refs, which `REV-046`
+  § `ADR-012` leaves a target-design question for the cutover slice.
+
+### Corrections owed to the reconciliation brief
+
+Collected here so the audit does not have to reassemble them from six sections.
+None is a Revision: each is a correction to a record or to this slice's own
+authored text, and the decisions themselves stand.
+
+1. **`DEC-136` handoff item 1** expects a direct implementation seam in the
+   existing `.doctrine/doctrine.toml` loader rather than a new configuration
+   subsystem. Not available: the shared reader reads disk at `root` and is
+   deliberately tolerant, `REQ-449` reads a blob at the contracted base OID and
+   must be strict. A separate typed projection is required either way. The
+   decision — the `[interpretation]` block stays in `.doctrine/doctrine.toml`,
+   resolved once from the contracted base — stands.
+2. **The slice's closure intent overstates `REQ-459`.** It is a contributing
+   change against a requirement that stays `pending`, not a move to `satisfied`
+   (`sec-8`).
+3. **Risk `R4` is retired and `R2` changes subject** (above).
+4. **The slice's Affected surface names `tests/**` for the acceptance tests.**
+   They live in the new crate's `#[cfg(test)]` modules, because a bin-only
+   package cannot be linked from `tests/`; only `sec-6`'s export-set and
+   two-tree gate assertions land in `tests/`. The same table omits the
+   workspace `Cargo.toml`, which `sec-8` adds.
+
+### Follow-Up at close
+
+**The `doctrine-control` distribution contract** (`R5`). Whichever slice first
+releases the binary owes the nix `srcWithDist` graft, the binstall asset name,
+`install.sh` and `release.yml` together, and owes them as one change — a missing
+embed graft ships a hollow binary with no compile error. An `RFC-025` § State of
+play note carries it alongside the five-slice decomposition.
+

@@ -11,16 +11,12 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "src/capsule/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/dispatch_config.rs"
 intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dtoml.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/**"
@@ -32,7 +28,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".doctrine/doctrine.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/jail.rs"
@@ -41,6 +37,42 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/worktree/jail_prefix.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "crates/doctrine-control/**"
+intent = "design-target"
+
+[[selector]]
+selector = "src/lib.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/config_file.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/interpretation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "Cargo.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/architecture_layering.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
