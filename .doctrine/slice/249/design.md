@@ -204,3 +204,123 @@ rulings gated, objective 4 never did. The phase boundary is load-bearing and the
 plan must hold it — the wire fix may not quietly absorb facet work to save a
 phase.
 
+<!-- doctrine:section sec-5 -->
+# 5.1 System Model
+
+## The shape of the change
+
+One authored table, one pure write seam, four consumers. Nothing here is a new
+subsystem; every box below already exists except the table.
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │ src/knowledge.rs                          │
+                    │                                           │
+  read (unchanged)  │  RawFacet ──validate_facet──▶ RecordFacet │
+                    │      ▲                            ▲       │
+                    │      │ serde key-set pin (P1)     │ P2    │
+                    │  ┌───┴───────────────────────┐    │       │
+                    │  │ facet_fields(kind)        │────┘       │
+                    │  │ the authored partition    │            │
+                    │  └───┬────────┬─────────┬────┘            │
+                    └──────┼────────┼─────────┼─────────────────┘
+                           │        │         │
+              ┌────────────┘        │         └──────────────┐
+              ▼                     ▼                        ▼
+   six `edit <kind>` subverbs   `settle <ID> <state>`   doctor tripwire
+   + kind-blind `edit <ID>`     (coverage derived)      (inert-key warning)
+              │                     │
+              └──────────┬──────────┘
+                         ▼
+              src/facet_write.rs  ── toml_edit, F-1 guarded ──▶  record-NNN.toml
+                         ▲
+                         │ (same seam, second caller)
+              apply_record_effects (DEC-086 step 5)  ◀── CreateRecord{facet, body}
+```
+
+## The authored table
+
+The one artefact this design adds:
+
+```rust
+/// One facet field: its key, and the shape the writer must emit.
+pub(crate) struct FacetField {
+    pub(crate) name: &'static str,
+    pub(crate) shape: FieldShape,
+}
+
+pub(crate) enum FieldShape {
+    Text,
+    List,
+    Closed(&'static [&'static str]),   // the variant tokens, from the enum's own serde form
+}
+
+/// Every field one record kind owns, in template order — the single authored
+/// derivation of the per-kind field sets (STD-001).
+pub(crate) fn facet_fields(kind: RecordKind) -> &'static [FacetField];
+```
+
+It lives in `src/knowledge.rs`, adjacent to `validate_facet`, because the table
+*is* the data form of what that function's arms already say in code. Splitting
+them across modules is how the two drift. (Cohesion pressure noted: that module
+also carries the knowledge CLI, since there is no `src/commands/knowledge.rs`.
+This design does not relayer it; see § 8.)
+
+Authoring is forced — Rust has no reflection over struct fields, and `DEC-169`
+already refused a proc macro written for one table. So the design question is
+only how it is kept honest, and there are two independent pins:
+
+- **P1 — union totality.** Derive `RawFacet`'s serde key set (it gains
+  `Serialize`; every field is already `#[serde(default)]`) and assert it equals
+  the union of `facet_fields` over `RecordKind::ALL`. A facet field added to the
+  model and forgotten in the table is a test failure, not a silent absence. This
+  is `DEC-169`'s read-through-serde idiom, second application.
+- **P2 — per-kind placement.** For each kind, write every field the table gives
+  it, read the record back through the untouched `validate_facet`, and assert the
+  typed facet holds it. A field filed under the wrong kind is discarded on read —
+  so P2 catches exactly what P1 cannot, using the read model as the oracle rather
+  than a second list.
+
+P1 and P2 together make the table total *and* correctly partitioned without any
+name being typed twice.
+
+## What each consumer takes from it
+
+| consumer | reads | derives |
+|---|---|---|
+| `knowledge edit <kind>` | `facet_fields(kind)` | its flag set; a test asserts clap's arg names equal the table's |
+| `knowledge settle` | `facet_fields(kind)` | settleable states, by `<state>_by`/`<state>_on` name lookup (`DEC-178`) |
+| `doctor` tripwire | all kinds | key → honouring kind, for the warning message (`DEC-177`) |
+| step-5 write | `facet_fields(kind)` | shape dispatch for the `toml_edit` emit |
+
+This is what discharges the rider `DEC-177` and `DEC-178` both carry: the table
+exists as data, so neither falls back.
+
+## The write mechanism
+
+`src/facet_write.rs::set_facet_mixed` is the mechanism, already live under
+`doctrine risk set`, already `toml_edit` and therefore already edit-preserving
+per `SPEC-004`. It creates missing keys, which `DEC-170` forbids for facet
+fields. The seam gains a **posture parameter** rather than a guard at each call
+site: one enum threaded to the insert decision, `RiskFacet`'s caller passing the
+creating posture it has today and knowledge passing F-1. A call-site guard would
+have to be repeated by every future caller and would be the parallel
+implementation `AGENTS.md` forbids.
+
+## The phase boundary
+
+`DEC-165` splits the slice and the split is load-bearing, not cosmetic:
+
+- **Phase A — the wire fix, no facet anywhere.** Objective 3's inert-key refusal
+  (`Declaration` keys × design-run subject kinds, `DEC-169`'s serde-pinned table)
+  plus the prose half of objective 2 (`CreateRecord.body` written at step 5 via
+  the existing `entity::write_body`). Neither touches a record kind, a facet, or
+  knowledge governance. Together they are exactly what would have prevented the
+  SL-248 loss.
+- **Phase B onward — the facet surfaces.** The table, the six subverbs, the
+  kind-blind `edit`, `settle`, `CreateRecord.facet` at the same step-5 site, and
+  the doctor tripwire.
+
+The plan must hold the boundary: Phase A may not absorb facet work to save a
+phase.
+
