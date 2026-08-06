@@ -218,3 +218,75 @@ gets one generic multi-target driver rather than a third hand-rolled loop.
   on 2.1.220; no contradiction observed.
 - The behaviour-preservation gate is satisfiable by construction if the merge
   core generalises rather than narrows — see the map's `inq-2`.
+
+## RV-348 round 1 — responder pass (design review of SL-250)
+
+Eleven findings raised against `design.md` at run revision 39: 2 blocker, 4
+major, 3 minor, 2 nit. **All eleven upheld**, each re-derived against the source
+before disposing. Remediated at revisions 40 (adopt) / 41 (materialise); the
+materialiser round-tripped the edits byte-identically.
+
+### What the two blockers actually cost
+
+`F-1` was not an arithmetic slip. Four counts live at four altitudes — ten plugin
+entries, seven specs, eleven settings entries, seven printed hook lines — and
+three of the four were stated wrong because specs and entries were conflated
+throughout. The consequence landed in `sec-7`: the `VH` gate read "all seven
+entries", so the slice's only load-bearing acceptance criterion was satisfiable
+by a settings file four entries short. `sec-1` now carries a count ledger and
+every other mention cites it.
+
+`F-2` was an inverted impact claim hiding an unreported destructive write.
+`src/corpus.rs:506` matches `install_claude_hook` against `RefreshOutcome`
+directly, so the `HookWrite` return does not compile — but the compile break was
+the cheap half. Both the `DEC-163` announcement and the `DEC-164` eviction rider
+had been sited on `boot::wire`, which `run_sync_install` never enters, so
+`memory sync install` would have swept the sibling silently. The seam is now a
+shared writer both callers reach.
+
+### The finding the review did not raise
+
+Remediation surfaced a **POL-002 breach the ledger missed**, and the human author
+ruled on it rather than the responder improvising: `HookSpec` bakes
+`current_exe()`, and `DEC-163` flips the default scope to `.claude/settings.json`
+— a committed file. SL-195 had already closed exactly this defect on `.mcp.json`
+and left the invariant **baked ⟺ gitignored** behind, with Claude hooks left
+baked *because* they were gitignored and an acceptance criterion reading *no
+absolute host path in any tracked file*. The scope flip would have reintroduced
+the breach in the same installer, one key over.
+
+Settled by riding SL-195's own seam: the committed scope writes
+`${DOCTRINE_BIN:-doctrine}` (proven live — the shipped `hooks.json` has carried
+that form for all ten of its entries), `Local` keeps the baked path, and
+`is_doctrine_program` gains one arm so five predicates own both forms. That arm
+is what makes a scope switch *heal* — an abspath entry is rewritten in the file
+being written and evicted from the file being abandoned — which is precisely
+`is_doctrine_mcp_entry`'s posture.
+
+Second ruling, same conversation: **`install_baseref` follows the scope dial**.
+Left "unchanged" it would have written `worktree.baseRef` to
+`settings.local.json` while eleven hook entries went to `settings.json`, so
+doctrine would author two Claude settings files per install with only one swept.
+
+### What a further pass should probe
+
+The remediation is broader than the ledger, so the next pass has new surface
+rather than a re-read:
+
+1. **The command-form change is the biggest untested claim in the design.**
+   `sec-2`'s `command_for` makes the hook command scope-dependent, which turns
+   `HookSpec` from carrying a rendered `String` into carrying `exec` + `args`.
+   Probe whether any consumer of `spec.command` was missed — `fallback_for`,
+   `entry_is_canonical`, the `RefreshOutcome::Refreshed(command)` payload — and
+   whether `EvictOutcome::merge`'s absorbing-`Unreadable` fold is right when
+   different specs disagree.
+2. **Ownership widening.** `is_doctrine_program` accepting the portable literal
+   is a strict widening on paper. Attack it for a foreign command that becomes
+   ours, and for the `Local`→`Project`→`Local` round trip.
+3. **The class-(ii) test table in `sec-7`** was enumerated by reading, not by
+   running. A pass that actually compiles the rename would find any site the
+   table misses — `:5302` "and neighbours" is the loosest entry in it.
+4. **Whether `install_baseref` following the scope needs its own eviction.** The
+   design argues the stale copy is inert because the value is invariant. That
+   holds only while nothing else ever writes `worktree.baseRef`.
+5. `QUE-209` (REV granularity) remains deferred to reconciliation, untouched.

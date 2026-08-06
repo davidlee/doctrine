@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd72c-4593-7120-a75d-1383def3f105"
+recorded_at = "2026-08-06T13:03:50.675512256Z"
+kind = "friction"
+summary = "/design skill's Recovery block omits the required positional SLICE on design resume/show"
+detail = "The design SKILL.md Activation and Recovery blocks write the commands as 'doctrine design resume' and 'doctrine design resume --run <id> --known-revision <rev> --known-fragment <frag>' with no positional argument. The binary requires <SLICE> positionally on both resume and show, and rejects a --slice flag. Cost two failed invocations plus a --help round trip before the first useful envelope. The flags themselves are all real; only the positional is missing from the skill text."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
