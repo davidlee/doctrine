@@ -349,20 +349,29 @@ design.)*
   requirement, which is what the closure criterion below assumed it did.)*
 - SPEC-019 and PRD-010 enumerate seven record kinds with no residual "four",
   SPEC-019 carries a facet contract for `EVD` / `HYP` / `CPT`, and lists the
-  verbs this slice ships. *(Pinned by an in-crate canary asserting every kind in
+  verbs this slice ships. *(Facet contracts and the verb set only — **not** the
+  three kinds' lifecycle vocabularies or supersession rules, which § Non-Goals
+  defers to ISS-316. The design's § 9 had quietly re-acquired them; RV-349
+  F-13.)* *(Pinned by an in-crate canary asserting every kind in
   `kinds::RECORD` is named in both — DEC-176, the observable R4 demanded. Agent
   verification of the prose sits on top of that, not in place of it.)* ISS-316
   narrows to its lifecycle-vocabulary half rather than closing. *(Strengthened
   twice in review — RV-349 F-5. The canary reads **both authored tiers** of both
   entities, not SPEC-019's prose alone: three of the stale sites are in
   `spec-019.toml`'s structured `responsibilities`. And "no residual four" is
-  enforced as a blanket ban on the word in those two entities — matched
+  enforced as a near-blanket ban on the word in those two entities — matched
   case-insensitively, on a word boundary — not as a pin on one enumeration
-  phrase. All 32 occurrences (`spec-019.md` 25, `spec-019.toml` 3,
-  `spec-010.md` 4, `spec-010.toml` 0) are kind-derived and none is independent,
-  so a phrase pin reports green on the other 31; and a case-sensitive ban passes
-  over `spec-019.md`'s `### Four kinds, one engine`, the most prominent of them
-  (RV-349 F-7).)*
+  phrase. Of the 32 occurrences (`spec-019.md` 25, `spec-019.toml` 3,
+  `spec-010.md` 4, `spec-010.toml` 0), **31 are kind-derived and one is not**:
+  `spec-019.md:330`'s "four coupled sites" counts integration points and stays
+  correct at seven kinds, so it is exempt by a declared allowlist rather than
+  reworded to satisfy a test. A phrase pin reports green on 31 of the 32
+  (RV-349 F-5); a case-sensitive ban passes over `### Four kinds, one engine`,
+  the most prominent of them (F-7); a ban with no exemption forces the REV to
+  damage accurate prose (F-9); and an allowlist checked for mere presence lets a
+  duplicated exempt phrase inherit the exemption silently, so it is held to a
+  count identity instead — total occurrences equal the sum of the allowlist's
+  expected counts (F-11).)*
 - A `[facet]` key inert at its record's kind is reported by `doctrine doctor` —
   not refused on read. Test-verified. *(DEC-177.)*
 - The existing knowledge suites stay green unchanged (the behaviour-preservation
