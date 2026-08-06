@@ -121,6 +121,14 @@ patches for the two instances recorded here.
 
 ## Related
 
+- **IMP-403** (knowledge facets are systematically unfilled) — its lead 2 is the
+  other half of observation 2. IMP-403 notes that `CreateRecord` offers no facet
+  slot, so a checkpoint cannot carry the ruling the agent has in hand; this item
+  records what happens when the agent tries anyway through the nearest-looking
+  key. One is a missing slot, the other is a silent sink, and together they are
+  why records mint hollow. A fix to either should be weighed against the other:
+  refusing `body` here without giving `CreateRecord` somewhere to put prose just
+  converts a silent loss into a dead end.
 - Sibling finding from the same session, separately observed: a stale
   `~/.cargo/bin/doctrine` silently drops unknown `apply` fields (it reports the
   same `--version` as the tree build). `ApplyRequest` carries no

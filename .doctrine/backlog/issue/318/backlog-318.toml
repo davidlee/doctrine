@@ -30,3 +30,7 @@ target = "SL-247"
 label = "references"
 role = "originates_from"
 target = "SL-248"
+
+[[relation]]
+label = "related"
+target = "IMP-403"

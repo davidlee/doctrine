@@ -59,6 +59,13 @@ records minted with the decision fully argued in conversation, four empty facets
 hand-patched afterwards. This may be the single highest-leverage fix — capture
 at the moment of decision rather than as a follow-up chore.
 
+Corroborated a day later on `SL-248`'s run, and worse: six checkpoints reached
+for the nearest-looking key and sent the prose as `body`. `body` is *section*
+prose, inert at a `cp-` subject, so `DEC-155`…`DEC-160` minted hollow and the
+prose was discarded silently — see **ISS-318** observation 2. The agent's
+behaviour is the evidence for this lead: given no slot, it invented one. Fixing
+the silence without adding the slot only converts the loss into a dead end.
+
 **3. Nothing validates it.** A `decision` can hold `status = "accepted"` with an
 empty `choice` and the corpus reports clean. `doctrine validate` has no signal
 here. An advisory warning (not an error) would at least make the gap visible.
