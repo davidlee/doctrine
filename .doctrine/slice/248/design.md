@@ -530,7 +530,7 @@ in order:
 ```
 --unshare-all                      # namespaces; network included
 --proc /proc  --dev /dev           # the two pseudo-filesystems a process needs
---tmpfs /tmp                       # writable temporary area, dies with the capsule
+--tmpfs /tmp                       # TRANSIENT scratch: per-execution, dies with the capsule
 --ro-bind <host> <inner>           # once per readable input, in declared order
 --bind <host> <inner>              # once per writable area, in declared order
 --chdir <working_directory>
@@ -1059,9 +1059,31 @@ reuse — verified — so this half is net-new whatever input form is chosen.
     capsule/                          # rw → /capsule
       repo/                           #   the clone, created INSIDE the sandbox
       out/                            #   the output area
-      tmp/                            #   the writable temporary area
+      tmp/                            #   RETAINED scratch: per-transaction
     agent/                            # rw → /agent, the agent home
 ```
+
+**Two scratch areas, and they are not the same thing.** The design called both
+"the writable temporary area" until the naming hid a defect (`sec-7` B4), so
+they are distinguished by name from here on:
+
+| inner path | backed by | lifetime | in `disk_used` |
+|---|---|---|---|
+| `/tmp` — **transient** | `--tmpfs`, anonymous | one `execute`; gone when that capsule exits | no |
+| `/capsule/tmp` — **retained** | `tx/<id>/capsule/tmp/`, host disk | the transaction, across all its executions | yes |
+
+*Transient* and *retained* rather than *isolated* and *shared*: `/capsule/tmp`
+is shared only across the executions of **one** transaction, and bare "shared"
+collides head-on with `REQ-450` criterion 1's vocabulary, whose whole claim is
+that two transactions share no such state. Retained is what actually
+distinguishes it — it is on host disk, it survives the capsule that wrote it,
+`Observation.disk_used` counts it, and it is transaction state a later slice's
+harvest can read. The transient area is none of those.
+
+Only the retained area is a declared writable entry in the placement. `/tmp` is
+the profile's own mount (`sec-2`), which is why no placement-level delta reaches
+it and why `sec-7` row 1 — writing to every *declared* writable location — does
+not name it.
 
 Distinct host directories mapping to `sec-2`'s fixed inner layout. The
 transaction root is on real disk, not tmpfs: `sec-5`'s free-space probe must
@@ -1272,7 +1294,7 @@ tidiness is what a later slice would reach for.
    Verified before the clone, so a placement pairing base B with an export of A
    refuses instead of producing a capsule whose contracted base is a fiction.
 4. **Two transactions share no mutable state.** Distinct `tx/<id>/` roots,
-   distinct clones, distinct processes, distinct temporary areas. The export is
+   distinct clones, distinct processes, distinct retained scratch. The export is
    shared and read-only — not shared *mutable* state, so `REQ-450` criterion 1
    is untouched.
 5. **The transaction id is allocated trusted-side and supplied to `provision`;
@@ -1302,7 +1324,7 @@ and takes its own.
 | checkout | a file in the working tree at `/capsule/repo` | both placements carry the first transaction's `TransactionRoot` |
 | repository | an object and a ref in `/capsule/repo/.git` | as above |
 | runtime | a sentinel in the agent home `/agent` — the state a harness accumulates across a run | as above |
-| temporary state | a file in the capsule's `/tmp` | as above |
+| temporary state | a file in the **retained** scratch at `/capsule/tmp` — never the transient `/tmp`, which no placement delta reaches | as above |
 | **process** | capsule A enumerates `/proc` and attempts `kill -0` on a pid the trusted side observed capsule B running under, while both run concurrently | **the pid namespace alone removed**, every other property intact |
 
 **The storage control is a placement, not a second provision.** This table said
@@ -2988,9 +3010,11 @@ the whole table rather than to row 7 alone moved three rows, which is the return
 on stating it as a rule:
 
 - **Row 1** wrote a sentinel to `/capsule/out` only. A backend giving each
-  transaction a fresh output area while sharing the agent home or the temporary
-  area passed. The payload now writes to every writable location the placement
-  declares.
+  transaction a fresh output area while sharing the agent home or the retained
+  scratch passed. The payload now writes to every writable location the
+  placement declares — which is `/capsule/out`, `/capsule/tmp` and `/agent`, and
+  not the transient `/tmp`, since that is the profile's mount rather than a
+  declared entry.
 - **Row 5** attempted a TCP loopback connection only. A backend that denies by
   packet filter rather than by network namespace blocks TCP and leaves an
   abstract unix socket — a distinct mechanism in the same channel — reachable.
@@ -3219,12 +3243,48 @@ rows share one delta; the process row has its own (`sec-3`).
 | B1 | checkout | `Sequential`: a file in the working tree at `/capsule/repo` | `SharedRoot` |
 | B2 | repository | `Sequential`: an object and a ref in `/capsule/repo/.git` | `SharedRoot` |
 | B3 | runtime | `Sequential`: a sentinel in the agent home `/agent` | `SharedRoot` |
-| B4 | temporary state | `Sequential`: a file in the capsule's `/tmp` | `SharedRoot` |
+| B4 | temporary state | `Sequential`: a file in the **retained** scratch at `/capsule/tmp` | `SharedRoot` |
 | B5 | process | `Concurrent`: A enumerates `/proc` and attempts `kill -0` on a pid the trusted side observed B running under | `Removed(ProcessVisibility)` |
 
 B5's probe asserts two things positively — B's process is absent from A's
 `/proc`, and the signal fails — and its control asserts that with the pid
 namespace shared and only that changed, both become possible.
+
+**B4 named `/tmp` until this round, and its control could not fail.** `/tmp` is
+`--tmpfs`: an anonymous mount the profile makes fresh on every `execute`, backed
+by nothing beneath the transaction root. `SharedRoot` re-points a placement's
+root, so it reaches everything the placement *declares* writable and cannot
+reach `/tmp` at all — A's file died with A's capsule and B saw an empty tmpfs
+under **both** arms. That is `Unproven` by this section's own algebra, and since
+`Admission` is computed from tables A and B alone, the suite as specified could
+never return `Admitted`. B4 now targets the retained scratch, which is the
+transaction state `REQ-450` criterion 1 is about and which `SharedRoot` does
+reach.
+
+Two things this is worth noticing about. It is the residual of the `SharedRoot`
+repair two subsections above: moving the removal down to the placement fixed a
+control that could not be *built*, and left one that could not *fail* — the same
+`F-25` lesson a third time, that a rule checked in only one direction is half a
+rule. And it survived four review rounds because two different areas answered to
+the same words; `sec-3` now names them.
+
+The transient area carries no admission row and that is deliberate rather than
+an omission. Its privacy is `--tmpfs`'s by construction, it holds no transaction
+state, `Observation.disk_used` does not count it, and `REQ-450` criterion 1's
+temporary-state axis is a claim about state two transactions could share. A row
+for it would need its own `PropertyRemoval` — binding a shared host directory at
+`/tmp` — which buys a proof of something no requirement asks for at the cost of
+widening the weakening vocabulary `sec-9` residual 2 already tracks as growing
+every round.
+
+**Row 1 keeps writing to the retained scratch, and the overlap with B4 is
+intended.** Tables A and B discharge different requirements — row 1 is
+`SPEC-030`'s backend property, B1–B4 are `REQ-450` criterion 1's named axes —
+and this section's non-overlap rule binds a row's *control* to a mechanism
+unique to it, not a row's payload to untouched ground. Narrowing row 1 to avoid
+the overlap would undo `F-27`'s strengthening, which widened it to every
+declared writable location precisely because a backend freshening the output
+area while sharing the agent home passed the narrower payload.
 
 ### Table C — the executed claims other sections owe
 
@@ -3339,7 +3399,7 @@ what a later slice would reach for.
 | 3 | reaching real canonical state or credentials | decoys only, inside the fixture's own root; the operator's repository and credentials are named by no arm and bound under neither |
 | 5 | contacting the network | a trusted-side loopback listener, never the internet — measured refused under `--unshare-all`, so the row holds offline |
 | 7, B5 | a leaked process | `timeout -k` outside the sandbox plus a **session** kill in teardown, not a process-group kill — see below (`EVD-013`) |
-| 8 | filling the disk, or hanging | the unbounded write goes to the capsule's size-capped tmpfs; the wall payload sleeps a small fixed multiple of the bound |
+| 8 | filling the disk, or hanging | the unbounded write goes to the capsule's size-capped **transient** tmpfs at `/tmp`, never the retained scratch on host disk; the wall payload sleeps a small fixed multiple of the bound |
 | 9 | the control arm writing to real host state | its readable entries are fixture-owned decoys under the fixture's own root, and its `/source` is an export this run built for itself — never one a real transaction adopts |
 | 10 | the control arm handing a capsule a live descriptor | the descriptor is opened onto a fixture-created decoy file under the fixture's own root; no descriptor the trusted side holds for real is ever marked inheritable |
 | 11 | the control arm leaking the trusted-side environment | the assertion is over a decoy variable the fixture sets in its own child, so nothing the operator's shell carries is read, compared or reported |
