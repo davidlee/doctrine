@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd757-7e79-79c2-88d7-b42ab99c0f7e"
+recorded_at = "2026-08-06T13:51:03.289458436Z"
+kind = "friction"
+summary = "code-review: shell $-expansion mangles review raise --detail, same class as the known backtick footgun"
+detail = """
+Raising RV-348 F-16 failed with 'bad substitution' because the --detail text quoted a design snippet containing the literal token DOCTRINE_BIN in POSIX default-expansion braces. Cost one retry plus a scratch-file workaround (write the detail to a file, pass --detail "$(cat f.txt)" — command-substitution output is not re-expanded).
+
+An existing memory (mem_019fbc7514097c42aa042ab7bb2206c6) records that backticks silently mangle 'review dispose' responses. This is the same defect class on a different metacharacter and a different verb, so the memory is narrower than the hazard: ANY shell metacharacter in a raise/dispose payload is at risk, and reviews of code quote code by construction. Note the failure modes differ in severity — backticks mangle SILENTLY, dollar-brace fails LOUDLY. The loud one is cheap; the silent one is the dangerous half and is the one already recorded.
+
+Worth either widening that memory to the metacharacter class across all payload-bearing review verbs, or giving the CLI a --detail-file flag so prose payloads never transit a shell."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

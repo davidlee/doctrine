@@ -14,7 +14,7 @@ ref   = "SL-250"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the spec/entry counts to agree with the registry; observed nine/six/seven where the code gives ten/seven/eleven, and the VH gate passes at 7 of 11 entries"
 detail = """
@@ -57,7 +57,7 @@ seven. The VH criterion moves to eleven entries."""
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected memory sync install to report the eviction DEC-164 mandates; observed a design that declares corpus.rs unchanged while changing install_claude_hook's return type, leaving the destructive sweep silent on the routine path"
 detail = """
@@ -104,7 +104,7 @@ that corpus.rs is out of scope reaching for .written and keeping the silence."""
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the behaviour-preservation gate to be a compiler-checked rename; observed a semantic default-scope flip that inverts existing assertions, blunting the gate's signal"
 detail = """
@@ -160,7 +160,7 @@ to the human author with the related question F-3's remediation exposed."""
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected a failed sweep to be distinguishable from an empty one; observed plan_evict collapsing malformed-settings and nothing-to-evict onto the same silent NOTHING, on the one path DEC-164 exists to de-silence"
 detail = """
@@ -212,7 +212,7 @@ distinction between that and the reporting obligation is accepted as stated."""
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected sec-4's deletion inventory to name everything the cut orphans; observed six items and four tests missing, which the workspace dead_code denial turns into a red gate rather than a leftover"
 detail = """
@@ -264,7 +264,7 @@ and the DOCTRINE_MARKETPLACE conditional is settled in the text."""
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the VH leg to name a durable evidence sink as sec-7 does for the VA leg; observed evidence that dies with the session on the one criterion the slice rests on"
 detail = """
@@ -308,7 +308,7 @@ binary carrying the slice."""
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected a mid-loop abort to report which specs landed; observed RefreshReport discarded on the error path, so a partial activation is announced only as a generic harness failure"
 detail = """
@@ -345,7 +345,7 @@ condition whose remedy is unconditional."""
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected the sticky key to bind as claude-settings-scope; observed rename_all shown only on the enum, so without a container-level rename the key is silently ignored and the default silently wins"
 detail = """
@@ -387,7 +387,7 @@ finding's point and is accepted."""
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected the stale-comment sweep sec-5 starts to cover the retirement's own casualties; observed one instance caught and three left, including a banner asserting install.rs still installs the plugin so hooks auto-load"
 detail = """
@@ -432,7 +432,7 @@ HookSpec and plan_hook docs named as the lower-stakes pair."""
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected sec-5's helper table citations to resolve; observed three of nine off, one by 1837 lines"
 detail = """
@@ -465,7 +465,7 @@ get their own line refs instead of inheriting a neighbouring pair."""
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected sec-2's equivalence claim for is_doctrine_boot_command to hold on every input; observed it differs on non-space whitespace, though the conclusion to spare the predicate stands on its other stated ground"
 detail = '''
@@ -510,6 +510,170 @@ predicates the draft does collapse are already the strict form today
 (is_doctrine_sync_command at :922 among them). So the exception is the one
 predicate whose semantics would actually change, which is a reason rather than
 an exemption."""
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "blocker"
+title = "Expected write-before-evict to guarantee activation lands before removal; observed PrintedFallback is an Ok value, so a malformed target file still triggers the sweep and destroys the working activation"
+detail = """
+ROUND 2 — against the remediated design at run revision 41. New surface, not a re-read.
+
+sec-3 justifies the ordering: "**Write before evict.** Activation lands before removal, so an interrupted run leaves the hook firing twice rather than not at all — the same reasoning DEC-167 applies to the human cutover, at file granularity."
+
+That guarantee does not hold, because a failed write is not an error. install_hook_to_file returns Ok(RefreshOutcome::PrintedFallback{..}) when the target settings file is malformed JSON or carries a wrongly-typed hooks/<event> (src/boot.rs:1603 via plan_hook :1159-1168, :1170-1178). So in sec-3's own snippet:
+
+    let written = install_hook_to_file(root, settings_rel(scope), spec, dry_run)?;
+    let evicted = evict_hook_from_file(root, settings_rel(scope.sibling()), spec, dry_run)?;
+
+the ? on line 1 does not short-circuit on PrintedFallback. Nothing was written. The sweep on line 2 then runs and deletes this spec's owned entries from the sibling.
+
+The reachable case is the likely one, not a contrived one. A user is at Local scope today, so the live hooks are in .claude/settings.local.json and working. .claude/settings.json exists but is malformed — plausible precisely because sec-3 makes it the COMMITTED, hand-editable, reviewable file, and sec-6 notes this repo already tracks it (.gitignore:4-5). The scope default is Project. On the first install after this slice: the target is unparseable, so no entries are written; the sibling is well-formed, so eleven entries worth of owned hooks are evicted from it. Net result: doctrine has destroyed working activation and installed nothing.
+
+This is exactly the state DEC-167 identifies as the one to walk away from: "The reverse order leaves the repo with no activation at all for the window, and absence is the more dangerous state ... isolation: worktree teardown is conditional on that hook firing, so its absence changes dispatch semantics without saying so." sec-6 repeats it: "Order toward the degraded state, never the absent one." The design orders correctly and then defeats its own ordering by treating a soft write failure as success for sequencing purposes.
+
+What the operator sees makes it worse, not better. The PrintedFallback message is corpus.rs:518-524 / wire's equivalent: "settings are malformed — add this hook manually" plus the snippet. It says nothing about the sibling. Under the remediated sec-3 the eviction rider now fires too, so the output reads "could not merge, here is a snippet" ALONGSIDE "evicted N stale hook entries from .claude/settings.local.json" — which is not a warning that activation is now zero. It reads like routine cleanup.
+
+Note this is NOT the F-4 case and is not fixed by EvictOutcome::Unreadable. F-4 was the sibling being unreadable. This is the TARGET being unreadable and the sibling being perfectly readable — the sweep succeeds, which is the problem.
+
+Expected: eviction gated on the write having actually landed — Wired / Refreshed / None all mean the canonical set is present in the target, PrintedFallback means it is not, and only the first three earn the right to sweep. A one-line guard, and it restores the property sec-3 already claims. Observed: an unconditional sweep behind a ? that cannot see the failure it is meant to be sequenced after."""
+
+[[finding]]
+id = "F-13"
+status = "open"
+severity = "major"
+title = "Expected the scope-dependent command form to reach plan_hook; observed scope threaded nowhere between install_claude_hook and the merge core, and no answer for what the Codex arm passes to a Claude-only enum"
+detail = """
+ROUND 2 — the new sec-2 command-form section, which the notes call the biggest untested claim in the document.
+
+sec-2 makes the rendered command a function of the scope: command_for(spec, scope), desired_entries(spec, scope), plan_hook computing let command = command_for(spec, scope), entry_is_canonical taking that command, and fallback_for "takes the scope alongside the spec". HookSpec drops its rendered command: String for exec: PathBuf + args.
+
+Every one of those is inside or below plan_hook. But sec-3's install_claude_hook — the function that RESOLVES the scope — hands it off like this:
+
+    let written = install_hook_to_file(root, settings_rel(scope), spec, dry_run)?;
+
+install_hook_to_file (src/boot.rs:1595-1612) receives rel_path and NOT scope. It is the only path from install_claude_hook to plan_hook (:1603), and it also calls annotate_fallback(plan.outcome, rel_path, spec) (:1611), which calls fallback_for(spec) (:1587). So three signatures the design never mentions must change to carry the scope: install_hook_to_file, annotate_fallback, and install_codex_hook (:1628). The design revises install_claude_hook, plan_hook, desired_entries, entry_is_canonical and fallback_for, and stops exactly one layer short of the function that connects them. Deriving the scope back out of rel_path inside install_hook_to_file is the other option and is worse — it would make the merge core reverse-engineer a decision its caller already made.
+
+The second half is the harder one. plan_hook is the SHARED merge core: install_codex_hook writes .codex/hooks.json through it (:1628-1634), and Codex has no ClaudeSettingsScope at all. For sec-7's claim to hold — "The Codex arm's output stays byte-identical" — Codex must render the baked <abs exec> form, i.e. it must pass ClaudeSettingsScope::Local. So a Claude-settings-file enum is threaded through the Codex path purely to select "baked", meaning it no longer denotes what its name and doc-comment say it denotes.
+
+That is the same boundary sec-3 gets right one paragraph earlier. It puts ClaudeSettingsScope in install_config and keeps the path mapping in boot.rs on the reasoning that "putting the path in install_config would give a pure leaf domain knowledge it does not otherwise have (ADR-001, and the module's own doc)". The identical objection applies here in the other direction: the generic merge core acquires a Claude-scope concept it does not otherwise have, on behalf of an arm that has no scopes.
+
+Worth stating plainly: the underlying invariant is NOT Claude-specific. .codex/hooks.json is gitignored (.gitignore:9, /.codex — verified, the file is untracked), so baked ⟺ gitignored already holds there for the same reason it holds for settings.local.json. So the axis plan_hook actually needs is "baked or portable", which Codex answers "baked" honestly, and which the two Claude scopes map onto. That is a naming and placement question the design should settle rather than an implementer discovering it while wiring a Claude enum into the Codex arm. I am not prescribing the shape — sec-3 already demonstrates the design can reason about this boundary well.
+
+Consequences if unsettled: (a) an implementer either widens install_hook_to_file with a Claude type or reverse-derives the scope, and neither is what sec-3's own layering argument would choose; (b) the byte-identical-Codex-output claim in sec-7 depends on an unstated Local pass that nothing tests; (c) src/corpus.rs:520 calls the pub(crate) fallback_for(&spec) in its PrintedFallback arm and now needs a scope there too — available as write.scope from the HookWrite the remediation added, but sec-3's corpus.rs paragraph covers only "matches write.written for its four existing arms".
+
+Expected: the scope (or the baked/portable axis it selects) threaded explicitly through install_hook_to_file / annotate_fallback / install_codex_hook, with the Codex value named and justified. Observed: the rendering function specified, and the wire that feeds it left out."""
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "major"
+title = "Expected the unswept worktree.baseRef copy to be provably inert; observed the claim rests on the value being invariant, which BaseRefOutcome::Conflict exists precisely to allow it not to be"
+detail = """
+ROUND 2 — the new sec-3 subsection "install_baseref follows the scope", one of the two rulings that went past the ledger and has not been reviewed by anyone.
+
+The ruling itself is right and I want to be clear about that: leaving install_baseref on SETTINGS_LOCAL_REL while eleven hook entries go to settings.json would have doctrine authoring two Claude settings files per install with only one swept. Following the scope is correct.
+
+The carve-out attached to it is not. sec-3 declines to sweep the key and justifies it:
+
+  "A stale copy left in the abandoned file after a scope flip carries the identical value doctrine would write, so it cannot disagree with the live one; it is inert rather than dangerous."
+
+The premise is that the value is invariant. It is not, and the incumbent code is built around it not being: BaseRefOutcome::Conflict(String) (src/boot.rs:1341-1343) is documented as "Present with a NON-head value; left untouched, reported (no clobber — a per-operator deliberate override is respected, §8.3)". Doctrine deliberately preserves an operator's non-head baseRef. So the reachable state is:
+
+  1. Operator sets worktree.baseRef = "main" in .claude/settings.local.json. Doctrine respects it and reports Conflict on every install thereafter.
+  2. This slice ships; the default scope is Project. install_baseref(root, Project, ..) reads .claude/settings.json, finds no worktree key, and writes "head" — reporting Set, not Conflict.
+  3. The override survives untouched in the abandoned file, because the sweep is spec-keyed over hooks.<event> arrays and worktree.baseRef has no spec.
+
+Now two settings files carry DIFFERENT values for the same key, and DEC-164 establishes that scopes MERGE ("Scopes merge — OQ-6 settled that by probe"). So one of them wins. Either the stale local "main" continues to win and doctrine's fresh project "head" is inert — the exact inverse of the section's claim — or the project value wins and the operator's deliberate, previously-respected override is silently revoked. The design does not state which, and cannot claim inertness without stating it.
+
+What rides on the key is why this is not cosmetic. worktree.baseRef governs where the claude dispatch arm forks from (SL-064 §8: "so the claude /dispatch arm's isolated worker forks the orchestrator session HEAD, base==B by placement"). A wrong fork base is a known, already-bitten failure in this repo — the boot snapshot carries mem.signpost.doctrine.dispatch-claude-arm-wrong-base as a standing signpost. A silent disagreement about baseRef across a scope flip lands in that footgun, and the operator's Conflict signal disappears at the same moment, because after the flip doctrine is reading a file where the override is not present.
+
+Also note the reporting regression the same change causes independently of any sweep: an operator who has been seeing Conflict on every install starts seeing Set, with no line saying "your previous override is in the file we just walked away from". The remediation was otherwise scrupulous about exactly this class of thing — F-2 and F-4 were both about a destructive or scope-changing act being legible.
+
+Not a blocker: it requires the operator to have exercised a documented override, and the mechanism is otherwise sound. Major because the design asserts a safety property ("cannot disagree") that its own codebase contradicts, on a key whose disagreement changes dispatch semantics silently — and because "it is inert" is the whole of the argument for not sweeping.
+
+Expected: either the sweep reaches worktree.baseRef under the scope flip, or the section states the merge precedence, states that a pre-existing Conflict override is stranded, and says the installer reports it. The design's own standard, from sec-6: R10 is engineered because both settings files are doctrine's to write. This key is now in both files and doctrine writes it. Observed: an inertness claim resting on invariance that BaseRefOutcome::Conflict exists to deny."""
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "major"
+title = "Expected the eviction rider to report what was removed; observed EvictOutcome::merge treating Unreadable as absorbing, so a partly-successful destructive sweep reports only the failure and never the deletion"
+detail = """
+ROUND 2 — attacking the fold the remediation introduced to close F-4.
+
+sec-4 specifies it in one line: "EvictOutcome::merge folds the per-spec sweeps into one: Unreadable is absorbing (if any spec could not sweep the sibling, the sibling could not be swept), Removed sums, Nothing is the identity."
+
+The parenthetical is the flaw. Unreadable is per-SPEC, not per-FILE, because both of plan_evict's Unreadable conditions can be true for one spec and false for another in the same file. hook_array_mut (src/boot.rs:1127-1137) navigates to hooks.<event> and returns None when THAT event's value is the wrong type — leaving other events in the same well-formed file perfectly sweepable.
+
+The reachable state, with the seven-spec loop over one sibling file:
+
+  - .claude/settings.local.json is valid JSON. hooks.SessionStart is a proper array holding an owned <abs exec> memory sync entry. hooks.SubagentStart has been hand-edited to a string.
+  - spec sync (SessionStart): owned entry found, drop_owned_hooks runs, new_json produced, the file IS WRITTEN → Removed(1).
+  - spec nominate (SubagentStart): hook_array_mut returns None → Unreadable.
+  - merge: Unreadable absorbs → claude_scope carries Unreadable.
+  - Output: "could not sweep .claude/settings.local.json (malformed) — stale doctrine hooks may still fire there". The Removed(1) is gone.
+
+So doctrine deleted an entry from a file and reported only that it could not sweep it. That breaches DEC-164 on the clause the remediation itself quotes twice: the installer "says what it removed and from where", and the rider is "what keeps a destructive-looking write honest". It also breaches the sentence sec-3 now carries in plan_evict's own doc-comment — "fail-soft here is REPORTED, because the entries are still firing" — by reporting the fail-soft and suppressing the write.
+
+The message errs in the safe direction for the user's next ACTION (it tells them to go look), which is why this is not a blocker. It errs in the wrong direction for the record of what doctrine did, which is the obligation F-4 was raised on. Note the asymmetry with how carefully the same remediation handled the analogous case one level down: plan_evict deliberately separates "absent sibling parses to an empty object and reaches Nothing, not Unreadable; only a file that exists and cannot be understood is unreadable." That precision is then discarded by the fold above it.
+
+Two further consequences worth having on the record:
+
+  - Removed and Unreadable are not mutually exclusive facts about a file, so a three-variant enum folded with an absorbing rule cannot represent the state. The states are a count and a failure flag, which is a different shape from a three-way sum.
+  - sec-7's new test a_failed_sweep_is_reported_not_silent seeds "malformed sibling and wrongly-typed hooks.<event>" and asserts Unreadable is printed. Written against a single spec it passes under this fold; it cannot catch the mixed case. So the criterion added to close F-4 does not cover the gap the fold opens.
+
+Expected: a fold that carries both facts — the summed removal count AND whether any spec could not sweep — with the rider printing both lines when both are true. Observed: an absorbing rule justified by a file-level claim about a spec-level condition."""
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "minor"
+title = "Expected shell-form expansion of the portable literal to be a property of hooks; observed it is a property of the shell, and the cited paragraph names two shells where the POSIX default-expansion syntax does not work"
+detail = """
+ROUND 2 — the mechanism claim underneath the command-form change.
+
+sec-2 argues: "**This works because hooks are shell form.** A command hook with no `args` key has its `command` string passed to `sh -c`, which 'tokenizes the string, expands variables' (`hooks.md:341`). Doctrine emits no `args` key, so `${DOCTRINE_BIN:-doctrine}` expands at execution."
+
+The read of the doc is right as far as it goes, and I checked it rather than taking it: `docs/claude/hooks.md` does say shell form runs when `args` is absent, and that "The shell tokenizes the string, expands variables, and interprets pipes, &&, redirects, and globs." Confirmed. Doctrine emits no `args` key. Confirmed.
+
+But the same paragraph names the shell, and it is not always `sh`: "The `command` string is passed to a shell: `sh -c` on macOS and Linux, **Git Bash on Windows, or PowerShell when Git Bash isn't installed**." The `${VAR:-default}` form is POSIX parameter expansion. Git Bash provides it. PowerShell does not — there `${...}` delimits a variable NAME, so `${DOCTRINE_BIN:-doctrine}` resolves as a variable literally named `DOCTRINE_BIN:-doctrine`, which is unset, and the command degrades to empty. On that platform the committed scope writes hooks that cannot fire — and per DEC-162's own documented gotcha (`mem.fact.claude.pretooluse-hook-fail-open`) PreToolUse hooks fail OPEN, so they degrade silently rather than announcing themselves.
+
+The design's empirical control does not cover it either: "it is the empirically proven case: `plugins/doctrine/hooks/hooks.json` has shipped every one of its ten entries in exactly this form, and those hooks fire." True, and the evidence was gathered on a POSIX host — same form, same platform. It proves `sh -c` expands it; it cannot prove the claim as stated.
+
+There is also an asymmetry the section papers over while otherwise being scrupulous about it. sec-2 correctly distinguishes the two mechanisms — "This is not inference from the `.mcp.json` mechanism, which is different — Claude Code expands that one itself at load (`mcp.md:384`)" — and `MCP_COMMAND`'s own doc-comment confirms it (`src/boot.rs:544-549`, "env-expansion resolved by Claude Code at load"). But that difference cuts against the framing that this "rides the seam SL-195 already cut": SL-195's literal is expanded by the CLIENT and is therefore genuinely platform-portable, whereas the identical literal in a hook is expanded by whichever shell the platform picks. Same string, same constant, different portability guarantee. Renaming `MCP_COMMAND` to `PORTABLE_EXEC` and sharing it across both surfaces makes the two look equivalent at precisely the point where they are not.
+
+Minor, and deliberately so. If doctrine does not target Windows, the whole thing is one sentence of stated scope — and there is decent evidence it does not (the repo is NixOS / bubblewrap per AGENTS.md, flake-defined). But it should BE that sentence, rather than an unqualified "this works because hooks are shell form", because the constant is now shared with a consumer for which the claim is unconditionally true, and this is the section where a future reader will look for the caveat.
+
+Expected: the POSIX-shell assumption stated where the mechanism is claimed, and one line noting that the shared literal's portability guarantee differs between its two consumers. Observed: a platform-conditional mechanism asserted unconditionally, citing the very paragraph that lists the exceptions."""
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "minor"
+title = "Expected the class-(ii) table to let a reviewer tell an expected red from a real one; observed its out.hook row cites three lines carrying no such assertion and omits the one that matters most"
+detail = """
+ROUND 2 — a residual inside the fix to F-3, and the notes flag this row themselves as "the loosest entry".
+
+sec-7's class-(ii) table exists for one purpose, which the section states well: enumerate the knowingly-rewritten assertions "so an expected red is distinguishable from a real one", protecting the class-(i) inference that any red there means the generalisation narrowed. A table serving that purpose has to be exact, because a reviewer who finds an uncited red has to decide whether it is class (i).
+
+The row reads: | every out.hook assertion | :3916, :3924, :3926, :3948, :5302 and neighbours | RefreshReport.hook becomes hooks: Vec<RefreshOutcome> |
+
+Grepped, the out.hook assertion sites in src/boot.rs are exactly three: :3916, :3924, :3953. Of the five cited:
+
+  - :3916 correct.
+  - :3924 correct.
+  - :3926 is assert!(matches!(out.mcp, RefreshOutcome::Wired(_))) — .mcp, not .hook.
+  - :3948 is assert!(matches!(out.mcp, RefreshOutcome::None)) — .mcp.
+  - :5302 is inside install_refresh_claude_carries_not_applicable_for_mcp_extension and asserts out.mcp_extension — not .hook, and the test needs no change at all under this row's stated reason.
+
+And the omission is the interesting one. :3953 is the CODEX arm assertion — assert!(matches!(out.hook, RefreshOutcome::Wired(_) | RefreshOutcome::None)) — inside install_refresh_writes_settings_and_respects_dry_run under the comment "Codex arm: hook is wired into .codex/hooks.json, no Claude settings/MCP." It is the single site where sec-7's other claim gets tested: "The Codex arm's output stays byte-identical." Under hooks: Vec<RefreshOutcome> it must become an index or a first(), on the arm the design most wants to assert is untouched. It is also the site F-13's Codex-scope question lands on.
+
+So the row is inverted relative to its own purpose: three of its five references point at .mcp / .mcp_extension assertions that either do not change or change for a different reason, and the one genuinely load-bearing site is absent. "And neighbours" is doing the work a table entry is supposed to do.
+
+Everything else in the table checks out, and it is worth saying so, because the rest of it is precise. Every SETTINGS_REL test site in the file — :3908, :4190, :4204, :4223, :4251, :4766, :4782, :4797, :4809, :5523 — is covered by a row, with the correct reason attached, including the inverting assertion at :3904 and the malformed-settings case at :4809 that my original finding did not name. The baseref row is right too. This is one row.
+
+Minor. Expected: the row resolved to :3916, :3924, :3953, with :3953 called out as the Codex-arm assertion that carries the byte-identical claim; and the three .mcp sites dropped or moved to their own row with their own reason. Observed: a precision table whose loosest row is the one guarding the claim the design least wants doubted."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
