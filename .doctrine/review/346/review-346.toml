@@ -165,5 +165,111 @@ detail = "Expected: rule 4 of the restriction algebra deterministically classifi
 disposition = "fixed"
 response = "Upheld. Three predicates over the same pair of sequences were producing two contradictory answers: an insertion leaves the base rows in their original relative order, so neither the reordering test nor the replacement test described it, while the prose and the test title claimed Reordered. The diagnosis is now an ordered classification — removed, then inserted by subsequence check, then reordered, then replaced — with prefix deciding acceptance and subsequence deciding which refusal. VerificationRowInserted is a new variant. The test titles are aligned and a case is added asserting the classification order itself, so a refinement that both removes and reorders reports Removed."
 
+[[finding]]
+id = "F-18"
+status = "answered"
+severity = "blocker"
+title = "Expected the process-freshness control to be executable through the backend contract; observed no way to obtain a live payload PID"
+detail = "sec-7 Table B row B5 requires two concurrent capsules and says the trusted side observes the subject payload PID, then renders that PID into the observer argv; it explicitly rejects a PID reported by the subject. But sec-2 exposes only synchronous CapsuleBackend::execute and ConformanceBackend::execute_weakened calls returning Observation after execution completes. Neither returns a start handle, exposes a running PID, accepts a PID callback, or gives the harness another observation seam. A thread can keep execute in flight but cannot learn the child PID through this interface. Therefore the control added in response to RV-346 F-6 is not implementable as specified, and REQ-450 criterion 1 cannot be credited to Table B until the contract carries a trusted live-process observation mechanism."
+disposition = "fixed"
+response = """
+Upheld. Confirmed by reading sec-2: CapsuleBackend::execute is synchronous and yields only an Observation after the run completes, so a harness holding it in flight on a thread cannot name the process it started, and sec-7 rightly refuses a pid the subject reports (invariant 9, REQ-448 criterion 3). The control was unbuildable as specified — the same defect class as the SharedRoot mistake this ledger already found, and it arrived in the remediation for F-3..F-6.
+
+Fix: ConformanceBackend gains execute_observed(placement, execution, &dyn Fn(HostPid)), called once trusted-side after the capsule's top-level process exists and before the call returns. HostPid is a newtype over the host-namespace pid, and sec-7 now states why a host-namespace pid is the right value to send in: under the probe arm the observer's own pid namespace does not contain that number, and under the ProcessVisibility control it does — so the row discriminates for the isolation reason rather than an arithmetic one.
+
+The seam is on ConformanceBackend, not CapsuleBackend, so invariant 6 holds: production keeps no admission affordance. It also makes observability part of what admission costs — a backend that cannot name the process it spawned cannot have its process-isolation property controlled, and refusing to admit it is correct. Two new indeterminacy cases are specified so the seam cannot yield a false pass: execute_observed returning without calling back, and the subject exiting before the observer runs. Both classify Indeterminate, never Held."""
+
+[[finding]]
+id = "F-19"
+status = "answered"
+severity = "blocker"
+title = "Expected admission to reject writable immutable inputs; observed every listed probe passes a backend that uses writable binds"
+detail = "sec-2 requires the per-base export and every declared readable input to be bound read-only, while sec-9 residual 1 relies on no capsule being able to alter a declared path. Table A row 2 only executes from each bound path, rows 3 and 4 only test absence/read reach, and Table B mutates transaction-local paths; no row attempts a write through a readable mount or the shared source export. A BubblewrapBackend mutant replacing ro-bind with bind for readable inputs therefore preserves every listed observation while giving capsules mutable shared host/toolchain/export state. Execution confirms the mechanism: bwrap --ro-bind / / --bind HOST HOST followed by a capsule write changed the host marker to capsule-mutated with exit 0. This violates the explicit immutable-input and fresh-state contract, invalidates sec-9 residual 1 as stated, and means REQ-459 criterion 1 is not discharged by Table A."
+disposition = "fixed"
+response = """
+Upheld, and it is the most serious finding on this ledger. Verified by walking the tables: row 1 writes to /capsule/out (writable by design), row 2 executes from bound paths, rows 3-4 establish that undeclared things are unreachable, rows 5-8 touch no mount, table B writes only transaction-local paths that are supposed to be writable, table C reads. No row ever wrote to something it had asked to be read-only, so the single guard DEC-157 depends on was the one guard never seen to fire.
+
+Fix: a ninth property. SPEC-030 clause 2 — 'an explicit base and input set' — carries two independently failable claims. Row 2 proves the set is bounded; row 9 proves it is immutable. Neither implies the other. Row 9's probe writes through each readable mount and into /source and requires every write to fail; its control is PropertyRemoval::InputsWritable, which rebinds those mounts writable and changes no mount's presence and no path — a single delta whose mechanism (the read-onlyness of a binding present under both arms) is unique to the row, so it satisfies the same rule rows 3 and 4 are held to.
+
+Containment is structural, not careful: row 9's readable entries are fixture-owned decoys under the fixture's own root, and the /source it writes to is a per-run export the fixture built for itself, never one a real transaction adopts. A control arm that could corrupt the shared export would damage the property it tests.
+
+Consequential changes: sec-2 gains invariant 11 (what is readable is read-only, and it is an executed claim) with an explicit note that invariant 4 does not imply it — absence says nothing about how present paths are attached. sec-9 residual 1 cited invariant 4 for exactly that inference and has been rewritten; its dismissal of the resolution-time race now rests on row 9 rather than on an invariant that did not cover it. sec-8 records that REQ-459 criterion 1 was not discharged before row 9 existed. DEC-156's count moves eight to nine and its one-to-one-with-the-clauses sentence is withdrawn: nine rows over eight clauses, one clause covered twice. Human-authorised, as the seven-to-eight correction was."""
+
+[[finding]]
+id = "F-20"
+status = "answered"
+severity = "blocker"
+title = "Expected the unconditional admission test to run in the supported jail; observed the exact nested profile cannot create its network namespace"
+detail = "sec-7 and sec-9 residual 3 claim the supported Linux bubblewrap development jail runs the suite unconditionally, relying on DEC-160 session evidence that nested bubblewrap works. In the current NixOS bubblewrap review jail, the exact recorded command bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all -- /bin/sh -c echo nested-ok exits 1 with loopback: Failed to create NETLINK_ROUTE socket: Operation not permitted. The discriminating controls show the failure is the denied-network leg: the same command with --share-net succeeds, the explicit non-network namespace set succeeds, and --unshare-net alone fails. Since Table A row 5 and the normal backend profile require the failing default-denied network namespace, the unconditional test would make cargo test fail in the stated supported environment; the residual is not confined to macOS and must be reconciled before the checked-set ruling can stand."
+disposition = "contested-not-reproduced"
+response = """
+Not upheld as stated; the mechanism it exhibits is kept. Ran the exact recorded command and its three discriminating controls in this project's jail:
+
+  bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all -- /bin/sh -c 'echo nested-ok'   -> nested-ok, exit 0
+  ... --unshare-all --share-net ...                                                                        -> nested-ok, exit 0
+  ... --unshare-net (alone) ...                                                                            -> nested-ok, exit 0
+  ... --unshare-user --unshare-ipc --unshare-pid --unshare-uts --unshare-cgroup ...                        -> nested-ok, exit 0
+
+All four succeed, including the leg the finding names as failing. That is the positive control the claim needed and it contradicts it, so 'the supported Linux bubblewrap development jail cannot run the suite' is withdrawn.
+
+The likely cause of the observation: this review ran under a codex sandbox set to workspace-write, whose Linux seccomp filter denies network syscalls by default. socket(AF_NETLINK, ...) is what bubblewrap opens to bring up loopback in a fresh netns, and 'Failed to create NETLINK_ROUTE socket: Operation not permitted' is what that denial looks like. The measurement was of a layer wrapping the jail, not of the jail.
+
+The general fact survives and is now recorded rather than discarded, because it is worth more than the specific claim was: any confinement layer that denies network-namespace setup makes row 5's probe arm, and therefore admission, impossible on that host — an agent sandbox is such a layer and so is a seccomp-filtered CI runner. sec-7's unconditional-Admitted paragraph now carries the re-measurement, the withdrawal, and the general form. sec-9 residual 3 is retitled from 'a macOS development host' to 'a host that cannot run the backend', and it now names the open question this design does not settle: what a CI environment that denies the namespaces should do. DEC-160's nested-bubblewrap claim gains the same caveat — true of the arrangements measured, not of every runner."""
+
+[[finding]]
+id = "F-21"
+status = "answered"
+severity = "blocker"
+title = "Expected default-members to change only the checked set; observed it also selects the unreleased control package for packaging and publish"
+detail = "sec-8 calls default-members = [dot, crates/doctrine-control] the whole checked-set change, while sec-6 and sec-9 require doctrine-control to be built but not released and defer its distribution contract. A minimal workspace using that exact default-members shape showed bare cargo package assembling both the root package and doctrine-control. Cargo publish has the same default-member package-selection surface, and this repository justfile publish recipe is the bare cargo publish --allow-dirty form. The proposed doctrine-control manifest is not specified with publish = false and the publish recipe is explicitly declared unchanged, so the next normal crates.io release selects the supposedly unreleased package. The same probe also showed cargo fmt formats all workspace members including cordage, so default-members is not what extends formatting and cordage is not outside that part of the fast loop. The design must explicitly prevent publication or path-limit the recipe, and then restate the actual checked-set effects."
+disposition = "fixed"
+response = """
+Upheld, both halves, and reproduced.
+
+Publish selection: a minimal workspace with default-members = ['.', 'crates/sub'] packaged both members under a bare cargo package, and just publish is the bare 'cargo publish --allow-dirty' form. So the design's 'built but not released' would have been violated by the next ordinary release.
+
+The fix is two changes, and the measurement shows why neither alone is enough — they fail in opposite directions. publish = false in the new crate's manifest does NOT make a bare cargo publish skip the member: it makes the whole command fail with 'error: sub cannot be published' (verified with cargo publish --dry-run). So the manifest key alone breaks releases rather than protecting them. And a path-limited recipe alone leaves nothing stating the intent durably. Both land: publish = false in crates/doctrine-control/Cargo.toml, and 'cargo publish -p doctrine' in the justfile. Verified that -p selection gets past member selection with a publish = false sibling present. pkg-check already passes -p doctrine and needs nothing.
+
+Second half also upheld: cargo fmt formats every workspace member regardless of default-members — verified by excluding a member from the default set and watching fmt reformat it anyway. sec-8's checked-set paragraph said the ruling extends fmt, lint, build and test; it now says lint, build and test, and states explicitly that formatting already reached the new crate and that cordage was never outside that leg. sec-8 also no longer claims default-members is 'the whole of the checked-set change' — it is a package-selection default, and its reach into packaging and publishing is now stated where the ruling is made.
+
+Touch-set consequence: the justfile joins it, correcting sec-8's own claim two paragraphs later that the release arrangement does not change."""
+
+[[finding]]
+id = "F-22"
+status = "answered"
+severity = "major"
+title = "Expected the whole-diff table to include generated workspace metadata; observed Cargo.lock is omitted and a locked build refuses"
+detail = "sec-8 says its modified-path table is the whole diff but omits Cargo.lock. In a minimal root-package workspace matching the design, I generated the lockfile with root plus cordage, then added doctrine-control as a workspace/default member with its path dependency on the root lib. cargo build --locked exited 101: cannot update the lock file because --locked was passed. Regenerating added a doctrine-control package entry. This repository treats Cargo.lock as release-owned input and the Nix/crane path consumes it, so implementation necessarily modifies Cargo.lock even with no new registry dependency. The touch-set and phase scope are incomplete until it is named."
+disposition = "fixed"
+response = "Upheld. Adding a workspace member rewrites Cargo.lock whether or not a registry dependency arrives; cargo build --locked refuses against a stale one; this repo commits it and the crane build consumes it. It is now a row in sec-8's modified-paths table, and sec-9's corrections list names it among four paths the slice's authored Affected surface omits (with the workspace Cargo.toml, the justfile publish recipe, and the [package] include allow-list). Cargo.lock has also been added to the slice's design-target selectors."
+
+[[finding]]
+id = "F-23"
+status = "answered"
+severity = "major"
+title = "Expected the public-library alternative to require a source enumeration; observed one negative include rule cleanly omits the lib target"
+detail = "sec-9 R7 accepts a new public semver surface after rejecting exclusion of src/lib.rs on the claim that exclusion would require replacing the package include allow-list with an enumeration. A minimal package with the same include = [slash src glob] shape and both src/main.rs and src/lib.rs disproves that premise: adding the single pattern !/src/lib.rs made cargo package -p rootpkg --list omit the library, and full cargo package verified successfully with the explicit warning that the library was ignored because src/lib.rs was not included. The remaining tradeoff, a published binary-only crate differing from the local workspace package, is real, but the asserted enumeration cost is not. Because publishing the five exports creates durable semver obligations, R7 must re-evaluate the actual one-line alternative rather than accept the API on a false cost."
+disposition = "fixed"
+response = """
+Upheld — the premise was false and the position it supported is reversed. Reproduced on a minimal package with the same include shape: adding the single pattern '!/src/lib.rs' makes cargo package --list omit the library, and cargo package completes with a warning that it was ignored because its source was not included. include takes gitignore-style patterns, negation included, so no enumeration is required.
+
+R7 is rewritten. The design now takes the exclusion rather than accepting the API: the five exported items exist for doctrine-control, which lives in this workspace and is never published, so publishing them buys nothing and creates durable semver obligations. The remaining tradeoff is the one you named and it is stated rather than waved past — the published crate differs from the built one, having a bin target where the workspace package has both. That is tolerable because nothing downstream builds doctrine-control from a published doctrine, and because cargo install and binstall want the binary. It is not free of hazard: a divergence between packaged and local source is the same shape as the crane embed-strip trap that shipped a hollow binary at v0.5.0. So the exclusion is asserted rather than trusted — pkg-check, which already asserts that force-included embed roots survive packaging, gains the opposite assertion for this path. Both edits are in sec-8's touch-set.
+
+The export-set test keeps its job unchanged; it was never there to protect crates.io consumers, it bounds what doctrine-control can reach across the workspace boundary."""
+
+[[finding]]
+id = "F-24"
+status = "answered"
+severity = "major"
+title = "Expected REQ-461 closure to execute the real capacity comparison; observed its only filesystem proof may skip and closure disclaims it"
+detail = "REQ-461 criterion 1 requires provisioning to compare available space at the capsule location. sec-5 assigns the real mechanism to SystemHost statvfs on the capsule root and says filesystem claims are executed in sec-7 Table C, but that row reports Skipped whenever the repository and capsule root share a filesystem. sec-8 then marks REQ-461 satisfied using only pure capacity/configuration tests and explicitly says closure does not rest on the executed row. Those pure tests exercise arithmetic and fixture HostFacts; they cannot detect a SystemHost that probes the wrong path, returns a manufactured figure, or never calls statvfs. Under the slice standing discipline, a filesystem claim needs non-skippable execution on a discriminating reproduction. The requirement cannot move to satisfied until such evidence exists or the executed row is made mandatory on a fixture that actually supplies distinct filesystems."
+disposition = "fixed"
+response = """
+Upheld. Pure tests over a fixture HostFacts exercise arithmetic and cannot observe whether the real probe is ever called, on what path, or against what quantity — and the one executed row skipped wherever the capsule root and repository share a filesystem. Marking REQ-461 satisfied while explicitly disclaiming its only executed evidence was not defensible under this slice's own standing discipline.
+
+Fix: table C's capacity claim splits into two rows. The first is unconditional — the fixture calls SystemHost on its own capsule root and requires agreement, within one allocation unit, with a statvfs the test performs itself on the same path. That rules out never calling statvfs, a manufactured or cached figure, and reading the wrong quantity, and it needs no particular disk layout so it never skips. The second is the wrong-path discriminator, which is only observable across filesystems: the fixture selects a path on a second filesystem from the host's own mounts at build time and asserts the two figures differ and each matches an independent statvfs. It does not wait for the operator's disk layout to differ — on Linux a tmpfs is present at /dev/shm or /tmp, and measured here the real-disk capsule root and the tmpfs reported 272 GiB against 32 GiB. Where no second filesystem is found the row reports skipped naming that reason.
+
+REQ-461 stays satisfied, but closure now rests on the unconditional row rather than on pure tests with a disclaimer. sec-8's closure table says so, and records that this row moved in round 3."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -622,6 +622,14 @@ live.
    configuration names.
 10. **`src/worktree/` is not imported.** Enforced by `sec-6`'s export set, which
    carries no bubblewrap surface at all.
+11. **What is readable is read-only, and that is an executed claim.** Every
+   entry in `readable`, and the source export, are bound so that a capsule's
+   write to them fails. This is not implied by any of the invariants above:
+   invariant 4 says the canonical repository and credentials are *absent*, and
+   absence says nothing about how the paths that are present are attached. A
+   backend binding exactly the declared set and binding it writable satisfies
+   1–10 and violates `DEC-157`. `sec-7` row 9 is where it is proven, with the
+   writable binding as its control (`RV-346` `F-19`).
 
 ### Verification alignment
 
@@ -681,7 +689,12 @@ Environment vocabulary:
 - `working_directory_has_no_inherit_value` (a type-level property, asserted by
   construction rather than by test)
 
+Read-only attachment (invariant 11) has no pure test that could establish it —
+whether a mount is writable is a property of the running capsule, not of the
+argv — so it is executed only, in `sec-7` row 9.
+
 Executed, and the reason the shape assertions are not enough: all of `sec-7`.
+
 
 <!-- doctrine:section sec-3 -->
 ## The capsule transaction and how it is provisioned
@@ -1971,6 +1984,7 @@ Three facts about it decide most of this section.
 ```
 crates/doctrine-control/
   Cargo.toml                  # depends on the doctrine lib target, path
+                              #   publish = false — see Nothing ships
   src/main.rs                 # the two verbs
   src/host.rs                 # HostFacts, SystemHost                    (sec-5)
   src/config.rs               # CapsuleConfig, the [capsule] reader      (sec-5)
@@ -2190,8 +2204,28 @@ with it. All three claims verified by execution. The root package's lib target
 above exists because a *second crate* has to reach it; nothing has to reach
 into `doctrine-control`, so it acquires no published surface.
 
-**Nothing ships.** The distribution contract — the nix `srcWithDist` graft, the
-binstall asset name, `install.sh`, `release.yml` — is a close-time Follow-Up for
+**Nothing ships, and that takes two changes rather than a convention.**
+`publish = false` in the new crate's manifest, **and** the publish recipe
+path-limited to `cargo publish -p doctrine`. Both, because neither alone is
+enough and the failure modes are opposite ones — measured on a minimal
+workspace while remediating `RV-346` `F-21`:
+
+- `default-members` selects the new crate for *packaging and publishing* as
+  well as for building, so a bare `cargo publish` — which is what `just publish`
+  runs today — would reach for it. The manifest key is what states the
+  intent durably rather than leaving it to a flag someone may drop.
+- But `publish = false` does not make a bare `cargo publish` *skip* the member;
+  it makes the whole command fail with ``error: `doctrine-control` cannot be
+  published``. So the manifest key alone would break releases instead of
+  protecting them, and the recipe must name its package.
+
+`just publish` is therefore in this slice's touch-set (`sec-8`), which an
+earlier draft of that section denied by listing the release arrangement among
+what does not change. `pkg-check` already passes `-p doctrine` and needs
+nothing.
+
+The distribution contract itself — the nix `srcWithDist` graft, the binstall
+asset name, `install.sh`, `release.yml` — remains a close-time Follow-Up for
 whichever slice first releases the binary, recorded as risk `R5` and not
 discharged here. The binary is reachable from the build tree only, which is what
 the scope means by tested machinery sitting beside the incumbent arms, unused.
@@ -2232,8 +2266,9 @@ the existing suites unchanged, which is the point of doing it behind
 re-exports: if any of the 35 call sites changes behaviour, tests that were
 written for something else fail.
 
+
 <!-- doctrine:section sec-7 -->
-## The conformance suite: the eight properties, their controls, and admission
+## The conformance suite: the nine properties, their controls, and admission
 
 `REQ-459` criterion 1 asks for a shared conformance suite, `DEC-156` fixes its
 discipline, and `DEC-160` fixes where it lives and who calls it. This section is
@@ -2314,6 +2349,10 @@ pub(crate) enum PropertyRemoval {
     Teardown,
     ProcessVisibility,
     ResourceBound(Bound),
+    /// Row 9. Every readable input and the source export become writable —
+    /// the mechanism unique to input immutability, and the only removal that
+    /// changes how an existing mount is bound rather than which mounts exist.
+    InputsWritable,
 }
 
 pub(crate) enum Bound { FileSize, Wall }
@@ -2331,8 +2370,45 @@ pub(crate) trait ConformanceBackend: CapsuleBackend {
         execution: &Execution,
         removal: PropertyRemoval,
     ) -> Result<Observation, BackendError>;
+
+    /// Run as `execute` does, and call `observer` exactly once — trusted-side,
+    /// after the capsule's top-level process exists and before this returns —
+    /// with that process's pid *in the host's pid namespace*.
+    ///
+    /// Row B5's seam, and it exists because nothing else can supply one.
+    /// `CapsuleBackend::execute` is synchronous and yields only an
+    /// `Observation` after the run is over, so a harness holding it in flight
+    /// on a thread still cannot name the process it started; and a pid the
+    /// capsule reports about itself is capsule-written state, which invariant 9
+    /// and `REQ-448` criterion 3 forbid as evidence.
+    fn execute_observed(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        observer: &dyn Fn(HostPid),
+    ) -> Result<Observation, BackendError>;
 }
+
+/// A pid as the trusted parent sees it, in the host's own pid namespace.
+/// A newtype because the whole point of row B5 is that this number means
+/// something different inside a capsule than it does outside one.
+pub(crate) struct HostPid(pub(crate) i32);
 ```
+
+**Why the seam is here and not on `CapsuleBackend`.** Invariant 6 holds that
+the production trait carries no admission affordance, and an observer is an
+admission affordance even though it cannot weaken anything: production has no
+use for it and would pass a no-op. Putting it on `ConformanceBackend` also
+makes it part of what admission *costs* — a backend that cannot name the
+process it spawned cannot have its process-isolation property controlled, and
+a property that cannot be controlled cannot be proven. Refusing to admit such a
+backend is the correct outcome rather than an inconvenience.
+
+An earlier draft of this section specified row B5 against `execute` alone and
+was not implementable. `RV-346` `F-18` is right that the control added in
+answer to `F-3`…`F-6` could not be built at all, which is the same defect as
+the `SharedRoot` mistake two subsections below and is why both are recorded
+here rather than quietly repaired.
 
 **A dishonest implementation fails closed.** An `execute_weakened` that ignores
 its argument and runs fully confined makes every control arm show the property
@@ -2349,6 +2425,7 @@ no lazy implementation that yields a green verdict.
 | `ProcessVisibility` | `--unshare-all` replaced by `--unshare-user --unshare-ipc --unshare-uts --unshare-cgroup --unshare-net` |
 | `ResourceBound(FileSize)` | `RLIMIT_FSIZE` not set on the child |
 | `ResourceBound(Wall)` | the `timeout -k` wrapper omitted |
+| `InputsWritable` | every `--ro-bind` carrying a readable entry or the source export becomes `--bind` |
 
 `ProcessVisibility` enumerates rather than subtracting because **there is no
 `--share-pid`**: `--share-net` is bubblewrap's only re-share flag and its help
@@ -2359,7 +2436,7 @@ process rows.
 
 ### The arm is the unit of execution, not the capsule
 
-Six of the thirteen rows are two-capsule — something is written or done in one
+Six of the fourteen rows are two-capsule — something is written or done in one
 capsule and observed from another — and one of those runs its two capsules
 concurrently. A runner keyed to a single placement cannot carry them, so the
 unit the harness runs is the **arm**: everything that executes in order to
@@ -2386,10 +2463,33 @@ enum ArmShape {
 /// observed the subject running under, never one the subject reported
 /// (`REQ-448` criterion 3).
 struct PidProbe {
-    argv: fn(pid: i32) -> Argv,
+    argv: fn(pid: HostPid) -> Argv,
     observed: Observed,
 }
 ```
+
+**How the pid arrives, and why a host-namespace pid is the right one to send
+in.** The harness runs the subject through `execute_observed` on its own
+thread, handing an observer that publishes the pid to the main thread and
+returns. The main thread waits for that pid, renders the observer's argv from
+it, and runs the observer while the subject is still alive — the subject's
+payload sleeps for a bounded interval so the window exists rather than being
+raced for.
+
+The number handed to the observer is a pid in the *host's* namespace, and that
+is exactly what gives the row content. Under the probe arm the observer has its
+own pid namespace, in which that number names nothing, so both assertions hold
+for the reason the property claims: the subject is not visible. Under the
+control arm — `ProcessVisibility` removed, and only that — the observer shares
+the host's pid namespace, the same number resolves to the subject, and both
+assertions become possible. A namespace-local pid would have made the probe arm
+hold for an arithmetic reason instead of an isolation one.
+
+Two failure modes the row must not read as success, both classified
+`Indeterminate` rather than `Failed`: the subject exiting before the observer
+runs, and `execute_observed` returning without ever having called the observer.
+The second is a backend that did not implement the seam, and a suite that read
+it as a passing probe would admit the backend it was least able to check.
 
 ### Both arms provision; the control applies exactly one delta
 
@@ -2417,7 +2517,7 @@ enum Delta {
     /// The placement's network posture becomes `Permitted`. Row 5.
     NetworkPermitted,
     /// The placement is unchanged; one profile property is removed from the
-    /// backend. Rows 6, 7, 8, B5.
+    /// backend. Rows 6, 7, 8, 9, B5.
     Removed(PropertyRemoval),
 }
 ```
@@ -2448,16 +2548,17 @@ struct Row {
 /// properties, so one enum spans both rather than a `Property` key that cannot
 /// hold half of what the verdict reports.
 enum RowId {
-    /// One of the eight `SPEC-030` § Platform backend contract clauses.
+    /// An enforcement claim of `SPEC-030` § Platform backend contract. Nine
+    /// over eight clauses — see Table A on why clause 2 carries two.
     Property(Property),
     /// One of `REQ-450` criterion 1's five freshness axes.
     Axis(Axis),
 }
 
 enum Property {
-    FreshMutableState, ExplicitInputSet, CanonicalAndCredentialDenial,
-    BoundedFilesystemVisibility, NetworkPosture, WorkingDirectory,
-    ProcessTreeTeardown, ResourceAndTerminationObservation,
+    FreshMutableState, ExplicitInputSet, ImmutableInputSet,
+    CanonicalAndCredentialDenial, BoundedFilesystemVisibility, NetworkPosture,
+    WorkingDirectory, ProcessTreeTeardown, ResourceAndTerminationObservation,
 }
 
 enum Axis { Checkout, Repository, Runtime, TemporaryState, Process }
@@ -2564,10 +2665,11 @@ repairs**: the first says the guard is broken, the second says the row is. This
 is `SL-241`'s rule — a guard never seen to fire is not known to work
 (`probe-guards.sh`, `EX-10`) — turned on the suite itself.
 
-### Table A — the eight properties
+### Table A — the nine properties
 
-One row per `SPEC-030` § Platform backend contract clause, in the
-correspondence `sec-2` states.
+`SPEC-030` § Platform backend contract states eight clauses; this table has
+nine rows, because its second clause — *an explicit base and input set* —
+carries two independently failable enforcement claims. See below the table.
 
 | # | property | shape | probe holds when | delta | control fails when |
 |---|---|---|---|---|---|
@@ -2579,6 +2681,48 @@ correspondence `sec-2` states.
 | 6 | deterministic working directory | `Single`: `pwd`, the arm run from two different trusted-side cwds | both equal `working_directory` | `Removed(WorkingDirectory)` | `pwd` tracks the trusted-side cwd |
 | 7 | process-tree teardown | `Single`: orphan a descendant, then exit | no descendant outlives the `execute` call | `Removed(Teardown)` | the descendant survives |
 | 8 | trusted observation of resource limits and termination | `Single` ×5, one per `Termination` variant | each variant correctly distinguished | `Removed(ResourceBound(..))` | the capped and timed-out payloads run to completion |
+| 9 | immutable input set | `Single`: write through each readable mount, then write into `/source` | every write fails | `Removed(InputsWritable)` | the writes succeed |
+
+#### Row 9 exists because clause 2 has two halves that fail apart
+
+Clause 2 asks for *an explicit base and input set*. Row 2 proves the set is
+**bounded** — only declared paths reach a capsule. Row 9 proves it is
+**immutable** — a declared path cannot be written through. Neither implies the
+other, and the failure that motivated the split is concrete: a backend binding
+exactly the declared paths and binding them writable satisfies row 2 in full
+while handing every capsule mutable shared host state, including the per-base
+export that `DEC-157` makes the immutable input and that every concurrent
+transaction on that base shares.
+
+`RV-346` `F-19` found this by executing the mutant rather than reading the
+profile — `bwrap --ro-bind / / --bind HOST HOST` followed by a capsule write
+changed the host's marker and exited 0. As drafted, every row of tables A and B
+passed that backend: row 2 only executes from bound paths, rows 3 and 4 only
+establish that undeclared things are unreachable, and table B writes only to
+transaction-local paths that are *supposed* to be writable. The suite had no row
+that wrote to something it had asked to be read-only, so the one guard `DEC-157`
+depends on was the one guard never seen to fire.
+
+This is the same arithmetic correction `DEC-156` already took once, applied to a
+different clause. There it was two clauses wrongly merged into one row; here it
+is one clause wrongly assumed to be one claim. `DEC-156`'s count moves eight →
+nine, authorised by the human author rather than taken mid-run, and its
+correspondence sentence changes with it: the suite's rows cover every clause,
+and one clause is covered twice because one control can only remove one
+mechanism.
+
+Row 9's mechanism is unique to it — the read-onlyness of a bind that exists
+under both arms — so it satisfies the rule rows 3 and 4 are held to. Its delta
+changes no mount's presence and no path, only how an existing mount is attached,
+which is why it is a `PropertyRemoval` and not a `Widened`.
+
+**Its hazard is that the control arm really does write to host state**, and
+containment is structural rather than careful: the readable entries in this
+row's placement are fixture-owned decoys under the fixture's own root, and the
+`/source` it writes to is a **per-run export the fixture built for itself**,
+never one adopted from a shared capsule root. A control arm that could corrupt
+the export other transactions adopt would be a suite that damages the property
+it is testing.
 
 Row 5's two arms are measured, not assumed: against a trusted-side listener on
 `127.0.0.1`, the capsule is refused under `--unshare-all`
@@ -2701,7 +2845,8 @@ verdict.
 |---|---|---|
 | `sec-4` | read-once (`REQ-449` criterion 3) | `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy` |
 | `sec-3` | the clone's object set is the contracted history alone | `the_clones_object_set_is_exactly_the_exports` |
-| `sec-5` | the capacity probe reads the capsule root's filesystem | `the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on` |
+| `sec-5` | `SystemHost` reads real available space at the path it is given | `the_capacity_probe_reads_real_space_at_the_path_it_is_given` |
+| `sec-5` | and reads the capsule root's filesystem, not the repository's | `the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on` |
 
 The object-set claim compares trusted-side: the capsule prints its object names
 with `git -C /capsule/repo cat-file --batch-all-objects --batch-check='%(objectname)'`
@@ -2709,13 +2854,36 @@ and the trusted side compares the set against the same query run on the export.
 The `--batch-check` is not optional — bare `--batch-all-objects` is a fatal
 error (`'--batch-all-objects' requires a batch mode`), verified by execution.
 
-**Table C may skip; tables A and B may not.** `sec-5`'s row runs only where the
-capsule root and the repository are on different filesystems and reports
-*skipped* where they are not. That is not the green skip `DEC-156` forbids,
-because what `DEC-156` forbids is an *admission* that passes without being
-established — and a Table C row contributes to no admission. The distinction is
-structural rather than a promise: `Admission` is computed from tables A and B
-alone, so a Table C row has no path to it.
+**`sec-5`'s two rows split a claim that was one row and could not carry it.**
+The first is unconditional: the fixture calls `SystemHost` on its own capsule
+root and compares the figure against a `statvfs` the test performs itself on
+the same path, requiring agreement within one allocation unit. That rules out a
+host that never calls `statvfs`, one that returns a manufactured or cached
+figure, and one that reads the wrong *kind* of quantity — and it needs no
+particular disk layout, so it never skips.
+
+It cannot rule out a host that probes the **wrong path**, because where the
+capsule root and the repository share a filesystem the two figures are equal
+and the defect is unobservable. The second row is the discriminator, and the
+fixture does not wait for the operator's disk layout to supply one: it compares
+the capsule root — which `DEC-156` already requires to be on real disk, never
+tmpfs — against a path on a second filesystem it selects at fixture build time
+from the host's own mounts, and asserts the two figures differ and each matches
+an independent `statvfs`. On Linux a tmpfs is present at `/dev/shm` or `/tmp`
+and the pair is available in practice; measured here, the real-disk root and
+the tmpfs reported 272 GiB against 32 GiB. Where no second filesystem can be
+found the row reports *skipped* naming that reason, which is a report about the
+host rather than a silent pass.
+
+`RV-346` `F-24` is why this is two rows. As one skippable row it was the only
+executed evidence `REQ-461` had, and `sec-8` was closing the requirement while
+explicitly disclaiming it — pure tests over a fixture `HostFacts` exercise
+arithmetic and cannot observe whether the real probe was ever called.
+
+**Table C may skip; tables A and B may not.** A Table C row contributes to no
+admission, and the distinction is structural rather than a promise: `Admission`
+is computed from tables A and B alone, so a Table C row has no path to it. That
+is what makes a skip there lawful where `DEC-156` forbids one in an admission.
 
 ### The fixture
 
@@ -2742,6 +2910,17 @@ struct Fixture {
     /// control is a lawful widening.
     decoy_credential: PathBuf,
     decoy_repository: PathBuf,
+    /// Row 9's targets: a readable decoy the row writes through, and this
+    /// fixture's **own** export — built for this run, adopted by nothing else,
+    /// so the control arm's writes cannot reach an export a real transaction
+    /// shares.
+    decoy_readable_input: PathBuf,
+    own_export: PathBuf,
+    /// Table C's second capacity row: a path on a filesystem other than the
+    /// one `capsule_root` is on, chosen from the host's mounts at build time.
+    /// `None` where the host offers no second filesystem, which makes that row
+    /// report *skipped* naming the reason rather than passing quietly.
+    second_filesystem: Option<PathBuf>,
     /// Row 4's target, and row 2's.
     decoy_undeclared: PathBuf,
     decoy_executable: PathBuf,
@@ -2770,6 +2949,7 @@ what a later slice would reach for.
 | 5 | contacting the network | a trusted-side loopback listener, never the internet — measured refused under `--unshare-all`, so the row holds offline |
 | 7, B5 | a leaked process | `timeout -k` outside the sandbox plus a process-group kill in teardown (`sandbox.sh:288`); the control's orphan is what the reaper exists for (`EVD-013`) |
 | 8 | filling the disk, or hanging | the unbounded write goes to the capsule's size-capped tmpfs; the wall payload sleeps a small fixed multiple of the bound |
+| 9 | the control arm writing to real host state | its readable entries are fixture-owned decoys under the fixture's own root, and its `/source` is an export this run built for itself — never one a real transaction adopts |
 
 ### The verdict
 
@@ -2819,11 +2999,28 @@ unavailable backend takes `NotAdmitted::Unavailable` and exits nonzero, which is
 
 **The test asserts `Admitted` unconditionally.** Making it conditional on
 availability would reintroduce precisely the green skip, so it does not: on a
-host without bubblewrap this project's `cargo test` fails. That is a real cost
-and it is accepted rather than hidden — the supported development environment is
-Linux with bubblewrap, and `DEC-160` verified that nested bubblewrap works
-inside this project's jail, so neither dispatch nor CI needs a special
-arrangement. `sec-9` carries the consequence for a macOS development host.
+host that cannot run the backend, this project's `cargo test` fails. That is a
+real cost and it is accepted rather than hidden — the supported development
+environment is Linux with bubblewrap, and `DEC-160` verified that nested
+bubblewrap works inside this project's jail, re-measured while remediating
+`RV-346` round 3: `--unshare-all`, `--unshare-net` alone, and the explicit
+non-network unshare set all succeed one level down.
+
+**What that measurement does not cover is a third layer.** `RV-346` `F-20`
+reported the exact nested profile failing with `Failed to create NETLINK_ROUTE
+socket: Operation not permitted`, and the reading it drew — that this project's
+jail cannot run the suite — does not hold: the same commands succeed in that
+jail, which is the positive control the claim needed. The observation was real
+in the environment it was made in, an agent sandbox wrapping the jail whose
+seccomp filter denies the socket bubblewrap opens to bring up loopback in a
+fresh network namespace. The general fact survives the specific claim's
+withdrawal: **any additional confinement layer that denies network-namespace
+setup makes row 5's probe arm, and therefore admission, impossible** — and a
+seccomp-filtered CI runner is that layer as much as an agent sandbox is.
+`backend verify` is the path for such a host, reporting
+`NotAdmitted::Unavailable` naming what is missing, and `sec-9` residual 3
+carries the consequence for `cargo test` — which is not a macOS-only concern,
+as an earlier draft of that residual assumed.
 
 ### Invariants
 
@@ -2842,7 +3039,13 @@ arrangement. `sec-9` carries the consequence for a macOS development host.
    weakening surface; `ConformanceBackend` is a separate trait and is
    `pub(crate)`.
 7. **Hazardous rows reach decoys** inside the fixture's own root. No arm names
-   the operator's repository or credentials.
+   the operator's repository or credentials, and no arm — probe or control —
+   can write to an export any real transaction adopts: row 9's writable-input
+   control operates on an export this run built for itself.
+10. **A live pid is the trusted parent's observation.** Row B5's target comes
+   from `execute_observed`'s callback, never from the subject's own output, and
+   a backend that returns without calling it yields `Indeterminate` rather than
+   a held probe.
 8. **The suite creates no capsule-delete capability.** Cleanup is the fixture's
    own `Drop` over a temporary root it created.
 9. **A backend's own report is never evidence.** Every arm result is read from
@@ -2864,6 +3067,9 @@ Pure, over classification:
 - `both_tokens_present_is_ambiguous_not_held`
 - `a_missing_value_line_is_indeterminate_rather_than_unequal` — row 6's shape
 - `a_termination_observation_reads_its_marker_from_a_killed_run`
+- `an_observed_execution_that_never_calls_back_is_indeterminate_not_held` — the
+  backend that did not implement the B5 seam, which must not read as a pass
+- `a_subject_that_exited_before_the_observer_ran_is_indeterminate`
 
 Pure, over the verdict algebra:
 
@@ -2892,6 +3098,7 @@ Executed, table A — each asserts `RowVerdict::Proven`, so each runs both arms:
 - `deterministic_working_directory_is_proven`
 - `process_tree_teardown_is_proven`
 - `resource_and_termination_observation_is_proven`
+- `immutable_input_set_is_proven`
 
 Executed, the claims that need naming beyond their row:
 
@@ -2908,22 +3115,34 @@ Executed, the claims that need naming beyond their row:
 - `a_probe_arm_placement_is_byte_identical_to_what_provision_returned` —
   invariant 4, which nothing else would catch
 - `the_shared_root_delta_repoints_only_the_second_placement`
+- `a_write_through_every_readable_mount_fails` — row 9's probe stated per
+  entry, so a backend binding one entry read-only and another writable cannot
+  pass on the first
+- `a_write_into_the_source_export_fails` — the `DEC-157` half specifically
+- `the_writable_inputs_delta_changes_no_mount_and_no_path` — that the control
+  differs by attachment alone, which is what makes it a single delta
+- `the_writable_inputs_control_writes_only_to_this_runs_own_export`
+- `the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed`
 
 Executed, table B: the twelve titles `sec-3`'s `Verification alignment` already
 names, driven by this harness rather than restated here.
 
 Executed, table C: the three titles above.
 
-**These tests live in the new crate,** which `just check` does not build — it is
-root-package only. The phase that lands this section must bring
-`doctrine-control` into the checked set, or the suite is green by never running.
+**These tests live in the new crate,** which `just check` would not build by
+default — it is root-package only, and a suite that is never built is green by
+never running. `sec-8` rules on the checked set and owns the change.
 
-`REQ-459` criterion 1 is discharged by table A in full. Criterion 2 —
+`REQ-459` criterion 1 is discharged by table A in full, which as of `RV-346`
+`F-19` means *including row 9* — without it the suite admitted a backend that
+bound every declared input writable, and criterion 1 was not discharged at all.
+Criterion 2 —
 bubblewrap becoming *the supported* backend — needs production acceptance tests
 this slice does not have, so it is recorded as a contributing `--change` and
 reported **partial** in the reconciliation brief, the same shape `sec-3` uses
 for `REQ-450`. Criterion 3 is discharged structurally: there is one suite, it is
 parameterised by backend, and a second backend passing it edits nothing.
+
 
 <!-- doctrine:section sec-8 -->
 ## Code impact and verification alignment
@@ -2948,7 +3167,7 @@ New, the second crate — a bin-only package, no lib target (`sec-6`):
 
 | path | what it is | owner |
 |---|---|---|
-| `crates/doctrine-control/Cargo.toml` | path dependency on the `doctrine` lib target | `sec-6` |
+| `crates/doctrine-control/Cargo.toml` | path dependency on the `doctrine` lib target, and `publish = false` | `sec-6` |
 | `crates/doctrine-control/src/main.rs` | the two verbs, `provision` and `backend verify` | `sec-6` |
 | `crates/doctrine-control/src/host.rs` | `HostFacts`, `SystemHost` | `sec-5` |
 | `crates/doctrine-control/src/config.rs` | `CapsuleConfig` and the `[capsule]` reader | `sec-5` |
@@ -2957,7 +3176,7 @@ New, the second crate — a bin-only package, no lib target (`sec-6`):
 | `crates/doctrine-control/src/backend/bubblewrap.rs` | the Linux profile, its twelve flag constants and its argv | `sec-2` |
 | `crates/doctrine-control/src/transaction.rs` | `CapsuleTransaction`, `TransactionId`, `AcceptedBase`, `PhaseIdentity` | `sec-3` |
 | `crates/doctrine-control/src/provision.rs` | `provision`, export publication, root ownership, rollback | `sec-3` |
-| `crates/doctrine-control/src/conformance.rs` | the eight-property table, the fixture, the verdict, and the second caller | `sec-7` |
+| `crates/doctrine-control/src/conformance.rs` | the nine-property table, the fixture, the verdict, and the second caller | `sec-7` |
 
 Modified — and this is the whole of it, which is `sec-6` invariant 2 stated as a
 diff rather than as a claim:
@@ -2967,10 +3186,20 @@ diff rather than as a claim:
 | `src/git.rs` | `read_path_at` and `CaptureError` `pub(crate)` → `pub` | compiler-required: `pub use` of a `pub(crate)` item is `E0364` |
 | `src/dtoml.rs` | two items removed, re-exported from `config_file` under their existing names | all 35 call sites across 33 files are untouched |
 | `src/main.rs` | one `mod config_file;` declaration | the binary's `dtoml` reaches the relocated items through it |
-| `Cargo.toml` | `crates/doctrine-control` joins `[workspace] members`; a `default-members` key is added | see the checked set below |
+| `Cargo.toml` | `crates/doctrine-control` joins `[workspace] members`; a `default-members` key is added; `include` gains `!/src/lib.rs` | see the checked set below, and `sec-9` `R7` for the exclusion |
+| `Cargo.lock` | one package entry for the new member | generated, but committed and release-owned here |
+| `justfile` | `publish` becomes `cargo publish -p doctrine`; `pkg-check` gains the assertion that `src/lib.rs` is absent from the packaged source | `sec-6` § Nothing ships; `sec-9` `R7` |
 | `tests/architecture_layering.rs` | `check`'s module filter takes its source directory as a parameter; the gate runs twice; the export-set assertions are added | `discover_units` and `extract_edges` are already parameterised |
 | `.doctrine/adr/001/layering.toml` | `config_file = "leaf"`, `interpretation = "leaf"`, the edge `dtoml → config_file`, and a second section for the new crate's eight units | unit names are unique per tree, so the new crate's map is not merged |
 | `.doctrine/doctrine.toml` | the `[capsule]` table | this project's own operator configuration, not a platform default |
+
+Three of those rows are `RV-346` round 3's. `Cargo.lock` was missing (`F-22`):
+adding a workspace member rewrites it whether or not a registry dependency
+arrives, `cargo build --locked` refuses against a stale one, and the crane build
+consumes it. The `justfile` and `include` rows are `F-21` and `F-23`, and both
+correct a claim made two paragraphs below this table in an earlier draft — that
+the release arrangement does not change. It does, in two small places, and the
+reason it does is that `default-members` reaches further than the checked set.
 
 `src/main.rs` does **not** declare `mod interpretation;`. Nothing in the
 agent-facing binary consumes the policy in this slice — `doctrine-control`
@@ -2996,26 +3225,46 @@ existing suites, which is the point of doing them behind a re-export and behind
 a parameter. `sec-9` carries the corrected reading.
 
 Also unchanged: every incumbent dispatch, worktree, marker and confinement
-suite; `src/commands/`; `src/dispatch_config.rs`; the release arrangement
-(`flake.nix`, `install.sh`, `release.yml`, the `[package] include` list), which
-`sec-6` defers to whichever slice first releases the second binary.
+suite; `src/commands/`; `src/dispatch_config.rs`; and the *distribution* half of
+the release arrangement — `flake.nix`, `install.sh`, `release.yml` — which
+`sec-6` defers to whichever slice first releases the second binary. The two
+release-adjacent paths that do change (`justfile`'s publish recipe and the
+`include` allow-list) are in the table above; they are about not shipping the
+new crate and not widening the old one, which is the opposite of a distribution
+contract.
 
 ### The checked set
 
 `sec-7` left one obligation on this section: the new crate's tests are green by
 never running unless something brings it into the checked set. `just check` runs
-`fmt`, `lint`, `build`, `validate`, `test`, and four of those five resolve to a
-bare `cargo` invocation that, with a package at the workspace root and no
-`default-members`, selects the root package alone. `crates/cordage` is outside
-the fast loop today for exactly this reason, and a new crate would inherit that
-by default — including `cargo clippy`, which would leave the new crate unlinted
-under `just gate` as well, since `lint` is root-package-only in both recipes.
+`fmt`, `lint`, `build`, `validate`, `test`. Three of those — `lint`, `build`,
+`test` — resolve to a bare `cargo` invocation that, with a package at the
+workspace root and no `default-members`, selects the root package alone.
+`crates/cordage` is outside the fast loop today for exactly this reason, and a
+new crate would inherit it — including `cargo clippy`, which would leave the new
+crate unlinted under `just gate` too, since `lint` is root-package-only in both
+recipes.
+
+**`fmt` is not one of the three.** `cargo fmt` walks every workspace member
+regardless of `default-members` — measured, against a member excluded from the
+default set, which it formatted anyway (`RV-346` `F-21`). An earlier draft of
+this section listed `fmt` among what the ruling below extends, and it was wrong
+twice: formatting already reaches the new crate, and `cordage` was never outside
+that leg of the fast loop.
 
 **The ruling: `default-members = [".", "crates/doctrine-control"]`.** One key,
-in the workspace `Cargo.toml`, and `fmt`, `lint`, `build` and `test` all reach
-the new crate with no per-recipe flag and no recipe edit. `cordage` stays out of
-the fast loop exactly as today; `test-all`'s `--workspace` is unchanged and
-still covers all three. This is the whole of the checked-set change.
+in the workspace `Cargo.toml`, and `lint`, `build` and `test` reach the new
+crate with no per-recipe flag. `cordage` stays out of those three exactly as
+today; `test-all`'s `--workspace` is unchanged and still covers all three
+packages.
+
+**It is not the whole of the change, which is the other half of `F-21`.**
+`default-members` is a *package selection* default, not a build-command one, so
+it also selects the new crate for `cargo package` and `cargo publish` — and
+`just publish` runs the bare form. `sec-6` § Nothing ships carries the two-part
+answer (`publish = false` in the new manifest, and `-p doctrine` on the recipe)
+and the measurement showing why each alone is insufficient. Both edits are in
+the touch-set above.
 
 Its consequence is honest and belongs here rather than in a phase note: the
 executed conformance suite joins the fast inner loop. Tables A, B and C are on
@@ -3053,8 +3302,8 @@ unit it tests, which reaches `pub(crate)` items and does run under `cargo test`.
 | `sec-4`'s parse, normalization, hash and restriction tests (≈42) | `src/interpretation.rs`, root package | pure |
 | `sec-5`'s capacity, configuration and root-resolution tests (≈33) | `config.rs`, `capacity.rs`, `host.rs` | pure, over a fixture `HostFacts` |
 | `sec-6`'s export-set and two-tree gate assertions (7) | `tests/architecture_layering.rs` | integration, root package |
-| `sec-7`'s classification and verdict-algebra tests (18) | `conformance.rs` | pure |
-| `sec-7`'s tables A, B and C | `conformance.rs` | executed, one fixture per run |
+| `sec-7`'s classification and verdict-algebra tests (≈20) | `conformance.rs` | pure |
+| `sec-7`'s tables A (nine rows), B (five) and C (four) | `conformance.rs` | executed, one fixture per run |
 
 The counts are indicative for phase sizing; each section's own list is the
 authority, and two titles are named by two sections and belong to one test.
@@ -3106,15 +3355,26 @@ reconciliation brief, alongside `DEC-136`'s handoff note (`sec-1`, `sec-4`).
 | requirement | this slice | evidence |
 |---|---|---|
 | `REQ-449` | `satisfied` | `sec-4`'s refusal, normalization, hash and restriction tests; criterion 3 by `sec-7` table C's read-once row |
-| `REQ-461` | `satisfied` | `sec-5`'s pure capacity and configuration tests. The executed probe row is corroboration and may report *skipped* where the capsule root and the repository share a filesystem, so closure does not rest on it |
-| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A in full; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet |
+| `REQ-461` | `satisfied` | `sec-5`'s pure tests for the arithmetic and the configuration, **plus** table C's unconditional row — `SystemHost`'s figure agrees with a `statvfs` the test performs itself on the same path. The wrong-path discriminator is a second, conditional row |
+| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A in full, row 9 included; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet |
 | `REQ-450` | contributing `--change`, stays `pending` | criterion 1 by table B. Criteria 2 and 3 need candidate identity and harvest from later slices |
-| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only, by table A rows 1–5 |
+| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only: canonical state and credentials by row 3, arbitrary undeclared paths by row 4, the shared object store by rows 3 and 9 together — reachable-but-not-writable is not denial — and egress by row 5 |
+
+**Two of those rows moved in `RV-346` round 3.** `REQ-461` could not have been
+`satisfied` as the table first read it (`F-24`): its only executed evidence was
+a row that skips wherever the capsule root and the repository share a
+filesystem, and the pure tests run against a fixture `HostFacts` that cannot
+observe whether the real probe is ever called. `sec-7` splits that claim into an
+unconditional leg and a discriminating one, and closure now rests on the first.
+`REQ-459` criterion 1 was **not** discharged before row 9 existed (`F-19`) —
+table A admitted a backend binding every declared input writable — so *in full*
+was a true statement about a table that was missing a row.
 
 Coverage records name the discharging test per criterion (`doctrine coverage
 record`), and the reconciliation brief reports `REQ-448`, `REQ-450` and
 `REQ-459` as partial in those words rather than leaving a reader to infer it
 from a `pending` status.
+
 
 <!-- doctrine:section sec-9 -->
 ## Risks, residuals, and what stays open
@@ -3159,6 +3419,15 @@ property* — is a rule a later row can be added in violation of. A property wit
 no unique mechanism cannot be controlled independently, and the rows must then
 be re-cut rather than the control widened.
 
+`R3` has now been realised twice rather than merely feared, and both times by
+the external pass rather than by the author. `F-2` found two clauses merged into
+one row, and `F-19` found one clause carrying two claims of which only one had a
+row — a suite that admitted a backend binding every declared input writable.
+Neither was a careless omission; both read as complete until someone executed
+the mutant the suite did not have. The standing form of this risk is that **the
+gap in a property suite is invisible from inside it**, and the only reliable
+detector is an adversary constructing the backend the suite would wrongly pass.
+
 **`R4` — the `bwrap_core_argv` parity contract. Retired.** Its premise was that
 this slice widens the shared bubblewrap builder. `DEC-155` gives the capsule
 backend its own flag constants and its own profile, so the byte-parity test
@@ -3188,16 +3457,36 @@ alone, 203 in `memory.rs`), so this is the accepted side of a considered trade
 rather than an oversight. The mitigation is the rule, not a test: the binary
 does not import from its own library.
 
-**`R7` — the `doctrine` package acquires a public library API.** It has none
-today; `src/lib.rs` is inside the published `include` list, so at the next
-release of `doctrine` the five exported items become semver surface that
-downstream consumers may depend on. The exposure is bounded and asserted —
-`the_root_library_exports_exactly_the_named_set` fails on any accidental
-widening, and every exported item is leaf-tier — which is the design's answer.
-The alternative, excluding the lib target from the published tarball, would
-require replacing the `include` allow-list with an enumeration and would make
-the published crate differ from the built one; that is more fragile than the
-export assertion, and it is rejected on those grounds rather than overlooked.
+**`R7` — the `doctrine` package would otherwise acquire a public library API,
+and the design declines it.** `src/lib.rs` falls inside the published `include`
+allow-list, so on the next release of `doctrine` the five exported items would
+become semver surface any downstream consumer could depend on — for no benefit,
+since the only consumer that needs them is `doctrine-control`, which lives in
+this workspace and is never published.
+
+A first draft of this risk accepted that exposure, on the ground that excluding
+the lib target would mean replacing the `include` allow-list with a file
+enumeration. **That premise was false.** `include` takes gitignore-style
+patterns, negation included, so the exclusion is one line —
+`include = ["/src/**", …, "!/src/lib.rs"]` — measured on a minimal package
+while remediating `RV-346` `F-23`: `cargo package --list` omits `src/lib.rs`
+and `cargo package` completes, warning that the library was ignored because its
+source was not included.
+
+So the design takes the exclusion. What remains is a genuine tradeoff rather
+than a cost: **the published crate differs from the built one**, having a bin
+target where the workspace package has both. That is tolerable because nothing
+downstream builds `doctrine-control` from a published `doctrine`, and because
+`cargo install doctrine` and `cargo binstall` want the binary and nothing else.
+It is not free of hazard — a divergence between packaged and local source is
+the same shape as the crane embed-strip trap that shipped a hollow binary at
+`v0.5.0` — so the exclusion is asserted rather than trusted: `pkg-check`, which
+already asserts that force-included embed roots survive packaging, gains the
+opposite assertion for this one path.
+
+The export-set test keeps its job either way. It is not there to protect
+crates.io consumers who now do not exist; it bounds what `doctrine-control` can
+reach across the workspace boundary, which is `sec-6`'s enforcement ruling.
 
 ### Assumptions
 
@@ -3221,13 +3510,22 @@ later slice, or a mechanism the backend contract cannot currently express.
 **1. The resolution-time race.** Declared readable paths are fully resolved,
 validated and then bound, and the window between validation and bind is real: a
 path re-pointed inside it would bind a target that was never validated. It is
-not capsule-reachable — no declared path is writable by any capsule, which is
-`sec-2` invariant 4 and is proven by table A rows 3 and 4 — so it is a
-control-plane-side race over operator-owned configuration, and an operator who
-can re-point a declared path can also edit the configuration that declares it.
-Closing it properly means binding against an open descriptor rather than a
-path, and whether the backend contract can express that at all — for bubblewrap
-and for any later backend — is itself unanswered. Recorded, not solved.
+not capsule-reachable, so it is a control-plane-side race over operator-owned
+configuration, and an operator who can re-point a declared path can also edit
+the configuration that declares it.
+
+**That dismissal rests on an executed claim, and until `RV-346` `F-19` it did
+not.** An earlier draft cited `sec-2` invariant 4 — the canonical repository and
+credentials are absent from the mount set — which is the wrong invariant: it
+says nothing about whether the paths that *are* present can be written through,
+and that is precisely what the race needs. Nothing in the suite proved it, and a
+backend binding declared inputs writable would have passed every row. `sec-2`
+invariant 11 now states the property and `sec-7` row 9 proves it, so the
+dismissal stands on evidence rather than on an invariant that did not cover it.
+
+Closing the race properly still means binding against an open descriptor rather
+than a path, and whether the backend contract can express that at all — for
+bubblewrap and for any later backend — is unanswered. Recorded, not solved.
 
 **2. Out-of-crate backends break `sec-7`'s sealing.** `ConformanceBackend` and
 its weakening vocabulary are `pub(crate)`, which is what stops a production
@@ -3238,18 +3536,37 @@ is a newtype over a private enum — deliberately not built here, because
 building an extension point for a second backend that does not exist is how the
 first one gets designed wrong.
 
-**3. A macOS development host cannot run this project's tests.** `sec-7`'s
-admission test asserts `Admitted` unconditionally, because conditioning it on
-backend availability reintroduces exactly the green skip `DEC-156` forbids. So
-on a host without bubblewrap, `cargo test` fails — and `sec-8` sharpens this by
-putting `doctrine-control` in `default-members`, which brings the failure
-forward into `just check`. It is accepted rather than hidden: the supported
-development environment is Linux with bubblewrap, `DEC-160` verified that nested
-bubblewrap works inside this project's own jail, and `backend verify` is the
-descriptive path — it names what was missing and what would satisfy it
-(`POL-002` facet 3) instead of failing opaquely. No `SPEC-030` requirement is
-met by making the suite conditional, and the cost falls on a development host
-rather than on a capsule.
+**3. A host that cannot run the backend cannot run this project's tests.**
+`sec-7`'s admission test asserts `Admitted` unconditionally, because
+conditioning it on backend availability reintroduces exactly the green skip
+`DEC-156` forbids. So on such a host `cargo test` fails — and `sec-8` sharpens
+this by putting `doctrine-control` in `default-members`, which brings the
+failure forward into `just check`.
+
+**The affected set is wider than a first draft of this residual assumed.** It
+named macOS, on the reasoning that Linux-with-bubblewrap is the supported
+environment and nested bubblewrap was verified inside this project's own jail.
+Both of those remain true — re-measured while remediating `RV-346` round 3 —
+but they are not the whole population. `F-20` reported the nested profile
+failing to create its network namespace, and although the specific claim did not
+survive its positive control (the same commands succeed in this jail), the
+mechanism it exhibited is real: **any confinement layer wrapping the jail whose
+filter denies the socket bubblewrap opens to bring up loopback makes row 5's
+probe arm impossible, and with it admission.** An agent sandbox is such a layer.
+So is a seccomp-filtered CI runner. The residual is therefore not "macOS" but
+*any host, or any nesting, that denies what the backend needs* — and it is
+sharper than it looks, because the environments most likely to hit it are
+exactly the automated ones a project relies on to notice breakage.
+
+It is accepted rather than hidden. `backend verify` is the descriptive path,
+naming what was missing and what would satisfy it (`POL-002` facet 3) instead of
+failing opaquely; no `SPEC-030` requirement is met by making the suite
+conditional; and the cost falls on a development or CI host rather than on a
+capsule. What this design does **not** carry is a ruling on what such a CI
+environment should do instead, and that is the open part: the choice is between
+requiring a runner that permits the namespaces, and accepting that admission is
+established on developer machines and release hosts only. Whichever slice first
+runs this suite in CI owes that decision.
 
 **4. The executed suite's cost lands on the fast inner loop.** `sec-8` rules
 `default-members` and states the measurement obligation and the one lawful
@@ -3303,8 +3620,9 @@ authored text, and the decisions themselves stand.
 4. **The slice's Affected surface names `tests/**` for the acceptance tests.**
    They live in the new crate's `#[cfg(test)]` modules, because a bin-only
    package cannot be linked from `tests/`; only `sec-6`'s export-set and
-   two-tree gate assertions land in `tests/`. The same table omits the
-   workspace `Cargo.toml`, which `sec-8` adds.
+   two-tree gate assertions land in `tests/`. The same table omits four paths
+   `sec-8` adds: the workspace `Cargo.toml`, `Cargo.lock`, the `justfile`'s
+   publish recipe, and the `[package] include` allow-list.
 
 ### Follow-Up at close
 
@@ -3313,4 +3631,5 @@ releases the binary owes the nix `srcWithDist` graft, the binstall asset name,
 `install.sh` and `release.yml` together, and owes them as one change — a missing
 embed graft ships a hollow binary with no compile error. An `RFC-025` § State of
 play note carries it alongside the five-slice decomposition.
+
 
