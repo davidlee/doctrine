@@ -1582,12 +1582,25 @@ when it was written.
 `F-19` then showed the rule I wrote to prevent that — *shapes and consequences,
 never quantities* — was the wrong rule, and wrong in both directions: it banned
 design-stable numbers this section needs and permitted claims that decay without
-being numeric. The rule that actually holds is **monotone or nothing**: no
-statement here may become false as the review continues. That is what "three
-pins" and "fires once at the end of a stage" satisfy and what "twice" never did;
-it is also what rules out *none of them was checked* and *in every instance*,
-which are totality claims over a set the next round can extend — the pass's own
-first pattern, committed inside the paragraph describing it.
+being numeric. Its replacement, *monotone or nothing*, was wrong in a third way,
+and `F-20` is that: as a rule over the whole section it is **false of this
+section**. The press list below is deliberately a list of current states —
+*largest thing still undefined*, *no home yet*, *remaining unverified* — and the
+paragraph above says what the reviewer cleared *without a finding*, which a later
+round could falsify. A rule banning those would delete the section's purpose. It
+was also, being a totality asserted about content nobody had checked it against,
+this pass's first pattern committed inside the rule written to stop it.
+
+The boundary that actually holds is narrower, and it is a distinction between two
+kinds of claim rather than a ban:
+
+- **Claims about the review's own history** — what the ledger owns and revises as
+  it moves — must be monotone. *Twice*, *four rounds*, *in any round* were not,
+  and every one of them was stale on arrival.
+- **Claims about the design's current state** need no such guard. They are bound
+  by this section's fingerprint: if the design moves under them, the attestation
+  that covers this section goes stale and someone has to look. That is the
+  machinery doing the work a rule cannot.
 
 ## What it changed
 
