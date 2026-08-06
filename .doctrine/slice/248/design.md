@@ -1047,17 +1047,37 @@ and takes its own.
 
 | axis | what is written or done | control (one property removed) |
 |---|---|---|
-| checkout | a file in the working tree at `/capsule/repo` | second transaction provisioned into the first's root |
+| checkout | a file in the working tree at `/capsule/repo` | both placements carry the first transaction's `TransactionRoot` |
 | repository | an object and a ref in `/capsule/repo/.git` | as above |
 | runtime | a sentinel in the agent home `/agent` — the state a harness accumulates across a run | as above |
 | temporary state | a file in the capsule's `/tmp` | as above |
-| **process** | capsule A enumerates `/proc` and attempts `kill -0` on a pid the trusted side observed capsule B running under, while both run concurrently | **`--unshare-pid` alone removed**, every other property intact |
+| **process** | capsule A enumerates `/proc` and attempts `kill -0` on a pid the trusted side observed capsule B running under, while both run concurrently | **the pid namespace alone removed**, every other property intact |
+
+**The storage control is a placement, not a second provision.** This table said
+*second transaction provisioned into the first's root* until `sec-7` was drafted
+against it, and that control cannot be set up: step 9 creates the transaction
+root exclusively, and
+`provision_onto_an_existing_transaction_root_refuses_and_removes_nothing`
+asserts the refusal three rows below. A control the system refuses to build
+proves nothing. The removal therefore happens one level down, at the placement —
+the fixture builds a second `CapsulePlacement` carrying the *same*
+`TransactionRoot`, which `try_new` admits because its carve-out accepts a
+writable entry descending from this placement's own root and both placements
+satisfy it against the same root. `sec-7` runs it.
 
 The process row is what makes the fifth axis carry information. Its green arm
 asserts two things positively — B's process does not appear in A's `/proc`, and
 the signal fails — and its control asserts that with the pid namespace shared,
 and *only* that changed, both succeed. That is `DEC-156`'s discipline applied to
 an axis that has no storage to compare.
+
+Its control is named by the property rather than by the flag, because
+bubblewrap has **no `--share-pid`**: `--share-net` is its only re-share flag.
+Removing the pid namespace means assembling the explicit `--unshare-*` set
+without it, which is `sec-7`'s `PropertyRemoval::ProcessVisibility`. That
+removal also disables process-tree teardown as a side effect — measured, in
+`sec-7` — so this control leaks a descendant and depends on the harness reaper
+`DEC-156` provides for.
 
 Test titles:
 
@@ -2194,4 +2214,550 @@ The relocation of `DOCTRINE_TOML` and `read_doctrine_toml_text` is covered by
 the existing suites unchanged, which is the point of doing it behind
 re-exports: if any of the 35 call sites changes behaviour, tests that were
 written for something else fail.
+
+<!-- doctrine:section sec-7 -->
+## The conformance suite: the eight properties, their controls, and admission
+
+`REQ-459` criterion 1 asks for a shared conformance suite, `DEC-156` fixes its
+discipline, and `DEC-160` fixes where it lives and who calls it. This section is
+that suite: the harness, the removal vocabulary, the three tables it runs, and
+the verdict it returns. It is the only part of this design that executes
+anything, which is why every other section's `Verification alignment` ends by
+pointing here.
+
+### Where it lives, and its two callers
+
+`crates/doctrine-control/src/conformance.rs` — engine tier, out-edges
+`provision` and `backend` (`sec-6`). One module, two callers (`DEC-160`):
+
+```rust
+/// The whole suite, parameterised by backend. `REQ-459` criterion 3: a second
+/// backend is admitted by passing these assertions, never by editing them.
+pub(crate) fn verify(
+    backend: &dyn ConformanceBackend,
+    config: &CapsuleConfig,
+    host: &dyn HostFacts,
+    today: Date,
+) -> AdmissionVerdict;
+```
+
+`today` is a parameter rather than a read, for the reason `sec-5` gave for
+`HostFacts` carrying no clock: `src/clock.rs` is the single home for wall-clock
+reads and `main.rs` is the shell that performs it. The verdict is dated because
+`DEC-156` requires admission to be a recorded verdict naming backend, host and
+date, so `REQ-459` criterion 3's *independently* has an artefact to point at.
+
+- **`backend verify`** calls it for the on-host verdict, exiting nonzero with
+  structured output when the backend is not admitted.
+- **The integration test** calls it so CI asserts *admitted*.
+
+### The removal is named by the property, never by a flag
+
+A control removes one property. What it costs in flags is the backend's
+business, so the vocabulary is property-shaped — a flag-shaped one would be
+bubblewrap's and could not be asked of a second backend.
+
+```rust
+/// One property a control arm removes.
+///
+/// `pub(crate)`, with `ConformanceBackend`, because every backend lives in this
+/// crate (`sec-6`: `backend/bubblewrap.rs`, plural-ready). That is an
+/// assumption, not a law — if a backend ever ships from outside the crate this
+/// vocabulary becomes public API and needs sealing so nothing but the suite can
+/// ask a backend to weaken itself. `sec-9` carries it.
+pub(crate) enum PropertyRemoval {
+    WorkingDirectory,
+    Teardown,
+    ProcessVisibility,
+    ResourceBound(Bound),
+}
+
+pub(crate) enum Bound { FileSize, Wall }
+
+/// The admission instrumentation, deliberately not on `CapsuleBackend`.
+///
+/// Production uses `CapsuleBackend` and it carries no way to weaken anything.
+/// A backend seeking admission implements this second trait as well, and
+/// implementing it is not a favour: without controls the suite proves nothing,
+/// so `DEC-156`'s discipline *is* this obligation.
+pub(crate) trait ConformanceBackend: CapsuleBackend {
+    fn execute_weakened(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        removal: PropertyRemoval,
+    ) -> Result<Observation, BackendError>;
+}
+```
+
+**A dishonest implementation fails closed.** An `execute_weakened` that ignores
+its argument and runs fully confined makes every control arm show the property
+still holding, which the harness reports as `Unproven` — not admitted. There is
+no lazy implementation that yields a green verdict.
+
+`BubblewrapBackend`'s mapping, each delta measured rather than reasoned about
+(the evidence is below):
+
+| removal | bubblewrap delta |
+|---|---|
+| `WorkingDirectory` | `--chdir <wd>` omitted |
+| `Teardown` | `--die-with-parent` omitted |
+| `ProcessVisibility` | `--unshare-all` replaced by `--unshare-user --unshare-ipc --unshare-uts --unshare-cgroup --unshare-net` |
+| `ResourceBound(FileSize)` | `RLIMIT_FSIZE` not set on the child |
+| `ResourceBound(Wall)` | the `timeout -k` wrapper omitted |
+
+`ProcessVisibility` enumerates rather than subtracting because **there is no
+`--share-pid`**: `--share-net` is bubblewrap's only re-share flag and its help
+states it "can only combine with `--unshare-all`". The removal is therefore the
+one place the backend does not assemble its profile the usual way, and it is
+worth the asymmetry — the alternative is a suite that cannot control its own
+process rows.
+
+### Two removal mechanisms, and which one a row uses
+
+Which mechanism a row uses is decided by **where its property lives**, and the
+split is not cosmetic.
+
+- A **mount-set** property is removed by building a *different placement*
+  through `CapsulePlacement::try_new`. That the widened placement is still
+  lawful is itself evidence: it passes the same validating constructor the
+  probe's placement passed, so it differs by exactly the entry the row added and
+  by nothing else. Rows 1–5.
+- A **profile** property has no placement to express it — the flags belong to
+  the backend — so the row names a `PropertyRemoval` and the backend honours it.
+  Rows 6–8.
+
+```rust
+enum Control {
+    /// A second validated placement, differing by exactly one entry.
+    Placement(fn(&Fixture) -> Result<CapsulePlacement, PlacementRefusal>),
+    /// The same placement, one profile property removed.
+    Removal(PropertyRemoval),
+}
+
+struct Row {
+    property: Property,
+    probe: Probe,
+    subject: fn(&Fixture) -> Result<CapsulePlacement, PlacementRefusal>,
+    control: Control,
+}
+```
+
+Nothing below the row table is row-specific: one runner takes an arm and
+returns what it showed.
+
+```rust
+/// The single point at which the suite touches a backend.
+fn run_arm(
+    backend: &dyn ConformanceBackend,
+    fixture: &Fixture,
+    placement: &CapsulePlacement,
+    probe: &Probe,
+    removal: Option<PropertyRemoval>,
+) -> ArmResult;
+```
+
+### Every probe reports a token; silence is a harness failure
+
+A probe that is *denied* and a probe that never ran look identical on an empty
+stdout, and reading the second as the first is how a suite certifies a backend
+it never exercised. So every payload prints, on both outcomes:
+
+```sh
+/bin/sh -c 'if cat /decoy/credential >/dev/null 2>&1; then echo HELD-NOT; else echo HELD; fi'
+```
+
+```rust
+/// What the arm is read off.
+enum Observed {
+    /// One of two tokens on stdout.
+    Token { held: &'static str, failed: &'static str },
+    /// Stdout equals this exactly — row 6, where the observation is a value
+    /// rather than a binary.
+    Exactly(String),
+    /// The termination itself is the observation — row 8.
+    Termination(Termination),
+}
+
+struct Probe { argv: Argv, observed: Observed }
+
+/// What one arm showed about the property under test. Uniform across all three
+/// `Observed` kinds, which is why the vocabulary is *held/failed* rather than
+/// *reached/denied*: rows 6 and 8 observe a value and a termination, not a
+/// reach.
+enum ArmResult {
+    Held,
+    Failed,
+    /// Neither could be established — no token, an unexpected termination, or
+    /// output the row cannot classify.
+    Indeterminate { termination: Termination, stdout: Vec<u8>, stderr: Vec<u8> },
+}
+```
+
+The tokens are `Argv` strings, not compiled helpers or embedded assets, which is
+what keeps the product weight of shipping the suite small (`DEC-160`).
+
+### The row verdict, and why *unproven* is not *violated*
+
+```rust
+enum RowVerdict {
+    /// The probe held and the control failed. The property is enforced, and the
+    /// control licenses the inference that the enforcement is what did it.
+    Proven,
+    /// The probe arm did not hold: the property is not enforced.
+    Violated,
+    /// The control arm still held, so removing the property changed nothing and
+    /// the probe's result has no established cause.
+    Unproven,
+    Indeterminate { arm: Arm, detail: String },
+}
+```
+
+Only `Proven` on every row admits. `Violated` and `Unproven` are both
+not-admitted and are reported distinctly because they name **different
+repairs**: the first says the guard is broken, the second says the row is. This
+is `SL-241`'s rule — a guard never seen to fire is not known to work
+(`probe-guards.sh`, `EX-10`) — turned on the suite itself.
+
+### Table A — the eight properties
+
+One row per `SPEC-030` § Platform backend contract clause, in the
+correspondence `sec-2` states.
+
+| # | property | probe payload (inside the capsule) | probe holds when | control | control fails when |
+|---|---|---|---|---|---|
+| 1 | fresh mutable state | B reads `/capsule/out/sentinel`, written by A | absent | both placements carry A's `TransactionRoot` | present |
+| 2 | explicit input set | exec a binary from each bound path, then exec the decoy | declared exec 0, decoy `NotExecutable` | decoy's directory added to `readable` | decoy execs 0 |
+| 3 | denial of canonical state and credentials | read the decoy credential; read the decoy repository's secret blob; `git -C /capsule/repo cat-file --batch-all-objects` | both reads fail, object set is the contracted history alone | decoy credential and decoy repository bound read-only | both reads succeed |
+| 4 | bounded host filesystem visibility | read the undeclared decoy; enumerate `/` | read fails, `/` holds only the profile's own entries | undeclared decoy added to `readable` | read succeeds |
+| 5 | explicit network posture | connect to the trusted-side loopback listener | refused | `NetworkPosture::Permitted` | connected |
+| 6 | deterministic working directory | `pwd`, run twice from two different trusted-side cwds | both equal `working_directory` | `PropertyRemoval::WorkingDirectory` | `pwd` tracks the trusted-side cwd |
+| 7 | process-tree teardown | orphan a descendant, then exit | no descendant outlives the `execute` call | `PropertyRemoval::Teardown` | the descendant survives |
+| 8 | trusted observation of resource limits and termination | five payloads, one per `Termination` variant | each variant correctly distinguished | `ResourceBound(FileSize)` / `ResourceBound(Wall)` | the capped and timed-out payloads run to completion |
+
+#### Row 1's control is a placement, not a second provision
+
+An earlier reading had the control *provision* a second transaction into the
+first's root. It cannot: `sec-3` step 9 creates the transaction root
+exclusively, and
+`provision_onto_an_existing_transaction_root_refuses_and_removes_nothing`
+asserts that it refuses. A control that the system refuses to set up is not a
+control.
+
+So the removal happens one level down, at the placement: the fixture builds a
+second `CapsulePlacement` carrying the *same* `TransactionRoot`, which
+`try_new` admits — its carve-out accepts a writable entry descending from this
+placement's own root, and both placements satisfy it against the same root.
+`sec-3`'s freshness table names the same control in the provisioning register
+and needs the same amendment; it is flagged there rather than silently
+reinterpreted here.
+
+This also states plainly what property 1 is a property *of*. That provisioning
+computes a distinct root per transaction is `sec-3`'s claim, proven by
+`sec-3`'s tests. Row 1's claim is the backend's: that it *honours* the root it
+is given rather than placing capsule state somewhere fixed.
+
+#### Rows 3 and 4 share a mechanism and are still independent
+
+Both deny by absence from the mount set (`sec-2` invariant 4), so the natural
+objection is that they are one property. They are not, and the difference is
+what row 3's probe reaches for. Row 4 asks whether an arbitrary undeclared path
+is unreachable. Row 3 asks whether the *canonical repository* is unreachable —
+which under `DEC-157` is a claim about the whole provisioning arrangement, not
+about the backend's mount handling: the capsule is provisioned from a per-base
+export, so the canonical object store is outside the mount set under **every**
+arm including the controls (`sec-3`). A backend could deny arbitrary undeclared
+files perfectly and still be handed a placement containing the canonical
+repository; row 3's third payload — enumerating the clone's object set — is what
+catches that, and it is the same probe that would catch an alternates-file leak
+that `sec-3`'s export validation missed.
+
+Row 3's control does **not** edit `ForbiddenScopes`. The decoys are not members
+of it, so widening `readable` by one entry is a lawful placement and the control
+is a single-entry delta like every other. `ForbiddenScopes`' own job — refusing
+a placement that *declares* the real credential scope — is a construction-time
+refusal with no execution in it, and it is proven by `sec-2`'s pure tests
+(`declared_root_that_resolves_into_the_credential_scope_refuses` and the `F-10`
+descendant mutants). The suite does not repeat them.
+
+#### Row 7's control is `--die-with-parent`, and the choice is measured
+
+The obvious worry is redundancy: with a pid namespace, an orphan should die when
+the namespace's init dies, so removing `--die-with-parent` alone might change
+nothing and the row would report `Unproven` against a correct backend. The 2×2
+was run rather than argued (`bwrap` 0.11.2, in this project's jail; payload
+`/bin/sh -c 'sleep N & exit 0'`, survivors counted trusted-side):
+
+| pid namespace | `--die-with-parent` | descendant survives |
+|---|---|---|
+| present | absent | **yes** |
+| absent | absent | **yes** |
+| present | present | no |
+| absent | present | **yes** |
+
+Teardown needs **both**, and neither is redundant. The explanation is visible in
+the same measurement: with `--unshare-all`, the payload reports `pid=2`, not
+`pid=1`. Bubblewrap runs its own init as pid 1, so the namespace does not
+collapse when the command exits, and the kernel's kill-the-namespace behaviour
+never fires on its own.
+
+Both removals therefore make row 7's control fail as required, and the row takes
+`--die-with-parent` — the mechanism **unique to teardown**. Taking the pid
+namespace instead would remove the mechanism row B5 (process visibility) also
+depends on, and a control removing two rows' guards at once cannot establish
+which one produced the result. That is `RV-346` `F-2`'s objection applied one
+level down, and it yields the rule the suite follows generally: *a row's control
+removes the mechanism unique to that row's property; where a property has no
+unique mechanism, it cannot be controlled independently and the rows must be
+re-cut.*
+
+The converse is a hazard rather than a defect: row B5's control, which does
+remove the pid namespace, breaks teardown as a side effect and leaks a process.
+`DEC-156` already provides for it — the outer reaper is what the control's
+orphan exists for — and the measurement confirms it applies to B5's control as
+much as to row 7's.
+
+#### Row 6 observes a value, and the trusted-side cwd is the thing to vary
+
+Running the probe twice from two different trusted-side working directories is
+what gives row 6 content. Measured, again in the jail:
+
+```
+--chdir /tmp,     trusted cwd /workspace/doctrine  →  pwd = /tmp
+no --chdir,       trusted cwd /workspace/doctrine  →  pwd = /workspace/doctrine
+no --chdir,       trusted cwd /tmp                 →  pwd = /tmp
+```
+
+Without `--chdir` the capsule's working directory *tracks the trusted side's* —
+exactly the inheritance the property forbids, and invisible to a probe run from
+a single cwd. `sec-2`'s `working_directory_has_no_inherit_value` is the
+type-level half of the same property, asserted by construction; this is the
+executed half.
+
+#### Row 8 is five payloads, one per `Termination` variant
+
+The property is that the trusted parent distinguishes every way a run can end,
+so the probe is a sub-table:
+
+| variant | payload |
+|---|---|
+| `Exited { code }` | `exit 7` |
+| `Signalled { signal }` | a payload that raises `SIGTERM` on itself |
+| `TimedOut` | a sleep longer than the configured timeout |
+| `FileSizeExceeded` | a write larger than `file_size_cap` |
+| `NotExecutable` | an argv naming a path outside the readable set |
+
+`NotExecutable` and `Exited { code: 127 }` are the pair the spike had to separate
+by hand (`sandbox.sh:297,309`) — *the runner refused* and *the runner never ran*
+otherwise read identically — so the row asserts them as distinct outcomes rather
+than merely as distinct codes.
+
+The control removes the corresponding bound, and only the `TimedOut` and
+`FileSizeExceeded` payloads have one: with the bound gone, the sleep runs to
+completion and the oversized write succeeds. The other three variants have no
+bound to remove and are asserted on the probe arm alone — stated rather than
+papered over, because it means three of the five carry no control. They are
+observations of what the OS reports, not enforcement claims, so there is no
+guard whose firing is in question; the enforcement half of row 8 is the two
+bounded payloads.
+
+### Table B — the five freshness axes
+
+`REQ-450` criterion 1 and `DEC-157`, driven by the same harness. Four storage
+rows share one control; the process row has its own (`sec-3`).
+
+| id | axis | probe | control |
+|---|---|---|---|
+| B1 | checkout | a file in the working tree at `/capsule/repo` | both placements carry one `TransactionRoot` |
+| B2 | repository | an object and a ref in `/capsule/repo/.git` | as above |
+| B3 | runtime | a sentinel in the agent home `/agent` | as above |
+| B4 | temporary state | a file in the capsule's `/tmp` | as above |
+| B5 | process | A enumerates `/proc` and attempts `kill -0` on a pid the trusted side observed B running under, concurrently | `PropertyRemoval::ProcessVisibility` |
+
+B5's probe asserts two things positively — B's process is absent from A's
+`/proc`, and the signal fails — and its control asserts that with the pid
+namespace shared and only that changed, both become possible.
+
+### Table C — the executed claims other sections owe
+
+These are not admission rows. They ride the same fixture because they need a
+provisioned capsule, and they are reported separately so nothing conditional
+can reach the verdict.
+
+| owed by | claim | test |
+|---|---|---|
+| `sec-4` | read-once (`REQ-449` criterion 3) | `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy` |
+| `sec-5` | the capacity probe reads the capsule root's filesystem | `the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on` |
+
+**Table C may skip; tables A and B may not.** `sec-5`'s row runs only where the
+capsule root and the repository are on different filesystems and reports
+*skipped* where they are not. That is not the green skip `DEC-156` forbids,
+because the thing `DEC-156` forbids is an *admission* that passes without being
+established — and a Table C row contributes to no admission. The distinction is
+structural rather than a promise: `Admission` is computed from tables A and B
+alone, so a Table C row has no path to it.
+
+### The fixture
+
+```rust
+/// Built once, trusted-side, before any row runs.
+struct Fixture {
+    /// Real disk, never tmpfs (`DEC-156`): `sec-5`'s probe must read real
+    /// available space, and a resource observation on tmpfs would measure the
+    /// mount's size rather than the disk's.
+    root: TempRoot,
+    capsule_root: PathBuf,
+    /// A git repository holding a ref the contracted base does not — the row 3
+    /// target, so the real canonical repository is never involved.
+    decoy_repository: PathBuf,
+    decoy_credential: PathBuf,
+    decoy_undeclared: PathBuf,
+    decoy_executable: PathBuf,
+    /// Trusted-side, the row 5 target.
+    listener: TcpListener,
+}
+```
+
+**One transaction per arm.** A row that left state behind would contaminate the
+next, and rows 1 and B1–B4 need two transactions within a single arm. The cost
+is bounded by `sec-3`'s export being built once per base and adopted by every
+transaction after it, so a transaction is a local clone from a warm export.
+
+**Cleanup is the harness's.** `TempRoot`'s `Drop` removes the run's root.
+`DEC-156` is explicit that this must not mint a product-side capsule-delete
+capability for test convenience — `DEC-133` and `DEC-137` hold that a harvested
+capsule is live work, and a delete primitive introduced here for tidiness is
+what a later slice would reach for.
+
+### Hazard containment, per row
+
+| row | hazard | containment |
+|---|---|---|
+| 3 | reaching real canonical state or credentials | decoys only; the real ones are outside the mount set under **both** arms, so no arrangement of the suite reaches them |
+| 5 | contacting the network | the target is a trusted-side loopback listener, never the internet — `--unshare-all` denies loopback as it denies egress, so the distinction holds offline and in CI |
+| 7, B5 | a leaked process | `timeout -k` outside the sandbox plus a process-group kill in teardown (`sandbox.sh:288`); the control's orphan is what the reaper exists for |
+| 8 | filling the disk | the unbounded write goes to the capsule's size-capped tmpfs, so it is bounded by the mount rather than by the host |
+
+### The verdict
+
+```rust
+pub(crate) struct AdmissionVerdict {
+    pub(crate) backend: BackendId,
+    pub(crate) host: HostDescriptor,
+    pub(crate) date: Date,
+    pub(crate) outcome: Admission,
+    /// Every row, including the proven ones — the artefact `REQ-459`
+    /// criterion 3 points at.
+    pub(crate) rows: Vec<(Property, RowVerdict)>,
+    /// Reported, never admitted on.
+    pub(crate) auxiliary: Vec<(Claim, AuxOutcome)>,
+}
+
+pub(crate) enum Admission {
+    /// Every row in tables A and B is `Proven`.
+    Admitted,
+    NotAdmitted { reason: NotAdmitted },
+}
+
+pub(crate) enum NotAdmitted {
+    /// `POL-002` facet 3: what is missing and what would satisfy it. Read from
+    /// `CapsuleBackend::availability` before any row runs.
+    Unavailable { missing: String, remedy: String },
+    /// At least one row was not `Proven`.
+    Rows,
+}
+```
+
+There is exactly one green path and it requires every row to have been run. An
+unavailable backend takes `NotAdmitted::Unavailable` and exits nonzero, which is
+`DEC-156`'s "never a green skip" made structural rather than remembered.
+
+**The integration test asserts `Admitted` unconditionally.** Making it
+conditional on availability would reintroduce precisely the green skip, so it
+does not: on a host without bubblewrap this project's `cargo test` fails. That
+is a real cost and it is accepted rather than hidden — the supported development
+environment is Linux with bubblewrap, and `DEC-160` verified that nested
+bubblewrap works inside this project's jail, so neither dispatch nor CI needs a
+special arrangement. `sec-9` carries the consequence for a macOS development
+host.
+
+### Invariants
+
+1. **Admission requires every row to have run.** No skip, no early return, and
+   no conditional reaches `Admission::Admitted`; it is computed from tables A
+   and B alone.
+2. **Every property carries a control that was seen to fail.** A row whose
+   control still held is `Unproven`, which is not admitted.
+3. **A control differs from its probe by exactly one thing** — one placement
+   entry, or one named property removal. Mount-set controls prove this by
+   passing the same validating constructor.
+4. **Nothing weakens through `CapsuleBackend`.** The production trait has no
+   weakening surface; `ConformanceBackend` is a separate trait and is
+   `pub(crate)`.
+5. **Hazardous rows reach decoys.** The real canonical repository and real
+   credentials are outside the mount set under both arms of every row.
+6. **The suite creates no capsule-delete capability.** Cleanup is the fixture's
+   own `Drop` over a temporary root it created.
+7. **A backend's own report is never evidence.** Every arm result is read from
+   the `Observation` the trusted parent returns — `REQ-448` criterion 3.
+
+### Verification alignment
+
+The suite is the executed evidence for the rest of the design, so what *this*
+section owes is tests of the part that can be wrong without any capsule
+running: the classification. `RowVerdict` is a pure function of two
+`ArmResult`s, and it is where a suite silently degrades into one that always
+passes.
+
+Pure, over the verdict algebra:
+
+- `held_probe_and_failed_control_is_proven`
+- `failed_probe_is_violated_even_when_the_control_failed`
+- `held_control_is_unproven_rather_than_proven`
+- `an_indeterminate_arm_is_never_proven` — over both arms
+- `a_backend_ignoring_its_removal_yields_unproven_for_every_row` — the
+  fails-closed claim, against a stub whose `execute_weakened` delegates to
+  `execute`
+- `admitted_requires_every_row_proven` — one row of each non-proven kind
+- `an_unavailable_backend_is_not_admitted_and_runs_no_row`
+- `auxiliary_outcomes_do_not_reach_the_admission`
+- `a_skipped_auxiliary_claim_leaves_the_verdict_admitted`
+- `the_verdict_names_backend_host_and_date`
+
+Executed, table A — each is one test asserting `RowVerdict::Proven`, which
+means each runs both arms:
+
+- `fresh_mutable_state_is_proven`
+- `explicit_input_set_is_proven`
+- `denial_of_canonical_state_and_credentials_is_proven`
+- `bounded_filesystem_visibility_is_proven`
+- `explicit_network_posture_is_proven`
+- `deterministic_working_directory_is_proven`
+- `process_tree_teardown_is_proven`
+- `resource_and_termination_observation_is_proven`
+
+Executed, the claims that need naming beyond their row:
+
+- `a_binary_is_executed_from_each_bound_path` — row 2's `F-P05-17` half: the
+  shebang class was found by running the project's own suite, not by inspecting
+  the profile (`sec-2`)
+- `every_termination_variant_is_distinguished` — row 8's five payloads
+- `not_executable_is_distinct_from_exit_127`
+- `the_working_directory_does_not_track_the_trusted_side_cwd` — row 6 from two
+  trusted-side cwds
+- `no_descendant_outlives_the_execute_call` — row 7's probe arm
+- `the_orphan_left_by_the_teardown_control_is_reaped_by_the_harness` — the
+  containment, asserted rather than assumed
+
+Executed, table B: the twelve titles `sec-3`'s `Verification alignment` already
+names, driven by this harness rather than restated here.
+
+Executed, table C: the two titles above.
+
+`REQ-459` criterion 1 is discharged by table A in full. Criterion 2 —
+bubblewrap becoming *the supported* backend — needs production acceptance tests
+this slice does not have, so it is recorded as a contributing `--change` and
+reported **partial** in the reconciliation brief, the same shape `sec-3` uses
+for `REQ-450`. Criterion 3 is discharged structurally: there is one suite, it is
+parameterised by backend, and a second backend passing it edits nothing.
 

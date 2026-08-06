@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 13
+slug = "capsule-teardown-needs-both-the-pid-namespace-and-die-with-parent"
+title = "Capsule teardown needs both the pid namespace and --die-with-parent"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = ""
+provenance   = ""               # inspection | experiment | reproduction | citation
+confidence   = ""               # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "measured basis for sec-7 row 7's control and sec-3's process-visibility control"
+target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "confirms the one-property-removed control fires for process-tree teardown"
+target = "DEC-156"

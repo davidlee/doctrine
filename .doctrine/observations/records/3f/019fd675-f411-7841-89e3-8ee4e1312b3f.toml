@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd675-f411-7841-89e3-8ee4e1312b3f"
+recorded_at = "2026-08-06T09:44:42.25768439Z"
+kind = "friction"
+summary = "/design: design apply silently accepts unknown top-level keys, so schema probing proved nothing and cost 3 revisions"
+detail = """Drafting SL-248 sec-7 I needed the payload shape for declaring a section body. 'doctrine design apply' has no --help detail for the payload and design show's hint line only demonstrates the inquiry ('declare') form. I probed with {"sections":[]} then {"sections":[{"foo":"bar"}]} then a nonsense top-level key; all three were accepted, each bumping the revision (46->49), and none refused. Root cause is in-source: ApplyRequest carries a #[serde(flatten)] envelope so it cannot use deny_unknown_fields (submission.rs:117-119) — Declaration does, ApplyRequest structurally cannot. The correct answer (sections are declared via 'declare' with a 'body' field) was only findable by reading src/design_run/submission.rs. Cost: 3 wasted revisions plus a source read. Adjacent to mem_019fd03e13397240b4eb05af218f5cf5 (retired wire field is a silent no-op) — same root cause, different symptom: that memory covers removed fields, this is unknown fields. A payload-shape example for the section form in the drafting obligation text, or on 'design apply --help', would have cost nothing."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
