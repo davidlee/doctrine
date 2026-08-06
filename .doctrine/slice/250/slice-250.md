@@ -10,9 +10,14 @@ channel*) argues that this trades a smaller install footprint for an activation
 model that **fails silently at every layer**, and asks for direct-write
 activation plus a doctor leg that can say *why* an install is inert.
 
-This slice carries IMP-400 in full. It is the second slice SL-247 (*Usable
-non-worktree subagents*) deferred to under its Non-Goals — "touches SPEC-010 /
-PRD-003 and needs its own design run".
+This slice carries IMP-400's **activation** legs — direct-write hooks and the
+Claude skills channel. Its **diagnostic** leg was carved out to IMP-407 (user,
+2026-08-06): this slice ships activation, IMP-407 ships the diagnosis of
+activation. IMP-400 therefore stays open on two counts, not one — migration
+(`OQ-4`) and the doctor leg.
+
+It is the second slice SL-247 (*Usable non-worktree subagents*) deferred to
+under its Non-Goals — "touches SPEC-010 / PRD-003 and needs its own design run".
 
 ### Why the plugin channel is the wrong substrate
 
@@ -123,10 +128,12 @@ stays published for anyone who prefers the plugin.
   correctness, not edge-case handling.
 
 - **POL-002** (platform independence from host-project conventions) bounds how
-  much Claude-specific per-user knowledge may enter the engine. Layers 1–4 of
-  the doctor walk read `~/.claude*` and system managed-settings paths — outside
-  the project entirely. Where that check lives is a design decision, not an
-  implementation detail.
+  much Claude-specific per-user knowledge may enter the engine. *No longer a live
+  constraint here (2026-08-06):* the only per-user reads this slice contemplated
+  were the doctor walk's layers 1–4, and that leg is IMP-407's. **This slice
+  reads no `~/.claude*` or managed-settings path at all** — it writes
+  project-scoped settings files and nothing else. POL-002 still governs the
+  slice (the `governed_by` edge stands), but via facet (1)/(2), not facet (3).
 - **No parallel implementation.** Hooks go through `HookSpec`; non-hook keys go
   beside it in the `plan_baseref` shape. Skills go through the existing SPEC-010
   planner.
@@ -234,10 +241,17 @@ stays published for anyone who prefers the plugin.
 
   **Disposition (user, 2026-08-06): document, do not engineer.** No file-spanning
   ownership, no automatic eviction, no migration pass. The remedy is a documented
-  note — *if you switch scope, delete the old entry from the other settings file*
-  — and, at most, a cheap read-only finding in the doctor leg, which is already
-  walking both files and can compare owned entries for near-zero marginal code.
-  Design decides whether even that earns its keep.
+  note — *if you switch scope, delete the old entry from the other settings file*.
+
+  **Amended 2026-08-06, on carving the doctor leg out to IMP-407.** The original
+  disposition offered a middle rung — "at most, a cheap read-only finding in the
+  doctor leg, which is already walking both files". **That rung no longer exists
+  in this slice**, because the leg that would have carried it is gone. The choice
+  is now binary: pure documentation, or a drop-only normalize against the scope
+  being left at write time. Design decides (`inq-5`). Note the stake is not
+  hypothetical — the default flip from `settings.local.json` to `settings.json`
+  double-fires the memory-sync hook for every existing install, this repo
+  included.
 - **`R8` — mid-migration double-fire.** The settings boot hook was originally
   removed because it double-fired against the plugin. Any state with the plugin
   still enabled *and* settings hooks written reproduces that. **Disposition
@@ -378,10 +392,11 @@ stays published for anyone who prefers the plugin.
 - **`OQ-4` — SETTLED by research (2026-08-06): yes, and better.** Settings files
   are watched and hot-reloaded, `hooks` explicitly included. See `R1`.
   (IMP-400 `OQ-5`.)
-- **`OQ-5` — SETTLED by research (2026-08-06): a feature-scoped POL-002
-  capability declaration.** The doctor leg declares its dependency on Claude's
-  per-user files, no default path acquires it, and absence yields a descriptive
-  finding naming what was missing. See `R2`.
+- **`OQ-5` — MOVED to IMP-407 (user, 2026-08-06), carrying its settlement.** It
+  settled by research as a feature-scoped POL-002 capability declaration: the
+  doctor leg declares its dependency on Claude's per-user files, no default path
+  acquires it, and absence yields a descriptive finding naming what was missing.
+  That settlement stands and travels with the leg. See `R2`.
 - **`OQ-6` — SETTLED BY PROBE (2026-08-06): hooks MERGE across settings scopes.**
   A project-scope hook and a local-scope hook on the same matcher both fired on
   one tool call. Writing project scope by default cannot clobber a user's own
@@ -409,23 +424,22 @@ Done is judged by:
   actually fire — demonstrated live, not merely planned. This is the claim the
   whole slice rests on and should carry a `VH` leg; `/hooks` is the surface that
   shows both that they are live and which file they came from.
-- **The doctor names the layer.** Each blocking layer in the diagnosis order
-  produces a distinct, accurate diagnosis against fixtures — the per-user layers
-  are fixture-driven since they cannot be mutated in test. Scoped honestly per
-  `R7`: the doctor reports that what doctrine wrote is present, canonical and
-  sole, not that the harness loaded it.
-- **`SpawnSeamSymmetry` still guards the spawn seams.** Its input migrates with
-  the hooks and its live-config regression test passes against the new
-  authoritative source (`R6`).
+- **`SpawnSeamSymmetry` is untouched and still green.** Its input
+  (`plugins/doctrine/hooks/hooks.json`) survives this slice, so the criterion is
+  that the check needs **no** change and its live-config regression test passes
+  unmodified — the same behaviour-preservation posture as `corpus.rs` (`R6`,
+  withdrawn).
 - **Safety contracts intact.** Foreign hook entries and pinned skill
   directories/links survive every path; the existing `boot.rs` and `install.rs`
   suites stay green unchanged (behaviour-preservation gate).
 - **Governance reconciled.** SPEC-010 amended through a REV to describe the
   surviving channel set; RFC-018 updated with anything new the slice learns.
 - **Backlog dispositioned.** IMP-400 reduced to its migration leg and left open
-  (not closed — migration is out of scope); CHR-045 (*bump plugin.json version
-  when the skill set changes*) resolved or explicitly retained; IMP-234 and
-  CHR-037 assessed for overlap.
+  (not closed — migration is out of scope); IMP-407 (*doctor leg*) confirmed
+  still open and still `after` this slice; CHR-045 (*bump plugin.json version
+  when the skill set changes*) resolved or explicitly retained — note it is
+  **no longer moot**, since the plugin manifest survives as `R9`'s escape hatch;
+  IMP-234 and CHR-037 assessed for overlap.
 
 ## Summary
 
@@ -435,3 +449,10 @@ Done is judged by:
   `enabledPlugins` entries and marketplace registrations, and under what
   ownership discipline. Deferred out of this slice; IMP-400 stays open carrying
   it (IMP-400 `OQ-4`).
+- **IMP-407 — the doctor leg** (user, 2026-08-06). Two checks: the trust-layer
+  activation walk that names the blocking layer, and a conformance check keeping
+  the published `hooks.json` honest against the `HookSpec` registry. Sequenced
+  `after` SL-250. `R2`, `R7` and `OQ-5` travel with it.
+- **IMP-406 — serve non-Claude harnesses from the embed** via `.agents/skills`.
+  This slice ships only the *parameterisation* (`OQ-9`); shipping the neutral
+  target and deciding which harnesses stop delegating is IMP-406's.
