@@ -2,14 +2,14 @@
 
 ## Decision
 
-All nine hook entries currently in `plugins/doctrine/hooks/hooks.json` are
+All ten hook entries currently in `plugins/doctrine/hooks/hooks.json` are
 written directly through the `boot.rs` merge core, at the **single**
 flag-selected scope `OQ-1` settled (default: project `.claude/settings.json`).
 No per-entry scope routing, and no entry is dropped.
 
-## The inventory: nine entries, six specs
+## The inventory: ten entries, six specs
 
-Under [[DEC-161]]'s ordered matcher set the nine entries collapse onto six
+Under [[DEC-161]]'s ordered matcher set the ten entries collapse onto six
 `HookSpec`s, one of which already exists:
 
 | entries | spec |
@@ -21,9 +21,15 @@ Under [[DEC-161]]'s ordered matcher set the nine entries collapse onto six
 | 4 × `PreToolUse` → `worktree pretooluse` | **one** new spec, matcher set `Bash`, `Edit\|Write`, `Agent`, `Workflow` |
 | 2 × `PreToolUse` → `memory surface` | **one** new spec, matcher set `Read\|Edit\|Write`, `Bash` |
 
+The table sums to ten: 1+1+1+1+4+2. An earlier revision of this record headlined
+it as nine while the table already said otherwise; the count was corrected in
+place (RV-348 `F-1`), and SL-250's `sec-1` now carries the four-altitude ledger
+that keeps entries, specs, emitted entries and printed lines apart.
+
 This confirms SL-250's triage finding `T1` ("~6 new specs, not a constructor").
 The existing `HookSpec::sync` (`memory sync`) is already written directly and is
-untouched by this slice beyond the scope dial.
+untouched by this slice beyond the scope dial — it never shipped in the plugin,
+which is why seven specs cover ten plugin entries.
 
 ### `T2` resolves mechanically, not by choice
 

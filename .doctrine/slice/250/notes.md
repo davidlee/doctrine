@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 · 6e454608d
+fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `reviewing` rev 41 · 4ac31fd1f
 
 ### Produced
 
@@ -34,8 +34,10 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 ·
   runbook steps discharged, sufficiency accepted, stage advanced to `drafting`.
   - `DEC-161` — `HookSpec` carries an ordered matcher set; ownership stays
     command-only (settles `R5`).
-  - `DEC-162` — nine entries, six specs, one scope dial; closes `T2`. Also
-    absorbed `inq-3` by adoption rather than a duplicate record.
+  - `DEC-162` — **ten** entries, six specs, one scope dial; closes `T2`. Also
+    absorbed `inq-3` by adoption rather than a duplicate record. (Its headline
+    said nine while its own table summed to ten; corrected in place at RV-348
+    `F-1`. Cite ten.)
   - `DEC-163` — scope is a sticky `doctrine.toml` key, no `--scope` flag; the
     installer announces its target.
   - `DEC-164` — writing one scope evicts the abandoned one and reports it;
@@ -62,6 +64,22 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 ·
   `src/commands/doctor.rs`, `plugins/doctrine/hooks/**`, `.claude-plugin/**`,
   `.doctrine/spec/tech/010/**`) are deliberately NOT design targets — each is
   read or verified, none is edited.
+- **RV-348** — external design review of `design.md` at rev 39. Eleven findings
+  (2 blocker, 4 major, 3 minor, 2 nit), **all upheld**, none contested. Round
+  detail is in § RV-348 round 1 below; the ledger holds the findings and
+  responses. Run adopted at rev 40, materialised at 41, round-trip
+  byte-identical. `review_pass` is now STALE and all seven section attestations
+  are stale by construction.
+- **`DEC-162` corrected in place** — headline "nine entries" → "ten", which its
+  own inventory table already summed to. The design's `sec-1` count ledger is the
+  durable fix; this was the error at its source.
+- **Observation `019fd72c-…`** — RFC-011: the `/design` skill's Activation and
+  Recovery blocks omit the required positional `<SLICE>` on `design resume` /
+  `design show`.
+- **`src/corpus.rs` joins the changed-paths set** (RV-348 `F-2`). It was recorded
+  as unchanged in `sec-1`'s code-impact table; the selectors recorded at
+  `draft.selectors` list it as scope-relevant-only. **That classification is now
+  wrong** and `review.selectors` has not yet been re-run — see Open.
 
 ### Learned
 
@@ -110,11 +128,19 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 ·
   — exactly the routine flagless install `DEC-163` argues about. As a parameter,
   `memory sync install` could omit it and re-create the entry in the abandoned
   file on every run, reintroducing `R10` as the treadmill `DEC-163` set out to
-  prevent. Resolving inside makes that unspellable and `corpus.rs` needs no
-  change at all. In `sec-3`.
+  prevent. Resolving inside makes that unspellable. In `sec-3`.
+  - **SUPERSEDED in part (RV-348 `F-2`):** this entry used to end "and
+    `corpus.rs` needs no change at all". **False, and false in the dangerous
+    direction.** `run_sync_install` matches the return value against
+    `RefreshOutcome` directly, so the `HookWrite` return does not compile; worse,
+    inheriting the sweep without the report meant the highest-frequency install
+    path performed the slice's one destructive write in silence. `corpus.rs`
+    **is** a changed path, and the announcement seam is shared, not `wire`-local.
 - **`A3` is already satisfied** — `.gitignore:4` carries `!/.claude/settings.json`
   beside `/.claude/*`. No edit needed; the project settings file is already
-  tracked here.
+  tracked here. **What that fact turned out to cost (RV-348 remediation):** it is
+  precisely *because* the project file is committed that the baked `current_exe()`
+  command form had to go — see the POL-002 entry below.
 - **`.doctrine/skills/*` needs no `ensure_gitignored` call** — `install/
   manifest.toml:46` already lists it. But `ensure_gitignored`'s doc-comment still
   claims "`skills install` reuses this", which is stale and will send the next
@@ -122,10 +148,13 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 ·
 - **Two DRY fixes on live code, beyond the DECs.** (1) Four of five ownership
   predicates in `boot.rs` are the same suffix-strip shape; four more were coming
   — they collapse onto one `is_doctrine_command(cmd, args)` helper.
-  `is_doctrine_boot_command` is deliberately left alone (equivalent, but guards a
-  spec nothing ships). (2) `SETTINGS_REL` → `SETTINGS_LOCAL_REL`: once doctrine
-  writes either of two settings files, "the settings file" is an ambiguity
-  someone will misread.
+  `is_doctrine_boot_command` is deliberately left alone — **not** because it is
+  equivalent (RV-348 `F-11`: it splits on the last whitespace of *any* kind, so
+  it diverges from the suffix-strip form on tab and newline separators) but
+  because it is the one predicate whose semantics would actually change, and it
+  guards a spec nothing ships. (2) `SETTINGS_REL` → `SETTINGS_LOCAL_REL`: once
+  doctrine writes either of two settings files, "the settings file" is an
+  ambiguity someone will misread.
 - **The vestigial "Hooks plugin leg" comment** at `src/install.rs:2295-2300`
   documents code that no longer exists. Not captured as a backlog item — it dies
   with `sec-4`'s deletion pass.
@@ -134,15 +163,58 @@ fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `drafting` rev 38 ·
   `R9` needs the plugin working as the managed-policy escape hatch, so
   `hooks.json` survives and the check is untouched. Its closure criterion
   inverted from "input migrates" to "needs no change".
+- **A committed default scope makes the baked exec path a POL-002 breach —
+  SL-195 had already ruled on it.** Not raised by RV-348; found while
+  remediating, ruled by the user. `HookSpec` bakes `current_exe()`, and `DEC-163`
+  flips the default to `.claude/settings.json`, which this design itself calls
+  committed and travelling with the repo. SL-195 closed the identical defect on
+  `.mcp.json`, left the invariant **baked ⟺ gitignored** behind, and left Claude
+  hooks baked *precisely because* they were gitignored; its acceptance criterion
+  reads *no absolute host path in any tracked file*. Settled on SL-195's own
+  seam — committed scope writes `${DOCTRINE_BIN:-doctrine}` (`MCP_COMMAND` →
+  `PORTABLE_EXEC`, one literal, two surfaces), `Local` keeps the baked path, and
+  `is_doctrine_program` gains one arm so all five predicates own both forms.
+  That arm is what makes a scope switch **heal** rather than orphan, exactly as
+  `is_doctrine_mcp_entry` (`src/boot.rs:1475-1480`) does for SL-195's own
+  migration.
+  - Empirically safe: command hooks are **shell form** (no `args` key), and
+    `sh -c` expands variables (`docs/claude/hooks.md:341`). Different mechanism
+    from `.mcp.json`, which Claude Code expands itself at load (`mcp.md:384`).
+    The shipped `plugins/doctrine/hooks/hooks.json` has carried this form for all
+    ten of its entries and those hooks fire.
+  - Incidental: shell form tokenizes, so a **space-bearing** baked exec path is
+    already broken at execution today, whatever the ownership predicates tolerate.
+    Not fixed for `Local`; noted in `sec-2` so nobody reads predicate tolerance as
+    an execution guarantee.
+- **`install_baseref` had to follow the scope dial** (user ruling, same
+  conversation). Left "unchanged" and merely renamed, it would write
+  `worktree.baseRef` to `settings.local.json` while eleven hook entries went to
+  `settings.json` — doctrine authoring two Claude settings files per install with
+  only one swept, against `sec-3`'s own one-of-two-files invariant. The sweep
+  still does not chase it: eviction is spec-keyed and `worktree.baseRef` is a
+  top-level key whose value is invariant, so a stale copy is inert.
+- **Design-review findings can be right about the claim and wrong about the
+  address.** Three of nine helper citations in `sec-5` were off, one by 1837
+  lines, while the table's actual argument held. Re-derive line refs at
+  materialise time; a design's citations rot faster than its reasoning.
 
 ### Open
 
 - **The inquiry set is CLOSED.** All eight blocking nodes dispositioned; two
-  remain deferred to IMP-407. The run is at `drafting` — its live state is the
+  remain deferred to IMP-407. The run is at `reviewing` — its live state is the
   section set, not the question set. Read it with `doctrine design resume 250`.
-- **The draft is complete and materialised; the drafting runbook is discharged.**
-  Next is the user's read of `design.md` and the advance to `reviewing`. Nothing
-  in the draft is provisional on an unsettled question.
+- **The `reviewing` runbook is UNDISCHARGED — all three steps.** `review.scope`
+  (reconcile `slice-250.md` against what the review accepted), `review.selectors`
+  (re-record design targets — **`src/corpus.rs` moved from scope-relevant to
+  changed**, and `src/dtoml.rs` is now touched for a doc correction), and
+  `review.passes` (satisfied by § RV-348 round 1's "what a further pass should
+  probe", written after the pass).
+- **Two gates the responder cannot discharge.** `review-disposition-attested` is
+  the *user's* — dispose the RV-348 pass as `conducted`, naming the RV. And all
+  seven `section-reviewed` attestations went stale at rev 40 by construction;
+  the remediation touched every section.
+- **RV-348 awaits the raiser.** Eleven findings answered, none verified or
+  contested yet. Blockers still open hold the reviewing edge.
 - **At reconcile:** `QUE-209` — does the REV widen `REQ-186` or add new
   requirements for the newly-governed hook set and the scope key? Deferred here
   by the user at the sufficiency gate; the REV is authored at reconcile, which is
