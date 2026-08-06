@@ -1,0 +1,30 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 1
+slug = "hyp-unused-because-no-skill-routes-to-it"
+title = "HYP is unused because no skill routes to it"
+record_kind = "hypothesis"
+status = "proposed"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+proposition = "HYP has zero records after fourteen months not because agents have no hypotheses worth keeping, but because no shipped skill routes hypothesis work to the record kind. Every skill that hands off to /knowledge enumerates an explicit kind subset, and all of them name only the original four (harvest: 'DEC / QUE / ASM / CON'; design: 'an open question to QUE, a locked choice to DEC, an assumption the design carries to ASM'; preflight: 'capture as ASM'; consult: 'a resolved tradeoff to DEC'). EVD, HYP and CPT appear in no handoff. HYP is the extreme case because it is doubly unrouted: no handoff names it, and /rigour — the one skill whose core method IS hypothesis generation, and whose 'predict each hypothesis's expected result first' step matches the `predicts` facet field exactly — has no /knowledge handoff at all. The generative site and the capture site are never connected."
+predicts    = "If a kind is captured only when a skill routes to it, then: (1) adding an explicit HYP handoff to /rigour and /consult should produce HYP records within a few sessions of normal use, where fourteen months without one produced none; (2) the same intervention on CPT (2 records) should move it, while CPT's mention count in /knowledge — already the highest of any kind at 4 — should keep failing to predict usage; (3) the effect should be visible in the routing, not the vocabulary: skills that describe a kind without naming a capture verb for it should show no lift. Falsified if HYP records appear at a normal rate with no routing change, or if adding the handoff leaves HYP at zero — either would mean the barrier is the kind's usefulness rather than its discoverability."
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the testable form of IMP-403 lead 5 — whether shipped skills instruct agents to capture into the newer record kinds at all"
+target = "IMP-403"
