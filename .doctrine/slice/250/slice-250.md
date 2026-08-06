@@ -199,6 +199,17 @@ stays published for anyone who prefers the plugin.
   can confirm the settings file it wrote is present, canonical, and sole — it
   cannot confirm the harness loaded it. The closure criteria must not promise
   otherwise.
+- **`R10` — cross-scope double-fire; the probe's one adverse finding.** Because
+  scopes *merge* (`OQ-6`) and doctrine's merge core normalizes ownership only
+  **within the single file it writes** (`install_hook_to_file(root, rel_path,
+  …)`), an owned entry left in `settings.local.json` and the same hook newly
+  written to `settings.json` both fire. This is not hypothetical: the live
+  `memory sync install` path writes `SETTINGS_REL` = `.claude/settings.local.json`
+  (`src/boot.rs:531`, `src/corpus.rs:506`), so every existing install already has
+  an owned entry in local scope. Flipping the default to project scope without
+  sweeping the other file double-fires the sync hook. Ownership must span both
+  scope files, or the scope switch must evict the owned entry from the scope it
+  leaves. **This lands directly on the `OQ-1` design and must be answered there.**
 - **`R8` — mid-migration double-fire.** The settings boot hook was originally
   removed because it double-fired against the plugin. Any state with the plugin
   still enabled *and* settings hooks written reproduces that. Install ordering is
@@ -216,6 +227,11 @@ stays published for anyone who prefers the plugin.
   hooks from user and project sources so they may come only from plugins or
   managed settings. Under that gate the plugin channel is the safer one. Fewer
   failure modes, not a subset; the design must say so rather than overclaim.
+  **Mitigation (user, 2026-08-06): this is a reason to keep the plugin manifest
+  around and document it as the sanctioned workaround** for managed-policy-locked
+  environments. `.claude-plugin/marketplace.json` already stays published under
+  IMP-400 `OQ-1`; the slice's user-facing docs must name it as the escape hatch
+  rather than leaving it as vestigial.
 - **`R3` — bootstrap ordering.** *Downgraded (user, 2026-08-06): "I can manually
   fiddle it."* Retiring the channel that currently activates Doctrine in this
   repo can leave the working session (and dispatch workers) without hooks partway
@@ -233,13 +249,13 @@ stays published for anyone who prefers the plugin.
   symlink channel is how this repo worked before IMP-224 moved it onto the
   plugin — but its orchestration was **deleted**, not left dormant. Only the
   proven-ownership helpers survive. See `OQ-2`.
-- **`A3` — `OQ-1`'s stated benefit does not apply to this repo.** `.gitignore:4`
-  ignores `/.claude` wholly, so project `settings.json` is untracked *here*;
-  "reviewable, travels with the repo" is a claim about client projects. Note also
-  that `SETTINGS_REL`'s own rationale for choosing the gitignored file — "the
-  absolute exec path belongs out of git" — evaporates once commands are the
-  portable `${DOCTRINE_BIN:-doctrine}` form. The settled answer stands; the
-  justification is narrower than it reads.
+- **`A3` — `OQ-1`'s benefit needs a gitignore change to land in this repo.**
+  `.gitignore:4` ignores `/.claude` wholly, so project `settings.json` is
+  untracked *here*. **The user will adjust `.gitignore` as needed (2026-08-06)**,
+  so this is a small in-scope edit, not a constraint. Note also that
+  `SETTINGS_REL`'s own rationale for choosing the gitignored file — "the absolute
+  exec path belongs out of git" — evaporates once commands are the portable
+  `${DOCTRINE_BIN:-doctrine}` form, which the probe confirmed works (`OQ-7`).
 - **`OQ-1` — SETTLED (user, 2026-08-06): both, by scope flag, defaulting to
   project `settings.json`.** Committed activation is reviewable and travels with
   the repo; `settings.local.json` stays available for a collaborator who must not
@@ -269,28 +285,27 @@ stays published for anyone who prefers the plugin.
   capability declaration.** The doctor leg declares its dependency on Claude's
   per-user files, no default path acquires it, and absence yields a descriptive
   finding naming what was missing. See `R2`.
-- **`OQ-6` — do hooks from `settings.json` and `settings.local.json` merge or
-  does one override the other?** Strong inference for merge — the documented rule
-  concatenates and deduplicates array-valued settings across scopes, and exempts
-  exactly two settings, neither of them `hooks`; plugin hooks are documented to
-  "merge with your user and project hooks". But `hooks` is an object of
-  event → array and the docs never name it in the merge rule. If it overrides,
-  writing project scope by default could silently defeat a user's own local
-  hooks, and the scope flag's semantics change. **Settle by experiment, in the
-  first phase, before any merge-core surgery.**
-- **`OQ-7` — does Claude Code shell-expand `${VAR:-default}` inside a
-  `settings.json` hook command**, as it does in `.mcp.json` commands
-  (`src/boot.rs:539-543`)? Every hook command is `${DOCTRINE_BIN:-doctrine}`, so
-  a no here breaks the verbatim port. Minutes to probe; pair it with `OQ-6`.
+- **`OQ-6` — SETTLED BY PROBE (2026-08-06): hooks MERGE across settings scopes.**
+  A project-scope hook and a local-scope hook on the same matcher both fired on
+  one tool call. Writing project scope by default cannot clobber a user's own
+  `settings.local.json` hooks. See `R10` for the consequence.
+- **`OQ-7` — SETTLED BY PROBE (2026-08-06): yes.** `${PROBE_BIN:-sh}` expanded
+  and ran inside a `settings.json` hook command, so every
+  `${DOCTRINE_BIN:-doctrine}` string ports verbatim.
+- **`OQ-8` — SETTLED BY PROBE (2026-08-06): the target shape is valid.** Two
+  entries with a byte-identical command string on different matchers both fired,
+  each receiving its own tool. `R5` is therefore purely doctrine's own
+  limitation, not the harness's: widening ownership to `(command, matcher)`
+  yields a file Claude Code honours.
 
 ## Verification / closure intent
 
 Done is judged by:
 
-- **The two probes land first.** `OQ-6` (hooks merge vs override across settings
-  scopes) and `OQ-7` (`${VAR:-default}` expansion in a settings hook command) are
-  answered by experiment before any merge-core change. Both can invalidate design
-  choices and both cost minutes.
+- **No cross-scope double-fire.** `R10`: after a scope switch, exactly one owned
+  entry per hook exists across `settings.json` *and* `settings.local.json`
+  together — the merge core's sole-and-canonical guarantee must hold across the
+  pair, not per file.
 - **A cold install activates.** In a scratch project with no plugin
   registration, `doctrine install` (or the settled verb) leaves hooks that
   actually fire — demonstrated live, not merely planned. This is the claim the
