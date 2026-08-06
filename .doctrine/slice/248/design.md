@@ -332,10 +332,35 @@ the product resting on one. The product form:
   entry and the config key — `POL-002` facet 3, and the same shape `jail.rs:302-393`
   already uses for jail policy.
 - The capsule's inner `PATH` is *derived*: the host `PATH` entries that lie
-  beneath a declared readable root, in host order. Nothing else. This keeps the
-  spike's behaviour — the capsule gets the declared toolchain and not the
-  control plane's own binaries — while making the root a declared input rather
-  than a NixOS-shaped literal.
+  beneath **any** declared readable root, in host `PATH` order, deduplicated.
+  Nothing else. Several roots contributing is the ordinary case, not an edge —
+  a host that declares `["/usr/bin", "/opt/toolchain", "/bin/sh"]` and carries
+  `PATH=/home/u/.local/bin:/usr/bin:/opt/toolchain/bin` derives
+  `PATH=/usr/bin:/opt/toolchain/bin` inside: `/usr/bin` is a root itself,
+  `/opt/toolchain/bin` is beneath one, `/home/u/.local/bin` is beneath none and
+  is dropped. `/bin/sh` is a file, so no `PATH` entry can be beneath it and it
+  contributes nothing here — it is declared for the shebang reason above. This
+  keeps the spike's behaviour — the capsule gets the declared toolchain and not
+  the control plane's own binaries — while making the roots a declared input
+  rather than a NixOS-shaped literal.
+
+Containment is **lexical over normalized absolute paths**, and symlinks are not
+followed. That is a deliberate choice with a known cost: a declared root whose
+contents symlink *outside* every declared root produces a capsule where the
+binary is visible and unexecutable. NixOS makes this the common case rather than
+the exotic one — `/usr/bin/env` and most of `/bin` are symlinks into
+`/nix/store` — so a NixOS host must declare `/nix/store` alongside `/usr/bin`,
+and the spike's single `/nix/store` root is what that reduces to.
+
+Resolving symlinks and auto-declaring their targets was rejected: it would make
+the readable set depend on filesystem contents at provisioning time rather than
+on the declaration, which is the property `POL-002` facet 1 and `REQ-459`
+property 2 both rest on — an input set is explicit or it is not. The step-2
+existence probe **cannot** detect this class, because the symlink itself exists;
+only an executed probe can. `sec-7` property 2 therefore carries a row that
+executes a binary from each declared root rather than merely stat-ing it, which
+is the same lesson as the spike's `F-P05-17` — the shebang class was found by
+running the project's own suite, not by inspecting the profile.
 
 Only `readable_roots` and the per-base export (`sec-3`) ever become readable
 inputs. There is no host-shaped default and no fallback: `Doctrine supplies no
@@ -386,6 +411,8 @@ this section owes both kinds. Pure, hermetic:
 - `empty_mount_vector_refuses_rather_than_running_unconfined`
 - `empty_argv_refuses`
 - `inner_path_is_derived_only_from_declared_readable_roots`
+- `inner_path_draws_from_every_declared_root_in_host_path_order`
+- `a_file_readable_root_contributes_no_inner_path_entry`
 - `absent_readable_root_refuses_naming_the_entry_and_the_config_key`
 - `working_directory_has_no_inherit_value` (a type-level property, asserted by
   construction rather than by test)
