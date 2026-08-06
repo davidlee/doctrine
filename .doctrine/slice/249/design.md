@@ -339,9 +339,10 @@ doctrine knowledge settle <ID> <state> --by WHO [--<text-field> V]
 ```
 
 Flag names are the field's own name, kebab-cased — `--validation-plan`,
-`--waiver-reason`, `--decided-by`. No flag name is authored: the subverb builds
-its arg set from `facet_fields(kind)`, and a test asserts clap's arg names equal
-the table's, so the two cannot drift. This refines `DEC-178`'s illustrative
+`--waiver-reason`, `--decided-by`. The args stay clap-derive-declared, as the
+rest of this CLI is, and `facet_fields(kind)` is their **oracle**: a test asserts
+each subverb's arg names equal its kind's table row, so the two cannot drift. See
+§ 5.5 for why the table does not build the args directly. This refines `DEC-178`'s illustrative
 `--reason` to `--waiver-reason`; the ruling's substance is untouched.
 
 `--body` / `--body-mode` (`replace` | `append`, `-` reads stdin) are lifted from
@@ -695,4 +696,98 @@ table is not on its critical path.
 No path repairs. Every refusal above leaves the corpus exactly as it found it and
 names what to do. The one operation that can leave partial state is **B**, and
 it is ordered so the partial state is the one a human would rather find.
+
+<!-- doctrine:section sec-9 -->
+# 5.5 Invariants, Assumptions & Edge Cases
+
+## Invariants
+
+Each is a property a test asserts, not a habit.
+
+- **I1 — byte-stable round-trip.** A record written by any verb parses to the
+  same typed `RecordFacet` and re-renders to the same bytes. The existing
+  `render_facet` round-trip suite is the oracle and stays green unchanged.
+- **I2 — the table is total.** `⋃ facet_fields(k) over RecordKind::ALL` equals
+  `RawFacet`'s serde key set. A model field with no table row fails the build's
+  tests.
+- **I3 — the table is correctly partitioned.** Every field the table gives a kind
+  survives `validate_facet` for that kind. A field on the wrong row is discarded
+  on read, so I3 catches what I2 cannot.
+- **I4 — one writer per concern.** `status` only through `set_record_status`;
+  `[facet]` only through `apply_facet_edits`; the `.md` only through
+  `entity::write_body`. `plan_facet_edits` is the sole constructor of a
+  `FacetEdit`, so I4's facet half is a type property.
+- **I5 — `accepted` is unreachable from `settle`.** Not by a guard: the token is
+  absent from the derived settleable set (`DEC-088`, `DEC-178`).
+- **I6 — no facet key is ever created.** F-1 posture; an absent key is a refusal
+  naming the record (`DEC-170`).
+- **I7 — a refusal leaves the corpus byte-identical.** Every validation precedes
+  every write, on both the CLI and the admission path.
+- **I8 — `doctrine risk set` is unchanged.** It passes `KeyPosture::Create` and
+  exercises the same code it does today; its suite stays green unchanged (the
+  behaviour-preservation gate).
+- **I9 — the wire-key table is total.** A fully-populated `Declaration`'s serde
+  key set equals the table's (`DEC-169`).
+
+## Assumptions
+
+- **A1 (carried)** — the read model is sound and stays put. If the write path
+  forces a change to `RecordFacet` or `validate_facet`, that is a `/consult`
+  trigger, not a quiet edit.
+- **A2 (confirmed)** — `Declaration` carries `deny_unknown_fields` and
+  `CreateRecord` sits inside it, so the payload extension needs no serde fight.
+- **A3 (to verify in phase)** — *every* kind's scaffold template seeds *every*
+  field of that kind present and empty. `knowledge-decision.toml` is confirmed
+  (`DEC-170`); the other six are assumed on the strength of the shared authoring
+  convention and are cheap to check. **If any template omits a field, F-1 turns
+  every existing record of that kind into one the writer refuses** — so this is
+  the first thing Phase B verifies, not something to discover at the first write.
+- **A4** — `RawFacet` can gain `Serialize` as a derive-only change. It is a
+  private struct with no manual `Deserialize`, so nothing observable moves.
+
+## Why the table does not build the CLI args
+
+`facet_fields` is a runtime value; clap's derive is compile-time. Generating the
+six subverbs' args from the table would mean the builder API for these six
+commands alone, in a CLI that is derive-declared throughout — a second idiom, for
+the benefit of not typing thirty flag names once.
+
+So the args are derive-declared and the table is their **oracle**: one test per
+kind asserting `Command::get_arguments()`'s names equal `facet_fields(kind)`
+kebab-cased. Drift fails the test; the surface stays in one idiom. This is the
+`accepted cost` shape the `OQ-1` settlement already used — relocate the check
+rather than remove it, when relocation is one comparison.
+
+## Edge cases
+
+- **Concept.** No facet subverb (`DEC-173`); `knowledge edit concept CPT-001` is
+  refused, naming the kind-blind verb. `knowledge edit CPT-001` reaches
+  everything a concept has, since its content is its prose (`DEC-172`).
+- **The one shared field name.** `confidence` belongs to both assumption and
+  evidence, with the same closed enum. Per-kind subverbs make that unambiguous
+  at the call site with no special case; the table simply lists it twice, and I2
+  compares sets, so the duplicate is not a discrepancy.
+- **Clearing.** `--choice ""` writes `""`; a list flag given no values writes
+  `[]`. Clearing by omitting the key is unspellable (`DEC-170`).
+- **Re-settling.** `settle` refuses when the record already holds the target
+  state: a transition from a state to itself is not a transition. Amending an
+  answer already given is `knowledge edit question --answer`, which is the verb
+  for changing a field. This keeps `answered_on` meaning *when it was answered*
+  rather than *when the command last ran*.
+- **Withdrawn records.** `settle` refuses on a withdrawn status, reusing the
+  existing predicate rather than a second list.
+- **A hand-deleted facet key** surfaces at the next write as an F-1 refusal
+  naming the record. It is *not* visible to `doctor`: the tripwire this slice
+  adds warns on keys that are present and inert, not on keys that are missing.
+  The mirror check is cheap and tempting, and is deliberately out of scope —
+  adding a facet field to an existing kind would make every prior record of that
+  kind trip it, so the missing-key direction needs a migration story this slice
+  does not owe. Recorded as a follow-up.
+- **A record predating a new facet field** is the same case seen from the other
+  end, and is the reason the mirror check is not free. Whoever adds a facet field
+  to a kind must also seed it into existing records, or every write to them
+  refuses. The objective 4 REV should carry that as a stated consequence of the
+  F-1 posture.
+- **Large prose.** `--body -` reads stdin, as `memory edit` does. No size rule is
+  invented here.
 
