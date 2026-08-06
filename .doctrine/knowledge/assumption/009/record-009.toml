@@ -1,0 +1,36 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 9
+slug = "git-is-the-assumed-and-privileged-version-control-system"
+title = "Git is the assumed and privileged version control system"
+record_kind = "assumption"
+status = "held"
+created = "2026-08-06"
+updated = "2026-08-06"
+tags = ["capsule", "git", "portability", "substitutability"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim           = "Doctrine assumes Git as its version control system and privileges it structurally: entity storage, immutable inputs, identity, provenance, and the capsule programme's admission journal are all expressed in Git objects and refs. No contract states this, and no alternative is contemplated in v0."
+confidence      = "high"
+basis           = "design-inference"
+validation_plan = "Held rather than validated: this is a recorded choice, not a proposition to test. It is invalidated the day a non-Git backing is proposed, at which point the surfaces this record names are the inventory of what would have to change."
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "immutable inputs, identity, and the admission journal are Git objects and refs"
+target = "SPEC-030"
