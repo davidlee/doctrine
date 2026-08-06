@@ -34,3 +34,36 @@ stay pairwise-disjoint so the entries never clobber each other. The matcher for 
 Related: [[mem.pattern.distribution.skill-refresh-command]] (the `claude install`
 rename), [[mem.pattern.dispatch.claude-subagentstart-worker-identity]] (why the
 hook is SubagentStart-scoped).
+
+
+---
+
+## Correction (SL-250, 2026-08-06) — matcher is threaded through WRITING, not OWNERSHIP
+
+The headline above is true but incomplete, and the gap is load-bearing. Verified
+against `src/boot.rs` at this date:
+
+- `HookSpec` does carry `event` + `matcher`, and `entry_is_canonical` compares
+  **both** matcher and command — so matcher governs the no-write short-circuit.
+- But `owned_positions` proves ownership by **`command` alone**
+  (`is_ours: fn(&str) -> bool` applied to the command string). Its own doc
+  comment: *"A hook is owned iff its `command` is recognised by the spec's
+  poison-tolerant predicate. More than one owned position is never legitimate —
+  the normalize collapses them to a single canonical entry."*
+
+**Consequence:** a hook set where several entries share one command and differ
+only by matcher **cannot be expressed**. One predicate per command marks them all
+owned and the normalize drops all but one. The disjoint-per-command predicate
+convention (`is_doctrine_boot_command`, `_sync_`, `_emit_`, `_create_fork_`)
+assumes one matcher per command and silently breaks when that stops holding.
+
+This bites the six `PreToolUse` entries in `plugins/doctrine/hooks/hooks.json` —
+four share `worktree pretooluse`, two share `memory surface`. The harness fires
+them all correctly (probe: [[mem.fact.claude.settings-hooks-merge-and-matcher]]);
+the limitation is doctrine's own.
+
+**Also stale:** `HookSpec::stamp_subagent`, cited above, was retired at
+`348570c9` (SL-152 PHASE-04) and replaced by `HookSpec::create_fork`
+(`WorktreeCreate`). The live constructor list is `boot`, `boot_emit`, `sync`,
+`create_fork`. The surviving `run_stamp_subagent` / `worktree marker
+--stamp-subagent` hits in `src/` are the unrelated CLI path, not a HookSpec ctor.

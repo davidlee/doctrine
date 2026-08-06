@@ -6,7 +6,7 @@ status = "active"
 title = "boot.rs HookSpec merge core is generalized over event+matcher"
 summary = "boot.rs HookSpec merge core generalized over event+matcher (SL-056 PHASE-11) — one impl wires SessionStart and SubagentStart"
 created = "2026-06-13"
-updated = "2026-06-13"
+updated = "2026-08-06"
 
 [scope]
 paths = ["src/boot.rs"]

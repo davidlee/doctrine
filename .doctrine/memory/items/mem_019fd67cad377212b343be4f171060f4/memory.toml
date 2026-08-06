@@ -1,0 +1,46 @@
+memory_uid = "mem_019fd67cad377212b343be4f171060f4"
+memory_key = "mem.fact.claude.settings-hooks-merge-and-matcher"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Settings-file hooks: merge across scopes, fire per matcher, expand ${VAR:-default}"
+summary = "Claude Code settings hooks merge across project/local scopes, honour same-command different-matcher entries, and shell-expand ${VAR:-default} — verified by probe on v2.1.220"
+created = "2026-08-06"
+updated = "2026-08-06"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["harness:claude", "hooks", "settings"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "1e1cb01bd77fa86ec8417aac807f6a77c9e1cf08"
+tree = "d4da1f708aa9449ecf8376df459bc1d5f4800da2"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "1e1cb01bd77fa86ec8417aac807f6a77c9e1cf08"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-250"
+
