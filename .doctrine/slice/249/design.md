@@ -565,3 +565,134 @@ load-bearing for the write posture, and the objective 4 REV should say so — a
 future template edit that drops a seeded field would silently convert every
 record of that kind into one the writer refuses.
 
+<!-- doctrine:section sec-8 -->
+# 5.4 Lifecycle, Operations & Dynamics
+
+Five paths. Four are new; the fifth is the one that lost the content.
+
+## A — filling a facet at the CLI
+
+```
+doctrine knowledge edit decision DEC-042 --choice "…" --rationale "…"
+```
+
+```mermaid
+sequenceDiagram
+    participant U as caller
+    participant C as knowledge CLI
+    participant P as plan_facet_edits (pure)
+    participant W as apply_facet_edits → facet_write
+    U->>C: edit decision DEC-042 --choice …
+    C->>C: resolve_ref → (Decision, 42)
+    C->>C: subverb kind vs id prefix
+    Note over C: mismatch → refuse, naming the right subverb
+    C->>P: (kind, raw assignments)
+    P->>P: field owned by kind? value shape? closed-enum token?
+    Note over P: any failure → typed refusal, nothing written
+    P-->>C: Vec<FacetEdit>
+    C->>W: (path, edits)
+    W->>W: toml_edit; F-1 refuse if a key is absent
+    W-->>U: DEC-042: choice, rationale
+```
+
+Every decision is in `P`, which has no filesystem. The shell does two things the
+pure layer cannot: resolve the id and write the bytes. A failure anywhere before
+`W` leaves the file untouched; a failure inside `W` leaves it untouched too,
+because `facet_write` builds the whole document before it writes.
+
+## B — settling
+
+```
+doctrine knowledge settle QUE-198 answered --by david --answer "…"
+```
+
+One act, three writes, in this order:
+
+1. `plan_facet_edits` validates `answer` (the state's `captures` field, required
+   — omitting it is a refusal, not an empty write), `answered_by` from `--by`,
+   and `answered_on` from `clock::today()`.
+2. `apply_facet_edits` writes all three.
+3. `set_record_status` moves `status` and `updated`.
+
+**Ordering is deliberate: evidence first, token second.** A crash between them
+leaves a record whose facet says who answered it and when, still sitting at
+`open` — visibly incomplete, and re-running the same command completes it. The
+reverse order would leave `answered` with an empty answer, which is the exact
+state the corpus is already full of and which nothing would flag.
+
+`settle` is not atomic across the two files, and does not pretend to be. It is
+*ordered* so that the surviving state is the honest one.
+
+## C — minting a filled record
+
+```mermaid
+sequenceDiagram
+    participant A as agent
+    participant R as design apply
+    participant M as execute_mint
+    participant K as knowledge
+    A->>R: declare cp-N dispose{form:create, kind, title, body, facet}
+    R->>R: admission — Declaration keys inert at cp-? facet keys owned by kind?
+    Note over R: either failure → typed refusal, run revision unchanged
+    R->>M: MintPlan
+    M->>K: steps 2–4 reserve → materialise (scaffold, hollow)
+    M->>M: journal Materialised
+    M->>K: step 5 — status, shapes edge, body, facet
+    M->>M: journal Applied
+    M-->>A: DEC-179
+```
+
+The facet payload is validated at **admission**, before any id is reserved. A
+disposition naming a field the kind does not own is refused with the run
+unchanged — no hollow record, no reserved id burned. That is the same
+`plan_facet_edits` the CLI runs, not a second check.
+
+**On a crash between `Materialised` and `Applied`:** the record exists hollow.
+Re-submitting the same `submission_id` resumes at step 5 with the payload the
+retry carries, and every effect there is idempotent — `set_authored_status`
+writes only on a change, `append_edge` returns `Noop`, and a facet-and-prose
+write of the same payload produces the same bytes. Nothing is removed or
+rewritten to repair a runtime failure (`DEC-083`).
+
+## D — the refusal that would have caught SL-248
+
+```
+declare: [{ subject: "cp-4", body: "## The two candidate sites\n…", dispose: {…} }]
+```
+
+Admission consults the `Declaration`-key table: `body` is honoured for `sec-`
+subjects and inert for `cp-`. Refused, at submission, with the run's revision
+unmoved and the message naming `dispose.create.body` as the key the caller
+wanted.
+
+All six of SL-248's dispositions take that path. The loss becomes a refusal the
+agent can act on in the same turn, which is the whole of objective 3's value —
+the content is still in the agent's context at the moment of the refusal, which
+it was not by the time the operator noticed.
+
+## E — the standing scan
+
+`doctrine doctor` walks the corpus and warns for each `[facet]` key populated but
+inert at its record's kind, naming the record, the key, and the kind that would
+honour it. It reads; it never refuses and never repairs. `knowledge list` keeps
+working on a damaged corpus, which is the whole point (`DEC-177`).
+
+## Phase dynamics
+
+`DEC-165`'s boundary in operational terms:
+
+- **Phase A** ships paths **D** and the prose half of **C**. After it, the
+  SL-248 class of loss cannot recur — a mis-keyed payload is refused and a
+  correctly-keyed one lands.
+- **Phase B onward** ships **A**, **B**, **E** and the facet half of **C**.
+
+The ordering is not merely permitted by `DEC-165`; it is the ordering that gets
+the observed defect closed first. Nothing in Phase A reads `facet_fields`, so the
+table is not on its critical path.
+
+## Failure posture, stated once
+
+No path repairs. Every refusal above leaves the corpus exactly as it found it and
+names what to do. The one operation that can leave partial state is **B**, and
+it is ordered so the partial state is the one a human would rather find.
+
