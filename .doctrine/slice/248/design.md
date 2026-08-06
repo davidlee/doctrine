@@ -439,6 +439,14 @@ so the numeral now lives where the rows do.
 | 9 | immutable input set | that a declared readable path cannot be written through |
 | 10 | closed descriptor set | that no open file descriptor crosses `execute` except the ones the contract deliberately owns |
 | 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv`, with nothing inherited from the trusted-side process |
+| 12 | owned standard streams | that descriptors 0, 1 and 2 are the parent's own — an empty source, and one-way capture endpoints it created — never the trusted-side process's |
+| 13 | confined process credentials | a mapped uid and gid, no supplementary groups, empty effective and permitted capability sets, and `no_new_privs` set — the property invariant 4's denial-by-absence silently stands on |
+
+Rows 12 and 13 arrived in round 5 and the table did not move with them until
+`RV-346` round 6 was being prepared. That is `F-28`'s defect a second time, in
+the section whose own note above records `F-28` — which is the argument for
+`sec-7`'s table being the single source and this one being answerable to it,
+rather than the two being maintained in parallel.
 
 #### The rows are derived from channels, not from clauses
 
@@ -456,9 +464,9 @@ every mechanism but one unproven.
 
 Clause 2 — *an explicit base and input set* — is the whole of the problem. It
 says nothing about the channels by which input arrives, so a row written against
-it proves whichever channel its author happened to picture. Rows 2, 9, 10 and 11
-are all clause 2, and each was found by someone constructing the backend the
-existing rows would wrongly pass rather than by re-reading them.
+it proves whichever channel its author happened to picture. Rows 2, 9, 10, 11
+and 12 are all clause 2, and each was found by someone constructing the backend
+the existing rows would wrongly pass rather than by re-reading them.
 
 So the design keeps a **channel ledger**: the closed enumeration of ways
 authority crosses `execute`, each naming the row that proves it. A channel with
@@ -1022,10 +1030,16 @@ case each refusal must not capture:
 - `an_inner_path_that_is_an_ancestor_of_another_refuses`
 - `the_bound_host_path_is_the_resolved_path_not_the_declared_one`
 
-Environment vocabulary:
+Environment and standard-stream vocabulary:
 
 - `capsule_env_is_a_closed_vocabulary_with_trusted_side_values`
 - `no_public_route_carries_caller_supplied_environment_text`
+- `capsule_stdio_is_a_closed_vocabulary_with_parent_owned_endpoints` — the
+  `CapsuleStdio` half of the same argument, since a closed enum is what makes an
+  inherited descriptor unrepresentable rather than merely discouraged
+- `no_public_route_supplies_a_raw_descriptor_to_execution` — the counterpart to
+  the environment's text route: a `RawFd` reaching `Execution` from a caller is
+  the failure this vocabulary exists to prevent
 - `working_directory_has_no_inherit_value` (a type-level property, asserted by
   construction rather than by test)
 
@@ -3911,9 +3925,12 @@ Executed, the claims that need naming beyond their row:
 - `each_descriptor_authority_mode_is_exercised_readable_write_only_and_socket` —
   that all three decoys are marked inheritable on the control arm, which is what
   `RV-346` `F-31` established a single readable decoy cannot stand in for
-- `the_write_only_decoy_is_unmodified_after_both_arms` — the `F-31` mutant's own
-  observation: a descriptor that yields no bytes on read can still carry write
-  authority, so the row checks the decoy's contents trusted-side
+- `the_write_only_decoy_is_unmodified_after_the_probe_arm_and_mutated_after_the_control`
+  — the `F-31` mutant's own observation, and stated in both directions because
+  only the pair carries it: a descriptor that yields no bytes on read can still
+  carry write authority, so the row checks the decoy's contents trusted-side
+  after each arm, and the control's mutation is the positive observation that
+  the mechanism was reachable at all
 - `the_descriptor_control_changes_no_mount_no_env_and_no_argv_byte` — that row
   10's delta is a single axis, the same assertion row 9 carries
 - `a_descriptor_leaking_backend_fails_row_ten` — the `F-26` mutant as a stub:
@@ -4124,7 +4141,7 @@ unit it tests, which reaches `pub(crate)` items and does run under `cargo test`.
 
 | evidence | lives in | kind |
 |---|---|---|
-| `sec-2`'s argv, closure and placement-validation tests (≈37 titles) | `backend.rs`, `backend/bubblewrap.rs` | pure |
+| `sec-2`'s argv, closure, vocabulary and placement-validation tests (≈39 titles) | `backend.rs`, `backend/bubblewrap.rs` | pure |
 | `sec-3`'s export, clone, rollback and ownership tests (≈22) | `provision.rs`, `transaction.rs` | pure and trusted-side |
 | `sec-4`'s parse, normalization, hash and restriction tests (≈42) | `src/interpretation.rs`, root package | pure |
 | `sec-5`'s capacity, configuration and root-resolution tests (≈33) | `config.rs`, `capacity.rs`, `host.rs` | pure, over a fixture `HostFacts` |
@@ -4139,10 +4156,12 @@ refusals and the lawful case each must not capture (`F-25`) — and table A's
 executed cost by two arms plus two controls (`F-26` and the channel ledger).
 Round 5 moves table A again, to thirteen rows: two new (`F-30`'s standard
 streams, `F-32`'s process credentials) and one widened from a single decoy to
-three (`F-31`). That is four further executed arms, two further controls, and
-`sec-2` gains `CapsuleStdio`'s own pure tests. None of it is a large phase-sizing
-move; all of it is recorded because a count nobody adjusts is a count nobody is
-reading.
+three (`F-31`). That is two further executed arms plus two further controls, on
+round 4's convention of one of each per row; the `F-31` widening costs no arm at
+all, since three decoys ride row 10's existing pair. `sec-2` gains
+`CapsuleStdio`'s two pure tests, taking its figure to ≈39. None of it is a large
+phase-sizing move; all of it is recorded because a count nobody adjusts is a
+count nobody is reading.
 
 `sec-6`'s assertions land in `tests/architecture_layering.rs` rather than a new
 file because the export set is the cross-crate half of the same rule the file
@@ -4278,28 +4297,48 @@ property* — is a rule a later row can be added in violation of. A property wit
 no unique mechanism cannot be controlled independently, and the rows must then
 be re-cut rather than the control widened.
 
-`R3` has now been realised **three times** rather than merely feared, and every
+`R3` has now been realised **six times** rather than merely feared, and every
 time by the external pass rather than by the author. `F-2` found two clauses
 merged into one row. `F-19` found one clause carrying two claims of which only
 one had a row — a suite that admitted a backend binding every declared input
 writable. `F-26` found a clause-2 channel with no row at all, and writing the
-fix found a second one beside it. None was a careless omission; each read as
-complete until someone executed the mutant the suite did not have.
+fix found a second one beside it. Round 5 found three more: `F-30`, a channel
+the ledger had never listed; `F-31`, a row whose payload observed a consequence
+of its property rather than the property; and `F-32`, a channel the ledger
+listed and never rowed. None was a careless omission; each read as complete
+until someone executed the mutant the suite did not have — or, for `F-32`, read
+the ledger against the table.
 
 The standing form of this risk is that **the gap in a property suite is
-invisible from inside it**, and the only reliable detector is an adversary
-constructing the backend the suite would wrongly pass. Three data points now say
-the same thing about *where* the gaps are: all four missing rows were clause 2,
-and clause 2 is the clause that names an outcome without naming the mechanisms
-that reach it.
+invisible from inside it**, and the most reliable detector is an adversary
+constructing the backend the suite would wrongly pass. Round 5 refined that in
+two ways worth carrying.
 
-`sec-2`'s **channel ledger** is round 4's structural answer, and it is worth
-being exact about what it does and does not buy. It does not make the suite
-complete. It changes the failure from *nobody thought of this channel* to *this
-channel has no row*, which is a blank cell in a table someone can read. That is
-a real improvement over the previous state, where the enumeration existed only
-in whichever author's head last wrote a row, and it is strictly weaker than a
-proof. The residual below states what it leaves open.
+First, the gaps are no longer all in one place. Through round 4 every missing
+row was clause 2 — the clause that names an outcome without naming the
+mechanisms that reach it — and that looked like the whole finding. Row 12 is
+clause 2 and keeps the pattern; **row 13 answers no clause at all**, and a
+suite derived from clauses could not have reached it by any amount of care.
+Where the spec is silent, the clause-2 heuristic says nothing.
+
+Second, `F-31` is a failure mode the earlier five did not have. It was not a
+missing row: row 10 existed, ran, and passed a backend that carried live write
+authority, because it held on *the decoy's bytes appearing nowhere* rather than
+on the decoy's presence. A row can be present and structurally correct and still
+prove nothing. `sec-7` states the rule that answers it — a row must observe the
+property, not a consequence of the property that is convenient to observe — and
+that rule is not enforced by any table; it is a reading obligation on whoever
+writes the next row.
+
+`sec-2`'s **channel ledger** is round 4's structural answer, and round 5 is the
+first evidence of what it actually buys. It does not make the suite complete.
+For a channel the ledger *lists*, it changes the failure from *nobody thought of
+this* to *this channel has no row* — a blank cell someone can read, which is
+exactly how `F-32` was found, at reading cost rather than at execution cost. For
+a channel the ledger does **not** list it buys nothing whatever: `F-30` produced
+no blank because the standard streams were on no list, and it took an executed
+probe. The two failure modes are not equally detectable and the ledger only
+addresses one of them. The residual below states what that leaves open.
 
 **`R4` — the `bwrap_core_argv` parity contract. Retired.** Its premise was that
 this slice widens the shared bubblewrap builder. `DEC-155` gives the capsule
