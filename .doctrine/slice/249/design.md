@@ -1573,12 +1573,21 @@ miscounting itself. The fix is not more care. It is to stop keeping the copy, an
 to keep here only what the ledger cannot: what the pass changed in the design,
 what it cleared, and what it taught.
 
-`F-18` is the same lesson one turn further in, and it is why nothing below counts
-anything. The first rewrite dropped the tables and kept the *arithmetic in the
+`F-18` is the same lesson again, and it is why nothing below counts anything. An
+earlier form of this section dropped the tables and kept the *arithmetic in the
 prose* — "twice", "four rounds", "in any round" — which is the same mutable fact
 in a form that reads as description rather than as a tally. It was already stale
-when it was written. A section describing an ongoing review may hold shapes and
-consequences; it may not hold quantities.
+when it was written.
+
+`F-19` then showed the rule I wrote to prevent that — *shapes and consequences,
+never quantities* — was the wrong rule, and wrong in both directions: it banned
+design-stable numbers this section needs and permitted claims that decay without
+being numeric. The rule that actually holds is **monotone or nothing**: no
+statement here may become false as the review continues. That is what "three
+pins" and "fires once at the end of a stage" satisfy and what "twice" never did;
+it is also what rules out *none of them was checked* and *in every instance*,
+which are totality claims over a set the next round can extend — the pass's own
+first pattern, committed inside the paragraph describing it.
 
 ## What it changed
 
@@ -1616,27 +1625,28 @@ coverage. Recorded so a later reader finds a ruling rather than re-deriving one.
 
 ## What it taught
 
-Two shapes recur across this pass, and neither is carelessness. Both are worth
-carrying into the plan.
+Shapes recur across this pass, and none is carelessness. These are the ones
+worth carrying into the plan.
 
 **A totality asserted rather than enumerated.** *The pins are total together.
 The retry carries the same payload. Every occurrence is kind-derived. The
-allowlist expires. The declared phrase is found.* Each was cheap to check, each
-was part of an argument that was otherwise sound, and that is exactly why none
-was checked — the claim inherited the credibility of the reasoning around it.
-Where this design now states such a thing, it states the enumeration or the
-identity beside it, so a reader evaluates rather than trusts.
+allowlist expires. The declared phrase is found.* Each was cheap to check, and
+each was part of an argument that was otherwise sound — which is the mechanism,
+not an excuse: a claim of this kind inherits the credibility of the reasoning
+around it and so never attracts the one command that would settle it. Where this
+design states such a thing, it states the enumeration or the identity beside it,
+so a reader evaluates rather than trusts.
 
 **The artefact nobody re-reads.** The scope card drifted from the design;
 a criterion widened past the card's own non-goals because nothing compared it
 back; a finding sat contested on the ledger while its substance was
 being fixed elsewhere; and this section drifted from the ledger repeatedly.
-In every instance the artefact was the one updated last, after the substantive
-work, by hand. The `review.scope` runbook step is the comparison that should
-catch this and it fires once at the end of a stage — the wrong cadence for a
-review with many rounds. Mechanising it is a note for whoever next designs at
-this length. There is no fix inside this slice, and resolving to remember would
-be the same failure again.
+Each of those artefacts was the one updated last, after the substantive work, by
+hand. The `review.scope` runbook step is the comparison that should catch this
+and it fires once at the end of a stage — the wrong cadence for a review that
+keeps going. Mechanising it is a note for whoever next designs at this length.
+There is no fix inside this slice, and resolving to remember would be the same
+failure again.
 
 `R4` says objective 4's completion is easy to assert. This pass is that failure
 mode, found repeatedly inside the design that guards against it.
