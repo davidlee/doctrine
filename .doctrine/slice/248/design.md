@@ -652,3 +652,279 @@ slices. This slice records a contributing `--change` against criterion 1 and
 reports the requirement as **partial** in the reconciliation brief, not quietly
 claimed. `REQ-448`'s denial half is the same shape and is proven by `sec-7`.
 
+<!-- doctrine:section sec-4 -->
+## Interpretation policy: resolution, normalization, and restriction
+
+`REQ-449` binds each transaction to an interpretation policy resolved from the
+contracted base, and permits a phase contract only to *narrow* it. This section
+builds the typed value, the canonical hash, the refusal set, and the restriction
+algebra. `sec-3` step 4 and step 5 are its callers.
+
+### Current behaviour, and why the shared reader cannot be extended
+
+`src/dtoml.rs` is leaf-tier (`.doctrine/adr/001/layering.toml:32`) and holds
+`DOCTRINE_TOML` (`dtoml.rs:80`) and `read_doctrine_toml_text(root)`
+(`dtoml.rs:87`). It is **deliberately tolerant**: unknown top-level tables are
+ignored, absent values default.
+
+`DEC-136`'s handoff item 1 expects "a direct implementation in the existing
+`doctrine.toml` loader rather than a new configuration subsystem". That is not
+available, for two independent reasons:
+
+1. **The source differs.** `read_doctrine_toml_text` reads a file from disk at
+   `root`. `REQ-449` resolves a **blob at the contracted base OID** —
+   `git::read_path_at(root, base, DOCTRINE_TOML)` (`src/git.rs:790`), which is
+   working-tree-free and returns `Ok(None)` for an absent path. Verified this
+   session; it is the entire impure surface the resolution needs.
+2. **The strictness differs, in opposite directions.** The shared reader must
+   tolerate what it does not know, or every unrelated table breaks it.
+   `REQ-449` criterion 1 must **refuse** an unknown key. One type cannot be both.
+
+`DEC-136`'s decision — the `[interpretation]` block stays in
+`.doctrine/doctrine.toml` and is resolved once from the base — **stands
+unchanged**. Only that supporting note is wrong, which makes it a record
+correction owed to the reconciliation brief rather than a Revision.
+
+`src/reserve.rs:78-97` is the precedent and the shape to follow: a tolerant
+outer document projecting one table, a pure `parse_*(text)` function, and a thin
+loader that supplies the text. This design differs from it in exactly one
+respect — the projected table is strict inside — and in where the text comes
+from.
+
+### Target behaviour
+
+`src/interpretation.rs`, leaf-tier in the root package beside `dtoml`, exported
+to `doctrine-control` through the lib target (`sec-6`). Pure throughout: it
+takes text and returns a typed value or a refusal. Nothing in it reads a file, a
+clock, or a repository.
+
+```rust
+/// The v1 schema version. The only accepted value (STD-001).
+pub const INTERPRETATION_SCHEMA: u64 = 1;
+
+/// A normalized, validated interpretation policy.
+///
+/// Construction is through `parse` alone — there is no public constructor and
+/// no public field mutation, so an unnormalized value of this type cannot
+/// exist. That is what lets `canonical_hash` and `restrict` assume
+/// normalization rather than re-checking it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterpretationPolicy {
+    schema: u64,
+    /// Byte-sorted after duplicate rejection.
+    forbidden_executables: Vec<ExecutableName>,
+    /// Byte-sorted after duplicate rejection.
+    interpreted_paths: Vec<PathPattern>,
+    /// Order preserved. Non-empty.
+    verification: Vec<VerificationRow>,
+}
+
+/// A normalized executable basename: non-empty, no slash, no whitespace,
+/// not `.` or `..`.
+pub struct ExecutableName(String);
+
+/// A normalized repository-relative gitignore-style pattern: not absolute,
+/// no backslash, no NUL, no lexical `..` component.
+pub struct PathPattern(String);
+
+/// One verification row. Argument order preserved; every argument non-empty.
+pub struct VerificationRow { argv: Vec<String> }
+```
+
+```rust
+pub fn parse(text: &str) -> Result<InterpretationPolicy, PolicyRefusal>;
+pub fn canonical_hash(policy: &InterpretationPolicy) -> PolicyHash;
+pub fn restrict(
+    base: &InterpretationPolicy,
+    refinement: &InterpretationPolicy,
+) -> Result<InterpretationPolicy, RestrictionRefusal>;
+```
+
+### Why the table is walked rather than deserialized
+
+The obvious shape is a `#[derive(Deserialize)]` struct with
+`deny_unknown_fields`. It is rejected: `REQ-449` criterion 1 requires **six
+distinguishable refusals** — missing block, missing required key, unknown key,
+unsupported schema version, invalid normalized value, empty verification
+sequence — and serde produces a formatted *string* for the first four. Turning
+those back into typed refusals means pattern-matching a dependency's error
+message, which is a classification that breaks silently when `toml` rewords
+itself, in exactly the code whose job is to refuse precisely.
+
+So: parse to `toml::Table` — tolerant at the top level, so `[dispatch]`,
+`[capsule]` and `[reservation]` are simply not looked at — then project
+`interpretation` and walk its keys explicitly against the known set. Absent
+table is `BlockMissing`; a key in the table but not in the known set is
+`UnknownKey { key }`; a key in the known set but not in the table is
+`KeyMissing { key }`.
+
+That distinction is required and not incidental: `SPEC-030` says *"the two lists
+may be explicitly empty when the project genuinely has no such instances;
+omission is not equivalent to emptiness."* A derive with `#[serde(default)]`
+collapses exactly that difference.
+
+### Validation
+
+Applied per field, after presence is established.
+
+| field | rule | refusal on violation |
+|---|---|---|
+| `schema` | integer equal to `INTERPRETATION_SCHEMA` | `UnsupportedSchema { found }` |
+| `trusted_side_forbidden_executables` | each entry non-empty, contains no `/`, no whitespace, and is neither `.` nor `..` | `InvalidExecutable { entry, reason }` |
+| | no two entries equal | `DuplicateEntry { field, entry }` |
+| `interpreted_paths` | each entry non-empty, not absolute, no `\`, no NUL, no lexical `..` component | `InvalidPathPattern { entry, reason }` |
+| | no two entries equal | `DuplicateEntry { field, entry }` |
+| `verification` | at least one row | `EmptyVerificationSequence` |
+| | each row's `argv` non-empty | `EmptyArgv { row }` |
+| | each argument non-empty | `EmptyArgument { row, index }` |
+
+`SPEC-030` says arguments are "non-empty UTF-8 strings". TOML strings are UTF-8
+by construction, so the only executable half of that rule is non-emptiness —
+stated here rather than left as an assertion that cannot fail.
+
+**Duplicate rejection precedes sorting, and both precede the hash.** A
+`BTreeSet` would have made the sort free and the duplicate *invisible*, which is
+the opposite of `REQ-449` criterion 2's requirement to sort "after duplicate
+detection". The typed value therefore holds `Vec`, sorted, with the duplicate
+check as an explicit refusing step.
+
+### The canonical hash
+
+`canonical_hash` is SHA-256 over a **deterministic encoding of the typed value**,
+never over source text or a re-serialized TOML document. Re-serializing would
+let formatting choices — quoting style, key order, whitespace, integer spelling
+— re-enter a value whose entire purpose is to be stable across them.
+
+```
+domain  := "doctrine.interpretation.v1"
+encode  := domain
+         ‖ u64_le(schema)
+         ‖ u64_le(count forbidden) ‖ for each: u64_le(len) ‖ utf8 bytes
+         ‖ u64_le(count paths)     ‖ for each: u64_le(len) ‖ utf8 bytes
+         ‖ u64_le(count rows)      ‖ for each row:
+                u64_le(count argv) ‖ for each arg: u64_le(len) ‖ utf8 bytes
+```
+
+Length prefixes are what make the encoding injective. Plain concatenation lets
+`["ab", "c"]` and `["a", "bc"]` hash identically, and those are two different
+forbidden-executable sets — one of which forbids an executable the other
+permits. The domain prefix keeps a future v2 encoding from colliding with a v1
+one over the same bytes.
+
+`PolicyHash` is a newtype over the digest with no public constructor other than
+`canonical_hash`, so a hash cannot be fabricated from anything but a validated
+policy.
+
+### The restriction algebra
+
+`DEC-159` puts `REQ-449` criterion 4 here, as a pure function over typed values
+— never over source text, which is `SPEC-030`'s explicit instruction.
+
+**The refinement document states the refined policy in full**, in the same
+`[interpretation]` schema, and goes through the same `parse`. Two consequences,
+both deliberate:
+
+- Subset validation compares like with like through one parser. This is DRY on a
+  genuine invariant — the two documents describe the same typed values and are
+  obliged to change together, which is the shared referent `DEC-155` found
+  absent in the bubblewrap flag names and present here.
+- A **delta** document was rejected because it cannot be refused for the things
+  `REQ-449` criterion 4 names. "Remove a project verification row" and "reorder
+  project verification" have no spelling in an additions-only document, so an
+  author who drops a project check would be silently granted the removal. Stated
+  in full, dropping a check *is* the refusal.
+
+Rules, evaluated in order:
+
+| # | check | result |
+|---|---|---|
+| 1 | `refinement.schema == base.schema` | else `SchemaMismatch { base, refinement }` |
+| 2 | `refinement.forbidden_executables ⊇ base.forbidden_executables` | else `ForbiddenEntryRemoved { entry }` |
+| 3 | `refinement.interpreted_paths ⊇ base.interpreted_paths` | else `InterpretedPathRemoved { entry }` |
+| 4 | `base.verification` is a **prefix** of `refinement.verification`, row by row, `argv` byte-equal | else the diagnosis below |
+| — | all hold | `Ok(refinement.clone())` |
+
+Adding a forbidden executable or an interpreted path is a *restriction*: both
+lists name things the trusted plan refuses to run or treats as hostile, so a
+superset is strictly narrower. That is why rules 2 and 3 are superset checks in
+the same direction rather than one of each.
+
+Rule 4's failure is diagnosed rather than reported as one opaque mismatch,
+because the three cases have different fixes:
+
+- a base row appears nowhere in the refinement → `VerificationRowRemoved { index }`
+- every base row appears, but not in base order → `VerificationRowReordered { index }`
+- the refinement's row at index *i* differs from the base's → `VerificationRowReplaced { index }`
+
+Anything the refinement adds must come **after** the base sequence; a row
+inserted before or between base rows fails the prefix test and is reported as
+`VerificationRowReordered`.
+
+### Invariants
+
+1. **Monotonicity.** For any `Ok(result) = restrict(base, r)`:
+   `result.forbidden_executables ⊇ base.forbidden_executables`,
+   `result.interpreted_paths ⊇ base.interpreted_paths`, and
+   `base.verification` is a prefix of `result.verification`. There is no input
+   for which `restrict` returns a policy weaker than `base` on any axis.
+2. **Identity.** `restrict(p, p) == Ok(p)` for every valid `p`.
+3. **Normalization is a type property.** Every `InterpretationPolicy` in
+   existence came out of `parse`, so `canonical_hash` and `restrict` never see
+   an unsorted list or an unvalidated entry.
+4. **Hash injectivity over the typed value.** Two policies with the same
+   canonical hash are equal as typed values. (Modulo SHA-256, which is the
+   assumption every content-addressed part of the corpus already makes —
+   `ASM-009`.)
+5. **Read-once.** The only call site that supplies `text` from a repository is
+   `sec-3` step 4, reading a blob at the contracted base OID. Nothing in this
+   slice reads `.doctrine/doctrine.toml` from a capsule checkout or a harvested
+   tree.
+
+### Verification alignment
+
+`REQ-449`'s refusal cases are `VT` tests over the real parser, one per row of
+the validation table plus the block/key/schema cases:
+
+- `missing_interpretation_block_refuses`
+- `missing_required_key_refuses_naming_the_key`
+- `unknown_key_refuses_naming_the_key`
+- `unsupported_schema_version_refuses_naming_the_version`
+- `empty_verification_sequence_refuses`
+- `explicitly_empty_list_is_accepted_and_is_not_the_same_as_omission`
+- `executable_with_a_slash_refuses` / `..._with_whitespace_...` /
+  `..._that_is_dot_or_dotdot_...` / `..._that_is_empty_...`
+- `absolute_path_pattern_refuses` / `backslash_...` / `nul_...` /
+  `lexical_dotdot_component_...`
+- `duplicate_forbidden_executable_refuses` /
+  `duplicate_interpreted_path_refuses`
+- `empty_argv_row_refuses` / `empty_argument_refuses`
+
+Normalization and hash:
+
+- `set_valued_lists_sort_by_raw_utf8_bytes`
+- `verification_row_and_argument_order_are_preserved`
+- `canonical_hash_is_stable_across_key_order_and_whitespace`
+- `canonical_hash_distinguishes_split_boundaries_in_adjacent_entries` — the
+  `["ab","c"]` versus `["a","bc"]` case, which is what the length prefixes buy
+- `canonical_hash_is_not_computed_over_source_text` (asserted by reformatting the
+  document and comparing hashes)
+
+Restriction, one per refusal plus the two invariants:
+
+- `refinement_may_add_forbidden_entries`
+- `refinement_may_append_verification_rows`
+- `refinement_removing_a_forbidden_entry_refuses`
+- `refinement_removing_an_interpreted_path_refuses`
+- `refinement_removing_a_project_verification_row_refuses`
+- `refinement_reordering_project_verification_refuses`
+- `refinement_replacing_a_project_verification_row_refuses`
+- `refinement_inserting_a_row_before_a_project_row_refuses_as_reordered`
+- `refinement_with_a_different_schema_refuses`
+- `restrict_is_identity_on_its_own_base`
+- property: `restrict_never_weakens_any_axis` over generated policy pairs
+
+Read-once (`REQ-449` criterion 3), which is an executed test in `sec-7`'s
+environment rather than a pure one:
+
+- `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy`
+
