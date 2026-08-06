@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd72b-04e5-7360-b34d-7d96e0d7f4c9"
+recorded_at = "2026-08-06T13:02:28.581839639Z"
+kind = "friction"
+summary = "/design: hand-editing design.md under a managed run needs an adopt_authored round-trip whose section fingerprints the CLI never surfaces"
+detail = "design.md under a managed design run is written by 'design materialise' from runtime section payloads, so a hand edit diverges the watermark. The refusal is good (it names adopt_authored), but discharging it needs a complete sections map of per-section fingerprints, and nothing surfaces them: 'design show' truncates to 12 hex chars, and the AdoptionMarkersInvalid refusal reports only counts (9 missing / 0 unknown / 0 mismatched), never the expected values. Recovering the algorithm cost four probe applies plus reading src/commands/design.rs:316 and src/design_run/document.rs — sha256 of the region after each marker line minus exactly one trailing newline. A 'design fingerprints' read verb, or full digests in show, or expected values in the mismatch refusal, would each have collapsed this to one step."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

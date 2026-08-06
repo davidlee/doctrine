@@ -251,11 +251,13 @@ for something else are the proof (AGENTS.md).
 **R3 — a property suite is only as good as its adversary.** REQ-459's suite is
 the gate every future backend passes. Written weakly it certifies nothing.
 SL-241's confinement matrix (P-C2) is the floor, not the ceiling. **Realised
-twice during design, both times by the external pass rather than by the author**
-— RV-346 `F-2` found two spec clauses merged into one row, and `F-19` found one
-clause carrying two claims of which only one had a row. The standing form: the
-gap in a property suite is invisible from inside it, and the only reliable
-detector is an adversary constructing the backend the suite would wrongly pass.
+three times during design, every time by the external pass rather than by the
+author** — RV-346 `F-2` found two spec clauses merged into one row, `F-19` found
+one clause carrying two claims of which only one had a row, and `F-26` found a
+clause-2 *channel* with no row at all, whose class fix then found a second one
+beside it. The standing form: the gap in a property suite is invisible from
+inside it, and the only reliable detector is an adversary constructing the
+backend the suite would wrongly pass. All four missing rows were clause 2.
 
 **R4 — the `bwrap_core_argv` parity contract. Retired.** Added at pre-design
 triage on the premise that this slice widens the shared bubblewrap builder.
@@ -291,8 +293,9 @@ resolution needs; it was, at point of use, and `sec-6` exports it on that basis.
 - REQ-449 and REQ-461 move `pending → satisfied` with recorded coverage
   (`doctrine coverage record`) naming the discharging test or agent evidence.
 - **REQ-459 does not.** This scope originally expected it to; the design
-  corrects that (`sec-8`). Criterion 1 is discharged by the nine-row table in
-  full and criterion 3 structurally — one suite parameterised by backend — but
+  corrects that (`sec-8`). Criterion 1 is discharged by Table A in full — every
+  channel in `sec-2`'s ledger rowed — and criterion 3 structurally, one suite
+  parameterised by backend, but
   criterion 2, bubblewrap becoming *the supported* backend, needs production
   acceptance evidence this slice does not produce (R1). So REQ-459 records a
   contributing `--change` and stays `pending`.

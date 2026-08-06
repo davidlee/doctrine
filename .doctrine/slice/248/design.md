@@ -505,6 +505,23 @@ arm's form — would reproduce the capsule's host path inside, which reads the
 parent directory of every other capsule into existence as a mountpoint chain
 (`sandbox.sh:58-66`).
 
+**Those four are the profile's own. A declared readable input keeps its resolved
+host path as its inner path** — `sec-3` step 10 binds each entry at the path it
+was validated as, which is what makes the derived inner `PATH` below computable
+at all. So the transaction's own state is at a fixed inner layout and the
+readable set is identity-mapped, and the paragraph above is about the former.
+
+The `try_new` rules are therefore stated over inner paths that come from two
+different places, and the gap between them is deliberate: an entry *naming* a
+reserved destination is refused, an entry *beneath* one is not. A
+`readable-roots` entry resolving under `/tmp` is lawful and lands inside the
+`--tmpfs` that precedes it in the assembly order. Refusing it instead would
+refuse a host whose toolchain sits beneath a profile-owned path — the `F-25`
+shape one level down, where a rule written only as a refusal takes the lawful
+case with it. Whether bubblewrap creates that mountpoint inside the tmpfs rather
+than refusing the bind is **a phase obligation to execute**, not a claim this
+design makes on its behalf.
+
 #### The profile
 
 The twelve flag tokens are named once in this module and nowhere else. Assembly,
@@ -700,6 +717,39 @@ in Rust than in bash, and generated shell trusted-side would reintroduce quoting
 hazards on a security boundary, where the typed refusals and the canonical hash
 live.
 
+#### Descriptors are closed outside the sandbox too, and by no flag
+
+Invariant 12 is the only enforcement in this section with **no flag behind it**.
+bubblewrap does not close inherited descriptors, and neither `--unshare-all` nor
+`--clearenv` reaches them: an already-open descriptor is not a namespace, a
+mount or an environment entry. The mechanism is the trusted parent's, in the
+same place as `timeout -k` and `RLIMIT_FSIZE`, and it is named here because the
+invariant it discharges was added under `RV-346` `F-26` with nothing behind it
+but the word *closed*.
+
+The backend enumerates `/proc/self/fd` in the parent, **before the fork**, and
+sets `FdFlags::CLOEXEC` on every descriptor above 2 through
+`rustix::io::fcntl_setfd`. `rustix::io` is ungated, so this adds no crate and no
+feature to the root package's edge, and `src/worktree/claim_lock.rs:92` is the
+precedent for handing rustix a descriptor directly. The new crate's own rustix
+edge is not the root package's and is `sec-6`'s to declare.
+
+Enumerate-and-mark in the parent rather than closing after the fork, for one
+reason: a post-fork closure runs between `fork` and `exec` where allocation is
+unsafe, and reading a directory there is precisely the allocation to avoid.
+`close_range` would be the direct form and needs `libc`, which is not a
+dependency and which `Cargo.toml:77`'s zero-new-crates posture rules out —
+verified this session against `rustix` 1.1.4, which does not carry it.
+
+Two facts bound what the sweep is for, both verified by execution this session.
+Rust opens its own files `O_CLOEXEC`, so the backend's *own* handles are already
+closed by construction; what the sweep exists for is anything the trusted-side
+process inherited from *its* parent, or that an FFI path opened without the
+flag. And the residual is a descriptor opened between the sweep and the spawn —
+provisioning is single-threaded through `sec-3`'s step list, so that window has
+no writer, but the claim rests on `sec-7` row 10 having seen the sweep fire
+rather than on this paragraph.
+
 ### Invariants
 
 1. **A backend chooses no path.** Every host path in `CapsulePlacement` is
@@ -758,8 +808,9 @@ live.
    writable binding as its control (`RV-346` `F-19`).
 12. **No descriptor crosses `execute` that the contract did not open.** The
    capsule receives the three standard streams and nothing else; every other
-   descriptor held by the trusted-side process is closed or marked
-   close-on-exec before the capsule starts. Like invariant 11, this has no pure
+   descriptor held by the trusted-side process is marked close-on-exec before
+   the capsule starts, by the parent-side sweep above — no flag in the profile
+   reaches this channel. Like invariant 11, this has no pure
    test that could establish it — whether a descriptor survived an `exec` is a
    property of the running capsule, not of the argv — so it is executed only, in
    `sec-7` row 10, with an inheritable decoy as its control (`RV-346` `F-26`).
@@ -796,6 +847,13 @@ this section owes both kinds. Pure, hermetic:
 - `resolver_returning_a_relative_or_absent_path_refuses`
 - `resolver_nonzero_exit_refuses_naming_the_resolver`
 - `closure_expansion_binds_each_returned_path_individually_never_their_common_parent`
+- `every_descriptor_above_two_is_marked_close_on_exec_before_the_exec` — the
+  parent-side half of invariant 12, asserted over a descriptor the test opens
+  *without* `O_CLOEXEC`, since a Rust-opened one is already closed and would
+  pass against a backend that swept nothing
+- `a_readable_entry_beneath_a_profile_owned_mount_is_admitted` — the lawful case
+  the reserved-destination rule must not capture, `/tmp` being the one a host is
+  most likely to hit
 
 Placement validation — one per refusal variant, and the `RV-346` `F-1` class
 first because it was found by execution rather than by reading:
@@ -935,6 +993,15 @@ does **not** verify the commit against the canonical accepted ref, because the
 accepted-ref check belongs to admission (`REQ-455`), an explicit Non-Goal here.
 What this slice does verify is the weaker and entirely local claim that the
 export bound at `/source` contains exactly this base — see step 8.
+
+**`backend` documents the second one, and it is stated rather than left
+implied.** The field records the mechanism that created the capsule and step 11
+executes through it; `provision` does **not** check that mechanism ever passed
+`sec-7`'s suite. The admission journal is `REQ-455` and a Non-Goal for the same
+reason the accepted-ref check is, so the obligation is the caller's — and it is
+named in the same words as the base's so a later slice inherits two stated
+obligations rather than one stated and one silent. `backend verify` is what a
+caller runs to discharge it today; nothing yet records that it did.
 
 **Phase identity is bound; plan schema is not.** `RFC-027` is open and proposes
 reshaping selectors, plans, phase gates and criteria. Provisioning reads neither
@@ -2156,6 +2223,7 @@ Three facts about it decide most of this section.
 ```
 crates/doctrine-control/
   Cargo.toml                  # depends on the doctrine lib target, path
+                              #   its own rustix edge — see below
                               #   publish = false — see Nothing ships
   src/main.rs                 # the two verbs
   src/host.rs                 # HostFacts, SystemHost                    (sec-5)
@@ -2193,6 +2261,25 @@ synthesizes a `CapsuleConfig`, and its freshness delta reaches a provisioned
 transaction's `TransactionRoot`. An earlier draft listed `provision` and
 `backend` alone, which the gate below would have failed — the edge check reads
 imports, and a transitive path through `provision` is not one.
+
+**The new crate declares its own `rustix` edge, and cannot inherit the root
+package's.** `capacity` calls `statvfs` (`sec-5`) and `backend` performs the
+descriptor sweep (`sec-2`), so the manifest carries
+`rustix = { version = "1", default-features = false, features = ["fs", "std"] }`.
+
+The `std` in that list is the part worth writing down, because `sec-5` reads as
+if this dependency were already paid for. The root package declares
+`features = ["fs"]` and gets `std` **only by unification** — from `crossterm`,
+and from `which` and `tempfile`, which are dev-dependencies. `doctrine-control`
+depends on none of the three. Without `std`, `rustix::fd::AsFd` is a `no_std`
+polyfill that `std::fs::File` does not implement and every call site fails
+`E0277`; reproduced on a minimal package this session, and cleared by adding the
+feature. It is still zero new compiled crates — the same widening-its-own-surface
+argument `Cargo.toml:77` already records — but it is a second manifest that has
+to say so, and a claim about the root package's edge does not transfer to it.
+This is `sec-6`'s standing trap class, not a new one: like the `crate::kinds`
+`E0432` below, it is invisible to a reading of the production graph and surfaces
+only at the first build of the second crate.
 
 `backend` is leaf despite executing processes, because the tier rule classifies
 by what a unit imports and not by whether it is pure — `git` is leaf in the root
@@ -2623,7 +2710,7 @@ process rows.
 
 ### The arm is the unit of execution, not the capsule
 
-Six of the fourteen rows are two-capsule — something is written or done in one
+Six rows across tables A and B are two-capsule — something is written or done in one
 capsule and observed from another — and one of those runs its two capsules
 concurrently. A runner keyed to a single placement cannot carry them, so the
 unit the harness runs is the **arm**: everything that executes in order to
@@ -3362,14 +3449,14 @@ as an earlier draft of that residual assumed.
    the operator's repository or credentials, and no arm — probe or control —
    can write to an export any real transaction adopts: row 9's writable-input
    control operates on an export this run built for itself.
-10. **A live pid is the trusted parent's observation.** Row B5's target comes
-   from `execute_observed`'s callback, never from the subject's own output, and
-   a backend that returns without calling it yields `Indeterminate` rather than
-   a held probe.
 8. **The suite creates no capsule-delete capability.** Cleanup is the fixture's
    own `Drop` over a temporary root it created.
 9. **A backend's own report is never evidence.** Every arm result is read from
    the `Observation` the trusted parent returns — `REQ-448` criterion 3.
+10. **A live pid is the trusted parent's observation.** Row B5's target comes
+   from `execute_observed`'s callback, never from the subject's own output, and
+   a backend that returns without calling it yields `Indeterminate` rather than
+   a held probe.
 
 ### Verification alignment
 
@@ -3476,8 +3563,8 @@ Executed, the claims that need naming beyond their row:
 - `an_environment_passthrough_backend_fails_row_eleven` — the row 11 mutant as a
   stub
 
-Executed, table B: the twelve titles `sec-3`'s `Verification alignment` already
-names, driven by this harness rather than restated here.
+Executed, table B: the freshness titles `sec-3`'s `Verification alignment`
+already names, driven by this harness rather than restated here.
 
 Executed, table C: the three titles above.
 
@@ -3519,7 +3606,7 @@ New, the second crate — a bin-only package, no lib target (`sec-6`):
 
 | path | what it is | owner |
 |---|---|---|
-| `crates/doctrine-control/Cargo.toml` | path dependency on the `doctrine` lib target, and `publish = false` | `sec-6` |
+| `crates/doctrine-control/Cargo.toml` | path dependency on the `doctrine` lib target, its own `rustix` edge (`fs` **and** `std`, not inherited from the root package), and `publish = false` | `sec-6` |
 | `crates/doctrine-control/src/main.rs` | the two verbs, `provision` and `backend verify` | `sec-6` |
 | `crates/doctrine-control/src/host.rs` | `HostFacts`, `SystemHost` | `sec-5` |
 | `crates/doctrine-control/src/config.rs` | `CapsuleConfig` and the `[capsule]` reader | `sec-5` |
