@@ -275,14 +275,33 @@ only how it is kept honest, and there are two independent pins:
   the union of `facet_fields` over `RecordKind::ALL`. A facet field added to the
   model and forgotten in the table is a test failure, not a silent absence. This
   is `DEC-169`'s read-through-serde idiom, second application.
-- **P2 — per-kind placement.** For each kind, write every field the table gives
-  it, read the record back through the untouched `validate_facet`, and assert the
-  typed facet holds it. A field filed under the wrong kind is discarded on read —
-  so P2 catches exactly what P1 cannot, using the read model as the oracle rather
-  than a second list.
+- **P2 — per-kind placement, as an *equality*.** For each kind, write **every
+  field in the union** — not merely the ones the table gives that kind — read the
+  record back through the untouched `validate_facet`, and assert that the set of
+  fields the typed facet retained equals `facet_fields(kind)` exactly. *Retained*
+  means present in that kind's variant struct; every other field is discarded on
+  read.
 
-P1 and P2 together make the table total *and* correctly partitioned without any
-name being typed twice.
+The equality is the load-bearing word, and `RV-349`'s `F-3` — that the pins as
+first drafted could not see ownership *multiplicity* — is why. An inclusion pin
+("every table field survives") is blind to a field the table hands a kind that
+does not own it, and P1 compares a union, which discards multiplicity by
+construction. Under the equality that case fails: a `choice` wrongly listed on
+`question` is dropped by `validate_facet`, so the retained set is smaller than
+the table's row and the two differ.
+
+This also retires the design's own weakest joint. The first draft argued that no
+facet field validates for a kind that does not own it *because* `validate_facet`'s
+arms read disjoint field sets — an argument about the current code rather than a
+property anything enforced. The equality needs no such argument: the read model
+is the oracle, and the test compares against what it actually retained.
+
+`confidence`, legitimately owned by both assumption and evidence, is not a
+special case. It is retained for both kinds and both rows list it, so both
+equalities hold.
+
+P1 and P2 together make the table total *and* exactly partitioned, without any
+name being typed twice, and without a third pin.
 
 ## What each consumer takes from it
 
@@ -307,6 +326,11 @@ creating posture it has today and knowledge passing F-1. A call-site guard would
 have to be repeated by every future caller and would be the parallel
 implementation `AGENTS.md` forbids.
 
+Note the shape both write cores already have: `set_facet_mixed` and
+`dep_seq::apply_status` each take a held `&mut toml_edit::DocumentMut`, and their
+path-level wrappers are what open and write. That is what makes § 5.4's `settle`
+one atomic write rather than two, and it costs no new machinery.
+
 ## The phase boundary
 
 `DEC-165` splits the slice and the split is load-bearing, not cosmetic:
@@ -314,9 +338,10 @@ implementation `AGENTS.md` forbids.
 - **Phase A — the wire fix, no facet anywhere.** Objective 3's inert-key refusal
   (`Declaration` keys × design-run subject kinds, `DEC-169`'s serde-pinned table)
   plus the prose half of objective 2 (`CreateRecord.body` written at step 5 via
-  the existing `entity::write_body`). Neither touches a record kind, a facet, or
-  knowledge governance. Together they are exactly what would have prevented the
-  SL-248 loss.
+  the existing `entity::write_body`), and with it the retry-payload binding § 5.3
+  now requires — the first payload-bearing write is what makes that binding
+  necessary. Neither touches a record kind, a facet, or knowledge governance.
+  Together they are exactly what would have prevented the SL-248 loss.
 - **Phase B onward — the facet surfaces.** The table, the six subverbs, the
   kind-blind `edit`, `settle`, `CreateRecord.facet` at the same step-5 site, and
   the doctor tripwire.
@@ -403,12 +428,47 @@ pub(crate) fn apply_facet_edits(path: &Path, edits: &[FacetEdit]) -> anyhow::Res
 
 The split is the project's pure/imperative rule: `plan_facet_edits` holds every
 decision and is exhaustively testable without a filesystem; `apply_facet_edits`
-is the thin shell over `facet_write::set_facet_mixed`. `settle` is
-`plan_facet_edits` plus `set_record_status` in one act — it composes the two
-seams rather than introducing a third.
+is the thin shell over `facet_write::set_facet_mixed`.
 
 A cleared value is `RawValue::Text(String::new())`, written as `""`. `DEC-170`
 forbids clearing by omission, and `plan_facet_edits` has no way to express it.
+
+## `settle` writes once
+
+`settle` composes the same two seams over **one held document**, not two
+path-level writers in sequence. `RV-349`'s `F-2` is why the first draft was
+wrong to reach for sequencing: `[facet]` and `status`/`updated` are keys in the
+*same* `record-NNN.toml` — `set_record_status` resolves that exact path through
+`record_toml_path` — so there is no two-file transaction to order, and ordering
+one was buying a guarantee that a single write gives outright.
+
+Nothing new is needed to write once. Both cores are already document-level and
+their path wrappers are the only IO:
+
+| core | wrapper today |
+|---|---|
+| `facet_write::set_facet_mixed(&mut DocumentMut, table, fields)` | `doctrine risk set`'s caller |
+| `dep_seq::apply_status(&mut DocumentMut, managed, hint)` | `dep_seq::set_authored_status(path, …)` |
+
+So the shell reads the record once, applies both, and writes once:
+
+```rust
+/// Apply planned facet edits and a status transition to one record in a single
+/// edit-preserving write. Composes the two existing document-level cores over
+/// one held document; introduces no third writer.
+pub(crate) fn apply_settlement(
+    path: &Path,
+    edits: &[FacetEdit],
+    managed: &[(&str, &str)],
+) -> anyhow::Result<()>;
+```
+
+Validation still precedes every write, and now covers the status token too:
+`settle` refuses a foreign-kind or non-settleable state *before* the document is
+touched, so `I7` holds for the whole verb rather than for its facet half. `I4`'s
+one-writer-per-concern is preserved by composition — `apply_status` remains the
+sole author of `status`/`updated`, reached through a different wrapper rather
+than through a second implementation.
 
 ## The write posture
 
@@ -462,7 +522,7 @@ check the CLI runs, not a second one.
 ## Refusals
 
 Every refusal below is typed and names its remedy. The first four are new; the
-fifth is `ISS-318`'s.
+fifth is `ISS-318`'s; the sixth is the retry guard § 5.3 requires.
 
 | condition | message shape |
 |---|---|
@@ -471,8 +531,9 @@ fifth is `ISS-318`'s.
 | state has no settlement | `accepted` is not a settle transition for a decision; use `knowledge status` |
 | facet key absent on write | malformed record 042: `[facet]` is missing `choice` — restore the key and retry; the file is left untouched (`DEC-170`) |
 | `Declaration` key inert at subject's kind | `body` is inert at `cp-4`; it is honoured for `sec-` subjects. To carry a record's prose, use `dispose.create.body` |
+| retry under a journalled submission carries a different payload | submission `sub-…` is mid-mint at `DEC-181` and its payload has changed; re-send the payload it was journalled with, or use a new submission id |
 
-That last message is the whole of the SL-248 recovery: the six dispositions that
+The fifth message is the whole of the SL-248 recovery: the six dispositions that
 sent prose as `body` would each have been refused, at submission, with the key
 they were reaching for named in the refusal.
 
@@ -486,9 +547,9 @@ spelling, and a pin that fails loudly rather than a convention that erodes.
 
 | table | owner | pinned by |
 |---|---|---|
-| facet key → owning kind, with shape | `src/knowledge.rs`, beside `validate_facet` | P1 union vs `RawFacet`'s serde key set; P2 per-kind round-trip through `validate_facet` |
+| facet key → owning kind, with shape | `src/knowledge.rs`, beside `validate_facet` | P1 union vs `RawFacet`'s serde key set; P2 per-kind round-trip through `validate_facet`, as an equality |
 | resolving state → captured field | `src/knowledge.rs`, beside the above (four rows) | every `captures` name ∈ `facet_fields(kind)`; state set ≡ the by/on derivation |
-| `Declaration` wire key → honouring subject kind | `src/design_run/submission.rs` | key set of a fully-populated `Declaration`'s serde form (`DEC-169`) |
+| `Declaration` wire key → honouring subject kind | `src/design_run/submission.rs` | key set of a fully-populated `Declaration`'s serde form (`I9`), *plus* the behavioural matrix `I10` — the key set alone proves inventory, not mapping |
 
 The third is not the first two. It is `Declaration`'s ~16 wire keys against the
 design-run *subject* kinds (`inq-`, `sec-`, `att-`, `fnd-`, `cp-`), touches no
@@ -497,7 +558,9 @@ Phase A ship without objective 4 (`DEC-165`, `DEC-169`).
 
 ## Who may write `[facet]`
 
-Exactly two callers, both through `apply_facet_edits`:
+Exactly two callers, both through the planned-edit seam — `apply_facet_edits`,
+or `apply_settlement`, which composes it over a held document rather than
+duplicating it:
 
 1. the six `knowledge edit <kind>` subverbs and `settle`, at the CLI;
 2. `apply_record_effects` at DEC-086 step 5, for a `form = "create"` disposition.
@@ -510,9 +573,19 @@ enforced by the type rather than by convention.
 
 ## Who owns status
 
-`set_record_status` owns the token, unchanged and uncoupled. `settle` **calls**
-it; it does not write `status` itself, so there remains one writer and one
-vocabulary check.
+The status *vocabulary check* and the status *write* are two things, and only
+the second was ever coupled to a path.
+
+`dep_seq::apply_status` owns the write, unchanged: it is the sole author of
+`status`/`updated`, and both `set_record_status` (its existing path wrapper) and
+`apply_settlement` (§ 5.2) reach the same core. There is one writer, reached two
+ways, not two writers.
+
+The vocabulary check — *is this token a status of this kind?* — currently lives
+inside `set_record_status` above the call. `settle` needs it too and must not
+copy it, so it is lifted into a named predicate beside `statuses(kind)` and both
+callers use it. This is the only refactor the settle path forces, and it is
+extraction, not a parallel implementation.
 
 The exception is the one `DEC-088` reserves: a decision reaches `accepted` only
 through `apply_record_effects`, bound to a content-derived digest. `settle` has
@@ -520,20 +593,62 @@ no route there — not by a guard, but because `accepted` is not in the derived
 settleable set at all (`DEC-178`). The reservation is upheld by the shape of the
 derivation rather than by a check someone could later relax.
 
-## Where the payload lives during a mint
+## Where the payload lives during a mint, and what binds it
 
-`CreateRecord`'s `body` and `facet` are **not** journalled, and do not need to
-be. Recovery here is submission-keyed retry: the caller re-submits the same
-`submission_id`, `plan_checkpoints` rebuilds the `MintPlan` from that request,
-and `execute_mint` resumes at the first incomplete step against the id the
-journal already names. The payload is present on the retry because the retry
-carries it.
+`CreateRecord`'s `body` and `facet` are **not** journalled. That was the first
+draft's position and it survives, but its stated justification did not, and
+`RV-349`'s `F-1` is why.
 
-This is what makes `DEC-168`'s siting sound rather than merely convenient. The
-rejected alternative — pre-filling the scaffold inside `create_record` — would
-have needed the payload at step 4, which `materialise_record_at` reaches from the
-journal alone (id, title, slug), so it would have forced the payload into the
-journal. Step 5 needs no such widening.
+**The argument that failed.** The draft said recovery is submission-keyed retry —
+the caller re-submits the same `submission_id`, `plan_checkpoints` rebuilds the
+`MintPlan` from that request, `execute_mint` resumes against the id the journal
+names, and the payload is present because the retry carries it. Every clause is
+true. The unstated premise is that a retry under a given `submission_id` carries
+the *same* payload, and nothing enforces it in the window that matters:
+
+- `run::admit` refuses a replayed `submission_id` whose payload digest differs —
+  but only when a **receipt** exists, and receipts land with the snapshot.
+- `execute_mint` journals its `RecoveryIntent` (`src/design_run/attestation.rs`)
+  *before* the authored effect, and that journal holds `submission`, `subject`,
+  `reserved_record`, `state` and `acceptance` — no payload and no digest of one.
+- So a crash after the intent is journalled and before the snapshot persists
+  leaves an intent with no receipt. The run's revision never moved, so a retry
+  carrying a **different** payload passes the CAS, is admitted as `Fresh`, and
+  `execute_mint` finds the held intent and resumes.
+- Step 5 then applies `intent.acceptance()` — the acceptance journalled with the
+  *first* payload, bound by `acceptance_digest` to that payload's content — while
+  the record's content comes from the second. The freshly-built plan's acceptance
+  is discarded.
+
+The window is not new: `title` and `slug` can already diverge from what was
+accepted this way. What this slice changes is the blast radius. Once the payload
+carries the record's prose and its whole facet, "accepted under a digest of
+different content" stops being a cosmetic divergence and becomes exactly the
+class of silent content error the slice exists to close. Shipping the widening
+without the guard would be indefensible.
+
+**The guard.** `RecoveryIntent` gains one field — a digest of the mint's payload,
+recorded at step 1 with the intent, `#[serde(default)]` so a pre-existing journal
+reads as absent. On resume, `execute_mint` compares the rebuilt plan's digest
+against the journalled one and, on a mismatch, refuses before any resumed effect,
+naming the submission and the record it is mid-mint on (§ 5.2's sixth refusal).
+An absent digest — an intent written by an older binary — resumes as it does
+today; the guard is additive and never turns a recoverable state into a stuck
+one. Nothing is rolled back to repair a runtime failure, which is `DEC-083`'s
+rule: the retry is refused, the corpus is untouched, and the caller either
+re-sends what it journalled or opens a new submission.
+
+This makes the *non-journalling* sound rather than merely convenient. The payload
+still need not be stored, because what recovery needs is not the payload but the
+guarantee that the payload has not changed — and a digest is the cheap form of
+that guarantee. It also keeps `DEC-168`'s siting: the rejected alternative,
+pre-filling the scaffold inside `create_record`, would have needed the payload
+itself at step 4, which `materialise_record_at` reaches from the journal alone
+(id, title, slug) — so it would have forced the payload into the journal. Step 5
+needs no such widening, and the digest is bytes, not content.
+
+The guard lands in **Phase A**, with the first payload-bearing write. Phase A is
+what introduces content that can diverge, so it is what owes the binding.
 
 The window `DEC-168` names stays open and is not new: between
 `IntentState::Materialised` and `IntentState::Applied` the record exists hollow
@@ -552,7 +667,8 @@ thing lands in:
   committed and diffable; both are written edit-preservingly, so a hand-authored
   record and a verb-written one are byte-indistinguishable.
 - **Runtime** — the design run's own state, including the checkpoint
-  dispositions. Disposable; the records it mints are not.
+  dispositions and the recovery journal that now carries the payload digest.
+  Disposable; the records it mints are not.
 - **Derived** — nothing added. The doctor tripwire computes its findings per
   scan and stores none.
 
@@ -601,28 +717,41 @@ pure layer cannot: resolve the id and write the bytes. A failure anywhere before
 `W` leaves the file untouched; a failure inside `W` leaves it untouched too,
 because `facet_write` builds the whole document before it writes.
 
-## B — settling
+## B — settling, in one write
 
 ```
 doctrine knowledge settle QUE-198 answered --by david --answer "…"
 ```
 
-One act, three writes, in this order:
+One act, one document, one write:
 
-1. `plan_facet_edits` validates `answer` (the state's `captures` field, required
-   — omitting it is a refusal, not an empty write), `answered_by` from `--by`,
-   and `answered_on` from `clock::today()`.
-2. `apply_facet_edits` writes all three.
-3. `set_record_status` moves `status` and `updated`.
+1. **Validate everything first.** `answered` is a status of this kind and is in
+   the derived settleable set; `answer` — the state's `captures` field — is
+   present (omitting it is a refusal, not an empty write); `plan_facet_edits`
+   validates `answer`, `answered_by` from `--by`, and `answered_on` from
+   `clock::today()`.
+2. **Apply to one held document.** Read `record-NNN.toml` once;
+   `set_facet_mixed` writes the three facet fields, `apply_status` writes
+   `status` and `updated`.
+3. **Write once**, atomically, through the existing `fsutil::write_atomic`.
 
-**Ordering is deliberate: evidence first, token second.** A crash between them
-leaves a record whose facet says who answered it and when, still sitting at
-`open` — visibly incomplete, and re-running the same command completes it. The
-reverse order would leave `answered` with an empty answer, which is the exact
-state the corpus is already full of and which nothing would flag.
+**The first draft had this wrong and `RV-349`'s `F-2` is the correction.** It
+described `settle` as non-atomic "across the two files" and defended an ordering
+— facet evidence first, status token second — as the arrangement whose surviving
+state after a crash is the honest one. There are not two files. `[facet]`,
+`status` and `updated` are all keys of the same `record-NNN.toml`, which is the
+path `set_record_status` resolves through `record_toml_path`. The ordering
+argument was answering a question the storage layout does not ask.
 
-`settle` is not atomic across the two files, and does not pretend to be. It is
-*ordered* so that the surviving state is the honest one.
+Nor is one write expensive here. Both mutating cores already operate on a held
+`&mut DocumentMut` and only their wrappers do IO, so composing them costs a
+function, not a design (§ 5.2). What the single write buys is stronger than what
+the ordering bought: there is no interleaving to reason about, no partially
+settled record to define, and `I7` — a refusal leaves the corpus byte-identical —
+holds for the whole verb rather than for its facet half. The failure mode the
+draft was most worried about is not mitigated but **removed**: a refusal inside
+the status leg can no longer land after the facet leg, because validation
+precedes the single write.
 
 ## C — minting a filled record
 
@@ -636,6 +765,8 @@ sequenceDiagram
     R->>R: admission — Declaration keys inert at cp-? facet keys owned by kind?
     Note over R: either failure → typed refusal, run revision unchanged
     R->>M: MintPlan
+    M->>M: step 1 — journal intent + payload digest
+    Note over M: held intent with a different digest → refuse, nothing resumed
     M->>K: steps 2–4 reserve → materialise (scaffold, hollow)
     M->>M: journal Materialised
     M->>K: step 5 — status, shapes edge, body, facet
@@ -649,11 +780,14 @@ unchanged — no hollow record, no reserved id burned. That is the same
 `plan_facet_edits` the CLI runs, not a second check.
 
 **On a crash between `Materialised` and `Applied`:** the record exists hollow.
-Re-submitting the same `submission_id` resumes at step 5 with the payload the
-retry carries, and every effect there is idempotent — `set_authored_status`
-writes only on a change, `append_edge` returns `Noop`, and a facet-and-prose
-write of the same payload produces the same bytes. Nothing is removed or
-rewritten to repair a runtime failure (`DEC-083`).
+Re-submitting the same `submission_id` with the same payload resumes at step 5,
+and every effect there is idempotent — `set_authored_status` writes only on a
+change, `append_edge` returns `Noop`, and a facet-and-prose write of the same
+payload produces the same bytes. Re-submitting the same `submission_id` with a
+*different* payload is refused at step 1 by the digest the intent now carries
+(§ 5.3), because the acceptance journalled with that intent is bound to the
+payload it was given and cannot be honestly applied to another. Nothing is
+removed or rewritten to repair a runtime failure (`DEC-083`).
 
 ## D — the refusal that would have caught SL-248
 
@@ -682,9 +816,10 @@ working on a damaged corpus, which is the whole point (`DEC-177`).
 
 `DEC-165`'s boundary in operational terms:
 
-- **Phase A** ships paths **D** and the prose half of **C**. After it, the
-  SL-248 class of loss cannot recur — a mis-keyed payload is refused and a
-  correctly-keyed one lands.
+- **Phase A** ships path **D**, the prose half of **C**, and the retry-payload
+  binding that half requires. After it, the SL-248 class of loss cannot recur — a
+  mis-keyed payload is refused, a correctly-keyed one lands, and a changed retry
+  cannot inherit an acceptance it did not earn.
 - **Phase B onward** ships **A**, **B**, **E** and the facet half of **C**.
 
 The ordering is not merely permitted by `DEC-165`; it is the ordering that gets
@@ -693,41 +828,74 @@ table is not on its critical path.
 
 ## Failure posture, stated once
 
-No path repairs. Every refusal above leaves the corpus exactly as it found it and
-names what to do. The one operation that can leave partial state is **B**, and
-it is ordered so the partial state is the one a human would rather find.
+No path repairs, and after `F-2` no path leaves partial state. Every refusal
+above leaves the corpus exactly as it found it and names what to do; every write
+is a single atomic write of one document. The mint is the one multi-step
+operation, and its steps are journalled rather than ordered-and-hoped: each is
+idempotent, resumed against the id the journal names, and now guarded by the
+payload digest that makes a resumed step 5 provably about the same content the
+acceptance was given for.
 
 <!-- doctrine:section sec-9 -->
 # 5.5 Invariants, Assumptions & Edge Cases
 
 ## Invariants
 
-Each is a property a test asserts, not a habit.
+Each is a property a test asserts, not a habit. `I1`–`I9` are the drafting set;
+`I10`–`I12` were added by `RV-349` and are named, not renumbered.
 
-- **I1 — byte-stable round-trip.** A record written by any verb parses to the
-  same typed `RecordFacet` and re-renders to the same bytes. The existing
-  `render_facet` round-trip suite is the oracle and stays green unchanged.
+- **I1 — byte-stable round-trip of the read model.** A record parses to the same
+  typed `RecordFacet` and re-renders to the same bytes. The existing
+  `render_record_toml` round-trip suite is the oracle and stays green unchanged.
+  Its scope is exactly that and no more: the emit is `#[cfg(test)]`, has no
+  production caller, and omits `[[relation]]`/`[relationships]` — so it proves the
+  model, not the writer. Edit preservation is `I11`.
 - **I2 — the table is total.** `⋃ facet_fields(k) over RecordKind::ALL` equals
   `RawFacet`'s serde key set. A model field with no table row fails the build's
   tests.
-- **I3 — the table is correctly partitioned.** Every field the table gives a kind
-  survives `validate_facet` for that kind. A field on the wrong row is discarded
-  on read, so I3 catches what I2 cannot.
-- **I4 — one writer per concern.** `status` only through `set_record_status`;
-  `[facet]` only through `apply_facet_edits`; the `.md` only through
-  `entity::write_body`. `plan_facet_edits` is the sole constructor of a
-  `FacetEdit`, so I4's facet half is a type property.
+- **I3 — the table is exactly partitioned.** For each kind, write *every* field
+  in the union, read through `validate_facet`, and the set retained equals
+  `facet_fields(kind)` — an equality, not an inclusion. A field on the wrong row
+  is retained by nobody and so fails its own row's equality; a field on an extra
+  row fails there. `I3` catches what `I2` cannot, and the equality is what makes
+  it catch ownership multiplicity as well as placement (`RV-349` `F-3`).
+- **I4 — one writer per concern.** `status`/`updated` only through
+  `dep_seq::apply_status` (reached by `set_record_status` or by
+  `apply_settlement`, never re-implemented); `[facet]` only through
+  `apply_facet_edits` or the `apply_settlement` that composes it; the `.md` only
+  through `entity::write_body`. `plan_facet_edits` is the sole constructor of a
+  `FacetEdit`, so `I4`'s facet half is a type property.
 - **I5 — `accepted` is unreachable from `settle`.** Not by a guard: the token is
   absent from the derived settleable set (`DEC-088`, `DEC-178`).
 - **I6 — no facet key is ever created.** F-1 posture; an absent key is a refusal
   naming the record (`DEC-170`).
 - **I7 — a refusal leaves the corpus byte-identical.** Every validation precedes
-  every write, on both the CLI and the admission path.
+  every write, on the CLI, on `settle` (including its status-vocabulary check),
+  and on the admission path.
 - **I8 — `doctrine risk set` is unchanged.** It passes `KeyPosture::Create` and
   exercises the same code it does today; its suite stays green unchanged (the
   behaviour-preservation gate).
 - **I9 — the wire-key table is total.** A fully-populated `Declaration`'s serde
-  key set equals the table's (`DEC-169`).
+  key set equals the table's (`DEC-169`). This is an *inventory* claim and
+  nothing more — see `I10`.
+- **I10 — no wire key is accepted and ignored.** For every (`Declaration` key ×
+  design-run subject kind) pair, a submission carrying that key on that subject
+  is either observably effectful or refused. Never silently accepted. `I9`
+  compares two key sets and would stay green if the table mapped `body` to `cp-`
+  or `dispose` to `sec-`, because the sets are identical either way; `I10`'s
+  oracle is behaviour, not the table under test (`RV-349` `F-4`). This is also
+  what makes § 9's "refused across the whole field set" criterion true, rather
+  than the single `body`-on-`cp-` replay standing in for it.
+- **I11 — the writer is edit-preserving.** A record carrying comments, unknown
+  sibling keys, `[[relation]]` and `[relationships]` tables, written through
+  `apply_facet_edits`, differs only in the intended `[facet]` values; everything
+  else is byte-identical, and a second application of the same edits changes
+  nothing. This is `SPEC-004`'s actual requirement, and no existing suite covers
+  it (`RV-349` `F-6`).
+- **I12 — a resumed mint is about the payload it was journalled with.** A retry
+  under a `submission_id` whose intent is journalled, carrying a payload whose
+  digest differs, is refused before any resumed effect — so an acceptance can
+  never be applied to content it was not bound to (`RV-349` `F-1`, `DEC-088`).
 
 ## Assumptions
 
@@ -743,7 +911,10 @@ Each is a property a test asserts, not a habit.
   every existing record of that kind into one the writer refuses** — so this is
   the first thing Phase B verifies, not something to discover at the first write.
 - **A4** — `RawFacet` can gain `Serialize` as a derive-only change. It is a
-  private struct with no manual `Deserialize`, so nothing observable moves.
+  private struct with no manual `Deserialize`, so nothing observable moves. `A4`
+  does **not** widen under `I3`'s equality: the per-kind oracle is
+  `validate_facet`'s retention, so the six variant structs need no serde derives
+  and the closed value-enums need none either.
 
 ## Why the table does not build the CLI args
 
@@ -765,8 +936,10 @@ rather than remove it, when relocation is one comparison.
   everything a concept has, since its content is its prose (`DEC-172`).
 - **The one shared field name.** `confidence` belongs to both assumption and
   evidence, with the same closed enum. Per-kind subverbs make that unambiguous
-  at the call site with no special case; the table simply lists it twice, and I2
-  compares sets, so the duplicate is not a discrepancy.
+  at the call site with no special case; the table lists it twice, and `I3`'s
+  per-kind equalities both hold because `validate_facet` retains it for both
+  kinds. It is the case that makes multiplicity real rather than hypothetical,
+  which is why `I2`'s set comparison alone was never enough.
 - **Clearing.** `--choice ""` writes `""`; a list flag given no values writes
   `[]`. Clearing by omitting the key is unspellable (`DEC-170`).
 - **Re-settling.** `settle` refuses when the record already holds the target
@@ -776,6 +949,9 @@ rather than remove it, when relocation is one comparison.
   rather than *when the command last ran*.
 - **Withdrawn records.** `settle` refuses on a withdrawn status, reusing the
   existing predicate rather than a second list.
+- **A foreign-kind or non-settleable state** is refused before the document is
+  opened, not after the facet leg has landed. The check that made this ordering
+  matter in the first draft is now one of the validations `I7` covers.
 - **A hand-deleted facet key** surfaces at the next write as an F-1 refusal
   naming the record. It is *not* visible to `doctor`: the tripwire this slice
   adds warns on keys that are present and inert, not on keys that are missing.
@@ -788,6 +964,10 @@ rather than remove it, when relocation is one comparison.
   to a kind must also seed it into existing records, or every write to them
   refuses. The objective 4 REV should carry that as a stated consequence of the
   F-1 posture.
+- **A journalled intent with no payload digest** — an intent written by a binary
+  predating `I12` — resumes as it does today. The field is `#[serde(default)]`
+  and absence means "unguarded", never "mismatched": the guard is additive and
+  must not convert a recoverable state into a stuck one.
 - **Large prose.** `--body -` reads stdin, as `memory edit` does. No size rule is
   invented here.
 
@@ -867,7 +1047,7 @@ it is worse than a pointer.
 | `DEC-173` | concept gets no facet subverb | § 5.2 refusals |
 | `DEC-174` | `EVD`/`HYP` contracts are elevated from `SL-159` unchanged | objective 4 |
 | `DEC-175` | `PRD-010`'s kind-set clause is a stale enumeration | objective 4, § 2 |
-| `DEC-176` | kind coverage in governance is pinned by a canary | § 9 |
+| `DEC-176` | kind coverage in governance is pinned by a canary | § 9, and `D9` |
 | `DEC-177` | read stays tolerant; inert keys are caught by `doctor` | § 5.4 path E |
 | `DEC-178` | one settle verb, reach derived from facet names | § 5.2, I5 |
 | `DEC-179` | the edit verbs already share their machinery | § 6, and the plan's phase set |
@@ -879,11 +1059,14 @@ beside them, and they are recorded here because implementation depends on them.
 
 - **D1 — one authored table, two pins.** `facet_fields(kind)` is authored because
   Rust has no reflection and `DEC-169` already refused a proc macro for one
-  table. P1 (union ≡ `RawFacet`'s serde key set) and P2 (per-kind round-trip
-  through `validate_facet`) are independent and between them total: P1 catches a
-  field missing from the table, P2 catches one on the wrong row. *Alternative:*
-  per-consumer tables. Rejected — three copies of the fact this slice exists to
-  make writable.
+  table. P1 (union ≡ `RawFacet`'s serde key set) and P2 (per-kind retention
+  through `validate_facet`, as an **equality**) are independent and between them
+  total: P1 catches a field missing from the table, P2 catches one on the wrong
+  row *or* on an extra row. *Alternative:* per-consumer tables. Rejected — three
+  copies of the fact this slice exists to make writable. *Amended by `RV-349`
+  `F-3`* — P2 was drafted as an inclusion, which could not see ownership
+  multiplicity; the equality closes it without a third pin and without new serde
+  derives (§ 5.1).
 - **D2 — `KeyPosture` on the writer, not a guard at each call site.** A call-site
   guard has to be repeated by every future caller and is the parallel
   implementation `AGENTS.md` forbids. The parameter also keeps `doctrine risk
@@ -900,13 +1083,59 @@ beside them, and they are recorded here because implementation depends on them.
 - **D5 — the create payload is validated at admission**, by the same
   `plan_facet_edits` the CLI runs, before any id is reserved. A bad payload
   therefore costs no hollow record and no burned id.
-- **D6 — `settle` writes evidence before the status token.** Not atomic across
-  two files and not pretending to be; ordered so the surviving state after a
-  crash is a record that says who settled it and when while still sitting at its
-  open status, rather than a settled status with an empty answer.
+- **D6 — `settle` is one document, one write.** *Superseded in review.* The
+  drafted D6 ordered two path-level writes — facet evidence, then the status
+  token — and argued the ordering from which partial state a crash would leave.
+  `RV-349` `F-2` established the premise was false: `[facet]`, `status` and
+  `updated` are keys of the same `record-NNN.toml`, and both mutating cores
+  already take a held `&mut DocumentMut`. So `settle` validates everything,
+  applies both to one document, and writes once. The partial state the ordering
+  was arranging is not mitigated but removed, and `I7` gains the whole verb
+  rather than its facet half. The old reasoning is kept visible here because a
+  reader who has seen the drafted §5.4 should be able to find out what happened
+  to it.
 - **D7 — `settle` refuses a state-to-itself transition.** Keeps `answered_on`
   meaning *when it was answered*. Amending an answer is `knowledge edit
   question --answer`, which is the verb for changing a field.
+
+## Decided in review
+
+Three more, each forced by a finding on `RV-349` rather than chosen freely.
+
+- **D8 — the recovery intent binds its payload by digest.** `RecoveryIntent`
+  gains a `#[serde(default)]` payload digest, written at step 1; a resumed mint
+  whose rebuilt plan digests differently is refused before any effect (§ 5.3,
+  `I12`). *Alternatives:* (a) journal the payload itself — rejected, it is the
+  widening `DEC-168` avoided and a digest answers the only question recovery
+  asks; (b) rebuild the acceptance from the retry rather than the intent —
+  rejected, `DEC-088` binds an acceptance to the content the *user* saw, so
+  honouring a fresh one silently re-accepts on the user's behalf; (c) accept the
+  window as pre-existing and document it — rejected, because this slice is what
+  makes the divergent content the record's whole substance. Lands in Phase A,
+  with the first payload-bearing write.
+- **D9 — the coverage canary reads both tiers and asserts an absence.**
+  `DEC-176`'s ruling stands; its observable is strengthened. `RV-349` `F-5`
+  showed the canary as written — every `kinds::RECORD` prefix appears in
+  `SPEC-019`'s prose — passes on a spec that adds one sentence naming the three
+  new kinds while leaving nine four-kind statements standing. So the canary reads
+  the authored `.toml` **and** `.md` of both `SPEC-019` and `PRD-010`, asserts
+  each kind in its paired form (`assumption (ASM)`, per `DEC-176`'s own
+  substring-collision note), and asserts the stale four-kind enumeration is
+  absent. The absence assertion pins the specific enumeration phrase, not the
+  word *four* — a spec may legitimately say "four" about something else, and a
+  test that forbids a common word is a test someone will disable. The
+  agent-verified prose criteria for the per-kind contracts and lifecycle verbs
+  stay: a canary proves the enumeration moved, not that the contracts are right.
+  Still a project-local test, never a `validate` rule (`POL-002`).
+- **D10 — edit preservation gets its own fixture test.** `RV-349` `F-6` showed
+  `I1`'s named oracle cannot serve: `render_record_toml` is `#[cfg(test)]`, has
+  no production caller, and omits relation tables, so a green round-trip suite
+  says nothing about whether `apply_facet_edits` drops a comment or an unknown
+  sibling key. `I11` is the missing invariant and its test is a fixture record
+  carrying comments, unknown keys, `[[relation]]` and `[relationships]`, asserted
+  byte-identical outside the intended `[facet]` values and idempotent on a second
+  application. This is what discharges `SPEC-004` for the new writer; `I1` keeps
+  its narrower job.
 
 <!-- doctrine:section sec-12 -->
 # 8. Risks & Mitigations
@@ -915,10 +1144,10 @@ beside them, and they are recorded here because implementation depends on them.
 
 - **`R1` — the amendment is authorship, not annotation**, now across two entities
   (`SPEC-019`, `PRD-010` — `DEC-175`) plus a third amendment row for SPEC-019's
-  false self-description. *Mitigation:* `DEC-176`'s canary makes coverage an
-  observable rather than a claim, and `DEC-172`/`DEC-174` reduce the authorship
-  to elevation-with-citation rather than fresh judgement. What is left is prose,
-  and prose is what `R4` warns about.
+  false self-description. *Mitigation:* `DEC-176`'s canary, as strengthened by
+  `D9`, makes coverage an observable rather than a claim, and `DEC-172`/`DEC-174`
+  reduce the authorship to elevation-with-citation rather than fresh judgement.
+  What is left is prose, and prose is what `R4` warns about.
 - **`R2a` — `SL-246` ordering.** `SL-249`'s REV lands first; `SL-246` then
   derives its per-kind field lists from governance. *Mitigation:* nothing here
   changes it, but note that `SL-246` can now derive from `facet_fields` in code
@@ -926,9 +1155,11 @@ beside them, and they are recorded here because implementation depends on them.
 - **`R3` residual — surface coherence.** Six subverbs, a kind-blind `edit`, and
   `settle`. *Mitigation:* `D3`'s oracle test keeps the flag names honest, and the
   refusal catalogue (§ 5.2) is the surface's teaching layer.
-- **`R4` — objective 4's completion is easy to assert.** *Mitigation:* `DEC-176`.
-  This is the risk the slice has already recurred on once (`SL-159`), so the
-  canary is not belt-and-braces; it is the control.
+- **`R4` — objective 4's completion is easy to assert.** *Mitigation:* `DEC-176`,
+  as strengthened by `D9`. This is the risk the slice has already recurred on
+  once (`SL-159`), so the canary is not belt-and-braces; it is the control — and
+  `RV-349` `F-5` showed the first draft's canary would have passed a spec that
+  still called the kind set four, which is the recurrence wearing a green test.
 
 ## New, from drafting
 
@@ -943,7 +1174,9 @@ beside them, and they are recorded here because implementation depends on them.
   here" is exactly how `DEC-165`'s ordering is lost, and with it the property
   that the data-loss fix ships first. *Mitigation:* the plan states the boundary
   as an exit criterion, not a preference — Phase A's exit asserts that no symbol
-  from the facet table is referenced by anything it ships.
+  from the facet table is referenced by anything it ships. Note that review added
+  work to Phase A (`D8`'s retry binding) without moving the boundary: the guard
+  touches the mint's journal, not a record kind.
 - **`R7` — adding a facet field later is a corpus migration, not an edit.**
   F-1's posture means a new field must be seeded into every existing record of
   that kind or every write to them refuses. *Mitigation:* state it as a
@@ -955,6 +1188,23 @@ beside them, and they are recorded here because implementation depends on them.
   *Mitigation:* none taken here, deliberately (§ 6). Splitting it in front of the
   data-loss fix inverts the slice's priority. Recorded so the next reader knows
   it was seen rather than missed.
+
+## New, from review
+
+- **`R9` — the retry guard is additive, so pre-existing journals stay
+  unguarded.** `D8`'s digest is `#[serde(default)]`; an intent written before it
+  reads as absent and resumes unguarded, which is deliberate — the alternative
+  turns every in-flight mint at upgrade time into a stuck one. The exposure is
+  bounded to intents already journalled when the binary changes, and the runtime
+  state is disposable. *Mitigation:* none beyond stating it; a migration for a
+  gitignored journal would cost more than the window it closes.
+- **`R10` — `I10`'s matrix is the kind of test that gets trimmed.** ~80 cells,
+  each asserting one of two outcomes, is exactly the shape someone later reduces
+  to "the interesting ones" — at which point the across-the-whole-field-set
+  criterion quietly becomes the single replay again, which is the state `RV-349`
+  `F-4` found. *Mitigation:* the matrix is generated by iterating both
+  vocabularies rather than written out cell by cell, so trimming it requires
+  deleting a loop rather than deleting rows nobody misses.
 
 ## Assumptions restated as risk
 
@@ -973,33 +1223,48 @@ design-run wire — so the behaviour-preservation gate applies: the existing sui
 are the proof and must stay green **unchanged**. Two of them matter most and
 neither may be edited to accommodate this work:
 
-- the knowledge round-trip suite (`render_facet` byte-stability, `I1`);
+- the knowledge round-trip suite (`render_record_toml` byte-stability, `I1`);
 - `doctrine risk set`'s suite, which is what `KeyPosture::Create` exists to keep
   true (`I8`).
 
 An edit to either is a signal that the design is wrong, not that the test is.
 
+What that gate does **not** buy is stated once, because the first draft assumed
+it did: the round-trip suite exercises a `#[cfg(test)]` emit with no production
+caller and no relation tables, so it proves the read model survives this work and
+proves nothing about the new writer. Edit preservation is a separate test with a
+separate fixture (`I11`, `D10`).
+
 ## Test surface by invariant
 
 | invariant | test shape |
 |---|---|
-| `I1` round-trip | existing suite, unchanged |
+| `I1` model round-trip | existing suite, unchanged |
 | `I2` table totality | `RawFacet` serde key set vs `⋃ facet_fields` |
-| `I3` partition | per kind: write every table field, read through `validate_facet`, assert present |
+| `I3` partition | per kind: write **every union field**, read through `validate_facet`, assert retained set **equals** `facet_fields(kind)` |
 | `I4` one writer | type-level for facets (`plan_facet_edits` is the sole constructor); test for status and body |
 | `I5` `accepted` unreachable | assert the derived settleable set excludes every `DEC` state |
 | `I6` F-1 | write to a record with a hand-deleted key → refusal naming the record, file byte-identical |
-| `I7` refusal is inert | every refusal case asserts the file's bytes before and after |
+| `I7` refusal is inert | every refusal case asserts the file's bytes before and after — including `settle`'s status-vocabulary and settleability refusals |
 | `I8` `risk set` | existing suite, unchanged |
 | `I9` wire-key totality | fully-populated `Declaration` serde key set vs the table |
+| `I10` no silent wire key | matrix over (key × subject kind): each cell is observably effectful **or** refused; a cell that is neither fails |
+| `I11` edit preservation | fixture record with comments, unknown sibling keys, `[[relation]]`, `[relationships]` → `apply_facet_edits` → only the intended `[facet]` values differ; second application is a no-op |
+| `I12` retry binding | journal an intent, retry the same `submission_id` with a changed payload → refused before any effect, record and run unchanged; same payload → resumes and completes |
 
-Plus the three oracle tests the tables earn: clap args vs `facet_fields` (`D3`),
+Plus the oracle tests the tables earn: clap args vs `facet_fields` (`D3`),
 templates vs `facet_fields` (`R5`), and `settlements`' state set vs the by/on
 derivation (§ 5.2).
 
+`I10` is the one worth sizing before the plan: ~16 `Declaration` keys × 5
+design-run subject kinds is ~80 cells, table-driven, each asserting one of two
+outcomes. Its oracle is behaviour, deliberately — deriving expectations from the
+same table the code consults would prove only that the table equals itself
+(`RV-349` `F-4`).
+
 ## The criteria that close the slice
 
-Restated from the scope card with what drafting changed:
+Restated from the scope card with what drafting and review changed:
 
 - Every facet field of the **six** facet-bearing kinds round-trips through its
   kind's subverb; `knowledge edit concept` is refused, naming the kind-blind
@@ -1007,19 +1272,31 @@ Restated from the scope card with what drafting changed:
 - A subverb naming a kind the id contradicts is refused with the correct subverb
   named. *Test-verified.*
 - A `Declaration` key inert at its subject's kind is refused across the whole
-  field set — and specifically, a `body` on a `cp-` subject is refused naming
-  `dispose.create.body`. *Test-verified, and this is the SL-248 replay.*
+  field set — the whole set meaning every (key × subject kind) cell, not the one
+  observed instance — and specifically, a `body` on a `cp-` subject is refused
+  naming `dispose.create.body`. *Test-verified by `I10` plus the SL-248 replay.*
 - A `form = "create"` disposition mints a record whose facet **and** prose are
   populated in one act with no follow-up write. *Test-verified; the criterion
   that closes the data loss.*
+- A retry of a journalled mint carrying a changed payload is refused before any
+  resumed effect, so no record is accepted under an attestation bound to
+  different content. *Test-verified (`I12`).*
 - `settle` populates the captured field, the actor and the date and moves the
-  status in one act; omitting the captured field is a refusal; the settleable set
-  is derived, not listed. *Test-verified.*
+  status in **one** write; omitting the captured field is a refusal; a
+  foreign-kind or non-settleable state is refused before the file is opened; the
+  settleable set is derived, not listed. *Test-verified.*
+- A write through `apply_facet_edits` preserves comments, unknown sibling keys
+  and relation tables, and is idempotent. *Test-verified (`I11`) — this is the
+  `SPEC-004` criterion, and `I1` does not stand in for it.*
 - A populated `[facet]` key inert at its record's kind is reported by `doctor`,
   and `knowledge list` still succeeds on that corpus. *Test-verified.*
-- Every kind in `kinds::RECORD` is named in `SPEC-019` and `PRD-010`.
-  *Test-verified by `DEC-176`'s canary — a project-local test, never a `validate`
-  rule (`POL-002`).*
+- Every kind in `kinds::RECORD` is named, in its paired form, in both authored
+  tiers of `SPEC-019` and `PRD-010`, **and** the stale four-kind enumeration is
+  absent from both. *Test-verified by `DEC-176`'s canary as strengthened by
+  `D9` — a project-local test, never a `validate` rule (`POL-002`).*
+- The per-kind contracts and lifecycle vocabularies for `EVD`, `HYP` and `CPT`
+  are present and coherent in `SPEC-019`. *Agent-verified — a canary proves the
+  enumeration moved, not that the contracts are right.*
 - `IMP-403` leads 1 and 2 are demonstrably closed; leads 3–5 carry their own
   follow-up items.
 
@@ -1035,38 +1312,79 @@ carries its facet — which the mint test asserts directly.
 <!-- doctrine:section sec-14 -->
 # 10. Review Notes
 
-Where a reviewer should press, in the order I would press.
+## The pass that has run
 
-1. **`D1`'s two pins — are they actually total together?** P1 compares sets, so a
-   field listed under two kinds is invisible to it (and `confidence` legitimately
-   is). P2 is per-kind and would not notice a field that appears on an extra row
-   *and* validates there. The claim is that no facet field validates for a kind
-   that does not own it, which holds because `validate_facet`'s arms read
-   disjoint field sets — but that is an argument about the current code, not a
-   property the pins enforce. If a reviewer wants a third pin, this is where it
-   goes.
-2. **`D6`'s ordering argument.** It assumes a crash between two writes is the
-   failure mode worth optimising for. If the more likely failure is a refusal
-   *inside* `set_record_status` after the facet write has landed — a foreign-kind
-   state, say — then the record ends with settlement evidence it never earned.
-   The mitigation would be validating the state token before writing anything;
-   worth deciding explicitly rather than inheriting.
-3. **`DEC-177`'s scope, revisited against `D5`.** The doctor tripwire exists
-   because the read path stays tolerant. But `D5` now validates facet payloads at
-   admission, and the CLI validates at `plan_facet_edits` — so the only remaining
-   producer of an inert key is a hand-edit. A reviewer might reasonably ask
-   whether the tripwire still earns its place. I think it does, precisely because
-   hand-edits are the population that gets no other feedback, but the argument is
-   weaker than it was when the ruling was taken.
-4. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
+`RV-349` — one external adversarial pass over this document at design-run
+revision 48, briefed on eight lines of attack, five of them lifted from this
+section's drafted form. Six findings, all upheld on evidence, all integrated
+above:
+
+| finding | severity | what it changed |
+|---|---|---|
+| `F-1` | blocker | § 5.3's recovery argument rewritten; `D8`, `I12`, and a Phase A payload-digest guard |
+| `F-2` | major | § 5.4 path B and § 5.2 rewritten to one document, one write; `D6` superseded |
+| `F-3` | major | `P2` becomes an equality; `D1` amended; `I3` restated |
+| `F-4` | major | `I10` added — the wire table's *mapping*, not just its inventory |
+| `F-5` | major | `D9` — the coverage canary reads both tiers and asserts an absence |
+| `F-6` | major | `D10`, `I11` — edit preservation gets its own fixture; `I1`'s scope narrowed |
+
+Two of the six landed on joints this section had already named as weak, which is
+the outcome that says the self-assessment was honest but insufficient: naming a
+weak joint is not the same as fixing it, and `F-3` in particular was answered by
+a *simpler* pin rather than the third pin the drafted note proposed.
+
+The two that did not come from this section's own list are the two worth
+noticing. `F-1` found a false premise about code — the claim that a
+submission-keyed retry pins the payload — which no amount of internal re-reading
+would have surfaced, because the design was consistent with itself and wrong
+about the source. `F-2` found a factual error of the same class in the opposite
+direction: an atomicity problem the design worked to mitigate did not exist,
+because the two writes it was ordering target one file.
+
+Cleared without a finding, on the reviewer's own record: `DEC-177`'s tripwire
+remains justified for hand-edits and out-of-band writers; `KeyPosture`, the
+templates and the live corpus are consistent on seeding; the Phase A/B boundary
+is otherwise coherent; `D4`'s `body` reuse is carried by objective 3's refusal;
+`ADR-013` REV routing and `ADR-004` relation deferral are correctly applied; and
+four specific code claims this design makes — `Declaration`'s
+`deny_unknown_fields`, `set_facet_mixed`'s missing-key creation,
+`skip_serializing_if` totality, `append_edge → Noop` — match the source.
+
+## Where a further pass should press
+
+In the order I would press, now that the six are integrated.
+
+1. **`D8`'s digest, at the plan.** The guard is designed here and sized nowhere.
+   What exactly is digested — the `Declaration`, the `MintPlan`, the disposition
+   payload — decides whether a legitimate no-op retry (same content, different
+   key order in a `BTreeMap`) is refused. The wrong choice converts a recovery
+   path into a dead end, which is the failure mode `R9` is deliberately *not*
+   accepting. This is the highest-value thing left to get wrong.
+2. **`I10`'s cell semantics.** "Observably effectful or refused" is easy to say
+   and needs a definition per key before the test is written: some keys are
+   effectful only in combination, and a cell asserting the wrong side of the
+   disjunction is a test that passes while the mapping is wrong — which is what
+   `F-4` found in the first place, one level up.
+3. **Whether `settle` still earns a separate verb.** `DEC-178`'s case for it was
+   partly that the transition is a coupled multi-write. After `F-2` it is one
+   write of one document, which is what `knowledge edit question` will also be.
+   The remaining case — that a disposition is part of resolving and not a field
+   one may forget — is `DEC-062`'s and stands on its own, but it is now the
+   *whole* case rather than the larger half of one.
+4. **`D9`'s absence assertion, once the REV prose exists.** Pinning a specific
+   enumeration phrase is right in principle and unwritable until the phrase is
+   known. If the REV rewrites the section rather than editing the sentence, the
+   assertion has nothing to pin and the canary quietly loses half its strength.
+5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
    recommendation (§ 6). If a reviewer thinks either should have been ruled here,
    the counter-argument is that both are about what the REV *says*, and the REV
    does not exist yet.
-5. **`R8`.** `src/knowledge.rs` gains tables and three verbs and is already
+6. **`R8`.** `src/knowledge.rs` gains tables and three verbs and is already
    carrying the CLI. The design says explicitly that splitting it is out of
    scope. That is a judgement about sequencing, not about whether the module is
    too big — a reviewer who disagrees is disagreeing about priority, which is the
    user's call and is already recorded.
-6. **Anything phase A touches that reads `facet_fields`.** `R6` says the boundary
-   erodes under convenience. The cheapest review is a grep.
+7. **Anything Phase A touches that reads `facet_fields`.** `R6` says the boundary
+   erodes under convenience, and review just added work to Phase A. The cheapest
+   review is still a grep.
 
