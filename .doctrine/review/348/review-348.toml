@@ -1,0 +1,515 @@
+id    = 348
+slug  = "design-review-of-sl-250"
+title = "design review of SL-250"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-250"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Expected the spec/entry counts to agree with the registry; observed nine/six/seven where the code gives ten/seven/eleven, and the VH gate passes at 7 of 11 entries"
+detail = """
+The draft states its inventory at four altitudes and three of the four numbers are wrong. They are not independent slips: specs and *entries* are conflated throughout.
+
+(a) plugins/doctrine/hooks/hooks.json holds TEN entries, not nine — SessionStart 1, WorktreeCreate 1, SubagentStart 1, SubagentStop 1, PreToolUse 6 (four worktree-pretooluse on Bash / Edit|Write / Agent / Workflow, two memory-surface on Read|Edit|Write / Bash). sec-1 says 'nine hook entries across five events'; sec-2 says 'the nine plugin entries collapse onto six'. Five events is right. Nine is not. DEC-162's own inventory table also sums to ten, so the draft is restating a headline the decision's table already contradicts — reconciling it is the draft's job, not a re-opening of the decision.
+
+(b) sec-4's claude_hook_specs returns SEVEN specs (boot_emit, sync, create_fork, nominate, denominate, pretooluse, memory_surface). sec-3 says 'one Claude refresh now performs six merges'; sec-7 says wire's Claude arm 'now prints six hook lines where it printed none'. The loop in sec-4 iterates the registry, so both are seven — as sec-4 itself concedes two paragraphs later when it says 'seven scattered calls'.
+
+(c) The entries written to the settings file are ELEVEN — 1+1+1+1+1+4+2 over sec-2's own matcher sets (ten from the plugin plus the already-shipping memory-sync entry).
+
+The sharp end is (c) meeting sec-7. The VH criterion reads: 'the /hooks output showing all seven entries sourced from .claude/settings.json'. Eleven is correct. As written, the slice's SOLE load-bearing acceptance gate is satisfied by a settings file carrying seven of eleven entries — it certifies precisely the silently-partial activation the slice exists to eliminate, and which sec-4 names as 'the failure class this whole slice exists to stop being silent about'. An auditor counting to seven passes a broken install; one counting to eleven fails a correct one and has no way to know which number the design meant.
+
+Blocker on the permissive direction of the error in a verification criterion, not on the arithmetic per se. Expected: one stated altitude for each count (plugin entries / specs / emitted entries / printed lines), each agreeing with claude_hook_specs and sec-2's matcher table. Evidence: plugins/doctrine/hooks/hooks.json; design.md sec-1 line 11, sec-2 lines 186-188, sec-3 line 416, sec-4 lines 476-492, sec-7 lines 830, 918."""
+disposition = "upheld"
+response = """
+Upheld on all four counts, verified against the files rather than the draft.
+
+plugins/doctrine/hooks/hooks.json holds TEN entries across five events —
+SessionStart 1, WorktreeCreate 1, SubagentStart 1, SubagentStop 1, PreToolUse 6
+(four worktree-pretooluse on Bash / Edit|Write / Agent / Workflow, two
+memory-surface on Read|Edit|Write / Bash). claude_hook_specs returns SEVEN
+specs. The matcher sets sum to ELEVEN settings entries (1+1+1+1+1+4+2). wire
+prints one line per spec outcome, so SEVEN hook lines. Four distinct numbers,
+and the draft conflated specs with entries at three of the four sites.
+
+The sharp end is conceded without qualification: as written, sec-7's VH gate
+certifies a settings file carrying seven of eleven entries — a four-entries-short
+install passes the slice's only load-bearing acceptance criterion, which is
+precisely the silently-partial activation sec-4 names as the failure class the
+slice exists to stop.
+
+Remedy: sec-1 gains a count ledger stating each altitude exactly once — ten
+plugin entries, seven specs, eleven settings entries, seven printed hook lines —
+and every downstream mention is corrected against it. sec-2's "the nine plugin
+entries collapse onto six" becomes ten entries onto six specs, plus sync riding
+along for the file and the scope dial, for seven. sec-2's heading, sec-3's
+merge count, sec-4's loop description and sec-7's printed-line count all move to
+seven. The VH criterion moves to eleven entries."""
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "blocker"
+title = "Expected memory sync install to report the eviction DEC-164 mandates; observed a design that declares corpus.rs unchanged while changing install_claude_hook's return type, leaving the destructive sweep silent on the routine path"
+detail = """
+sec-3 changes install_claude_hook's signature to return HookWrite { scope, written, evicted } (design.md lines 329-338). Its second caller, run_sync_install at src/corpus.rs:506, matches the return value directly against RefreshOutcome::Wired / Refreshed / None / PrintedFallback (src/corpus.rs:506-524). That does not compile against HookWrite. Yet the draft asserts the opposite twice:
+
+  sec-1 code-impact table: 'src/corpus.rs | none — install_claude_hook absorbs the scope'
+  sec-3: 'memory sync install inherits both the scope and the sweep with no change to corpus.rs at all'
+
+The compile break is the cheap half. The consequential half is what the false claim suppresses. Under this design, memory sync install:
+  - resolves the scope and writes to it (project by default);
+  - runs evict_hook_from_file against the sibling, DELETING owned entries;
+  - reports neither, because the announcement and the eviction rider both ride 'the existing writeln!(stdout, ...) seam in boot::wire' (sec-3 line 411), and run_sync_install does not go through wire.
+
+That contradicts both governing decisions on their own terms. DEC-164: 'When doctrine writes one Claude settings scope it also sweeps the sibling file ... and reports the eviction in the installer target line DEC-163 adds', and 'The reporting rider is what keeps a destructive-looking write honest'. DEC-163: 'The installer announces the target early — where it will write, and which key changes it.' DEC-163 further singles this caller out as the reason the scope is a sticky key at all: memory sync install is 'exactly the routine, flagless install' the decision argues about, and 'doctrine install is the documented ritual after any shipped-memory edit'.
+
+So the highest-frequency install path performs the slice's one destructive write with no output whatsoever. The minimal fix an implementer reaches for, having been told twice that corpus.rs is out of scope, is .written — which keeps the silence.
+
+Expected: sec-1 and sec-3 to name corpus.rs as changed, and to state what run_sync_install prints for scope and eviction (or to state explicitly that the sweep is suppressed on that caller, and why that is safe). Observed: an impact claim that is not merely incomplete but inverted, carrying an unreported destructive write behind it."""
+disposition = "upheld"
+response = """
+Upheld, including the reading of why the false claim is the expensive half.
+
+Verified: src/corpus.rs:506 matches install_claude_hook's value directly against
+RefreshOutcome::Wired / Refreshed / None / PrintedFallback. A HookWrite return
+does not compile against that, so sec-1's "none" and sec-3's "no change to
+corpus.rs at all" are inverted, not merely incomplete. And the announcement plus
+the eviction rider were both sited on boot::wire, which run_sync_install never
+enters — so the documented ritual after any shipped-memory edit would resolve a
+scope, write to it, delete owned entries from the sibling, and print nothing
+about either. DEC-163 singled that caller out as the reason the scope is a
+sticky key at all; DEC-164 calls the rider "what keeps a destructive-looking
+write honest". Both are breached on their own terms.
+
+Remedy, at the class rather than the instance: the reporting seam stops being
+wire-local. One helper in boot.rs takes the scope and the eviction count and
+writes the DEC-163 announcement plus the DEC-164 rider to an out: &mut dyn
+Write. wire calls it once per Claude arm before its hook lines;
+run_sync_install calls it around its single HookWrite and matches write.written
+for its four existing arms. sec-1's code-impact table names src/corpus.rs as
+changed, and sec-3 states what that caller prints.
+
+That also removes the trap named in the finding — an implementer told twice
+that corpus.rs is out of scope reaching for .written and keeping the silence."""
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Expected the behaviour-preservation gate to be a compiler-checked rename; observed a semantic default-scope flip that inverts existing assertions, blunting the gate's signal"
+detail = """
+sec-7 pins the gate as: 'The existing boot.rs and install.rs suites are the proof, and they must stay green unchanged except where a rename touches them', and then 'SETTINGS_REL to SETTINGS_LOCAL_REL is a compiler-checked rename; the test bodies change only in that identifier.'
+
+That is false for the boot.rs Claude tests, because the default scope FLIPS from settings.local.json to settings.json (sec-3, DEC-163). Those tests do not merely mention the identifier — they assert against the path it names, and against a Claude arm that writes no hook at all:
+
+  - src/boot.rs:3904 install_refresh_writes_settings_and_respects_dry_run — reads root.join(SETTINGS_REL) (:3908) and asserts commands(&json).is_empty() with the comment 'no boot hook wired for Claude (ships via plugin)' (:3931-3933). Under this slice the Claude arm writes eleven entries to a DIFFERENT file. The assertion inverts; it does not get renamed.
+  - src/boot.rs:4180 install_claude_hook_wires_boot_and_sync_as_two_entries — reads root.join(SETTINGS_REL) at :4190 and :4204. The file it reads will not exist; the correct constant is SETTINGS_PROJECT_REL, not SETTINGS_LOCAL_REL. A mechanical rename produces a red test whose fix is a different constant.
+  - src/boot.rs:4216 install_claude_hook_sync_respects_dry_run (:4223), :4250, :4766, :4782, :4797, :5523 — same class.
+  - src/boot.rs:4755 wire_adds_import_and_hook_then_is_idempotent — same, plus the report shape.
+  - Every out.hook assertion (:3916, :3924, :3926, :3948, :5302 and neighbours) changes with RefreshReport.hook becoming hooks: Vec<RefreshOutcome> (sec-3 lines 419-432). sec-7 does not count this in its 'only that identifier' claim either.
+
+Why this matters beyond churn: sec-7 gives the gate its diagnostic meaning — 'Any red here means the generalisation narrowed something.' Once a large, expected, benign red is baked into the same suite for an unrelated reason (the default flip), that inference no longer holds, and the one signal the design relies on instead of testing the generalisation is exactly the signal it has degraded.
+
+Note the generalisation claim itself survives inspection — see the synthesis; this finding is about the gate, not the matcher set.
+
+Expected: sec-7 to separate the two classes — (i) the matcher-set generalisation, where unchanged-green is the proof, and (ii) the default-scope flip and the report-shape change, where specific existing assertions are knowingly rewritten, enumerated so a reviewer can tell an expected red from a real one. Observed: both collapsed into 'a compiler-checked rename'."""
+disposition = "upheld"
+response = """
+Upheld, and the enumeration checks out site by site.
+
+src/boot.rs:3904 asserts commands(&json).is_empty() against
+root.join(SETTINGS_REL) with the comment "no boot hook wired for Claude (ships
+via plugin)" — under this slice the Claude arm writes eleven entries to a
+different file, so the assertion inverts rather than renames. :4180 and :4216
+read root.join(SETTINGS_REL) and want SETTINGS_PROJECT_REL, not
+SETTINGS_LOCAL_REL, so a mechanical rename lands red with the wrong constant.
+Same class at :4250, :4755-4797, :4809 and :5523. Every out.hook assertion moves
+to out.hooks. "The test bodies change only in that identifier" was false.
+
+The diagnostic argument is the part worth conceding loudest. sec-7 gave the gate
+its meaning — "any red here means the generalisation narrowed something" — and
+then baked a large expected red into the same suite for an unrelated reason.
+That destroys the inference the design substituted for testing the
+generalisation.
+
+Remedy: sec-7 splits the gate in two. Class (i), preserved by construction: the
+merge core at N=1, the Codex arm, corpus.rs's spec shape — unchanged green is
+the proof, and any red there is a real narrowing. Class (ii), knowingly
+rewritten: the default-scope flip and the report-shape change, with the affected
+tests enumerated by name and line so a reviewer can tell an expected red from a
+real one.
+
+One thing the enumeration surfaced that the finding did not name, and that the
+remedy has to settle: install_baseref (src/boot.rs:1428) is a SETTINGS_REL
+consumer that is not a hook. Under the rename it keeps writing
+settings.local.json while eleven hook entries go to settings.json — so doctrine
+would author two Claude settings files per install, which contradicts sec-3's
+"doctrine writes exactly one of two files" and sits outside the sweep. Whether
+baseRef follows the scope dial is a ruling sec-3 owes and does not make. Carried
+to the human author with the related question F-3's remediation exposed."""
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Expected a failed sweep to be distinguishable from an empty one; observed plan_evict collapsing malformed-settings and nothing-to-evict onto the same silent NOTHING, on the one path DEC-164 exists to de-silence"
+detail = """
+sec-3's plan_evict (design.md lines 364-371) returns EvictPlan::NOTHING on three distinct conditions:
+
+  1. parse_settings returns None — the abandoned file is malformed JSON;
+  2. hook_array_mut returns None — hooks or hooks.<event> is present but wrongly typed (src/boot.rs:1127-1137 returns None precisely so a malformed-but-valid structure is never clobbered);
+  3. owned count is zero — the legitimate no-op.
+
+Cases 1 and 2 mean 'doctrine could not sweep and the stale entries are still there, still firing'. Case 3 means 'there was nothing to do'. They are the same value, and sec-3's reporting rider only fires 'when something was actually removed' (line 405), so all three print nothing.
+
+The asymmetry with the write path is the tell. plan_hook on malformed JSON returns PrintedFallback (src/boot.rs:1159-1168), which sec-2 deliberately upgrades so 'the manual-repair snippet a malformed settings file prints is complete rather than one sixth of the answer'. The draft invests in a good diagnostic for the file it is writing and none for the file it is abandoning — while sec-3's own framing (line 444) is that the sweep exists because doctrine can reach both files. The draft calls this 'same fail-soft' (line 366 comment); it is the same non-clobber, but not the same reporting.
+
+This lands on DEC-164's stated rationale rather than beside it. That decision rejected documenting R10 on three grounds, two of which are 'The failure is silent. A hook firing twice means memory-sync runs twice and boot emits twice — it presents as mild slowness and nothing else' and 'Nothing would report it. The leg that would have surfaced the stale entry went to IMP-407 with the doctor.' A silently-failed sweep reproduces exactly that state, engineered rather than documented, and IMP-407 is still not there to catch it.
+
+Concretely: a user with a hand-edited (and slightly broken) .claude/settings.local.json switches to project scope. Install writes eleven entries to settings.json, cannot parse the sibling, says nothing, and reports success. Every hook fires twice, permanently, and the mechanism built to prevent that reported no failure.
+
+Expected: a third EvictPlan state (or an outcome carrying the parse failure) surfaced in the installer output, on the model of PrintedFallback — at minimum one line naming the file it could not sweep. Observed: an unconditional silent no-op. Note this is fail-soft on a file being LEFT, which is a strictly weaker safety obligation than fail-soft on a file being written, and correspondingly a stronger reporting obligation.
+
+Never-clobber itself checks out on this path — see the synthesis."""
+disposition = "upheld"
+response = """
+Upheld. The three-conditions-onto-one-value reading is exact, and the asymmetry
+argument is the right frame.
+
+Verified in the incumbent code: hook_array_mut (src/boot.rs:1127-1137) returns
+None precisely so a wrongly-typed structure is never clobbered, and plan_hook
+turns the same two None cases into PrintedFallback (:1159-1168) — a diagnostic —
+while the drafted plan_evict turns them into EvictPlan::NOTHING, which the
+reporting rider suppresses because it fires only when a count is non-zero. The
+draft therefore invests in a complete manual-repair snippet for the file it
+writes and offers nothing for the file it abandons, having argued at sec-3 line
+444 that the sweep exists because doctrine can reach both files.
+
+The scenario given is reachable and is the exact state DEC-164 rejected
+documenting R10 over: hooks fire twice, it presents as mild slowness, and
+nothing reports it. IMP-407's doctor leg is not there to catch it.
+
+Remedy: eviction gets a three-valued outcome rather than a count —
+nothing / removed(n) / unreadable(path) — with unreadable raised on both None
+paths (unparseable JSON, wrongly-typed hooks or hooks.<event>). The shared
+reporting seam from F-2 prints a line naming the file it could not sweep,
+modelled on PrintedFallback. sec-7 gains a case for it beside
+plan_evict_is_fail_soft_on_malformed_json, which currently asserts only the
+non-clobber half and would have passed under the silent shape.
+
+Fail-soft on the file being left stays the correct safety posture; the finding's
+distinction between that and the reporting obligation is accepted as stated."""
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "Expected sec-4's deletion inventory to name everything the cut orphans; observed six items and four tests missing, which the workspace dead_code denial turns into a red gate rather than a leftover"
+detail = """
+sec-4 enumerates the removal set (design.md lines 515-537) and it is accurate as far as it goes — every named item is genuinely orphaned once the run() Claude branch steps 1 and 2 go. Verified with a positive control on each (callers grepped, not just absences).
+
+What it does not name, all in src/install.rs, all reachable ONLY from code sec-4 deletes:
+
+  - MarketplaceManifest (:672) and ManifestPlugin (:679) — the .claude-plugin/marketplace.json deserialization structs. Sole readers: select_plugin and select_marketplace_source.
+  - select_plugin (:687) — sole non-test caller is select_marketplace_source (:750), which sec-4 deletes.
+  - MARKETPLACE_MANIFEST_REL (:703) — the .claude-plugin/marketplace.json path constant, read only by the --dev precondition check.
+  - source_matches (:830) — sole caller is marketplace_action (:843), which sec-4 deletes.
+  - claude_list_has (:765) — sole non-test caller is claude_plugin_has (:779), which sec-4 deletes.
+
+And four more tests beyond the five sec-4 lists: select_plugin_picks_by_name_not_first (:3037), plugin_presence_is_exact_not_substring (:3059), marketplace_presence_is_exact_token (:3075), source_default_is_github_slug (:3084).
+
+This is not tidiness. The repo denies dead_code workspace-wide (mem_019e95ec587b71a2866e5fd97ffab45c; AGENTS.md 'lint as you go', just gate at zero warnings), so an implementer who works the inventory literally does not ship a stale helper — they ship a RED GATE, and then have to re-derive the orphan closure themselves at the point where the design was supposed to have done it. sec-4 is otherwise the section that does this work well, which is why the gap reads as an omission rather than a deferral.
+
+It also resolves the one item sec-4 leaves conditional. 'DOCTRINE_MARKETPLACE survives only if something still reads it; if not, it goes with the rest' (line 539) — after the cut its only readers are :457 (inside the deleted step 1), :699 (enable_key, deleted) and :751 (select_marketplace_source, deleted). So it goes. The condition is answerable now from the same closure and does not need to be carried into implementation.
+
+The draft is right about the other survivor: [install] repo has a live independent consumer at src/install.rs:423 feeding delegate_argv (:1989, called :2058) on the npx path, which OQ-2 left alone. Confirmed.
+
+Expected: the transitive orphan closure named, or an explicit statement that the implementer derives it and the gate enforces it. Observed: a partial list presented as complete, against a linter that makes completeness load-bearing."""
+disposition = "upheld"
+response = """
+Upheld. Every named orphan re-derived with a positive control on its callers.
+
+MarketplaceManifest (src/install.rs:672) and ManifestPlugin (:679) are read only
+at :743 and by select_plugin; select_plugin (:687) has one non-test caller at
+:750; MARKETPLACE_MANIFEST_REL (:703) is read only at :735 — all three sites sit
+inside select_marketplace_source's --dev precondition, which sec-4 deletes.
+source_matches (:830) has one caller, marketplace_action (:849). claude_list_has
+(:765) has one non-test caller, claude_plugin_has (:780). The four extra tests
+are at :3037, :3059, :3075 and :3084.
+
+The dead_code point lands: the inventory as written did not leave a stale helper
+behind, it left a red gate, with the orphan closure to be re-derived at exactly
+the moment the design was meant to have supplied it.
+
+DOCTRINE_MARKETPLACE is resolved rather than left conditional, and the finding's
+closure is confirmed: after the cut its only readers are :457 (run()'s deleted
+step 1), :699 (enable_key) and :751 (the --dev check). All three go, so the
+constant goes. sec-4's conditional sentence is replaced by the ruling.
+
+[install] repo's survival is confirmed independently: src/install.rs:423 feeds
+delegate_argv (:1989, called :2058) on the npx path, untouched by OQ-2.
+
+Remedy: sec-4's removal set is extended with the six items and the four tests,
+and the DOCTRINE_MARKETPLACE conditional is settled in the text."""
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "Expected the VH leg to name a durable evidence sink as sec-7 does for the VA leg; observed evidence that dies with the session on the one criterion the slice rests on"
+detail = """
+sec-7 is careful about this for the weaker leg and silent about it for the stronger one.
+
+For VA (SPEC-010 conformance) it says: 'The evidence must be re-derivable at audit, so it belongs in the reconciliation brief with file/line citations — not in a runtime artefact that disappears' (design.md lines 935-936). Correct, and exactly the right instinct.
+
+For VH it says only: 'Evidence to capture: the /hooks output showing all seven entries sourced from .claude/settings.json, plus one observed effect per event class — a session boot emitting, a WorktreeCreate fork, and a PreToolUse surfacing' (lines 918-920). It names WHAT to capture and never WHERE it lands.
+
+That omission is inverted relative to the stakes. sec-7 itself says of this leg: 'This is the claim the whole slice rests on and no test can make it: /hooks is the only surface reporting which hooks are live and which file each came from, and it is interactive-only.' A VH criterion over an interactive-only surface, with no named sink, produces evidence that exists in one agent session and nowhere an auditor can reach. mem_019fd1d862887d42b7a1f88c28fd28a7 records this failure mode directly: a VA/VH criterion over gitignored runtime state leaves no evidence an audit can re-derive.
+
+Note the interaction with the slice's own subject matter. /hooks reports live hooks; .claude/settings.json is tracked in this repo (.gitignore:4, per sec-6) but a scratch project's is not, and sec-7 specifies a scratch project with no plugin registration. So the artefact the evidence is about is, in the prescribed setting, itself untracked. Pasting the /hooks output into the reconciliation brief is a re-derivable transcription; leaving it in the session is not.
+
+Also note the count in the same sentence is wrong — see F-1. That is what an unsinked criterion costs twice: nobody can check it later, and nobody caught it now.
+
+Expected: the same sentence sec-7 already wrote for VA, applied to VH — the /hooks transcript and the three observed effects transcribed into the reconciliation brief (or another authored, committed artefact), with the scratch-project conditions stated so the run is reproducible. Observed: a capture list with no destination, on the slice's load-bearing gate."""
+disposition = "upheld"
+response = """
+Upheld. The inversion is real and the draft has no defence for it: sec-7 names a
+durable sink for the weaker leg (VA, "not in a runtime artefact that
+disappears") and names only a capture list for the leg it calls "the claim the
+whole slice rests on".
+
+mem.pattern doctrine records this failure mode directly
+(mem_019fd1d862887d42b7a1f88c28fd28a7): a criterion over gitignored runtime
+state leaves no evidence an audit can re-derive. The interaction the finding
+draws out is accepted too — the prescribed setting is a scratch project, whose
+.claude/settings.json is untracked, so the artefact the evidence is about does
+not survive either.
+
+The finding's closing observation is conceded as the sharper point: an unsinked
+criterion cost twice here, because the wrong count in the same sentence (F-1)
+survived precisely because nobody had to write the evidence down anywhere a
+second reader would meet it.
+
+Remedy: sec-7's VH leg gains the sentence its VA leg already has. The /hooks
+transcript and the three observed effects are transcribed into the
+reconciliation brief, with the scratch-project preconditions stated so the run
+is reproducible — no plugin registration, no marketplace entry, named scope,
+binary carrying the slice."""
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "minor"
+title = "Expected a mid-loop abort to report which specs landed; observed RefreshReport discarded on the error path, so a partial activation is announced only as a generic harness failure"
+detail = """
+sec-4's failure-isolation argument (design.md lines 502-508) is mostly sound and I checked it rather than assuming: wire does isolate one harness's failure (src/boot.rs:1951, and the wire_isolates_one_harness_failure test at :4803), the writes are atomic via fsutil::write_atomic (:1609), each spec is independently idempotent, and a re-run does complete the set. So the state is not silent — an error surfaces. The draft is right to prefer ? over swallowing.
+
+The gap is narrower. On abort at spec k, the ? propagates out of the loop, so the RefreshReport is never constructed and the hooks vector accumulated so far (design.md lines 461-466) is dropped with it. The operator learns that the Claude arm failed; they do not learn that five of eleven entries are live, nor which five. For most slices that is unremarkable. For this one, sec-4's own justification for ? is that the alternative 'would hide a half-activated install, which is the failure class this whole slice exists to stop being silent about' — and a half-activated install is precisely the state the abort leaves, unenumerated.
+
+The sweep sharpens it slightly. Because sec-3 folds write-then-evict into install_claude_hook, an abort at spec k leaves specs 1..k-1 written AND swept, and specs k..7 unwritten with their stale entries still in the abandoned file. So the intermediate state is genuinely mixed across both files, and the operator has no report of the boundary. sec-6 raises the stakes for one member of that set: an absent WorktreeCreate hook 'changes dispatch semantics without saying so'.
+
+Minor, not major: an error is printed, the remedy (re-run) is correct and unconditional, and no data is destroyed. Expected: either the partial hooks vector surfaced on the error path (anyhow context naming the spec that failed and the count written), or one sentence in sec-4 stating that the operator's only obligation on failure is to re-run and that enumeration is deliberately not offered. Observed: an argument that the shape is correct which does not address what the operator is told."""
+disposition = "upheld"
+response = """
+Upheld, and the finding's own concessions are accepted as correct — wire does
+isolate one harness's failure (src/boot.rs:1951, wire_isolates_one_harness_failure
+at :4803), writes are atomic, each spec is independently idempotent, and a re-run
+completes the set. The question mark is the right shape and stays.
+
+The gap is as narrowed: on abort at spec k the report is never constructed, so
+the accumulated outcomes are dropped and the operator learns the arm failed
+without learning how far it got. The sweep-folded-into-the-write factoring makes
+the intermediate state mixed across both files, and sec-6 raises the stakes for
+one member of the set — an absent WorktreeCreate hook changes dispatch semantics
+without saying so.
+
+Remedy: the loop's error is contextualised rather than the report reshaped. The
+question mark gains anyhow context naming the spec that failed and how many
+entries were written before it, so the operator's message carries the boundary.
+sec-4 states that the only obligation on failure is to re-run, and that the
+context line exists so the interim state is legible rather than guessed.
+
+Chosen over surfacing a partial report because a half-built RefreshReport would
+have to be interpretable by wire's success path, which buys a type for a
+condition whose remedy is unconditional."""
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "minor"
+title = "Expected the sticky key to bind as claude-settings-scope; observed rename_all shown only on the enum, so without a container-level rename the key is silently ignored and the default silently wins"
+detail = """
+sec-3 shows the TOML as [install] claude-settings-scope = "project" (design.md lines 283-288) and gives the derive list for the enum: #[derive(... Deserialize)] #[serde(rename_all = "kebab-case")] pub(crate) enum ClaudeSettingsScope (lines 294-303). On an enum, rename_all governs the VARIANT names — it makes the values project and local parse. It does nothing for the field name.
+
+The field lives on InstallConfig (src/install_config.rs:21), which carries only #[serde(default)] at the container level and no rename_all — it has never needed one, because its single existing field, repo, is one word. So a second field added as written deserializes from claude_settings_scope, not claude-settings-scope. The draft never shows InstallConfig's change, describing it only as 'a second field on a live table rather than a new config surface' (line 292).
+
+The failure mode is the one this slice is about. Neither InstallConfig nor DoctrineToml sets deny_unknown_fields (checked: absent from src/dtoml.rs, src/install_config.rs, src/dispatch_config.rs), and the container has #[serde(default)]. So claude-settings-scope = "local" in doctrine.toml is not an error and not a warning — it is discarded, the field falls to its Default of Project, and install writes the project file and then EVICTS the user's local entries under DEC-164. The user set local scope, got project scope, and had their local entries swept, with the installer's announcement line truthfully reporting a target they did not choose.
+
+Kept at minor because the precedent is unambiguous and an implementer following it lands correctly: DispatchConfig carries #[serde(rename_all = "kebab-case", default)] at the container (src/dispatch_config.rs:50-51), which is what makes [dispatch] preferred-subprocess-harness and claude-force-subprocess-dispatch bind — and DEC-163 names that table as the precedent it is riding. Note src/dispatch_config.rs:93 also shows the per-field alternative, #[serde(rename = "worker-forbidden-writes")].
+
+Expected: the container attribute stated where the key spelling is stated, since the draft chose to show derive lists at all, and a test asserting the KEY binds (not only that an absent key defaults). sec-7's absent_key_defaults_to_project_scope and scope_key_selects_the_settings_file both pass under the broken spelling if the second is written against the enum rather than against parsed TOML text. Observed: the one attribute that makes the documented spelling work is the one not shown."""
+disposition = "upheld"
+response = """
+Upheld, and it is a minor only by luck of precedent.
+
+Verified: InstallConfig (src/install_config.rs:19-21) carries #[serde(default)]
+alone, no container rename_all — it never needed one, its single field repo being
+one word. DispatchConfig (src/dispatch_config.rs:50-51) carries
+#[serde(rename_all = "kebab-case", default)], which is what makes
+preferred-subprocess-harness and claude-force-subprocess-dispatch bind, and the
+per-field alternative is visible at :93. Neither InstallConfig nor DoctrineToml
+sets deny_unknown_fields; confirmed absent from dtoml.rs, install_config.rs and
+dispatch_config.rs.
+
+So the drafted field would have bound from claude_settings_scope, and the
+documented spelling would have been discarded in silence — under
+#[serde(default)] it is neither an error nor a warning. The failure mode is the
+slice's own: the user sets local, gets project, has their local entries swept by
+DEC-164, and the announcement line truthfully reports a target they did not
+choose. Worth noting the eviction makes this strictly worse than an ordinary
+ignored key.
+
+Remedy: sec-3 shows InstallConfig's container attribute where it shows the key
+spelling, and sec-7 gains a test that parses the key from TOML text rather than
+constructing the enum — scope_key_selects_the_settings_file as drafted would
+have passed under the broken spelling if written against the enum, which is the
+finding's point and is accepted."""
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "minor"
+title = "Expected the stale-comment sweep sec-5 starts to cover the retirement's own casualties; observed one instance caught and three left, including a banner asserting install.rs still installs the plugin so hooks auto-load"
+detail = """
+sec-5 does this well once. On the gitignore leg it notes: 'ensure_gitignored's doc-comment still claims skills install reuses it — that claim is stale and should be corrected to name the manifest, or the comment will send the next reader looking for a call site that should not exist' (design.md lines 716-718). Exactly right, and exactly the reasoning that applies to three more sites this slice invalidates and the draft does not name.
+
+  1. src/install.rs:2296-2301 — an orphan banner reading 'Hooks plugin leg — install the doctrine Claude plugin as a skills-directory plugin so hooks (SessionStart / WorktreeCreate) auto-load without a marketplace install step. The per-skill symlinks are untouched; the plugin dir carries only the manifest + hooks.' There is no code under it — the next item is #[cfg(test)] mod tests_hymns. So it already misdescribes the file, and after this slice it asserts the precise opposite of the slice's name. It cost me a detour to confirm it was dead rather than a fourth activation channel the design had missed; the next reader pays that too, with more reason to believe it.
+
+  2. src/install_config.rs:2-8 — the module doc says the [install] table 'Parameterises the printed post-install delegation instructions: the git repo slug the Claude plugin marketplace (/plugin marketplace add <repo>) and the universal npx skills command ... resolve against.' sec-4 deletes the marketplace command, and sec-3 adds a field that is activation scope, not printed instructions. Both halves of the stated purpose go stale in the same slice. Mirrored at src/dtoml.rs:44-45, where the [install] field comment reads 'parameterises the printed post-install plugin / npx-skills instructions'.
+
+  3. src/boot.rs:1614-1616 — install_claude_hook's own doc-comment says it merges 'into .claude/settings.local.json'. That is the single sentence sec-3's scope dial most directly falsifies, in the function sec-3 rewrites. Adjacent and lower-stakes: HookSpec's doc (:960-964) and plan_hook's (:1147-1152) both describe a SessionStart hook, already loose today with create_fork on WorktreeCreate and wrong once five events ship.
+
+Minor severity — comments, and the design has demonstrably got the habit. Raised because the retirement is the event that invalidates them and this design is the artefact that knows it, and because mem_019fa3c8737f7812b59f86db053d456b is on point: fix the defect class, not the instance, and sweep for siblings before closing.
+
+Expected: sec-4 or sec-5 to name the doc sites the retirement falsifies alongside the ensure_gitignored one. Observed: one of four."""
+disposition = "upheld"
+response = """
+Upheld. All three sites read as described.
+
+src/install.rs:2296-2301 is a banner with no code under it — the next item is
+#[cfg(test)] mod tests_hymns — asserting that install.rs installs the doctrine
+plugin so hooks auto-load. It already misdescribes the file and after this slice
+it asserts the opposite of the slice's name. The detour cost is conceded: a
+reader has more reason to believe it after the retirement, not less.
+
+src/install_config.rs:2-8 describes the [install] table as parameterising the
+printed post-install delegation instructions — the marketplace half of which
+sec-4 deletes, while sec-3 adds a field that is activation scope, not printed
+instructions. Both halves go stale in one slice. Mirrored at src/dtoml.rs:44-45.
+
+src/boot.rs:1614-1616 says install_claude_hook merges into
+.claude/settings.local.json — the single sentence sec-3's scope dial most
+directly falsifies, in the function sec-3 rewrites. HookSpec's doc (:960-964) and
+plan_hook's (:1147-1152) both still say SessionStart, already loose with
+create_fork on WorktreeCreate and wrong once five events ship.
+
+The class framing is accepted: sec-5 got the habit right once and the design is
+the artefact that knows which claims the retirement invalidates.
+
+Remedy: sec-4 gains a doc-correction inventory naming all four sites — the
+ensure_gitignored one sec-5 already caught plus these three — with the adjacent
+HookSpec and plan_hook docs named as the lower-stakes pair."""
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "nit"
+title = "Expected sec-5's helper table citations to resolve; observed three of nine off, one by 1837 lines"
+detail = """
+sec-5's survived-the-deletion table (design.md lines 583-588) exists so an implementer can find each helper without re-deriving the recovery. Three entries send them to the wrong place:
+
+  - relative_path cited at :1844 — actually src/install.rs:1859.
+  - PluginAssets grouped under ':1670, :1731' — actually src/install.rs:22, the RustEmbed root at the top of the file, not in the 1670-1731 neighbourhood at all.
+  - select_for_install grouped under the same ':1670, :1731' — actually src/install.rs:2079.
+
+Correct as cited: install_base :1816, relative_target :1877, classify_link :1918, write_link :1964, Entry :1670, discover :1731. Related items grouped onto one line are fine where they are genuinely adjacent (Link :1892, ForeignReason :1883, foreign_reason :1981 under classify_link's :1918; staging_path :1954 under write_link's :1964) — that reads as deliberate grouping, not error.
+
+DEC-166's two line ranges, which the draft repeats at lines 603-604 and load-bears on for the byte-identical claim, are exact: the agents block is src/install.rs:2179-2191 and the workflows block is :2279-2291, and they are byte-identical. Confirmed by reading both.
+
+Nit. Expected: the two mis-cited helpers corrected and PluginAssets/select_for_install given their own line refs rather than inheriting a neighbouring pair. Observed: a table that is right about the claim it is making and wrong about three addresses."""
+disposition = "upheld"
+response = """
+Upheld. Re-derived: relative_path is at src/install.rs:1859, not :1844;
+PluginAssets is the RustEmbed root at :22, not in the 1670-1731 neighbourhood;
+select_for_install is at :2079. The six others are correct as cited —
+install_base :1816, relative_target :1877, classify_link :1918, write_link
+:1964, Entry :1670, discover :1731 — as are the grouped neighbours (Link :1892,
+ForeignReason :1883, foreign_reason :1981, staging_path :1954), which read as
+deliberate adjacency rather than error.
+
+DEC-166's two ranges are confirmed exact and byte-identical at :2179-2191 and
+:2279-2291, as the finding also found.
+
+Remedy: the three addresses are corrected and PluginAssets and select_for_install
+get their own line refs instead of inheriting a neighbouring pair."""
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "nit"
+title = "Expected sec-2's equivalence claim for is_doctrine_boot_command to hold on every input; observed it differs on non-space whitespace, though the conclusion to spare the predicate stands on its other stated ground"
+detail = '''
+sec-2 justifies sparing one of the five predicates: 'is_doctrine_boot_command is deliberately left alone. Its rsplit_once form is behaviourally equivalent on every input, but it carries a documented NOTE about what breaks if the command grows a second arg, and it guards a spec nothing ships' (design.md lines 240-244).
+
+The universal quantifier is false. The two forms diverge on whitespace that is not a space:
+
+  is_doctrine_boot_command (src/boot.rs:891-896) splits on the LAST whitespace character of any kind — cmd.trim().rsplit_once(char::is_whitespace).
+  is_doctrine_command (design.md lines 218-223) requires a literal single space — strip_suffix(args).and_then(|program| program.strip_suffix(' ')).
+
+So for the command /x/doctrine<TAB>boot the existing predicate returns true (rsplit_once yields ("/x/doctrine", "boot")) and the proposed helper returns false (strip_suffix("boot") leaves "/x/doctrine\t", and strip_suffix(' ') fails). Same for a newline separator. They agree on repeated spaces, because is_doctrine_program trim_end()s its argument (:903).
+
+Two reasons this stays a nit rather than becoming a finding of substance:
+
+  - Nothing ships as a consequence. The draft's decision is NOT to collapse this predicate, so the divergence is never realised in code. The claim is load-bearing only for the counterfactual.
+  - The decision is right on its other ground anyway. 'It guards a spec nothing ships' is sufficient on its own — HookSpec::boot keeps its expect(dead_code) per sec-4 and DEC-162 — and does not need the equivalence claim to stand.
+
+Worth recording because the narrower truth is the more useful one for a later reader: the tolerant rsplit_once form is not a stylistic variant of the suffix-strip form, it is strictly more permissive on separators, and the four predicates the draft DOES collapse are already the strict form today (e.g. is_doctrine_sync_command, :922). So the exception is not an inconsistency being tolerated — it is the one predicate whose semantics would actually change. That is a better argument than the one the draft makes, and it is available for free.
+
+Expected: 'behaviourally equivalent except on non-space whitespace separators', or drop the equivalence clause and lean on the dead-spec ground. Observed: an overclaim in the safe direction.'''
+disposition = "upheld"
+response = """
+Upheld, and the finding's replacement argument is better than the draft's, so it
+is taken rather than merely patched.
+
+Confirmed: is_doctrine_boot_command (src/boot.rs:891-896) splits on the last
+whitespace character of any kind via rsplit_once(char::is_whitespace), while the
+drafted is_doctrine_command requires a literal single space. They diverge on tab
+and newline separators — for a tab-separated command the incumbent returns true
+and the helper false. They agree on repeated spaces because is_doctrine_program
+trims (:903).
+
+Both reasons the finding gives for keeping this a nit hold: nothing ships as a
+consequence, because the draft's ruling is not to collapse the predicate; and
+the dead-spec ground is sufficient on its own, HookSpec::boot keeping its
+expect(dead_code) per sec-4 and DEC-162.
+
+Remedy: the equivalence clause is dropped, not qualified. sec-2 states the
+narrower and more useful truth instead — the tolerant rsplit_once form is
+strictly more permissive on separators than the suffix-strip form, and the four
+predicates the draft does collapse are already the strict form today
+(is_doctrine_sync_command at :922 among them). So the exception is the one
+predicate whose semantics would actually change, which is a reason rather than
+an exemption."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
