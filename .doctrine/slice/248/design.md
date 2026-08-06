@@ -1722,3 +1722,276 @@ reads the filesystem the capsule root is on rather than the repository's — a
 single test that runs only where the two differ, and reports skipped rather than
 passed where they do not.
 
+<!-- doctrine:section sec-6 -->
+## Crate topology, the export set, and layering enforcement
+
+`DEC-153` settles that this code lands in a second binary, `doctrine-control`,
+in the same workspace, with the split line at canonical mutation and nothing
+migrating out of the existing binary. `DEC-160` settles that two verbs hang off
+it, built but not released. This section builds the crate, classifies its
+modules under `ADR-001`, specifies what the root package must export for the new
+crate to reach the two pieces it needs, and rules on the enforcement gap that
+crossing opens.
+
+### Current behaviour
+
+```
+doctrine/                     # the workspace
+  Cargo.toml                  # [workspace] members = [".", "crates/cordage"]
+  src/main.rs                 # 94 `mod` declarations — the whole product
+  crates/cordage/             # a zero-dependency leaf crate; doctrine → cordage
+  tests/architecture_layering.rs
+  .doctrine/adr/001/layering.toml
+```
+
+Three facts about it decide most of this section.
+
+1. **The root package has no lib target.** `src/lib.rs` does not exist; the
+   package builds one binary from `src/main.rs`, which declares all 94 modules.
+   Nothing outside the package can reach any of them today.
+2. **`cordage` is the precedent, and it points the other way.** It is a
+   product-neutral leaf that `doctrine` depends on. `doctrine-control` is the
+   reverse direction — it needs two things the root package already has — so
+   `cordage` is a precedent for the workspace split and not for the dependency.
+3. **The layering gate walks one tree.** `discover_units` and `extract_edges`
+   (`tests/architecture_layering.rs:40,123`) are already parameterised by a
+   source directory, but the gate calls them on `Path::new("src")`
+   (`:1148`), and `check`'s module filter hardcodes the same path (`:558`).
+
+### The new crate
+
+```
+crates/doctrine-control/
+  Cargo.toml                  # depends on the doctrine lib target, path
+  src/main.rs                 # the two verbs
+  src/host.rs                 # HostFacts, SystemHost                    (sec-5)
+  src/config.rs               # CapsuleConfig, the [capsule] reader      (sec-5)
+  src/capacity.rs             # CapacityVerdict, assess_capacity         (sec-5)
+  src/backend.rs              # CapsuleBackend, CapsulePlacement,
+                              #   Execution, Observation, Termination,
+                              #   ForbiddenScopes                        (sec-2)
+  src/backend/bubblewrap.rs   # the Linux profile and its argv           (sec-2)
+  src/transaction.rs          # CapsuleTransaction, TransactionId,
+                              #   AcceptedBase, PhaseIdentity            (sec-3)
+  src/provision.rs            # provision, export publication, root
+                              #   ownership, rollback                    (sec-3)
+  src/conformance.rs          # the eight-property table                 (sec-7)
+```
+
+`ADR-001`'s rule applies inside the new crate exactly as it does inside the root
+package — tier is the highest altitude of any non-test file, and there are no
+cycles:
+
+| unit | tier | out-edges |
+|---|---|---|
+| `host` | leaf | none |
+| `config` | leaf | `host` |
+| `capacity` | leaf | `config`, `host` |
+| `backend` | leaf | `config` |
+| `transaction` | engine | `backend`, `config` |
+| `provision` | engine | `transaction`, `backend`, `capacity`, `config`, `host` |
+| `conformance` | engine | `provision`, `backend` |
+| `main` | command | all of the above |
+
+`backend` is leaf despite executing processes, because the tier rule classifies
+by what a unit imports and not by whether it is pure — `git` is leaf in the root
+package on the same reading. The pure/imperative split is a separate obligation,
+discharged inside each unit: `sec-3` names which of provisioning's thirteen
+steps are pure given `HostFacts`, and `sec-5` splits its reader into a pure
+parse and a host-reading resolution.
+
+**`src/worktree/` is absent from that table and stays absent.** `sec-2`
+invariant 10 asserts it, and this is where it is enforced: `doctrine-control`
+does not depend on the root package's worktree modules because the export set
+below does not carry them, and it cannot reach around the export set.
+
+### What the root package must export, and what that costs
+
+`doctrine-control` needs exactly two things from the root package:
+
+1. `git::read_path_at(root, refish, path)` (`src/git.rs:790`) — the
+   working-tree-free blob read `REQ-449`'s resolution runs on, verified this
+   session to be the whole impure surface that resolution needs;
+2. the `[interpretation]` policy module `sec-4` builds, which lives in the root
+   package rather than here because both binaries will need it at cutover.
+
+It also needs the project config file's location and a raw read of it, for
+`sec-5`'s `[capsule]` table.
+
+**A lib target on the root package, with a curated export list.**
+
+```rust
+// src/lib.rs — the entire public surface of the doctrine library.
+mod config_file;
+mod git;
+mod kinds;
+
+pub mod interpretation;
+
+pub use config_file::{DOCTRINE_TOML, read_doctrine_toml_text};
+pub use git::{CaptureError, read_path_at};
+```
+
+Four consequences, none of them free, all of them small:
+
+- **The exported items change visibility.** `read_path_at`, `CaptureError`,
+  `DOCTRINE_TOML` and `read_doctrine_toml_text` are `pub(crate)` today and
+  become `pub`. Nothing else does. This list *is* the export contract, and the
+  gate below asserts it.
+- **`main.rs` keeps its own module tree.** It continues to declare
+  `mod git;` rather than importing `doctrine::git`, so the modules the lib
+  target names compile twice. The alternative — making `main.rs` a thin binary
+  over the library — would require every `pub(crate)` item the command layer
+  reaches to become `pub` (110 in `git.rs` alone, 203 in `memory.rs`), which
+  publishes most of the product as library API to buy a build-time saving. The
+  double compilation is the cheaper of the two, and it is bounded by the module
+  list above.
+- **The set must be transitively closed over `crate::` paths, including test
+  code.** `git` is out-edge-free in the production graph, but its `#[cfg(test)]`
+  module imports `crate::kinds` (`src/git.rs:2896`), and the lib target compiles
+  that module under `cargo test`. `kinds` is therefore declared — privately, as
+  a path target rather than an export. This is the trap in the whole
+  arrangement: it is invisible to a production-graph reading and shows up as a
+  build failure the first time the library's own tests run.
+- **`dtoml` cannot be exported, and does not need to be.** It carries seventeen
+  `crate::` references — `conduct`, `verify`, `estimate`, `value`,
+  `dispatch_config`, `install_config` — because `DoctrineToml` projects each of
+  their tables, and `verify` reaches `coverage`, which is engine-tier. Declaring
+  it would pull the cascade into a library whose export set is meant to be leaf
+  only.
+
+**The config file's location and raw read move to their own leaf module.**
+`DOCTRINE_TOML` and `read_doctrine_toml_text` sit in `dtoml` today and are used
+35 times, so relocating them naively would touch 33 files. `src/config_file.rs`
+takes both, and `dtoml` re-exports them under their existing names:
+
+```rust
+// src/dtoml.rs
+pub(crate) use crate::config_file::{DOCTRINE_TOML, read_doctrine_toml_text};
+```
+
+Every existing `dtoml::DOCTRINE_TOML` call site is untouched, `STD-001`'s single
+source is preserved rather than duplicated, and the new module is out-edge-free
+so it can be exported. The split is also honest about what `dtoml` already is:
+its own documentation describes `read_doctrine_toml_text` as the shared file
+read used by consumers that project their own table out-of-band of
+`DoctrineToml` — two altitudes in one module, and only the lower one crosses
+the crate boundary.
+
+### `layering.toml`
+
+Four rows are added to the root package's map — `config_file = "leaf"` (out=0),
+and `interpretation = "leaf"` (out=0) from `sec-4` — plus one edge, `dtoml →
+config_file`, leaf to leaf. The new crate's eight units are recorded in their
+own section rather than merged into the root map, because unit names are only
+unique within a tree and merging them would make `config` ambiguous.
+
+### The enforcement gap, and the ruling
+
+Crossing a crate boundary steps outside what the existing gate can see, in two
+independent ways:
+
+1. **The second tree is never walked.** The gate runs on `src` alone, so
+   `doctrine-control`'s eight units are unclassified and its internal edges
+   unchecked.
+2. **A cross-crate import is not a `crate::` path.** `CratePathCollector`
+   (`tests/architecture_layering.rs:216`) accumulates the first component after
+   `crate`, so `doctrine::interpretation::parse` produces no edge at all. Even
+   walking both trees would leave every edge from `doctrine-control` into the
+   root package invisible.
+
+The two gaps take different answers, and the design's position is that
+generalising the extractor to cross crates is the wrong one.
+
+**For the cross-crate direction: assert the export list, not the edges.** The
+public surface of the root library is the only route from `doctrine-control`
+into the root package. Bounding that list bounds every cross-crate edge exactly,
+with no graph analysis at all:
+
+```rust
+/// The root library's entire public export set (STD-001).
+const EXPORTED: &[&str] = &[
+    "interpretation", "DOCTRINE_TOML", "read_doctrine_toml_text",
+    "read_path_at", "CaptureError",
+];
+```
+
+A test asserts that the public items reachable from `doctrine`'s crate root are
+exactly this set, and that every module contributing one is classified `leaf` in
+`layering.toml`. This is stronger than an edge check — an edge check would
+permit `doctrine-control` to reach any exported engine-tier item, and this
+refuses the export in the first place — and it doubles as protection against
+the published crate's API widening by accident. `interpretation` is exported as
+a whole module because it is purpose-built and out-edge-free; the other four are
+individual items behind private modules.
+
+**For the intra-crate direction: run the existing gate a second time.**
+`discover_units` and `extract_edges` already take a source directory. The one
+change is `check`'s module filter (`:558`), which builds its on-disk existence
+probe from a hardcoded `"src"` and must take the same directory as a parameter.
+The gate then runs twice — once per tree, each against its own `[tiers]`
+section — and `doctrine-control`'s eight units are enforced by the same
+machinery, at the cost of one parameter and one call.
+
+Naming this rather than letting it pass is `sec-1`'s obligation under
+`ADR-001` discharged: the design confronts the place the existing gate cannot
+see instead of inheriting an assertion that stopped being true when a second
+crate appeared.
+
+### The two verbs
+
+`DEC-160`: `doctrine-control` exposes `provision` and `backend verify`, built
+but not released.
+
+- **`provision`** consumes contract resolution, the refinement algebra,
+  capacity, layout and the backend — `sec-3`'s `provision` behind a CLI.
+  A transaction `show` verb is deliberately omitted: nothing operates a
+  transaction yet, and the tests inspect the returned value directly.
+- **`backend verify`** runs `sec-7`'s conformance suite for an on-host verdict,
+  exiting nonzero with structured output when the backend is not admitted. It
+  is also `POL-002` facet 3's descriptive absence path for bubblewrap: absent,
+  the verdict names what was missing and what would satisfy it, rather than the
+  suite skipping green.
+
+**Nothing ships.** The distribution contract — the nix `srcWithDist` graft, the
+binstall asset name, `install.sh`, `release.yml` — is a close-time Follow-Up for
+whichever slice first releases the binary, recorded as risk `R5` and not
+discharged here. The binary is reachable from the build tree only, which is what
+the scope means by tested machinery sitting beside the incumbent arms, unused.
+`POL-002` is why that Follow-Up is named rather than done: the four artefacts
+are this project's own release arrangement, and the platform does not acquire a
+release step because one of its slices produced a second binary.
+
+### Invariants
+
+1. **The export list is the whole crossing.** `doctrine-control` reaches the
+   root package through the items in `src/lib.rs` and through nothing else;
+   every one of them is leaf-tier.
+2. **Nothing migrates.** No existing verb, module or behaviour moves out of the
+   root binary. The only changes to existing code are four visibility
+   promotions, one module relocation behind re-exports, and one test parameter.
+3. **Both trees are gated.** Every unit in both source trees is classified in
+   `layering.toml` and checked by the same gate, and an unclassified unit fails
+   it.
+4. **`doctrine-control` is not mounted into a capsule.** `DEC-153` places it on
+   the control host only; `sec-2`'s readable set is declared configuration, and
+   nothing in this design adds the control binary to it.
+
+### Verification alignment
+
+- `the_root_library_exports_exactly_the_named_set`
+- `every_exported_item_belongs_to_a_leaf_tier_module`
+- `the_layering_gate_runs_over_both_source_trees`
+- `an_unclassified_unit_in_the_new_crate_fails_the_gate`
+- `a_command_tier_import_from_an_engine_unit_in_the_new_crate_fails_the_gate`
+- `doctrine_control_does_not_depend_on_the_worktree_modules` — asserted through
+  the export set, which carries no worktree surface at all
+- `the_existing_layering_gate_is_unchanged_in_verdict_over_the_root_tree` — the
+  behaviour-preservation obligation for a change to shared machinery: the
+  parameterisation must not move any existing classification
+
+The relocation of `DOCTRINE_TOML` and `read_doctrine_toml_text` is covered by
+the existing suites unchanged, which is the point of doing it behind
+re-exports: if any of the 35 call sites changes behaviour, tests that were
+written for something else fail.
+
