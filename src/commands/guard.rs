@@ -128,6 +128,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             ReviewCommand::Verify { .. } => Write("review verify"),
             ReviewCommand::Contest { .. } => Write("review contest"),
             ReviewCommand::Withdraw { .. } => Write("review withdraw"),
+            ReviewCommand::Conclude { .. } => Write("review conclude"),
             ReviewCommand::Unlock { .. } => Write("review unlock"),
             ReviewCommand::List { .. }
             | ReviewCommand::Show { .. }

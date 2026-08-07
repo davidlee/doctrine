@@ -219,6 +219,18 @@ fn tools() -> Vec<McpTool> {
             }),
         },
         McpTool {
+            name: "review_conclude".to_owned(),
+            description: "Declare the pass finished (the raiser's verb) — sets the concluded marker a design run's `Conducted` disposition is admissible over. Idempotent, no unset; open findings are fine (disposing them is the responder's work afterwards).\n\nReturns: {\"Concluded\": { review_id: int, already: bool }} — `already` is true when the pass was concluded before this call.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "reference": { "type": "string", "description": "Review reference: RV-007 or the bare id 7" },
+                    "as": { "type": "string", "description": "Cooperative role assertion (default: raiser)" }
+                },
+                "required": ["reference"]
+            }),
+        },
+        McpTool {
             name: "review_status".to_owned(),
             description: "Report a review's derived state and rebuild its baton (cache == recompute).\n\nReturns: {\"Status\": { canonical: \"RV-NNN\", status: \"active\"|\"done\", awaiting: \"raiser\"|\"responder\"|\"none\", findings_count: int, rounds: int, cache_primed: bool, stale_paths: [string] }} — `rounds` counts all finding-state transitions (raise, dispose, verify, contest, withdraw); `cache_primed` is the prime-cache freshness signal, never a gate; `stale_paths` lists paths whose git-sha diverged since prime.".to_owned(),
             input_schema: json!({
@@ -746,6 +758,18 @@ fn call_tool(
                 Some(root.to_path_buf()),
                 &fields.str_field("reference"),
                 &fields.str_field("finding"),
+                role,
+            )?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        "review_conclude" => {
+            let fields = ExtractFields::from_value(arguments, &["reference"]);
+            let role_str = fields.opt_str_field("as");
+            let role = review::parse_role(role_str.as_deref(), review::Role::Raiser)
+                .context("invalid role")?;
+            let out = review::run_conclude(
+                Some(root.to_path_buf()),
+                &fields.str_field("reference"),
                 role,
             )?;
             Ok(serde_json::to_string(&out)?)
@@ -1629,13 +1653,13 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
             review::ReviewError::RoleMismatch {
                 expected,
                 actual,
-                verb,
+                act,
             } => JsonRpcResponse::error(
                 id,
                 -32602,
                 format!(
                     "Role mismatch: {} is the {}'s verb, not the {}'s",
-                    verb.as_str(),
+                    act.as_str(),
                     expected.as_str(),
                     actual.as_str()
                 ),
@@ -1643,7 +1667,7 @@ fn map_review_error(id: Option<Id>, err: &anyhow::Error) -> JsonRpcResponse {
                     "code": "ROLE_MISMATCH",
                     "expected": expected.as_str(),
                     "actual": actual.as_str(),
-                    "verb": verb.as_str()
+                    "verb": act.as_str()
                 })),
             ),
             review::ReviewError::StateMismatch {
@@ -1727,6 +1751,7 @@ When MCP tools are available, use these tools instead of CLI commands:
 | `doctrine review verify` | `review_verify` | |
 | `doctrine review contest` | `review_contest` | |
 | `doctrine review withdraw` | `review_withdraw` | |
+| `doctrine review conclude` | `review_conclude` | ends the pass; `Conducted` needs it |
 | `doctrine review status` | `review_status` | |
 | `doctrine review prime` | `review_prime` | |
 | `doctrine memory search` | `memory_search` | |
@@ -1815,9 +1840,9 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_29_tools() {
+    fn tool_list_has_30_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 29);
+        assert_eq!(list.tools.len(), 30);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -1850,6 +1875,7 @@ mod tests {
         assert!(names.contains(&"review_verify"));
         assert!(names.contains(&"review_contest"));
         assert!(names.contains(&"review_withdraw"));
+        assert!(names.contains(&"review_conclude"));
         assert!(names.contains(&"review_status"));
         assert!(names.contains(&"review_prime"));
         assert!(names.contains(&"memory_search"));
@@ -2121,7 +2147,7 @@ mod tests {
         let err = ReviewError::RoleMismatch {
             expected: crate::review::Role::Raiser,
             actual: crate::review::Role::Responder,
-            verb: crate::review::Verb::Dispose,
+            act: crate::review::Verb::Dispose.into(),
         };
         let e = anyhow::anyhow!(err);
         let resp = map_review_error(Some(Id::Number(1)), &e);
@@ -2228,7 +2254,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 29);
+        assert_eq!(tools.len(), 30);
     }
 
     #[test]

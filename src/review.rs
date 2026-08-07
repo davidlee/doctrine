@@ -215,6 +215,23 @@ pub(crate) enum ReviewCommand {
         path: Option<PathBuf>,
     },
 
+    /// Declare the pass finished (the raiser's verb) — sets the concluded marker
+    /// a design run's `Conducted` disposition is admissible over. Idempotent, and
+    /// there is no unset. Open findings are fine: disposing them is the
+    /// responder's work afterwards.
+    Conclude {
+        /// Review reference — `RV-007` or the bare id `7`.
+        reference: String,
+
+        /// Cooperative role assertion (default: raiser).
+        #[arg(long = "as")]
+        role: Option<String>,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Report a review's derived state and rebuild its baton (cache == recompute).
     Status {
         /// Review reference — `RV-007` or the bare id `7`.
@@ -397,6 +414,18 @@ pub(crate) fn dispatch(cmd: ReviewCommand, color: bool) -> anyhow::Result<()> {
             use std::io::Write;
             let role = parse_role(role.as_deref(), Role::Raiser)?;
             let out = run_withdraw(path, &reference, &finding, role)?;
+            let rendered = print_review(&out);
+            write!(std::io::stdout(), "{rendered}")?;
+            Ok(())
+        }
+        ReviewCommand::Conclude {
+            reference,
+            role,
+            path,
+        } => {
+            use std::io::Write;
+            let role = parse_role(role.as_deref(), Role::Raiser)?;
+            let out = run_conclude(path, &reference, role)?;
             let rendered = print_review(&out);
             write!(std::io::stdout(), "{rendered}")?;
             Ok(())
@@ -692,6 +721,57 @@ impl Verb {
     }
 }
 
+/// What one turn asserts — a finding transition, or the pass-level conclude.
+///
+/// [`Verb`] stays the **finding-transition** vocabulary: `can`, `required_for` and
+/// `gate` are all keyed on a [`FindingStatus`], and concluding has no finding, so
+/// a sixth `Verb` variant would force answers into that table that do not exist
+/// (there is no status a conclude requires). Splitting here instead keeps the
+/// transition table meaning what it says.
+///
+/// [`with_turn`] needs exactly two things from a turn — the role it statically
+/// requires, and whether it is a contest, for the baton's counter. Both live here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TurnAct {
+    /// One of the five finding transitions.
+    Finding(Verb),
+    /// The raiser declares the pass finished (SL-244 `sec-4`, IMP-392).
+    Conclude,
+}
+
+impl TurnAct {
+    /// The role this act statically requires. Concluding is the raiser's — it is
+    /// the reviewer saying *I have finished reading*, which is exactly the claim
+    /// the design run's `Conducted` arm repeats one layer out — and deliberately
+    /// not `dispose`'s, which is per-finding and the responder's.
+    const fn required_role(self) -> Role {
+        match self {
+            Self::Finding(verb) => verb.required_role(),
+            Self::Conclude => Role::Raiser,
+        }
+    }
+
+    /// Whether this turn is a contest, for the baton's observability counter.
+    const fn is_contest(self) -> bool {
+        matches!(self, Self::Finding(Verb::Contest))
+    }
+
+    /// The verb name a refusal reports. A conclude has no [`Verb`], so the
+    /// role-mismatch refusal needs its own label rather than a borrowed one.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Finding(verb) => verb.as_str(),
+            Self::Conclude => "conclude",
+        }
+    }
+}
+
+impl From<Verb> for TurnAct {
+    fn from(verb: Verb) -> Self {
+        Self::Finding(verb)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Transition predicate (design §5, D-C4/D-C5)
 // ---------------------------------------------------------------------------
@@ -769,6 +849,13 @@ pub(crate) enum ReviewOutput {
     Withdrawn {
         finding_id: String,
         review_id: u32,
+    },
+    /// The pass-level conclude (IMP-392). `already` distinguishes the call that
+    /// set the latch from the one that found it set — both succeed, and a caller
+    /// who cannot know which it made deserves to be told.
+    Concluded {
+        review_id: u32,
+        already: bool,
     },
     Showed {
         id: u32,
@@ -876,6 +963,10 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
                 canonical_id(*review_id)
             )
         }
+        ReviewOutput::Concluded { review_id, already } => {
+            let tail = if *already { " (already concluded)" } else { "" };
+            format!("Concluded the pass on {}{tail}\n", canonical_id(*review_id))
+        }
         ReviewOutput::Showed { formatted, .. }
         | ReviewOutput::Listed { formatted, .. }
         | ReviewOutput::Status { formatted, .. } => formatted.clone(),
@@ -912,7 +1003,10 @@ pub(crate) enum ReviewError {
     RoleMismatch {
         expected: Role,
         actual: Role,
-        verb: Verb,
+        /// The act refused. A [`TurnAct`] rather than a [`Verb`] because the
+        /// pass-level `conclude` takes the same static role check and has no
+        /// `Verb` to name itself with.
+        act: TurnAct,
     },
     StateMismatch {
         finding: String,
@@ -940,12 +1034,12 @@ impl fmt::Display for ReviewError {
             Self::RoleMismatch {
                 expected,
                 actual,
-                verb,
+                act,
             } => {
                 write!(
                     f,
                     "`{}` is the {}'s verb; --as {} cannot assert it",
-                    verb.as_str(),
+                    act.as_str(),
                     expected.as_str(),
                     actual.as_str()
                 )
@@ -1155,12 +1249,30 @@ struct Target {
     phase: Option<String>,
 }
 
-/// The `[review]` metadata table (design §5): the facet and the two role labels.
+/// The `[review]` metadata table (design §5): the facet, the two role labels, and
+/// the concluded-pass marker.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 struct ReviewMeta {
     facet: String,
     raiser: String,
     responder: String,
+    /// Whether the raiser has declared this pass finished (SL-244 `sec-4`,
+    /// IMP-392). Written only by [`run_conclude`]; never a function of the
+    /// findings.
+    ///
+    /// **This is not the `status` the file's own header forbids.** A review's
+    /// status is derived from its findings (ADR-007 D-C8) and so is never stored;
+    /// a pass *concluding* is an event, and it is not derivable — a clean pass and
+    /// a pass never run present the same findings, the same derived status and the
+    /// same `await`. Storing what cannot be derived is the storage rule holding,
+    /// not bending.
+    ///
+    /// **Absence is not-concluded.** There is no third state and no migration:
+    /// every ledger minted before this key existed reads unconcluded, which is the
+    /// right answer for a pass nobody closed and the conservative one for a pass
+    /// somebody did.
+    #[serde(default)]
+    concluded: bool,
 }
 
 /// Render `review-NNN.toml` from the embedded template (design §4). Every
@@ -1259,6 +1371,9 @@ impl ReviewDraft {
                     .responder
                     .clone()
                     .unwrap_or_else(|| "responder".to_owned()),
+                // A pass is unconcluded until its raiser says otherwise, and the
+                // renderer emits no key for it — absence carries the same answer.
+                concluded: false,
             },
             target: Target {
                 reference: args.target.clone(),
@@ -1673,14 +1788,14 @@ fn outstanding_by_severity(doc: &ReviewDoc) -> OutstandingCounts {
 /// [`unresolved_blockers_for`]'s does.
 #[derive(Debug)]
 pub(crate) struct PassFacts {
-    /// Whether the ledger carries the concluded-pass marker.
+    /// Whether the ledger carries the concluded-pass marker
+    /// ([`ReviewMeta::concluded`], set by [`run_conclude`]).
     ///
-    /// **Always `false` today, and the read is still correct.** No verb sets the
-    /// marker and no field holds it — it lands with `IMP-392` — so no ledger
-    /// carries one, and "does this ledger carry it" is honestly answered `false`
-    /// for every ledger. The design accepts this interim in as many words: the
-    /// `Conducted` arm is the one that waits, and `Waived` is the deliberately
-    /// available exit meanwhile.
+    /// Absence reads `false`, which is the honest answer for a pass nobody closed
+    /// and the conservative one for a pass somebody did — every ledger minted
+    /// before the marker existed reads unconcluded, and no migration says
+    /// otherwise. This is what makes a design run's `Conducted` disposition
+    /// admissible; `Waived` reads none of it.
     pub(crate) concluded: bool,
     /// The findings holding the run's `reviewing → locked` edge, by `F-n` id.
     pub(crate) undisposed_blockers: Vec<String>,
@@ -1710,7 +1825,7 @@ pub(crate) fn read_pass_facts(root: &Path, reference: &str) -> anyhow::Result<Pa
     let doc = read_review(&root.join(REVIEW_DIR), id)
         .with_context(|| format!("read the review pass `{reference}`"))?;
     Ok(PassFacts {
-        concluded: false,
+        concluded: doc.review.concluded,
         undisposed_blockers: undisposed_blockers(&doc),
         outstanding: outstanding_by_severity(&doc),
     })
@@ -2274,18 +2389,18 @@ type MidTurnHook<'a> = &'a dyn Fn();
 /// 6. recompute `await` + the new hash from the written ledger.
 /// 7. BATON LAST: `write_atomic` the baton.
 /// 8. release the lock (`LockGuard` drop).
-fn with_turn<F, T>(root: &Path, id: u32, verb: Verb, role: Role, f: F) -> anyhow::Result<T>
+fn with_turn<F, T>(root: &Path, id: u32, act: TurnAct, role: Role, f: F) -> anyhow::Result<T>
 where
     F: FnOnce(&mut toml_edit::DocumentMut, &[FindingRow]) -> anyhow::Result<T>,
 {
-    with_turn_hooked(root, id, verb, role, &|| {}, f)
+    with_turn_hooked(root, id, act, role, &|| {}, f)
 }
 
 /// `with_turn` with an injectable mid-turn hook (the pre-write CAS test seam).
 fn with_turn_hooked<F, T>(
     root: &Path,
     id: u32,
-    verb: Verb,
+    act: TurnAct,
     role: Role,
     mid_turn: MidTurnHook<'_>,
     f: F,
@@ -2320,11 +2435,11 @@ where
     }
 
     // 4. STATIC role check (D-C4) — the half the wrapper owns.
-    if role != verb.required_role() {
+    if role != act.required_role() {
         return Err(ReviewError::RoleMismatch {
-            expected: verb.required_role(),
+            expected: act.required_role(),
             actual: role,
-            verb,
+            act,
         }
         .into());
     }
@@ -2361,7 +2476,7 @@ where
 
     // 7. BATON LAST — preserve the observability counters across the turn.
     let prior = read_baton(root, id)?.unwrap_or_default();
-    let contests = prior.contests + u32::from(verb == Verb::Contest);
+    let contests = prior.contests + u32::from(act.is_contest());
     let baton = Baton {
         awaiting,
         authored_hash: hash,
@@ -2491,13 +2606,13 @@ pub(crate) fn run_raise(
 ) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
-    let new_id = with_turn(&root, id, Verb::Raise, role, |doc, existing| {
+    let new_id = with_turn(&root, id, Verb::Raise.into(), role, |doc, existing| {
         // Per-finding gate: `raise` targets a fresh (None) finding (design §5).
         if !can(Verb::Raise, None, role) {
             return Err(ReviewError::RoleMismatch {
                 expected: Verb::Raise.required_role(),
                 actual: role,
-                verb: Verb::Raise,
+                act: Verb::Raise.into(),
             }
             .into());
         }
@@ -2534,7 +2649,7 @@ pub(crate) fn run_dispose(
 ) -> anyhow::Result<ReviewOutput> {
     let root = resolve_review_root(path)?;
     let id = parse_ref(&args.reference)?;
-    with_turn(&root, id, Verb::Dispose, role, |doc, existing| {
+    with_turn(&root, id, Verb::Dispose.into(), role, |doc, existing| {
         let from = finding_status_of(existing, &args.finding)?;
         gate(Verb::Dispose, from, role, &args.finding)?;
         let table = finding_table_mut(doc, &args.finding)?;
@@ -2631,6 +2746,51 @@ pub(crate) fn run_withdraw(
     })
 }
 
+/// `doctrine review conclude <RV-NNN> [--as raiser]` — the raiser declares the
+/// pass finished, setting the concluded marker (SL-244 `sec-4`, IMP-392).
+///
+/// The marker is what a design run's `Conducted` disposition is admissible over,
+/// and it is deliberately **not** a function of the finding set: a clean pass and
+/// a pass never run present identical findings, so nothing derivable can tell
+/// them apart. Hence a verb of its own — no existing one could set it as a side
+/// effect without acquiring a second meaning, and `dispose` least of all, being
+/// per-finding and the responder's.
+///
+/// Rides [`with_turn`] like every mutating verb, so the per-review lock and both
+/// CAS windows apply unchanged. **Open findings are fine**: disposing them is the
+/// responder's work afterwards, and requiring a clean ledger would make this a
+/// second, stricter spelling of the gate it feeds.
+///
+/// Idempotent, and there is no unset — a pass that concluded happened. A run that
+/// wants another pass gets a new `RV`.
+pub(crate) fn run_conclude(
+    path: Option<PathBuf>,
+    reference: &str,
+    role: Role,
+) -> anyhow::Result<ReviewOutput> {
+    let root = resolve_review_root(path)?;
+    let id = parse_ref(reference)?;
+    // The latch is written unconditionally: re-writing `true` costs an identical
+    // byte sequence, where reading it before the turn would race the lock this
+    // turn exists to hold.
+    let already = with_turn(&root, id, TurnAct::Conclude, role, |doc, _findings| {
+        let meta = doc
+            .get_mut("review")
+            .and_then(toml_edit::Item::as_table_mut)
+            .ok_or_else(|| anyhow::anyhow!("ledger has no `[review]` table"))?;
+        let already = meta
+            .get("concluded")
+            .and_then(toml_edit::Item::as_bool)
+            .unwrap_or(false);
+        meta["concluded"] = toml_edit::value(true);
+        Ok(already)
+    })?;
+    Ok(ReviewOutput::Concluded {
+        review_id: id,
+        already,
+    })
+}
+
 /// The shared shell for the three raiser status-only transitions
 /// (verify/contest/withdraw): gate per-finding, apply the status, and route an
 /// optional `--note` to the baton's ephemeral handoff log (D10). Disposition /
@@ -2644,7 +2804,7 @@ fn run_raiser_transition(
     note: Option<&str>,
     role: Role,
 ) -> anyhow::Result<()> {
-    with_turn(root, id, verb, role, |doc, existing| {
+    with_turn(root, id, verb.into(), role, |doc, existing| {
         let from = finding_status_of(existing, finding)?;
         gate(verb, from, role, finding)?;
         let table = finding_table_mut(doc, finding)?;
@@ -2969,8 +3129,16 @@ pub(crate) fn run_status(path: Option<PathBuf>, reference: &str) -> anyhow::Resu
     };
     write_baton(&root, id, &rebuilt)?;
 
+    // The marker rides the status line only when set: silence is the far commoner
+    // state, and a `concluded=no` on every unconcluded pass would be noise on the
+    // line a reader scans for the derived state.
+    let concluded = if doc.review.concluded {
+        " · concluded"
+    } else {
+        ""
+    };
     let mut formatted = format!(
-        "{} — {} · await={} · findings {} · rounds {}\n",
+        "{} — {} · await={} · findings {} · rounds {}{concluded}\n",
         canonical_id(id),
         status.as_str(),
         awaited.as_str(),
@@ -3372,6 +3540,7 @@ mod tests {
             facet: facet.to_owned(),
             raiser: "rev".to_owned(),
             responder: "auth".to_owned(),
+            concluded: false,
         }
     }
 
@@ -4057,7 +4226,7 @@ mod tests {
         let err = with_turn_hooked(
             root,
             1,
-            Verb::Dispose,
+            Verb::Dispose.into(),
             Role::Responder,
             &hook,
             |doc, existing| {
@@ -4658,7 +4827,8 @@ mod tests {
         assert!(clean.undisposed_blockers.is_empty());
         assert!(
             !clean.concluded,
-            "no verb sets the concluded marker until IMP-392, so no ledger carries one"
+            "a ledger nobody concluded reads unconcluded — absence is the answer, \
+             not a missing feature (the marker landed with IMP-392's carve)"
         );
 
         // And a readable ledger holding a live blocker carries it by F-n id.
@@ -4671,6 +4841,86 @@ mod tests {
         assert_eq!(
             observe_pass(root, "RV-001").unwrap().undisposed_blockers,
             vec!["F-1".to_owned()]
+        );
+    }
+
+    // ---- IMP-392: the concluded-pass marker (SL-244 `sec-4`) ----
+
+    /// The marker is a **latch**: absent means not-concluded, `conclude` sets it,
+    /// and concluding again is a no-op success rather than a refusal.
+    ///
+    /// Both halves are asserted here because the failure mode is asymmetric — a
+    /// verb that refuses the second call looks correct in the happy path and
+    /// breaks exactly the caller who cannot know whether a pass was already
+    /// closed, which is the caller the latch exists for.
+    #[test]
+    fn conclude_latches_the_marker_and_is_idempotent() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+
+        assert!(
+            !observe_pass(root, "RV-001").unwrap().concluded,
+            "absence is not-concluded — a fresh ledger carries no marker"
+        );
+
+        let first = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+        assert!(
+            matches!(first, ReviewOutput::Concluded { already: false, .. }),
+            "the first conclude sets the latch: {first:?}"
+        );
+        assert!(observe_pass(root, "RV-001").unwrap().concluded);
+
+        let second = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+        assert!(
+            matches!(second, ReviewOutput::Concluded { already: true, .. }),
+            "concluding a concluded pass is a no-op, not a refusal: {second:?}"
+        );
+        assert!(
+            observe_pass(root, "RV-001").unwrap().concluded,
+            "and the latch stays set — there is no unset"
+        );
+    }
+
+    /// Concluding is the **raiser's** act — *I have finished reading* — on the
+    /// same authority axis that separates `raise`/`verify`/`withdraw` from the
+    /// responder's `dispose` (SL-244 `sec-4`).
+    #[test]
+    fn conclude_is_the_raisers_verb() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+
+        let err = run_conclude(Some(root.to_path_buf()), "RV-001", Role::Responder)
+            .expect_err("the responder cannot conclude the raiser's pass");
+        assert!(
+            err.to_string().contains("raiser"),
+            "the refusal names the required role: {err}"
+        );
+        assert!(!observe_pass(root, "RV-001").unwrap().concluded);
+    }
+
+    /// **Open findings are allowed, and this is the normal case.** A pass that
+    /// found things concludes with them outstanding; disposing them is the
+    /// responder's work afterwards. Requiring a clean ledger would make the
+    /// marker a second, stricter spelling of the gate it feeds.
+    #[test]
+    fn conclude_leaves_open_findings_alone() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        run_raise(
+            Some(root.to_path_buf()),
+            &raise_args("RV-001", Severity::Blocker, "must fix"),
+            Role::Raiser,
+        )
+        .unwrap();
+
+        run_conclude(Some(root.to_path_buf()), "RV-001", Role::Raiser).unwrap();
+
+        let facts = observe_pass(root, "RV-001").unwrap();
+        assert!(facts.concluded, "a live blocker does not block concluding");
+        assert_eq!(
+            facts.undisposed_blockers,
+            vec!["F-1".to_owned()],
+            "and the finding is untouched by the pass-level act"
         );
     }
 
@@ -5194,7 +5444,7 @@ mod tests {
         let err = ReviewError::RoleMismatch {
             expected: Role::Raiser,
             actual: Role::Responder,
-            verb: Verb::Raise,
+            act: Verb::Raise.into(),
         };
         let anyhow_err: anyhow::Error = err.into();
         let downcast = anyhow_err
@@ -5204,11 +5454,11 @@ mod tests {
             ReviewError::RoleMismatch {
                 expected,
                 actual,
-                verb,
+                act,
             } => {
                 assert_eq!(*expected, Role::Raiser);
                 assert_eq!(*actual, Role::Responder);
-                assert_eq!(*verb, Verb::Raise);
+                assert_eq!(*act, TurnAct::Finding(Verb::Raise));
             }
             _ => panic!("wrong variant: {downcast:?}"),
         }
