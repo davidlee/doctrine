@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd994-b9f9-7e00-be39-9a3295a4492a"
+recorded_at = "2026-08-07T00:17:10.64993735Z"
+kind = "friction"
+summary = "pi-research hygiene sweep: 1 of 5 claims survived verification, and verifying cost more than the finding was worth"
+detail = "SL-249 design run, reviewing stage. Ran ./scripts/pi-research --think high over design.md for consistency/hygiene residue after RV-349 closed. It returned five findings. One was real and became RV-349 F-24 ('skip_serializing_if is total over Declaration' is false — 14 of 16 fields; subject is mandatory, resolved_record is #[serde(skip)]). The other four did not survive: (1) a table of 'five stale line numbers the design cites' — the design contains exactly two file:line citations, both correct; the five live in DEC-177/DEC-178, and under those records' convention of anchoring at the item's doc-comment start three of the five are correct as written; (2) the brief's HIGHEST-VALUE finding, a claimed scope-card contradiction between a 'blanket ban' and the allowlist — the card says 'NEAR-blanket ban' and the following sentences are what the 'near' refers to; the brief also quoted the card as saying 'all 32 occurrences are kind-derived and none independent' when it says '31 are kind-derived and one is not'; (3) 'two nearly identical parentheticals' in the card — there are three, all distinct; (4) run.rs:1323 reported as actually 1322 — 1323 is correct. The brief was well-structured, carried a Limits section, and its verified-correct work was substantial (every durable id resolved, every count recounted correctly, no contradictions) — which is exactly what made the four false claims expensive: they were phrased with the same specificity as the true ones, including a fabricated quotation, so each needed an independent check before it could be dismissed. Cost: ~9 min wall clock for the sweep, then roughly as much orchestrator context spent falsifying it as the one real finding was worth. The lesson is not don't use the researcher; it is that a research brief's claims are raw material for verification and must not be relayed or acted on unchecked, and that a prompt asking for evidence a reader can re-derive does not make the evidence real."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
