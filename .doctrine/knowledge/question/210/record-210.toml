@@ -1,0 +1,46 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 210
+slug = "can-a-large-design-maintain-parallel-enumerations-without-a-machine-guard"
+title = "Can a large design maintain parallel enumerations without a machine guard?"
+record_kind = "question"
+status = "open"
+created = "2026-08-07"
+updated = "2026-08-07"
+tags = ["design", "authoring", "drift", "enumerations"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = "Can a design document that carries the same enumeration in several places keep them consistent without a machine guard, or is the honest ruling that it cannot and should say so?"
+why_matters = "SL-248's single-source rule for the count fixed the numeral and nothing else; a sweep before RV-346 round 6 found ten defects, eight of that class, two inside the section documenting the original finding. The design's own proposed guard is a test that does not exist yet, so it protects the implementation and never the design."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "commits 48bc59a44, 9ffe8a1d6, b504edc95 — the ten defects and their fixes",
+  "RV-346 F-28 (round 4) raised the class; round 5 reproduced it eight times",
+]
+contradicts = []
+notes = [
+  "Put to the external reviewer as RV-346 round 6 line 6; that ruling settles SL-248, not the general case.",
+  "Three of the ten were found by cheap scout agents and one by executing a probe; none by re-reading — sec-9 R3's claim about property suites appears to hold for the document's bookkeeping too.",
+  "If the answer is a lint over authored prose, it is doctrine-general work for backlog new, not SL-248 scope.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the design whose parallel enumerations keep drifting"
+target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "raised as F-28, reproduced eight times in round 5, put to round 6 as line 6"
+target = "RV-346"
