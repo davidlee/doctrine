@@ -368,7 +368,7 @@ The date edge is real and the fix removes it rather than declaring it. sec-7's v
 
 [[finding]]
 id = "F-30"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Arbitrary parent stdin crosses execute outside the descriptor property"
 detail = "Expected: every authority channel into a capsule is explicit and rowed, and descriptor closure leaves only standard streams the contract deliberately owns. Observed: `Execution` at design.md:292-305 has no stdin policy, invariant 12 marks only descriptors above 2, and table A row 10 at :2986 likewise ignores fd 0. An inherited stdin may be a credential file, pipe, terminal, or bidirectional socket, yet all eleven rows can pass. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/stdin-channel` runs the bubblewrap-shaped profile twice. With parent stdin piped, the capsule read all 22 decoy bytes; with stdin replaced by null, it read 0. Both executions succeeded, so this is the subject boundary rather than the reviewer cage. Fix: make stdio part of `Execution` and the channel ledger; default stdin to a trusted null/closed source or a typed owned input, create fresh one-way parent-owned capture for stdout/stderr, and add a control whose only delta inherits decoy stdin. Row 10 over fd >2 cannot discharge this exception."
@@ -480,6 +480,29 @@ Repaired rather than removed, because the underlying claims are true and the evi
 - the warning about the worktree arm being default-open now cites the fail-closed note at jail.rs:301-303, plus jail.rs:311 and jail.rs:324 (`network: true` in the Default impl). It is also renamed from "harvest note" to "fail-closed note", which is what that comment actually is.
 
 Your sample rate is recorded as the answer to round 6 line 2a: 15/16 landings, 93.75%, with both failures being source-line cites and the EVD-013/EVD-014 entity citations landing correctly. That split is itself the useful signal — entity citations are stable under edit, line citations rot silently as the cited file moves, and this design carries a lot of the second kind."""
+
+[[finding]]
+id = "F-38"
+status = "answered"
+severity = "blocker"
+title = "Expected both row 12 legs to gate admission; observed the sole mutant cannot detect an ignored readability leg"
+detail = """
+Expected: row 12's two independently observable legs both gate admission, with a mutant that proves the descriptor-1 readability leg cannot be ignored while the stdin leg still holds.
+
+Observed at SL-248 design-run revision 78: table A row 12 correctly requires stdin to yield zero bytes and reads of descriptors 1 and 2 to fail, and the executable projection now names each probe assertion. But its only mutant, `a_stdin_inheriting_backend_fails_row_twelve`, inherits the trusted side's whole stdio and therefore trips both legs. Every listed test can still pass if the row verdict accidentally keys only on stdin: the conforming backend passes `neither_descriptor_one_nor_two_is_readable_by_the_capsule`, while the whole-stdio mutant reports `Violated` through its readable stdin. No test requires a backend with an empty stdin but a readable socket on descriptor 1 to report `Violated`.
+
+That omission can admit a backend retaining the undeclared inbound authority channel row 12 exists to forbid, so it is a blocker rather than backlog. Add a leg-specific stub mutant—empty stdin, readable descriptor 1, otherwise conforming—and require row 12 to report `Violated`, parallel to row 10's second `F-31` mutant."""
+disposition = "fixed"
+response = """
+Upheld, and the ruling was right — I raised the parity gap without settling it precisely because a self-issued blocker on my own remediation is worth little, and your reading of the failure mode is sharper than mine was. The decisive point is the one I had not written down: every listed test passes if the row verdict keys on the `stdin` leg alone, because the conforming backend and the whole-stdio mutant are both consistent with a readability leg that is never consulted. The row reads correctly and the suite would not notice if the implementation ignored half of it.
+
+Fixed at design-run revision 80. Two sections moved, `sec-7` (`15efefae8556` to `f82beb86d90e`) and `sec-8` (`35c6c5031f6e` to `f7239e18a2fe`); the other seven reproduce their revision-78 digests unchanged.
+
+**`sec-7`** — the executed list now carries `a_readable_descriptor_one_backend_fails_row_twelve`: empty `stdin`, otherwise conforming, one readable socket on descriptor 1, required to report `Violated`. It is stated as the leg-specific mutant and the existing `a_stdin_inheriting_backend_fails_row_twelve` is now annotated with *why* it cannot stand in for it — that a backend inheriting the whole of the trusted side's stdio hands back a readable `stdin` and a readable descriptor 1 together, so it trips both legs and discriminates neither. The general rule is stated where a later reader will hit it: a row with two independently observable legs needs a mutant per leg, or the legs are not separately gating. That is your `F-31` finding at row 10 generalised, which is what makes this the second instance rather than a new idea.
+
+**`sec-8`** — the round-by-round test-cost narrative gains round 8: one further stub mutant, no new row, arm or control, and table A stays at **fourteen** rows. Worth stating explicitly since a mutant is the one addition in this document that changes the executed cost without changing the row count, and the surrounding narrative is otherwise row-indexed.
+
+Table A's row-count figure in `sec-8`'s evidence table is unchanged and correct at fourteen. I checked the other enumerations rather than assuming: mutants are named in exactly one place in this document, `sec-7`'s executed list, so unlike the round 6 credential split there is no parallel projection to drift. `sec-2`'s channel ledger is untouched — this adds no channel."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

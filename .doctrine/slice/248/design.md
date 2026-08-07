@@ -4332,7 +4332,19 @@ Executed, the claims that need naming beyond their row:
   can **read** descriptor 1 — the undeclared inbound channel (`RV-346` `F-30`)
 - `the_stdio_control_changes_nothing_above_descriptor_two` — that rows 10 and 12
   are disjoint by descriptor number, so a failure names one of them
-- `a_stdin_inheriting_backend_fails_row_twelve` — the `F-30` mutant as a stub
+- `a_stdin_inheriting_backend_fails_row_twelve` — the `F-30` mutant as a stub,
+  and it trips **both** legs, since a backend inheriting the whole of the
+  trusted side's stdio hands back a readable `stdin` and a readable descriptor 1
+  together
+- `a_readable_descriptor_one_backend_fails_row_twelve` — the leg-specific mutant
+  (`F-38`), and the one the pair above cannot stand in for: empty `stdin`,
+  otherwise conforming, one readable socket on descriptor 1. Without it every
+  listed test still passes when the verdict keys on the `stdin` leg alone — the
+  conforming backend passes because neither descriptor is readable, the
+  whole-stdio mutant reports `Violated` through its `stdin`, and the undeclared
+  inbound channel row 12 exists to forbid is admitted. This is row 10's `F-31`
+  lesson at row 12: a row with two independently observable legs needs a mutant
+  per leg, or the legs are not separately gating
 - `the_capsule_reports_the_declared_identity` — row 13's probe arm: uid, gid and
   `uid_map` all equal the placement's declared capsule identity
 - `the_identity_control_changes_no_mount_no_env_and_no_descriptor` — row 13's
@@ -4553,7 +4565,11 @@ Round 5 moves table A to thirteen rows: two new (`F-30`'s standard streams,
 since three decoys ride row 10's existing pair. Round 6 splits the credential
 row, taking table A to fourteen: one further arm and one further control, plus
 one test asserting the two unrowed observations reach no verdict (`R8`). `sec-2`
-gains `CapsuleStdio`'s two pure tests, taking its figure to ≈39. None of it is a large
+gains `CapsuleStdio`'s two pure tests, taking its figure to ≈39. Round 8 adds
+one further **stub mutant** and no row, arm or control: `F-38` found row 12's
+two legs sharing a single mutant that trips both, so the readability leg was not
+separately gating — the same defect `F-31` fixed at row 10, and the same remedy.
+Table A stays at fourteen rows. None of it is a large
 phase-sizing move; all of it is recorded because a count nobody adjusts is a
 count nobody is reading.
 
