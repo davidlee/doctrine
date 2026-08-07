@@ -237,7 +237,11 @@ about the subject — establish which cage produced the failure before raising i
 
 **Subject.** `.doctrine/slice/248/design.md` at design-run revision 75,
 watermark `ec973c1e`, plus the author-side commits made after it and before this
-brief: `48bc59a44`, `9ffe8a1d6` and `b504edc95`. Round 5's five findings
+brief: `48bc59a44`, `9ffe8a1d6`, `b504edc95`, then the credential spike and its
+evidence record — `1c41447c8`, `039422cd0`, `ed8800414`, `c786fb094`. The last
+four are what turned line 1's argument and line 2's third condition from
+reasoned into measured; `EVD-014` is the citable artefact and `EVD-013` is its
+precedent and method source. Round 5's five findings
 (`F-29`…`F-33`) are all remediated and answered. This is primarily a
 **verification pass** — the remediations are the subject, not the sections
 around them — with one substantive open decision at 1.
