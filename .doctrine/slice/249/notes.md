@@ -219,16 +219,27 @@ in-place-edit posture the research round settled on stands.
 ## Review pass — RV-349, and what a further pass would probe
 
 Written at the close of the design run's `reviewing` stage, after the pass
-concluded. One external adversarial pass (codex, `RV-349`), conducted over
-multiple rounds against `design.md`, every finding upheld on evidence. The
-ledger is the record; this is the forward-looking half.
+concluded. One external adversarial pass (codex, `RV-349`) over multiple rounds
+against `design.md`, then one in-session raiser round over `sec-14` alone
+(`F-21`–`F-23`, raised against revision 77 — not the external lane, which matters
+because the run's review policy is adversarial-only). Every finding upheld on
+evidence. The ledger is the record; this is the forward-looking half.
 
-**Is another pass warranted? Yes, but not of this artefact.** The pass reached
-the point where each round's findings were about the *record* of the review
-rather than the design — `sec-14`'s accuracy about itself, and the successive
-rules written to keep it accurate. That is a real defect class and it stopped
-paying for itself. The design's substance settled early and has been stable
-since; no round after the first two changed an architectural choice.
+**Is another pass warranted? The in-session round revised this answer.** The
+first form of this note said yes, but not of this artefact: the external pass had
+reached the point where each round's findings were about the *record* of the
+review rather than the design — `sec-14`'s accuracy about itself, and the
+successive rules written to keep it accurate — and that had stopped paying for
+itself. The design's substance did settle early and has been stable since; no
+round after the first two changed an architectural choice. But the round that
+followed this note found a **major** in the same artefact: `F-21`, the section
+asserting that its own fingerprint bound its claims about *other* sections, when
+`missing_lanes` matches an attestation on its subject's own bytes. That is not
+the record-accuracy class. It is item 4 below — an unverified claim about code,
+one grep from settling — and it was sitting inside the rule written to stop
+exactly that pattern. The judgement to carry forward: the artefact is exhausted
+for *review-record* findings and demonstrably was not for *unchecked-claim* ones,
+which is the category the list below already ranks first by expected yield.
 
 **What a further pass should probe** — carried in `design.md` § 10 in full, and
 summarised here so the slice notes stand alone:

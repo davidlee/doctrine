@@ -1573,11 +1573,11 @@ miscounting itself. The fix is not more care. It is to stop keeping the copy, an
 to keep here only what the ledger cannot: what the pass changed in the design,
 what it cleared, and what it taught.
 
-`F-18` is the same lesson again, and it is why nothing below counts anything. An
-earlier form of this section dropped the tables and kept the *arithmetic in the
-prose* — "twice", "four rounds", "in any round" — which is the same mutable fact
-in a form that reads as description rather than as a tally. It was already stale
-when it was written.
+`F-18` is the same lesson again, and it is why nothing below tallies the review.
+An earlier form of this section dropped the tables and kept the *arithmetic in
+the prose* — "twice", "four rounds", "in any round" — which is the same mutable
+fact in a form that reads as description rather than as a tally. It was already
+stale when it was written.
 
 `F-19` then showed the rule I wrote to prevent that — *shapes and consequences,
 never quantities* — was the wrong rule, and wrong in both directions: it banned
@@ -1585,22 +1585,36 @@ design-stable numbers this section needs and permitted claims that decay without
 being numeric. Its replacement, *monotone or nothing*, was wrong in a third way,
 and `F-20` is that: as a rule over the whole section it is **false of this
 section**. The press list below is deliberately a list of current states —
-*largest thing still undefined*, *no home yet*, *remaining unverified* — and the
-paragraph above says what the reviewer cleared *without a finding*, which a later
-round could falsify. A rule banning those would delete the section's purpose. It
-was also, being a totality asserted about content nobody had checked it against,
-this pass's first pattern committed inside the rule written to stop it.
+*largest thing still undefined*, *no home yet*, *remaining unverified* — and a
+rule banning those would delete the section's purpose. It was also, being a
+totality asserted about content nobody had checked it against, this pass's first
+pattern committed inside the rule written to stop it.
 
-The boundary that actually holds is narrower, and it is a distinction between two
-kinds of claim rather than a ban:
+The boundary that holds is narrower, and it is a distinction between two kinds of
+claim rather than a ban:
 
 - **Claims about the review's own history** — what the ledger owns and revises as
   it moves — must be monotone. *Twice*, *four rounds*, *in any round* were not,
-  and every one of them was stale on arrival.
-- **Claims about the design's current state** need no such guard. They are bound
-  by this section's fingerprint: if the design moves under them, the attestation
-  that covers this section goes stale and someone has to look. That is the
-  machinery doing the work a rule cannot.
+  and every one of them was stale on arrival. The clearances below are therefore
+  dated to the round that gave them rather than asserted as current ledger state:
+  `F-23` found this section citing them as an example of what the boundary
+  permits, when they fall squarely on this side of it.
+- **Claims about the design's current state** carry no mechanical guarantee, and
+  the first version of this bullet asserted one they do not have. An attestation
+  binds *its own section's bytes* — `missing_lanes` (`src/design_run/snapshot.rs`)
+  matches a held attestation on its subject and on that subject's fingerprint —
+  so a later amendment to § 5.3 stales sec-8's attestation and leaves this
+  section's untouched and live. What stands in for the guarantee is discipline,
+  and it is the shape the two sections below already have: *point, don't restate*
+  — name the section or decision that holds the claim, so a design that moves
+  under the pointer leaves the pointer true. Where the press list states a
+  current judgement it is unguarded, and it is an instruction to go and look: a
+  stale one costs a wasted look, not a false belief.
+
+`F-21` is the fourth round of that shape, and the first raised in-session rather
+than by the external reviewer: a totality asserted about machinery nobody had run
+a command against, written into the correction to the third. The machinery this
+section appealed to was not, in fact, already there.
 
 ## What it changed
 
@@ -1620,21 +1634,22 @@ catch, and what the specs actually say.
 
 ## What it cleared
 
-On the reviewer's record, without a finding: `DEC-177`'s tripwire remains
-justified for hand-edits and out-of-band writers; the Phase A/B boundary is
-coherent; `D4`'s `body` reuse is carried by objective 3's refusal; `ADR-013` REV
-routing and `ADR-004` relation deferral are correctly applied; the seven scaffold
-templates seed exactly their kinds' field sets; and the code claims checked
-against the source — `Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s
-missing-key creation, `skip_serializing_if` totality, `append_edge → Noop` —
-hold. They are named rather than counted, so the list can grow without this
-paragraph going stale.
+Through the external reviewer's last round, raised against revision 72, no
+finding had been raised on: `DEC-177`'s tripwire remains justified for hand-edits
+and out-of-band writers; the Phase A/B boundary is coherent; `D4`'s `body` reuse is
+carried by objective 3's refusal; `ADR-013` REV routing and `ADR-004` relation
+deferral are correctly applied; the seven scaffold templates seed exactly their
+kinds' field sets; and the code claims checked against the source —
+`Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s missing-key creation,
+`skip_serializing_if` totality, `append_edge → Noop` — hold. They are named
+rather than counted, so the list can grow without this paragraph going stale.
 
 `D9`'s proportionality was put to the reviewer directly, because a single test
 asserting a spec says "seven" and not "four" had been rewritten again and again,
-and that is the profile of a fix that has outgrown what it protects. The ruling was that it has not: the final test is compact, each
-clause closes a demonstrated failure, and a simpler one would knowingly surrender
-coverage. Recorded so a later reader finds a ruling rather than re-deriving one.
+and that is the profile of a fix that has outgrown what it protects. The ruling
+was that it has not: the test as it stands is compact, each clause closes a
+demonstrated failure, and a simpler one would knowingly surrender coverage.
+Recorded so a later reader finds a ruling rather than re-deriving one.
 
 ## What it taught
 
@@ -1643,12 +1658,12 @@ worth carrying into the plan.
 
 **A totality asserted rather than enumerated.** *The pins are total together.
 The retry carries the same payload. Every occurrence is kind-derived. The
-allowlist expires. The declared phrase is found.* Each was cheap to check, and
-each was part of an argument that was otherwise sound — which is the mechanism,
-not an excuse: a claim of this kind inherits the credibility of the reasoning
-around it and so never attracts the one command that would settle it. Where this
-design states such a thing, it states the enumeration or the identity beside it,
-so a reader evaluates rather than trusts.
+allowlist expires. The declared phrase is found. The fingerprint binds it.* Each
+was cheap to check, and each was part of an argument that was otherwise sound —
+which is the mechanism, not an excuse: a claim of this kind inherits the
+credibility of the reasoning around it and so never attracts the one command that
+would settle it. Where this design states such a thing, it states the enumeration
+or the identity beside it, so a reader evaluates rather than trusts.
 
 **The artefact nobody re-reads.** The scope card drifted from the design;
 a criterion widened past the card's own non-goals because nothing compared it
