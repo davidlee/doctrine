@@ -1,14 +1,14 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 280
-slug = "review-contest-records-no-durable-rationale"
-title = "review contest records no durable rationale"
+id = 320
+slug = "re-adopting-an-edited-designmd-needs-a-section-map-nothing-emits"
+title = "Re-adopting an edited design.md needs a section map nothing emits"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-07-29"
-updated = "2026-07-29"
+created = "2026-08-07"
+updated = "2026-08-07"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
