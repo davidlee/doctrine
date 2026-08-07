@@ -74,7 +74,7 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · design reviewing rev 76, RV-346 round 6 remediated and returned · 5ffdea138
+fresh-as-of: 2026-08-08 · design reviewing rev 80, RV-346 concluded · ba07f8674
 
 ### Produced
 
@@ -98,6 +98,20 @@ fresh-as-of: 2026-08-08 · design reviewing rev 76, RV-346 round 6 remediated an
   `ISS-280` — second instance recorded, sharpening the fix's shape (`5ffdea138`).
 - No code touched; no gate applicable. All `.doctrine` changes committed
   path-limited — another agent's `SL-249`/`SL-250` files left untouched.
+- **`RV-346` is closed** — `done · await=none · concluded`, 38 findings over
+  nine rounds (`ba07f8674`). Round 7 verified 7 of 8 and raised nothing under a
+  scope-bound brief; rounds 8 and 9 closed the remainder.
+- Round 7's credential ruling went **with** the design: supplementary groups and
+  `no_new_privs` stay observed-but-unrowed. A permanent `Unproven` buys no
+  discrimination where no control fires, and would make `Admitted` unreachable.
+- `F-30` upheld (`3e0402b9b`) — the round-6 row 12 rewrite left `sec-7`'s test
+  title and gloss projecting the *repudiated* property (non-delivery, and the
+  bidirectionality reasoning). Renamed to name readability; row 12's containment
+  hazard, a second instance codex did not spot, fixed with it.
+- `F-38` raised and remediated (`089b082e4`) — row 12's two legs shared one
+  mutant that trips both, so the readability leg was not separately gating.
+  `sec-7` gains `a_readable_descriptor_one_backend_fails_row_twelve` and states
+  the rule; `sec-8`'s test-cost narrative gains round 8. Table A stays fourteen.
 
 ### Learned
 
@@ -105,19 +119,32 @@ fresh-as-of: 2026-08-08 · design reviewing rev 76, RV-346 round 6 remediated an
 - `mem.fact.bubblewrap.unshare-user-is-a-no-op-unprivileged`.
 - Friction captured: `.doctrine/observations/records/d7/` — a contest's reasoning
   has no durable home.
+- **A scope-bound review brief works, and the binding belongs on the ledger.**
+  Round 7 was told the bar was blocker-or-regression and that a nothing-raised
+  round was the successful outcome. It raised nothing out of scope and said so.
+  Written into the brief rather than the driver's prompt, so it survived handover
+  and codex read it directly.
+- **Don't self-rule on a scope bar you authored.** The row 12 mutant-parity gap
+  was found while remediating `F-30`; it was put to codex rather than fixed
+  unilaterally, and codex ruled it a *blocker* (`F-38`). A self-issued finding on
+  one's own remediation is worth little; the external ruling is the value.
+- `ISS-320` updated (`60a4f90ef`): the `adopt_authored` envelope is snake_case
+  while sibling enums are kebab-case, and the refusal names one field rather than
+  the convention. Also — the recomputation's cross-check is **not** luck: validate
+  it against the *unedited* document (all nine digests must reproduce) before
+  relying on it. Friction recorded at `observations/records/36/`.
 
 ### Open
 
-- **`RV-346` round 7 is the next move, and it should be scope-bound to
-  verification** — 8 findings answered and awaiting the raiser; see
-  `handover.md`.
-- The split's one live disagreement: whether the two unrowed credential
-  mechanisms should be rows carrying permanent `Unproven`. Put to codex in
-  `F-32`'s response; the design argues not.
-- `sections_outstanding_review` is 9 of 9 and every fingerprint moved at rev 76
-   — the largest remaining gate, and not startable until the ledger closes.
-- `review_pass` reads `STALE`; the `Conducted` disposal arm is now reachable
-  (`IMP-392`'s blocking leg landed), so `RV-347` no longer forces `Waived`.
+- **Both remaining gates are the user's, not an agent's.** The ledger is closed,
+  so nothing else blocks them.
+  - `review_pass` reads `STALE`. Dispose it `Conducted` naming `RV-346`, whose
+    pass is concluded and carries no open blocker. The arm is reachable
+    (`IMP-392`'s blocking leg landed); `Waived` is not forced.
+  - `sections_outstanding_review` is 9 of 9, ~4900 lines. Human review is the v1
+    default and the obligation says not to invent a reviewer posture. Every
+    fingerprint moved at rev 76 and `sec-7`/`sec-8` moved again at rev 80, so no
+    earlier attestation would have survived.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.
 - `ISS-319` — separable defect, fixable independently of `QUE-208`.
 - `SL-248` `OQ-1` (five-slice decomposition, provisional), `OQ-3` (three
