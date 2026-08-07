@@ -167,7 +167,7 @@ response = "Resolved through F-19, which is where this thread now lives. F-17 es
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Sec-14 still mirrors mutable review history"
 detail = "Revision 68 sec-14 does not yet satisfy F-17's structural fix. At lines 1570-1572 it says the section was 'twice' the subject of findings for miscounting itself, but RV-349 already has four sec-14 counting/taxonomy findings: F-10, F-15, F-16 and F-17. The same section still hand-maintains other review-owned facts: the scope card drifted 'twice' and F-5 sat contested for 'four rounds' (lines 1623-1626), D9 was rewritten 'more times than anything else' (1603-1605), three claims were 'checked by nobody in any round' (1655-1658), and review added Phase A work 'twice' (1667). Those can change when the review proceeds even if the binding design does not, exactly the coupling F-17 meant to remove. The design-consequence bullets themselves are sound pointers rather than competing contracts. Cheapest fix: make the history qualitative ('repeatedly', 'while its substance was fixed', 'required repeated repair', 'lack a cited pin/evidence', 'Phase A grew during review') or remove it; retain the design-relative lessons and pointer list."
@@ -176,7 +176,7 @@ response = "Resolved through F-20, which corrected the rule both of these were d
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Sec-14 still quantifies the review"
 detail = "Revision 70 sec-14 states that an ongoing-review record 'may not hold quantities' and says nothing below counts anything (§10, lines 1576-1581), but its audit missed several unquoted, review-derived quantities: F-18 is 'one turn further in' and refers to 'the first rewrite' (1576-1578); D9 was rewritten 'again and again' (1611-1613); 'Two shapes recur' and 'Both' are asserted across the pass (1619-1620); 'none was checked' totals the listed claims' pre-review verification (1622-1626); 'In every instance' totals the artefact-drift examples (1634); and 'many rounds' / 'found repeatedly' quantify the review's duration and recurrence (1637, 1641-1642). These are not design-stable quantities or quotations, and several can change merely as review continues. The genuinely design-stable survivors pass: identifiers and section/list ordinals; the table's three pins; seven templates; the runbook firing once per stage; and design-mechanism counts in the press list. Cheapest fix is either to apply the stated rule to the remaining history ('F-18 extends the lesson'; 'the rewrite'; 'D9's history raised the proportionality question'; introduce the two lesson headings without counting them; describe the shared mechanisms without none/every/many/repeatedly), or narrow the rule explicitly to mutable cardinalities and chronology and justify why qualitative frequencies cannot stale."
@@ -185,7 +185,7 @@ response = "Resolved through F-20, which corrected the rule both of these were d
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Monotone-or-nothing is false of sec-14"
 detail = "Revision 72 sec-14 declares that no statement there may become false as review continues (§10, 'The pass'), but retained content intentionally violates that global invariant. 'On the reviewer's record, without a finding' is mutable ledger state: a later finding on any cleared claim makes it false without changing the binding design. 'Every substantive change is recorded where it binds' and 'the architecture ... is unchanged' can be falsified by a later design amendment; D9's 'final test' ceases to be final on another rewrite. The press list is necessarily non-monotone: 'largest thing still undefined', D8a 'has no home yet', claims are 'remaining unverified' and 'carry no evidence', and inquiries are 'left open' precisely name states a further pass or reconcile should end. The earlier sentence 'nothing below counts anything' is also literally inconsistent with the newly admitted design-stable counts below it. The three declined F-19 phrases are not defects: 'again and again', 'a review that keeps going', and 'found repeatedly' are monotone qualitative history. Cheapest fix is to narrow the rule to the actual boundary: claims whose truth depends only on mutable review-ledger/history state must be monotone; design-relative current-state claims are instead bound by sec-14's fingerprint. Rephrase 'nothing below counts anything' as 'nothing below tallies the review', and make the clearance wording a fixed historical observation rather than current 'without a finding' status."
@@ -194,7 +194,7 @@ response = "Upheld, and your boundary is adopted verbatim because it is better t
 
 [[finding]]
 id = "F-21"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Sec-14's fingerprint guarantee does not cover the claims it licenses"
 detail = "Revision 77 sec-14 (§10 'The pass') states the second arm of its adopted boundary as: 'Claims about the design's current state need no such guard. They are bound by this section's fingerprint: if the design moves under them, the attestation that covers this section goes stale and someone has to look. That is the machinery doing the work a rule cannot.' The machinery does not do that work. A section attestation is live while the stored fingerprint equals THAT SECTION's own current fingerprint: DesignSnapshot::missing_lanes (src/design_run/snapshot.rs:499-517) matches on held.subject() == subject && held.fingerprint() == fingerprint, and the same per-subject rule is stated at src/design_run/attestation.rs:240-244 ('an attestation names the exact bytes it attests to') and 393-398 ('A section attestation is live while a stored Fingerprint still equals its subject's current one'). Sec-14's design-state claims are almost all about OTHER sections: 'Every substantive change is recorded where it binds' with pointers into §5.3 / §5.2 / §5.4 B / §5.1 / D6 / D8 / D8a / D9 / D10 / I3 / I3b / I10 / I11 / I12 (lines 1607-1615), 'The architecture that came out of drafting is unchanged' (1617), '§9's criterion narrowed back inside the slice's non-goals' (1615), and press items on I10, D8a, R8 and §6 (1669-1698). If §5.3 is later amended, sec-8's fingerprint moves and sec-8 owes a fresh attestation; sec-14's bytes are untouched, its attestation stays live, and nothing makes anyone look here. The whole-run ContentCoverage (attestation.rs:390-418) does diff every section, but it invalidates the INTEGRATED REVIEW and the LOCK ACCEPTANCE, not 'the attestation that covers this section', and it is spent at the lock — after which design movement routes through a revision that rechecks sec-14 not at all. Consequence: the stated reason a whole class of claims needs no rule is a guarantee doctrine does not offer, so the class is unguarded, and a later reader citing this sentence elsewhere inherits the error. Raised major rather than minor because the sentence is the section's load-bearing conclusion and it is wrong about the machinery this very run executes. Cheapest fix: restate the arm to what the mechanism actually binds — sec-14's own bytes, so only a rewrite of sec-14 re-opens its attestation — and either make the cross-section claims pointers (name the section/decision, not its content, so a moved design leaves the pointer true) or state the exposure instead of asserting a binding."
@@ -203,7 +203,7 @@ response = "Upheld, and the finding is right about the mechanism. missing_lanes 
 
 [[finding]]
 id = "F-22"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "'Nothing below counts anything' is still false of sec-14"
 detail = """Revision 77 sec-14 line 1576 still reads 'F-18 is the same lesson again, and it is why nothing below counts anything.' F-20 already named this sentence — 'The earlier sentence "nothing below counts anything" is also literally inconsistent with the newly admitted design-stable counts below it' — and supplied the fix: rephrase it as 'nothing below tallies the review'. F-20 was disposed 'Upheld, and your boundary is adopted verbatim', but only the boundary landed; the sentence is unchanged. Below it the section counts three times: 'the facet table's three pins' (1611), 'the seven scaffold templates' (1626), and 'gains tables and three verbs' (1693), plus the quoted 'seven' and 'four' at 1634. Each is legitimate — F-19 explicitly listed 'the table's three pins' and 'seven templates' among the design-stable survivors that pass — so the counts are right and the sentence banning them is the defect. It is also the same shape the section names as this pass's signature failure: a totality asserted about content nobody checked it against. Cheapest fix is the rephrase F-20 already wrote."""
@@ -212,7 +212,7 @@ response = "Upheld. F-20 named the sentence and supplied the rephrase; the dispo
 
 [[finding]]
 id = "F-23"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Sec-14 keeps the review-history claims its own boundary forbids"
 detail = """Revision 77 sec-14 adopts: 'Claims about the review's own history — what the ledger owns and revises as it moves — must be monotone' (lines 1597-1599). Two retained claims are review-history and non-monotone. (1) 'On the reviewer's record, without a finding:' (1623) — a later finding on any item in that list falsifies it without the design moving. F-20 named exactly this ('mutable ledger state: a later finding on any cleared claim makes it false') and prescribed making the wording a fixed historical observation; that half of the fix was not applied. (2) 'the final test is compact' (1635) — F-20 named this too ('D9's "final test" ceases to be final on another rewrite'); unchanged. Worse than the omissions, the F-20 paragraph MISCLASSIFIES the first of them: 'the paragraph above says what the reviewer cleared without a finding, which a later round could falsify. A rule banning those would delete the section's purpose' (1588-1591). Under the boundary the section then adopts, that claim sits on the review-history side, where monotonicity IS required — so the new boundary bans it too. Only the press list, which is design-current-state, is saved by the arm the sentence invokes. As written the section's central argument reads as licensing a claim its own rule forbids, which is the third rule in a row failing against content it was not checked against. Cheapest fix: date the clearance to the round it was true of ('through round N the reviewer had raised no finding on …' — monotone, and it stays true), say 'the test as it stands' rather than 'the final test', and let the press list carry the design-current-state illustration on its own."""
@@ -221,7 +221,7 @@ response = "Upheld on both halves. The clearance paragraph now reads 'Through th
 
 [[finding]]
 id = "F-24"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Declaration's skip_serializing_if totality is asserted, and is false"
 detail = "Revision 81 §3 (Mechanical), design.md:163: 'Serde's skip_serializing_if is total over Declaration, so a fully-populated value serialises to exactly the wire key set — the pin DEC-169 uses instead of a proc macro. The same totality is what makes D8's digest cover the payload without an enumeration to maintain.' The enumeration: Declaration (src/design_run/submission.rs:124) has 16 fields; 14 carry skip_serializing_if; 'subject' (:125) carries none — correctly, it is mandatory — and 'resolved_record' carries #[serde(skip)], so it is never on the wire at all. The sentence is false of two of sixteen. The conclusion it supports survives, but not for the reason given: a fully-populated value emits exactly the 15 wire keys because serde emits a populated field, not because skip_serializing_if is total. An implementer writing DEC-169's pin from this sentence looks for the attribute on every field, finds two without it, and has to re-derive whether the pin holds; the one worth thinking about is resolved_record, which the pin cannot see because it is not a wire key. Note that this is one of the four code claims §10 lists as 'checked against the source' and holding, so a cleared claim does not hold as worded. The same inventory is stated approximately twice more: '~16 wire keys' (§5.2 design.md:580, §9 design.md:1491) sizing I10's matrix at '~80 cells' (§9 design.md:1492, R10 §8 design.md:1432). The wire count is 15, so the matrix is 75 cells over 5 subject kinds. The tilde makes those approximations rather than errors, but §9 calls I10 'the one worth sizing before the plan', and this design's own rule is to state the enumeration beside the totality. Cheapest fix: replace the §3 totality with its enumeration; exact the ~16/~80 only if those sections are being touched anyway, since §3 alone costs one section attestation and all four cost four. Found by a repo-researcher sweep for consistency and hygiene, then verified against the source; raised in-session, not by the external lane."
@@ -230,7 +230,7 @@ response = "Upheld and fixed in §3 at design run revision 82; the section's att
 
 [[finding]]
 id = "F-25"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "sec-14 still restates the cross-section claims F-21 required it only to point at"
 detail = """
@@ -253,7 +253,7 @@ Declined: the claim that the entries "remain semantic descriptions such as 'the 
 
 [[finding]]
 id = "F-26"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "sec-14 still tallies the review after saying it does not"
 detail = """
@@ -274,7 +274,7 @@ Worth naming: the reason to prefer the broad rule was that it is easier to polic
 
 [[finding]]
 id = "F-27"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = 'sec-14 retains the non-monotone "final" claim F-23 was meant to remove'
 detail = """
@@ -291,7 +291,7 @@ Recorded in "What it taught" beside F-26 as the compact form of "the artefact no
 
 [[finding]]
 id = "F-28"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "F-24's false totality survives in both edited sections"
 detail = """
@@ -314,7 +314,7 @@ Added to the enumerated-totality list in "What it taught" as "The wire key set i
 
 [[finding]]
 id = "F-29"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "sec-3 turns a root-only proof into a claim that subtable insertion is unsafe"
 detail = """
@@ -337,7 +337,7 @@ This is the same shape as DEC-168/D8a two bullets up in the same section — a r
 
 [[finding]]
 id = "F-30"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The new prose introduces non-monotone superlatives"
 detail = """
@@ -356,7 +356,7 @@ The superlative is worth naming as its own attractor. It is the natural register
 
 [[finding]]
 id = "F-31"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = '"What it cleared" replaces one present-tense warrant with another'
 detail = """
@@ -375,7 +375,7 @@ What this instance adds beyond the fix: proximity is not protection. The rule wa
 
 [[finding]]
 id = "F-32"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = '"What it taught" asserts another unenumerated design-wide totality'
 detail = """
@@ -394,7 +394,7 @@ The provenance is the part worth keeping. This sentence is not new prose from th
 
 [[finding]]
 id = "F-33"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "The F-32 correction still makes a current cross-section claim"
 detail = """
@@ -405,10 +405,17 @@ This closes F-32's original design-wide, unenumerated totality: the population i
 Cheapest fix: delete the descriptive half — "The plan should pair such claims with their enumeration or identity by default, so a reader evaluates rather than trusts."
 
 [Raised by the external adversarial reviewer (codex/GPT-5.5) on its third re-read, transcribed verbatim at its stated severity.]"""
+disposition = "fix-now"
+response = """
+Closed by deletion rather than by rewrite. The sentence F-33 named — "Where the pass found one, the enumeration or the identity now sits beside it" — went with the whole "What it taught" paragraph when F-34's cut landed, so there is no present-tense cross-section survey left in sec-14 to correct.
+
+Confirmed by the raiser that the defect was not merely relocated: design-history.md does not carry that present-tense replacement claim, and the quotations it does carry are fixed historical evidence in a file that is explicitly non-load-bearing — unmarked, unfingerprinted, unattested, and outside the design's claim surface.
+
+Worth recording that F-33 was the cheapest possible demonstration of F-34's thesis. It existed only because the F-32 fix had to say something about other sections' current state, and it stopped existing the moment the section stopped being the kind of thing that says such things."""
 
 [[finding]]
 id = "F-34"
-status = "open"
+status = "verified"
 severity = "major"
 title = "sec-14 still mirrors the ledger in narrative form"
 detail = """
@@ -432,6 +439,40 @@ A sufficient opening would be approximately: "RV-349 is authoritative for review
 Reviewer's judgment accompanying the finding: the corrections are converging locally, but sec-14 is not converging structurally. It is too long for the role it claims. Further sentence-level correction will continue the same loop; the right next move is deletion of the ledger narrative, not another prose repair.
 
 [Raised by the external adversarial reviewer (codex/GPT-5.5) on its third re-read, transcribed verbatim at its stated severity, in answer to a direct question about whether the section should be cut rather than corrected. Note the ancestry: F-17 and F-18 were both deletions of ledger-mirroring content from this same section, and each helped. This is the third.]"""
+disposition = "fix-now"
+response = """
+Upheld, cut taken, and then upheld a second time on the re-read — the first cut carried the defect into the paragraph explaining the cut.
+
+Round one of the fix: the historical narrative under "The pass", "What it changed", "What it cleared" and "What it taught" were all deleted outright rather than reduced. sec-14 went from roughly 160 lines to roughly 50 — an opening plus the press list. Everything with value beyond git history moved to a new sibling, .doctrine/slice/249/design-history.md: the rule's F-17..F-26 evolution and the boundary that holds, the dated clearances, D9's proportionality ruling, and both taught patterns. That file is deliberately not a design section — not marker-delimited, not fingerprinted, not attested, and carrying no weight on the design.
+
+The raiser then found the mechanism surviving in miniature: the replacement opening narrated F-34's own cause, consequence, repair and relocated contents, which is the section writing ledger history about the finding that told it to stop writing ledger history. Four lines, same shape. Fixed by adopting the raiser's own drafted opening verbatim rather than authoring a third version — four sentences saying where review history lives, where durable changes bind, what the press list is, and that the sibling exists. Using the reviewer's wording was itself the point: every previous opening was prose I wrote about this section's discipline, and every one of them was falsified.
+
+Note on the deviation from the prescription: D9's ruling was NOT moved to D9's owning passage as the finding suggested. § 7 is one of the twelve sections holding a live adversarial attestation, and relocating a ruling into it would have cost that attestation to move text that is not load-bearing. It went to design-history.md instead. The raiser confirmed on re-read that live D9 remains self-sufficient — its owning passage still carries the canary mechanism, enumeration, exception, normalisation, cardinality and rationale — and that nothing load-bearing was wrongly relocated.
+
+The lasting result is that sec-14 is no longer the kind of artefact that generates findings when the design moves. Its claims are now about where things live, which is stable, rather than about what they say, which is not."""
+
+[[finding]]
+id = "F-35"
+status = "verified"
+severity = "minor"
+title = "Press item 4 asserts another design-wide totality"
+detail = """
+design.md:1614 now says: "Every other unenumerated totality claim in this design. The remaining unverified code claims …"
+
+Changing "here" to "in this design" made the claim explicitly design-wide. The three examples do not establish that they are every remaining unverified code claim. An omitted claim would make the press instruction false — the same mechanism as F-32.
+
+Cheapest fix: "**Three unverified code claims worth pressing.** `entity::write_body` …, `resolve_ref` …, and `catalog::scan` … carry no evidence …". Remove both "Every other" and "remaining".
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its fourth read, transcribed verbatim at its stated severity. The referent change was the responder's, made while cutting the section — the original "here" was scoped to a section that the cut then removed, and repairing the dangling referent widened the claim instead of narrowing it.]"""
+disposition = "fix-now"
+response = """
+Upheld, and the provenance is the useful part: this defect was manufactured by the cut, not merely surfaced by it.
+
+Press item 4 originally read "Every other unenumerated totality claim here", where "here" scoped to the enumerated-totality material in the same section. The cut deleted that material, leaving the referent dangling, and the repair replaced "here" with "in this design" — which widened a scoped claim into a design-wide totality asserting that three named claims are every remaining unverified one. F-32's mechanism exactly, introduced in the act of tidying after F-34.
+
+Fixed to the raiser's wording: "Three unverified code claims worth pressing", naming entity::write_body's behaviour on an absent file, resolve_ref's refusal surface and catalog::scan's shape as the tripwire's precedent, with both "Every other" and "remaining" removed. The count is self-referential to the three items in its own sentence and does not decay.
+
+The general lesson, which is now the only one this ledger has taught more than twice: repairing a dangling reference is an edit to a claim's scope, and the default direction of that edit is outward. A referent that loses its context should be narrowed to what is actually known, not widened to whatever domain still parses."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

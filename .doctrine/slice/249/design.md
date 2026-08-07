@@ -1578,20 +1578,10 @@ carries its facet — which the mint test asserts directly.
 <!-- doctrine:section sec-14 -->
 # 10. Review Notes
 
-`RV-349` is authoritative for this design's review history — findings,
-severities, contests, dispositions and rounds all live there. Durable design
-changes are recorded at the decisions and sections that hold them, not
-summarised here.
-
-`F-34` is why this section is short. It previously narrated the ledger at
-length, which meant every response to a finding rewrote the section, invalidated
-its attestation, and created fresh claims to review; two consecutive adversarial
-rounds found defects almost exclusively in prose written to fix the previous
-round's. What the ledger cannot hold — the evolution of this section's own rule,
-the clearances the pass produced by raising nothing, `D9`'s proportionality
-ruling, and the failure shapes worth carrying into the plan — moved to
-`design-history.md` beside this file. What remains is the press list, which is
-the one thing here with a purpose neither the ledger nor another section serves.
+`RV-349` is authoritative for review history and dispositions. Durable design
+changes bind at their owning decisions and sections. The press list below repeats
+only current judgements that remain targets for scrutiny. Non-normative working
+history is retained in the sibling `design-history.md`.
 
 ## Where a further pass should press
 
@@ -1611,11 +1601,11 @@ the one thing here with a purpose neither the ledger nor another section serves.
    vehicle carrying a knowledge-record correction because no other exists until
    this slice ships. Someone should check that is a legitimate home rather than
    the only one available.
-4. **Every other unenumerated totality claim in this design.** The remaining unverified
-   code claims — `entity::write_body`'s behaviour on an absent file,
-   `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the tripwire's
-   precedent — carry no evidence anywhere in this design, and each is one command
-   from being either evidence or a finding.
+4. **Three unverified code claims worth pressing.** `entity::write_body`'s
+   behaviour on an absent file, `resolve_ref`'s refusal surface, and
+   `catalog::scan`'s shape as the tripwire's precedent carry no evidence anywhere
+   in this design, and each is one command from being either evidence or a
+   finding.
 5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
    recommendation (§ 6). The counter-argument to ruling them here is that both
    are about what the REV *says*, and the REV does not exist yet.
