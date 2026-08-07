@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd991-2993-7371-9a3a-e852951ab14e"
+recorded_at = "2026-08-07T00:13:17.075571583Z"
+kind = "friction"
+summary = "spike script false-negatived on NixOS PATH — every sandbox arm reported command not found"
+detail = "SL-248 credential spike, run outside the jail. The handed-over bwrap script bound /nix /usr /bin /lib /lib64 /etc but not /run. On NixOS the login PATH points at /run/current-system/sw/bin, so id/grep/sed/readlink/tr were all absent inside every bwrap arm while the no-bwrap positive control reported normally. Five arms agreed by saying nothing — the exact EVD-013 shape the brief warned about. Cost a full run to detect and a second run to fix (pinning PATH to the /nix/store bin dirs then broke the control, which has no shell on that PATH). Portable fix for any future bwrap probe on this host: --setenv PATH to the resolved store bin dirs, and invoke /bin/sh by absolute path in the control so it runs the identical environment."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

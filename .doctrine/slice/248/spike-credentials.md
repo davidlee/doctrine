@@ -128,14 +128,54 @@ something, and it is the one credential leg the jail genuinely could not see.
 Fill one row per arm. `userns` records the inode, not just presence — two arms
 that both created a namespace are only distinguishable by it.
 
+Host: NixOS, Linux 7.1.6 x86_64, bubblewrap 0.11.2, `max_user_namespaces=247154`.
+
 | arm | uid | gid | Groups | CapPrm | CapEff | NoNewPrivs | userns | uid_map | exit |
 |---|---|---|---|---|---|---|---|---|---|
-| P | | | | | | | | | |
-| A1 | | | | | | | | | |
-| A2 | | | | | | | | | |
-| A3 | | | | | | | | | |
-| A4 | | | | | | | | | |
-| A5 | | | | | | | | | |
+| P | 1000 | 100 | `1 17 26 57 67 100 174 966 988` | `0000000000000000` | `0000000000000000` | 0 | `4026531837` (init) | `0 0 4294967295` | 0 |
+| A1 | 1000 | 100 | `65534 ×8 + 100` | `0000000000000000` | `0000000000000000` | 1 | `4026534903` | `1000 0 1` | 0 |
+| A2 | 1000 | 100 | `65534 ×8 + 100` | `0000000000000000` | `0000000000000000` | 1 | `4026534966` | `1000 0 1` | 0 |
+| A3 | 4242 | 4242 | `65534 ×8 + 4242` | `0000000000000000` | `0000000000000000` | 1 | `4026534897` | `4242 0 1` | 0 |
+| A4 | 1000 | 100 | `65534 ×8 + 100` | `0000000000000000` | `0000000000000000` | 1 | `4026535187` | `1000 0 1` | 0 |
+| A5 | 1000 | 100 | `65534 ×8 + 100` | `000001ffffffffff` | `000001ffffffffff` | 1 | `4026535192` | `1000 0 1` | 0 |
+
+**`userns` inodes are not stable across runs and carry no cross-run meaning.**
+The table transcribes `spike-credentials-output.txt`. Re-running the script
+reproduces every other column byte-for-byte but reallocates these numbers — the
+namespaces are torn down at arm exit and the kernel recycles the inode numbers,
+so a repeat run saw `A1`/`A2` land on the same two values and `A3`/`A4`/`A5` on
+different ones. What is load-bearing is only that each `bwrap` arm's inode
+differs from `P`'s init namespace, never the specific value.
+
+`Groups` renders the `/proc/self/status` line, which keeps its **nine** entries in
+every arm; the mapped gid sits at its original list position and the other eight
+render as the overflow gid `65534`. `id -G` deduplicates this to `100 65534`.
+
+The table's fixed columns omit the two that carry this spike's only genuinely
+new signal, so they are recorded separately rather than by amending its schema:
+
+| arm | CapInh | CapBnd |
+|---|---|---|
+| P | `0000000800000000` (`CAP_WAKE_ALARM`) | `000001ffffffffff` (full, 41 caps) |
+| A1 | `0000000000000000` | `0000000000000000` |
+| A2 | `0000000000000000` | `0000000000000000` |
+| A3 | `0000000000000000` | `0000000000000000` |
+| A4 | `0000000000000000` | `0000000000000000` |
+| A5 | `000001ffffffffff` | `000001ffffffffff` |
+
+### Run notes — the first two runs were discarded, and why
+
+The brief's own positive-control mandate earned its keep immediately. **Run 1**
+returned `command not found` for `id`, `grep`, `sed`, `readlink` and `tr` in
+every `bwrap` arm while `P` reported normally — the exact `EVD-013` shape, five
+arms agreeing because none of them could speak. Cause: this is a NixOS host, the
+login `PATH` points at `/run/current-system/sw/bin`, and `/run` is deliberately
+not bound. Fixed by pinning the sandbox `PATH` to the `/nix/store` bin
+directories already reachable through the `/nix` bind, adding nothing to the
+bind set. **Run 2** then broke `P` alone — the pinned `PATH` holds coreutils,
+grep and sed but no shell — fixed by invoking `/bin/sh` by absolute path so the
+control runs the identical environment to the arms. Run 3 is what is reported
+above and what the answers below cite. No arm errored in run 3.
 
 ## The six decisions
 
@@ -170,6 +210,57 @@ Answer each in one or two sentences, citing the arms.
    jail, quote the refusal — that would mean the candidate depends on already
    being inside a user namespace, which is a material constraint on any row
    built from it.
+
+## The six answers
+
+1. **`bwrap` is not setuid here.** `stat` reads
+   `mode=555 owner=root setuid=-r-xr-xr-x` — root-owned, world-executable, no
+   `s` bit — so it runs through the unprivileged user-namespace path, which the
+   host permits (`max_user_namespaces=247154`). The in-jail conclusion transfers
+   and nothing below is re-opened on this ground.
+
+2. **`--unshare-user` does nothing observable.** `A1` and `A2` are identical on
+   every credential column — uid, gid, `Groups`, all four capability sets,
+   `NoNewPrivs`, `uid_map`. Their `userns` inodes differ (`4026534903` vs
+   `4026534966`), but both differ from `P`'s init namespace `4026531837`, so
+   these are two *distinct new* namespaces rather than one shared or inherited
+   one — the difference is that they are separate invocations, not that the flag
+   changed the posture, and per the table note the values themselves do not
+   survive a re-run. The design's chosen removal is a no-op delta on a real host
+   exactly as in-jail.
+
+3. **Bubblewrap sets `no_new_privs`; it does not inherit it.** This is the
+   question the jail could not reach, and this host answers it: `P` reads
+   `NoNewPrivs: 0` and every `bwrap` arm reads `1`. The design's claim that it is
+   bubblewrap's default is now corroborated by measurement rather than assumed.
+
+4. **Supplementary groups are not cleared — the list is never empty.** `P` shows
+   nine real gids (`1 17 26 57 67 100 174 966 988`); `A1` shows nine entries
+   still, the mapped gid `100` in place and the other eight rendered as the
+   overflow gid `65534`. The groups are unmapped, not dropped, so the list has
+   the same cardinality in every arm including `A3`. Row 13 holds only when the
+   list is empty, and on this host it is empty in no arm.
+
+5. **Yes — and only on this host.** `P` carries a full bounding set
+   `CapBnd=000001ffffffffff` and a non-empty `CapInh=0000000800000000`
+   (`CAP_WAKE_ALARM`); `A1` reads `0000000000000000` on both. That is bubblewrap
+   observably stripping something, and it is precisely the leg the jail could
+   not see, which already read `0` in `CapBnd` before any `bwrap` ran. The
+   brief's fallback case does not apply, but its warning was half-right: `CapPrm`
+   and `CapEff` are already all-zero in the unprivileged parent and on their own
+   would still have shown nothing — the signal lives entirely in `CapBnd` and
+   `CapInh`.
+
+6. **Both candidates behave the same here, with one prediction falsified.**
+   `A5` did not refuse: it exits `0` with all four sets at `000001ffffffffff`
+   against `A1`'s all-zero, matching the jail, and now moving `CapBnd` from a
+   measured-empty rather than an already-empty baseline. `A3` vs `A4` moves uid
+   (`4242` vs `1000`), gid (`4242` vs `100`), the mapped entry in `Groups`, and
+   `uid_map` (`4242 0 1` vs `1000 0 1`) — again matching. The one divergence is
+   against the brief's expectation, not against the jail: it predicted real gids
+   outside in place of the in-jail overflow `65534`, and the unmapped
+   supplementary groups render `65534` on this host too. No column moved in the
+   jail and not here, or here and not there.
 
 ## What to hand back
 
