@@ -440,7 +440,7 @@ so the numeral now lives where the rows do.
 | 10 | closed descriptor set | that no open file descriptor crosses `execute` except the ones the contract deliberately owns |
 | 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv`, with nothing inherited from the trusted-side process |
 | 12 | owned standard streams | that descriptors 0, 1 and 2 are the parent's own — an empty source, and one-way capture endpoints it created — never the trusted-side process's |
-| 13 | confined process credentials | a mapped uid and gid, no supplementary groups, empty effective and permitted capability sets, and `no_new_privs` set — the property invariant 4's denial-by-absence silently stands on |
+| 13 ⚠ | confined process credentials | the property invariant 4's denial-by-absence silently stands on. `sec-7`'s statement of *how* it is observed is measured wrong on three of four conditions (`EVD-014`) and is `RV-346` round 6's to re-cut; the property itself is not in question |
 
 Rows 12 and 13 arrived in round 5 and the table did not move with them until
 `RV-346` round 6 was being prepared. That is `F-28`'s defect a second time, in
@@ -2934,7 +2934,7 @@ neither, which is `F-2`'s objection and the reason each removal names its flag
 list in full rather than saying *fewer namespaces*.
 
 **`CredentialsConfined`'s delta has now been measured, and it does not work.**
-Executed against bubblewrap 0.11.2 while preparing `RV-346` round 6. Both arms —
+`EVD-014`, measured while preparing `RV-346` round 6. Both arms —
 `--unshare-all`, and the enumeration above with `--unshare-user` dropped —
 produced a byte-identical credential report: same uid, same gid, same non-empty
 supplementary groups, `CapPrm` and `CapEff` both zero, `NoNewPrivs` 1. The cage
@@ -2947,20 +2947,29 @@ project's outer jail.
 
 Row 13 as specified can therefore only read `Unproven`, and
 `Admission::Admitted` is unreachable — which is `sec-7`'s `B4` class exactly, in
-the row added one round after `B4` was found. Three further results from the same
-session bear on the row's *probe* rather than its control: the profile passes no
-`--uid` and no `--gid`, so the capsule's uid is the host's and not a mapped
-identity; `--unshare-all` does not clear supplementary groups, and cannot, since
-a user namespace may not `setgroups`; and `no_new_privs` is bubblewrap's default
-rather than a flag the profile passes, so it is set under every namespace
-combination and carries no signal for any namespace-shaped delta. Two of row
-13's four holding conditions are false against this design's own backend and a
-third is uninformative.
+the row added one round after `B4` was found.
 
-**A delta that does fire has been measured, and is not adopted here.** In the
-same session, `--cap-add ALL` under `--unshare-all` returned `CapInh`, `CapPrm`,
-`CapEff` and `CapBnd` all `000001ffffffffff` against the probe arm's all-zero,
-exiting clean. Those are capabilities inside the capsule's *own* user namespace
+**Three of the row's four holding conditions are also wrong**, which is the part
+the unjailed leg of `EVD-014` settled. *Mapped identity* is unmet: the profile
+passes no `--uid` and no `--gid`, so the capsule's uid is the host's. *Empty
+supplementary groups* is unmeetable: a user namespace may not `setgroups`, so
+bubblewrap **unmaps** the list rather than dropping it and the entry count is
+identical in every arm. And *both capability sets are empty* names `CapPrm` and
+`CapEff`, which are all-zero for **any** unprivileged process on any host — true
+vacuously, discriminating nothing. Bubblewrap does strip real capability
+authority, but in `CapBnd` and `CapInh`: measured full and non-empty in an
+unjailed parent, zero in every `bwrap` arm. The row is reading the two fields
+that cannot move and ignoring the two that do.
+
+Only `no_new_privs` survives, and it is now measured rather than assumed — the
+unjailed parent reads `0` and every arm reads `1`, so bubblewrap **sets** it.
+That is the one claim in this paragraph the jail could not have established, and
+it was previously carried on a reading of bubblewrap's documented default.
+
+**A delta that does fire has been measured, and is not adopted here.**
+`EVD-014` again: `--cap-add ALL` under `--unshare-all` returned `CapInh`,
+`CapPrm`, `CapEff` and `CapBnd` all `000001ffffffffff` against the probe arm's
+all-zero, exiting clean. Those are capabilities inside the capsule's *own* userns
 rather than host root, which is exactly the threat invariant 15 names: a capsule
 holding `CAP_SYS_ADMIN` in its namespace can mount what was never bound. So the
 property is falsifiable under bubblewrap after all — the design simply reached
@@ -3245,7 +3254,7 @@ realisation.
 | 10 | closed descriptor set | `Single`: the parent opens **three** decoys and marks each inheritable — a readable file, a **write-only** file, and one end of a socket pair — then the payload enumerates `/proc/self/fd` | no descriptor above 2 appears in the enumeration | `Removed(DescriptorsClosed)` | any decoy appears in the enumeration, is read, is written, or carries a byte back to the parent |
 | 11 | closed environment | `Single`: the parent sets a decoy variable in **its own** environment; the payload dumps its whole environment | the dump is exactly `CapsuleEnv`, and the decoy is absent | `Removed(EnvCleared)` | the decoy is present |
 | 12 | owned standard streams | `Single`: the parent execs with a decoy secret readable on `stdin` and one end of a socket pair on `stdout`; the payload reads `stdin` to EOF and attempts a write back through `stdout` | `stdin` yields zero bytes and the write-back does not reach the parent | `Removed(StdioOwned)` | the decoy is read from `stdin`, or the write-back arrives |
-| 13 | confined process credentials | `Single`: the payload reports uid, gid and supplementary groups from the credential syscalls, and its effective and permitted capability sets and `no_new_privs` from `/proc/self/status` | uid and gid are the mapped capsule identity, supplementary groups are empty, both capability sets are empty, and `no_new_privs` is set | `Removed(CredentialsConfined)` | the capsule reports a host credential, a non-empty capability set, or `no_new_privs` clear |
+| 13 ⚠ | confined process credentials — **as specified below and measured wrong; `EVD-014`, awaiting `RV-346` round 6** | `Single`: the payload reports uid, gid and supplementary groups from the credential syscalls, and its effective and permitted capability sets and `no_new_privs` from `/proc/self/status` | uid and gid are the mapped capsule identity, supplementary groups are empty, both capability sets are empty, and `no_new_privs` is set | `Removed(CredentialsConfined)` | the capsule reports a host credential, a non-empty capability set, or `no_new_privs` clear |
 
 #### The payload must be the property's strongest negation, not a representative one
 

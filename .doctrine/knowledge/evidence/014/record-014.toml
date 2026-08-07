@@ -1,0 +1,54 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 14
+slug = "bubblewrap-credential-confinement-what-a-delta-can-and-cannot-falsify"
+title = "Bubblewrap credential confinement: what a delta can and cannot falsify"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-07"
+updated = "2026-08-07"
+tags = ["capsule", "confinement", "bubblewrap", "conformance"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = "Dropping --unshare-user is a no-op for non-setuid bwrap 0.11.2 and cannot control a credential row; --cap-add ALL can. Bubblewrap sets no_new_privs and strips CapBnd/CapInh, but never CapPrm/CapEff — which are all-zero for any unprivileged process, so the two fields row 13 names carry no signal."
+provenance   = "experiment"     # inspection | experiment | reproduction | citation
+confidence   = "high"           # low | medium | high — measured on two hosts, jailed and unjailed, agreeing on every arm
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "sec-2 invariant 15 — the property is real and falsifiable under bubblewrap",
+  "sec-7 B4's class — a control delta that cannot change what its payload observes",
+]
+contradicts = [
+  "sec-7 table A row 13's delta as specified (CredentialsConfined drops --unshare-user)",
+  "sec-7 row 13's probe conditions: three of four — mapped identity, empty supplementary groups, and 'both capability sets are empty' naming CapPrm/CapEff rather than CapBnd/CapInh",
+]
+notes = [
+  "Measured twice: in-jail, then unjailed on the real NixOS host. Every arm agrees across both; only the no-bwrap control differs, the jail having already established what the measurement was trying to observe.",
+  "Cage isolated per RV-346 F-20 by comparing /proc/self/ns/user against the parent's rather than the credential report. Inode VALUES are not stable across runs — only difference-from-parent is load-bearing.",
+  "Two unjailed runs discarded before the reported one: EVD-013's shape recurring, every bwrap arm silent because NixOS PATH points at unbound /run. The positive control is what caught it.",
+  "Script, verbatim capture and the six answers: .doctrine/slice/248/spike-credentials.{sh,md}, spike-credentials-output.txt.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "measured basis for sec-7 row 13's control, and the refutation of its delta as specified"
+target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "a one-property-removed control that cannot fire, and a candidate that can"
+target = "DEC-156"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "raised as round 6 line 1; the remedy is this review's to rule on"
+target = "RV-346"

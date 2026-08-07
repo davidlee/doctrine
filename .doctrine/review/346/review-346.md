@@ -310,13 +310,27 @@ about the subject — establish which cage produced the result before raising it
    and `sec-9`'s out-of-jail caveat mostly dissolves. If it does not, say what
    the row becomes instead.
 
-2. **Row 13's probe conditions, same session, also recorded.** Two of four are
-   false against the design's own backend — the profile passes no `--uid`/`--gid`
-   so the uid is the host's rather than a mapped identity, and `--unshare-all`
-   cannot clear supplementary groups since a userns may not `setgroups` — and a
-   third, `no_new_privs`, is a bubblewrap default carrying no signal for a
-   namespace delta. Verify, and treat this as bounded evidence about the *probe*:
-   if the remedy at 1 re-cuts the row, these conditions are re-cut with it.
+2. **Row 13's probe is wrong on three of its four conditions, and the third is
+   the interesting one.** All measured, both jailed and unjailed, in `EVD-014`.
+   *Mapped identity* is unmet — the profile passes no `--uid`/`--gid`. *Empty
+   supplementary groups* is unmeetable — a userns may not `setgroups`, so
+   bubblewrap unmaps the list rather than dropping it and the entry count is
+   identical in every arm. And *both capability sets are empty* names `CapPrm`
+   and `CapEff`, which are all-zero for **any** unprivileged process on any host:
+   true vacuously, discriminating nothing. Bubblewrap does strip real capability
+   authority — `CapBnd` measured full and `CapInh` non-empty in an unjailed
+   parent, both zero in every arm — so **the row reads the two fields that cannot
+   move and ignores the two that do**. Only `no_new_privs` survives, and it is
+   now measured rather than inferred from documentation: the unjailed parent
+   reads `0`, every arm reads `1`, so bubblewrap sets it.
+
+   The generalisation is worth more than the row, and it is `F-31`'s rule wearing
+   different clothes: `F-31` was a probe observing a *consequence* of its
+   property; this is a probe observing a field that **cannot vary** under any
+   backend the suite will meet. Both pass against a broken backend, for different
+   reasons. Sweep table A for the second shape as you were asked to sweep for the
+   first — a holding condition whose field is constant across every arm the suite
+   can construct is not a test.
 
 2a. **The `EVD-013` over-attribution, and whether the sweep behind it was
    complete.** `sec-7` captioned all ten deltas as measured and then attributed
