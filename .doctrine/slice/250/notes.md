@@ -6,226 +6,96 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · design run `dr-019fd692` @ stage `reviewing` rev 41 · 4ac31fd1f
+fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · ebe741aa6
 
 ### Produced
 
-- `slice-250.md` — scope, with every open question either settled inline or
-  explicitly deferred. The settlements carry their evidence; do not re-derive.
+- `slice-250.md` — scope, reconciled twice: once against the eight inquiry
+  decisions (`inquire.scope`), once against what the review accepted
+  (`review.scope`, `167ce6a03`). The settlements carry their evidence; do not
+  re-derive.
 - `research/` — three-thread round + four probes (runtime, gitignored, **not a
-  durable sink**). Its load-bearing findings are mirrored into `slice-250.md`;
+  durable sink**). Load-bearing findings are mirrored into `slice-250.md`;
   anything cited from `research.md` alone dies with the folder.
-- IMP-406 — serve non-Claude harnesses from the embed via `.agents/skills`.
-  Sequenced `after` SL-250; carries the `.agents/skills` generalisation this
-  slice deliberately does not ship.
-- `mem.fact.claude.settings-hooks-merge-and-matcher` (`mem_019fd67cad37…`) — the
-  probe results, recorded durably.
-- Observation `019fd685-…` — RFC-011 instrumentation: the SPEC-010 / code
-  divergence was found only by reading git history during research.
-- Design run `dr-019fd692` — opened, exploring runbook discharged, 10-node
-  inquiry map declared, both exploring-edge gates cleared, now at `inquiring`.
-  **The run holds the live question set; do not restate it here.**
-- IMP-407 — the doctor leg, carved out of this slice (user, 2026-08-06).
-  Carries `R2`, `R7`, `OQ-5`, and a second leg the carve-out surfaced.
-- Observation `019fd6a7-…` — RFC-011: research-baseline restamp treadmill; a
-  design run's own slice-card edits regress its `explore.research` step.
-- **The `inquiring` stage, complete.** All eight blocking inquiries dispositioned,
-  each carrying a settled record; two nodes stay deferred to IMP-407. Both
-  runbook steps discharged, sufficiency accepted, stage advanced to `drafting`.
-  - `DEC-161` — `HookSpec` carries an ordered matcher set; ownership stays
-    command-only (settles `R5`).
-  - `DEC-162` — **ten** entries, six specs, one scope dial; closes `T2`. Also
-    absorbed `inq-3` by adoption rather than a duplicate record. (Its headline
-    said nine while its own table summed to ten; corrected in place at RV-348
-    `F-1`. Cite ten.)
-  - `DEC-163` — scope is a sticky `doctrine.toml` key, no `--scope` flag; the
-    installer announces its target.
-  - `DEC-164` — writing one scope evicts the abandoned one and reports it;
-    `R10` engineered, not documented.
-  - `DEC-166` — extract the link-reconcile helper; skills loops targets locally.
-  - `DEC-167` — cutover order: install, then disable the plugin.
-  - `DEC-171` — REV targets SPEC-011 / `REQ-186` alone; SPEC-010 closes by
-    conformance.
-  - `QUE-209` — REV requirement granularity, deferred to reconciliation.
-- **`slice-250.md` reconciled against all eight decisions** (runbook step
-  `inquire.scope`). Six passages contradicted them and were corrected: the
-  Scope items 1–3, the merge-core Non-Goal, `R5`, `R10`, `OQ-1`, and the closure
-  criteria. Research baseline restamped twice.
-- **The `drafting` draft — seven sections, materialised to `design.md`** (956
-  lines). `sec-1` activation architecture · `sec-2` the ordered matcher set and
-  the seven specs · `sec-3` scope key + abandoned-scope sweep · `sec-4` the write
-  seam and the retirement act · `sec-5` the skills channel and the extracted link
-  trichotomy · `sec-6` cutover and docs · `sec-7` verification. The run holds the
-  section set; do not restate it here.
-- **Design-target selectors recorded** (runbook step `draft.selectors`,
-  discharged): `src/boot.rs`, `src/install.rs`, `src/install_config.rs`,
-  `src/commands/cli.rs`, `install/**`, `.doctrine/spec/tech/011/**`. The
-  scope-relevant-only entries (`src/corpus.rs`, `src/doctor_checks.rs`,
-  `src/commands/doctor.rs`, `plugins/doctrine/hooks/**`, `.claude-plugin/**`,
-  `.doctrine/spec/tech/010/**`) are deliberately NOT design targets — each is
-  read or verified, none is edited.
-- **RV-348** — external design review of `design.md` at rev 39. Eleven findings
-  (2 blocker, 4 major, 3 minor, 2 nit), **all upheld**, none contested. Round
-  detail is in § RV-348 round 1 below; the ledger holds the findings and
-  responses. Run adopted at rev 40, materialised at 41, round-trip
-  byte-identical. `review_pass` is now STALE and all seven section attestations
-  are stale by construction.
-- **`DEC-162` corrected in place** — headline "nine entries" → "ten", which its
-  own inventory table already summed to. The design's `sec-1` count ledger is the
-  durable fix; this was the error at its source.
-- **Observation `019fd72c-…`** — RFC-011: the `/design` skill's Activation and
-  Recovery blocks omit the required positional `<SLICE>` on `design resume` /
-  `design show`.
-- **`src/corpus.rs` joins the changed-paths set** (RV-348 `F-2`). It was recorded
-  as unchanged in `sec-1`'s code-impact table; the selectors recorded at
-  `draft.selectors` list it as scope-relevant-only. **That classification is now
-  wrong** and `review.selectors` has not yet been re-run — see Open.
+- `design.md` — seven sections, materialised. The run holds the section set and
+  the decision set; do not restate either here. Read it with
+  `doctrine design resume 250`.
+- **Design run `dr-019fd692` is LOCKED at rev 51.** Policy switched to
+  `adversarial-only` at rev 45 on DEC-074's human-proxy grant, which made the
+  seven RV-348 lane attestations satisfy the required lane; reviewing runbook
+  discharged 3/3 (46–48); RV-348 disposed **conducted** (49); design accepted
+  (50); stage moved (51). The lock prints its own caveat — *an auditable agent
+  claim of user acceptance, not authenticated proof of a human act*.
+- **RV-348** — external design review at rev 39, two rounds, 17 findings, all
+  terminal, none contested. **Concluded** 2026-08-07 (the marker's first real
+  use). Round detail below; the ledger holds findings and responses.
+- **IMP-392's concluded-pass marker, carved out and landed** (`f3ed222ae`).
+  `[review].concluded` + `doctrine review conclude` + `review_conclude` (MCP);
+  `read_pass_facts` reads it in place of a hard-coded `false`, which is what
+  makes a `Conducted` disposition reachable at all. IMP-392 stays **open** on
+  the section reference, the RV resolution, the `Finding` retirement and the
+  severity summary.
+- Backlog minted: IMP-406 (`.agents/skills` from the embed, `after` SL-250) ·
+  IMP-407 (the doctor leg, carrying `R2`/`R7`/`OQ-5`) · **CHR-057** (retract a
+  `needs` edge — see Open).
+- Memories: `mem.fact.claude.settings-hooks-merge-and-matcher`
+  (`mem_019fd67cad37…`, the probe results) · **`mem.fact.doctrine.needs-axis-append-only`**
+  (`mem_019fd9a3c36a…`).
+- Observations (RFC-011): `019fd685-…` SPEC-010/code divergence found only via
+  git history · `019fd6a7-…` research-baseline restamp treadmill ·
+  `019fd72c-…` `/design` omits the positional `<SLICE>` · `019fd989-…` the
+  `Conducted` arm was unreachable, so a conducted pass could only be recorded as
+  waived · `019fd99f-…` the `needs` axis has no retraction verb.
+- **Gate:** `doctrine check gate` exit 0 after the last code change. All
+  `.doctrine` changes committed alongside — nothing pending.
 
 ### Learned
 
-- **Corrected `mem_019ec3392f247d53a1a4c910be8306aa`** in place. It claimed the
-  merge core is "generalized over event+matcher" — true for *writing* and for
-  `entry_is_canonical`, but `owned_positions` proves ownership by **command
-  alone**. It also still cited the retired `HookSpec::stamp_subagent`. A future
-  agent reading it would have concluded the multi-matcher case was handled.
-- **SPEC-010 specifies code that does not exist** — the canonical-tree-plus-
-  symlink Claude channel, deleted at `347197e8` with no amendment. Pre-existing
-  divergence, independent of this slice; `OQ-2b` closes it. In the observation,
-  not yet in a governance sink.
-- **`T1`/`T2`/`T3`** — the three design-surface findings that resize the hook and
-  skills legs. Written up in § Design surface triage below; `T2`'s drift is now
-  IMP-407's Leg 2 and `T3` reframes `OQ-9` as a no-parallel-implementation
-  question rather than a speculative generalisation.
-- **The link-reconcile duplication already existed, twice.** The trichotomy match
-  is byte-identical in `src/install.rs:2179-2191` (agents) and `:2279-2291`
-  (workflows). `T3` framed skills as a *risk* of a fourth copy; it is really the
-  third, which is what made `DEC-166` a DRY fix on live code rather than a
-  speculative generalisation.
-- **`T2` resolves mechanically, not by choice.** The plugin's `boot --emit` is
-  `boot_emit`'s hook, not `HookSpec::boot`'s — `is_doctrine_boot_command`
-  (`src/boot.rs:891`) requires the trailing arg to be literally `boot`. And
-  `is_doctrine_emit_command` (`:932`) already recognises the legacy args to
-  self-heal. So writing the canonical form retires the stale `*` entry with no
-  migration step.
-- **`design apply` silently swallows unknown payload keys.** `ApplyRequest`
-  carries `#[serde(flatten)]`, which disables `deny_unknown_fields`, so a
-  misspelled or invented top-level key is a no-op that still bumps the revision —
-  it looks like it applied. Already recorded as
-  `mem_019fd03e13397240b4eb05af218f5cf5`; hit again this session while probing
-  for the disposition schema. Read `src/design_run/submission.rs`, don't probe.
-- **The plugin-step fork, settled by the user (2026-08-06): delete them.** No DEC
-  covered what happens to the ~150 lines that *perform* plugin activation
-  (`select_marketplace_source`, `marketplace_action`, `claude_plugin_*`,
-  `enable_key`, `parse_registered_source`, `refresh_failure_is_fatal`, plus their
-  tests). Option (b) — keep them behind an opt-in — was rejected on `DEC-163`'s
-  own argument: a re-enterable plugin path re-creates `R8`'s double-fire, and
-  `R8` is the one risk doctrine cannot detect or reconcile. Written up in `sec-4`.
-  Consequence: `--dev` (`src/commands/cli.rs:126`) goes with them — its sole
-  consumer is `select_marketplace_source`. `[install] repo` survives; the npx
-  delegate still reads it.
-- **Correctness catch: the scope must resolve INSIDE `install_claude_hook`**, not
-  be passed to it. Its second caller is `run_sync_install` (`src/corpus.rs:506`)
-  — exactly the routine flagless install `DEC-163` argues about. As a parameter,
-  `memory sync install` could omit it and re-create the entry in the abandoned
-  file on every run, reintroducing `R10` as the treadmill `DEC-163` set out to
-  prevent. Resolving inside makes that unspellable. In `sec-3`.
-  - **SUPERSEDED in part (RV-348 `F-2`):** this entry used to end "and
-    `corpus.rs` needs no change at all". **False, and false in the dangerous
-    direction.** `run_sync_install` matches the return value against
-    `RefreshOutcome` directly, so the `HookWrite` return does not compile; worse,
-    inheriting the sweep without the report meant the highest-frequency install
-    path performed the slice's one destructive write in silence. `corpus.rs`
-    **is** a changed path, and the announcement seam is shared, not `wire`-local.
-- **`A3` is already satisfied** — `.gitignore:4` carries `!/.claude/settings.json`
-  beside `/.claude/*`. No edit needed; the project settings file is already
-  tracked here. **What that fact turned out to cost (RV-348 remediation):** it is
-  precisely *because* the project file is committed that the baked `current_exe()`
-  command form had to go — see the POL-002 entry below.
-- **`.doctrine/skills/*` needs no `ensure_gitignored` call** — `install/
-  manifest.toml:46` already lists it. But `ensure_gitignored`'s doc-comment still
-  claims "`skills install` reuses this", which is stale and will send the next
-  reader looking for a call site that should not exist. Flagged in `sec-5`.
-- **Two DRY fixes on live code, beyond the DECs.** (1) Four of five ownership
-  predicates in `boot.rs` are the same suffix-strip shape; four more were coming
-  — they collapse onto one `is_doctrine_command(cmd, args)` helper.
-  `is_doctrine_boot_command` is deliberately left alone — **not** because it is
-  equivalent (RV-348 `F-11`: it splits on the last whitespace of *any* kind, so
-  it diverges from the suffix-strip form on tab and newline separators) but
-  because it is the one predicate whose semantics would actually change, and it
-  guards a spec nothing ships. (2) `SETTINGS_REL` → `SETTINGS_LOCAL_REL`: once
-  doctrine writes either of two settings files, "the settings file" is an
-  ambiguity someone will misread.
-- **The vestigial "Hooks plugin leg" comment** at `src/install.rs:2295-2300`
-  documents code that no longer exists. Not captured as a backlog item — it dies
-  with `sec-4`'s deletion pass.
-- **`R6` withdrawn on a false premise** (recorded on `slice-250.md`). It assumed
-  retirement blinds `SpawnSeamSymmetry`; but the Non-Goals keep `plugins/` and
-  `R9` needs the plugin working as the managed-policy escape hatch, so
-  `hooks.json` survives and the check is untouched. Its closure criterion
-  inverted from "input migrates" to "needs no change".
+- `mem_019fd9a3c36a…` — the `needs` axis is append-only and `unlink` does not
+  reach it. Read it before hunting for a retraction verb.
+- **Corrected `mem_019ec3392f247d53a1a4c910be8306aa`** in place — it claimed the
+  merge core is generalized over event+matcher; `owned_positions` proves
+  ownership by **command alone**.
+- **SPEC-010 specifies code that does not exist** — deleted at `347197e8` with no
+  amendment. Pre-existing divergence; `OQ-2b` closes it by conformance.
+- **`design apply` silently swallows unknown payload keys** (`ApplyRequest` has
+  `#[serde(flatten)]`, which disables `deny_unknown_fields`) — already
+  `mem_019fd03e13397240b4eb05af218f5cf5`. Read `src/design_run/submission.rs`,
+  don't probe.
+- **The `Verb`/`TurnAct` split** — `Verb` is the finding-transition vocabulary
+  (`can` / `required_for` / `gate` are keyed on a `FindingStatus`), so a
+  pass-level act rides a sibling type rather than a sixth variant. Written up on
+  IMP-392; the reasoning generalises to any future non-finding review act.
 - **A committed default scope makes the baked exec path a POL-002 breach —
   SL-195 had already ruled on it.** Not raised by RV-348; found while
-  remediating, ruled by the user. `HookSpec` bakes `current_exe()`, and `DEC-163`
-  flips the default to `.claude/settings.json`, which this design itself calls
-  committed and travelling with the repo. SL-195 closed the identical defect on
-  `.mcp.json`, left the invariant **baked ⟺ gitignored** behind, and left Claude
-  hooks baked *precisely because* they were gitignored; its acceptance criterion
-  reads *no absolute host path in any tracked file*. Settled on SL-195's own
-  seam — committed scope writes `${DOCTRINE_BIN:-doctrine}` (`MCP_COMMAND` →
-  `PORTABLE_EXEC`, one literal, two surfaces), `Local` keeps the baked path, and
-  `is_doctrine_program` gains one arm so all five predicates own both forms.
-  That arm is what makes a scope switch **heal** rather than orphan, exactly as
-  `is_doctrine_mcp_entry` (`src/boot.rs:1475-1480`) does for SL-195's own
-  migration.
-  - Empirically safe: command hooks are **shell form** (no `args` key), and
-    `sh -c` expands variables (`docs/claude/hooks.md:341`). Different mechanism
-    from `.mcp.json`, which Claude Code expands itself at load (`mcp.md:384`).
-    The shipped `plugins/doctrine/hooks/hooks.json` has carried this form for all
-    ten of its entries and those hooks fire.
-  - Incidental: shell form tokenizes, so a **space-bearing** baked exec path is
-    already broken at execution today, whatever the ownership predicates tolerate.
-    Not fixed for `Local`; noted in `sec-2` so nobody reads predicate tolerance as
-    an execution guarantee.
-- **`install_baseref` had to follow the scope dial** (user ruling, same
-  conversation). Left "unchanged" and merely renamed, it would write
-  `worktree.baseRef` to `settings.local.json` while eleven hook entries went to
-  `settings.json` — doctrine authoring two Claude settings files per install with
-  only one swept, against `sec-3`'s own one-of-two-files invariant. The sweep
-  still does not chase it: eviction is spec-keyed and `worktree.baseRef` is a
-  top-level key whose value is invariant, so a stale copy is inert.
+  remediating. `baked ⟺ gitignored` survives via `CommandForm { Baked, Portable }`.
+  Detail in `design.md` § The command form and in `slice-250.md` Scope item 1;
+  the POSIX-shell boundary that rides with it is in § Ruled, not designed below.
 - **Design-review findings can be right about the claim and wrong about the
   address.** Three of nine helper citations in `sec-5` were off, one by 1837
-  lines, while the table's actual argument held. Re-derive line refs at
-  materialise time; a design's citations rot faster than its reasoning.
+  lines, while the table's argument held. Re-derive line refs at materialise
+  time; a design's citations rot faster than its reasoning.
+- **The raiser's pattern across both RV-348 rounds:** the mechanism is right and
+  the sentence attached to it overclaims by one degree. An implementer reads a
+  discharged-analysis sentence as discharged, so the round-2 remediation fixed
+  sentences as well as mechanisms.
 
 ### Open
 
-- **The inquiry set is CLOSED.** All eight blocking nodes dispositioned; two
-  remain deferred to IMP-407. The run is at `reviewing` — its live state is the
-  section set, not the question set. Read it with `doctrine design resume 250`.
-- **The `reviewing` runbook is UNDISCHARGED — all three steps.** `review.scope`
-  (reconcile `slice-250.md` against what the review accepted), `review.selectors`
-  (re-record design targets — **`src/corpus.rs` moved from scope-relevant to
-  changed**, and `src/dtoml.rs` is now touched for a doc correction), and
-  `review.passes` (satisfied by § RV-348 round 1's "what a further pass should
-  probe", written after the pass).
-- **Two gates the responder cannot discharge.** `review-disposition-attested` is
-  the *user's* — dispose the RV-348 pass as `conducted`, naming the RV. And all
-  seven `section-reviewed` attestations went stale at rev 40 by construction;
-  the remediation touched every section.
-- **RV-348 awaits the raiser.** Eleven findings answered, none verified or
-  contested yet. Blockers still open hold the reviewing edge.
+- **CHR-057 — ISS-314 reads blocked on delivered work.** Its `needs: IMP-392`
+  was for the marker alone; the marker landed and the edge cannot be retracted.
+  The correction lives in prose on IMP-392 until a verb exists. `after` has the
+  same gap.
+- **Next: `/plan`.** The design is locked; there is no plan yet.
 - **At reconcile:** `QUE-209` — does the REV widen `REQ-186` or add new
-  requirements for the newly-governed hook set and the scope key? Deferred here
-  by the user at the sufficiency gate; the REV is authored at reconcile, which is
-  where requirement granularity is the natural call.
-- **At close:** IMP-400 does *not* close with this slice — its `OQ-4`
-  (migrating existing `enabledPlugins` / marketplace registrations) is out of
-  scope and keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.
-- **At reconcile:** the REV target is SPEC-011 (`REQ-186`) **alone** — SPEC-010
-  dropped out under `DEC-171`, since `OQ-2b` makes its responsibilities 3–6 true
-  again rather than needing amendment; it is a conformance-verification target
-  instead. RFC-018 takes the harness field notes.
+  requirements for the newly-governed hook set and the scope key? The REV target
+  is SPEC-011 (`REQ-186`) **alone**; SPEC-010 is a conformance-verification
+  target under `DEC-171`. RFC-018 takes the harness field notes.
+- **At close:** IMP-400 does *not* close with this slice — its `OQ-4` (migrating
+  existing `enabledPlugins` / marketplace registrations) is out of scope and
+  keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.
+- **What a further review pass should probe** — five items, in § What a further
+  pass should probe below, written after the last pass.
 
 ## Design surface triage (design run `dr-019fd692`, 2026-08-06)
 
