@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdea2-8902-7780-bc56-7ea94e3a2a36"
+recorded_at = "2026-08-07T23:50:21.698258674Z"
+kind = "friction"
+summary = "design apply adopt_authored envelope is snake_case while sibling payload vocab is kebab-case (/design, ISS-320)"
+detail = "Recovering from a hand-edit during the SL-248 managed design run. ISS-320 documents that no verb emits the adopt_authored section map, so the payload must be hand-built. It does not state the key wire detail: ApplyRequest and SubmissionEnvelope carry NO serde rename_all, so the envelope is snake_case (run_uid, known_revision, submission_id, adopt_authored) — while several sibling enums in the same module ARE kebab-case. A first attempt built with kebab keys is refused with 'missing field run_uid', which names one field and not the convention, so the natural fix is to correct that one key and be refused again. Cost one wasted apply cycle. Compounds ISS-320's existing unactionable-refusal complaint."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
