@@ -14,7 +14,7 @@ ref   = "SL-248"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected bounded validated mounts; observed lexical roots and mount collisions can expose forbidden host state"
 detail = "In `sec-2`, the design says `[capsule] readable_roots` accepts any host directory or file (lines 324-330), preserves host paths as inner paths, and deliberately does not follow symlinks (lines 347-359), while the profile mounts `/proc`, `/dev`, and `/tmp` before all readable entries and mounts writable entries afterward (lines 291-303). A configured root of `/`, `/proc`, `/dev`, `/tmp`, `/source`, the capsule-root parent, or an ancestor of the canonical repository therefore either exposes the host directly or shadows a reserved mount. A root such as `/opt/tools` that is itself a symlink to the canonical repository evades lexical checks: bubblewrap dereferences the source path for `--ro-bind`. I verified this locally with a symlinked declared directory; the marker in its out-of-tree target was readable inside bwrap (`shared-net-symlink-bind=0`). This contradicts the claimed absence of canonical state, credentials, other capsules, and undeclared host state, and `/source` shadowing can substitute the contracted export. Fix by making `CapsulePlacement` construction validating and non-public: reject duplicate/ancestor-overlapping inner mounts and reserved destinations; refuse symlink roots or resolve and validate their targets explicitly; and reject any root equal to or above canonical, control-plane, capsule-parent, or credential scopes. The conformance suite must carry mutants for each collision class."
@@ -32,7 +32,7 @@ response = "Upheld on the merits and NOT yet fixed, because the fix is a governa
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected an explicit accepted-base binding; observed a generic readable list and arbitrary CommitId leave the base unproved"
 detail = "SPEC-030 requires an explicit base and input set, but `sec-2` row 2 maps only the input list, and `CapsulePlacement` has no semantic base input. In `sec-3`, `ProvisionRequest.base` is an unconstrained `CommitId` (lines 547-554) and the export is only one generic `MountedPath`; no step proves that `base` is the accepted identity or that `/source` denotes the export for that identity. A caller can request base B while placing an export for A at `/source` (or a declared `/source` root can shadow it) and all seven stated backend properties still pass. Fix by accepting or deriving a typed `AcceptedBase` at the trusted boundary, representing the source export as a distinct immutable input bound to that identity rather than an element of a public vector, reserving `/source`, and verifying before clone that the supplied export contains exactly the bound base."
@@ -77,7 +77,7 @@ response = "Upheld: the defect is real and structural. --clearenv stops inherita
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected idempotent immutable export publication; observed the concurrent loser and existing-export validation are unspecified"
 detail = "`sec-3` step 6 says an export is idempotently reused when it already holds `base`, and invariant 2 says concurrent builders use a temporary name and rename into place. It does not define unique temporary ownership, no-replace publication, what the rename loser does, or what proves an existing directory is the exact immutable export rather than a symlink, partial/corrupt repository, repository with alternates, or repository containing extra refs/objects. Two concurrent builders can produce one rename failure rather than idempotent reuse, and a weak `holds base` check can bind more host object state than the per-base export decision permits. Fix by specifying an atomic publish protocol: uniquely owned temp directory, full export validation, symlink refusal, no-replace rename, loser validation and reuse of the winner, cleanup only of the caller-owned temp, and an exact invariant for refs/config/alternates/object closure."
@@ -86,7 +86,7 @@ response = "Contest upheld. The temporary export directory is created before ste
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected rollback to remove only newly owned empty state; observed transaction-root ownership and collision handling are unstated"
 detail = "`sec-3` says the transaction id is allocated trusted-side, step 7 creates `tx/<id>`, and rollback recursively removes that path after failure. The function signature supplies neither a preallocated id nor an allocator seam, and the design does not require an exclusive atomic create or refusal when the path already exists. On an allocator collision or retry with the same id, an implementation using recursive directory creation can enter an existing transaction root and later delete work it did not create, contradicting the rollback rationale and REQ-461. Fix by specifying where collision-resistant identity comes from, requiring atomic exclusive creation of the root, retaining a creation/ownership token, and making rollback refuse deletion unless that exact call created the root and no transaction was returned."
@@ -95,7 +95,7 @@ response = "Contest upheld, and it is the better half of the finding. The transa
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected forbidden scopes to reject every overlap; observed descendants remain bindable"
 detail = "Expected: CapsulePlacement validation prevents every declared readable root and resolver result from reaching canonical repository state, control-plane state, credentials, or another capsule, while permitting only the current transaction directories that provisioning owns. Observed: sec-2 lines 219-221 reject a resolved host path only when it equals or is an ancestor of a ForbiddenScopes member. A descendant such as repository/.git/config, credentials/token, or capsule-root/tx/sibling therefore passes. sec-5 lines 1529-1536 says capsule_root protects siblings by relying on provisioning to compute only current-transaction paths, but configured readable-roots and closure-resolver output are also provisioning-computed and can name any descendant. The design needs provenance-aware categories: bidirectional overlap rejection for declared and resolved readable inputs, with a narrow carve-out only for validated current-transaction writable paths, plus descendant mutants for every forbidden scope."
@@ -104,7 +104,7 @@ response = "Upheld — blocker, and the reasoning it refutes was mine. sec-2 lin
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected strict verification-row schema; observed nested unknown and missing keys lack refusals"
 detail = "Expected: REQ-449 strictness applies to the entire interpretation block, so every unknown key and every missing required key is refused before a policy is normalized, hashed, or executed. Observed: sec-4 lines 1110-1115 defines an explicit walk only for the interpretation table key set, while lines 1133-1135 validate only a non-empty verification sequence, non-empty argv, and non-empty arguments. It never specifies refusal of an unknown key inside a verification row, a row missing argv, or a wrong row shape. A row containing argv plus extra = true therefore has no defined refusal and may be silently projected out of the canonical typed value. Walk each verification row recursively against the sole argv key, give missing, unknown, and wrong-type cases typed refusals, and add real-parser tests."
@@ -113,7 +113,7 @@ response = "Upheld — blocker. The walk covered the interpretation table and th
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected checked bound arithmetic; observed MiB conversion can overflow before construction"
 detail = "Expected: every accepted numeric config value converts once into ByteCount or Duration without panic, wraparound, or ambiguity; an unrepresentable bound refuses naming its key. Observed: sec-5 lines 1397-1402 says expected-capsule-size-mib and file-size-cap-mib convert into u64-backed ByteCount, but overflow handling is specified only for statvfs multiplication at lines 1604-1608 and warning-threshold multiplication at lines 1614-1616. The refusal table has no conversion-overflow case, and the tests cover only threshold saturation. Any MiB value above floor(u64::MAX / 1048576) leaves construction undefined. Use checked unit conversion with a named BoundOverflows key refusal and boundary tests for both size keys."
@@ -122,7 +122,7 @@ response = "Upheld. Overflow was specified for the statvfs multiplication and th
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected a reachable early-warning tier; observed multiplier one erases it"
 detail = "Expected: every accepted capacity policy preserves REQ-461 criterion 1 by having a non-empty region that warns before the insufficient refusal boundary. Observed: sec-5 lines 1414-1416 accepts capacity-warn-multiplier >= 1, but the tier definition at lines 1618-1623 makes Low equal to expected <= available < expected times multiplier. At multiplier 1 that interval is empty, so no available-space value can emit the conspicuous warning. The refusal and tests reject only values below one. Require a multiplier greater than one, or define explicit multiplier-one semantics that still produces the required warning, and pin the boundary."
@@ -131,7 +131,7 @@ response = "Upheld, and the check is now stronger than the argument that produce
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected a clock-free HostFacts boundary; observed sec-3 still requests a clock"
 detail = "Expected: the no-clock ruling is consistent everywhere, since provisioning consumes no timestamp and src/clock.rs remains the sole wall-clock home. Observed: sec-5 lines 1554-1559 correctly removes clock from HostFacts, but sec-3 line 784 still documents the host argument as clock, statvfs, path existence. That is the signature sketch an implementer meets first and it directly contradicts the later trait. Remove clock from the sec-3 comment and add the transaction-id source explicitly rather than letting clock return as an accidental identity input."
@@ -140,7 +140,7 @@ response = "Upheld — my own inconsistency, ruled in sec-5 and not swept into s
 
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected defaults matched to measured properties; observed no evidence for the per-file cap"
 detail = "Expected: at R1 evidence altitude, each enforced default is tied to the quantity actually measured, and known-failing or unmeasured values are not presented as generally usable optional defaults. Observed: scripts/spike-capsule/capsule/sandbox.sh uses one disk_cap for both RLIMIT_FSIZE and a whole-tree du check, and maps either leg to the same resource-cap outcome. The recorded heavy 4.4 GiB point is peak whole-tree use and cannot establish the largest file or which disk leg fired. Sec-5 lines 1393-1395 and 1661-1665 drop the whole-tree cap but retain 256 MiB as a per-file default attributed to the spike; the 300s default is separately known to have failed at 352s. Calling all defaults a guess that every project should override is honest about uncertainty, but optional enforced defaults still terminate work. Either require explicit execution bounds, choose and justify conservative values from the heavy fixture where the measurement matches, or gather separate maximum-file evidence before assigning the per-file default."
@@ -149,7 +149,7 @@ response = "Upheld, and it is the sharpest finding of the round. The spike used 
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected an absolute root outside the repo; observed relative HOME yields a relative root"
 detail = "Expected: CapsuleConfig.root is always absolute and resolved, and the default cannot land in the repository or current working directory. Observed: sec-5 lines 1516-1520 ignores a relative XDG_DATA_HOME but joins HOME with .local/share without requiring HOME to be absolute or non-empty. HOME=relative therefore produces a relative capsule root, contradicting the type claim at line 1431 and invariant 4 at lines 1678-1680; the refusal set and root tests contain no relative-HOME case. Require an absolute non-empty HOME before joining, otherwise refuse naming root, and add both relative and empty HOME tests."
@@ -158,7 +158,7 @@ response = "Upheld. The draft rejected a relative XDG_DATA_HOME and then joined 
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected deterministic restriction refusals; observed inserted rows contradict the diagnosis"
 detail = "Expected: rule 4 of the restriction algebra deterministically classifies row removal, reorder, replacement, and insertion as the design and named tests promise. Observed: sec-4 lines 1211-1217 says a base row is Reordered only when all base rows appear but not in base order, and otherwise an index mismatch is Replaced; yet inserting a row before or between base rows leaves the base rows in their original relative order. The stated algorithm therefore selects Replaced for the insertion examples while the text and test at line 1290 require Reordered. The policy still refuses, so this is not a security blocker, but the implementable diagnostic contract is contradictory. Define precedence using prefix and subsequence checks and align the test title."
@@ -167,7 +167,7 @@ response = "Upheld. Three predicates over the same pair of sequences were produc
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the process-freshness control to be executable through the backend contract; observed no way to obtain a live payload PID"
 detail = "sec-7 Table B row B5 requires two concurrent capsules and says the trusted side observes the subject payload PID, then renders that PID into the observer argv; it explicitly rejects a PID reported by the subject. But sec-2 exposes only synchronous CapsuleBackend::execute and ConformanceBackend::execute_weakened calls returning Observation after execution completes. Neither returns a start handle, exposes a running PID, accepts a PID callback, or gives the harness another observation seam. A thread can keep execute in flight but cannot learn the child PID through this interface. Therefore the control added in response to RV-346 F-6 is not implementable as specified, and REQ-450 criterion 1 cannot be credited to Table B until the contract carries a trusted live-process observation mechanism."
@@ -181,7 +181,7 @@ The seam is on ConformanceBackend, not CapsuleBackend, so invariant 6 holds: pro
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected admission to reject writable immutable inputs; observed every listed probe passes a backend that uses writable binds"
 detail = "sec-2 requires the per-base export and every declared readable input to be bound read-only, while sec-9 residual 1 relies on no capsule being able to alter a declared path. Table A row 2 only executes from each bound path, rows 3 and 4 only test absence/read reach, and Table B mutates transaction-local paths; no row attempts a write through a readable mount or the shared source export. A BubblewrapBackend mutant replacing ro-bind with bind for readable inputs therefore preserves every listed observation while giving capsules mutable shared host/toolchain/export state. Execution confirms the mechanism: bwrap --ro-bind / / --bind HOST HOST followed by a capsule write changed the host marker to capsule-mutated with exit 0. This violates the explicit immutable-input and fresh-state contract, invalidates sec-9 residual 1 as stated, and means REQ-459 criterion 1 is not discharged by Table A."
@@ -197,7 +197,7 @@ Consequential changes: sec-2 gains invariant 11 (what is readable is read-only, 
 
 [[finding]]
 id = "F-20"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the unconditional admission test to run in the supported jail; observed the exact nested profile cannot create its network namespace"
 detail = "sec-7 and sec-9 residual 3 claim the supported Linux bubblewrap development jail runs the suite unconditionally, relying on DEC-160 session evidence that nested bubblewrap works. In the current NixOS bubblewrap review jail, the exact recorded command bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all -- /bin/sh -c echo nested-ok exits 1 with loopback: Failed to create NETLINK_ROUTE socket: Operation not permitted. The discriminating controls show the failure is the denied-network leg: the same command with --share-net succeeds, the explicit non-network namespace set succeeds, and --unshare-net alone fails. Since Table A row 5 and the normal backend profile require the failing default-denied network namespace, the unconditional test would make cargo test fail in the stated supported environment; the residual is not confined to macOS and must be reconciled before the checked-set ruling can stand."
@@ -218,7 +218,7 @@ The general fact survives and is now recorded rather than discarded, because it 
 
 [[finding]]
 id = "F-21"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected default-members to change only the checked set; observed it also selects the unreleased control package for packaging and publish"
 detail = "sec-8 calls default-members = [dot, crates/doctrine-control] the whole checked-set change, while sec-6 and sec-9 require doctrine-control to be built but not released and defer its distribution contract. A minimal workspace using that exact default-members shape showed bare cargo package assembling both the root package and doctrine-control. Cargo publish has the same default-member package-selection surface, and this repository justfile publish recipe is the bare cargo publish --allow-dirty form. The proposed doctrine-control manifest is not specified with publish = false and the publish recipe is explicitly declared unchanged, so the next normal crates.io release selects the supposedly unreleased package. The same probe also showed cargo fmt formats all workspace members including cordage, so default-members is not what extends formatting and cordage is not outside that part of the fast loop. The design must explicitly prevent publication or path-limit the recipe, and then restate the actual checked-set effects."
@@ -236,7 +236,7 @@ Touch-set consequence: the justfile joins it, correcting sec-8's own claim two p
 
 [[finding]]
 id = "F-22"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the whole-diff table to include generated workspace metadata; observed Cargo.lock is omitted and a locked build refuses"
 detail = "sec-8 says its modified-path table is the whole diff but omits Cargo.lock. In a minimal root-package workspace matching the design, I generated the lockfile with root plus cordage, then added doctrine-control as a workspace/default member with its path dependency on the root lib. cargo build --locked exited 101: cannot update the lock file because --locked was passed. Regenerating added a doctrine-control package entry. This repository treats Cargo.lock as release-owned input and the Nix/crane path consumes it, so implementation necessarily modifies Cargo.lock even with no new registry dependency. The touch-set and phase scope are incomplete until it is named."
@@ -245,7 +245,7 @@ response = "Upheld. Adding a workspace member rewrites Cargo.lock whether or not
 
 [[finding]]
 id = "F-23"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the public-library alternative to require a source enumeration; observed one negative include rule cleanly omits the lib target"
 detail = "sec-9 R7 accepts a new public semver surface after rejecting exclusion of src/lib.rs on the claim that exclusion would require replacing the package include allow-list with an enumeration. A minimal package with the same include = [slash src glob] shape and both src/main.rs and src/lib.rs disproves that premise: adding the single pattern !/src/lib.rs made cargo package -p rootpkg --list omit the library, and full cargo package verified successfully with the explicit warning that the library was ignored because src/lib.rs was not included. The remaining tradeoff, a published binary-only crate differing from the local workspace package, is real, but the asserted enumeration cost is not. Because publishing the five exports creates durable semver obligations, R7 must re-evaluate the actual one-line alternative rather than accept the API on a false cost."
@@ -265,11 +265,13 @@ title = "Expected REQ-461 closure to execute the real capacity comparison; obser
 detail = "REQ-461 criterion 1 requires provisioning to compare available space at the capsule location. sec-5 assigns the real mechanism to SystemHost statvfs on the capsule root and says filesystem claims are executed in sec-7 Table C, but that row reports Skipped whenever the repository and capsule root share a filesystem. sec-8 then marks REQ-461 satisfied using only pure capacity/configuration tests and explicitly says closure does not rest on the executed row. Those pure tests exercise arithmetic and fixture HostFacts; they cannot detect a SystemHost that probes the wrong path, returns a manufactured figure, or never calls statvfs. Under the slice standing discipline, a filesystem claim needs non-skippable execution on a discriminating reproduction. The requirement cannot move to satisfied until such evidence exists or the executed row is made mandatory on a fixture that actually supplies distinct filesystems."
 disposition = "fixed"
 response = """
-Upheld. Pure tests over a fixture HostFacts exercise arithmetic and cannot observe whether the real probe is ever called, on what path, or against what quantity — and the one executed row skipped wherever the capsule root and repository share a filesystem. Marking REQ-461 satisfied while explicitly disclaiming its only executed evidence was not defensible under this slice's own standing discipline.
+Upheld on the contest. The split landed in table C and sec-5's Verification alignment still carried the old singular claim — "the one executed claim it owes ... a single test that runs only where the two differ, and reports skipped rather than passed where they do not". That is the F-28 class again, in the section that owns the requirement.
 
-Fix: table C's capacity claim splits into two rows. The first is unconditional — the fixture calls SystemHost on its own capsule root and requires agreement, within one allocation unit, with a statvfs the test performs itself on the same path. That rules out never calling statvfs, a manufactured or cached figure, and reading the wrong quantity, and it needs no particular disk layout so it never skips. The second is the wrong-path discriminator, which is only observable across filesystems: the fixture selects a path on a second filesystem from the host's own mounts at build time and asserts the two figures differ and each matches an independent statvfs. It does not wait for the operator's disk layout to differ — on Linux a tmpfs is present at /dev/shm or /tmp, and measured here the real-disk capsule root and the tmpfs reported 272 GiB against 32 GiB. Where no second filesystem is found the row reports skipped naming that reason.
+sec-5 now states both rows and which one REQ-461 rests on:
+1. Unconditional — SystemHost is called on the fixture's own capsule root and must agree, within one allocation unit, with a statvfs the test performs itself on the same path. Rules out never calling statvfs, a manufactured or cached figure, and reading the wrong quantity. Depends on no disk layout, so it never skips.
+2. Conditional, and only this one — that the probe reads the capsule root's filesystem rather than the repository's is observable only across filesystems, so the fixture picks a second-filesystem path from the host's own mounts at build time and asserts the figures differ and each matches an independent statvfs. Skips, naming the reason, where no second filesystem exists.
 
-REQ-461 stays satisfied, but closure now rests on the unconditional row rather than on pure tests with a disclaimer. sec-8's closure table says so, and records that this row moved in round 3."""
+REQ-461's closure rests on 1, which cannot skip; 2 strengthens where the host allows and is honest where it does not."""
 
 [[finding]]
 id = "F-25"
@@ -279,19 +281,13 @@ title = "Expected the typed source export to pass placement validation; observed
 detail = "Expected: sec-2 CapsulePlacement::try_new admits the design own typed per-base SourceExport while still refusing generic readable paths beneath ForbiddenScopes.capsule_root. Observed: sec-2 says every resolved host path equal to, above, or below capsule_root refuses, with one typed carve-out only for writable entries beneath this placement TransactionRoot; it then states that readable entries get no carve-out. The layout places the source at <capsule_root>/export/<base-oid>, and sec-7 row 9 also requires its fixture own export as /source. The source is therefore a descendant of the forbidden capsule root, is not writable transaction state, and every lawful production or fixture placement is refused before any conformance row runs. This is the over-denial side of the F-10 remediation. Add a distinct typed SourceExport admission rule tied to the accepted base and the export subtree, keep the generic readable vector carve-out-free, and pin both a positive lawful-source case and a negative sibling-export substitution mutant."
 disposition = "fixed"
 response = """
-Upheld in full, and the class behind it is now the design's rule rather than this row's patch.
+Upheld on the contest. try_new gained the typed SourceExport rule and sec-5 invariant 4 still described exactly one carve-out — writable entries under the placement's own transaction root — so this section still said the validator refuses the design's only lawful source placement. Read literally, a suite in which no conformance row can be constructed.
 
-Confirmed by reading: the layout puts the export at `<capsule_root>/export/<base-oid>`; `capsule_root` is a `ForbiddenScopes` member; overlap is bidirectional; the sole carve-out was writable-descendant-of-this-transaction-root. So the validator refused the design's only lawful source placement, and sec-7 row 9's fixture — which builds its own per-run export — could not have been constructed either. Every conformance row would have failed before running.
-
-Both readings were defects, which is why this is not a wording fix. If `source` was validated, nothing lawful passed. If it was exempt, there was an unvalidated authority channel, which is exactly what sec-2 invariant 2 claims to have closed.
-
-Fixed: `try_new` gains a typed `SourceExport` admission rule — the field descends from `<capsule_root>/export/` and its carried base identity equals the placement's accepted base; everything else refuses. It is a second typed carve-out beside `TransactionRoot`, and neither is a carve-out in the readable/writable vectors, which stay carve-out-free. Your negative control is taken as `a_source_export_of_a_different_base_refuses`, plus two more: a source outside the export directory, and a readable entry naming the export directory (so the two carve-outs cannot be composed into a third).
-
-The class: you found the over-denial mirror of F-10's under-denial, in the same rule. F-10 was found because nothing proved the rule denied enough; F-25 was possible because nothing proved it admitted enough. Only one direction had a test. sec-2 now states the discipline once — every refusal rule is paired with a positive case the refusal must not capture — and the placement tests are ordered to make the pairing visible. The one pre-existing positive control had the right instinct; F-25 is what it cost to have that instinct once rather than as a rule."""
+Invariant 4 now names both typed exceptions and asserts there are no others: writable entries under the placement's own transaction root, and the SourceExport at <capsule_root>/export/<base-oid>, admitted only where its carried base identity equals the placement's accepted base. It also restates what neither exception is — neither loosens the readable or writable vectors, which stay carve-out-free — since that is the property sec-2 invariant 2 claims and the thing a reader of this invariant alone would otherwise have to infer."""
 
 [[finding]]
 id = "F-26"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected admission to reject undeclared inherited descriptors; observed all nine rows pass a backend that leaks one"
 detail = "Expected: sec-2 explicit-input, bounded-visibility, credential-denial, and network-posture claims cover every authority channel crossing execute, so a future backend preserving an undeclared file descriptor cannot be admitted. Observed: sec-7 row 2 and row 4 exercise only mounted paths, and row 5 attempts a new connection; no row gives the parent an inheritable decoy descriptor and asks the capsule to consume it. A backend identical on every listed observation but preserving one inherited descriptor therefore passes all nine rows while exposing an already-open credential file or preconnected socket. Execution isolates the mechanism and the cage: a direct child given an inheritable descriptor read FD-SECRET and exited 0; the bubblewrap-shaped profile with --unshare-all --share-net ran and exposed no bytes, showing BubblewrapBackend happens to close it. The exact network-denied profile failed only at the reviewing sandbox NETLINK seccomp layer, so that failure is not attributed to the subject. This is a suite defect, not a BubblewrapBackend defect. Add the tenth independent claim under the explicit-input clause: close every descriptor except the deliberately owned standard or observation channels, with a probe carrying one inheritable decoy and a one-axis control that preserves it."
@@ -313,7 +309,7 @@ What this does not buy, stated in sec-9 residual 5: the ledger cannot establish 
 
 [[finding]]
 id = "F-27"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected teardown to reject process-group-only reaping; observed row 7 does not require an escaped descendant"
 detail = "Expected: sec-2 property 7 and sec-7 row 7 reject a backend that kills only the original process group while a double-forked or setsid descendant survives. Observed: Table A specifies only orphan a descendant, without requiring that descendant to leave the original session or process group, while sec-7 hazard containment explicitly relies on a process-group kill. A process-group-only backend passes an ordinary orphan probe and still violates the contract that no descendant outlives execute. The mechanism reproduces without namespaces: killing the original process group removed a same-group control process, but a descendant that created a new session remained alive until explicitly cleaned up. Pin the row 7 payload to fork and escape the original process group or session before its parent exits, require trusted-side proof that this descendant is gone when execute returns, and give the harness cleanup authority that does not itself stop at the escaped process group. Otherwise the next mutant is admitted by a probe weaker than the property title."
@@ -341,17 +337,20 @@ title = "Expected the authorised nine-row correction everywhere; observed sec-2 
 detail = "Expected: the F-19 remediation and the human-authorised DEC-156 correction leave one count and one correspondence rule throughout the design. Observed: sec-7 says nine rows over eight clauses and records DEC-156 moving eight to nine; sec-8 and the reconciled SL-248 scope also say nine. But sec-2 still says the contract meaning is eight properties, claims one-to-one correspondence with the eight SPEC-030 clauses, says DEC-156 was corrected to eight, and says sec-7 builds eight rows. Sec-6 twice calls conformance an eight-property table. These statements are not historical framing; they are current implementation instructions and directly contradict invariant 11 and row 9. Replace the stale count and correspondence prose in sec-2 and sec-6, preserving the actual rule: nine independent claims cover eight clauses, with the explicit-input clause covered for boundedness and immutability."
 disposition = "fixed"
 response = """
-Upheld. You are right that these were current implementation instructions and not historical framing — sec-2 told a reader the contract's meaning is eight properties, asserted one-to-one correspondence with the eight clauses, and reported DEC-156 as 'corrected to eight', three rounds after the first correction and one after the second.
+Upheld on the contest, and this is the third pass, so the remediation is the ruling rather than another sweep.
 
-One correction to the finding, which does not change its substance: sec-6 states the stale count ONCE, in the `src/conformance.rs` comment. Its other 'eight' references are to the new crate's eight units in the layering map, which is a different eight and is correct.
+Your four instances are all real and all fixed: the repeated count, Property carrying 11 variants against a 13-row table, the incomplete Delta::Removed list, and — the one that matters — no implemented exact-coverage test.
 
-Fixed at the class. The count now lives in exactly one place — sec-7's Table A — and no other section restates it as a numeral. sec-2 names the properties without counting them; sec-6's comment reads 'the property table (count: sec-7 Table A)'; sec-8's evidence table refers to 'tables A, B (five) and C (four)'. A numeral repeated across five sections is a constant with five definitions, so STD-001 applies to prose here as much as to code.
+That last one is the finding. every_row_id_is_covered_by_exactly_one_table was cited as enforcement in the remediation of the finding it was meant to close, while being an unwritten planned test in the list above it. So the first remediation moved the numeral to a single source and the numeral stopped drifting, while the row contents, enum variants, delta list and test titles kept drifting. The count was never the thing that was wrong.
 
-That is not sufficient on its own — a rule nobody enforces decays the same way the first correction did — so the enforcement is a test: `every_row_id_is_covered_by_exactly_one_table` already existed, and sec-7 now asserts the executed title list is exactly the row set. A row added without a title, or a title outliving its row, is red rather than quiet. That assertion is what makes the count safe to state in one place at all.
+Taking your line-6 ruling as written — not fully fixable at design altitude — and stating it rather than implying otherwise:
 
-The one-to-one correspondence claim is not restored in a corrected form — it is gone. The rows now cover eight clauses from eleven rows across three multiply-covered clauses, and the structure that IS one-to-one is the channel ledger F-26 forced: one row per channel, because one control can only remove one mechanism.
+- Table A is normative. Every other enumeration in the document is a manually maintained projection, labelled as one where it appears, and wrong by default when it disagrees. New sec-7 subsection "Table A is the inventory; everything else is a projection".
+- Exactly one projection is machine-checked: the Property enum has one variant per row and RowId::Property keys the verdict, so a row the suite can construct that the enum cannot name is a compile error. That fences the enum against the code's tables and says nothing about the prose.
+- every_row_id_is_covered_by_exactly_one_table stays planned and is worth writing — it asserts every RowId the CODE constructs falls in exactly one of the code's tables, which is real. It is no longer claimed to protect this document, because it cannot: closing that loop needs something that parses this Markdown, and no phase owns it.
+- sec-9 R9 carries the residual with the altitude stated.
 
-Both of the sections you named have been amended and both are unreviewed as amended, along with sec-7, sec-8 and sec-9."""
+Current state, verified by counting the artefacts rather than by assertion: Table A 14 rows, sec-2's properties projection 14, Property 14 variants, per-row executed titles 14. Round 6's own split forced a hand-edit of three of those four in one change, which is the argument for R9 rather than against it."""
 
 [[finding]]
 id = "F-29"
@@ -360,7 +359,12 @@ severity = "blocker"
 title = "The new crate inherits neither serde nor toml, so the mandated config reader cannot compile"
 detail = "Expected: sec-6 applies its own warning that a second workspace member must declare the dependencies its code uses. Observed: sec-5 mandates a Serde projection and `#[serde(deny_unknown_fields)]` at design.md:1915-1925, while sec-6 and the authoritative touch-set at :2287-2304 and :3669 give `crates/doctrine-control/Cargo.toml` only the doctrine path edge, rustix, and `publish = false`; neither serde nor toml is declared. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/manifest-transfer` has a root package depending on serde/toml and a control member depending only on the root. `cargo check -p control` fails E0433 for both crates; `cargo check -p control --features direct-parser-edges` succeeds after the control member declares them directly. Fix: specify `serde.workspace = true` and `toml.workspace = true` on the new member and include those edges in sec-6/sec-8 manifest instructions; then execute the actual second-member build."
 disposition = "fixed"
-response = "Upheld, and it is this section's own class defeating this section. sec-6 stated the principle — a claim about the root package's edge does not transfer to a second workspace member — and then applied it to rustix alone, leaving sec-5's mandated Serde projection to inherit an edge that does not exist. sec-6 now enumerates every edge the crate's own code uses (doctrine by path, rustix with fs+std, serde with derive, toml) in a table, and states the rule that matters more than the table: derive the list from the crate's own use statements and treat disagreement with the table as the table being stale. sec-8's touch-set row carries the same instruction. Recorded in prose that stating a class and applying it to one member is how the class survives — the F-27 shape, one level up."
+response = """
+Upheld on the contest, both halves, and I reproduced yours before fixing.
+
+rustix::process is gated behind a `process` feature neither manifest declares — confirmed on a minimal package, E0433 with the compiler's own note naming the gate. I also ran the positive control: rustix::fs::statvfs and rustix::io::fcntl_setfd, the two modules this design actually names, both compile under fs+std. So the edge table was correct for the call sites specified today and is a trap for the next one — and since credentials, pids and signals all live in rustix::process, and rows 13/14 are about credentials, the next reader was likely to walk straight into it. The table now records that rustix's modules are individually gated, with your instance attached, so the "derive from the crate's own use statements" rule has something concrete to bite on.
+
+The date edge is real and the fix removes it rather than declaring it. sec-7's verify(..., today: Date) sketched time::Date, and time was not on the edge list — so the signature did not compile, and declaring the edge would have put a second date formatter in the workspace, which src/clock.rs's module contract explicitly forbids ("no parallel date formatter"). clock::today() already returns the YYYY-MM-DD String every authored record in this project stores. So verify takes today: String, AdmissionVerdict.date is String, and clock::today becomes the third root-package export. Zero new compiled crates survives and the time edge is never opened."""
 
 [[finding]]
 id = "F-30"
@@ -369,11 +373,18 @@ severity = "blocker"
 title = "Arbitrary parent stdin crosses execute outside the descriptor property"
 detail = "Expected: every authority channel into a capsule is explicit and rowed, and descriptor closure leaves only standard streams the contract deliberately owns. Observed: `Execution` at design.md:292-305 has no stdin policy, invariant 12 marks only descriptors above 2, and table A row 10 at :2986 likewise ignores fd 0. An inherited stdin may be a credential file, pipe, terminal, or bidirectional socket, yet all eleven rows can pass. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/stdin-channel` runs the bubblewrap-shaped profile twice. With parent stdin piped, the capsule read all 22 decoy bytes; with stdin replaced by null, it read 0. Both executions succeeded, so this is the subject boundary rather than the reviewer cage. Fix: make stdio part of `Execution` and the channel ledger; default stdin to a trusted null/closed source or a typed owned input, create fresh one-way parent-owned capture for stdout/stderr, and add a control whose only delta inherits decoy stdin. Row 10 over fd >2 cannot discharge this exception."
 disposition = "fixed"
-response = "Upheld. Execution now carries a stdio field over a closed CapsuleStdio vocabulary with one variant — EmptyInputCapturedOutput — on exactly CapsuleEnvVar's argument: a RawFd field or an Inherit variant would make handing a capsule a live trusted-side descriptor the ordinary case rather than an unrepresentable one. Output endpoints are one-way rather than merely parent-created, because a socket pair satisfies 'the parent made it' while carrying bytes back. New sec-2 invariant 14; new sec-7 table A row 12 with StdioOwned, disjoint from row 10 by descriptor number so a failure names one row. Invariant 12 is re-titled to say 'above 2' explicitly and now states that the bound used to be the hole. The descriptor-sweep paragraph gains the rule underneath: a sweep is described by its bound as much as by its action, and an unstated bound reads as everything. The ledger gains the standard streams as a channel it never listed."
+response = """
+Upheld on the contest. You are right on both halves and the second is the one that mattered.
+
+Row 12 asserted "stdin yields zero bytes and the write-back does not reach the parent", and the second leg rejected the flow the design intends. CapsuleStdio::EmptyInputCapturedOutput makes descriptors 1 and 2 one-way endpoints the parent created AND READS — capture is the point, so bytes reaching the trusted side is specified behaviour, not violation. The row asserted that capture is broken.
+
+And it named the wrong distinguishing property. The stated reason for one-way endpoints was that a socket pair carries bytes back into the trusted side; a capture pipe does that too. What a socket pair actually confers, and a pipe write end does not, is that the capsule can READ descriptor 1 — an inbound channel the ledger never declared.
+
+Fixed: the payload reads stdin to EOF, then attempts to read descriptors 1 and 2, and the row holds when both reads fail. Under Removed(StdioOwned) the capsule inherits the trusted side's own standard streams, which on a terminal or a socket are readable, so the control fires on exactly the mechanism the row names. Written up as its own subsection since the "observes delivery rather than capability" shape is reusable."""
 
 [[finding]]
 id = "F-31"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Row 10 reads descriptors but admits a backend that leaks write authority"
 detail = "Expected: row 10 proves the closed-descriptor-set property against the strongest negation, so no inherited descriptor can carry authority across execute. Observed: table A at design.md:2986 only enumerates and reads descriptors; the tests at :3610-3618 require unreadability and absence of decoy bytes. The claim at :3612-3614 that absent bytes distinguish an open-but-unreadable descriptor from a closed one is false. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/write-fd-mutant` passes an unlinked host file as an inheritable write-only fd through the bubblewrap-shaped profile. The row-shaped read observation produced 0 bytes, but a write payload mutated 17 host bytes; setting CLOEXEC made the control exit 1 and left the decoy unchanged. A backend that closes readable inherited fds but preserves write-only ones therefore earns Proven from the readable decoy while retaining mutation authority. Fix: exercise every descriptor authority mode under the same closure mechanism, at minimum readable and write-only decoys and a bidirectional/socket case; if one control cannot change every observation, split the property into independently controlled rows."
@@ -386,17 +397,81 @@ status = "answered"
 severity = "blocker"
 title = "Backend admission leaves process credentials wholly ungoverned"
 detail = "Expected: ADR-020 requires independently equivalent filesystem, process, credential, network, and canonical-repository authority properties, and REQ-459 criterion 1 claims the shared suite proves credential denial. Observed: the only process-credential text in the design is residual 5 at design.md:4129-4135, which concedes that uid/gid mapping, supplementary groups, capabilities, and setuid regain have no contract clause and no row. A positive-controlled search for `uid|gid|supplementary groups|capabilities|no-new-privs|setuid` finds the residual and no enforcement or verification elsewhere. Thus a backend retaining host process credentials can pass every row, while sec-8 still claims REQ-459 criterion 1 in full and credits REQ-448 denial. `--unshare-all` is only a bubblewrap mechanism, not the cross-backend property ADR-020 requires; the current outer jail already strips capabilities, so a local zero-capability probe cannot establish the general claim. Fix before lock: obtain the governance ruling SPEC-030 currently lacks, define the observable process-authority posture including uid/gid, supplementary groups, capability sets, and no-new-privs/setuid behavior, then add independently falsifiable controls and rows or withdraw the in-full closure claim until governed evidence exists."
-disposition = "fixed — SPEC-030 clause deferred to a Revision"
-response = "Upheld, and rowed — but on different reasoning than you gave, which is worth stating because the difference matters. Your ADR-020 reading is over-broad: ADR-020 requires the five authority classes of a *macOS* mechanism before it can claim parity, which with one backend is a future bill rather than a present breach. The decisive argument is internal. sec-8 defines the phrase — 'in full above means every channel in the ledger has a row, a claim that can be checked against something' — and sec-9 residual 5 then states that three ledger channels have no table A row, process credentials among them. The design refutes its own claim in its own words, two hundred lines after writing the paragraph explaining the phrase had already been false twice. F-30 makes it false a further way by adding an unlisted channel. Fixed as table A row 13 (CredentialsConfined) and sec-2 invariant 15, which states the part neither of us had written down: invariant 4 achieves denial by absence, absence denies only what the capsule cannot reach by other means, and a payload holding host credentials with a capability set retained can mount what was never bound — so the filesystem denial the whole design rests on was standing on a property the contract did not require. Two honest weakenings recorded rather than hidden: setuid regain is governed via no_new_privs rather than probed, because a suite that must not be privileged cannot build a setuid-root decoy; and the row is only weakly falsifiable in this project's jail, which already strips capabilities, so the phase owes a run outside it. The governance blank stays open — SPEC-030 states no clause, row 13 exists on ADR-020's credential-authority class instead, which is lawful because DEC-156 derives rows from channels rather than clauses. sec-9 Follow-Up carries the Revision, deliberately not taken here: routing a governance cycle in front of a design otherwise ready to lock, to record a property the design already implements and tests, is the wrong order."
+disposition = "fixed"
+response = """
+Upheld on the contest, and the row is split rather than narrowed. Your ruling on line 1 is taken: the discipline survives semantically, a control may grant if the grant negates exactly one protection, and --cap-add ALL is therefore lawful as a typed granting control rather than a mislabelled property removal. That is now a named subsection in sec-7 and Delta gains a Granted(AuthorityGrant) variant, deliberately NOT folded into Widened — Widened widens the mount set and takes a placement function, a capability grant touches no mount, and reusing it would make the two indistinguishable in the verdict.
+
+Where this departs from your remedy, and why. You said "narrow or split", and the split you sketched was four-way: capabilities, identity, supplementary-group mapping, no_new_privs. Measured against EVD-014's unjailed arms, only two of the four are controllable under bubblewrap:
+
+- identity: --uid 4242 --gid 4242 gives uid=4242, uid_map "4242 0 1"; omitting gives host uid=1000. Fires. Row 13, Removed(MappedIdentity).
+- capabilities: --cap-add ALL gives all four sets 000001ffffffffff against the probe arm's all-zero. Fires. Row 14, Granted(AllCapabilities), reading CapBnd and CapInh — never CapPrm/CapEff, which is your line-2 point.
+- supplementary groups: every arm reads the same unmapped 65534 list. A userns may not setgroups, so bubblewrap unmaps rather than drops, and dropping --unshare-user does not restore them because the namespace is created regardless. No delta changes the observation.
+- no_new_privs: parent 0, every arm 1, including under --cap-add ALL. bwrap's full flag list has no way to leave it clear. No delta changes the observation.
+
+Rowing the last two would manufacture two more instances of the B4 defect this split exists to remove — rows whose control cannot fire, reading Unproven forever, with Admission::Admitted unreachable. So they are recorded as observed-but-unrowed: the fixture reports them, rows 13 and 14 assert them as supporting observations, neither carries a verdict, and a named test asserts they reach no verdict so a later reader cannot mistake them for admission evidence. sec-9 R8 carries the residual and states the exposure plainly: sec-7 cannot distinguish a backend that confines these from one that never had to, and that is a fact about one backend rather than about the contract.
+
+Also landed as a consequence: the bubblewrap profile now passes --uid/--gid. It did not before, which is why "mapped identity" was unmet — row 13 asserts a declared identity, so there has to be one to declare. That is a real behaviour change, not bookkeeping, and it is called out as such.
+
+If you judge the two unrowed mechanisms should be rows carrying permanent Unproven rather than observations, say so and I will re-cut — but that reads to me as the defect this round removed, reintroduced by name."""
 
 [[finding]]
 id = "F-33"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Table C is four tests in its table and sec-8 but three in sec-7s verification tail"
 detail = "Table C lists four named tests at design.md:3295-3300 and sec-8 confirms `C (four)` at :3805, but sec-7 says `Executed, table C: the three titles above` at :3629. This is a stale numeral in implementation instructions, the same drift class the document elsewhere warns against. Fix `three` to `four` or remove the repeated numeral."
 disposition = "fixed"
 response = "Upheld. sec-7's verification tail now reads 'the four titles above', matching table C's four rows and sec-8's 'C (four)'. Same F-28 class. sec-8's evidence table also gains table A's own count explicitly — 'tables A (thirteen), B (five) and C (four)' — so the numeral has one source rather than three places to drift between."
+
+[[finding]]
+id = "F-34"
+status = "withdrawn"
+severity = "blocker"
+title = "Expected row 10 to detect inherited descriptors; observed its own enumeration descriptor violates the holding condition"
+detail = """
+Expected: Table A row 10's Single observation must have a realizable no-inheritance holding condition, with the positive control distinguishing the inherited-descriptor case. Observed: the payload is specified to enumerate /proc/self/fd and hold only when no descriptor above 2 appears. Executing the minimal observation 0
+1
+2
+3 produced 0, 1, 2, 3: opening the directory for enumeration creates the observer's own fd above 2. Therefore an otherwise clean process fails the literal condition before any nominated decoy is inherited, and the positive control cannot repair that false baseline. Specify how the observer fd is excluded without hiding inherited fds, or make the property about nominated decoy identities/targets rather than every number above 2."""
+
+[[finding]]
+id = "F-35"
+status = "withdrawn"
+severity = "minor"
+title = "Expected precise evidence citations; observed jail.rs:806 points at unrelated implementation"
+detail = "Expected: SL-248 R1 requires current source claims to carry precise citations that land on their evidence. Observed: a 16-citation source-line sample had 15 supporting landings (93.75%), but both uses of  do not. At current subject watermark ec973c1e,  is  in the macOS resolver; it supports neither sec-2's open-by-default network claim nor sec-2's claimed harvest warning. The sampled EVD-013/EVD-014 entity citations did land on the stated measurements. Repair or remove the two misattributed line citations."
+
+[[finding]]
+id = "F-36"
+status = "answered"
+severity = "blocker"
+title = "Expected row 10 to detect inherited descriptors; observed its own enumeration descriptor violates the holding condition"
+detail = """Expected: Table A row 10's Single observation must have a realizable no-inheritance holding condition, with the positive control distinguishing the inherited-descriptor case. Observed: the payload is specified to enumerate /proc/self/fd and hold only when no descriptor above 2 appears. Executing the minimal observation `sh -c "ls -1 /proc/self/fd"` produced 0, 1, 2, 3: opening the directory for enumeration creates the observer's own fd above 2. Therefore an otherwise clean process fails the literal condition before any nominated decoy is inherited, and the positive control cannot repair that false baseline. Specify how the observer fd is excluded without hiding inherited fds, or make the property about nominated decoy identities/targets rather than every number above 2."""
+disposition = "fixed"
+response = """
+Upheld, and reproduced before remediating: `sh -c "ls -1 /proc/self/fd"` in a clean process reports 0, 1, 2, 3. Opening the directory to enumerate it creates the observer's own descriptor, so row 10's holding condition was unsatisfiable by the observation that tested it. The probe arm could never reach Proven and the positive control had nothing left to distinguish.
+
+The remediation deliberately does NOT take the second option you offered. Narrowing the row to "none of the nominated decoys appears" is row 11's denylist defect one level down: it passes a backend leaking a descriptor the fixture never thought to nominate, which is the whole of what a closed-descriptor-set property exists to catch. The strength had to survive the fix.
+
+So the payload now resolves every entry rather than counting them, and the row holds when every descriptor above 2 resolves to the payload's own handle on /proc/self/fd. That excludes exactly one descriptor, by identity rather than by number, and it excludes it because the observation created it — a leaked descriptor cannot masquerade as the observer's, since the observer's target is the enumeration directory itself. The claim stays "nothing above 2 that the observation did not itself open".
+
+Recorded as its own subsection in sec-7 because the generalisation is worth more than the row: F-31 was a probe observing a consequence of its property; this was a probe whose own machinery falsified the property it observed. Both are failures to ask what the observation does to the thing observed."""
+
+[[finding]]
+id = "F-37"
+status = "answered"
+severity = "minor"
+title = "Expected precise evidence citations; observed jail.rs:806 points at unrelated implementation"
+detail = "Expected: SL-248 R1 requires current source claims to carry precise citations that land on their evidence. Observed: a 16-citation source-line sample had 15 supporting landings (93.75%), but both uses of `jail.rs:806` do not. At current subject watermark ec973c1e, `src/worktree/jail.rs:806` is `Vec::with_capacity(policy.extra_rw.len())` in the macOS resolver; it supports neither sec-2's open-by-default network claim nor sec-2's claimed harvest warning. The sampled EVD-013/EVD-014 entity citations did land on the stated measurements. Repair or remove the two misattributed line citations."
+disposition = "fixed"
+response = """
+Upheld, both citations, verified at the subject watermark. src/worktree/jail.rs:806 is `let mut extra_rw = Vec::with_capacity(policy.extra_rw.len());` in the macOS resolver and supports neither claim it was attached to.
+
+Repaired rather than removed, because the underlying claims are true and the evidence exists:
+- the network default-open claim now cites jail.rs:311 (the `network` field doc: "false => --unshare-net. Default true") and jail.rs:570 (`if !policy.network` appending the flag);
+- the warning about the worktree arm being default-open now cites the fail-closed note at jail.rs:301-303, plus jail.rs:311 and jail.rs:324 (`network: true` in the Default impl). It is also renamed from "harvest note" to "fail-closed note", which is what that comment actually is.
+
+Your sample rate is recorded as the answer to round 6 line 2a: 15/16 landings, 93.75%, with both failures being source-line cites and the EVD-013/EVD-014 entity citations landing correctly. That split is itself the useful signal — entity citations are stable under edit, line citations rot silently as the cited file moves, and this design carries a lot of the second kind."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

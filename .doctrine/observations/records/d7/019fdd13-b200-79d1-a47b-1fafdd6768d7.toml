@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdd13-b200-79d1-a47b-1fafdd6768d7"
+recorded_at = "2026-08-07T16:34:43.328984166Z"
+kind = "friction"
+summary = "/design + review ledger: a contest's reasoning has no durable home"
+detail = "RV-346 round 6: codex contested six findings. The ledger persists the raiser's original title/detail and the responder's disposition/response, but a *contest* writes nothing durable — --note is documented ephemeral baton chatter, and the raiser has no response field of their own. So the reason a remediation was judged inadequate survives only in the external reviewer's returned summary, which lives in the orchestrator's context and dies with it. A fresh responder resuming from the ledger alone sees status=contested and the original finding, and cannot recover what specifically was still wrong. Cost here: the round-6 contest reasons had to be copied out of the MCP return value by hand to survive. Either contest needs a durable field, or the protocol should require the raiser to re-raise as a new finding (heavier, and it inflates the ledger)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

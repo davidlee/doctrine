@@ -66,7 +66,7 @@ directory that holds no work.
   produce a message naming what was missing and what would satisfy it, which is
   what `backend verify` is for (`sec-7`).
 - `STD-001` — single-source named constants. Every `[interpretation]` key, the
-  schema version, the inner layout paths, the capacity defaults and the twelve
+  schema version, the inner layout paths, the capacity defaults and the profile's
   bubblewrap flag tokens are named once. `DEC-155` records a **departure** for
   the flag tokens specifically: they are not shared with `src/worktree/jail.rs`,
   and the record carries the argument so review meets an adjudication rather
@@ -108,7 +108,7 @@ nothing structural in common:
 |---|---|---|
 | filesystem floor | `--ro-bind / /` — everything readable, writes denied | an allowlist — the canonical repository, other capsules and the credential store are *absent* |
 | namespaces | none unshared | `--unshare-all` |
-| network | open by default, `--unshare-net` on opt-out (`jail.rs:806`) | denied by default, `--share-net` on opt-in |
+| network | open by default, `--unshare-net` on opt-out (`jail.rs:311`, `jail.rs:570`) | denied by default, `--share-net` on opt-in |
 | paths | the host path reproduced inside | a fixed inner layout |
 | environment | inherited | `--clearenv` plus explicit `--setenv` |
 | session | absent | `--new-session` |
@@ -440,13 +440,23 @@ so the numeral now lives where the rows do.
 | 10 | closed descriptor set | that no open file descriptor crosses `execute` except the ones the contract deliberately owns |
 | 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv`, with nothing inherited from the trusted-side process |
 | 12 | owned standard streams | that descriptors 0, 1 and 2 are the parent's own — an empty source, and one-way capture endpoints it created — never the trusted-side process's |
-| 13 ⚠ | confined process credentials | the property invariant 4's denial-by-absence silently stands on. `sec-7`'s statement of *how* it is observed is measured wrong on three of four conditions (`EVD-014`) and is `RV-346` round 6's to re-cut; the property itself is not in question |
+| 13 | mapped capsule identity | that the capsule runs as a declared uid and gid, not the trusted side's — the profile passes `--uid`/`--gid` for there to be one |
+| 14 | confined capabilities | that the capsule holds no capability authority in the bounding or inheritable set inside its own user namespace |
+
+Properties 13 and 14 were one property until `RV-346` round 6. It asserted four
+mechanisms and could control none of them; `EVD-014` measured which two are
+falsifiable under bubblewrap and which two are not, and `sec-7` § *Two of the
+four credential mechanisms cannot be rowed* carries the split. Supplementary-group
+authority and `no_new_privs` are still owed by the contract and are observed by
+the suite, but neither is a property here, because nothing this backend offers
+can falsify them (`R8`).
 
 Rows 12 and 13 arrived in round 5 and the table did not move with them until
-`RV-346` round 6 was being prepared. That is `F-28`'s defect a second time, in
-the section whose own note above records `F-28` — which is the argument for
-`sec-7`'s table being the single source and this one being answerable to it,
-rather than the two being maintained in parallel.
+`RV-346` round 6 was being prepared; round 6 then moved it again. That is
+`F-28`'s defect twice in the section whose own note above records `F-28` — which
+is the argument for `sec-7`'s table being the single source and this one being a
+**projection** answerable to it, rather than the two being maintained in
+parallel. `R9` states what that does and does not buy.
 
 #### The rows are derived from channels, not from clauses
 
@@ -482,7 +492,7 @@ mechanism nobody wrote down.
 | open file descriptors, above 2 | one inherited across `execute` is already-open authority no mount test sees | row 10 |
 | the standard streams — descriptors 0, 1, 2 | an inherited `stdin` is a readable credential, and an inherited `stdout` may be a bidirectional socket back to the trusted side | row 12 |
 | the environment | a value inherited from the trusted-side process, rather than computed for the capsule | row 11 |
-| process credentials | host uid/gid, supplementary groups, or a retained capability set lets the capsule reach what absence from the mount set was supposed to deny | row 13 |
+| process credentials | host uid/gid, supplementary groups, or a retained capability set lets the capsule reach what absence from the mount set was supposed to deny | rows 13 and 14; supplementary groups observed but unrowed (`R8`) |
 | the network | a socket to anything off-host or trusted-side | row 5 |
 | the process tree | a descendant that outlives the call, or a trusted-side process reachable from inside | row 7, and `sec-7` B5 |
 | `argv` | not a channel: it is typed, computed trusted-side, and never capsule-influenced | by construction (`Argv`) |
@@ -531,15 +541,24 @@ rounds, and a change to *that* still needs authorising. The corrections:
 - **nine → eleven** (`F-26`, and the channel ledger that finding required):
   descriptors and the environment are two further clause-2 channels, neither
   with an executed row.
-- **eleven → thirteen** (`F-30` and `F-32`): the standard streams are a channel
-  the ledger never listed, and process credentials are one it listed and did not
+- **eleven → thirteen** (`F-30`, `F-32`): the standard streams are a channel the
+  ledger never listed, and process credentials are one it listed and did not
   row. Row 10 was widened in the same round (`F-31`) without changing the count,
   which is the distinction worth keeping — a row whose *payload* was too weak is
   not a missing channel.
+- **thirteen → fourteen** (round 6, `F-32` on its second pass): the credential
+  row asserted four mechanisms and controlled none. Measured, two are
+  falsifiable under this backend and became rows 13 and 14; two are not and
+  became observations (`R8`). This correction is a **split**, not a new channel
+  — the ledger did not move — which is a fifth shape worth naming beside the
+  four above: a channel can be listed, rowed, and still wrong, if the row bundles
+  mechanisms whose controls differ.
 
-The pattern across all four is one pattern, and it is `sec-9`'s `R3` in its
+The pattern across all five is one pattern, and it is `sec-9`'s `R3` in its
 sharpest form: **every count correction has come from an adversary building the
 backend the suite would wrongly pass, and none from anyone reading the rows.**
+Round 6 is the sharpest instance — the correction came from *executing* the
+control and finding it inert, which no amount of reading would have produced.
 
 Round 5 is the first partial exception, and the exception is the point. `F-32`
 was found by reading this ledger against table A and noticing a listed channel
@@ -589,11 +608,12 @@ design makes on its behalf.
 
 #### The profile
 
-The twelve flag tokens are named once in this module and nowhere else. Assembly,
+The flag tokens are named once in this module and nowhere else. Assembly,
 in order:
 
 ```
 --unshare-all                      # namespaces; network included
+--uid <capsule-uid>  --gid <capsule-gid>   # the declared capsule identity (sec-7 row 13)
 --proc /proc  --dev /dev           # the two pseudo-filesystems a process needs
 --tmpfs /tmp                       # TRANSIENT scratch: per-execution, dies with the capsule
 --ro-bind <host> <inner>           # once per readable input, in declared order
@@ -606,6 +626,15 @@ in order:
 --share-net                        # ONLY when NetworkPosture::Permitted
 ```
 
+**`--uid`/`--gid` are new in round 6 and are a real behaviour change, not a
+bookkeeping one.** Without them a capsule runs as the trusted side's uid inside
+its user namespace, which is what `EVD-014` measured; row 13 asserts a *declared*
+identity, so there has to be one to declare. They require `--unshare-user`,
+which `--unshare-all` already implies, so the cost is two tokens and no new
+namespace. The values are the capsule's own, fixed by the profile rather than
+configurable — an operator-chosen uid would be a second way to weaken the
+capsule, and `sec-5` deliberately carries no credential knob.
+
 Two guards, both fail-closed, both taken from the spike's own findings:
 
 - an empty mount vector refuses rather than executing unconfined
@@ -613,7 +642,8 @@ Two guards, both fail-closed, both taken from the spike's own findings:
 - an empty `argv` refuses.
 
 `--share-net` last and conditional is the inversion `DEC-155` names and the
-harvest note at `jail.rs:806` warns about: the worktree arm is default-open, and
+fail-closed note at `jail.rs:301-303` warns about: the worktree arm's `Default`
+is the permissive floor (`network=true`, `jail.rs:311`, `jail.rs:324`), and
 a capsule must be default-denied. `sec-7`'s property 5 asserts the default
 **positively** — a probe that reaches a trusted-side loopback listener only when
 the posture is `Permitted` — because a negative-only assertion passes on a host
@@ -938,7 +968,8 @@ are the ones a shell hands a process by default.
    hard — which is a fact about bubblewrap and not about the contract, and
    `DEC-156` exists precisely because the contract must bind mechanisms nobody
    has written yet. Governed by `ADR-020`'s credential-authority class rather
-   than by a `SPEC-030` clause, which states none; executed in `sec-7` row 13.
+   than by a `SPEC-030` clause, which states none; executed in `sec-7` rows 13
+   and 14.
 
 **Invariants 11 through 15 are one shape repeated**, and the repetition is the
 point rather than an accident of drafting. Each names a property that no pure
@@ -1049,7 +1080,7 @@ the argv, so a pure suite can assert the flag that ought to produce them and
 never the thing itself. Invariant 11 (read-only attachment) is `sec-7` row 9;
 invariant 12 (descriptor closure above 2) is row 10; invariant 13 (a computed
 environment) is row 11; invariant 14 (parent-owned standard streams) is row 12;
-invariant 15 (established process credentials) is row 13.
+invariant 15 (established process credentials) is rows 13 and 14.
 
 Invariant 15 is the sharpest case of the general rule, because the pure test that
 *looks* sufficient is an argv assertion over `--unshare-all` — a flag from one
@@ -2286,9 +2317,19 @@ quota, and both are the backpressure `REQ-461` scopes out of V0.
 4. **The capsule root is absolute, resolved, and forbidden to capsules in both
    directions.** It is `ForbiddenScopes::capsule_root`, so `sec-2`'s validating
    constructor refuses any placement path that contains it *or lies under it*,
-   except writable entries under the placement's own transaction root. No
-   environment value can produce a relative root, and none can produce one
-   inside the repository.
+   with exactly **two** typed exceptions and no others: writable entries under
+   the placement's own transaction root, and the `SourceExport` — the immutable
+   input at `<capsule_root>/export/<base-oid>`, admitted only when its carried
+   base identity equals the placement's accepted base. No environment value can
+   produce a relative root, and none can produce one inside the repository.
+
+   The second exception is `RV-346` `F-25`, and this invariant is the mirror the
+   remediation missed twice. Stating only the transaction-root carve-out here
+   made this section say the validator refuses the design's only lawful source
+   placement — which, read literally, is a suite in which no conformance row can
+   be constructed. Both carve-outs are typed rules in `try_new` (`sec-2`), not
+   path-prefix escapes, and neither loosens the readable or writable vectors,
+   which stay carve-out-free.
 5. **Capacity is advisory in one direction only.** It may refuse before work
    starts; it may never permit what another rule refuses, and it is not consulted
    after `sec-3` step 3.
@@ -2341,10 +2382,26 @@ Capsule root resolution:
 - `a_sibling_transaction_under_the_resolved_root_is_refused_by_the_placement`
 
 Executed, in `sec-7`: nothing in this section is a confinement property, so the
-suite carries no capacity row. The one executed claim it owes is that the probe
-reads the filesystem the capsule root is on rather than the repository's — a
-single test that runs only where the two differ, and reports skipped rather than
-passed where they do not.
+suite carries no admission row. It owes **two** Table C claims, and the split is
+`RV-346` `F-24` — as one skippable test, the only executed evidence for
+`REQ-461` disappeared on any host where the capsule root and the repository
+share a filesystem, which is most of them.
+
+1. **Unconditional.** `SystemHost` reads real available space at the path it is
+   given: the fixture calls it on its own capsule root and requires agreement,
+   within one allocation unit, with a `statvfs` the test performs itself on the
+   same path. This rules out never calling `statvfs`, a manufactured or cached
+   figure, and reading the wrong quantity. It depends on no particular disk
+   layout, so it never skips.
+2. **Conditional, and only this one.** That the probe reads the capsule root's
+   filesystem rather than the repository's is observable only across
+   filesystems, so the fixture selects a second-filesystem path from the host's
+   own mounts at build time and asserts the two figures differ and each matches
+   an independent `statvfs`. Where no second filesystem exists it reports
+   *skipped* naming that reason.
+
+`REQ-461`'s closure rests on 1, which cannot skip. 2 strengthens it where the
+host allows and is honest about its absence where it does not.
 
 <!-- doctrine:section sec-6 -->
 ## Crate topology, the export set, and layering enforcement
@@ -2439,6 +2496,18 @@ enumerated against what this crate's modules actually call:
 | `serde = { version = "1", features = ["derive"] }` | `config`'s `[capsule]` projection and its `#[serde(deny_unknown_fields)]` (`sec-5`) | nothing that reaches here |
 | `toml` | `config`, to parse the table before projecting it (`sec-5`) | nothing that reaches here |
 
+**`rustix`'s modules are individually feature-gated, and `fs` does not buy
+them.** `RV-346` `F-29` on its second pass: `rustix::process` is behind a
+`process` feature neither manifest declares, so a call into it is `E0433` —
+*could not find `process` in `rustix`* — with the compiler's own note naming the
+gate. Reproduced on a minimal package. The two modules this design actually
+names, `rustix::fs::statvfs` and `rustix::io::fcntl_setfd`, both compile under
+`fs` + `std`, also reproduced — so the table above is correct **for the call
+sites specified today** and is a trap for the next one. Credentials, pids and
+signals all live in `rustix::process`, and rows 13 and 14 are about credentials,
+so the next reader is likely to walk into it. The rule below is what to apply;
+this note exists so the rule has a worked instance attached.
+
 Two of those are worth the words, because `sec-5` reads as though all three were
 already paid for. `rustix`'s `std` arrives at the root package from `crossterm`,
 and from `which` and `tempfile`, which are dev-dependencies; `doctrine-control`
@@ -2476,13 +2545,14 @@ below does not carry them, and it cannot reach around the export set.
 
 ### What the root package must export, and what that costs
 
-`doctrine-control` needs exactly two things from the root package:
+`doctrine-control` needs three things from the root package:
 
 1. `git::read_path_at(root, refish, path)` (`src/git.rs:790`) — the
    working-tree-free blob read `REQ-449`'s resolution runs on, verified this
    session to be the whole impure surface that resolution needs;
 2. the `[interpretation]` policy module `sec-4` builds, which lives in the root
-   package rather than here because both binaries will need it at cutover.
+   package rather than here because both binaries will need it at cutover;
+3. `clock::today()`, the project's single date formatter — see below.
 
 It also needs the project config file's location and a raw read of it, for
 `sec-5`'s `[capsule]` table.
@@ -2491,15 +2561,29 @@ It also needs the project config file's location and a raw read of it, for
 
 ```rust
 // src/lib.rs — the entire public surface of the doctrine library.
+mod clock;
 mod config_file;
 mod git;
 mod kinds;
 
 pub mod interpretation;
 
+pub use clock::today;
 pub use config_file::{DOCTRINE_TOML, read_doctrine_toml_text};
 pub use git::{CaptureError, read_path_at};
 ```
+
+**`clock::today` is the third export, and taking it is what avoids a fourth
+dependency edge.** `RV-346` `F-29`'s second half: `sec-7`'s `verify(..., today:
+Date)` sketched a `Date` that is `time::Date`, and `time` is not on the new
+crate's edge list — so the signature as written does not compile, and declaring
+the edge to fix it would put a second date formatter in the workspace.
+`src/clock.rs`'s module contract forbids exactly that ("no parallel date
+formatter"), and `clock::today()` already returns the `YYYY-MM-DD` `String`
+every authored record in this project stores. So `verify` takes `today: String`,
+`doctrine-control`'s `main.rs` reads it through this export, and the pure/impure
+split is unchanged — the shell reads the clock, the pure layer takes the value.
+Zero new compiled crates survives; the `time` edge is never opened.
 
 Four consequences, none of them free, all of them small:
 
@@ -2728,7 +2812,7 @@ pointing here.
 pub(crate) fn verify(
     backend: &dyn ConformanceBackend,
     host: &dyn HostFacts,
-    today: Date,
+    today: String,
 ) -> AdmissionVerdict;
 ```
 
@@ -2807,11 +2891,15 @@ pub(crate) enum PropertyRemoval {
     /// from `DescriptorsClosed` by descriptor number, which is what keeps the
     /// two independently controllable rather than one widening of the other.
     StdioOwned,
-    /// Row 13. The capsule's credential posture is not established — the user
-    /// namespace and its uid/gid map, the capability sets and `no_new_privs`
-    /// are left as the trusted side had them. Changes no mount, no descriptor
-    /// and no environment variable.
-    CredentialsConfined,
+    /// Row 13. The capsule's declared identity is not applied — it runs as
+    /// whatever uid and gid the user namespace maps by default, which is the
+    /// trusted side's. Changes no mount, no descriptor and no environment
+    /// variable.
+    ///
+    /// Replaces an earlier `CredentialsConfined`, which named four mechanisms
+    /// at once and was measured not to fire on any of them (`EVD-014`,
+    /// `RV-346` `F-32`). This one is measured to fire.
+    MappedIdentity,
 }
 
 pub(crate) enum Bound { FileSize, Wall }
@@ -2889,14 +2977,18 @@ caption used to claim all of them were measured and that was never true:
 | `DescriptorsClosed` | the fixture's three decoy descriptors are passed with `--file-descriptor`-style inheritance instead of being closed on exec |
 | `EnvCleared` | `--clearenv` omitted, the explicit `--setenv` list unchanged |
 | `StdioOwned` | the child is spawned with the trusted-side process's own descriptors 0, 1 and 2 instead of the parent-owned null source and capture endpoints |
-| `CredentialsConfined` | `--unshare-all` replaced by `--unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup --unshare-net` — the user namespace and its uid/gid map dropped, every other namespace kept |
+| `MappedIdentity` | `--uid <capsule-uid> --gid <capsule-gid>` omitted; every other flag unchanged |
+| `Granted(AllCapabilities)` | `--cap-add ALL` added; every other flag unchanged |
 
-**Exactly one of these deltas is measured: `Teardown`.** `EVD-013` is the
-pid-namespace × `--die-with-parent` 2×2 that settles row 7's control, and it
-measures nothing else. Its adjacent fact — that bubblewrap has no `--share-pid`
-— tells us how `ProcessVisibility`'s delta must be *expressed*, which is not the
-same as having seen that delta produce its row's control failure. **The other
-nine are reasoned**, and the design cites no measurement for any of them.
+**Three of these deltas are measured; the rest are reasoned.** `Teardown` by
+`EVD-013` — the pid-namespace × `--die-with-parent` 2×2 that settles row 7's
+control, and it measures nothing else. `MappedIdentity` and
+`Granted(AllCapabilities)` by `EVD-014`, which is also the record of the delta
+they replaced failing. `EVD-013`'s adjacent fact — that bubblewrap has no
+`--share-pid` — tells us how `ProcessVisibility`'s delta must be *expressed*,
+which is not the same as having seen that delta produce its row's control
+failure. **Every other delta in this table is reasoned**, and the design cites
+no measurement for any of them.
 
 The previous version of this paragraph claimed *the last four deltas are
 reasoned, not measured, and are the only rows in this table of which that is
@@ -2911,87 +3003,130 @@ is worth more than its correction, because the reasoned-versus-measured split is
 the whole of what `R1` asks this design to be honest about, and it was the part
 stated least carefully.
 
-Under `R1` the difference is recorded rather than smoothed over: **measuring the
-nine is a phase obligation**, materially larger than the four this paragraph
-used to claim, and a delta that turns out not to produce its row's control
-failure means the row is wrong rather than that the measurement is inconvenient.
-`CredentialsConfined` is already known to be such a delta — see the caveat below
-it — which is the argument for measuring the rest before trusting any of them.
+Under `R1` the difference is recorded rather than smoothed over: **measuring
+every unmeasured delta in this table is a phase obligation**, materially larger
+than the four an earlier version of this paragraph claimed, and a delta that
+turns out not to produce its row's control failure means the row is wrong rather
+than that the measurement is inconvenient. The retired `CredentialsConfined` is
+the worked example — it was reasoned, it was adopted, and it was wrong — which
+is the argument for measuring the rest before trusting any of them.
 
-`ProcessVisibility` and `CredentialsConfined` both enumerate rather than
-subtracting, because **there is no `--share-pid` and no `--share-user`**:
-`--share-net` is bubblewrap's only re-share flag and its help states it "can only
-combine with `--unshare-all`". Those two removals are therefore the places the
-backend does not assemble its profile the usual way, and the asymmetry is worth
-paying — the alternative is a suite that cannot control its own process rows.
+`ProcessVisibility` enumerates rather than subtracting, because **there is no
+`--share-pid`**: `--share-net` is bubblewrap's only re-share flag and its help
+states it "can only combine with `--unshare-all`". That removal is therefore the
+one place the backend does not assemble its profile the usual way, and the
+asymmetry is worth paying — the alternative is a suite that cannot control its
+own process-tree row.
 
-The two enumerations differ in exactly one flag each, and in **different** flags:
-`ProcessVisibility` drops `--unshare-pid` and keeps the user namespace,
-`CredentialsConfined` drops `--unshare-user` and keeps the pid namespace. That is
-what makes rows 7 and 13 independently controllable despite both being reached
-through the same `--unshare-all`. A removal that dropped both would establish
-neither, which is `F-2`'s objection and the reason each removal names its flag
-list in full rather than saying *fewer namespaces*.
+An earlier draft had a second enumerating removal beside it, dropping
+`--unshare-user` to control credentials, and argued the two were independent
+because they dropped different flags. The argument was sound and the premise was
+false: `EVD-014` measured that unprivileged `bwrap` creates a user namespace
+whether or not `--unshare-user` is passed, so that removal enumerated its way to
+a profile identical to the one it was controlling against. Rows 7 and 13 are
+still independently controllable, but row 13's control is now `--uid`/`--gid`
+omission, which touches no namespace at all.
 
-**`CredentialsConfined`'s delta has now been measured, and it does not work.**
-`EVD-014`, measured while preparing `RV-346` round 6. Both arms —
-`--unshare-all`, and the enumeration above with `--unshare-user` dropped —
-produced a byte-identical credential report: same uid, same gid, same non-empty
-supplementary groups, `CapPrm` and `CapEff` both zero, `NoNewPrivs` 1. The cage
-was established rather than assumed (`F-20`): both arms created a **new** user
-namespace with an identical `uid_map`, differing only in inode. Unprivileged
-`bwrap` must create a user namespace to perform its own mounts and does so
-whether or not the flag is passed, so **`--unshare-user` is a no-op here** and
-the delta changes nothing observable. That conclusion is independent of this
-project's outer jail.
+**Why the retired `CredentialsConfined` is recorded rather than deleted.** It
+was reasoned, adopted, and wrong, and `R1` asks this design to keep that visible.
+`EVD-014` measured both arms — `--unshare-all`, and the enumeration with
+`--unshare-user` dropped — producing a byte-identical credential report. The
+cage was established rather than assumed (`F-20`): both arms created a **new**
+user namespace with an identical `uid_map`, differing only in inode.
+Unprivileged `bwrap` must create a user namespace to perform its own mounts and
+does so whether or not the flag is passed, so `--unshare-user` was a no-op and
+the delta changed nothing observable.
 
-Row 13 as specified can therefore only read `Unproven`, and
-`Admission::Admitted` is unreachable — which is `sec-7`'s `B4` class exactly, in
-the row added one round after `B4` was found.
+Three of that row's four holding conditions were independently wrong, which the
+unjailed leg settled: *mapped identity* was unmet because the profile passed no
+`--uid`/`--gid`; *empty supplementary groups* was unmeetable because a user
+namespace may not `setgroups`, so bubblewrap unmaps the list rather than
+dropping it; and *both capability sets are empty* named `CapPrm`/`CapEff`, which
+are all-zero for any unprivileged process on any host — true vacuously,
+discriminating nothing. The two fields that do move are `CapBnd` and `CapInh`,
+and the row read neither.
 
-**Three of the row's four holding conditions are also wrong**, which is the part
-the unjailed leg of `EVD-014` settled. *Mapped identity* is unmet: the profile
-passes no `--uid` and no `--gid`, so the capsule's uid is the host's. *Empty
-supplementary groups* is unmeetable: a user namespace may not `setgroups`, so
-bubblewrap **unmaps** the list rather than dropping it and the entry count is
-identical in every arm. And *both capability sets are empty* names `CapPrm` and
-`CapEff`, which are all-zero for **any** unprivileged process on any host — true
-vacuously, discriminating nothing. Bubblewrap does strip real capability
-authority, but in `CapBnd` and `CapInh`: measured full and non-empty in an
-unjailed parent, zero in every `bwrap` arm. The row is reading the two fields
-that cannot move and ignoring the two that do.
+That is two distinct defects in one row: a control that could not fire, and a
+probe reading fields that cannot vary. Rows 13 and 14 below are what replaced
+it, and the second defect is the one that generalises — see *Table A is the
+inventory* for the sweep it triggered.
 
-Only `no_new_privs` survives, and it is now measured rather than assumed — the
-unjailed parent reads `0` and every arm reads `1`, so bubblewrap **sets** it.
-That is the one claim in this paragraph the jail could not have established, and
-it was previously carried on a reading of bubblewrap's documented default.
+**Two deltas that do fire have been measured, and both are adopted.** `EVD-014`
+again. `--uid 4242 --gid 4242` under `--unshare-all` returned `uid=4242`,
+`gid=4242` and a `uid_map` of `4242 0 1`, against the same profile without them
+returning the host's `uid=1000`. And `--cap-add ALL` under `--unshare-all`
+returned `CapInh`, `CapPrm`, `CapEff` and `CapBnd` all `000001ffffffffff`
+against the probe arm's all-zero, exiting clean. Those are capabilities inside
+the capsule's *own* userns rather than host root, which is exactly the threat
+invariant 15 names: a capsule holding `CAP_SYS_ADMIN` in its namespace can mount
+what was never bound. So the property is falsifiable under bubblewrap after all
+— the design reached for the wrong delta, not for an impossible one.
 
-**A delta that does fire has been measured, and is not adopted here.**
-`EVD-014` again: `--cap-add ALL` under `--unshare-all` returned `CapInh`,
-`CapPrm`, `CapEff` and `CapBnd` all `000001ffffffffff` against the probe arm's
-all-zero, exiting clean. Those are capabilities inside the capsule's *own* userns
-rather than host root, which is exactly the threat invariant 15 names: a capsule
-holding `CAP_SYS_ADMIN` in its namespace can mount what was never bound. So the
-property is falsifiable under bubblewrap after all — the design simply reached
-for the wrong delta.
+#### A control may grant, if the grant negates exactly one protection
 
-Adopting it is not a numeral change, which is why this paragraph stops here. The
-candidate **adds** to the capsule's posture where every other row's delta
-**removes** a mechanism, so it is `Widened`-shaped rather than
-`PropertyRemoval`-shaped, and `sec-7` distinguishes those deliberately (row 2 is
-`Widened`, row 9 is not, and the difference is argued). Whether a credential row
-may be controlled by widening, and what that does to *one control removes exactly
-one mechanism*, is the question — not whether the flag works.
+`RV-346` round 6 ruled on this and the ruling generalises past the row. The
+capability control **adds** to the capsule's posture where every other control
+in the table **removes** a mechanism, and `sec-7` separates those deliberately
+(row 2 is `Widened`, row 9 is argued not to be). The question was whether *one
+control removes exactly one mechanism* survives a control that grants.
 
-**What is deliberately not decided here.** Row 13's property is right and
-`F-32`'s argument for it stands untouched — invariant 4's denial-by-absence does
-rest on a credential posture the contract never required. What is wrong is the
-mechanism chosen to falsify it. It is carried to `RV-346` round 6 as its first
-line of attack rather than settled mid-run, with the candidate above as
-measurement rather than as a proposal. Until it is settled, row 13 is a specified row with a control
-known not to fire — which by `Admission`'s own algebra means this suite does not
-yet admit anything, and `sec-8`'s *all thirteen rows* is a claim about the table
-rather than about a passing suite. `sec-9` `R1` carries the evidence half.
+It survives, restated: **a control must negate exactly one protection**, and
+whether it does so by withdrawing a mechanism or by conferring the authority the
+mechanism exists to withhold is an implementation detail of the backend, not a
+property of the discipline. What the discipline actually forbids is a control
+that moves two things at once, because then a failing row names no mechanism.
+`--cap-add ALL` moves capability confinement and nothing else — no mount, no
+descriptor, no environment variable, no identity — so it satisfies the rule that
+matters.
+
+It is typed as `Delta::Granted(AuthorityGrant)` rather than folded into
+`Widened` or `PropertyRemoval`, for the reason `F-31` established one level
+down: a vocabulary that hides a distinction stops anyone noticing it exists.
+`Widened` widens the *mount set* and takes a placement function; a capability
+grant touches no mount. Reusing it would have made the two indistinguishable in
+the verdict, and a reader counting removals would have counted a grant among
+them.
+
+#### Two of the four credential mechanisms cannot be rowed, and that is the finding
+
+The retired `CredentialsConfined` asserted four things at once. Split apart and
+measured, exactly two are controllable under bubblewrap, and the other two have
+**no delta that changes them** — which by this design's own standard means they
+are not tests and must not be rows.
+
+| mechanism | control | measured | rowed |
+|---|---|---|---|
+| mapped identity (uid, gid) | omit `--uid`/`--gid` | fires — `4242` vs host `1000` | row 13 |
+| capability confinement | add `--cap-add ALL` | fires — full sets vs all-zero | row 14 |
+| supplementary-group authority | *none available* | every arm reads the same unmapped list | **no** |
+| `no_new_privs` | *none available* | every arm reads `1`, including `--cap-add ALL` | **no** |
+
+**Supplementary groups.** A user namespace may not `setgroups`, so bubblewrap
+unmaps the host list to the overflow gid rather than dropping it; the entry
+count is identical in every arm and the values are identical in every arm.
+Dropping `--unshare-user` does not restore them, because the namespace is
+created regardless. There is no flag that hands a capsule its real supplementary
+groups, so there is no arm in which the observation differs.
+
+**`no_new_privs`.** Bubblewrap sets it unconditionally on the unprivileged path
+and offers no flag to leave it clear; it reads `1` even under `--cap-add ALL`.
+The unjailed parent reads `0`, so we know bubblewrap *sets* it rather than
+inheriting it — but knowing the property holds is not the same as having a
+control that can falsify it.
+
+Rowing either would produce a row whose control cannot fire, which is `B4`'s
+class exactly — the defect that retired `CredentialsConfined` in the first
+place. Adding two more instances of it while fixing one would be a poor trade.
+So both are recorded as **observed but unrowed**: the fixture still reports them
+and the row bodies still assert them as *supporting* observations, but neither
+carries a verdict and neither can move `Admission`. `sec-9` `R8` carries the
+residual, because *unrowable under bubblewrap* is a fact about one backend, and
+a second backend with a `no_new_privs` switch would make the row constructible.
+
+This is the honest shape of the answer, and it is worth more than either
+alternative that was on the table. Narrowing to one aggregate row would have
+kept the aggregate that made row 13 uncontrollable. Splitting into four would
+have bought two rows that can only ever read `Unproven`.
 
 ### The arm is the unit of execution, not the capsule
 
@@ -3076,8 +3211,28 @@ enum Delta {
     /// The placement's network posture becomes `Permitted`. Row 5.
     NetworkPermitted,
     /// The placement is unchanged; one profile property is removed from the
-    /// backend. Rows 6, 7, 8, 9, B5.
+    /// backend. Rows 6, 7, 8, 9, 10, 11, 12, 13, B5.
     Removed(PropertyRemoval),
+    /// The placement is unchanged; the backend *grants* the capsule one
+    /// authority it otherwise withholds. Row 14, and the only granting control
+    /// in the table.
+    ///
+    /// A grant rather than a removal because some protections have no
+    /// off switch to remove — see *A control may grant, if the grant negates
+    /// exactly one protection*. `Granted` is a distinct variant rather than a
+    /// `PropertyRemoval` member so the asymmetry is visible in the type, and a
+    /// reader counting removals is not silently counting a grant among them.
+    Granted(AuthorityGrant),
+}
+
+/// One authority a control arm grants. Separate from `PropertyRemoval` because
+/// the two move the capsule in opposite directions.
+pub(crate) enum AuthorityGrant {
+    /// Row 14. Every capability is added to the capsule's sets inside its own
+    /// user namespace. Changes no mount, no descriptor, no environment
+    /// variable and no identity — the mechanism unique to capability
+    /// confinement.
+    AllCapabilities,
 }
 ```
 
@@ -3109,17 +3264,21 @@ struct Row {
 enum RowId {
     /// An enforcement claim of `SPEC-030` § Platform backend contract. One
     /// per channel rather than one per clause — see Table A, and `sec-2`'s
-    /// channel ledger for why clause 2 carries five, and row 13 no clause.
+    /// channel ledger for why clause 2 carries five, and rows 13-14 no clause.
     Property(Property),
     /// One of `REQ-450` criterion 1's five freshness axes.
     Axis(Axis),
 }
 
+/// One variant per Table A row, and the compiler is the only thing that keeps
+/// that true — see *Table A is the inventory; everything else is a projection*.
+/// Ordered as the table is.
 enum Property {
-    FreshMutableState, BoundedInputSet, ImmutableInputSet,
-    ClosedDescriptorSet, ClosedEnvironment,
+    FreshMutableState, BoundedInputSet,
     CanonicalAndCredentialDenial, BoundedFilesystemVisibility, NetworkPosture,
     WorkingDirectory, ProcessTreeTeardown, ResourceAndTerminationObservation,
+    ImmutableInputSet, ClosedDescriptorSet, ClosedEnvironment,
+    OwnedStandardStreams, MappedIdentity, ConfinedCapabilities,
 }
 
 enum Axis { Checkout, Repository, Runtime, TemporaryState, Process }
@@ -3228,17 +3387,21 @@ is `SL-241`'s rule — a guard never seen to fire is not known to work
 
 ### Table A — the properties
 
-**This table is where the count lives** (`sec-2`). `SPEC-030` § Platform backend
-contract states eight clauses and this table has **thirteen** rows. The
-difference is neither padding nor arithmetic: a clause names what a capsule must
-not *have*, a row must name the mechanism by which it would *get* it, and the two
-do not correspond. Clause 2 — *an explicit base and input set* — is a claim about
-inputs that names none of the channels inputs arrive by, so rows 2, 9, 10, 11 and
-12 are all clause 2. Row 13 answers no clause at all: `SPEC-030` states none for
-process credentials, and it is rowed on `ADR-020`'s authority instead — see
-*Row 13 answers no clause* below. `sec-2` § The rows are derived from channels,
-not from clauses carries the argument and the channel ledger; this table is its
-realisation.
+**This table is the inventory** (`sec-2`), and every other enumeration of the
+properties in this document is a projection of it — see *Table A is the
+inventory; everything else is a projection* below, which is the standing answer
+to a defect class this design has now shipped three times.
+
+`SPEC-030` § Platform backend contract states eight clauses and this table has
+**fourteen** rows. The difference is neither padding nor arithmetic: a clause
+names what a capsule must not *have*, a row must name the mechanism by which it
+would *get* it, and the two do not correspond. Clause 2 — *an explicit base and
+input set* — is a claim about inputs that names none of the channels inputs
+arrive by, so rows 2, 9, 10, 11 and 12 are all clause 2. Rows 13 and 14 answer
+no clause at all: `SPEC-030` states none for process credentials, and they are
+rowed on `ADR-020`'s authority instead — see *Rows 13 and 14 answer no clause*
+below. `sec-2` § The rows are derived from channels, not from clauses carries
+the argument and the channel ledger; this table is its realisation.
 
 | # | property | shape | probe holds when | delta | control fails when |
 |---|---|---|---|---|---|
@@ -3251,10 +3414,107 @@ realisation.
 | 7 | process-tree teardown | `Single`: fork a descendant that **leaves the original session and process group** (`setsid`) before its parent exits | no descendant outlives the `execute` call, established trusted-side | `Removed(Teardown)` | the escaped descendant survives |
 | 8 | trusted observation of resource limits and termination | `Single` ×5, one per `Termination` variant | each variant correctly distinguished | `Removed(ResourceBound(..))` | the capped and timed-out payloads run to completion |
 | 9 | immutable input set | `Single`: write through each readable mount, then write into `/source` | every write fails | `Removed(InputsWritable)` | the writes succeed |
-| 10 | closed descriptor set | `Single`: the parent opens **three** decoys and marks each inheritable — a readable file, a **write-only** file, and one end of a socket pair — then the payload enumerates `/proc/self/fd` | no descriptor above 2 appears in the enumeration | `Removed(DescriptorsClosed)` | any decoy appears in the enumeration, is read, is written, or carries a byte back to the parent |
+| 10 | closed descriptor set | `Single`: the parent opens **three** decoys and marks each inheritable — a readable file, a **write-only** file, and one end of a socket pair — then the payload enumerates `/proc/self/fd`, resolving every entry | every descriptor above 2 resolves to the payload's own enumeration handle — see *Row 10's observer is its own first false positive* | `Removed(DescriptorsClosed)` | any decoy appears in the enumeration, is read, is written, or carries a byte back to the parent |
 | 11 | closed environment | `Single`: the parent sets a decoy variable in **its own** environment; the payload dumps its whole environment | the dump is exactly `CapsuleEnv`, and the decoy is absent | `Removed(EnvCleared)` | the decoy is present |
-| 12 | owned standard streams | `Single`: the parent execs with a decoy secret readable on `stdin` and one end of a socket pair on `stdout`; the payload reads `stdin` to EOF and attempts a write back through `stdout` | `stdin` yields zero bytes and the write-back does not reach the parent | `Removed(StdioOwned)` | the decoy is read from `stdin`, or the write-back arrives |
-| 13 ⚠ | confined process credentials — **as specified below and measured wrong; `EVD-014`, awaiting `RV-346` round 6** | `Single`: the payload reports uid, gid and supplementary groups from the credential syscalls, and its effective and permitted capability sets and `no_new_privs` from `/proc/self/status` | uid and gid are the mapped capsule identity, supplementary groups are empty, both capability sets are empty, and `no_new_privs` is set | `Removed(CredentialsConfined)` | the capsule reports a host credential, a non-empty capability set, or `no_new_privs` clear |
+| 12 | owned standard streams | `Single`: the parent execs with a decoy secret readable on `stdin` and one end of a socket pair on `stdout`; the payload reads `stdin` to EOF, then attempts to **read** descriptors 1 and 2 | `stdin` yields zero bytes, and both reads fail — see *Row 12 observes readability, not delivery* | `Removed(StdioOwned)` | the decoy is read from `stdin`, or either read succeeds |
+| 13 | mapped capsule identity | `Single`: the payload reports uid and gid from the credential syscalls and its `uid_map` | both equal the placement's declared capsule identity, and `uid_map` maps exactly that one id | `Removed(MappedIdentity)` | the capsule reports the trusted side's uid or gid |
+| 14 | confined capabilities | `Single`: the payload reports `CapBnd` and `CapInh` from `/proc/self/status` — the two sets that vary, never `CapPrm`/`CapEff` | both are empty | `Granted(AllCapabilities)` | either set is non-empty |
+
+#### Table A is the inventory; everything else is a projection
+
+`RV-346` `F-28`, raised in round 4, remediated twice, and contested both times.
+The instances are not the finding. The finding is that this document maintains
+several parallel enumerations of one set — Table A, the `Property` enum, the
+`PropertyRemoval` list, the removal-to-flag table, `sec-2`'s properties table
+and channel ledger, `sec-8`'s evidence table, `sec-9`'s residuals — and a
+correction lands on the ones the round was looking at.
+
+The first remediation moved the *numeral* to a single source, and the numeral
+stopped drifting while the row contents, the enum variants, the delta list and
+the test titles kept drifting. That is the lesson: **the count was never the
+thing that was wrong.** A single-sourced count over a set that eight places
+enumerate independently reports agreement it has not checked.
+
+Round 6 ruled on whether this is fixable at design altitude, and the ruling is
+**not fully**, which this design now states rather than implies:
+
+- **Table A is normative.** It is the only enumeration of the properties with
+  authority. Every other list in this document is a **manually maintained
+  projection** of it, is labelled as one where it appears, and is wrong by
+  default when it disagrees.
+- **One projection is machine-checkable, and only one.** The `Property` enum has
+  one variant per Table A row, and `RowId::Property` keys the verdict, so a row
+  the suite can construct that the enum cannot name is a compile error. That is
+  a real fence and it is the only one available without new machinery.
+- **The rest are reader discipline, and saying otherwise was the error.** An
+  earlier draft proposed `every_row_id_is_covered_by_exactly_one_table` as the
+  structural guard. It was cited in the remediation of the finding it was meant
+  to close, and it does not exist — so it protected nothing, which is how the
+  class survived two corrections. A test that would actually close this has to
+  parse this Markdown table and diff it against the enum, and that generator is
+  implementation-side work no phase of this slice owns.
+
+`sec-9` `R9` carries the residual. The honest statement of the remaining
+exposure is that a document of this size maintains its parallel enumerations by
+discipline, that discipline has failed three times here, and the mitigation is
+that exactly one of the projections is compiler-enforced and the normative one
+is named.
+
+#### Row 10's observer is its own first false positive
+
+`RV-346` `F-36`. Row 10 used to hold when *no descriptor above 2 appears in the
+enumeration*, and no process can satisfy that while enumerating. Measured:
+`sh -c "ls -1 /proc/self/fd"` in a clean process reports `0 1 2 3`, because
+opening the directory to read it creates a descriptor above 2. The row failed
+before any decoy was inherited, so its probe arm could never reach `Proven` and
+its positive control had nothing to distinguish.
+
+The repair is *not* to relax the condition to *none of the nominated decoys
+appears*. That is row 11's denylist defect one level down: it would pass a
+backend leaking a descriptor the fixture never thought to nominate, which is
+precisely what a closed-descriptor-set property exists to catch. The strength
+has to survive.
+
+So the payload **resolves** every entry rather than counting them, and the row
+holds when every descriptor above 2 resolves to the payload's own handle on
+`/proc/self/fd`. That excludes exactly one descriptor, by identity rather than
+by number, and it excludes it because the observation created it — a leaked
+descriptor cannot masquerade as the observer's, because the observer's target is
+the enumeration directory itself. The claim stays *nothing above 2 that the
+observation did not itself open*, which is the strongest form the property can
+take from inside the capsule.
+
+The generalisation is `F-31`'s rule with the arrow reversed. `F-31` was a probe
+observing a *consequence* of its property; this was a probe whose own machinery
+falsified the property it observed. Both are failures to ask what the
+observation does to the thing observed, and the sweep in *Table A is the
+inventory* covers the class.
+
+#### Row 12 observes readability, not delivery
+
+`RV-346` `F-30`, contested and upheld on the second pass. Row 12 held when
+*`stdin` yields zero bytes and the write-back does not reach the parent*, and
+the second leg is wrong twice over.
+
+It rejects the flow the design intends. `CapsuleStdio::EmptyInputCapturedOutput`
+makes descriptors 1 and 2 one-way endpoints **the parent created and reads** —
+capturing output is the entire point, so bytes written by the capsule reaching
+the trusted side is the specified behaviour, not the violation. A row asserting
+the write-back does not arrive asserts that capture is broken.
+
+And it names the wrong distinguishing property. The stated reason for one-way
+endpoints is that a socket pair would carry bytes *back into* the trusted side —
+but a capture pipe does that too. What a socket pair actually confers, and a
+pipe write end does not, is that the capsule can **read** descriptor 1. That is
+the authority channel: a readable descriptor 1 lets a capsule receive whatever
+the trusted side puts there, which is an inbound channel the ledger never
+declared.
+
+So the row now reads `stdin` to EOF and then attempts to read descriptors 1 and
+2, and holds when both reads fail. Under `Removed(StdioOwned)` the capsule
+inherits the trusted side's own standard streams, which on a terminal or a
+socket are readable, so the control fires on exactly the mechanism the row
+names.
 
 #### The payload must be the property's strongest negation, not a representative one
 
@@ -3383,7 +3643,7 @@ transaction-local paths that are *supposed* to be writable. The suite had no row
 that wrote to something it had asked to be read-only, so the one guard `DEC-157`
 depends on was the one guard never seen to fire.
 
-`DEC-156`'s count moves **eleven → thirteen**, and that sentence should stop
+`DEC-156`'s count moves **eleven → fourteen**, and that sentence should stop
 being an event. The first three corrections were each authorised individually, as
 though moving the number were an exceptional act requiring dispensation. It is
 not. **The count is a reading of the channel ledger, not a decision**, and it
@@ -3397,11 +3657,11 @@ same change that moves the table, and needs no separate authorisation. A change
 to *how admission works* still does.
 
 Its correspondence sentence stays withdrawn and is now generalised: the rows
-cover every clause, three clauses are covered more than once, row 13 answers no
+cover every clause, three clauses are covered more than once, rows 13 and 14 answer no
 clause at all, and the structure that *is* one-to-one is the channel ledger,
 because one control can only remove one mechanism.
 
-#### Row 13 answers no clause, and rows anyway
+#### Rows 13 and 14 answer no clause, and row anyway
 
 `SPEC-030` states no clause about process credentials — uid and gid mapping,
 supplementary groups, capability sets, and whether a capsule can regain privilege
@@ -3410,6 +3670,14 @@ recorded it as a residual; `RV-346` `F-32` is that residual coming due. The
 question a blank clause raises is whether the property is out of scope or merely
 unwritten, and here it is unwritten, for a reason the rest of this design already
 depends on.
+
+These were one row until round 6. `F-32` was upheld and rowed as a single
+`CredentialsConfined`, which asserted four mechanisms at once and was measured
+to control none of them — see *Two of the four credential mechanisms cannot be
+rowed* in `sec-7`'s control vocabulary for the measurement and the split. Two of
+the four are now rows with controls that fire; the other two are observed and
+unrowed. The property argument below is unchanged by that split — it was always
+an argument about credentials as a channel, not about any one field.
 
 **Invariant 4 says denial is achieved by absence, not by read-only presence** —
 the canonical repository, other capsules and the credential store are never in
@@ -3431,29 +3699,37 @@ bound by, and rowing against it needs no Revision, because `DEC-156` stopped
 deriving rows from clauses in round 4. Rows come from channels; `ADR-020` names
 this channel; the row follows.
 
-**Setuid regain is governed, not probed, and that is a deliberate weakening.**
-The obvious payload — exec a setuid-root decoy and see whether privilege is
-gained — cannot be built by a suite that must not be privileged: creating a
-setuid-*root* file requires root, and a setuid file the test user owns confers
-the uid the payload already has. So the row asserts `no_new_privs` instead, which
-is the kernel flag that makes setuid regain impossible rather than merely
-unobserved. That is a real substitution and it is weaker in one specific way: it
-proves the mechanism is disabled, not that a particular binary failed to exploit
-it. Stated here rather than left for a later reader to discover, because a row
-whose payload was quietly narrowed is exactly what `F-27` was.
+**Setuid regain is neither probed nor rowed, and that is a deliberate
+weakening.** The obvious payload — exec a setuid-root decoy and see whether
+privilege is gained — cannot be built by a suite that must not be privileged:
+creating a setuid-*root* file requires root, and a setuid file the test user
+owns confers the uid the payload already has. An earlier draft substituted
+`no_new_privs` for it, which is the kernel flag that makes setuid regain
+impossible rather than merely unobserved.
 
-Two further limits, honestly. The row is falsifiable *here* only weakly, because
-this project's outer jail already strips capabilities, so a local probe cannot
-distinguish a backend that confines credentials from a host that had none to
-give — the control arm must therefore assert that the observation *changes* when
-`CredentialsConfined` is removed, and the phase landing it owes a run outside the
-jail to establish that it can. And `SPEC-030` still has a blank where a clause
-should be. That blank is now cited by a row rather than only by a residual, which
-is the difference between a gap that is governed and a gap that is merely known;
-closing it properly is a Revision this slice does not own, and `sec-9` carries it
-forward.
+That substitution is retained as an *observation* and withdrawn as a *row*.
+`EVD-014` measured that bubblewrap sets `no_new_privs` unconditionally — the
+unjailed parent reads `0`, every arm reads `1`, including under `--cap-add ALL`
+— and offers no flag that leaves it clear. So the fixture reports it and rows 13
+and 14 assert it as a supporting observation, but it carries no verdict, because
+a condition no delta can change is not a test. Stated here rather than left for
+a later reader to discover, because a row whose payload was quietly narrowed is
+exactly what `F-27` was, and a row whose payload cannot vary is what `F-32`
+became.
 
-**Each of the five rows added since round 3 has a mechanism unique to it**, which
+Two further limits, honestly. The measurements behind both rows are from a
+**single host, run outside this project's jail** — necessarily, because the jail
+already strips capabilities and sets `no_new_privs`, so a jailed probe cannot
+distinguish a backend that confines credentials from a cage that had already
+done it (`F-20`'s rule, and the reason `EVD-014` discards two earlier runs). The
+phase landing these rows owes the same run on its own host rather than
+inheriting this one's result. And `SPEC-030` still has a blank where a clause
+should be. That blank is now cited by two rows rather than only by a residual,
+which is the difference between a gap that is governed and a gap that is merely
+known; closing it properly is a Revision this slice does not own, and `sec-9`
+carries it forward.
+
+**Each of the rows added since round 3 has a mechanism unique to it**, which
 is the rule rows 3 and 4 are held to and the reason each is separately
 controllable:
 
@@ -3473,10 +3749,17 @@ controllable:
   attached to — which is why it cannot be folded into row 10 as a widening. Row
   10's delta and row 12's are disjoint by descriptor number, so a failure names
   one row without ambiguity.
-- Row 13's is the confinement of process credentials. Its delta leaves the whole
-  placement identical and changes only the credential posture the backend
-  establishes before `exec` — the user namespace and its uid/gid map, the
-  capability sets, and `no_new_privs`.
+- Row 13's is the application of the capsule's declared identity. Its delta
+  leaves the whole placement identical, touches no namespace, and changes only
+  whether `--uid`/`--gid` are passed — so the capsule runs as the user namespace
+  maps by default, which is the trusted side's uid.
+- Row 14's is capability confinement inside the capsule's own user namespace.
+  Its control is the table's only *grant*: it leaves the placement, the
+  identity, the descriptors and the environment identical and adds capability
+  authority the profile otherwise withholds. Rows 13 and 14 are disjoint by
+  field — row 13 moves `uid`/`gid`/`uid_map`, row 14 moves `CapBnd`/`CapInh` —
+  so a failure names one row without ambiguity, which is the property the
+  retired single credential row could not offer.
 
 **Its hazard is that the control arm really does write to host state**, and
 containment is structural rather than careful: the readable entries in this
@@ -3809,7 +4092,7 @@ slowly filling with them rather than by a red test.
 pub(crate) struct AdmissionVerdict {
     pub(crate) backend: BackendId,
     pub(crate) host: HostDescriptor,
-    pub(crate) date: Date,
+    pub(crate) date: String,
     pub(crate) outcome: Admission,
     /// Every row of tables A and B, including the proven ones — the artefact
     /// `REQ-459` criterion 3 points at.
@@ -3954,21 +4237,32 @@ Executed, table A — each asserts `RowVerdict::Proven`, so each runs both arms:
 - `closed_descriptor_set_is_proven`
 - `closed_environment_is_proven`
 - `owned_standard_streams_is_proven`
-- `confined_process_credentials_is_proven`
+- `mapped_capsule_identity_is_proven`
+- `confined_capabilities_is_proven`
 
-One title per row, and the list is asserted to be exactly the row set by
-`every_row_id_is_covered_by_exactly_one_table` above — so a row added without a
-title, or a title outliving its row, is a red test rather than a silent gap.
-That assertion is what makes the count safe to state in one place.
+One title per row. **Nothing checks that this document's list matches, and an
+earlier draft said otherwise.** `RV-346` `F-28`: this paragraph used to assert
+the list was held to the row set by
+`every_row_id_is_covered_by_exactly_one_table`, and it was cited as enforcement
+in the remediation of the finding it was meant to close, while being an unwritten
+planned test in the list above.
 
-**The last two titles were missing for a round, and the paragraph above is why
-that matters more than the omission.** Round 5 added rows 12 and 13 and did not
-add their titles; a literal reading of this list would have built a suite that
-never ran either row, which is `sec-8`'s *a suite that is never built is green
-by never running* one level down. The assertion that was supposed to prevent it
-is real but not yet written — it protects an implementation from drifting from
-this list, and protects this list from nothing. Until the suite exists, adding a
-row and adding its title are one edit held together by a reader.
+Two things are true and were run together. That test is worth writing and stays
+planned — it asserts every `RowId` the *code* constructs falls in exactly one of
+the code's tables, which is real and checkable. But it can say nothing about the
+prose above it: closing the loop from this document to the code needs something
+that parses this Markdown, and no phase owns that (`R9`). The enforcement that
+exists today is narrower still — the `Property` enum has one variant per row and
+keys the verdict, so a row the suite can construct that the enum cannot name is a
+compile error.
+
+**Twice now the titles have lagged the rows.** Round 5 added rows 12 and 13 and
+did not add their titles; a literal reading of this list would have built a
+suite that never ran either row, which is `sec-8`'s *a suite that is never built
+is green by never running* one level down. Round 6 split row 13 and this list
+had to be edited by hand again. Until the generator `R9` describes exists,
+adding a row and adding its title are one edit held together by a reader, and
+this document should say so where it previously implied a guard.
 
 Executed, the claims that need naming beyond their row:
 
@@ -4034,26 +4328,35 @@ Executed, the claims that need naming beyond their row:
 - `the_stdio_control_changes_nothing_above_descriptor_two` — that rows 10 and 12
   are disjoint by descriptor number, so a failure names one of them
 - `a_stdin_inheriting_backend_fails_row_twelve` — the `F-30` mutant as a stub
-- `the_capsule_reports_the_mapped_identity_and_no_capabilities` — row 13's probe
-  arm: uid, gid, empty supplementary groups, empty effective and permitted
-  capability sets, `no_new_privs` set
-- `the_credential_control_changes_no_mount_no_env_and_no_descriptor` — row 13's
+- `the_capsule_reports_the_declared_identity` — row 13's probe arm: uid, gid and
+  `uid_map` all equal the placement's declared capsule identity
+- `the_identity_control_changes_no_mount_no_env_and_no_descriptor` — row 13's
   single-axis assertion
-- `a_credential_retaining_backend_fails_row_thirteen` — the row 13 mutant as a
-  stub, and the row's only local falsification, since this project's outer jail
-  strips capabilities before the suite runs
+- `a_host_identity_backend_fails_row_thirteen` — the row 13 mutant as a stub
+- `the_capsule_holds_no_capabilities_in_the_bounding_or_inheritable_set` — row
+  14's probe arm, reading `CapBnd` and `CapInh` and **not** `CapPrm`/`CapEff`,
+  which cannot vary (`EVD-014`)
+- `the_capability_grant_changes_no_mount_no_env_no_descriptor_and_no_identity` —
+  row 14's single-axis assertion, and the only one of these asserted against a
+  *granting* control
+- `a_capability_retaining_backend_fails_row_fourteen` — the row 14 mutant as a
+  stub
+- `the_unrowed_credential_observations_are_reported_without_a_verdict` —
+  supplementary groups and `no_new_privs` are captured and displayed, and
+  contribute to no row (`R8`), so a later reader cannot mistake them for
+  admission evidence
 
 Executed, table B: the freshness titles `sec-3`'s `Verification alignment`
 already names, driven by this harness rather than restated here.
 
-Executed, table C: the four titles above.
+Executed, table C: the two capacity titles above, plus `sec-4`'s read-once and `sec-3`'s object-set titles.
 
 **These tests live in the new crate,** which `just check` would not build by
 default — it is root-package only, and a suite that is never built is green by
 never running. `sec-8` rules on the checked set and owns the change.
 
 `REQ-459` criterion 1 is discharged by table A **over the channels the ledger
-names**, which as of `RV-346` round 5 is all thirteen rows. The qualifier is not
+names**, which as of `RV-346` round 6 is all fourteen rows. The qualifier is not
 hedging and it is not decoration: *in full* has been claimed for this criterion
 four times against four different tables, and it was false the first three. What
 makes the fourth claim checkable rather than merely confident is that it
@@ -4101,7 +4404,7 @@ New, the second crate — a bin-only package, no lib target (`sec-6`):
 | `crates/doctrine-control/src/config.rs` | `CapsuleConfig` and the `[capsule]` reader | `sec-5` |
 | `crates/doctrine-control/src/capacity.rs` | `CapacityVerdict`, `assess_capacity` | `sec-5` |
 | `crates/doctrine-control/src/backend.rs` | `CapsuleBackend`, `CapsulePlacement`, `Execution`, `Observation`, `Termination`, `ForbiddenScopes` | `sec-2` |
-| `crates/doctrine-control/src/backend/bubblewrap.rs` | the Linux profile, its twelve flag constants and its argv | `sec-2` |
+| `crates/doctrine-control/src/backend/bubblewrap.rs` | the Linux profile, its flag constants and its argv | `sec-2` |
 | `crates/doctrine-control/src/transaction.rs` | `CapsuleTransaction`, `TransactionId`, `AcceptedBase`, `PhaseIdentity` | `sec-3` |
 | `crates/doctrine-control/src/provision.rs` | `provision`, export publication, root ownership, rollback | `sec-3` |
 | `crates/doctrine-control/src/conformance.rs` | the property table, the fixture, the verdict, and the second caller | `sec-7` |
@@ -4231,19 +4534,21 @@ unit it tests, which reaches `pub(crate)` items and does run under `cargo test`.
 | `sec-5`'s capacity, configuration and root-resolution tests (≈33) | `config.rs`, `capacity.rs`, `host.rs` | pure, over a fixture `HostFacts` |
 | `sec-6`'s export-set and two-tree gate assertions (7) | `tests/architecture_layering.rs` | integration, root package |
 | `sec-7`'s classification and verdict-algebra tests (≈20) | `conformance.rs` | pure |
-| `sec-7`'s tables A (thirteen), B (five) and C (four) | `conformance.rs` | executed, one fixture per run |
+| `sec-7`'s tables A (fourteen), B (five) and C (four) | `conformance.rs` | executed, one fixture per run |
 
 The counts are indicative for phase sizing; each section's own list is the
 authority, and two titles are named by two sections and belong to one test.
 `sec-2`'s figure moved by four in round 4 — the source-export carve-out's
 refusals and the lawful case each must not capture (`F-25`) — and table A's
 executed cost by two arms plus two controls (`F-26` and the channel ledger).
-Round 5 moves table A again, to thirteen rows: two new (`F-30`'s standard
-streams, `F-32`'s process credentials) and one widened from a single decoy to
-three (`F-31`). That is two further executed arms plus two further controls, on
-round 4's convention of one of each per row; the `F-31` widening costs no arm at
-all, since three decoys ride row 10's existing pair. `sec-2` gains
-`CapsuleStdio`'s two pure tests, taking its figure to ≈39. None of it is a large
+Round 5 moves table A to thirteen rows: two new (`F-30`'s standard streams,
+`F-32`'s process credentials) and one widened from a single decoy to three
+(`F-31`). That is two further executed arms plus two further controls, on round
+4's convention of one of each per row; the `F-31` widening costs no arm at all,
+since three decoys ride row 10's existing pair. Round 6 splits the credential
+row, taking table A to fourteen: one further arm and one further control, plus
+one test asserting the two unrowed observations reach no verdict (`R8`). `sec-2`
+gains `CapsuleStdio`'s two pure tests, taking its figure to ≈39. None of it is a large
 phase-sizing move; all of it is recorded because a count nobody adjusts is a
 count nobody is reading.
 
@@ -4295,9 +4600,9 @@ reconciliation brief, alongside `DEC-136`'s handoff note (`sec-1`, `sec-4`).
 |---|---|---|
 | `REQ-449` | `satisfied` | `sec-4`'s refusal, normalization, hash and restriction tests; criterion 3 by `sec-7` table C's read-once row |
 | `REQ-461` | `satisfied` | `sec-5`'s pure tests for the arithmetic and the configuration, **plus** table C's unconditional row — `SystemHost`'s figure agrees with a `statvfs` the test performs itself on the same path. The wrong-path discriminator is a second, conditional row |
-| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A **over the channels `sec-2`'s ledger names** — all thirteen rows, 9 through 13 included; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet. The qualifier is the claim: it is checkable, and it is not the same as *complete* |
+| `REQ-459` | **contributing `--change`, stays `pending`** | criterion 1 by table A **over the channels `sec-2`'s ledger names** — all fourteen rows, 9 through 14 included; criterion 3 structurally, one suite parameterised by backend; criterion 2 unmet. The qualifier is the claim: it is checkable, and it is not the same as *complete* |
 | `REQ-450` | contributing `--change`, stays `pending` | criterion 1 by table B. Criteria 2 and 3 need candidate identity and harvest from later slices |
-| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only, and it is a claim per channel rather than per row: canonical state and credentials in the mount channel by row 3, arbitrary undeclared paths by row 4, the shared object store by rows 3 and 9 together — reachable-but-not-writable is not denial — egress by row 5, and credentials reaching the capsule *already open* or *already in the environment* by rows 10 and 11, *on a standard stream* by row 12, and *reachable by privilege the capsule should not hold* by row 13 — the four channels this table cited nothing for before rounds 4 and 5 |
+| `REQ-448` | contributing `--change`, stays `pending` | the *denial* half only, and it is a claim per channel rather than per row: canonical state and credentials in the mount channel by row 3, arbitrary undeclared paths by row 4, the shared object store by rows 3 and 9 together — reachable-but-not-writable is not denial — egress by row 5, and credentials reaching the capsule *already open* or *already in the environment* by rows 10 and 11, *on a standard stream* by row 12, and *reachable by privilege the capsule should not hold* by rows 13 and 14 — the four channels this table cited nothing for before rounds 4 and 5 |
 
 **Rows of this table have moved in each of the last three rounds, and always in
 the same direction — a claim narrowing, never widening.** `REQ-461` could not have been `satisfied` as the table
@@ -4419,7 +4724,7 @@ two ways worth carrying.
 First, the gaps are no longer all in one place. Through round 4 every missing
 row was clause 2 — the clause that names an outcome without naming the
 mechanisms that reach it — and that looked like the whole finding. Row 12 is
-clause 2 and keeps the pattern; **row 13 answers no clause at all**, and a
+clause 2 and keeps the pattern; **rows 13 and 14 answer no clause at all**, and a
 suite derived from clauses could not have reached it by any amount of care.
 Where the spec is silent, the clause-2 heuristic says nothing.
 
@@ -4501,6 +4806,39 @@ opposite assertion for this one path.
 The export-set test keeps its job either way. It is not there to protect
 crates.io consumers who now do not exist; it bounds what `doctrine-control` can
 reach across the workspace boundary, which is `sec-6`'s enforcement ruling.
+
+**`R8` — two credential mechanisms are unrowable under bubblewrap, so the suite
+is weaker there than the contract is.** `RV-346` `F-32`, after the round-6
+split. Supplementary-group authority and `no_new_privs` are both established by
+bubblewrap and neither can be falsified by any delta it offers — measured, not
+inferred (`EVD-014`). They are asserted as supporting observations and carry no
+verdict, because a condition no control can change is not a test; rowing them
+would manufacture two more instances of the `B4` defect the split exists to
+remove.
+
+The exposure is specific and worth naming: `sec-7` cannot tell a backend that
+confines these from one that never had to. This is **a fact about one backend,
+not about the contract** — a second backend exposing a `no_new_privs` switch
+makes that row constructible immediately, and `ADR-020` already requires a macOS
+mechanism to demonstrate credential authority independently. So the residual is
+expected to shrink rather than to be lived with, and the honest reading today is
+that rows 13 and 14 cover the two credential mechanisms this backend can be
+argued with about, not the four the channel has.
+
+**`R9` — the properties are enumerated in eight places and one of them is
+checked.** `RV-346` `F-28`, raised in round 4 and contested through round 6.
+`sec-7`'s *Table A is the inventory* names Table A normative and everything else
+a manually maintained projection, and that ruling is the mitigation rather than
+a fix. Exactly one projection is machine-checked — the `Property` enum, by the
+compiler, because `RowId::Property` keys the verdict — and the rest are reader
+discipline that has now failed three times in this document.
+
+The structural answer needs a test that parses this Markdown table and diffs it
+against the enum, and no phase of this slice owns that generator. An earlier
+draft cited such a test in the remediation of the finding it was meant to close,
+which is worse than not having it: it read as enforcement while enforcing
+nothing, and it is why the class survived two corrections. Recorded here so the
+next reader knows the guarantee's real altitude before trusting a count.
 
 ### Assumptions
 
@@ -4611,8 +4949,10 @@ up.
 that could have happened to it.** Round 4 named three channels the ledger listed
 without giving each a table A row, and said a later reader should start there.
 One of them, **process credentials**, is exactly where `RV-346` `F-32` started —
-found by reading the ledger against the table, at reading cost, and now row 13
-under `ADR-020`'s credential-authority class (`sec-7`). The blank cell worked.
+found by reading the ledger against the table, at reading cost, and now rows 13
+and 14 under `ADR-020`'s credential-authority class (`sec-7`). The blank cell
+worked — though round 6 then showed that filling it correctly took two more
+passes and a measurement, which is `R3`'s point restated.
 
 `F-30` is the other half. The **standard streams** were not on the ledger at all:
 invariant 12 swept descriptors above 2, nobody wrote down what descriptors 0, 1
@@ -4636,7 +4976,7 @@ reachability is split between row 7 and table B's `B5`, so no single row carries
 it.
 
 And one governance blank stays open. `SPEC-030` states no clause for process
-credentials; row 13 exists on `ADR-020`'s authority instead, which is sufficient
+credentials; rows 13 and 14 exist on `ADR-020`'s authority instead, which is sufficient
 to row the property and is not the same as the contract requiring it. Closing
 that properly is a Revision against `SPEC-030` — see *Corrections owed* — and
 this slice does not own it.
@@ -4710,7 +5050,7 @@ read-only presence* — is a denial only if the capsule cannot reach what was ne
 bound, which is a claim about uid and gid mapping, supplementary groups,
 capability sets and `no_new_privs`. `SPEC-030` § Platform backend contract states
 no clause for any of it. This slice rows the property anyway, on `ADR-020`'s
-credential-authority class (`sec-7` row 13, `sec-2` invariant 15), which is
+credential-authority class (`sec-7` rows 13 and 14, `sec-2` invariant 15), which is
 lawful and sufficient to build against — `DEC-156` derives rows from channels
 rather than from clauses, so no clause is *needed* for a row to exist.
 
