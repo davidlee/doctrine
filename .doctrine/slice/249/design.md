@@ -160,10 +160,16 @@ by name).
 - **`Declaration` carries `deny_unknown_fields`; `ApplyRequest` cannot** (it
   carries a `#[serde(flatten)]` envelope). The facet payload therefore lands
   inside `Declaration`, where the guard already holds.
-- **Serde's `skip_serializing_if` is total over `Declaration`**, so a
-  fully-populated value serialises to exactly the wire key set — the pin
-  `DEC-169` uses instead of a proc macro. The same totality is what makes `D8`'s
-  digest cover the payload without an enumeration to maintain.
+- **`Declaration`'s wire key set is exactly its populated field set** — the pin
+  `DEC-169` uses instead of a proc macro, and what lets `D8`'s digest cover the
+  payload without an enumeration to maintain. Stated as the enumeration rather
+  than as a totality (`RV-349` `F-24`): of sixteen fields, fourteen carry
+  `skip_serializing_if`; `subject` carries none, being mandatory; and
+  `resolved_record` carries `#[serde(skip)]`, so it is not a wire key at all. A
+  fully-populated value therefore emits exactly the fifteen wire keys — because
+  serde emits a populated field, not because the attribute is total. What the pin
+  cannot see is a `#[serde(skip)]` field: free while such a field is never a wire
+  key, and a hole in the pin the moment one is.
 - **A `toml_edit` root insert-if-missing is safe; a subtable-nested one is not**
   (`mem_019ee9fd51d87aa38a2dfb31ad6c4eec`, which scopes its own proof and says
   so). `[facet]` fields are subtable-nested, which is why F-1 stands.
