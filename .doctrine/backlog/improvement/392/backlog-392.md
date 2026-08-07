@@ -74,7 +74,30 @@ reversed that — see below.
   fourth-prose-loader risk. So this item adds structured state saying a pass
   concluded, alongside the section reference it is already adding.
 
-  **Its shape is already specified — do not re-design it.** `SL-244`'s
+  **LANDED 2026-08-07 — carved out of this item, which stays open.** The marker
+  and its verb shipped exactly as `sec-4` specifies: `[review].concluded` absent
+  by default, `doctrine review conclude <RV>` / `review_conclude` on the raiser's
+  authority, idempotent latch, no unset, open findings allowed, riding
+  `with_turn`'s existing lock and both CAS windows. `read_pass_facts` reads it in
+  place of the hard-coded `false`, so a design run's `Conducted` disposition is
+  reachable — the one assertion `SL-244` `PHASE-05` `VA-3` deferred.
+
+  One design call the carve made that `sec-4` did not fix: `Verb` stays the
+  **finding-transition** vocabulary and the new act rides a sibling type,
+  `TurnAct { Finding(Verb), Conclude }`. `can` / `required_for` / `gate` are all
+  keyed on a `FindingStatus`, and concluding has no finding, so a sixth `Verb`
+  variant would have forced answers into that table that do not exist.
+  `with_turn` only ever needed the required role and the contest counter from its
+  verb, and both moved onto `TurnAct`.
+
+  **What this item still owes** is everything else in *What is here*: the section
+  reference on an `RV` finding, the design run resolving over an `RV`, the
+  `Finding` retirement, and the severity summary. The marker was pulled forward
+  because `SL-250`'s design run could not lock without it — the `Conducted` arm
+  was unreachable and `Waived` would have misrecorded a two-round pass as a
+  declined one.
+
+  **Its shape was already specified — it was not re-designed.** `SL-244`'s
   `design.md` § "The concluded-pass marker" (`sec-4`) fixes the marker and its
   writer: one boolean `concluded` key in the `RV`'s `[review]` table, absent by
   default; a new verb `doctrine review conclude <RV>` (none of the eleven
@@ -88,10 +111,18 @@ reversed that — see below.
   refuse: a pass concluding is an **event**, not a function of the finding set,
   so storing it is the rule holding rather than bending.
 
-  **This is the sub-item `ISS-314` waits on, and only this one.** `ISS-314`
-  `needs` this record for the marker alone — not for the section reference, the
-  `Finding` retirement, or the severity summary. If the marker is ever split
-  out, re-point that edge.
+  **This was the sub-item `ISS-314` waited on, and only this one** — not the
+  section reference, the `Finding` retirement, or the severity summary. The
+  marker having landed, that prerequisite is **discharged**, and `ISS-314` is
+  actionable now rather than when the rest of this item ships.
+
+  **The edge itself still stands, and could not be retracted** (2026-08-07).
+  `backlog needs` is append-only and `doctrine unlink` reaches only tier-1
+  `[[relation]]` rows, not the typed `[relationships].needs` axis — so there is
+  no verb for *this prerequisite turned out not to be one*, and the storage rule
+  forbids reaching for the TOML by hand. Captured as `CHR-057`. Until that
+  lands, `ISS-314` reads blocked on an inbound `needs` (ADR-017) that this
+  paragraph is the correction to.
 
 `DEC-138` also carries the arms themselves into a home: `SL-244` gives
 `CheckpointAct` a fourth optional slot for `Conducted { review } | Waived

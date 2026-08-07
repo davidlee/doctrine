@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd99f-0b24-7a22-993d-f23e8ed66914"
+recorded_at = "2026-08-07T00:28:26.788352203Z"
+kind = "friction"
+summary = "backlog: the needs axis is append-only — a discharged prerequisite cannot be retracted"
+detail = "IMP-392's body instructed re-pointing ISS-314's needs edge once the concluded-pass marker split out. The marker landed; the edge cannot be removed. backlog needs only appends, and doctrine unlink reaches tier-1 [[relation]] rows, not the typed [relationships].needs axis. The storage rule forbids hand-editing the TOML. Consequence: ISS-314 stays gated by ADR-017's actionability rule on work that shipped, and the correction can only live in prose. Captured as CHR-057."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

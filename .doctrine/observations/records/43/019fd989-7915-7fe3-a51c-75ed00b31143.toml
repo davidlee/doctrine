@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fd989-7915-7fe3-a51c-75ed00b31143"
+recorded_at = "2026-08-07T00:04:53.141448957Z"
+kind = "friction"
+summary = "/design: the Conducted review-disposition arm is unreachable, so a conducted pass can only be recorded as waived"
+detail = "SL-250's design run, gate contract review-disposition-attested. RV-348 concluded (done, 17 findings, all terminal, none contested), but the conducted arm is refused: 'RV-348 carries no concluded-pass marker Doctrine can read'. PassFacts.concluded is hard-coded false at src/review.rs:1713 with a test at :4660 asserting it — no verb sets the marker until IMP-392. So the only spellable exit is Waived, whose own contract text reads 'the findings stay on the RV, undisposed' — false here, all 17 are disposed. The record will misdescribe the act on two counts and the reason prose is the only place the truth can live. Cost: a user decision round-trip plus a permanently misleading change-log arm token."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
