@@ -228,5 +228,210 @@ detail = "Revision 81 §3 (Mechanical), design.md:163: 'Serde's skip_serializing
 disposition = "fixed"
 response = "Upheld and fixed in §3 at design run revision 82; the section's attestation (att-3) was invalidated by the edit, as expected. The bullet now leads with the property that is actually true — Declaration's wire key set is exactly its populated field set — and carries the enumeration beside it: of sixteen fields, fourteen carry skip_serializing_if; subject carries none, being mandatory; resolved_record carries #[serde(skip)] and is not a wire key at all. The causal correction matters as much as the count: a fully-populated value emits the fifteen wire keys because serde emits a populated field, not because the attribute is total. The residual is now stated rather than glossed — the pin cannot see a #[serde(skip)] field, which is free while such a field is never a wire key and a hole the moment one is. The ~16 wire keys / ~80 cells approximations in §5.2, §8 R10 and §9 are deliberately left: the tilde makes them approximations rather than errors, §9 already says I10 is the one worth sizing before the plan, and exacting them would move three more section fingerprints in a run one act from its gate. The real number is 15 keys and 75 cells over five subject kinds, recorded here so the plan does not have to re-derive it."
 
+[[finding]]
+id = "F-25"
+status = "answered"
+severity = "major"
+title = "sec-14 still restates the cross-section claims F-21 required it only to point at"
+detail = """
+design.md:1608 now correctly states that an attestation binds only its own section; this matches src/design_run/snapshot.rs:499. But the promised replacement discipline — "point, don't restate" — is not followed. design.md:1629-1639 restates substantive claims such as "`settle` as one validated atomic write", "the coverage canary's final form", and "The architecture … is unchanged." If those target sections change, these descriptions can become false while sec-14's attestation remains live, exactly the exposure F-21 identified.
+
+Cheapest fix: either reduce these entries to bare references, or bind every summary explicitly to a fixed revision/round as historical fact. Remove the claim that the existing entries are pointer-only.
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its re-read of sec-3 and sec-14 at design run revision 83, transcribed verbatim at its stated severity. Responder note on why this is major and not a repeat of F-21: F-21's own disposition asserted that "it is the shape the two sections below already have: point, don't restate". That was a totality asserted about content the disposing context did not check it against — this pass's signature failure — and it is false of the "What it changed" list it named. So the fix for F-21 both under-applied the discipline and asserted it had been applied.]"""
+disposition = "fix-now"
+response = """
+Contest upheld in two of three parts, and the third is declined on the text.
+
+Upheld (a): "Every substantive change is recorded where it binds" asserted completeness the index cannot carry — a new substantive change left off the list falsifies it while every pointer still resolves. Now "Substantive changes are recorded where they bind."
+
+Upheld (b): "only a *deleted* home falsifies one" was a safety totality of exactly the kind this section catalogues, and it is false — a home can be repurposed under a pointer that still resolves, and an index is silent about its omissions. The sentence now states the exposure instead of a guarantee: an index is cheaper than a description that goes quietly false, and it is not safe.
+
+Upheld (c): "Through this pass" is an expanding boundary, not a fixed one, while the pass is still moving — the same defect as an undated clearance, in a form that reads as dated. Now "As of revision 83 the architecture that came out of drafting had not been amended", which is fixed and stays true.
+
+Declined: the claim that the entries "remain semantic descriptions such as 'the retry-payload guard' and 'settle's write shape'". Those name a topic, not a state. "settle as one validated atomic write" asserted what § 5.2 says and went false if the write shape changed; "settle's write shape" asserts only that § 5.2 is where that shape is settled, and survives the shape changing — which is the property the finding asked for. The same holds for "the retry-payload guard": if § 5.3 stops carrying a retry-payload guard the pointer dangles, and a dangling pointer is the loud failure the reframing accepts. Reducing these to bare section numbers would cost a reader the ability to find anything and buy no additional truth. If a later pass disagrees, the disagreement is about whether a topic label is a claim, and it should be raised as that rather than settled by silence here."""
+
+[[finding]]
+id = "F-26"
+status = "answered"
+severity = "minor"
+title = "sec-14 still tallies the review after saying it does not"
+detail = """
+design.md:1582 says "nothing below tallies the review", but design.md:1620 calls F-21 "the fourth round of that shape". That is a review-history tally, not one of the legitimate design-stable counts preserved by F-22.
+
+Cheapest fix: write "F-21 repeats that shape", or narrow line 1582 to prohibit only mutable ledger tallies.
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its re-read of sec-3 and sec-14 at design run revision 83, transcribed verbatim at its stated severity. This is the third consecutive instance of the same mechanism: F-20 named a sentence and supplied a rephrase, F-22 found the rephrase applied nowhere, and the rephrase that then landed is itself falsified by a count below it that nobody re-read against the new sentence.]"""
+disposition = "fix-now"
+response = """
+Contest upheld, and it reverses the position taken in the first disposition — on evidence, which is the only thing that should reverse one.
+
+That disposition declined to narrow "nothing below tallies the review", on the reasoning that a rule permitting some tallies invites the next one. The contest supplies the counter-evidence: five review-history ordinals stand below the sentence — "this pass's first pattern", "the first version", "the first raised in-session", "one turn later", "a second one" — and every one of them is monotone, so the section's own adopted boundary permits them all. The sentence was therefore a rule stricter than the boundary it introduces and false of the section it governs, which is precisely F-20's defect, committed a third time and this time defended.
+
+Narrowed to what it can sustain: "nothing below counts rounds or findings", with the distinction stated once — an ordinal that fixes an event in the order it happened is monotone and stays; a running total is not and goes. The ordinals stand on that rule rather than in spite of it. The paragraph now records that the earlier form banned both and that the section went on using the first kind throughout, so the correction is visible rather than quietly applied.
+
+Worth naming: the reason to prefer the broad rule was that it is easier to police. That is a real advantage and it lost to the fact that the rule was false. A rule that is easy to check and wrong is worse than one that requires a distinction and is right."""
+
+[[finding]]
+id = "F-27"
+status = "answered"
+severity = "minor"
+title = 'sec-14 retains the non-monotone "final" claim F-23 was meant to remove'
+detail = """
+Although design.md:1656 now correctly says "the test as it stands", design.md:1634 still calls the same canary's state its "final form". Another rewrite makes that false without preserving a fixed historical boundary.
+
+Cheapest fix: use "the canary's reviewed form" or "its form at revision 82".
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its re-read of sec-3 and sec-14 at design run revision 83, transcribed verbatim at its stated severity. Note the shape: F-23 named two phrases and both were fixed at the sites F-23 cited, while the same claim standing at a third site — inside the "What it changed" list — was not swept for. Fixing the cited instances rather than the class is the mechanism F-22 already recorded.]"""
+disposition = "fix-now"
+response = """
+Upheld. F-23 named "the final test" at one site and it was fixed there to "the test as it stands", while the same non-monotone finality claim standing in the "What it changed" list as "the coverage canary's final form" was never swept for. The entry now reads "the coverage canary — D9", which drops the adjective entirely rather than dating it: under F-25's index reframing the entry names a home and says nothing about the state of what lives there, so there is no finality claim left to date.
+
+Recorded in "What it taught" beside F-26 as the compact form of "the artefact nobody re-reads": both fixes landed at the site the finding cited and nowhere else, so the same claim two paragraphs away survived. Fixing the instance rather than the class is the mechanism, and it is now named as such."""
+
+[[finding]]
+id = "F-28"
+status = "answered"
+severity = "minor"
+title = "F-24's false totality survives in both edited sections"
+detail = """
+design.md:163 says Declaration's wire-key set is exactly its populated field set. That is literally false when resolved_record is populated through src/design_run/submission.rs:439, because the field has #[serde(skip)] at src/design_run/submission.rs:200. The enumeration immediately below correctly says only fifteen of sixteen fields are wire-visible.
+
+Separately, design.md:1649-1650 still says the disproved "skip_serializing_if totality" holds.
+
+Cheapest fix: lead §3 with the exact fact — "a fully populated Declaration serializes fifteen of sixteen fields" — and change §10 to point to "§3's enumerated fifteen-key inventory".
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its re-read of sec-3 and sec-14 at design run revision 83, transcribed verbatim at its stated severity. Responder verification, since the first half is a claim about a claim: Declaration::resolving (submission.rs:443) is the setter, its own doc comment says the shell calls it between the DEC-086 id claim and the snapshot write, and the field carries #[serde(skip)]. So the populated-field set and the wire-key set differ by exactly one field on exactly the value the create path produces. The F-24 fix replaced one false totality with another, which is the pattern F-24 was raised about.]"""
+disposition = "fix-now"
+response = """
+Upheld on both halves, and the first is the more instructive.
+
+(a) § 3. Verified before accepting, since it is a claim about a claim: Declaration::resolving (src/design_run/submission.rs:443) sets resolved_record, its doc comment states the shell calls it between the DEC-086 id claim and the snapshot write, and the field carries #[serde(skip)] at :200. So on exactly the value the create path produces, sixteen fields are populated and fifteen reach the wire — the populated field set and the wire key set differ by that field, and "exactly" is false. The F-24 fix had replaced one false totality with another and placed it where the enumeration reads as its proof. The bullet now leads with the exact fact — "A fully-populated Declaration serialises fifteen of its sixteen fields" — keeps the enumeration, and states explicitly why the set-equality form is not used either, naming resolved_record's population as the counterexample rather than leaving it implicit.
+
+(b) § 10. The clearance paragraph listed "skip_serializing_if totality" among code claims checked against the source and then said they "hold". The list itself was true as dated — through revision 72 no finding had been raised on it — but the present-tense "hold" turned a dated clearance into a standing warrant, and F-24 had already disproved that member. The claim is struck from the list, "hold" is gone, and the paragraph now says why: dating the clearance keeps it true, and it was saying "hold" that made it false. That distinction is the F-23 boundary doing work rather than being restated.
+
+Added to the enumerated-totality list in "What it taught" as "The wire key set is the populated field set", and named as one of the instances written into a correction to an earlier instance."""
+
+[[finding]]
+id = "F-29"
+status = "answered"
+severity = "minor"
+title = "sec-3 turns a root-only proof into a claim that subtable insertion is unsafe"
+detail = """
+design.md:173-175 says a root insertion is safe while a subtable-nested insertion "is not", citing mem_019ee9fd51d87aa38a2dfb31ad6c4eec. That memory says only that its proof is root-scoped; it does not establish that subtable insertion is unsafe. The source actively inserts missing keys into a held facet table at src/facet_write.rs:251-263 while preserving siblings.
+
+DEC-170's refusal posture can still stand because an absent scaffold-seeded facet key represents damage — not because toml_edit cannot safely insert into a subtable.
+
+Cheapest fix: say the cited proof does not cover subtable insertion, then ground F-1 solely in the seeded-key/damage invariant.
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its re-read of sec-3 and sec-14 at design run revision 83, transcribed verbatim at its stated severity. Responder verification: the memory's "Scope of proof" paragraph says the encoder guarantee holds for root keys only and that "a key inserted into an existing subtable still positions within that subtable — unchanged", and its How-to-apply says "don't extend this to subtable-nested writes". That is a scope limit on the proof, not a finding of unsafety — so §3's parenthetical "which scopes its own proof and says so" attributes to the memory a claim it does not make. set_facet_mixed's Some(item) branch does exactly this insert unconditionally for every managed key. This is the same shape as DEC-168/D8a already recorded in §3: the ruling survives, the ground given for it is wrong.]"""
+disposition = "fix-now"
+response = """
+Upheld. Verified against both sources before accepting.
+
+The memory (mem_019ee9fd51d87aa38a2dfb31ad6c4eec) proves that a toml_edit root insert-if-missing cannot tail-land inside a trailing subtable, scopes that guarantee to root keys — "the encoder guarantee holds for root keys only" — and records that a key inserted into an existing subtable "still positions within that subtable — unchanged". Its how-to-apply says "don't extend this to subtable-nested writes". Every one of those is a limit on what the proof covers. None is a finding that subtable insertion is unsafe, so § 3's parenthetical "which scopes its own proof and says so" attributed to the memory a claim it does not make. The source agrees with the memory rather than with § 3: set_facet_mixed's Some(item) branch (src/facet_write.rs:251-263) inserts every managed key into a held [facet] table unconditionally, siblings preserved, and no defect is claimed of it anywhere in this design.
+
+The bullet is rewritten to say what is true — the root-insert proof does not reach subtable-nested writes, which is a scope limit and not a finding of unsafety — and F-1's ground is moved where the finding puts it: DEC-170's posture rests on its own invariant, that facet fields are scaffold-seeded so an absent one is damage and creating it would paper over the damage rather than report it. DEC-170 is unaffected; only the reason offered for it was wrong.
+
+This is the same shape as DEC-168/D8a two bullets up in the same section — a ruling that survives on grounds other than the ones recorded for it — and that is now the third such correction in § 3. Added to the enumerated-totality list as "The memory says subtable insertion is unsafe", since the failure was appealing to an authority without reading its scope paragraph, which costs the same one command as the others."""
+
+[[finding]]
+id = "F-30"
+status = "answered"
+severity = "minor"
+title = "The new prose introduces non-monotone superlatives"
+detail = """
+design.md:1642 calls one correction "the most useful thing in this section", and design.md:1710 calls certain findings "The sharpest instances". A later finding can falsify either judgment without changing the historical events they describe. This is precisely the non-numeric decay the section says F-19 exposed.
+
+Cheapest fix: use non-comparative claims — "is useful because…" and "Instances written into corrections are especially dangerous…".
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its second re-read of sec-3 and sec-14, transcribed verbatim at its stated severity. Both sentences are prose the responder wrote in the same round that disposed F-25/F-26/F-27, i.e. inside the corrections to the findings about this exact class.]"""
+disposition = "fix-now"
+response = """
+Upheld. Both are comparative judgements over an open set, so a later finding falsifies them without any historical fact changing — F-19's non-numeric decay, in prose written to explain F-19's non-numeric decay.
+
+"the most useful thing in this section" is now "why the pattern is recorded below as a mechanism rather than as a lapse", which states the consequence and ranks nothing. "The sharpest instances are the ones written into a correction" is now "The instances written into a correction to an earlier instance are the dangerous kind", which is a class claim rather than a maximum. The closing sentence lost "most dangerous" for the same reason and now says why it is dangerous instead: a correction is read as the careful version, so it is trusted at exactly the moment it has been written fastest.
+
+The superlative is worth naming as its own attractor. It is the natural register for writing about one's own errors — it reads as candour, and candour is what this section is for — which is why it slipped past a round explicitly hunting decaying claims."""
+
+[[finding]]
+id = "F-31"
+status = "answered"
+severity = "minor"
+title = '"What it cleared" replaces one present-tense warrant with another'
+detail = """
+design.md:1680 says the totality "does not stand now", and line 1681 says §3 "now carries" the enumeration. These are current-state claims, immediately before the paragraph explains why a dated clearance must not become a present-tense warrant.
+
+Cheapest fix: make the correction historical: F-24 disproved the listed claim at a fixed revision, and a named revision of §3 replaced it with the enumeration.
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its second re-read of sec-3 and sec-14, transcribed verbatim at its stated severity. The paragraph is the F-28 fix; it committed the defect it was written to explain, in the two sentences before explaining it.]"""
+disposition = "fix-now"
+response = """
+Upheld, and it is the cleanest specimen the pass has produced: the two sentences that commit the defect sit immediately before the two that explain it.
+
+"does not stand now" and "§ 3 now carries" are both present-tense reports of current state, load-bearing in a paragraph whose whole point is that a dated clearance carries no present-tense warrant. Fixed to the historical form the finding prescribes, with the revisions named from the ledger rather than approximated: the claim "did not survive the pass"; F-24 disproved it against revision 81 (F-24's own detail cites revision 81 §3); § 3 replaced it with an enumeration at revision 82 (F-24's disposition records that revision). The closing sentences keep the rule and now agree with the sentences above them.
+
+What this instance adds beyond the fix: proximity is not protection. The rule was not forgotten or half-remembered — it was being written out, in full, one sentence later. Whatever mechanism catches this class cannot rely on the author having the rule in mind, because here the author demonstrably did."""
+
+[[finding]]
+id = "F-32"
+status = "answered"
+severity = "minor"
+title = '"What it taught" asserts another unenumerated design-wide totality'
+detail = """
+design.md:1706-1708 says: "Where this design states such a thing, it states the enumeration or the identity beside it." That asserts a complete sweep of the whole design without supplying one — the exact pattern the paragraph condemns.
+
+Cheapest fix: scope the conclusion to the named examples or make it normative: "These examples are why the plan must pair such claims with their enumeration or identity."
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its second re-read of sec-3 and sec-14, transcribed verbatim at its stated severity. Note this sentence predates the round — it is the standing conclusion of the enumerated-totality paragraph, and it survived F-19, F-20, F-21, F-24 and F-25 unexamined while every one of those findings was about the class it claims to have swept.]"""
+disposition = "fix-now"
+response = """
+Upheld. "Where this design states such a thing, it states the enumeration or the identity beside it" is a claim about every occurrence in a fourteen-section design, asserted with no sweep behind it, standing as the conclusion of the paragraph that catalogues exactly this failure. F-24 and F-28 are two counterexamples the pass found by looking; the sentence had been asserting there were none since before either was raised.
+
+Made normative rather than descriptive, which is the finding's second option and the honest one: where the pass found one, the enumeration or the identity now sits beside it, and the plan should pair them by default. Followed by the reason it is phrased that way — a claim that the design holds no others would be this very pattern — so a later reader sees the restraint as deliberate rather than as vagueness.
+
+The provenance is the part worth keeping. This sentence is not new prose from this round; it is the standing conclusion of the enumerated-totality paragraph, and it survived F-19, F-20, F-21, F-24 and F-25 while every one of those findings was about the class it claimed to have swept. Five rounds of attention to a pattern did not cause anyone to read the sentence asserting the pattern was handled — including two rounds where the responder was editing the paragraph it closes. That is the "artefact nobody re-reads" failure operating at the scale of a single sentence, and it is why F-25's press item about unenumerated totalities stays open into the plan rather than being marked done here."""
+
+[[finding]]
+id = "F-33"
+status = "open"
+severity = "minor"
+title = "The F-32 correction still makes a current cross-section claim"
+detail = """
+design.md:1711 says: "Where the pass found one, the enumeration or the identity now sits beside it".
+
+This closes F-32's original design-wide, unenumerated totality: the population is now bounded to the examples just named. But it remains a present-tense survey of other sections. A later edit can remove one enumeration while sec-14's attestation remains live. It also contradicts the next sentence's claim that this is "an instruction and not a survey".
+
+Cheapest fix: delete the descriptive half — "The plan should pair such claims with their enumeration or identity by default, so a reader evaluates rather than trusts."
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its third re-read, transcribed verbatim at its stated severity.]"""
+
+[[finding]]
+id = "F-34"
+status = "open"
+severity = "major"
+title = "sec-14 still mirrors the ledger in narrative form"
+detail = """
+design.md:1583 says RV-349 is authoritative and sec-14 "deliberately does not mirror it"; lines 1587-92 say the remedy is to retain only what the ledger cannot. The section then narrates ledger events and dispositions extensively:
+
+- Lines 1594-1647 retell F-18 through F-26.
+- Lines 1685-1690 retell F-24 and F-28, including exact revisions.
+- Lines 1717-1733 retell the defects and fix provenance of F-25 through F-29.
+
+Those facts are precisely what the ledger can and does hold. The consequence is now demonstrated, not hypothetical: each response changes sec-14, invalidates its attestation, and creates fresh historical or cross-section claims to review. The section's retention rule is load-bearing and false of the section it governs.
+
+Cheapest fix: delete rather than tighten.
+- Delete the historical narrative under "The pass."
+- Delete "What it cleared"; the ledger owns clearances. Move the D9 ruling to D9's owning passage if it must remain in the design.
+- Delete the finding-by-finding provenance from "What it taught." Preserve only genuinely normative lessons in the plan, notes, or memory.
+- Prefer deleting "What it changed" as well: the changes already bind at their owning sections. If navigation is indispensable, retain only a terse, fixed-revision index.
+- Keep "Where a further pass should press." That is the part with a distinct and useful purpose.
+
+A sufficient opening would be approximately: "RV-349 is authoritative for review history and dispositions. Durable design changes are recorded at their owning decisions and sections. The remaining press points follow."
+
+Reviewer's judgment accompanying the finding: the corrections are converging locally, but sec-14 is not converging structurally. It is too long for the role it claims. Further sentence-level correction will continue the same loop; the right next move is deletion of the ledger narrative, not another prose repair.
+
+[Raised by the external adversarial reviewer (codex/GPT-5.5) on its third re-read, transcribed verbatim at its stated severity, in answer to a direct question about whether the section should be cut rather than corrected. Note the ancestry: F-17 and F-18 were both deletions of ledger-mirroring content from this same section, and each helped. This is the third.]"""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

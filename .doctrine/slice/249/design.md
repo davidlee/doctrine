@@ -160,19 +160,31 @@ by name).
 - **`Declaration` carries `deny_unknown_fields`; `ApplyRequest` cannot** (it
   carries a `#[serde(flatten)]` envelope). The facet payload therefore lands
   inside `Declaration`, where the guard already holds.
-- **`Declaration`'s wire key set is exactly its populated field set** — the pin
-  `DEC-169` uses instead of a proc macro, and what lets `D8`'s digest cover the
-  payload without an enumeration to maintain. Stated as the enumeration rather
-  than as a totality (`RV-349` `F-24`): of sixteen fields, fourteen carry
-  `skip_serializing_if`; `subject` carries none, being mandatory; and
-  `resolved_record` carries `#[serde(skip)]`, so it is not a wire key at all. A
-  fully-populated value therefore emits exactly the fifteen wire keys — because
-  serde emits a populated field, not because the attribute is total. What the pin
-  cannot see is a `#[serde(skip)]` field: free while such a field is never a wire
-  key, and a hole in the pin the moment one is.
-- **A `toml_edit` root insert-if-missing is safe; a subtable-nested one is not**
-  (`mem_019ee9fd51d87aa38a2dfb31ad6c4eec`, which scopes its own proof and says
-  so). `[facet]` fields are subtable-nested, which is why F-1 stands.
+- **A fully-populated `Declaration` serialises fifteen of its sixteen fields** —
+  the pin `DEC-169` uses instead of a proc macro, and what lets `D8`'s digest
+  cover the payload without an enumeration to maintain. Stated as the
+  enumeration rather than as a totality (`RV-349` `F-24`, then `F-28`): fourteen
+  fields carry `skip_serializing_if`; `subject` carries none, being mandatory;
+  and `resolved_record` carries `#[serde(skip)]`, so it is not a wire key at
+  all. The fifteen keys are emitted because serde emits a populated field, not
+  because the attribute is total. `F-28` is why this is not stated as *the wire
+  key set is the populated field set* either: `resolved_record` **is** populated,
+  by `Declaration::resolving` between `DEC-086`'s id claim and the snapshot
+  write, so on exactly the value the create path produces the two sets differ by
+  that field. What the pin cannot see is that same `#[serde(skip)]` field: free
+  while such a field is never a wire key, and a hole in the pin the moment one
+  is.
+- **The `toml_edit` root-insert proof does not reach subtable-nested writes**
+  (`mem_019ee9fd51d87aa38a2dfb31ad6c4eec`) — which is a scope limit on the
+  proof, not a finding of unsafety (`RV-349` `F-29`). The memory establishes
+  that a root insert-if-missing cannot tail-land inside a trailing subtable,
+  says the guarantee holds for root keys only, and records that a key inserted
+  into an existing subtable positions within it unchanged. `set_facet_mixed`
+  already inserts every managed key into a held `[facet]` table unconditionally
+  (`src/facet_write.rs`), so nothing mechanical forbids it. `DEC-170`'s F-1
+  posture therefore rests on its own ground and nothing else: facet fields are
+  scaffold-seeded, so an absent one is damage, and creating it would paper over
+  the damage rather than report it.
 - **`[facet]`, `status` and `updated` are keys of one file.** `record-NNN.toml`
   carries all three, and both mutating cores (`facet_write::set_facet_mixed`,
   `dep_seq::apply_status`) already take a held `&mut DocumentMut`. There is no
@@ -1566,124 +1578,20 @@ carries its facet — which the mint test asserts directly.
 <!-- doctrine:section sec-14 -->
 # 10. Review Notes
 
-## The pass
+`RV-349` is authoritative for this design's review history — findings,
+severities, contests, dispositions and rounds all live there. Durable design
+changes are recorded at the decisions and sections that hold them, not
+summarised here.
 
-`RV-349` is the record: findings, severities, contests, dispositions and rounds
-live there, and it is authoritative. This section deliberately does not mirror
-it.
-
-It used to. `RV-349` `F-17` is why it no longer does — a hand-maintained copy of
-ledger history, living inside the artefact the ledger reviews, goes stale every
-round by construction, and became the repeated subject of its own findings for
-miscounting itself. The fix is not more care. It is to stop keeping the copy, and
-to keep here only what the ledger cannot: what the pass changed in the design,
-what it cleared, and what it taught.
-
-`F-18` is the same lesson again, and it is why nothing below tallies the review.
-An earlier form of this section dropped the tables and kept the *arithmetic in
-the prose* — "twice", "four rounds", "in any round" — which is the same mutable
-fact in a form that reads as description rather than as a tally. It was already
-stale when it was written.
-
-`F-19` then showed the rule I wrote to prevent that — *shapes and consequences,
-never quantities* — was the wrong rule, and wrong in both directions: it banned
-design-stable numbers this section needs and permitted claims that decay without
-being numeric. Its replacement, *monotone or nothing*, was wrong in a third way,
-and `F-20` is that: as a rule over the whole section it is **false of this
-section**. The press list below is deliberately a list of current states —
-*largest thing still undefined*, *no home yet*, *remaining unverified* — and a
-rule banning those would delete the section's purpose. It was also, being a
-totality asserted about content nobody had checked it against, this pass's first
-pattern committed inside the rule written to stop it.
-
-The boundary that holds is narrower, and it is a distinction between two kinds of
-claim rather than a ban:
-
-- **Claims about the review's own history** — what the ledger owns and revises as
-  it moves — must be monotone. *Twice*, *four rounds*, *in any round* were not,
-  and every one of them was stale on arrival. The clearances below are therefore
-  dated to the round that gave them rather than asserted as current ledger state:
-  `F-23` found this section citing them as an example of what the boundary
-  permits, when they fall squarely on this side of it.
-- **Claims about the design's current state** carry no mechanical guarantee, and
-  the first version of this bullet asserted one they do not have. An attestation
-  binds *its own section's bytes* — `missing_lanes` (`src/design_run/snapshot.rs`)
-  matches a held attestation on its subject and on that subject's fingerprint —
-  so a later amendment to § 5.3 stales sec-8's attestation and leaves this
-  section's untouched and live. What stands in for the guarantee is discipline,
-  and it is the shape the two sections below already have: *point, don't restate*
-  — name the section or decision that holds the claim, so a design that moves
-  under the pointer leaves the pointer true. Where the press list states a
-  current judgement it is unguarded, and it is an instruction to go and look: a
-  stale one costs a wasted look, not a false belief.
-
-`F-21` is the fourth round of that shape, and the first raised in-session rather
-than by the external reviewer: a totality asserted about machinery nobody had run
-a command against, written into the correction to the third. The machinery this
-section appealed to was not, in fact, already there.
-
-## What it changed
-
-Every substantive change is recorded where it binds, not summarised here:
-
-- the recovery argument and the retry-payload guard — § 5.3, `D8`, `D8a`, `I12`;
-- `settle` as one validated atomic write — § 5.2, § 5.4 path B, `D6` superseded;
-- the facet table's three pins — § 5.1, `D1`, `I3`, `I3b`;
-- the wire table's mapping, distinct from its inventory — `I10`;
-- edit preservation as its own proof — `D10`, `I11`;
-- the coverage canary's final form — `D9`;
-- § 9's criterion narrowed back inside the slice's non-goals.
-
-The architecture that came out of drafting is unchanged. What the pass rewrote
-was the *evidence*: what the code does, what the pins cover, what the tests would
-catch, and what the specs actually say.
-
-## What it cleared
-
-Through the external reviewer's last round, raised against revision 72, no
-finding had been raised on: `DEC-177`'s tripwire remains justified for hand-edits
-and out-of-band writers; the Phase A/B boundary is coherent; `D4`'s `body` reuse is
-carried by objective 3's refusal; `ADR-013` REV routing and `ADR-004` relation
-deferral are correctly applied; the seven scaffold templates seed exactly their
-kinds' field sets; and the code claims checked against the source —
-`Declaration`'s `deny_unknown_fields`, `set_facet_mixed`'s missing-key creation,
-`skip_serializing_if` totality, `append_edge → Noop` — hold. They are named
-rather than counted, so the list can grow without this paragraph going stale.
-
-`D9`'s proportionality was put to the reviewer directly, because a single test
-asserting a spec says "seven" and not "four" had been rewritten again and again,
-and that is the profile of a fix that has outgrown what it protects. The ruling
-was that it has not: the test as it stands is compact, each clause closes a
-demonstrated failure, and a simpler one would knowingly surrender coverage.
-Recorded so a later reader finds a ruling rather than re-deriving one.
-
-## What it taught
-
-Shapes recur across this pass, and none is carelessness. These are the ones
-worth carrying into the plan.
-
-**A totality asserted rather than enumerated.** *The pins are total together.
-The retry carries the same payload. Every occurrence is kind-derived. The
-allowlist expires. The declared phrase is found. The fingerprint binds it.* Each
-was cheap to check, and each was part of an argument that was otherwise sound —
-which is the mechanism, not an excuse: a claim of this kind inherits the
-credibility of the reasoning around it and so never attracts the one command that
-would settle it. Where this design states such a thing, it states the enumeration
-or the identity beside it, so a reader evaluates rather than trusts.
-
-**The artefact nobody re-reads.** The scope card drifted from the design;
-a criterion widened past the card's own non-goals because nothing compared it
-back; a finding sat contested on the ledger while its substance was
-being fixed elsewhere; and this section drifted from the ledger repeatedly.
-Each of those artefacts was the one updated last, after the substantive work, by
-hand. The `review.scope` runbook step is the comparison that should catch this
-and it fires once at the end of a stage — the wrong cadence for a review that
-keeps going. Mechanising it is a note for whoever next designs at this length.
-There is no fix inside this slice, and resolving to remember would be the same
-failure again.
-
-`R4` says objective 4's completion is easy to assert. This pass is that failure
-mode, found repeatedly inside the design that guards against it.
+`F-34` is why this section is short. It previously narrated the ledger at
+length, which meant every response to a finding rewrote the section, invalidated
+its attestation, and created fresh claims to review; two consecutive adversarial
+rounds found defects almost exclusively in prose written to fix the previous
+round's. What the ledger cannot hold — the evolution of this section's own rule,
+the clearances the pass produced by raising nothing, `D9`'s proportionality
+ruling, and the failure shapes worth carrying into the plan — moved to
+`design-history.md` beside this file. What remains is the press list, which is
+the one thing here with a purpose neither the ledger nor another section serves.
 
 ## Where a further pass should press
 
@@ -1703,7 +1611,7 @@ mode, found repeatedly inside the design that guards against it.
    vehicle carrying a knowledge-record correction because no other exists until
    this slice ships. Someone should check that is a legitimate home rather than
    the only one available.
-4. **Every other unenumerated totality claim here.** The remaining unverified
+4. **Every other unenumerated totality claim in this design.** The remaining unverified
    code claims — `entity::write_body`'s behaviour on an absent file,
    `resolve_ref`'s refusal surface, `catalog::scan`'s shape as the tripwire's
    precedent — carry no evidence anywhere in this design, and each is one command
