@@ -96,10 +96,6 @@ captured in. Capture never stages or commits; a record stays untracked until
 someone commits it. See `install/using-doctrine.md` for the review-noise and
 local-exclusion tradeoffs.
 
-**The historical corpus stays where it is.** `.doctrine/rfc/011/case-notes.md`
-remains the record of everything instrumented before this cutover — it is not
-migrated, not superseded, and still worth reading. It is simply no longer the
-place new entries go.
 
 # orchestration
 
