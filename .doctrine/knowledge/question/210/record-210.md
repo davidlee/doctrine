@@ -68,3 +68,41 @@ property suites turning out to hold for the document's bookkeeping too.
 
 Relates to [[SL-248]] (`sec-2`, `sec-7`, `sec-9` `R3`), [[DEC-156]] (the count
 whose corrections keep exposing this), [[RV-346]] `F-28` and round 6 line 6.
+
+## The answer — RV-346 round 6, 2026-08-08
+
+**It cannot be fully fixed at design altitude, and the design now says so.** The
+external reviewer's ruling, taken as written: a document of this size maintains
+its parallel enumerations by discipline, and the mitigation available is naming
+which one is authoritative rather than pretending a guard exists.
+
+What `SL-248` did with it — the first and fourth candidates above, together, and
+neither alone:
+
+- Table A is **normative**; every other enumeration is a **manually maintained
+  projection**, labelled as one where it appears, and wrong by default when it
+  disagrees (`sec-7` § *Table A is the inventory; everything else is a
+  projection*).
+- Exactly **one** projection is machine-checked, and it is narrower than the
+  design had been claiming: the `Property` enum has one variant per row and keys
+  the verdict, so a row the suite can construct that the enum cannot name is a
+  compile error. That fences the enum against the *code's* tables. It says
+  nothing about the prose.
+- The design stops implying otherwise. `every_row_id_is_covered_by_exactly_one_table`
+  was cited **as enforcement in the remediation of the finding it was meant to
+  close** while being an unwritten planned test — which is why the class survived
+  two corrections. It stays planned and is worth writing, but it is no longer
+  claimed to protect the document.
+- `sec-9` `R9` carries the residual with the altitude stated.
+
+**The generalisable part is unchanged and is deliberately not answered here.**
+Whether doctrine should carry a mechanism for authored enumerations that must
+agree — the lint over authored prose — is the candidate that would actually fire
+during design, and it remains doctrine-general work outside `SL-248`'s scope. It
+is not filed as backlog work, because the ruling is that the cheaper mitigations
+suffice for this document; a future design that drifts again under the projection
+rule is the evidence that would justify the tool.
+
+Confirming datum from the same round: round 6's own credential-row split forced a
+hand-edit of three of the four projections in one change. The projection rule
+made that visible and did not prevent it, which is exactly the altitude claimed.

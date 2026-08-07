@@ -74,48 +74,50 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-07 · design reviewing rev 75, RV-346 round 6 briefed and held · ed8800414
+fresh-as-of: 2026-08-08 · design reviewing rev 76, RV-346 round 6 remediated and returned · 5ffdea138
 
 ### Produced
 
-- Round 5 remediated and answered — `RV-346` `F-29`…`F-33`, 33/33 findings
-  answered, `await=raiser` (`3271af47d`).
-- **Ten drift defects found by a pre-brief sweep and fixed** (`48bc59a44`,
-  `9ffe8a1d6`, `b504edc95`). Eight are `F-28`'s class; two — the `EVD-013`
-  over-attribution and row 13's dead control — are older than round 5. Three came
-  from cheap scout agents, one from executing a probe, none from re-reading.
-- `RV-346` round 6 briefed, six lines of attack, **deliberately not released**
-  (`69faf77ba`, `02427ef5c`, `ed8800414`).
-- Credential spike run unjailed on the real host — `spike-credentials.{md,sh}`,
-  `spike-credentials-output.txt` under `slice/248/`.
-- `sec-9` `R1` withdrawn as a statement of fact and restated as an obligation;
-  `sec-7`'s delta split corrected to one measured, nine reasoned. **The phase
-  obligation to measure the deltas is now nine, not four.**
-- Both row 13 entries marked ⚠ in place rather than re-cut — codex must see what
-  was specified in order to rule on it.
+- `RV-346` round 6 released to codex, returned, and remediated in full
+  (`b8a779cca`). 27 verified, 2 withdrawn, 6 contested, 2 raised; all 8 open
+  items dispositioned, ledger back at `await=raiser`.
+- **The credential row is split** — table A rows 13 (`MappedIdentity`) and 14
+  (`Granted(AllCapabilities)`), on `EVD-014`'s measured arms. Two of the four
+  bundled mechanisms have no control under bubblewrap and are recorded
+  observed-but-unrowed. `Delta` gains a `Granted` variant; `PropertyRemoval`
+  loses `CredentialsConfined`.
+- **The bubblewrap profile now passes `--uid`/`--gid`** — a behaviour change,
+  not bookkeeping: row 13 asserts a declared identity, so one must be declared.
+- Row 10's holding condition repaired (`F-36`, reproduced); row 12 now tests
+  descriptor-1 *readability* rather than delivery (`F-30`).
+- `verify` takes `today: String` and `clock::today` becomes a third root-package
+  export — removes the `time` edge rather than declaring it (`F-29`).
+- Design re-adopted at revision 76 via `adopt_authored` after hand-edits; seven
+  of nine section fingerprints moved.
+- Minted: `ISS-320` — no verb emits the `adopt_authored` section map;
+  `ISS-280` — second instance recorded, sharpening the fix's shape (`5ffdea138`).
 - No code touched; no gate applicable. All `.doctrine` changes committed
-  path-limited (`src/review.rs` and `observations/records/43/` belong to another
-  agent's SL-250 work — left untouched).
+  path-limited — another agent's `SL-249`/`SL-250` files left untouched.
 
 ### Learned
 
-- `EVD-014` — bubblewrap credential confinement: `--unshare-user` is a no-op for
-  non-setuid bwrap; `--cap-add ALL` fires; the signal lives in `CapBnd`/`CapInh`,
-  never `CapPrm`/`CapEff`.
-- `mem.fact.bubblewrap.unshare-user-is-a-no-op-unprivileged` — the same, as
-  reusable agent guidance.
-- `EVD-013`'s positive-control rule recurred twice in one spike session and
-  caught both times; carried into `EVD-014`'s method.
+- `EVD-014` — the measured arms now carry rows 13 and 14, not one bundled row.
+- `mem.fact.bubblewrap.unshare-user-is-a-no-op-unprivileged`.
+- Friction captured: `.doctrine/observations/records/d7/` — a contest's reasoning
+  has no durable home.
 
 ### Open
 
-- `QUE-210` — whether a design this size can hold parallel enumerations without a
-  machine guard; put to round 6 as line 6.
-- **`RV-346` round 6 must rule on row 13's mechanism** — the candidate is
-  `Widened`-shaped where every other delta is `PropertyRemoval`-shaped.
-- Review-pass disposal is **blocked**: the `Conducted` arm is unreachable until
-  `IMP-392`. The design run still names the empty `RV-347`.
-- `sections_outstanding_review` is 9 of 9 — the largest remaining gate, untouched.
+- **`RV-346` round 7 is the next move, and it should be scope-bound to
+  verification** — 8 findings answered and awaiting the raiser; see
+  `handover.md`.
+- The split's one live disagreement: whether the two unrowed credential
+  mechanisms should be rows carrying permanent `Unproven`. Put to codex in
+  `F-32`'s response; the design argues not.
+- `sections_outstanding_review` is 9 of 9 and every fingerprint moved at rev 76
+   — the largest remaining gate, and not startable until the ledger closes.
+- `review_pass` reads `STALE`; the `Conducted` disposal arm is now reachable
+  (`IMP-392`'s blocking leg landed), so `RV-347` no longer forces `Waived`.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.
 - `ISS-319` — separable defect, fixable independently of `QUE-208`.
 - `SL-248` `OQ-1` (five-slice decomposition, provisional), `OQ-3` (three

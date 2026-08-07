@@ -387,3 +387,88 @@ about the subject — establish which cage produced the result before raising it
    answer available at design altitude, or is the honest ruling that a document
    of this size maintains parallel enumerations by reader discipline and the
    design should say so where it currently implies otherwise?
+
+### Round 7 — verification, and one ruling. Not a sweep.
+
+**Subject.** `.doctrine/slice/248/design.md` at design-run revision 76, adopted
+watermark `61dd11f2`, commit `b8a779cca`. Seven of nine sections moved; `sec-3`
+and `sec-4` are byte-identical to what you read in round 6.
+
+**Scope, and it is narrower than any round so far.** This is a **verification
+pass**. Eight findings sit at `answered` — `F-24`, `F-25`, `F-28`, `F-29`,
+`F-30`, `F-32`, `F-36`, `F-37` — six of them contested by you in round 6 and
+two raised by you. Your job is to close them terminal, plus rule on the one
+question at 1.
+
+**Do not open new lines of attack.** Rounds 1 through 6 raised 37 findings
+across nine sections and every section has now been read externally at least
+once. The marginal value of another sweep is low and the cost is another full
+remediation cycle on a document that has one gate left. Raise a new finding
+**only** where it meets one of two bars:
+
+- it is a **blocker** — something that would make the implementation wrong, not
+  merely the prose weaker; or
+- it is **regression from this round's remediation** — a defect the round-6
+  edits introduced. Seven sections moved, so this is the live risk and it is in
+  scope by construction.
+
+Anything else — a better phrasing, a thinner argument, a section you would have
+written differently — is out of scope for this round. If you find such a thing
+and judge it worth keeping, say so in your summary and it goes to the backlog,
+not the ledger. A round that verifies eight findings and raises nothing is the
+expected outcome and the successful one.
+
+**Standing discipline, unchanged.** Build-level and confinement claims are
+verified by **execution on a minimal reproduction**. A negative read is not
+evidence, and a probe that fails in your own sandbox has not yet said anything
+about the subject until you establish which cage produced it (`F-20`).
+
+**1. The one ruling: two mechanisms are recorded as observed-but-unrowed, and
+you may disagree.** This is the only genuinely open question in the round.
+
+Your line-1 ruling was taken as written — the discipline survives semantically,
+a control may grant where the grant negates exactly one protection, and
+`--cap-add ALL` is now a typed `Delta::Granted(AuthorityGrant)` rather than a
+mislabelled removal. Your line-2 point was taken too: the probe reads `CapBnd`
+and `CapInh`, never `CapPrm`/`CapEff`.
+
+Where the remediation **departs from your remedy**: you sketched a four-way
+split, and it landed as two rows. Measured on `EVD-014`'s unjailed arms, only
+two of the four mechanisms have a control that fires — identity (`--uid 4242
+--gid 4242` gives `uid=4242`; omitting gives host `uid=1000`) and capabilities
+(`--cap-add ALL` gives all four sets `000001ffffffffff` against all-zero).
+Supplementary groups read the same unmapped list in every arm, because a userns
+may not `setgroups` and the namespace is created whether or not `--unshare-user`
+is passed. `no_new_privs` reads `1` in every arm including under `--cap-add
+ALL`, and bubblewrap's flag list offers no way to leave it clear.
+
+The argument for not rowing them is that a row whose control cannot fire is
+`B4`'s class — the exact defect that retired `CredentialsConfined` — so rowing
+two more would trade one instance for two. They are asserted as supporting
+observations, carry no verdict, and a named test asserts they reach no verdict.
+`sec-9` `R8` carries the exposure.
+
+**Rule on it.** If you judge that a contract-owed property belongs in the table
+even when this backend cannot falsify it — carrying `Unproven` honestly rather
+than being demoted to an observation — say so and say what `Admission` should
+then mean, because on the current algebra a permanent `Unproven` makes
+`Admitted` unreachable and the suite admits nothing. That second half is the
+part that has to work, and it is why the remediation went the other way.
+
+**2. The eight answered findings, against the artefact.** Read each response
+against what the document now says, not against how the response reads. The
+remediations that moved the most: `F-32` (rows 13 and 14, `sec-2` invariant 15,
+the profile gaining `--uid`/`--gid`), `F-36` (row 10 resolving descriptors to
+identity rather than counting them), `F-30` (row 12 reading descriptors 1 and 2
+rather than asserting non-delivery), `F-29` (`rustix` module gating, and
+`today: String` via a third export instead of a `time` edge).
+
+**3. Regression from the split, which is the round's real risk.** The credential
+row's split forced hand-edits across four parallel enumerations — Table A, the
+`Property` enum, `sec-2`'s properties projection, and the executed test titles —
+plus the removal/flag table, `DEC-156`'s count history, and `sec-8`'s closure
+table. All four principal projections were counted at **fourteen** after the
+edit. That is exactly `F-28`'s class, in a change made *while* remediating
+`F-28`, so verify it rather than trusting the count: pick the enumerations
+yourself and check they agree, and check the `13`→`14` renumbering did not leave
+a dangling cross-reference to "row 13" that now means something else.
