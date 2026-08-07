@@ -4069,7 +4069,7 @@ what a later slice would reach for.
 | 9 | the control arm writing to real host state | its readable entries are fixture-owned decoys under the fixture's own root, and its `/source` is an export this run built for itself — never one a real transaction adopts |
 | 10 | the control arm handing a capsule a live descriptor — now including a **writable** one | all three decoys are fixture-created under the fixture's own root, and the write-only decoy is an **unlinked** file, so the control arm's mutation is unreachable by name and dies with the descriptor; no descriptor the trusted side holds for real is ever marked inheritable |
 | 11 | the control arm leaking the trusted-side environment | the assertion is over a decoy variable the fixture sets in its own child, so nothing the operator's shell carries is read, compared or reported |
-| 12 | the control arm handing a capsule the *harness's* stdin, and the payload writing back through a live socket | both ends are fixture-created: `stdin` is a fixture-opened decoy file, never the trusted process's own descriptor 0, and `stdout` is one end of a socket pair the fixture made and closes on the way out |
+| 12 | the control arm handing a capsule the *harness's* stdin, and a **readable** descriptor 1 reaching into the trusted side | both ends are fixture-created: `stdin` is a fixture-opened decoy file, never the trusted process's own descriptor 0, and `stdout` is one end of a socket pair the fixture made and closes on the way out |
 | 13 | the control arm running a payload with real host credentials | the removal weakens the capsule's posture and never the parent's, and the payload only *reports* — it is a reader of `/proc/self/status` and the credential syscalls, never an actor, so the control arm's worst case is a truthful report of a posture the arm deliberately created |
 
 **Row 7's containment changed in round 4 and the reason generalises.** It read
@@ -4323,8 +4323,13 @@ Executed, the claims that need naming beyond their row:
   stub
 - `the_capsules_stdin_yields_no_bytes` — row 12's probe arm, against a parent
   that deliberately holds a readable decoy on descriptor 0
-- `the_capsule_cannot_write_back_through_its_stdout_socket` — row 12's second
-  leg, since a standard stream may be bidirectional
+- `neither_descriptor_one_nor_two_is_readable_by_the_capsule` — row 12's second
+  leg, and it names **readability, not delivery**: under
+  `EmptyInputCapturedOutput` the parent creates and reads descriptors 1 and 2, so
+  bytes written by the capsule arriving trusted-side is the specified behaviour
+  and a test asserting they do not arrive asserts capture is broken. What a
+  socket pair confers and a capture pipe's write end does not is that the capsule
+  can **read** descriptor 1 — the undeclared inbound channel (`RV-346` `F-30`)
 - `the_stdio_control_changes_nothing_above_descriptor_two` — that rows 10 and 12
   are disjoint by descriptor number, so a failure names one of them
 - `a_stdin_inheriting_backend_fails_row_twelve` — the `F-30` mutant as a stub

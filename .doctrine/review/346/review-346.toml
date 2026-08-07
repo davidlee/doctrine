@@ -259,7 +259,7 @@ The export-set test keeps its job unchanged; it was never there to protect crate
 
 [[finding]]
 id = "F-24"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected REQ-461 closure to execute the real capacity comparison; observed its only filesystem proof may skip and closure disclaims it"
 detail = "REQ-461 criterion 1 requires provisioning to compare available space at the capsule location. sec-5 assigns the real mechanism to SystemHost statvfs on the capsule root and says filesystem claims are executed in sec-7 Table C, but that row reports Skipped whenever the repository and capsule root share a filesystem. sec-8 then marks REQ-461 satisfied using only pure capacity/configuration tests and explicitly says closure does not rest on the executed row. Those pure tests exercise arithmetic and fixture HostFacts; they cannot detect a SystemHost that probes the wrong path, returns a manufactured figure, or never calls statvfs. Under the slice standing discipline, a filesystem claim needs non-skippable execution on a discriminating reproduction. The requirement cannot move to satisfied until such evidence exists or the executed row is made mandatory on a fixture that actually supplies distinct filesystems."
@@ -275,7 +275,7 @@ REQ-461's closure rests on 1, which cannot skip; 2 strengthens where the host al
 
 [[finding]]
 id = "F-25"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the typed source export to pass placement validation; observed the sole capsule-root carve-out excludes it"
 detail = "Expected: sec-2 CapsulePlacement::try_new admits the design own typed per-base SourceExport while still refusing generic readable paths beneath ForbiddenScopes.capsule_root. Observed: sec-2 says every resolved host path equal to, above, or below capsule_root refuses, with one typed carve-out only for writable entries beneath this placement TransactionRoot; it then states that readable entries get no carve-out. The layout places the source at <capsule_root>/export/<base-oid>, and sec-7 row 9 also requires its fixture own export as /source. The source is therefore a descendant of the forbidden capsule root, is not writable transaction state, and every lawful production or fixture placement is refused before any conformance row runs. This is the over-denial side of the F-10 remediation. Add a distinct typed SourceExport admission rule tied to the accepted base and the export subtree, keep the generic readable vector carve-out-free, and pin both a positive lawful-source case and a negative sibling-export substitution mutant."
@@ -331,7 +331,7 @@ One thing I did NOT do, and flag rather than bury: EVD-013's 2×2 was measured a
 
 [[finding]]
 id = "F-28"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected the authorised nine-row correction everywhere; observed sec-2 and sec-6 still instruct eight"
 detail = "Expected: the F-19 remediation and the human-authorised DEC-156 correction leave one count and one correspondence rule throughout the design. Observed: sec-7 says nine rows over eight clauses and records DEC-156 moving eight to nine; sec-8 and the reconciled SL-248 scope also say nine. But sec-2 still says the contract meaning is eight properties, claims one-to-one correspondence with the eight SPEC-030 clauses, says DEC-156 was corrected to eight, and says sec-7 builds eight rows. Sec-6 twice calls conformance an eight-property table. These statements are not historical framing; they are current implementation instructions and directly contradict invariant 11 and row 9. Replace the stale count and correspondence prose in sec-2 and sec-6, preserving the actual rule: nine independent claims cover eight clauses, with the explicit-input clause covered for boundedness and immutability."
@@ -354,7 +354,7 @@ Current state, verified by counting the artefacts rather than by assertion: Tabl
 
 [[finding]]
 id = "F-29"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "The new crate inherits neither serde nor toml, so the mandated config reader cannot compile"
 detail = "Expected: sec-6 applies its own warning that a second workspace member must declare the dependencies its code uses. Observed: sec-5 mandates a Serde projection and `#[serde(deny_unknown_fields)]` at design.md:1915-1925, while sec-6 and the authoritative touch-set at :2287-2304 and :3669 give `crates/doctrine-control/Cargo.toml` only the doctrine path edge, rustix, and `publish = false`; neither serde nor toml is declared. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/manifest-transfer` has a root package depending on serde/toml and a control member depending only on the root. `cargo check -p control` fails E0433 for both crates; `cargo check -p control --features direct-parser-edges` succeeds after the control member declares them directly. Fix: specify `serde.workspace = true` and `toml.workspace = true` on the new member and include those edges in sec-6/sec-8 manifest instructions; then execute the actual second-member build."
@@ -374,13 +374,21 @@ title = "Arbitrary parent stdin crosses execute outside the descriptor property"
 detail = "Expected: every authority channel into a capsule is explicit and rowed, and descriptor closure leaves only standard streams the contract deliberately owns. Observed: `Execution` at design.md:292-305 has no stdin policy, invariant 12 marks only descriptors above 2, and table A row 10 at :2986 likewise ignores fd 0. An inherited stdin may be a credential file, pipe, terminal, or bidirectional socket, yet all eleven rows can pass. Executed reproduction: `/tmp/claude-1000/-workspace-doctrine/158409ed-e3f2-482e-92ad-79dd8ba34048/scratchpad/stdin-channel` runs the bubblewrap-shaped profile twice. With parent stdin piped, the capsule read all 22 decoy bytes; with stdin replaced by null, it read 0. Both executions succeeded, so this is the subject boundary rather than the reviewer cage. Fix: make stdio part of `Execution` and the channel ledger; default stdin to a trusted null/closed source or a typed owned input, create fresh one-way parent-owned capture for stdout/stderr, and add a control whose only delta inherits decoy stdin. Row 10 over fd >2 cannot discharge this exception."
 disposition = "fixed"
 response = """
-Upheld on the contest. You are right on both halves and the second is the one that mattered.
+Upheld. The contest is correct and it is a regression introduced by round 6's own remediation — exactly the class the round-7 brief put in scope by construction.
 
-Row 12 asserted "stdin yields zero bytes and the write-back does not reach the parent", and the second leg rejected the flow the design intends. CapsuleStdio::EmptyInputCapturedOutput makes descriptors 1 and 2 one-way endpoints the parent created AND READS — capture is the point, so bytes reaching the trusted side is specified behaviour, not violation. The row asserted that capture is broken.
+Round 6 rewrote row 12 to read descriptors 1 and 2 and hold when both reads fail, and added the subsection *Row 12 observes readability, not delivery* arguing at length that asserting the write-back does not arrive asserts capture is broken. The row moved; the executable projection in `sec-7` did not. It still carried `the_capsule_cannot_write_back_through_its_stdout_socket`, and its gloss still carried the superseded reasoning verbatim ("since a standard stream may be bidirectional") — the very distinction the remediation replaced with readability of descriptor 1. An implementer working from the test titles, which are the executable projection, would have written a test asserting the repudiated property. Blocker severity is right.
 
-And it named the wrong distinguishing property. The stated reason for one-way endpoints was that a socket pair carries bytes back into the trusted side; a capture pipe does that too. What a socket pair actually confers, and a pipe write end does not, is that the capsule can READ descriptor 1 — an inbound channel the ledger never declared.
+Fixed at design-run revision 78, `sec-7` only (`8f0462967c10` to `15efefae8556`); the other eight sections reproduce their revision-76 digests unchanged.
 
-Fixed: the payload reads stdin to EOF, then attempts to read descriptors 1 and 2, and the row holds when both reads fail. Under Removed(StdioOwned) the capsule inherits the trusted side's own standard streams, which on a terminal or a socket are readable, so the control fires on exactly the mechanism the row names. Written up as its own subsection since the "observes delivery rather than capability" shape is reusable."""
+Two edits:
+
+1. The title is now `neither_descriptor_one_nor_two_is_readable_by_the_capsule`, and the gloss states the property positively — under `EmptyInputCapturedOutput` the parent creates and reads descriptors 1 and 2, so bytes arriving trusted-side is the specified behaviour; what a socket pair confers and a capture pipe's write end does not is that the capsule can read descriptor 1.
+
+2. A second instance of the same drift you did not name: row 12's containment hazard in the control-safety table read "the payload writing back through a live socket", describing the round-5 writing payload rather than the reading one. It now reads "a **readable** descriptor 1 reaching into the trusted side". The containment column was already correct and is unchanged — a fixture-made socket pair is precisely what makes descriptor 1 readable, so it is the right control for the new leg.
+
+**One question back, and it is yours to rule on rather than mine to settle.** Row 12 now has two legs and still one mutant, `a_stdin_inheriting_backend_fails_row_twelve`. A backend inheriting the trusted side's whole stdio trips both legs, so that stub does not discriminate them: a backend that supplies empty `stdin` but hands back a readable socket on descriptor 1 fails the second leg only, and nothing in the table demonstrates the suite would catch it. That is the shape `F-31` forced for row 10, which is why row 10 carries two mutants rather than one.
+
+I have not added it. It is a coverage gap in the projection rather than a defect in the row, the round-7 bar admits blockers and regressions only, and adding a mutant on my own reading is the move the scope bind exists to prevent. If you judge it meets the blocker bar, raise it and I will remediate; if you judge it backlog, say so and it goes there."""
 
 [[finding]]
 id = "F-31"
@@ -393,7 +401,7 @@ response = "Upheld. The design's claim that absent bytes distinguish an open-but
 
 [[finding]]
 id = "F-32"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Backend admission leaves process credentials wholly ungoverned"
 detail = "Expected: ADR-020 requires independently equivalent filesystem, process, credential, network, and canonical-repository authority properties, and REQ-459 criterion 1 claims the shared suite proves credential denial. Observed: the only process-credential text in the design is residual 5 at design.md:4129-4135, which concedes that uid/gid mapping, supplementary groups, capabilities, and setuid regain have no contract clause and no row. A positive-controlled search for `uid|gid|supplementary groups|capabilities|no-new-privs|setuid` finds the residual and no enforcement or verification elsewhere. Thus a backend retaining host process credentials can pass every row, while sec-8 still claims REQ-459 criterion 1 in full and credits REQ-448 denial. `--unshare-all` is only a bubblewrap mechanism, not the cross-backend property ADR-020 requires; the current outer jail already strips capabilities, so a local zero-capability probe cannot establish the general claim. Fix before lock: obtain the governance ruling SPEC-030 currently lacks, define the observable process-authority posture including uid/gid, supplementary groups, capability sets, and no-new-privs/setuid behavior, then add independently falsifiable controls and rows or withdraw the in-full closure claim until governed evidence exists."
@@ -443,7 +451,7 @@ detail = "Expected: SL-248 R1 requires current source claims to carry precise ci
 
 [[finding]]
 id = "F-36"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected row 10 to detect inherited descriptors; observed its own enumeration descriptor violates the holding condition"
 detail = """Expected: Table A row 10's Single observation must have a realizable no-inheritance holding condition, with the positive control distinguishing the inherited-descriptor case. Observed: the payload is specified to enumerate /proc/self/fd and hold only when no descriptor above 2 appears. Executing the minimal observation `sh -c "ls -1 /proc/self/fd"` produced 0, 1, 2, 3: opening the directory for enumeration creates the observer's own fd above 2. Therefore an otherwise clean process fails the literal condition before any nominated decoy is inherited, and the positive control cannot repair that false baseline. Specify how the observer fd is excluded without hiding inherited fds, or make the property about nominated decoy identities/targets rather than every number above 2."""
@@ -459,7 +467,7 @@ Recorded as its own subsection in sec-7 because the generalisation is worth more
 
 [[finding]]
 id = "F-37"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected precise evidence citations; observed jail.rs:806 points at unrelated implementation"
 detail = "Expected: SL-248 R1 requires current source claims to carry precise citations that land on their evidence. Observed: a 16-citation source-line sample had 15 supporting landings (93.75%), but both uses of `jail.rs:806` do not. At current subject watermark ec973c1e, `src/worktree/jail.rs:806` is `Vec::with_capacity(policy.extra_rw.len())` in the macOS resolver; it supports neither sec-2's open-by-default network claim nor sec-2's claimed harvest warning. The sampled EVD-013/EVD-014 entity citations did land on the stated measurements. Repair or remove the two misattributed line citations."
