@@ -8,6 +8,7 @@ title = "SL-248 design — rolling per-section external pass"
 facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
 raiser    = "codex"
 responder = "claude"
+concluded = true
 
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-248"
@@ -483,7 +484,7 @@ Your sample rate is recorded as the answer to round 6 line 2a: 15/16 landings, 9
 
 [[finding]]
 id = "F-38"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected both row 12 legs to gate admission; observed the sole mutant cannot detect an ignored readability leg"
 detail = """
