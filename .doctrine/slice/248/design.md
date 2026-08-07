@@ -2957,13 +2957,29 @@ combination and carries no signal for any namespace-shaped delta. Two of row
 13's four holding conditions are false against this design's own backend and a
 third is uninformative.
 
+**A delta that does fire has been measured, and is not adopted here.** In the
+same session, `--cap-add ALL` under `--unshare-all` returned `CapInh`, `CapPrm`,
+`CapEff` and `CapBnd` all `000001ffffffffff` against the probe arm's all-zero,
+exiting clean. Those are capabilities inside the capsule's *own* user namespace
+rather than host root, which is exactly the threat invariant 15 names: a capsule
+holding `CAP_SYS_ADMIN` in its namespace can mount what was never bound. So the
+property is falsifiable under bubblewrap after all — the design simply reached
+for the wrong delta.
+
+Adopting it is not a numeral change, which is why this paragraph stops here. The
+candidate **adds** to the capsule's posture where every other row's delta
+**removes** a mechanism, so it is `Widened`-shaped rather than
+`PropertyRemoval`-shaped, and `sec-7` distinguishes those deliberately (row 2 is
+`Widened`, row 9 is not, and the difference is argued). Whether a credential row
+may be controlled by widening, and what that does to *one control removes exactly
+one mechanism*, is the question — not whether the flag works.
+
 **What is deliberately not decided here.** Row 13's property is right and
 `F-32`'s argument for it stands untouched — invariant 4's denial-by-absence does
 rest on a credential posture the contract never required. What is wrong is the
-mechanism chosen to falsify it, and choosing a replacement is a design decision
-about a mechanism that will not let you drop the namespace the confinement rests
-on. It is carried to `RV-346` round 6 as its first line of attack rather than
-settled mid-run. Until it is settled, row 13 is a specified row with a control
+mechanism chosen to falsify it. It is carried to `RV-346` round 6 as its first
+line of attack rather than settled mid-run, with the candidate above as
+measurement rather than as a proposal. Until it is settled, row 13 is a specified row with a control
 known not to fire — which by `Admission`'s own algebra means this suite does not
 yet admit anything, and `sec-8`'s *all thirteen rows* is a claim about the table
 rather than about a passing suite. `sec-9` `R1` carries the evidence half.

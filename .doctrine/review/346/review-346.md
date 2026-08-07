@@ -292,12 +292,23 @@ about the subject — establish which cage produced the result before raising it
    makes the result bubblewrap's rather than this jail's (`F-20`). Row 13 can
    only read `Unproven`, so `Admission::Admitted` is unreachable — `B4`'s class,
    in the row added one round after `B4`. `F-32`'s argument for the *property* is
-   untouched and is not reopened. **The open question is the mechanism**: what
-   delta falsifies a credential posture under a backend that will not let you
-   drop the namespace the confinement rests on? Candidate shapes the design has
-   not evaluated — a probe-side `--uid`/`--gid` the control omits; a setuid-free
-   capability assertion the control cannot satisfy; a second backend stub. Rule
-   on one, or say the row must be re-cut to a property bubblewrap can fail.
+   untouched and is not reopened. **The open question is the mechanism, and it is
+   narrower than it was when this brief was first written.** A delta that fires
+   has since been measured: `--cap-add ALL` under `--unshare-all` returns all
+   four capability sets at `000001ffffffffff` against the probe arm's all-zero,
+   exiting clean — capabilities inside the capsule's own user namespace, which is
+   exactly the threat invariant 15 names. `--uid`/`--gid` moves identity
+   separately. So the property is falsifiable under bubblewrap and the design
+   reached for the wrong flag.
+
+   **What you are asked to rule on is not whether the flag works.** The candidate
+   *adds* to the capsule's posture where every other delta in that table
+   *removes* a mechanism — `Widened`-shaped, not `PropertyRemoval`-shaped, and
+   `sec-7` separates those on purpose (row 2 is `Widened`, row 9 is argued not to
+   be). Does *one control removes exactly one mechanism* survive a control that
+   grants rather than withholds? If it does, row 13 re-cuts around `--cap-add`
+   and `sec-9`'s out-of-jail caveat mostly dissolves. If it does not, say what
+   the row becomes instead.
 
 2. **Row 13's probe conditions, same session, also recorded.** Two of four are
    false against the design's own backend — the profile passes no `--uid`/`--gid`
