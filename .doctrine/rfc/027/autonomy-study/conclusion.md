@@ -204,15 +204,32 @@ governance. What remains genuinely un-run:
 
 ### Repairs earned against RFC-027
 
-| id | repair |
-|---|---|
-| R-a | Cite `ADR-020` / `SPEC-030` / `REV-046` / `DEC-133`–`137`; amend the stale *"SL-241 is testing that claim"* at `:966` and the non-goal at `:464` |
-| R-b | Re-frame or drop Stage 3's *"block only the affected frontier"* leg (`:1604`) against `ADR-020`'s phase-capsule transaction and `H9`'s unchanged frontier |
-| R-c | Restore the three dropped payload fields at `:1002` or state why dropped; add a decision-case row to the fact-ownership table, or record that the test has not been applied |
-| R-d | Re-label the arbitration ladder (`:774`) — argue the ordering or present it unordered, as brief E asked |
-| R-e | Mark `H12`'s confirm/kill as **un-run**, so the middle-tier claim stops reading as established |
-| R-f | Add `ADR-017` + `QUE`-gating and the design-run inquiry map as named incumbents to `H12` / implication 8 / Stage 3 |
-| R-g | Correct `H9`'s *"second dependency implementation"* (`:673`) to third — `design_run/inquiry.rs` is the missed one |
+Applied 2026-08-08: `R-a`, `R-b`, `R-e`, `R-g` — the four that fix statements
+which are *wrong in the corpus as it stands*. Held: `R-c`, `R-d`, `R-f` — each
+is substantive re-authoring of `H12` or implication 8 and deserves its own pass.
+
+| id | repair | state |
+|---|---|---|
+| R-a | Cite `ADR-020` / `SPEC-030` / `REV-046` / `DEC-133`–`137` / `ADR-017`; amend the stale *"SL-241 is testing that claim"* at `:966` and the non-goal at `:464` | **applied** |
+| R-b | Re-frame Stage 3's probe: withdraw the *"block only the affected frontier"* and *"without an interactive channel"* legs as already decided; name the admission journal as the chronology anchor; land the reconciled escalation shape | **applied** |
+| R-c | Restore the three dropped payload fields at `:1002` or state why dropped; add a decision-case row to the fact-ownership table, or record that the test has not been applied | held |
+| R-d | Re-label the arbitration ladder (`:774`) — argue the ordering or present it unordered, as brief E asked | held |
+| R-e | Mark `H12`'s confirm/kill as **un-run**, so the middle-tier claim stops reading as established | **applied** |
+| R-f | Add `ADR-017` + `QUE`-gating and the design-run inquiry map as named incumbents to `H12` / implication 8 | held (Stage 3 names them; `H12` and implication 8 do not) |
+| R-g | Correct `H9`'s *"second dependency implementation"* (`:673`) to third — `design_run/inquiry.rs` is the missed one | **applied** |
+
+### The reconciled escalation shape — confirmed
+
+Maintainer-confirmed 2026-08-08 and landed in Stage 3: `DEC-134`'s
+*payload-minimal notification* and this RFC's *structured decision case* are not
+in tension once the **assembly point** is fixed. The worker emits a minimal
+notification; the case is assembled **trusted-side, from evidence harvested out
+of the frozen capsule**. The worker sends a doorbell, not a dossier — which is
+also how brief 05's constraint *"prefer compact evidence-bearing escalation over
+transcript forwarding"* is satisfied. `ADR-020` already supplies both halves.
+
+What remains probe-able is the **lift**: how a minimal notification becomes a
+disposed case, and which of the two incumbent blocking-derivations carries it.
 
 ## Method notes
 
