@@ -1,0 +1,39 @@
+# crates/doctrine-control — the capsule control binary (SL-248, DEC-153/DEC-160).
+# The trusted side of starting a capsule transaction: contract resolution,
+# provisioning, and the backend conformance suite. Split from the agent-facing
+# `doctrine` binary at canonical mutation; nothing migrates out of it.
+#
+# Bin-only, and that is a decision rather than an omission (`sec-6`): a `tests/`
+# file cannot link a bin-only package (E0433), and a lib target would force the
+# conformance suite's weakening vocabulary public (E0603). Every test here is a
+# `#[cfg(test)]` module inside the unit it tests.
+#
+# Dependencies are derived from this crate's own `use` statements, never copied
+# from the design's table (EX-6). A workspace member is a separate compilation
+# unit: the root package having already paid for a crate buys this one nothing.
+# At PHASE-01 the list is the `doctrine` path edge alone — `rustix` (`fs` *and*
+# `std`), `serde` (`derive`) and `toml` arrive in PHASE-03 with the code calling
+# them.
+[package]
+name = "doctrine-control"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Capsule provisioning and backend conformance for doctrine dispatch"
+license = "GPL-3.0-only"
+repository = "https://github.com/davidlee/doctrine"
+readme = "README.md"
+keywords = ["capsule", "sandbox", "provisioning"]
+categories = ["development-tools"]
+# Never released. `default-members` (workspace Cargo.toml) selects this crate for
+# `cargo package` and `cargo publish` as much as for `build`/`clippy`/`test`, so
+# the key alone is not enough — `just publish` also names `-p doctrine`. Both are
+# required and neither substitutes for the other: `publish = false` makes a bare
+# `cargo publish` *fail*, not skip (`sec-6` § Nothing ships).
+publish = false
+
+[dependencies]
+doctrine = { path = "../.." }
+
+[lints]
+workspace = true

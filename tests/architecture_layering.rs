@@ -28,6 +28,54 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+// ─── SL-248 PHASE-01: the two source trees and the export set ──────────────
+//
+// The workspace has two source trees the gate must walk, and one crate boundary
+// it cannot see. `ADR-001`'s edge check reads `crate::` paths, so a cross-crate
+// import produces no edge at all — walking both trees would still leave every
+// edge from `doctrine-control` into the root package invisible. The two gaps
+// take different answers (`sec-6` § The enforcement gap, and the ruling):
+//
+//   * intra-crate — run the existing gate a second time, once per tree, each
+//     against its own tier section. One directory parameter and one more call;
+//     the extractors are NOT generalised to cross crates.
+//   * cross-crate — assert the root library's export list. The public surface of
+//     `src/lib.rs` is the only route in, so bounding that list bounds every
+//     cross-crate edge exactly, with no graph analysis. Stronger than an edge
+//     check, which would permit `doctrine-control` to reach any exported
+//     engine-tier item; this refuses the export in the first place.
+
+/// The authored tier map both trees are checked against (`ADR-001`).
+const LAYERING_TOML: &str = ".doctrine/adr/001/layering.toml";
+
+/// The root package's source tree, and the `[tiers]` section classifying it.
+const ROOT_SRC: &str = "src";
+const ROOT_TIERS_SECTION: &str = "tiers";
+
+/// `doctrine-control`'s source tree, and its own tier section. Separate, not
+/// merged: unit names are unique only within a tree, and merging would make
+/// `config` ambiguous once the crate lands one beside the root package's.
+const CONTROL_SRC: &str = "crates/doctrine-control/src";
+const CONTROL_TIERS_SECTION: &str = "doctrine_control_tiers";
+
+/// The root package's lib target — the whole cross-crate surface.
+const LIB_RS: &str = "src/lib.rs";
+
+/// The root library's entire public export set (`STD-001`). `PHASE-02` appends
+/// `interpretation`, taking it to six.
+///
+/// Every name here is an item `doctrine-control` reaches, and no name here
+/// belongs to a module above `leaf` tier. `src/worktree/` is absent and stays
+/// absent — `sec-2` invariant 10 is enforced by this list carrying no worktree
+/// surface, not by an edge check.
+const EXPORTED: &[&str] = &[
+    "CaptureError",
+    "DOCTRINE_TOML",
+    "read_doctrine_toml_text",
+    "read_path_at",
+    "today",
+];
+
 /// Discover top-level modules under `src_dir` by scanning for non-test `.rs` files.
 ///
 /// Each returned string is the basename of a `.rs` file under `src_dir/`, stripped
@@ -429,6 +477,80 @@ enum Violation {
 /// into standard TOML before parsing the rest.
 #[allow(dead_code)]
 fn load_layering(path: &Path) -> Result<(LayerMap, Accepted, TangleBaseline), String> {
+    let (doc, accepted) = layering_document(path)?;
+    let map = tier_map(&doc, ROOT_TIERS_SECTION, path)?;
+
+    // ── [tangle_baseline] → TangleBaseline ──
+    let tangle_table = doc
+        .get("tangle_baseline")
+        .and_then(|v| v.as_table())
+        .ok_or_else(|| format!("missing [tangle_baseline] section in {}", path.display()))?;
+
+    let mut tangle = BTreeMap::new();
+    for (key, val) in tangle_table.iter() {
+        let tier: Tier = key
+            .parse()
+            .map_err(|e| format!("bad tangle_baseline key `{key}`: {e}"))?;
+        let count = val
+            .as_integer()
+            .ok_or_else(|| format!("tangle_baseline.{key} must be an integer"))?;
+        let count: u32 = count
+            .try_into()
+            .map_err(|_| format!("tangle_baseline.{key} value out of u32 range"))?;
+        tangle.insert(tier, count);
+    }
+
+    Ok((map, accepted, TangleBaseline(tangle)))
+}
+
+/// Load a second source tree's classification (SL-248 `EX-11`).
+///
+/// The tier map comes from that tree's own section. The other two inputs do not:
+/// `PHASE-01` `D1` rules that a new crate gets a **zero** tangle baseline and
+/// **no** accepted violations. Inheriting the root tree's baseline would hand the
+/// new crate a tangle allowance it never earned — a loosening by accident — so
+/// both are synthesised here rather than authored, leaving nothing to drift.
+#[allow(dead_code)]
+fn load_tree_layering(
+    path: &Path,
+    tiers_section: &str,
+) -> Result<(LayerMap, Accepted, TangleBaseline), String> {
+    let (doc, _root_accepted) = layering_document(path)?;
+    let map = tier_map(&doc, tiers_section, path)?;
+    let baseline = TangleBaseline(BTreeMap::from([
+        (Tier::Leaf, 0),
+        (Tier::Engine, 0),
+        (Tier::Command, 0),
+    ]));
+    Ok((map, Accepted(BTreeSet::new()), baseline))
+}
+
+/// Parse one `[tiers]`-shaped section into a [`LayerMap`].
+#[allow(dead_code)]
+fn tier_map(doc: &toml_edit::DocumentMut, section: &str, path: &Path) -> Result<LayerMap, String> {
+    let table = doc
+        .get(section)
+        .and_then(|v| v.as_table())
+        .ok_or_else(|| format!("missing [{section}] section in {}", path.display()))?;
+
+    let mut map = BTreeMap::new();
+    for (key, val) in table.iter() {
+        let s = val
+            .as_str()
+            .ok_or_else(|| format!("tier value for `{key}` must be a string"))?;
+        let tier: Tier = s
+            .parse()
+            .map_err(|e| format!("bad tier for `{key}`: {e}"))?;
+        map.insert(key.to_string(), tier);
+    }
+    Ok(LayerMap(map))
+}
+
+/// Strip the `[[accepted_violation]]` entries out into [`Accepted`] and parse
+/// what remains as standard TOML. The accepted set is a property of the root
+/// tree's map; a second tree is loaded with an empty one (`D1`).
+#[allow(dead_code)]
+fn layering_document(path: &Path) -> Result<(toml_edit::DocumentMut, Accepted), String> {
     let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
 
@@ -465,44 +587,7 @@ fn load_layering(path: &Path) -> Result<(LayerMap, Accepted, TangleBaseline), St
         .parse()
         .map_err(|e| format!("invalid TOML in {}: {e}", path.display()))?;
 
-    // ── [tiers] → LayerMap ──
-    let tiers_table = doc
-        .get("tiers")
-        .and_then(|v| v.as_table())
-        .ok_or_else(|| format!("missing [tiers] section in {}", path.display()))?;
-
-    let mut map = BTreeMap::new();
-    for (key, val) in tiers_table.iter() {
-        let s = val
-            .as_str()
-            .ok_or_else(|| format!("tier value for `{key}` must be a string"))?;
-        let tier: Tier = s
-            .parse()
-            .map_err(|e| format!("bad tier for `{key}`: {e}"))?;
-        map.insert(key.to_string(), tier);
-    }
-
-    // ── [tangle_baseline] → TangleBaseline ──
-    let tangle_table = doc
-        .get("tangle_baseline")
-        .and_then(|v| v.as_table())
-        .ok_or_else(|| format!("missing [tangle_baseline] section in {}", path.display()))?;
-
-    let mut tangle = BTreeMap::new();
-    for (key, val) in tangle_table.iter() {
-        let tier: Tier = key
-            .parse()
-            .map_err(|e| format!("bad tangle_baseline key `{key}`: {e}"))?;
-        let count = val
-            .as_integer()
-            .ok_or_else(|| format!("tangle_baseline.{key} must be an integer"))?;
-        let count: u32 = count
-            .try_into()
-            .map_err(|_| format!("tangle_baseline.{key} value out of u32 range"))?;
-        tangle.insert(tier, count);
-    }
-
-    Ok((LayerMap(map), Accepted(accepted), TangleBaseline(tangle)))
+    Ok((doc, Accepted(accepted)))
 }
 
 /// Parse a line like `from = "state"; to = "install"` into ("state", "install").
@@ -538,6 +623,7 @@ fn extract_quoted_string(s: &str) -> Option<(String, String)> {
 
 #[allow(dead_code)]
 fn check(
+    src_dir: &Path,
     units: &BTreeSet<String>,
     edges: &BTreeSet<(String, String)>,
     map: &LayerMap,
@@ -554,8 +640,12 @@ fn check(
     //
     // For unit tests (synthetic modules like "leaf_mod"), the filter is a no-op
     // because those names won't be found on disk; we pass those edges through.
+    //
+    // SL-248 `EX-10`: the probe takes its directory from `src_dir` rather than a
+    // hardcoded "src", which is the whole of what running the gate over a second
+    // source tree costs. The extractors were already parameterised.
     let is_module = |name: &str| -> bool {
-        let src = std::path::PathBuf::from("src");
+        let src = src_dir;
         let exists_on_disk = src.join(format!("{name}.rs")).exists()
             || src.join(format!("{name}/mod.rs")).exists()
             || src.join(format!("{name}/{name}.rs")).exists();
@@ -1162,10 +1252,333 @@ pub fn scan() {
         let (map, accepted, baseline) =
             load_layering(layering_path).expect("failed to load layering.toml");
 
-        let violations = check(&units, &edges, &map, &accepted, &baseline);
+        let violations = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
 
         if !violations.is_empty() {
             panic!("GATE FAILED:\n{:#?}", violations);
+        }
+    }
+
+    // ── SL-248 PHASE-01: the second source tree ─────────────────────────
+
+    /// Run the gate over one source tree against its own tier section.
+    fn gate_tree(src_dir: &str, tiers_section: &str) -> Vec<Violation> {
+        let src = Path::new(src_dir);
+        assert!(src.exists(), "{src_dir} must exist");
+        let layering_path = Path::new(LAYERING_TOML);
+        assert!(layering_path.exists(), "{LAYERING_TOML} must exist");
+
+        let units = discover_units(src);
+        let edges = extract_edges(src);
+        let (map, accepted, baseline) = if tiers_section == ROOT_TIERS_SECTION {
+            load_layering(layering_path).expect("failed to load layering.toml")
+        } else {
+            load_tree_layering(layering_path, tiers_section)
+                .unwrap_or_else(|e| panic!("failed to load [{tiers_section}]: {e}"))
+        };
+
+        check(src, &units, &edges, &map, &accepted, &baseline)
+    }
+
+    /// SL-248 `VT-2`: the gate walks BOTH source trees, each against its own
+    /// tier section. `doctrine-control` is a separate compilation unit whose
+    /// internal edges the single-tree gate never saw; running the same machinery
+    /// a second time is what closes that half of the enforcement gap. The other
+    /// half — every edge *into* the root package — is bounded by the export set,
+    /// not by this call.
+    #[test]
+    fn the_layering_gate_runs_over_both_source_trees() {
+        for (src_dir, section) in [
+            (ROOT_SRC, ROOT_TIERS_SECTION),
+            (CONTROL_SRC, CONTROL_TIERS_SECTION),
+        ] {
+            let violations = gate_tree(src_dir, section);
+            assert!(
+                violations.is_empty(),
+                "GATE FAILED over {src_dir} (section [{section}]):\n{violations:#?}"
+            );
+        }
+    }
+
+    /// SL-248 `VT-2`: behaviour preservation. Threading a directory through
+    /// `check`'s module probe must move no existing classification — that is the
+    /// obligation on any change to shared machinery, and the reason a parameter
+    /// was added rather than the extractor generalised to cross crates.
+    #[test]
+    fn the_existing_layering_gate_is_unchanged_in_verdict_over_the_root_tree() {
+        let violations = gate_tree(ROOT_SRC, ROOT_TIERS_SECTION);
+        assert!(
+            violations.is_empty(),
+            "the root tree's verdict moved:\n{violations:#?}"
+        );
+    }
+
+    /// SL-248 `VT-3`: the second tree is genuinely *gated*, not merely walked.
+    /// Today `doctrine-control` holds only `main.rs`, which `discover_units`
+    /// deliberately skips — so the real second call passes over an empty unit
+    /// set and would pass over a broken map just as happily. These two synthetic
+    /// fixtures are what make that call load-bearing rather than vacuous.
+    #[test]
+    fn an_unclassified_unit_in_the_new_crate_fails_the_gate() {
+        let units: BTreeSet<_> = ["provision", "backend"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let edges: BTreeSet<_> = [(String::from("provision"), String::from("backend"))]
+            .into_iter()
+            .collect();
+        // `backend` is missing from the map — the shape of a phase that adds a
+        // unit and forgets its tier row.
+        let map = LayerMap(BTreeMap::from([(String::from("provision"), Tier::Engine)]));
+
+        let v = check(
+            Path::new(CONTROL_SRC),
+            &units,
+            &edges,
+            &map,
+            &Accepted(BTreeSet::new()),
+            &baseline_zero(),
+        );
+
+        assert!(
+            v.iter()
+                .any(|x| matches!(x, Violation::Unclassified(u) if u == "backend")),
+            "expected Unclassified(backend), got {v:?}"
+        );
+    }
+
+    /// SL-248 `VT-3`, second fixture: an upward edge inside the new crate is
+    /// refused. `ADR-001` applies inside `doctrine-control` exactly as it does
+    /// inside the root package — an engine unit reaching the command tier is the
+    /// violation the tier map exists to catch.
+    #[test]
+    fn a_command_tier_import_from_an_engine_unit_in_the_new_crate_fails_the_gate() {
+        let units: BTreeSet<_> = ["provision"].into_iter().map(String::from).collect();
+        let edges: BTreeSet<_> = [(String::from("provision"), String::from("main"))]
+            .into_iter()
+            .collect();
+        let map = LayerMap(BTreeMap::from([
+            (String::from("provision"), Tier::Engine),
+            (String::from("main"), Tier::Command),
+        ]));
+
+        let v = check(
+            Path::new(CONTROL_SRC),
+            &units,
+            &edges,
+            &map,
+            &Accepted(BTreeSet::new()),
+            &baseline_zero(),
+        );
+
+        assert!(
+            v.iter().any(|x| matches!(
+                x,
+                Violation::UpwardEdge { from, to, .. } if from == "provision" && to == "main"
+            )),
+            "expected UpwardEdge(provision → main), got {v:?}"
+        );
+    }
+
+    // ── SL-248 PHASE-01: the export set ─────────────────────────────────
+
+    /// One binding per exported item, with its type spelled out. Constructing
+    /// this links the test against the real lib target, so it is the proof that
+    /// the export set is not *narrower* than [`EXPORTED`] — the source parse
+    /// below proves only that it is not *wider*, and a name can be listed in a
+    /// constant without being exported at all.
+    struct RootLibraryExports {
+        doctrine_toml: &'static str,
+        read_doctrine_toml_text: fn(&Path) -> anyhow::Result<Option<String>>,
+        read_path_at: fn(&Path, &str, &str) -> Result<Option<String>, doctrine::CaptureError>,
+        today: fn() -> String,
+    }
+
+    impl RootLibraryExports {
+        fn linked() -> Self {
+            Self {
+                doctrine_toml: doctrine::DOCTRINE_TOML,
+                read_doctrine_toml_text: doctrine::read_doctrine_toml_text,
+                read_path_at: doctrine::read_path_at,
+                today: doctrine::today,
+            }
+        }
+    }
+
+    /// The public names `src/lib.rs` exposes at the crate root, each paired with
+    /// the module it comes from.
+    ///
+    /// Parsed from source rather than reflected, because Rust has no way to
+    /// enumerate a crate's public surface at runtime. That makes this the
+    /// *widening* check: any `pub` item added to the crate root — a re-export, a
+    /// public module, a stray `pub fn` — shows up here and has to be added to
+    /// [`EXPORTED`] deliberately.
+    fn lib_public_surface() -> BTreeMap<String, String> {
+        let src =
+            std::fs::read_to_string(LIB_RS).unwrap_or_else(|e| panic!("cannot read {LIB_RS}: {e}"));
+        let file = syn::parse_file(&src).unwrap_or_else(|e| panic!("cannot parse {LIB_RS}: {e}"));
+
+        let mut surface = BTreeMap::new();
+        for item in &file.items {
+            match item {
+                syn::Item::Use(u) if matches!(u.vis, syn::Visibility::Public(_)) => {
+                    collect_use_tree(&u.tree, None, &mut surface);
+                }
+                syn::Item::Mod(m) if matches!(m.vis, syn::Visibility::Public(_)) => {
+                    let name = m.ident.to_string();
+                    surface.insert(name.clone(), name);
+                }
+                syn::Item::Fn(f) if matches!(f.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(f.sig.ident.to_string(), String::from(LIB_RS));
+                }
+                syn::Item::Struct(s) if matches!(s.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(s.ident.to_string(), String::from(LIB_RS));
+                }
+                syn::Item::Enum(e) if matches!(e.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(e.ident.to_string(), String::from(LIB_RS));
+                }
+                syn::Item::Const(c) if matches!(c.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(c.ident.to_string(), String::from(LIB_RS));
+                }
+                syn::Item::Type(t) if matches!(t.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(t.ident.to_string(), String::from(LIB_RS));
+                }
+                syn::Item::Trait(t) if matches!(t.vis, syn::Visibility::Public(_)) => {
+                    surface.insert(t.ident.to_string(), String::from(LIB_RS));
+                }
+                _ => {}
+            }
+        }
+        surface
+    }
+
+    /// Walk a `pub use` tree, recording each leaf name against the first path
+    /// segment it came through — the contributing module.
+    fn collect_use_tree(
+        tree: &syn::UseTree,
+        module: Option<&str>,
+        out: &mut BTreeMap<String, String>,
+    ) {
+        match tree {
+            syn::UseTree::Path(p) => {
+                let seg = p.ident.to_string();
+                // `pub use crate::x::y` — `crate` is not the contributing module.
+                let next = if module.is_none() && seg != "crate" {
+                    Some(seg)
+                } else {
+                    module.map(String::from)
+                };
+                collect_use_tree(&p.tree, next.as_deref(), out);
+            }
+            syn::UseTree::Group(g) => {
+                for t in &g.items {
+                    collect_use_tree(t, module, out);
+                }
+            }
+            syn::UseTree::Name(n) => {
+                let name = n.ident.to_string();
+                out.insert(name.clone(), module.map_or(name, String::from));
+            }
+            syn::UseTree::Rename(r) => {
+                let name = r.rename.to_string();
+                out.insert(name, module.map_or_else(String::new, String::from));
+            }
+            syn::UseTree::Glob(_) => {
+                panic!("{LIB_RS}: a glob re-export makes the export set unbounded");
+            }
+        }
+    }
+
+    /// SL-248 `VT-1`: the root library exports exactly [`EXPORTED`] and nothing
+    /// else. This is the cross-crate half of `ADR-001`: `doctrine-control`'s only
+    /// route into the root package is this list, so bounding it bounds every
+    /// cross-crate edge — without any graph analysis, and more tightly than an
+    /// edge check, which would permit reaching any *exported* engine-tier item.
+    /// It doubles as protection against the published crate's API widening by
+    /// accident.
+    #[test]
+    fn the_root_library_exports_exactly_the_named_set() {
+        let exports = RootLibraryExports::linked();
+        assert_eq!(
+            exports.doctrine_toml, ".doctrine/doctrine.toml",
+            "DOCTRINE_TOML crossed the boundary with the wrong value"
+        );
+        assert_eq!(
+            (exports.today)().len(),
+            "YYYY-MM-DD".len(),
+            "today() must be the project's single date format"
+        );
+        let absent = std::env::temp_dir().join("doctrine-sl248-not-a-project");
+        assert!(
+            (exports.read_doctrine_toml_text)(&absent)
+                .expect("an absent doctrine.toml is Ok(None), never an error")
+                .is_none()
+        );
+        assert!(
+            (exports.read_path_at)(&absent, "HEAD", "Cargo.toml")
+                .expect("a failed cat-file is Ok(None), never an error")
+                .is_none()
+        );
+
+        let surface: BTreeSet<String> = lib_public_surface().into_keys().collect();
+        let expected: BTreeSet<String> = EXPORTED.iter().map(|s| String::from(*s)).collect();
+        assert_eq!(
+            surface, expected,
+            "{LIB_RS}'s public surface has moved. Every name here is semver \
+             surface for `doctrine-control` and a cross-crate edge ADR-001 \
+             cannot otherwise see — widen EXPORTED deliberately or not at all"
+        );
+    }
+
+    /// SL-248 `VT-1`: every module contributing an export is `leaf` in the tier
+    /// map. An edge check would let `doctrine-control` reach any exported item
+    /// whatever its tier; refusing a non-leaf export in the first place is what
+    /// keeps the crossing leaf-only. `dtoml` is the live case — it carries
+    /// seventeen `crate::` references and reaches engine-tier `coverage`, which
+    /// is why the two items that cross moved to `config_file` instead.
+    #[test]
+    fn every_exported_item_belongs_to_a_leaf_tier_module() {
+        let (map, _accepted, _baseline) =
+            load_layering(Path::new(LAYERING_TOML)).expect("failed to load layering.toml");
+
+        for (item, module) in lib_public_surface() {
+            let tier = map.0.get(&module).unwrap_or_else(|| {
+                panic!("{item} comes from `{module}`, which {LAYERING_TOML} does not classify")
+            });
+            assert_eq!(
+                *tier,
+                Tier::Leaf,
+                "{item} is exported from `{module}`, classified {tier:?} — the \
+                 export set must be leaf-only"
+            );
+        }
+    }
+
+    /// SL-248 `VT-4` / `sec-2` invariant 10: `doctrine-control` cannot reach the
+    /// root package's worktree modules. Enforced through the export set rather
+    /// than an edge check, because a cross-crate import is not a `crate::` path
+    /// and would produce no edge to check. The crate cannot reach around the
+    /// export set, so a surface that carries no worktree item carries no route
+    /// to one.
+    #[test]
+    fn doctrine_control_does_not_depend_on_the_worktree_modules() {
+        for (item, module) in lib_public_surface() {
+            assert_ne!(
+                module, "worktree",
+                "{item} exports worktree surface — sec-2 invariant 10 says the \
+                 control binary never reaches it"
+            );
+            assert!(
+                !item.to_lowercase().contains("worktree"),
+                "{item} names worktree surface in the export set"
+            );
         }
     }
 
@@ -1195,7 +1608,14 @@ pub fn scan() {
         let map = LayerMap(tiers);
         let accepted = Accepted(BTreeSet::new());
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(v.is_empty(), "expected no violations, got {v:?}");
     }
 
@@ -1214,7 +1634,14 @@ pub fn scan() {
         let map = LayerMap(tiers);
         let accepted = Accepted(BTreeSet::new());
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         // Both UpwardEdge and MixedUmbrella fire (leaf→engine upward without
         // acceptance or sub-classification).
         assert!(
@@ -1245,7 +1672,14 @@ pub fn scan() {
         accepted_set.insert(("leaf_mod".into(), "engine_mod".into()));
         let accepted = Accepted(accepted_set);
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(v.is_empty(), "accepted upward edge should pass, got {v:?}");
     }
 
@@ -1264,7 +1698,14 @@ pub fn scan() {
         accepted_set.insert(("leaf_mod".into(), "engine_mod".into()));
         let accepted = Accepted(accepted_set);
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert_eq!(v.len(), 1);
         assert!(matches!(v[0], Violation::StaleAccepted { .. }));
     }
@@ -1284,7 +1725,14 @@ pub fn scan() {
         let map = LayerMap(tiers);
         let accepted = Accepted(BTreeSet::new());
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(
             v.iter()
                 .any(|x| matches!(x, Violation::Unclassified(name) if name == "unknown_mod"))
@@ -1301,7 +1749,14 @@ pub fn scan() {
         let map = LayerMap(tiers);
         let accepted = Accepted(BTreeSet::new());
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(
             v.iter()
                 .any(|x| matches!(x, Violation::StaleEntry(name) if name == "ghost_mod"))
@@ -1325,7 +1780,14 @@ pub fn scan() {
         let map = LayerMap(tiers);
         let accepted = Accepted(BTreeSet::new());
         let baseline = baseline_zero();
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(
             v.iter()
                 .any(|x| matches!(x, Violation::MixedUmbrella { .. })),
@@ -1393,7 +1855,14 @@ pub fn scan() {
             (Tier::Engine, 0),
             (Tier::Command, 0),
         ]));
-        let v = check(&units, &edges, &map, &accepted, &baseline);
+        let v = check(
+            Path::new(ROOT_SRC),
+            &units,
+            &edges,
+            &map,
+            &accepted,
+            &baseline,
+        );
         assert!(
             v.iter().any(|x| matches!(
                 x,

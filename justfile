@@ -240,9 +240,24 @@ sync-plugin-versions:
 pkg-check:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo package -p doctrine --list --allow-dirty | grep -qx 'publication/manifest.toml' \
+  listing="$(cargo package -p doctrine --list --allow-dirty)"
+  grep -qx 'publication/manifest.toml' <<<"$listing" \
     || { echo "pkg-check: publication/manifest.toml absent from packaged source — check Cargo.toml [package] include" >&2; exit 1; }
   echo "pkg-check: publication/manifest.toml present in packaged source"
+  # SL-248 `sec-9` R7: the lib target exists for crates/doctrine-control alone
+  # and must not become crates.io semver surface — `!/src/lib.rs` in the include
+  # allow-list excludes it. Asserted rather than trusted: a packaged/local
+  # divergence is the crane embed-strip trap's shape, which shipped a hollow
+  # binary at v0.5.0 with no compile error. `src/main.rs` is the positive
+  # control — without it an empty or malformed listing would pass the absence
+  # check vacuously.
+  grep -qx 'src/main.rs' <<<"$listing" \
+    || { echo "pkg-check: src/main.rs absent from packaged source — the listing is empty or malformed, so the src/lib.rs check below would pass vacuously" >&2; exit 1; }
+  if grep -qx 'src/lib.rs' <<<"$listing"; then
+    echo "pkg-check: src/lib.rs present in packaged source — the lib target would become published API; check Cargo.toml [package] include for '!/src/lib.rs'" >&2
+    exit 1
+  fi
+  echo "pkg-check: src/lib.rs absent from packaged source (src/main.rs present)"
 
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
@@ -279,8 +294,12 @@ release bump: # readme-index
 # uncommitted. The flag skips that working-tree walk — which also silences the
 # .direnv symlink-loop warnings. release-check (gate + nix-build) is the real
 # correctness guard; the tree is otherwise clean.
+# -p doctrine: `default-members` selects crates/doctrine-control for publishing as
+# much as for building, and that crate is `publish = false` — which makes a bare
+# `cargo publish` FAIL rather than skip it. The manifest key states the intent
+# durably; this flag is what lets the command run (SL-248 `sec-6` § Nothing ships).
 publish: web-build release-check
-  cargo publish --allow-dirty
+  cargo publish -p doctrine --allow-dirty
 
 
 gc:
