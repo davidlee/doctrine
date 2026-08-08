@@ -455,6 +455,163 @@ fn parse_verification_row(
 }
 
 // ---------------------------------------------------------------------------
+// The restriction algebra.
+// ---------------------------------------------------------------------------
+
+/// Why a phase contract may not refine a base policy the way it asks to.
+///
+/// A refinement states the refined policy **in full**, in the same schema, and
+/// goes through the same [`parse`]. A delta document was rejected because
+/// "remove a project verification row" and "reorder project verification" have
+/// no spelling in an additions-only document — an author who dropped a check
+/// would be silently granted the removal.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum RestrictionRefusal {
+    /// The two documents describe different schema versions.
+    #[error("refinement schema {refinement} does not match base schema {base}")]
+    SchemaMismatch { base: u64, refinement: u64 },
+    /// The refinement drops a forbidden executable the base names.
+    #[error("refinement removes the forbidden executable `{entry}`")]
+    ForbiddenEntryRemoved { entry: String },
+    /// The refinement drops an interpreted path the base names.
+    #[error("refinement removes the interpreted path `{entry}`")]
+    InterpretedPathRemoved { entry: String },
+    /// A base verification row is gone.
+    #[error("refinement removes base verification row {index}")]
+    VerificationRowRemoved { index: usize },
+    /// The base rows all survive in order, but the additions are interleaved
+    /// rather than appended. `index` is the first refinement position the base
+    /// subsequence does not consume.
+    #[error(
+        "refinement inserts a row at position {index}; additions must come after the base sequence"
+    )]
+    VerificationRowInserted { index: usize },
+    /// The base rows all survive but have moved relative to each other.
+    /// `index` is the first position at which the two sequences differ.
+    #[error("refinement reorders base verification at position {index}")]
+    VerificationRowReordered { index: usize },
+    /// The exhaustive fallthrough of the ordered classification.
+    ///
+    /// **No input reaches it today**, and that is a property of the order
+    /// rather than an accident: once removal is diagnosed over the *multiset*
+    /// of rows, any refinement that still holds every base row either carries
+    /// the base as a subsequence (→ `Inserted`) or does not (→ `Reordered`). A
+    /// replacement is a removal plus an insertion, and the removal is caught
+    /// first — `refinement_replacing_a_project_verification_row_refuses` is the
+    /// test that pins that. The variant is kept because `sec-4`'s classification
+    /// names four cases and "otherwise" must have a name.
+    #[error("refinement replaces base verification row {index}")]
+    VerificationRowReplaced { index: usize },
+}
+
+/// Narrow `base` by `refinement`, or refuse (PURE).
+///
+/// The four rules are evaluated **in order**, so an earlier axis wins when a
+/// refinement violates several. Rules 2 and 3 are superset checks in the same
+/// direction: both lists name things the trusted plan refuses to run or treats
+/// as hostile, so a superset is strictly narrower.
+///
+/// # Errors
+///
+/// Returns the [`RestrictionRefusal`] naming the edit to undo. Rule 4's failure
+/// is diagnosed rather than reported as one opaque mismatch, because the cases
+/// have different fixes: **prefix decides acceptance, subsequence decides which
+/// refusal** (`RV-346` `F-17`).
+pub fn restrict(
+    base: &InterpretationPolicy,
+    refinement: &InterpretationPolicy,
+) -> Result<InterpretationPolicy, RestrictionRefusal> {
+    if base.schema != refinement.schema {
+        return Err(RestrictionRefusal::SchemaMismatch {
+            base: base.schema,
+            refinement: refinement.schema,
+        });
+    }
+    if let Some(entry) = dropped(
+        &base.forbidden_executables,
+        &refinement.forbidden_executables,
+    ) {
+        return Err(RestrictionRefusal::ForbiddenEntryRemoved {
+            entry: entry.0.clone(),
+        });
+    }
+    if let Some(entry) = dropped(&base.interpreted_paths, &refinement.interpreted_paths) {
+        return Err(RestrictionRefusal::InterpretedPathRemoved {
+            entry: entry.0.clone(),
+        });
+    }
+    if !is_prefix(&base.verification, &refinement.verification) {
+        return Err(diagnose(&base.verification, &refinement.verification));
+    }
+    Ok(refinement.clone())
+}
+
+/// The first `base` entry the `refinement` does not carry, if any.
+fn dropped<'a, T: PartialEq>(base: &'a [T], refinement: &[T]) -> Option<&'a T> {
+    base.iter().find(|entry| !refinement.contains(entry))
+}
+
+/// Whether `base` is a prefix of `refinement`, row by row.
+fn is_prefix(base: &[VerificationRow], refinement: &[VerificationRow]) -> bool {
+    base.len() <= refinement.len() && base.iter().zip(refinement).all(|(b, r)| b == r)
+}
+
+/// Classify a rule-4 failure. Ordered, and the order is what makes it
+/// deterministic — a refinement that both removes a row and reorders the rest
+/// reports the removal.
+fn diagnose(base: &[VerificationRow], refinement: &[VerificationRow]) -> RestrictionRefusal {
+    if let Some(index) = first_deficient(base, refinement) {
+        return RestrictionRefusal::VerificationRowRemoved { index };
+    }
+    if let Some(index) = first_unconsumed(base, refinement) {
+        return RestrictionRefusal::VerificationRowInserted { index };
+    }
+    // Nothing is missing and the base is not a subsequence, so the rows moved
+    // relative to each other. `VerificationRowReplaced` is *not* constructed
+    // here — see its doc comment for why no input reaches it.
+    RestrictionRefusal::VerificationRowReordered {
+        index: first_difference(base, refinement),
+    }
+}
+
+/// The first base position whose row occurs more often up to that point in the
+/// base than it does in the whole refinement — i.e. the first row the
+/// refinement has genuinely dropped. Multiset-aware, so a duplicated check
+/// collapsed to one is a removal rather than a reordering.
+fn first_deficient(base: &[VerificationRow], refinement: &[VerificationRow]) -> Option<usize> {
+    base.iter().enumerate().position(|(index, row)| {
+        let needed = base.iter().take(index + 1).filter(|r| *r == row).count();
+        let available = refinement.iter().filter(|r| *r == row).count();
+        needed > available
+    })
+}
+
+/// Greedily match `base` into `refinement` as a subsequence. `Some(index)` —
+/// the first refinement position the match skipped — when every base row is
+/// consumed in order; `None` when it is not a subsequence at all.
+fn first_unconsumed(base: &[VerificationRow], refinement: &[VerificationRow]) -> Option<usize> {
+    let mut skipped = None;
+    let mut remaining = base.iter();
+    let mut wanted = remaining.next();
+    for (index, row) in refinement.iter().enumerate() {
+        match wanted {
+            Some(expected) if expected == row => wanted = remaining.next(),
+            _ => skipped = skipped.or(Some(index)),
+        }
+    }
+    if wanted.is_some() { None } else { skipped }
+}
+
+/// The first position at which the two sequences differ, or the shorter one's
+/// length when one is a prefix of the other.
+fn first_difference(base: &[VerificationRow], refinement: &[VerificationRow]) -> usize {
+    base.iter()
+        .zip(refinement)
+        .position(|(b, r)| b != r)
+        .unwrap_or_else(|| base.len().min(refinement.len()))
+}
+
+// ---------------------------------------------------------------------------
 // The canonical hash.
 // ---------------------------------------------------------------------------
 
@@ -1138,6 +1295,188 @@ mod tests {
             hash_of(&one),
             hash_of(&two),
             "row order is semantic — it is the order the checks run in"
+        );
+    }
+
+    // ── the restriction algebra ─────────────────────────────────────────
+
+    /// A policy, always through [`parse`] — invariant 3 is what lets `restrict`
+    /// assume normalization, and a hand-built fixture would assert over a value
+    /// that cannot exist in production.
+    fn policy(forbidden: &str, paths: &str, argvs: &[&str]) -> InterpretationPolicy {
+        parse(&block(forbidden, paths, &rows(argvs))).expect("valid")
+    }
+
+    /// Verification rows spelled as single-argument commands, which is all the
+    /// restriction tests need to distinguish rows from one another.
+    fn checks(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| format!("\"{n}\"")).collect()
+    }
+
+    /// A policy whose verification sequence is `names`, one row each.
+    fn with_checks(names: &[&str]) -> InterpretationPolicy {
+        let owned = checks(names);
+        let argvs: Vec<&str> = owned.iter().map(String::as_str).collect();
+        policy("", "", &argvs)
+    }
+
+    #[test]
+    fn refinement_may_add_forbidden_entries() {
+        let base = policy("\"node\"", "\"*.sh\"", &["\"just\""]);
+        let refinement = policy("\"deno\", \"node\"", "\"*.py\", \"*.sh\"", &["\"just\""]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Ok(refinement.clone()),
+            "both lists name things the trusted plan refuses to run or treats \
+             as hostile, so a superset is strictly narrower"
+        );
+    }
+
+    #[test]
+    fn refinement_may_append_verification_rows() {
+        let base = with_checks(&["a"]);
+        let refinement = with_checks(&["a", "b"]);
+        assert_eq!(restrict(&base, &refinement), Ok(refinement.clone()));
+    }
+
+    #[test]
+    fn restrict_is_identity_on_its_own_base() {
+        let base = policy("\"node\"", "\"*.sh\"", &["\"just\", \"validate\""]);
+        assert_eq!(restrict(&base, &base), Ok(base.clone()));
+    }
+
+    #[test]
+    fn refinement_removing_a_forbidden_entry_refuses() {
+        let base = policy("\"deno\", \"node\"", "", &["\"just\""]);
+        let refinement = policy("\"node\"", "", &["\"just\""]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::ForbiddenEntryRemoved {
+                entry: "deno".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn refinement_removing_an_interpreted_path_refuses() {
+        let base = policy("", "\"*.py\", \"*.sh\"", &["\"just\""]);
+        let refinement = policy("", "\"*.sh\"", &["\"just\""]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::InterpretedPathRemoved {
+                entry: "*.py".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn refinement_removing_a_project_verification_row_refuses() {
+        let base = with_checks(&["a", "b"]);
+        let refinement = with_checks(&["a"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowRemoved { index: 1 }),
+            "stated in full, dropping a check *is* the refusal — which is why \
+             the refinement document is not a delta"
+        );
+    }
+
+    #[test]
+    fn refinement_reordering_project_verification_refuses() {
+        let base = with_checks(&["a", "b", "c"]);
+        let refinement = with_checks(&["a", "c", "b"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowReordered { index: 1 })
+        );
+    }
+
+    #[test]
+    fn refinement_swapping_two_project_rows_refuses_as_reordered() {
+        let base = with_checks(&["a", "b"]);
+        let refinement = with_checks(&["b", "a"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowReordered { index: 0 })
+        );
+    }
+
+    #[test]
+    fn refinement_replacing_a_project_verification_row_refuses() {
+        let base = with_checks(&["a", "b"]);
+        let refinement = with_checks(&["a", "c"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowRemoved { index: 1 }),
+            "a replacement is a removal plus an insertion, and the ordered \
+             classification catches the removal first — see the note on \
+             VerificationRowReplaced"
+        );
+    }
+
+    #[test]
+    fn refinement_inserting_a_row_before_a_project_row_refuses_as_inserted() {
+        let base = with_checks(&["a"]);
+        let refinement = with_checks(&["x", "a"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowInserted { index: 0 }),
+            "the base rows keep their relative order, so this is neither a \
+             reordering nor a replacement (RV-346 F-17)"
+        );
+    }
+
+    #[test]
+    fn refinement_inserting_a_row_between_project_rows_refuses_as_inserted() {
+        let base = with_checks(&["a", "b"]);
+        let refinement = with_checks(&["a", "x", "b"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowInserted { index: 1 })
+        );
+    }
+
+    #[test]
+    fn the_diagnosis_is_classified_in_the_stated_order() {
+        // Removes `b` *and* reorders what is left. Both descriptions are true;
+        // the order is what makes the answer deterministic.
+        let base = with_checks(&["a", "b", "c"]);
+        let refinement = with_checks(&["c", "a"]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::VerificationRowRemoved { index: 1 }),
+            "removal is diagnosed before reordering"
+        );
+    }
+
+    #[test]
+    fn refinement_with_a_different_schema_refuses() {
+        // The one fixture not built through `parse`, and deliberately so: today
+        // `parse` accepts exactly INTERPRETATION_SCHEMA, so two parsed policies
+        // always agree and this rule cannot be reached through a document. It
+        // guards the v2 in which `parse` accepts more than one version.
+        let base = with_checks(&["a"]);
+        let mut refinement = base.clone();
+        refinement.schema = INTERPRETATION_SCHEMA + 1;
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::SchemaMismatch {
+                base: INTERPRETATION_SCHEMA,
+                refinement: INTERPRETATION_SCHEMA + 1,
+            })
+        );
+    }
+
+    #[test]
+    fn a_removal_is_diagnosed_before_a_verification_change() {
+        let base = policy("\"node\"", "", &["\"a\""]);
+        let refinement = policy("", "", &["\"b\""]);
+        assert_eq!(
+            restrict(&base, &refinement),
+            Err(RestrictionRefusal::ForbiddenEntryRemoved {
+                entry: "node".to_owned()
+            }),
+            "the rules are evaluated in order, so the earlier axis wins"
         );
     }
 }
