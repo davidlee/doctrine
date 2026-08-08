@@ -32,10 +32,12 @@ In scope:
 
 - A durable entity family — `knowledge_record` — for epistemic and governance records,
   discriminated by a `record_kind` facet.
-- The four initial record kinds: **assumption**, **decision**, **question**,
-  **constraint**.
+- The seven record kinds: assumption (`ASM`), decision (`DEC`), question (`QUE`),
+  constraint (`CON`), evidence (`EVD`), hypothesis (`HYP`), and concept (`CPT`).
 - A common record schema (identity, summary, tags) plus a typed, kind-specific facet
-  block for each kind. Confidence is an assumption-only facet, not a common field; a
+  block for each kind — except concept (`CPT`), whose facet block is empty by design,
+  its content being its prose. Confidence is owned by the assumption and evidence rows
+  and is not a common field; a
   record's scope over other artefacts is expressed through typed relations, not a field.
 - A distinct lifecycle vocabulary per kind — truth lifecycles, not the work-intake
   lifecycle.
@@ -145,9 +147,15 @@ Constraints:
   no implementation may introduce parallel per-kind schemas or directories. (Mirrors
   the backlog's single-entity discipline and `entity-model.md`'s "fewer entity kinds,
   more facets" direction.)
-- The kind set is exactly the four initial kinds — assumption (`ASM`), decision
-  (`DEC`), question (`QUE`), constraint (`CON`), three-character per-kind prefixes —
+- The kind set is exactly seven — assumption (`ASM`), decision
+  (`DEC`), question (`QUE`), constraint (`CON`), evidence (`EVD`), hypothesis (`HYP`),
+  concept (`CPT`), three-character per-kind prefixes —
   and may not be extended without a reserved id. `finding` is excluded (§3, §8).
+
+  The enumeration was refreshed by `REV-050`, which added the last three. The extension rule
+  above is **unchanged**, and deliberately so: `EVD` and `HYP` (SL-159) and `CPT`
+  (SL-197) each reserved an id before extending, so the rule was **complied with**, not
+  waived. A future kind owes the same.
 - No `knowledge_record` kind may be admitted as a `backlog_item.item_kind`, and no
   backlog `item_kind` may be admitted as a `record_kind`; the two families are disjoint
   by the work-intake membership test.
@@ -214,8 +222,9 @@ Invariants:
 
 Acceptance gates:
 
-- Capturing each of the four kinds yields a durable record with a reserved kind-correct
-  id and the kind's default lifecycle state and typed facets.
+- Capturing each of the seven kinds yields a durable record with a reserved kind-correct
+  id and the kind's default lifecycle state and typed facets — concept (`CPT`) included,
+  whose typed facet block is legitimately empty.
 - A kind-valid status transition is atomic and edit-preserving — it round-trips without
   dropping comments or unknown keys — and a state outside the record's kind vocabulary
   is rejected.
@@ -337,7 +346,7 @@ Verification confirms that held truths are durable and citable, that each kind c
 its own lifecycle and typed facets without forking the model, and that the truth/work
 boundary holds — without binding the spec to a particular implementation.
 
-Capture is proven by confirming each of the four kinds (REQ-060) produces a durable
+Capture is proven by confirming each of the seven kinds (REQ-060) produces a durable
 record with a reserved kind-correct id, the kind's default lifecycle state, its typed
 facet defaults, and empty relation and evidence seams, persisting across reads.
 Inspection is proven by confirming kind is resolved from the id prefix and that
