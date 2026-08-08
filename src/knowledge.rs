@@ -25,6 +25,7 @@
 //! production writes go through `render_record_toml_seed` (template) +
 //! `dep_seq::set_authored_status` (`toml_edit`).
 
+use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -1700,6 +1701,153 @@ pub(crate) fn run_status(
     Ok(())
 }
 
+/// The flag payload for [`run_edit`], grouped so the shell's signature stays
+/// readable (the shape `memory::EditFields` already has). Borrowed throughout —
+/// the CLI owns the strings for the length of the call.
+pub(crate) struct EditFields<'a> {
+    /// `--title`, raw. Trimmed and refused when empty by [`run_edit`].
+    pub(crate) title: Option<&'a str>,
+    /// `--tags a,b` — ADDITIVE merge, never a replace (SL-249 PHASE-08 D2).
+    /// Removal and clearing stay with `doctrine tag set -d` / `tag clear`; one
+    /// verb owning removal is cheaper than two spellings of it.
+    pub(crate) tags: &'a [String],
+    /// `--body`, raw (unresolved): `-` means "read stdin", anything else is
+    /// used verbatim. Resolved by `input::resolve_body`.
+    pub(crate) body: Option<&'a str>,
+    /// `--body-mode`, resolved by `input::parse_body_mode`. Absent → `replace`.
+    /// Never an edit on its own — see [`run_edit`]'s totality guard.
+    pub(crate) body_mode: Option<&'a str>,
+}
+
+/// `doctrine knowledge edit <ID> [flags]` — the INVARIANT tier of the record
+/// edit surface (SL-249 PHASE-08): title, tags, and the `.md` prose. Kind-blind
+/// by construction — nothing below knows a `[facet]` field or dispatches on
+/// `RecordKind`; that tier is a separate, kind-dispatched surface. For a concept
+/// this verb is the whole edit surface, because a concept carries no facet by
+/// design (DEC-172).
+///
+/// Like `memory::run_edit`, this touches TWO files and so is **not** atomic
+/// across them. The mitigation is the write ORDERING, and the argument for it is
+/// stated in full on `memory::run_edit` — not restated here: every fallible step
+/// precedes every disk write, then the body lands before the TOML.
+///
+/// One open, one write (D4): title and tags are applied to ONE held
+/// `DocumentMut` and it is written ONCE, so `updated` is stamped exactly once
+/// per invocation and no torn intermediate state exists. A genuine no-op writes
+/// nothing at all — all three concerns report a changed-flag and the TOML write
+/// is gated on their disjunction.
+///
+/// One asymmetry, inherited rather than introduced: `dep_seq::apply_status`
+/// REFUSES a record whose `title`/`updated` keys are missing (F-1 — all seven
+/// scaffolds seed them, so an absent key is damage, and a tail insert would land
+/// inside the trailing `[relationships]`), while `tag::apply_tags_set` self-heals
+/// an absent `tags`. Both postures come from the existing seams.
+pub(crate) fn run_edit(
+    path: Option<PathBuf>,
+    reference: &str,
+    fields: &EditFields<'_>,
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // The totality guard sits AHEAD of the at-least-one-flag gate, as it does in
+    // `memory::run_edit`: a lone `--body-mode` would otherwise fall through to
+    // the generic message and say nothing about *why* it is not an edit. The
+    // wording is `input`'s single const (STD-001).
+    if fields.body_mode.is_some() && fields.body.is_none() {
+        anyhow::bail!("{}", crate::input::BODY_MODE_REQUIRES_BODY);
+    }
+    if fields.title.is_none() && fields.tags.is_empty() && fields.body.is_none() {
+        anyhow::bail!("`knowledge edit` requires at least one flag");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+
+    // --- every fallible step, ahead of every write (I7) ---
+    let title = match fields.title {
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                anyhow::bail!("--title must not be empty");
+            }
+            Some(trimmed)
+        }
+        None => None,
+    };
+    // `normalize_tag` is the single WRITE chokepoint — a malformed tag is a hard
+    // refusal naming the token, raised before the document is even opened.
+    let adds: BTreeSet<String> = fields
+        .tags
+        .iter()
+        .map(|t| crate::tag::normalize_tag(t))
+        .collect::<anyhow::Result<_>>()?;
+    let mode = fields
+        .body_mode
+        .map(crate::input::parse_body_mode)
+        .transpose()?
+        .unwrap_or(entity::BodyMode::Replace);
+    let body = fields
+        .body
+        .map(|raw| crate::input::resolve_body(raw, &mut io::stdin()))
+        .transpose()?;
+
+    let toml_path = record_toml_path(&root, kind, id);
+    let text = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("record not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    // Both write cores mutate the held document IN MEMORY only, so a refusal
+    // from either has written nothing.
+    let today = crate::clock::today();
+    let title_changed = match title {
+        Some(t) => crate::dep_seq::apply_status(
+            &mut doc,
+            &[("title", t), ("updated", &today)],
+            &format!(
+                "malformed record {}: missing seeded `title`/`updated` \
+                 — restore the missing keys and retry; the file is left untouched",
+                kind.canonical_id(id)
+            ),
+        )?,
+        None => false,
+    };
+    let tags_changed = if adds.is_empty() {
+        false
+    } else {
+        crate::tag::apply_tags_set(&mut doc, &adds, &BTreeSet::new(), &today)?
+    };
+
+    // --- writes, body first (D5) ---
+    let body_changed = match body {
+        Some(ref prose) => write_record_body(&root, kind, id, prose, mode)?,
+        None => false,
+    };
+    // A body-only edit needs this explicit stamp: neither TOML core can see the
+    // prose tier. Idempotent when a core already stamped the same day. Root
+    // `insert` is the edit-preserving idiom on a held document (CHR-019).
+    if body_changed {
+        doc.insert("updated", toml_edit::value(today.as_str()));
+    }
+
+    if title_changed || tags_changed || body_changed {
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+
+    // Post-state, in `run_status`'s shape: the canonical id and the value that
+    // now stands.
+    writeln!(
+        writer,
+        "{}: {}",
+        kind.canonical_id(id),
+        doc.get("title")
+            .and_then(toml_edit::Item::as_str)
+            .unwrap_or_default()
+    )?;
+    Ok(())
+}
+
 /// The per-record directory — `root/<kind-dir>/<id:03>` — the layout every path
 /// into one record's authored/prose files walks. Shared by `record_toml_path`,
 /// `read_record`'s two paths, and `write_record_body` (STD-001).
@@ -1714,25 +1862,26 @@ pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBu
     record_dir(root, kind, id).join(format!("{RECORD_STEM}-{id:03}.toml"))
 }
 
-/// Write a record's `.md` prose tier wholesale (SL-249, DEC-086 step 5).
+/// Write a record's `.md` prose tier (SL-249, DEC-086 step 5).
 ///
-/// The seam a design-run checkpoint's `create` disposition writes its payload
-/// `body` through: `entity::write_body` takes `dir` + `file` so kind layout
-/// stays with the caller, and the owner of knowledge record layout is this
-/// module, not the design-run shell. Always `BodyMode::Replace` — a resumed
-/// step 5 re-applies the same payload and must produce the same bytes, which
-/// `Append` would double.
+/// The ONE path to a record's prose (EX-4): `entity::write_body` takes `dir` +
+/// `file` so kind layout stays with the caller, and the owner of knowledge
+/// record layout is this module, not any calling shell. `mode` is the caller's
+/// (SL-249 PHASE-08 D3) — the design-run checkpoint and `knowledge edit` differ
+/// on it, and a direct `entity::write_body` call from either would re-derive the
+/// `record-NNN.md` name.
 pub(crate) fn write_record_body(
     root: &Path,
     kind: RecordKind,
     id: u32,
     text: &str,
+    mode: entity::BodyMode,
 ) -> anyhow::Result<bool> {
     entity::write_body(
         &record_dir(root, kind, id),
         &format!("{RECORD_STEM}-{id:03}.md"),
         text,
-        entity::BodyMode::Replace,
+        mode,
     )
 }
 
@@ -1833,6 +1982,25 @@ pub(crate) enum KnowledgeCommand {
         #[command(flatten)]
         common: crate::CommonShowArgs,
     },
+    /// Edit a knowledge record's title, tags, and prose body.
+    Edit {
+        /// Knowledge record reference — `ASM-007`, `DEC-012`, `CPT-001`.
+        id: String,
+        /// Replace the title.
+        #[arg(long)]
+        title: Option<String>,
+        /// Add tags (comma-separated). Additive — use `doctrine tag set -d` to remove.
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
+        /// New prose for the `.md` body; `-` reads stdin.
+        #[arg(long)]
+        body: Option<String>,
+        /// How `--body` treats the existing prose: `replace` (default) or `append`.
+        #[arg(long)]
+        body_mode: Option<String>,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
     /// Set a knowledge record's status.
     Status {
         id: String,
@@ -1890,6 +2058,24 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             };
             run_inspect(common.path, &common.id, format)
         }
+        KnowledgeCommand::Edit {
+            id,
+            title,
+            tags,
+            body,
+            body_mode,
+            path,
+        } => run_edit(
+            path,
+            &id,
+            &EditFields {
+                title: title.as_deref(),
+                tags: &tags,
+                body: body.as_deref(),
+                body_mode: body_mode.as_deref(),
+            },
+            &mut io::stdout(),
+        ),
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
         KnowledgeCommand::Paths {
             refs,
@@ -2846,5 +3032,213 @@ target = \"ADR-001\"
         let record = validate(raw).unwrap();
         assert_eq!(record.title, "Test");
         assert_eq!(record.record_kind, RecordKind::Assumption);
+    }
+
+    // ── `knowledge edit` — the kind-blind tier (SL-249 PHASE-08) ─────────────
+
+    /// A scratch root this module wholly owns. `root::find` returns an explicit
+    /// `path` verbatim, so the verb runs against it with no marker file.
+    fn edit_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("doctrine-sl249-p08-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    /// A facet-BEARING fixture: populated `[facet]` values, `[evidence]`,
+    /// `[relationships]`, a `[[relation]]` row and a hand-written comment —
+    /// every tier `knowledge edit` must leave byte-identical (EX-3, EX-4).
+    fn facet_bearing_decision() -> String {
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = 7
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"decision\"
+status = \"proposed\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"seed\"]
+
+[facet]                         # a hand-written comment on the facet header
+context      = \"the context\"
+choice       = \"the choice\"
+alternatives = [\"a\", \"b\"]
+rationale    = \"because\"
+consequences = [\"c\"]
+decided_by   = \"david\"
+decided_on   = \"2026-01-01\"
+
+[evidence]
+supports    = [\"SL-249\"]
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = [\"DEC-006\"]
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+"
+        )
+    }
+
+    /// The other end of the facet spectrum: a concept, whose `[facet]` is empty
+    /// BY DESIGN (DEC-172 — a concept's content is its prose). `knowledge edit`
+    /// is the whole edit surface such a record has.
+    fn empty_facet_concept() -> String {
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = 3
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"concept\"
+status = \"draft\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"seed\"]
+
+[facet]                         # empty by design (DEC-172)
+
+[evidence]
+supports    = []
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = []
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+"
+        )
+    }
+
+    /// Everything from `[facet]` on — the inert tail this verb never writes.
+    /// Compared byte-for-byte, so a lost comment or a re-serialised array fails
+    /// the assertion (EX-3: asserted on file bytes, never by reading an error).
+    fn inert_tail(text: &str) -> &str {
+        let at = text
+            .find("\n[facet]")
+            .expect("fixture carries a [facet] table");
+        text.get(at..).unwrap_or_default()
+    }
+
+    fn read_toml_text(root: &Path, kind: RecordKind, id: u32) -> String {
+        std::fs::read_to_string(record_toml_path(root, kind, id)).unwrap()
+    }
+
+    fn read_md_text(root: &Path, kind: RecordKind, id: u32) -> String {
+        std::fs::read_to_string(record_dir(root, kind, id).join(format!("record-{id:03}.md")))
+            .unwrap()
+    }
+
+    /// VT-1, the facet-bearing end: `knowledge edit DEC-007` round-trips title,
+    /// tags and prose, and leaves every other tier byte-identical. The prose
+    /// goes out through `write_record_body` → `entity::write_body`; nothing
+    /// else in the diff writes an `.md`.
+    #[test]
+    fn knowledge_edit_round_trips_the_invariant_tier_on_a_decision() {
+        let root = edit_root("dec");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let before = read_toml_text(&root, RecordKind::Decision, 7);
+
+        let mut out = Vec::new();
+        run_edit(
+            Some(root.clone()),
+            "DEC-007",
+            &EditFields {
+                title: Some("A new title"),
+                tags: &["Alpha".to_string(), "beta".to_string()],
+                body: Some("# New prose\n"),
+                body_mode: None,
+            },
+            &mut out,
+        )
+        .unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Decision, 7);
+        assert!(
+            after.contains("title = \"A new title\""),
+            "title should be set: {after}"
+        );
+        // Additive merge, stored sorted (D2) — the seeded tag survives, and both
+        // new tags are normalised through the single write chokepoint.
+        assert!(
+            after.contains("tags = [\"alpha\", \"beta\", \"seed\"]"),
+            "tags should merge additively and sort: {after}"
+        );
+        assert!(
+            after.contains(&format!("updated = \"{}\"", crate::clock::today())),
+            "updated should be stamped once: {after}"
+        );
+        assert_eq!(
+            read_md_text(&root, RecordKind::Decision, 7),
+            "# New prose\n"
+        );
+        assert_eq!(
+            inert_tail(&after),
+            inert_tail(&before),
+            "[facet], [evidence], [relationships], [[relation]] and comments must be byte-identical"
+        );
+        assert!(
+            String::from_utf8(out).unwrap().contains("DEC-007"),
+            "the post-state print names the canonical id"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// VT-1, the empty-facet end: a concept carries no facet by design
+    /// (DEC-172), so `knowledge edit` reaches everything it has. Same verb, no
+    /// kind dispatch — that is EX-5's whole claim.
+    #[test]
+    fn knowledge_edit_round_trips_the_invariant_tier_on_a_concept() {
+        let root = edit_root("cpt");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let before = read_toml_text(&root, RecordKind::Concept, 3);
+        let reference = RecordKind::Concept.canonical_id(3);
+
+        let mut out = Vec::new();
+        run_edit(
+            Some(root.clone()),
+            &reference,
+            &EditFields {
+                title: Some("A concept, renamed"),
+                tags: &["glossary".to_string()],
+                body: Some("# Definition\n\nThe prose IS the content.\n"),
+                body_mode: None,
+            },
+            &mut out,
+        )
+        .unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Concept, 3);
+        assert!(after.contains("title = \"A concept, renamed\""), "{after}");
+        assert!(after.contains("tags = [\"glossary\", \"seed\"]"), "{after}");
+        assert_eq!(
+            read_md_text(&root, RecordKind::Concept, 3),
+            "# Definition\n\nThe prose IS the content.\n"
+        );
+        assert_eq!(
+            inert_tail(&after),
+            inert_tail(&before),
+            "the empty [facet] header and every inert tier must survive verbatim"
+        );
+        assert!(
+            String::from_utf8(out).unwrap().contains(&reference),
+            "the post-state print names the canonical id"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

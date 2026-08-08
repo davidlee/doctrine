@@ -1150,7 +1150,16 @@ fn apply_record_effects(
 ) -> Result<()> {
     let (kind, id) = crate::knowledge::resolve_ref(record)?;
     if let Some(text) = body {
-        crate::knowledge::write_record_body(root, kind, id, text)?;
+        // Always `BodyMode::Replace` here (SL-249 PHASE-08 D3): a resumed step 5
+        // re-applies the same payload and must produce the same bytes, which
+        // `Append` would double.
+        crate::knowledge::write_record_body(
+            root,
+            kind,
+            id,
+            text,
+            crate::entity::BodyMode::Replace,
+        )?;
     }
     // EX-6/DEC-088: only a user-acceptance attestation moves a created record off
     // its kind's seeded default. A payload cannot ask for `accepted`; there is no
