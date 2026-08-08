@@ -676,3 +676,68 @@ assertion rather than the cited paths
 (`mem.pattern.testing.absence-assertion-over-an-unwritten-file`,
 `mem_019fa3c8737f7812b59f86db053d456b` — fix the defect class, not the
 instance).
+
+## PHASE-06 harvest — the retirement, and the third incomplete inventory
+
+Commits `97e0f5f4d..01b1c718b`. `just gate` green (clippy workspace zero
+warnings), full suite green, `cargo fmt` clean.
+
+### F1 — a fifth falsified claim, and three of the four already corrected
+
+`EX-4` enumerates four claims the retirement falsifies. On arrival, **three were
+already corrected** by earlier phases in passing: `install_claude_hook`'s doc
+(`src/boot.rs:2066-2075`) had stopped naming `settings.local.json` at PHASE-02,
+and `HookSpec`'s (`:1114-1119`) and `plan_hook`'s (`:1381-1391`) had stopped
+describing a `SessionStart` hook at PHASE-01. Only the dead "Hooks plugin leg"
+banner, `src/install_config.rs`'s module doc and its `src/dtoml.rs` mirror
+remained.
+
+A **fifth** claim the enumeration missed surfaced during the edit:
+`install_config.rs`'s `repo` *field* doc — distinct from the module doc `EX-4`
+names — also described the field as feeding "the plugin marketplace / npx skills
+commands". Corrected in the same commit.
+
+So `EX-4`'s enumeration was wrong in both directions at once: over-broad by
+three (already done) and short by one. Same defect class as PHASE-04's `F1` and
+PHASE-05's `F1`, now the **third** instance on this slice. What made it cheap
+this time was that the phase sheet asserted the over-broad half up front (`A2`)
+and told the implementer to confirm by reading rather than trust the note.
+
+### F2 — the `dead_code` denial did the closure work the inventory could not
+
+`EX-1`/`EX-2` enumerate a transitive closure the design derived by grepping
+callers. `cargo check` found exactly two residuals it missed: the now-unused
+`use std::process::Command;` import and the `DOCTRINE_MARKETPLACE` constant.
+Both deleted, no allowance added — `VA-1`'s "the dead_code denial IS the
+criterion" held as designed, and is the reason a hand-derived closure was
+acceptable to author in the first place.
+
+`A4`'s trap did not fire: `MARKETPLACE_ONLY_DOMAINS` (skill domains, survives)
+was not confused with `DOCTRINE_MARKETPLACE` (plugin identity, deleted).
+
+### D1 — the summary assertion was repointed, not deleted
+
+`EX-8` reads "`tests/e2e_claude_install.rs`'s … summary assertion goes". The
+string it asserts is authored at `src/install.rs:363`, so deleting the test
+without changing the source would have left the installer advertising a step it
+no longer performs (sheet `STOP-1`). Both goldens were repointed onto the
+replacement line — `install skills + agent def for claude` — as positive
+assertions. The criterion's intent (the claim about plugin machinery goes) is
+served, and the forward summary keeps a golden it would otherwise have lost.
+
+### VH-1 is outstanding
+
+The cold-install check — eleven entries in `/hooks`, all sourced from
+`.claude/settings.json`, with one observed effect per event class — is
+interactive and human-only (sheet `STOP-3`). It is the claim the slice rests on
+and no test can make it. Preconditions and evidence spec are in `plan.toml`'s
+`VH-1`; the transcript is transcribed verbatim into the reconciliation brief.
+
+### Owed at close
+
+`mem.pattern.distribution.skill-refresh-command`
+(`mem_019eae55811f7412b11559068fe8a279`) carries an SL-227 paragraph asserting
+"there is no `.doctrine/skills/` and nothing relinks `.claude/skills/<id>`", and
+that the harness-visible copy refreshes only via a plugin update. PHASE-05 and
+PHASE-06 falsify both halves. It is high-trust and scoped to `src/install.rs`,
+so it will be retrieved by the next agent to touch the installer.
