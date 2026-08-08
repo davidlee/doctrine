@@ -145,6 +145,34 @@ fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · e
      `dead_code` allowance", which is scoped to the four `HookSpec` constructors
      — none of which landed — but it is a real, recorded exception.
 
+- **PHASE-03 `EN-1` will NOT hold as written — two members were deferred to it
+  (2026-08-08, during PHASE-02).** `EN-1` asserts that `ClaudeSettingsScope::sibling()`
+  exists and that `RefreshReport` carries `claude_scope`. Neither landed in
+  PHASE-02, and PHASE-03 must create both rather than widen them.
+
+  The reason is PHASE-01's ratified `D1`, applied uniformly: `Cargo.toml:175`
+  sets `warnings = "deny"`, so a member with no reader is a hard error, and the
+  only alternatives are deferral or an `expect(dead_code)`. Both members are
+  read first by the sweep and the shared announcement writer, which are
+  PHASE-03's `EX-2` and `EX-6`. `claude_scope` was landed as PHASE-02 `EX-5`
+  writes it and probed — `error: field claude_scope is never read` — before
+  being deferred, so this is measured, not assumed.
+
+  **The payoff is the reason to prefer it over an allowance:** PHASE-02 also
+  discharges PHASE-01's `D4` (nothing constructed `CommandForm::Portable` until
+  `command_form(Project)` did), so the slice now carries **zero outstanding
+  `dead_code` allowances**. **Owed at reconcile:** the partition statement `D1`
+  already owes should name PHASE-02 → PHASE-03 as well as PHASE-01 → PHASE-02/04.
+
+- **At reconcile — `PHASE-02` `EX-7` is exact at the test-name level and lossy
+  at the line level.** It says its eight sites are "rewritten to
+  `SETTINGS_PROJECT_REL`", but at three of them the *command literals* flip too
+  (the project file is tracked, so it carries `${DOCTRINE_BIN:-doctrine}`), and
+  the create-fork test has a fourth such assertion no cited line reaches. All
+  four sit inside listed tests, so the enumeration held — but only because it
+  was read by name. Worth saying plainly in the amendment: the list enumerates
+  *tests*, not *assertions*.
+
 - **At reconcile — `fallback_for`'s output shape changed.** `EX-4` makes the
   malformed-settings repair snippet render the whole matcher set, so it is now a
   JSON **array** of entries rather than a single entry object, for N=1 as well
