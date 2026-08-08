@@ -5,10 +5,10 @@ id = 183
 slug = "i10-quantifies-over-the-subject-kind-axis-only"
 title = "I10 quantifies over the subject-kind axis only"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-08"
 updated = "2026-08-08"
-tags = []
+tags = ["area:testing", "cluster:design-run"]
 
 [facet]                         # every field typed; seeded empty (captured later)
 context      = "SL-249 PHASE-02/EN-2 asked for I10's per-key cell semantics. Defining them established that four wire keys are read on only one of their honouring kind's two paths, so a submission carrying one at the honouring kind in the other state is neither effectful nor refused."
@@ -35,3 +35,15 @@ notes       = []
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the PHASE-02/EN-2 ruling"
+target = "SL-249"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "scopes the kind axis, defers the state axis"
+target = "ISS-318"

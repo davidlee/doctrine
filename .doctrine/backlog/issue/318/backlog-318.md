@@ -117,6 +117,15 @@ comment (`submission.rs:117`). Every *inner* submission type does carry
 `deny_unknown_fields`; the outermost one, which is the only one a caller
 hand-authors from scratch, structurally cannot.
 
+> **Correction, 2026-08-08 (`ISS-328`).** The claim that every inner type carries
+> the attribute is **false**. Three types in `submission.rs` do — `Declaration`,
+> `CheckpointActDeclaration`, `AgentActDeclaration` — and the rest do not,
+> including `CreateRecord`, which is nested two levels inside a `Declaration` that
+> does. So an unknown key inside a `form = "create"` disposition is dropped by the
+> same mechanism this observation describes, with none of the structural excuse:
+> nothing prevents the attribute there. Raised as `ISS-328`; the reason it was not
+> fixed in passing is stored-snapshot compatibility, recorded there.
+
 ### The client-facing form is worse
 
 Two things make this sharper for an installed client than for this repo.
