@@ -117,7 +117,44 @@ verification = [
   { id = "VT-1", expects = "I9: the table's key set equals a fully-populated Declaration's serde key set, derived from serialising a value with every field populated rather than from a hand-written list.", test_file = "src/design_run/submission.rs", keywords = ["Declaration", "inert"], waived = false },
   { id = "VT-2", expects = "I10: the generated matrix over (wire key × subject kind). Every cell asserts effectful-or-refused; a cell that is neither fails. The generator iterates both source vocabularies, so the covered set is derived, not enumerated.", test_file = "src/design_run/submission.rs", keywords = ["inert", "subject"], waived = false },
   { id = "VT-3", expects = "The SL-248 replay: a cp- subject carrying body is refused at admission, the message names dispose.create.body, and the run revision is unchanged.", test_file = "src/commands/design.rs", keywords = ["inert", "cp-"], waived = false },
-  { id = "VA-1", expects = "Read the per-key cell semantics recorded under EN-2 against the matrix as built, and confirm each key's 'effectful' side is asserted by an observation of effect rather than by the table the code consults. A cell whose oracle is the table under test proves only that the table equals itself." },
+  { id = "VA-1", expects = "Read the per-key cell semantics against the matrix as built, and confirm each key's 'effectful' side is asserted by an observation of effect rather than by the table the code consults — a cell whose oracle is the table under test proves only that the table equals itself. The semantics MUST be recorded in the test module itself, not only in the runtime phase sheet: the sheet is gitignored and disposable, so a judgement recorded only there leaves an audit nothing to re-derive." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "The kind-blind edit verb"
+objective = """
+Ship `knowledge edit <ID>` — the invariant tier: title, tags, and the `.md`
+prose via `--body` / `--body-mode` (replace | append, `-` reads stdin), lifted
+from `memory edit` unchanged and riding `dep_seq` and `entity::write_body` as
+that verb already does.
+
+Placed here, ahead of the facet work, because it depends on none of it. OQ-1
+settled the surface split by TIER — invariant fields kind-blind, `[facet]`
+kind-dispatched — and the kind-blind half needs no table, no write posture and
+no per-kind dispatch. Shipping it early takes the prose tier out of PHASE-04,
+which is the plan's largest phase, and gives concept records their whole edit
+surface immediately: a concept carries no facet by design, so `knowledge edit
+CPT-001` reaches everything it has (DEC-172).
+
+Nothing new is invented on the prose tier. If this phase finds itself designing
+body semantics, it has drifted.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "`memory edit`'s `--body` / `--body-mode` treatment is the precedent to ride, not to re-derive. It is behaviour that already ships." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`knowledge edit <ID>` sets title and tags and writes the `.md` body for any record kind, including concept." },
+  { id = "EX-2", text = "`--body-mode` offers replace and append with `memory edit`'s exact semantics, and `-` reads stdin. No size rule is invented (§5.5)." },
+  { id = "EX-3", text = "Relations are untouched — `link`/`unlink` own them and `edit` does not (ADR-004, SPEC-018)." },
+  { id = "EX-4", text = "The verb rides `dep_seq` and `entity::write_body`; no third writer of the prose tier appears (I4)." },
+  { id = "EX-5", text = "The phase's diff introduces no per-kind facet knowledge — the facet table is authored in PHASE-03 and this phase precedes it." },
+]
+verification = [
+  { id = "VT-1", expects = "Title, tags and body round-trip through the kind-blind verb for a facet-bearing kind and for concept, with the record's other tiers byte-unchanged.", test_file = "src/knowledge.rs", keywords = ["knowledge edit", "write_body"], waived = false },
+  { id = "VT-2", expects = "Body mode parity with memory edit: replace overwrites, append inserts exactly one blank-line separator and does not double an existing one, an identical replace is a no-op, and `-` reads stdin.", test_file = "src/knowledge.rs", keywords = ["BodyMode", "append"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -162,6 +199,7 @@ exit_criteria = [
   { id = "EX-6", text = "`doctor` reports every populated-but-inert `[facet]` key, naming the record, the key, and the honouring kind. It never refuses and never repairs." },
   { id = "EX-7", text = "`knowledge list` still succeeds on a corpus carrying an inert key — the read path stays tolerant (DEC-177)." },
   { id = "EX-8", text = "The missing-key mirror of the tripwire is NOT built. It is cheap and tempting and deliberately out of scope: adding a facet field to a kind would make every prior record of that kind trip it, so it needs a migration story this slice does not owe (§5.5)." },
+  { id = "EX-9", text = "I1 — the behaviour-preservation gate on the read model. The knowledge round-trip suite passes UNCHANGED: `git diff` shows it unmodified. This phase adds a table beside `validate_facet` and must not perturb the model it describes; if it forces a change to `RecordFacet` or `validate_facet`, that is A1 breaking and a `/consult` trigger, not a quiet edit. Passing is not the criterion — passing *unedited* is." },
 ]
 verification = [
   { id = "VT-1", expects = "I2 and I3 and I3b together. I3 in particular writes every union field for each kind and asserts an equality against what validate_facet retained — the read model is the oracle, so the pin needs no argument about which fields validate_facet's arms happen to read.", test_file = "src/knowledge.rs", keywords = ["facet_fields", "RawFacet"], waived = false },
@@ -191,17 +229,18 @@ holds every decision and is exhaustively testable with no filesystem;
 of a validated edit, which makes I4's facet half a property of the type rather
 than a convention.
 
-The surface splits by tier, as OQ-1 settled: invariant fields kind-blind
-(`knowledge edit <ID>` — title, tags, body), `[facet]` kind-dispatched (six
-`knowledge edit <kind> <ID>` subverbs). Args stay clap-derive-declared as the
-rest of this CLI is, and the table is their ORACLE rather than their source: a
-per-kind test asserts each subverb's arg names equal its row, kebab-cased.
-Generating them would mean the builder API for six commands alone, a second idiom
-for the benefit of not typing thirty flag names once (D3).
+This phase ships the kind-dispatched half of the surface OQ-1 split by tier: six
+`knowledge edit <kind> <ID>` subverbs, whose flags are that kind's fields
+kebab-cased. (PHASE-08 already shipped the kind-blind half.) Args stay
+clap-derive-declared as the rest of this CLI is, and the table is their ORACLE
+rather than their source: a per-kind test asserts each subverb's arg names equal
+its row. Generating them would mean the builder API for six commands alone, a
+second idiom for the benefit of not typing thirty flag names once (D3).
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete: `facet_fields` exists and is pinned, so the subverbs' args and the seam's validation both consult one table." },
   { id = "EN-2", text = "`doctrine risk set`'s suite is green and untouched at entry — it is the baseline the posture parameter must preserve, so its state must be known before the parameter is threaded." },
+  { id = "EN-3", text = "PHASE-08 complete: the kind-blind verb exists, so this phase adds subverbs beside it rather than designing the prose tier as well." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Every facet field of the six facet-bearing kinds round-trips through its kind's subverb: written, read back, byte-stable." },
@@ -212,7 +251,7 @@ exit_criteria = [
   { id = "EX-6", text = "I11 — edit preservation, on its own fixture. A record carrying comments, unknown sibling keys, `[[relation]]` and `[relationships]`, written through the seam, differs only in the intended `[facet]` values; a second application of the same edits changes nothing. This is SPEC-004's actual requirement, and the existing round-trip suite does NOT stand in for it — that suite exercises a `#[cfg(test)]` emit with no production caller and no relation tables (D10, F-6)." },
   { id = "EX-7", text = "I7 — every refusal leaves the corpus byte-identical, asserted by comparing the file's bytes before and after, not by inspecting the error." },
   { id = "EX-8", text = "D3's oracle holds: each subverb's clap arg names equal its kind's row, kebab-cased. The surface stays in one idiom and drift fails a test." },
-  { id = "EX-9", text = "`--body` / `--body-mode` (replace | append, `-` reads stdin) behave as `memory edit`'s do, riding `entity::write_body`. Nothing new is invented on the prose tier." },
+  { id = "EX-9", text = "I1's gate holds here too: the knowledge round-trip suite passes unedited (as PHASE-03/EX-9). This phase writes through the model the suite pins." },
 ]
 verification = [
   { id = "VT-1", expects = "Per-kind round-trip through each subverb for every field of that kind, driven by iterating facet_fields rather than by a hand-written field list — so a new field joins the coverage without a test edit.", test_file = "src/knowledge.rs", keywords = ["plan_facet_edits", "FacetEdit"], waived = false },

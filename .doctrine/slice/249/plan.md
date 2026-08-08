@@ -8,11 +8,15 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Seven phases in two movements. `PHASE-01` and `PHASE-02` are the wire fix —
-together, exactly what would have prevented the SL-248 loss. `PHASE-03` through
-`PHASE-06` build the facet surfaces the corpus measurement demands. `PHASE-07`
-is the governance amendment, and its landing point is the plan's one open
-question (below).
+Eight phases in two movements. `PHASE-01` and `PHASE-02` are the wire fix —
+together, exactly what would have prevented the SL-248 loss. `PHASE-08` and
+`PHASE-03` through `PHASE-06` build the edit surfaces the corpus measurement
+demands. `PHASE-07` is the governance amendment, and its landing point is the
+plan's one open question (below).
+
+Execution order is the array order in `plan.toml`, and `PHASE-08` sits third —
+ids are immutable and never renumbered, so a phase added during revision takes
+the next free id wherever it belongs in the sequence.
 
 `DEC-165` — the ruling that objective 4 does not gate objectives 1–3 — is what
 makes that split available, and `R6` warns it erodes under convenience: Phase A
@@ -66,6 +70,23 @@ reader until `PHASE-04`'s writer needs it. If that trips `dead_code`, the
 staging attribute is the sanctioned answer for exactly that field, and it
 retires in `PHASE-04`.
 
+### Why the kind-blind verb goes early and alone
+
+`PHASE-08` was added in revision, splitting the prose tier out of what was the
+plan's largest phase.
+
+`OQ-1` settled the surface by **tier**: invariant fields kind-blind, `[facet]`
+kind-dispatched. The kind-blind half — title, tags, `--body` — depends on
+nothing this slice builds. It rides `dep_seq` and `entity::write_body` exactly
+as `memory edit` does, needs no table, no write posture and no per-kind
+dispatch, and so has no reason to wait behind `PHASE-03`.
+
+Shipping it third buys three things: `PHASE-04` shrinks to the kind-dispatched
+half it is actually about; concept records get their whole edit surface at once,
+since a concept carries no facet by design and its content is its prose
+(`DEC-172`); and the prose tier stops being a passenger in a phase whose risk is
+concentrated in a shared writer's posture change.
+
 ### Why `settle` is its own phase
 
 `PHASE-04` could absorb it — it is another verb over the same seam. It is kept
@@ -107,6 +128,13 @@ nothing was left behind on the source side.
 The corollary is `R10`: a generated matrix is trimmed by deleting a loop, which
 is visible in review, where a hand-written one is trimmed by deleting rows
 nobody misses.
+
+**Behaviour preservation is asserted about the diff, not the result.** The
+design names two suites that must stay green *unchanged* — the knowledge
+round-trip suite (`I1`) and `doctrine risk set`'s (`I8`). A suite edited to stay
+green passes, so the criteria (`PHASE-03/EX-9`, `PHASE-04/EX-9`,
+`PHASE-04/VA-1`) require `git diff` to show them unmodified. Passing is not the
+claim; passing unedited is.
 
 ## Notes
 
@@ -150,6 +178,20 @@ contradicts a locked design's stated timing. It is settled with the user before
   precedent (`PHASE-03/EN-3`) — press item 4's third claim.
 - `revision apply` does not auto-apply prose rows (above) — §6's unknown.
 - The `dead_code` denial is real and is a hard error, not a warning.
+
+### Owed at close, not by a phase
+
+The design's closure criteria include *`IMP-403` leads 1 and 2 are demonstrably
+closed; leads 3–5 carry their own follow-up items*. Leads 1 and 2 are what the
+phases build. Leads 3–5 become backlog items, which is harvest work rather than
+phase work — recorded here so `/close` picks them up instead of them expiring
+with the slice.
+
+The same applies to the two inquiries the design left open into reconcile
+(`inq-7`, `inq-9`) and to `D8a`'s correction of `DEC-168`'s recorded rationale.
+All three are `PHASE-07/EX-10`'s business if the amendment lands in a phase, and
+reconcile's if it does not — they move with the landing point, not
+independently of it.
 
 ### Deliberately not in the plan
 
