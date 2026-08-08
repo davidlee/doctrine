@@ -1467,6 +1467,104 @@ mod tests {
         );
     }
 
+    // ── monotonicity, over a generated universe ─────────────────────────
+
+    /// Every subset of `items`, rendered as a TOML list body.
+    fn subsets(items: &[&str]) -> Vec<String> {
+        (0..(1_usize << items.len()))
+            .map(|mask| {
+                items
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| mask & (1_usize << i) != 0)
+                    .map(|(_, s)| format!("\"{s}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .collect()
+    }
+
+    /// Every non-empty sequence over `items` of length one or two, each element
+    /// rendered as a row's `argv` body.
+    fn sequences(items: &[&str]) -> Vec<Vec<String>> {
+        let mut out: Vec<Vec<String>> = items.iter().map(|a| vec![format!("\"{a}\"")]).collect();
+        for a in items {
+            for b in items {
+                out.push(vec![format!("\"{a}\""), format!("\"{b}\"")]);
+            }
+        }
+        out
+    }
+
+    /// The whole generated universe, **exhaustive** over a small alphabet
+    /// rather than sampled from a large one: reproducible without a seed, and a
+    /// stronger claim than random search over a domain this size. Every member
+    /// is built as a document and comes back through `parse`, so the property
+    /// covers the pipe rather than the half below it.
+    fn generated_policies() -> Vec<InterpretationPolicy> {
+        const EXECUTABLES: [&str; 2] = ["a", "b"];
+        const PATHS: [&str; 2] = ["p", "q"];
+        const CHECKS: [&str; 3] = ["x", "y", "z"];
+
+        let mut out = Vec::new();
+        for forbidden in &subsets(&EXECUTABLES) {
+            for paths in &subsets(&PATHS) {
+                for sequence in &sequences(&CHECKS) {
+                    let argvs: Vec<&str> = sequence.iter().map(String::as_str).collect();
+                    out.push(
+                        parse(&block(forbidden, paths, &rows(&argvs)))
+                            .expect("every generated document is well-formed"),
+                    );
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn restrict_never_weakens_any_axis() {
+        let universe = generated_policies();
+        assert_eq!(universe.len(), 192, "the generator's shape has moved");
+
+        let mut accepted = 0_usize;
+        for base in &universe {
+            for refinement in &universe {
+                let Ok(result) = restrict(base, refinement) else {
+                    continue;
+                };
+                accepted += 1;
+                assert_eq!(
+                    &result, refinement,
+                    "an accepted restriction is the refinement"
+                );
+                for entry in &base.forbidden_executables {
+                    assert!(
+                        result.forbidden_executables.contains(entry),
+                        "forbidden entry {entry:?} was weakened away"
+                    );
+                }
+                for entry in &base.interpreted_paths {
+                    assert!(
+                        result.interpreted_paths.contains(entry),
+                        "interpreted path {entry:?} was weakened away"
+                    );
+                }
+                assert!(
+                    is_prefix(&base.verification, &result.verification),
+                    "base verification is no longer a prefix of the result"
+                );
+            }
+        }
+
+        assert!(
+            accepted >= universe.len(),
+            "only {accepted} of {} pairs were accepted — a property whose \
+             accepting family is empty proves nothing, and identity alone \
+             should contribute one per policy",
+            universe.len() * universe.len()
+        );
+    }
+
     #[test]
     fn a_removal_is_diagnosed_before_a_verification_change() {
         let base = policy("\"node\"", "", &["\"a\""]);
