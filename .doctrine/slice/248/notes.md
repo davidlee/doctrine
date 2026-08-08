@@ -154,9 +154,8 @@ five places.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages) **and the
-`/plan` critical pass run**; **the design is authorised to reopen and that work
-is owing** · 18121962d
+fresh-as-of: 2026-08-08 · **`/phase-plan` `PHASE-01` complete; execution not
+started** · design reopen DONE and the run **locked at revision 93** · 6b5036c38
 
 ### Produced
 
@@ -209,6 +208,15 @@ is owing** · 18121962d
   uncovered item a deliberate deferral), measured-versus-reasoned delta ordering
   (no delta depended on before the phase that measures it), phase sizing
   (`PHASE-02` largest, split point already pre-identified).
+- **`/phase-plan` `PHASE-01` run** (`66bfa0bef`, `6b5036c38`). Runtime sheet
+  filled: eight tasks, six `VT` mapped, five `VA` flagged as executed-not-reasoned,
+  all four `EN` re-checked against the tree. Two findings and one sub-decision
+  carried in the sheet (`F-1`, `F-2`, `D1`).
+- **`DEC-181`** — `EX-4`'s visibility promotions do **not** compile alone. Ruled
+  by the user; `plan.toml` `EX-3`/`EX-4` amended in place (text only, ids
+  untouched). See Open for what this leaves owed.
+- § *Execution posture* added above — `PHASE-01`+`PHASE-02` in-tree on `edge`,
+  clone from `PHASE-03`, and the clone-mints-no-entities rule.
 
 ### Learned
 
@@ -271,3 +279,21 @@ is owing** · 18121962d
   `REQ-448`'s denial half and `REQ-450` criterion 1.
 - Corrections owed at reconcile and follow-ups at close are carried in
   `design.md` `sec-9`, plus `ISS-323`.
+- **Two NEW corrections owed to the reconciliation brief** (`DEC-181`,
+  `/phase-plan` `PHASE-01`). The locked design was **not** reopened for either.
+  1. `sec-6`'s "The exported items change visibility… **Nothing else does**" and
+     invariant 2's "four visibility promotions, one module relocation behind
+     re-exports, and one test parameter" are **incomplete**: the bin target also
+     needs a `pub use` shim, because `main.rs` keeps its own module tree and
+     `unreachable_pub = "deny"` rejects a `pub` in a private module there.
+     `#[expect]` fails the lib target; `#[allow]` fails `clippy::allow_attributes`.
+     All four combinations measured.
+  2. The **call-site count is wrong in five places** — `sec-6`, `sec-8`, `EN-3`,
+     `EX-3`, `VA-4` all carry "35 call sites across 33 files". Measured: **50
+     occurrences across 21 files**. Load-bearing claim unaffected (the relocation
+     is behind re-exports, so no call site is edited); the untouched set is the
+     20 files listed in the `PHASE-01` sheet under `VA-4`.
+- **`RV-350` unresolved and odd** — a zero-finding stub with an unfilled template
+  brief, untracked in git while 973 other review files are committed, and it is
+  what the design run points at as its pass. Predates the reopen. The real
+  adversarial findings are in `RV-346`, concluded and committed.
