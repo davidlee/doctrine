@@ -405,6 +405,49 @@ the `PHASE-03` sheet as `F-7`, which supersedes `T14`'s escalation clause.
     violation and stop. A table that is wrong the same way in three consecutive
     phases is a defect in the table, not three incidents.
 
+### From `PHASE-04` execution (`5f6eec999`, `4535efde8`)
+
+23. **A mandated test would have passed whether the rule it tests existed or
+    not.** `D5`'s arrow puts the filesystem-root check last, and taken as a
+    trailing stage it is **unreachable**: `/` is an ancestor of every scope, so
+    the general overlap rule answers first and
+    `PlacementRefusal::FilesystemRoot` can never be constructed — leaving
+    `declared_root_that_resolves_to_the_filesystem_root_refuses` green either
+    way. Fixed by testing it per declared entry, immediately *before* the general
+    overlap, so the specific diagnosis wins; `D5`'s stage order is unchanged and
+    no `EX`/`VT` moved, and mutation `M5` now measures that the test
+    discriminates. The brief should carry this as the **vacuous-criterion**
+    class: a green mandated test is not evidence its rule is reachable, and only
+    a mutation shows the difference. Related in kind to items 7–8 (`PHASE-02`'s
+    unreachable algebra variants).
+
+24. **The sheet prescribed a TDD sequence this repository's lint configuration
+    forbids.** `T2`–`T10` are written as red/green/refactor cycles over one
+    staged module, but the module's `#![cfg_attr(not(test), expect(dead_code,
+    …))]` header is stripped under `cfg(test)`, and `unused = "deny"` then makes
+    every item lacking a *test* reader a hard error — so the module does not
+    compile at all until the last test lands. Measured: 69 errors after the
+    type-vocabulary task, **no partial-green state**, then all 30 tests passing
+    on the first successful compile. The red phase was reconstructed as a
+    seven-mutation battery, which is sound but is not what the sheet asked for.
+    **Actionable now, not at reconciliation:** `PHASE-05` is the same shape, so
+    its planner must prescribe *write-all-then-mutate* rather than per-task
+    red/green. Harvested as
+    `mem.pattern.lint.staged-module-unused-deny-collapses-tdd`.
+
+25. **Two in-criteria readings, recorded so an auditor need not re-derive them.**
+    (a) The transaction-root carve-out admits an entry *equal to* the transaction
+    root, not only a strict descendant — the root is the placement's own writable
+    state, refusing it is the over-denial direction `R2` and `RV-346` `F-25` warn
+    about, and no criterion or title covers equality. (b) The source must
+    *strictly* descend from `<capsule_root>/export/`; the export directory itself
+    refuses, since the contracted export is `<capsule_root>/export/<base-oid>`.
+
+**Measurement worth keeping:** the pre-round-4 blanket rule (`M1`) reds **20 of
+24** placement tests, not merely the one control the sheet predicted — `RV-346`
+`F-25`'s claim that "every conformance row would have failed before running"
+reproduced as a measurement rather than an assertion.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green
@@ -415,16 +458,17 @@ boundary had swept in four `SL-250` doc commits and one `IMP-412` backlog
 commit. `PHASE-02` `10c57a30b`…`a11b158e0`, four commits, `doctrine check gate`
 exit 0, lib target 210 tests (53 in `interpretation`, up from a 157 baseline).
 Five further items owed to reconciliation (6–10), one backlog item minted
-(`ISS-326`). **`PHASE-03` executed in the clone** on branch `sl-248`
-(`2f3a6db78`, `a79408d37`, `2a22084da`), driven by the `LOOP.md` loop:
-orchestrator routes, an Opus planner writes the sheet, an Opus worker executes
-it. `doctrine check gate` exit 0, 33 `doctrine-control` tests (`EN-1` predicted
-≈33), `verify-vt` `PHASE-03` **8/8 PASS** after the `completed` flip. The
-auto-recorded boundary needed **no** tightening — it spanned exactly the phase's
-three commits, because the clone has no concurrent agents; that is the first
-phase of this slice for which that was true. `VH-1` discharged by owner ruling.
-Nine further items owed to reconciliation (11–19). Next: `/phase-plan`
-`PHASE-04`. Design run locked at revision 93 · 6b5036c38
+(`ISS-326`). **`PHASE-03` and `PHASE-04` executed in the clone** on branch
+`sl-248`, driven by the `LOOP.md` loop: orchestrator routes, an Opus planner
+writes the sheet, an Opus worker executes it. `PHASE-03` `2f3a6db78`,
+`a79408d37`, `2a22084da` — gate exit 0, 33 tests, `verify-vt` 8/8 PASS.
+`PHASE-04` `5f6eec999`, `4535efde8` — gate exit 0, **63** `doctrine-control`
+tests, `verify-vt` 6/6 PASS. Neither phase's auto-recorded boundary needed
+tightening: each spanned exactly its own commits, because the clone has no
+concurrent agents. Fifteen further items owed to reconciliation (11-25).
+Next: `/phase-plan` `PHASE-05` — **its planner must prescribe
+write-all-then-mutate, not per-task red/green** (item 24).
+Design run locked at revision 93 · 6b5036c38
 
 ### Produced
 
