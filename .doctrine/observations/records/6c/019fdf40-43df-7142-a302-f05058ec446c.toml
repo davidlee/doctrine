@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf40-43df-7142-a302-f05058ec446c"
+recorded_at = "2026-08-08T02:42:38.687077797Z"
+kind = "friction"
+summary = "worktree guard refuses compound shell, hiding exit codes"
+detail = "Fixing ISS-324 in a worktree-isolated session. Verifying 'doctrine check gate' passed needed its exit code, but the session's worktree guard refuses any command it cannot statically prove stays in-tree — so 'gate >/dev/null 2>&1; echo $?' and 'gate | tail; echo ${PIPESTATUS[0]}' were both blocked. A piped 'gate 2>&1 | tail' runs but discards the status, so tail output alone cannot distinguish pass from fail. Cost two extra round trips to land on 'gate > <jobdir>/gate.log 2>&1; echo $?'. The guard is right to be strict; the friction is that the common read-only shape 'run a build command, capture its status' has no cheap allowed form."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
