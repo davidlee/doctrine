@@ -612,6 +612,34 @@ fn first_difference(base: &[VerificationRow], refinement: &[VerificationRow]) ->
 }
 
 // ---------------------------------------------------------------------------
+// Admission against the forbidden list.
+// ---------------------------------------------------------------------------
+
+/// Whether `policy` forbids running `candidate` trusted-side (PURE).
+///
+/// `candidate` may be a bare name or a path; the basename is derived here — the
+/// segment after the last `/` — so `/usr/bin/node` is forbidden by the list
+/// entry `node`. Deriving it here rather than at the call site is what keeps the
+/// rule single-sourced: a caller that has already resolved an executable to an
+/// absolute path must not have to know that the list is basenames.
+///
+/// The comparison is **exact, byte for byte**. No case folding and no trimming:
+/// a forbidden-executable list is a denial, and every normalisation added to a
+/// denial is a route around it for the input that normalises differently.
+///
+/// A free function rather than a method: this module is deliberately
+/// `impl`-block-free, and the admission rule is a *reader* of a policy rather
+/// than something the policy type does.
+#[must_use]
+pub fn forbids(policy: &InterpretationPolicy, candidate: &str) -> bool {
+    let basename = candidate.rsplit('/').next().unwrap_or(candidate);
+    policy
+        .forbidden_executables
+        .iter()
+        .any(|entry| entry.0 == basename)
+}
+
+// ---------------------------------------------------------------------------
 // The canonical hash.
 // ---------------------------------------------------------------------------
 
@@ -1576,5 +1604,21 @@ mod tests {
             }),
             "the rules are evaluated in order, so the earlier axis wins"
         );
+    }
+
+    #[test]
+    fn a_bare_forbidden_basename_is_forbidden() {
+        let policy = policy("\"node\"", "", &["\"a\""]);
+
+        assert!(forbids(&policy, "node"));
+        assert!(!forbids(&policy, "nodejs"));
+    }
+
+    #[test]
+    fn a_full_path_whose_last_segment_is_forbidden_is_forbidden() {
+        let policy = policy("\"node\"", "", &["\"a\""]);
+
+        assert!(forbids(&policy, "/usr/bin/node"));
+        assert!(!forbids(&policy, "/usr/bin/node/child"));
     }
 }

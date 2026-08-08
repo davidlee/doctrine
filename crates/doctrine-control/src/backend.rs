@@ -60,7 +60,11 @@
     )
 )]
 
-mod bubblewrap;
+// `pub(crate)` because PHASE-06's `provision` calls two of its items directly —
+// `readable_set` (`D3`, the seam the profile publishes) and
+// `profile_owned_host_path` (so `<root>/capsule` has one spelling). The
+// layering gate maps a submodule to its parent unit, so this adds no edge.
+pub(crate) mod bubblewrap;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -234,6 +238,13 @@ pub(crate) struct AcceptedBase(String);
 impl AcceptedBase {
     pub(crate) const fn new(oid: String) -> Self {
         Self(oid)
+    }
+
+    /// The oid, for the two places PHASE-06 needs it as text: the `export/<oid>`
+    /// leaf, and the refspec/`switch --detach` arguments. Read-only — there is
+    /// still exactly one constructor.
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -799,12 +810,114 @@ pub(crate) trait CapsuleBackend {
     ) -> Result<Observation, BackendError>;
 }
 
+/// The shared backend double.
+///
+/// Lives here, `pub(crate)` and `#[cfg(test)]`, on `host::fixture`'s precedent
+/// (`D4`): PHASE-06's `provision` tests need a backend that answers *per call*,
+/// and a second double in `provision` would be a second definition of what a
+/// backend does — the parallel implementation the project rules forbid.
+///
+/// It asserts **no** confinement property whatsoever: it runs nothing, isolates
+/// nothing, and observes nothing. Every property of a running capsule is
+/// `sec-7`'s, executed.
+#[cfg(test)]
+pub(crate) mod fixture {
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    use super::{
+        Availability, BackendError, BackendId, ByteCount, CapsuleBackend, CapsulePlacement,
+        Execution, Observation, Termination,
+    };
+
+    pub(crate) const WITNESS_ID: BackendId = BackendId::new("witness");
+
+    /// One canned outcome per call, then a fallback.
+    ///
+    /// The queue is what makes `sec-3`'s four executions testable at all: a
+    /// single canned outcome cannot distinguish *the clone failed* from *the
+    /// detach failed*, and `EX-14`'s whole claim is that provisioning names
+    /// which.
+    #[derive(Debug)]
+    pub(crate) struct WitnessBackend {
+        availability: Availability,
+        script: RefCell<VecDeque<Result<Observation, BackendError>>>,
+        fallback: Result<Observation, BackendError>,
+        calls: RefCell<Vec<Execution>>,
+    }
+
+    impl WitnessBackend {
+        /// Every call answers `outcome`.
+        pub(crate) fn always(outcome: Result<Observation, BackendError>) -> Self {
+            Self::scripted(Vec::new(), outcome)
+        }
+
+        /// The first calls answer from `script`, in order; every later call
+        /// answers `fallback`.
+        pub(crate) fn scripted(
+            script: Vec<Result<Observation, BackendError>>,
+            fallback: Result<Observation, BackendError>,
+        ) -> Self {
+            Self {
+                availability: Availability::Available,
+                script: RefCell::new(script.into()),
+                fallback,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+
+        pub(crate) fn reporting(mut self, availability: Availability) -> Self {
+            self.availability = availability;
+            self
+        }
+
+        /// Every execution this backend was asked for, in order — the evidence
+        /// that the argv provisioning built is the argv that ran.
+        pub(crate) fn calls(&self) -> Vec<Execution> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl CapsuleBackend for WitnessBackend {
+        fn id(&self) -> BackendId {
+            WITNESS_ID
+        }
+
+        fn availability(&self) -> Availability {
+            self.availability.clone()
+        }
+
+        fn execute(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+        ) -> Result<Observation, BackendError> {
+            self.calls.borrow_mut().push(execution.clone());
+            self.script
+                .borrow_mut()
+                .pop_front()
+                .unwrap_or_else(|| self.fallback.clone())
+        }
+    }
+
+    /// A capsule that exited with `code`, having printed `stdout`.
+    pub(crate) fn exited(code: i32, stdout: &str) -> Result<Observation, BackendError> {
+        Ok(Observation {
+            termination: Termination::Exited { code },
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+            disk_used: ByteCount::from_bytes(0),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
+    use super::fixture::{WITNESS_ID, WitnessBackend};
     use super::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
         CapsuleEnvVar, CapsulePlacement, CapsuleStdio, Execution, ForbiddenScopes, InnerPath,
@@ -1584,37 +1697,6 @@ mod tests {
 
     // ── T10: the contract itself ───────────────────────────────────────────
 
-    const WITNESS_ID: BackendId = BackendId::new("witness");
-
-    /// A canned implementation whose **only** purpose is to prove the contract
-    /// compiles, is dyn-compatible, and has the shape `EX-1` fixes.
-    ///
-    /// It asserts **no** confinement property whatsoever: it runs nothing,
-    /// isolates nothing, and observes nothing. Every property of a running
-    /// capsule is `sec-7`'s, executed.
-    struct WitnessBackend {
-        availability: Availability,
-        outcome: Result<Observation, BackendError>,
-    }
-
-    impl CapsuleBackend for WitnessBackend {
-        fn id(&self) -> BackendId {
-            WITNESS_ID
-        }
-
-        fn availability(&self) -> Availability {
-            self.availability.clone()
-        }
-
-        fn execute(
-            &self,
-            _placement: &CapsulePlacement,
-            _execution: &Execution,
-        ) -> Result<Observation, BackendError> {
-            self.outcome.clone()
-        }
-    }
-
     /// `EX-14`: a capsule's own nonzero exit is **data**, carried in `Ok`.
     /// Collapsing it into `BackendError` would make a working capsule reporting
     /// failure indistinguishable from a broken confinement mechanism.
@@ -1623,15 +1705,12 @@ mod tests {
         let placement = validate(lawful_parts()).expect("the lawful placement");
         let execution = execution();
 
-        let exited = WitnessBackend {
-            availability: Availability::Available,
-            outcome: Ok(Observation {
-                termination: Termination::Exited { code: 1 },
-                stdout: Vec::new(),
-                stderr: b"boom".to_vec(),
-                disk_used: ByteCount::from_bytes(4096),
-            }),
-        };
+        let exited = WitnessBackend::always(Ok(Observation {
+            termination: Termination::Exited { code: 1 },
+            stdout: Vec::new(),
+            stderr: b"boom".to_vec(),
+            disk_used: ByteCount::from_bytes(4096),
+        }));
         // Held behind a reference: `provision` will hold one of these, so the
         // trait must stay dyn-compatible.
         let backend: &dyn CapsuleBackend = &exited;
@@ -1644,15 +1723,13 @@ mod tests {
         assert_eq!(observation.stderr, b"boom");
         assert_eq!(observation.disk_used, ByteCount::from_bytes(4096));
 
-        let broken = WitnessBackend {
-            availability: Availability::Unavailable {
-                missing: "bwrap".to_owned(),
-                remedy: "install bubblewrap".to_owned(),
-            },
-            outcome: Err(BackendError::MechanismFailed {
-                detail: "could not start".to_owned(),
-            }),
-        };
+        let broken = WitnessBackend::always(Err(BackendError::MechanismFailed {
+            detail: "could not start".to_owned(),
+        }))
+        .reporting(Availability::Unavailable {
+            missing: "bwrap".to_owned(),
+            remedy: "install bubblewrap".to_owned(),
+        });
         let backend: &dyn CapsuleBackend = &broken;
         assert_eq!(
             backend.availability(),

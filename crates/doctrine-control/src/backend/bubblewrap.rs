@@ -760,7 +760,7 @@ fn capsule_environment(env: &CapsuleEnv, inner_path: &str) -> Vec<(&'static str,
 /// A profile-owned mount's host side, derived from the inner constant so the
 /// layout has one spelling: `/capsule` under the transaction root is
 /// `<root>/capsule`.
-fn profile_owned_host_path(root: &TransactionRoot, inner: &str) -> PathBuf {
+pub(crate) fn profile_owned_host_path(root: &TransactionRoot, inner: &str) -> PathBuf {
     root.path().join(inner.trim_start_matches('/'))
 }
 

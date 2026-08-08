@@ -57,5 +57,17 @@ rustix = { version = "1", default-features = false, features = [
 serde = { workspace = true }
 toml = { workspace = true }
 
+[dev-dependencies]
+# `provision.rs` — scratch capsule roots for the export, ownership and rollback
+# tests (SL-248 PHASE-06, `VT-1`…`VT-3`, `D5`). Inherited from the workspace,
+# where it is already `tempfile = "3"` and already a dev-dependency of the root
+# package, so this adds **no compiled crate** and `Cargo.lock` does not move.
+# Test-only, deliberately: the ban that
+# `mem.pattern.tooling.tempfile-dev-only-use-git-dir-scratch-index` records is
+# about *production* code creating scratch outside the tree. Preferred over a
+# hand-rolled scratch-root helper, which is the version that leaks on a failing
+# assertion.
+tempfile = { workspace = true }
+
 [lints]
 workspace = true

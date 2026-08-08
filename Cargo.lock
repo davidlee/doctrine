@@ -472,6 +472,7 @@ dependencies = [
  "doctrine",
  "rustix",
  "serde",
+ "tempfile",
  "toml",
 ]
 
