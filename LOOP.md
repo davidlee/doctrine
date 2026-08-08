@@ -267,10 +267,24 @@ rediscover.
 | phase sheet — tasks, criteria mapping, risks | planner |
 | phase **status** flips, `record-delta` | orchestrator only, after the gate |
 | `notes_NN-MM.md` shard | the phase's worker |
-| `notes.md`, `handover.md` | orchestrator only |
+| `notes.md` § *Owed* — **append only, at the end** | the phase's worker |
+| `notes.md` every other section, `handover.md` | orchestrator only |
 | authored `.doctrine/` entities (plan, design, backlog) | orchestrator only |
 | new entity **ids** | nobody, in this clone — mint on the parent at merge |
 | memories, observations | whoever learns it, at the moment it bites |
+
+**Why the worker owns § *Owed*.** It was orchestrator-only, and § *Budget* named
+that transcription the largest per-phase orchestrator cost — then suggested
+delegating it to a harvest sub-agent. The `PHASE-06` worker simply did it,
+correctly, without being asked; delegating to the agent that already holds the
+finding is strictly cheaper than delegating to a third one that must re-read the
+sheet to reconstruct it. So the rule follows the practice.
+
+Two constraints keep it safe. **Append at the end, never edit an existing item** —
+numbering is immutable, and the orchestrator may be writing another section in
+the same window. **The orchestrator still verifies at close**: read the sheet's
+Findings against § *Owed* and confirm every `F-` reached it. "The worker wrote
+it" is a claim like any other, and disk is truth (§ *The contract*).
 
 ## Stop conditions
 
