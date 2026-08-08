@@ -6,7 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 3e2d8d28e
+fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · e76a95e6e
+· `PHASE-01` completed
 
 ### Produced
 
@@ -31,6 +32,10 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 3
   `019fdfcc-ce76-77e0-8c30-7e3ce8603ae8`, `019fdfe5-72a7-7033-94b6-4debec579fd3`.
 - Gate status: no code modified this session — the planning probe of the
   `dead_code` denial was reverted and `git diff` on `src/` is clean.
+- `PHASE-01` (e76a95e6e) — `CreateRecord.body`; `knowledge::write_record_body`;
+  `RecoveryIntent.payload_digest` + `resumable_under`; the `plan_checkpoints`
+  payload digest lifted to unconditional and used twice. `VT-1`–`VT-4` PASS
+  under `slice verify-vt`; gate clean.
 
 ### Learned
 
@@ -59,6 +64,31 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 3
 - `doctor_checks.rs`'s `*_findings(root) -> Vec<Finding>` is the tripwire's
   precedent — not `catalog::scan`, which the design named and which does not
   exist under that name.
+- **`CreateRecord` does NOT carry `#[serde(deny_unknown_fields)]`** — only
+  `Declaration` does. So before `PHASE-01` a `dispose.create.body` key was
+  **silently swallowed**, not refused. `EN-2`'s conclusion is unaffected (the
+  extension needed no serde change), but the design's surrounding language, and
+  the `PHASE-01` plan entry, both read as though the nested payload were guarded.
+  It is not. Stronger evidence for the slice's premise than was expected, and an
+  open sibling — see Open below.
+- `PHASE-01/VA-1`, discharged 2026-08-08 against `git diff` of e76a95e6e: no
+  facet field table, no `[facet]` write, no `RecordKind`-dispatched behaviour.
+  The single match for `facet` in the added lines is doc prose on
+  `RecoveryIntent.payload_digest` naming the future blast radius. `EX-6` holds.
+- `EX-4` re-verified by grep over `src/commands/design.rs`: one payload digest
+  expression (`:967`), feeding both `acceptance_digest` and the intent. No second
+  digest domain.
+- `-D dead-code` forces test and consumer into ONE step, not two: `MintPlan`'s
+  new field would not compile until `execute_mint` read it, so `VT-2` could not
+  be observed red by the ordinary red/green rhythm. Discharged with a **positive
+  control** instead — the guard was temporarily short-circuited and `VT-2` failed
+  at its `unwrap_err`, then restored. Any phase of this slice staging an item
+  ahead of a consumer owes the same control.
+- `src/design_run/` sites its unit tests in ONE `src/design_run/tests.rs`, not in
+  per-file `mod tests`. The plan's `test_file` for `VT-3`/`VT-4` names
+  `attestation.rs` — the module under test, which is what `verify-vt` gates on
+  (keywords over that file, which pass). The tests themselves ride the existing
+  seam rather than opening a parallel one.
 - A review reading `done` is **not** concluded — `done` is derived from findings
   (ADR-007 D-C8), while a design run's `conducted` disposition needs
   `review.concluded`, set only by `doctrine review conclude`. →
@@ -75,6 +105,15 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 3
   design-wording item; design §3 and §5.3 still say reconcile.
 - `PHASE-02/EN-2` — `I10`'s per-key cell semantics are undefined and owed before
   the matrix is written (design §10 press item 1).
+- **An unknown key nested inside `CreateRecord` is silently dropped** (see
+  Learned). `PHASE-02` refuses a `Declaration` key inert *at its subject's kind*;
+  this is the adjacent hole — a key inert because it is not a key at all, one
+  level down, where `deny_unknown_fields` is absent. Same defect class as
+  `ISS-318`, and it belongs in `PHASE-02`'s reckoning rather than `PHASE-01`'s.
+  Not fixed here: it is outside `PHASE-01`'s criteria, and adding the attribute
+  needs a decision about stored proposal declarations, which ride the snapshot
+  and so outlive the binary that wrote them
+  (`mem.fact.design-run.snapshot-outlives-the-binary`).
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.

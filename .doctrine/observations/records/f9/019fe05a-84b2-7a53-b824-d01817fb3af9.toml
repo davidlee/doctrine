@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe05a-84b2-7a53-b824-d01817fb3af9"
+recorded_at = "2026-08-08T07:50:56.434937377Z"
+kind = "friction"
+summary = "phase-plan: plan test_file named a module with no test seam"
+detail = "SL-249 PHASE-01 VT-3/VT-4 mandate test_file=src/design_run/attestation.rs. That module has no mod tests — the whole design_run leaf sites its unit suite in one src/design_run/tests.rs. verify-vt gates keywords over the named file, so it passes either way, but a worker following the plan literally would open a parallel test module in the leaf, which the leaf-rule memory warns against. Cost: a detour to discover the seam. Plans would be cheaper to execute if test_file were checked against an existing test seam at authoring time."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

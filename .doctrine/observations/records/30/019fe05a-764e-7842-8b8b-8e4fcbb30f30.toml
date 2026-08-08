@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe05a-764e-7842-8b8b-8e4fcbb30f30"
+recorded_at = "2026-08-08T07:50:52.750876179Z"
+kind = "friction"
+summary = "execute: -D dead-code collapses red/green into one step for a staged field"
+detail = "SL-249 PHASE-01. A new MintPlan field cannot compile until its consumer reads it, so writing VT-2 then the guard is impossible as two observable steps — the test-only state is a hard build error, not a red test. The rhythm has to be replaced by a positive control (short-circuit the guard, watch the test fail, restore), which is more tokens and easy to skip silently. Same shape as mem.pattern.lint.dead-code-staged-ahead-cfg-test but the cost lands on TDD ordering rather than on staging attributes."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
