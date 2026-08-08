@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe013-3a70-7c00-a315-0c6ae794d158"
+recorded_at = "2026-08-08T06:33:04.368787575Z"
+kind = "friction"
+summary = "/phase-plan: memory retrieve has no compact output — scanning candidate keys costs full bodies"
+detail = """Step 3 of /phase-plan is 'run /retrieve-memory against the files you expect to touch'. `doctrine memory retrieve` (a) takes no positional query — a natural `retrieve "..."` errors and costs a --help round-trip, and (b) emits every hit as a full security-framed block with the whole body. The help says --columns is 'ignored by retrieve', so there is no key-and-title projection: I paid ~16 full memory bodies to learn which 4 were relevant, then re-ran with grep -E '^memory_key|^# ' to get the list I actually wanted. Four calls where one should do. A --format compact (key + title + trust) would make the skill's step 3 cheap enough to always run."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
