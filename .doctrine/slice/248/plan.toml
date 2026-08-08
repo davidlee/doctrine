@@ -1,0 +1,129 @@
+# Implementation plan for SL-248 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-248"
+
+# STAGE 1 OF 3 — the spine only. Every phase below carries its id, name and
+# objective; `entrance_criteria`, `exit_criteria` and `verification` are
+# deliberately empty and are stage 2's work (plan.md § Authoring stages).
+# The phase list is the artefact that had to be right first time, because
+# PHASE-NN ids are immutable and edits append rather than renumber.
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Workspace foundation and the checked set"
+objective = "Create the `doctrine-control` workspace member and the root package's lib target with its curated export set, and bring the new crate into the checked set in the same change — so no later phase can ship a suite that is green by never running."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Interpretation policy: parse, normalize, hash, restrict"
+objective = "Build `src/interpretation.rs` as a strict typed projection of `[interpretation]` beside the deliberately tolerant shared reader — six distinguishable refusals, duplicate rejection before sorting, an injective canonical hash, and the monotonic restriction algebra — and export it through the lib target."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Host facts, the `[capsule]` table, and advisory capacity"
+objective = "Build the crate's `HostFacts` seam and `SystemHost`, the `[capsule]` reader with its capsule-root resolution and required bounds, and the pure capacity tiering that warns and refuses without ever reserving or deleting."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The backend contract and placement validation"
+objective = "Define the `CapsuleBackend` contract and its closed vocabularies, and the single validating `CapsulePlacement` constructor — bidirectional overlap, reserved inner destinations, and the two typed carve-outs — with every refusal paired against the lawful case it must not capture."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "The bubblewrap backend profile"
+objective = "Implement the self-contained Linux profile — argv assembly in order, declared readable set and closure expansion, the derived inner PATH, resolve-then-validate-then-bind, parent-side descriptor closure and standard-stream ownership, and trusted-side wall and file-size bounds."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "The capsule transaction and provisioning"
+objective = "Build `provision` end to end — the thirteen steps, the atomic export publish-or-adopt protocol, exclusive root ownership by creation token, the three-execution clone inside the sandbox, and token-guarded rollback — behind the `provision` verb."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Conformance classification and verdict algebra"
+objective = "Build the suite's pure core — the sealed weakening vocabulary, arm classification with liveness established before any observation is read, and the row and admission verdict algebra in which a control that still held yields `Unproven`."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "The executed harness: fixture, arms, containment, table C"
+objective = "Build the executing half of the suite — the self-contained fixture, the three arm shapes, `ConformanceBackend` on the bubblewrap backend carrying all ten removals and the one grant, and per-row hazard containment — and prove it end to end on table C's four non-admitting claims."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "Admission tables: the clause-derived rows and the freshness axes"
+objective = "Land table A rows 1–8 and table B's five freshness axes with each control measured to fire rather than reasoned about, including re-running EVD-013's 2×2 against the strengthened session-escaping payload."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-10"
+name      = "The channel rows and the on-host verdict"
+objective = "Land table A rows 9–14 — the channels the ledger surfaced — each with its own stub mutant and its credential measurements re-run on this phase's own host, and expose the completed admission verdict behind `backend verify`."
+entrance_criteria = []
+exit_criteria     = []
+verification      = []
+specs             = []
+requirements      = []

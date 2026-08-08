@@ -1,9 +1,9 @@
 id = 248
 slug = "capsule-provisioning-and-linux-backend"
 title = "Capsule provisioning and Linux backend"
-status = "design"
+status = "plan"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-08"
 tags = ["area:config", "area:confinement", "area:dispatch", "area:worktree", "cluster:capsule"]
 
 [relationships]
