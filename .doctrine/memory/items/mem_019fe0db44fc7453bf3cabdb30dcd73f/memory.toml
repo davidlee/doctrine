@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe0db44fc7453bf3cabdb30dcd73f"
+memory_key = "mem.fact.layering.second-tree-zero-tangle-baseline"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Second source tree's layering gate has a synthesised zero tangle baseline"
+summary = "doctrine-control's layering section gets a zero tangle baseline synthesised in the test, so any same-tier import cycle in the new crate is an unbaselineable hard gate failure"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["tests/architecture_layering.rs", ".doctrine/adr/001/layering.toml"]
+globs = ["crates/doctrine-control/src/**"]
+commands = ["cargo test --test architecture_layering"]
+tags = ["layering", "adr-001", "gate", "sl-248"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0a2dd877c2fcd1d1f2214983eaa613d456203e5f"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "bbec561a27eb39ca2c3b09cb1cddc54e54ca38764f29b3dc9c36af22148bde9e"
+base_commit = "72ff933ce788cdbaaed8264c0bd108e91c81c07b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

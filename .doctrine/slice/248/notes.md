@@ -254,6 +254,54 @@ five places.
     a dependency's message, and it *carries* rather than *matches* it, which is
     the distinction `sec-4` § *Why the table is walked* is protecting.
 
+### From `PHASE-03` planning (sheet `phase-03.md`, pre-execution)
+
+<!-- Found at plan time, not execution time. No ids minted — this is the clone
+     (§ The hazard to respect in the clone). Mint on the parent at merge. -->
+
+11. **`sec-5`'s `HostFacts` sketch contradicts `sec-6`'s unit table, and the gate
+    enforces the table.** `sec-5:2247` returns `Result<ByteCount, CapacityUnknown>`;
+    `EX-3` puts `ByteCount` in `config.rs` and `EX-6`/`EX-12` force `config → host`,
+    so the sketch requires `host → config` and closes a two-node `leaf`-tier cycle.
+    The `doctrine-control` tree's tangle baseline is synthesised at **zero**
+    (`tests/architecture_layering.rs:517-521`, `PHASE-01` `D1`), so this is a hard
+    gate red with no baseline escape and no local fix — the file that could
+    baseline it is not this phase's. `sec-6`'s table and `EX-18` are the coherent
+    pair; the sketch is the outlier, and `EX-2` already amends the same sketch on
+    the clock axis. Resolved in-criteria by the sheet's `D1` (return raw `u64`,
+    move one `ByteCount::from` to the call site) — **no `EX`/`VT` altered**. Owed
+    as a design correction, not a criterion failure.
+
+12. **`Argv` is used in five places and defined nowhere.** `design.md:298`,
+    `:2095`, `:3207`, `:3367`, `:3402`; `sec-6`'s file map assigns it to no unit.
+    `config.rs` is the only placement that adds no edge the table lacks
+    (`backend → config` is already recorded). Design omission.
+
+13. **`assess_capacity` cannot name the capsule root.** `EX-14` fixes the
+    signature at `(probe, &CapacityPolicy)`; `EX-16` and `VT-2` both require the
+    root in the emitted warning and refusal, and neither parameter carries one —
+    `CapacityPolicy` deliberately holds only the expected size and multiplier
+    (`EX-20`'s no-reservation structure depends on that). Resolved by the sheet's
+    `D3`: the verdict stays pure and rootless, the *report* carries the root from
+    the caller. Both criteria satisfied as written; recorded because the next
+    reader meets the same tension.
+
+14. **`plan.md`'s file-ownership table omits `main.rs` from `PHASE-03`.**
+    `plan.md:212` gives `PHASE-03` four files and lists `main.rs` under phases 01,
+    06, 10 — but the three new modules never compile, so their ~33 tests never
+    run and `EN-1` is defeated, unless `main.rs` declares them. Harmless in
+    practice (03/06/10 are strictly sequential, the edit is three lines); the
+    table should read `main.rs | 01, 03, 06, 10`.
+
+15. **`sec-5` cites `src/install.rs:1818` for the `HOME` read precedent; the site
+    is now `src/install.rs:1505`.** Same class as item 4's stale figure. Trivial,
+    costs the next reader a grep.
+
+`EN-3`'s overstatement resurfaced at plan time and is **not** a new item — it is
+item 6 (`ISS-326`). It holds for `PHASE-03`'s three units only because all three
+appear in edges; the sheet's `T12` verifies that by deleting a row rather than by
+reading the criterion.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green

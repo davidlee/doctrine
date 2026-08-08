@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0db-6a85-7912-a245-058580084630"
+recorded_at = "2026-08-08T10:11:43.877326186Z"
+kind = "friction"
+summary = "phase-plan (SL-248 PHASE-03): design sketch and design unit-table contradicted each other; only cross-reading both found it"
+detail = "Planning SL-248 PHASE-03 cost an extra ~40k tokens of cross-checking because sec-5's HostFacts code sketch (Result<ByteCount, CapacityUnknown>) and sec-6's unit table (host | leaf | none) are mutually unsatisfiable once EX-3 places ByteCount in config.rs and EX-6 forces config -> host. Neither section cites the other, and the plan's provenance row grants both to the same phase without flagging the tension. The failure is invisible to a compiler and surfaces only as a TangleGrew gate red at the end of the phase. Two further design gaps found the same way: Argv is used in five places and defined nowhere, and assess_capacity's fixed two-parameter signature cannot supply the capsule_root that EX-16/VT-2 require in its warning and refusal. Generalisable: a design that ships both prose signatures AND a unit/edge table has two sources of truth for the same graph, and nothing in the authoring loop cross-validates them. A cheap check at /plan or /design close would be to derive the edge set from the sketched signatures and diff it against the authored table."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
