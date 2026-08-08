@@ -757,15 +757,30 @@ shows 35 `.claude/skills/<id>` → `../../.doctrine/skills/<id>` symlinks over a
 materialised canonical tree — SPEC-010 responsibilities 3–4 on a real cold
 install rather than in a tempdir.
 
+The preconditions are stronger than attestation. The operator **removed the
+doctrine marketplace from their outside-jail Claude config before the run**, and
+`known_marketplaces.json` is the registry Claude Code actually consults — an
+`enabledPlugins` entry whose marketplace is unregistered is skipped as an orphan,
+silently (`mem.system.claude.plugin-load-model`). So the plugin path was not
+merely unused; it was unavailable, and the eleven entries cannot have come from
+it. That is per-user host state no artefact here can re-derive, which is exactly
+why `VH-1` demands the preconditions be transcribed.
+
+The scratch project's `.claude/settings.local.json` was captured in full and
+holds only `enabledMcpjsonServers` — Claude Code's own key, written when the
+operator approved the MCP server. So: the `Project` default put every entry in
+`.claude/settings.json` with no `hooks` key in the sibling; no `worktree.baseRef`
+stranded there, which is PHASE-02 `EX-4`'s one-file-per-install claim; and
+PHASE-03's sweep correctly found nothing to evict rather than failing.
+
 **Not evidenced, and the criterion's own second half:** that the entries
 *fire*. `VH-1` asks for one observed effect per event class — a session boot
 emitting, a `WorktreeCreate` fork, a `PreToolUse` surfacing — and the capture
 shows registration only. This distinction is in the criterion because
 `mem.fact.claude.reload-plugins-registers-pretooluse` records a case where
-`/hooks` reported hooks live and the `PreToolUse` wall did not fire. A count is
-not a firing. Also uncaptured: `enabledPlugins` / marketplace state directly
-(inferred from the `[Project]` labels, not shown), and the contents of the
-scratch project's `.claude/settings.local.json`.
+`/hooks` reported hooks live and the `PreToolUse` wall did not fire, twice, with
+a logging shim confirming zero interception. A count is not a firing. This is
+now the sole gap; everything else `VH-1` asks for is captured.
 
 ### Owed at close
 

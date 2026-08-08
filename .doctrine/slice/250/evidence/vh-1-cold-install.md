@@ -19,8 +19,25 @@ capture opens with them and the operator attests they held:
 4. the scope key **absent**, exercising the `Project` default rather than a set value
 5. a binary built from this slice
 
-Attested, not separately evidenced — the capture shows the *result* of those
-conditions, not the conditions themselves. See *What this does not evidence*.
+Preconditions 2 and 3 were established by an affirmative act, not merely
+observed absent: the operator **removed the doctrine marketplace from their
+outside-jail Claude config before the run** (2026-08-08).
+
+That is the strongest available form of the precondition, and it is worth
+spelling out why. `known_marketplaces.json` is the registry Claude Code actually
+consults at load — `mem.system.claude.plugin-load-model`, verified empirically
+on CC 2.1.198. An `enabledPlugins` entry whose marketplace is unregistered is
+skipped as an orphan, **silently**, and the plugin is simply absent. So with the
+marketplace deregistered, the plugin path was not just unused during this run;
+it was unavailable, whether or not a stale `enabledPlugins` entry survived
+anywhere. The eleven entries cannot have come from it.
+
+Preconditions 1, 4 and 5 are operator-attested rather than separately captured.
+
+**This is per-user state, outside the repo.** The deregistration happened in the
+operator's host config, which no artefact here records and no auditor can
+re-derive. That is precisely why `VH-1` demands the preconditions be transcribed
+rather than recounted, and why this paragraph exists.
 
 ## The count: eleven, from Project settings
 
@@ -96,27 +113,50 @@ doctrine's own rather than being normalised away.
   tempdir test.
 - Agent defs and the workflow link landed on the same run.
 
+## The abandoned scope is clean
+
+The scratch project's `.claude/settings.local.json`, captured in full:
+
+```json
+{
+  "enabledMcpjsonServers": [
+    "doctrine"
+  ]
+}
+```
+
+Three facts fall out, all of them `PHASE-02` / `PHASE-03` claims:
+
+1. **The `Project` default landed everything in `.claude/settings.json`.** No
+   `hooks` key here at all — doctrine wrote none of its eleven entries to the
+   local file. That is the scope dial working with the key absent.
+2. **No `worktree.baseRef` stranded here.** `EX-4`'s "one Claude settings file
+   per install, not two" holds: the baseRef followed the hooks into the project
+   file rather than being left behind in the sibling.
+3. **The sweep correctly did nothing.** With no prior local install there was
+   nothing doctrine-owned to evict, and `PHASE-03`'s guard means that is
+   `EvictOutcome::Nothing`, not a failure. The one key present is foreign —
+   Claude Code wrote `enabledMcpjsonServers` itself when the operator approved
+   the MCP server at session start, visible at the head of the raw capture — and
+   it survives untouched.
+
+Fact 3 is weak evidence of never-clobber on its own (an empty sweep clobbers
+nothing by construction). It is listed because its *absence* would have been
+strong evidence against.
+
 ## What this does not evidence
 
 Named here so the audit does not read the capture as covering more than it does.
 
-1. **The three observed effects per event class.** `VH-1` asks for a session
-   boot emitting, a `WorktreeCreate` fork, and a `PreToolUse` surfacing — i.e.
-   that the entries *fire*, not merely that they are registered. The capture
-   shows registration only. `mem.fact.claude.reload-plugins-registers-pretooluse`
-   is the reason this distinction is in the criterion at all: it records a case
-   where `/hooks` reported hooks live and the `PreToolUse` wall did not fire.
-   A count is not a firing.
-2. **Preconditions 2 and 3 directly.** No `enabledPlugins` / marketplace state
-   was captured. The eleven entries being `[Project]`-scoped is strong indirect
-   evidence — a plugin-sourced hook renders differently — but it is inference,
-   not the precondition shown.
-3. **`.claude/settings.local.json`.** The tree shows the file exists in the
-   scratch project. Its contents were not captured, so whether it holds doctrine
-   entries (and therefore whether `PHASE-03`'s sweep had anything to evict, or
-   correctly left a clean file alone) is unknown from this capture. Not a
-   defect signal — at `Project` default with no prior local install there should
-   be nothing to sweep — but it is untested here.
+**The three observed effects per event class.** `VH-1` asks for a session boot
+emitting, a `WorktreeCreate` fork, and a `PreToolUse` surfacing — i.e. that the
+entries *fire*, not merely that they are registered. The capture shows
+registration only.
 
-Item 1 is the substantive gap and is `VH-1`'s explicit second half. Items 2 and
-3 are cheap to close on a re-run if the audit wants them.
+This is the criterion's explicit second half and the one real gap.
+`mem.fact.claude.reload-plugins-registers-pretooluse` is why the distinction is
+in `VH-1` at all: it records a case where `/hooks` reported hooks live and the
+`PreToolUse` wall did not fire, twice, with a logging shim confirming zero
+interception. A count is not a firing.
+
+Everything else `VH-1` asks for is captured above.
