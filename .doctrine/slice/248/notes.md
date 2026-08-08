@@ -297,10 +297,41 @@ five places.
     is now `src/install.rs:1505`.** Same class as item 4's stale figure. Trivial,
     costs the next reader a grep.
 
+16. **`execution-timeout-seconds`'s justification measures the wrong workload,
+    and the fix is a second key rather than a bigger number.** `sec-5` derives
+    `900` from the spike's Rust *build* fixture (352s measured, re-bounded to 900
+    with headroom). But `ADR-020` makes the capsule the dispatch authority
+    boundary, `DEC-134` fixes the headless worker, and the capsule mounts
+    `/agent` as "the state a harness accumulates across a run" — so what a
+    capsule executes is an **agent**, and `Execution.timeout` bounds it. An agent
+    run is not a build: this slice's own `PHASE-03` planner sub-agent took 650s
+    writing no code and running no builds, and a worker phase on this slice has
+    been taking about a session. At 900 an agent is `SIGTERM`ed mid-phase.
+
+    **Owner's ruling, 2026-08-08 — `900` stands, scoped to build/verification
+    execution, and agent execution gets its own bound as separate work.**
+    Rationale, in the owner's terms: the two workloads have very different
+    characteristics, and a bound slack enough for an agent means waiting two
+    hours to discover a `cp` typo. One key serving both is wrong in both
+    directions — too tight for the agent, too slack to fail a build fast.
+
+    So this is **two** items at reconciliation, and they are not the same kind:
+    (a) a design correction — `sec-5`'s justification for `900` should say it
+    bounds a build/verification contract, not any capsule execution; and (b)
+    **net-new work**, a second timeout key with its own parse, default posture
+    and enforcement, sized against an agent's tail rather than a build's. (b) is
+    a backlog item, not a design fix — mint it on the parent at merge
+    (this clone mints no ids). Out of scope for `PHASE-03`: `EX-19` fixes the key
+    set, so adding the key here would break an `EX` as written (`S4`).
+
 `EN-3`'s overstatement resurfaced at plan time and is **not** a new item — it is
 item 6 (`ISS-326`). It holds for `PHASE-03`'s three units only because all three
 appear in edges; the sheet's `T12` verifies that by deleting a row rather than by
 reading the criterion.
+
+`VH-1` is **discharged** by the ruling above — the five figures are confirmed as
+`sec-5`'s sample writes them (`900` / `512` / `8192` / `2` / `5`). Recorded in
+the `PHASE-03` sheet as `F-7`, which supersedes `T14`'s escalation clause.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
