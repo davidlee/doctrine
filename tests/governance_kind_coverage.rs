@@ -492,3 +492,248 @@ fn the_collapse_is_load_bearing() {
         "without the collapse the identity cannot be satisfied at all"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The live arm (`VT-1`) — the four authored tiers, against `kinds::RECORD`.
+// ---------------------------------------------------------------------------
+
+/// The four authored tier files, **path-listed**. Deliberately not a directory
+/// walk: `.doctrine/spec/tech/019/` also holds `handover.md`, `interactions.toml`
+/// and `members.toml`, none of which belong to either entity — and `handover.md`
+/// is gitignored scratch that still carries a stale four-kind claim by design.
+/// A glob here would read files the REV never amended and could not amend
+/// (`D9` scope).
+const LIVE_TIERS: &[(&str, &str)] = &[
+    ("spec-019.toml", ".doctrine/spec/tech/019/spec-019.toml"),
+    ("spec-019.md", ".doctrine/spec/tech/019/spec-019.md"),
+    ("spec-010.toml", ".doctrine/spec/product/010/spec-010.toml"),
+    ("spec-010.md", ".doctrine/spec/product/010/spec-010.md"),
+];
+
+fn live_tiers() -> Vec<(String, String)> {
+    let root = common::repo_root();
+    LIVE_TIERS
+        .iter()
+        .map(|(name, rel)| {
+            let path = root.join(rel);
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read authored tier {}: {e}", path.display()));
+            ((*name).to_string(), text)
+        })
+        .collect()
+}
+
+/// Every `pub(crate) const <NAME>: &str = "<value>";` in the file, so a prefix is
+/// read as its **value** rather than as its identifier. They coincide today
+/// (`ASM` = `"ASM"`); a canary that assumed so would silently check the wrong
+/// token the day they stop.
+fn str_consts(ast: &syn::File) -> std::collections::BTreeMap<String, String> {
+    ast.items
+        .iter()
+        .filter_map(|item| {
+            let syn::Item::Const(c) = item else {
+                return None;
+            };
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &*c.expr
+            else {
+                return None;
+            };
+            Some((c.ident.to_string(), s.value()))
+        })
+        .collect()
+}
+
+/// The record kinds, read out of `src/kinds/mod.rs` — the totality argument.
+///
+/// Two independent parses, and they must agree:
+///   * the `stem: "record"` `Kind` consts, which are the only place the long name
+///     is paired with the prefix (`ASSUMPTION_KIND` ↔ `prefix: ASM`);
+///   * the `RECORD` slice, which is the declared membership list.
+///
+/// A new record kind joins all 28 assertions with **no edit to this file**. That
+/// is what makes this a coverage assertion rather than a spot check — and it is
+/// why the disagreement below panics instead of silently preferring one parse.
+fn record_kinds_from_source() -> Vec<(String, String)> {
+    let path = common::repo_root().join("src/kinds/mod.rs");
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let ast = syn::parse_file(&text).expect("parse src/kinds/mod.rs");
+    let consts = str_consts(&ast);
+    let resolve = |ident: &str| -> String {
+        consts
+            .get(ident)
+            .unwrap_or_else(|| panic!("kind prefix `{ident}` is not a &str const in kinds/mod.rs"))
+            .clone()
+    };
+
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut declared: Option<Vec<String>> = None;
+
+    for item in &ast.items {
+        let syn::Item::Const(c) = item else {
+            continue;
+        };
+
+        // `pub(crate) const RECORD: &[&str] = &[ASM, DEC, …];`
+        if c.ident == "RECORD" {
+            let syn::Expr::Reference(r) = &*c.expr else {
+                panic!("RECORD is not a slice reference");
+            };
+            let syn::Expr::Array(arr) = &*r.expr else {
+                panic!("RECORD is not an array literal");
+            };
+            declared = Some(
+                arr.elems
+                    .iter()
+                    .map(|e| {
+                        let syn::Expr::Path(p) = e else {
+                            panic!("RECORD element is not a path");
+                        };
+                        resolve(&p.path.require_ident().expect("RECORD ident").to_string())
+                    })
+                    .collect(),
+            );
+            continue;
+        }
+
+        // `pub(crate) const ASSUMPTION_KIND: Kind = Kind { …, prefix: ASM, stem: "record" };`
+        let Some(stem_name) = c.ident.to_string().strip_suffix("_KIND").map(str::to_owned) else {
+            continue;
+        };
+        let syn::Expr::Struct(lit) = &*c.expr else {
+            continue;
+        };
+        let mut prefix: Option<String> = None;
+        let mut stem: Option<String> = None;
+        for field in &lit.fields {
+            let syn::Member::Named(id) = &field.member else {
+                continue;
+            };
+            match id.to_string().as_str() {
+                "prefix" => {
+                    if let syn::Expr::Path(p) = &field.expr
+                        && let Some(id) = p.path.get_ident()
+                    {
+                        prefix = Some(resolve(&id.to_string()));
+                    }
+                }
+                "stem" => {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) = &field.expr
+                    {
+                        stem = Some(s.value());
+                    }
+                }
+                _ => {}
+            }
+        }
+        if stem.as_deref() == Some("record")
+            && let Some(prefix) = prefix
+        {
+            pairs.push((stem_name.to_lowercase().replace('_', " "), prefix));
+        }
+    }
+
+    let declared = declared.expect("no `RECORD` const in src/kinds/mod.rs");
+    let from_consts: std::collections::BTreeSet<&String> = pairs.iter().map(|(_, p)| p).collect();
+    let from_record: std::collections::BTreeSet<&String> = declared.iter().collect();
+    assert_eq!(
+        from_consts, from_record,
+        "the two parses of the record-kind set disagree: `stem: \"record\"` consts \
+         vs the `RECORD` slice. One of them was edited without the other, and the \
+         canary cannot tell which is right."
+    );
+    assert!(
+        !pairs.is_empty(),
+        "no record kinds parsed out of kinds/mod.rs"
+    );
+    pairs
+}
+
+/// The fixture arms freeze a kind list because they describe a corpus that no
+/// longer exists. This is the one direction that still has to track reality: a
+/// kind **renamed or removed** invalidates the control's arithmetic, so it fails
+/// here. A kind *added* deliberately does not — it changes nothing about what
+/// the pre-amendment corpus said.
+#[test]
+fn frozen_kinds_are_still_real_kinds() {
+    let live = record_kinds_from_source();
+    for pair in frozen_record_kinds() {
+        assert!(
+            live.contains(&pair),
+            "frozen fixture kind {pair:?} is no longer a record kind — the \
+             pre_amendment control's expected counts need re-deriving, not \
+             deleting: {live:?}"
+        );
+    }
+}
+
+/// `VT-1`. Every kind in `kinds::RECORD`, in paired form, in all four authored
+/// tiers — and every `four` in those tiers accounted for.
+///
+/// **This arm cannot stage a red.** It was written after `REV-050` made the
+/// corpus correct, so it passed on its first run and proves nothing on its own.
+/// Its controls are real tests in the tree, not a claim: the `pre_amendment`
+/// fixture above (the same `check`, over the real stale bytes, asserting the
+/// exact failure set) and `the_live_arm_notices_a_wrong_allowlist` below (this
+/// arm's own path, perturbed).
+#[test]
+fn every_record_kind_is_enumerated_in_both_governance_entities() {
+    let owned = live_tiers();
+    let tiers: Vec<Tier<'_>> = owned
+        .iter()
+        .map(|(n, t)| Tier { name: n, text: t })
+        .collect();
+    let kinds = record_kinds_from_source();
+
+    let failures = check(&tiers, &kinds, ALLOW);
+    assert!(
+        failures.is_empty(),
+        "SPEC-019 / PRD-010 no longer enumerate the record kinds the corpus has \
+         ({} kinds × {} tiers). Amend the entities — or, if a `four` is genuinely \
+         about something other than the kind count, add an allowlist entry with \
+         the argument for it:\n{failures:#?}",
+        kinds.len(),
+        tiers.len()
+    );
+}
+
+/// The live arm's own positive control: perturb the allowlist against the **live**
+/// tiers and watch the identity fire. Without this, "no failures" over a corpus
+/// that happens to be correct is indistinguishable from a checker that looks at
+/// nothing.
+#[test]
+fn the_live_arm_notices_a_wrong_allowlist() {
+    let owned = live_tiers();
+    let tiers: Vec<Tier<'_>> = owned
+        .iter()
+        .map(|(n, t)| Tier { name: n, text: t })
+        .collect();
+
+    let perturbed = &[Exempt {
+        expect: ALLOW[0].expect + 1,
+        ..ALLOW[0]
+    }];
+    let failures = check(&tiers, &record_kinds_from_source(), perturbed);
+
+    assert!(
+        failures
+            .iter()
+            .any(|f| f == "spec-019.md: 'four' appears 1 time(s) but the allowlist accounts for 2"),
+        "the identity is vacuous over the live tiers: {failures:#?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.contains("exempt phrase") && f.contains("allowlist expects 2")),
+        "the per-entry half is vacuous over the live tiers: {failures:#?}"
+    );
+    // Exactly those two: all 28 paired forms are present, and the other three
+    // tiers carry no `four` and no exemption. The perturbation is the only defect.
+    assert_eq!(failures.len(), 2, "{failures:#?}");
+}
