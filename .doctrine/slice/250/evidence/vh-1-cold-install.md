@@ -186,14 +186,68 @@ This is stronger than a log line. The payload did not merely arrive — the agen
 refuse. A hook that registered but did not fire produces an agent that cheerfully
 writes the component.
 
-### `WorktreeCreate` — outstanding
+### `WorktreeCreate` — CONFIRMED
 
-The load-bearing one. `isolation: worktree` teardown is *conditional* on this
-hook firing (`mem_019f1a5ce1f472219da91d0724bb766b`), so an inert entry here
-changes dispatch's semantics silently. It is the strongest single argument the
-design makes for moving activation off the plugin, and the one effect most worth
-observing rather than inferring. Spawn an `isolation: worktree` subagent in the
-scratch project and confirm the fork lands.
+The load-bearing one: `isolation: worktree` teardown is *conditional* on this
+hook firing (`mem_019f1a5ce1f472219da91d0724bb766b`), so an inert entry changes
+dispatch's semantics silently rather than degrading them.
+
+Probe run 2026-08-08 in `/tmp/install_test` (git repo, HEAD `21b9d75`, clean
+tree, manual permission mode). One `isolation: worktree` subagent spawned.
+
+| | value |
+|---|---|
+| subagent `pwd` | `/tmp/install_test/.worktrees/agent-a7f941dff23e28c41` |
+| main session `pwd` | `/tmp/install_test` |
+| harness metadata | `worktreePath` + `agentId` `a7f941dff23e28c41` |
+| Agent-tool error / fallback | none reported |
+
+Main session `git worktree list`, run **after** the subagent returned (the
+positive control — the comparison is against a live value, not an assumption):
+
+```
+/tmp/install_test                                    21b9d75 [main]
+/tmp/install_test/.worktrees/agent-a7f941dff23e28c41 21b9d75 (detached HEAD)
+```
+
+**Why this is doctrine's hook and not the harness's own worktree support.**
+`.worktrees/<name>` is doctrine's layout, not a generic one:
+`WORKTREES_SUBDIR` in `src/worktree/create.rs`, with
+`src/worktree/dispatch_record.rs:301` naming `create-fork` *"THE one owner of the
+`.worktrees/<name>` layout, in both directions"*. The harness supplies a
+suggested slug and consumes the hook's stdout as the path; the path that came
+back is doctrine's. A registered-but-inert hook would have produced either an
+in-situ subagent or a harness-native path elsewhere.
+
+### `PreToolUse` — outstanding
+
+Six entries across five matchers, the largest block. Trip any matched tool and
+confirm the memory-surface or worktree wall reports.
+
+## A trap the probe surfaced, which is not a defect in this slice
+
+The subagent reported all three of its `git` commands failing identically:
+
+```
+fatal: not a git repository: (null)   [exit 128]
+```
+
+and diagnosed it as *"the parent repository is genuinely gone … confirmed with
+the sandbox disabled, so it is not a sandbox filesystem-view artifact"*.
+
+**That diagnosis is wrong**, and the operator refuted it from the main session:
+`/tmp/install_test/.git` was present throughout, along with `CLAUDE.md`,
+`.doctrine/` and the rest. The real cause is the linked worktree's `.git` *file*
+holding a `gitdir:` pointer out to `/tmp/install_test/.git/worktrees/<name>`,
+which the subagent's sandboxed filesystem view — scoped to its own worktree —
+could not follow. Git reports the unresolvable pointer as `(null)`. The
+subagent's "confirmed with the sandbox disabled" claim did not hold.
+
+Recorded because it will recur for every dispatch worker that runs `git` inside
+a fork, and because the failure *presents* as catastrophic repo loss. It says
+nothing about `WorktreeCreate` firing — the fork demonstrably exists and is
+registered in the parent. Operator's note: worktrees behave oddly when the repo
+sits outside the usual workspace path, as this scratch project does at `/tmp`.
 
 ### `PreToolUse` — outstanding
 

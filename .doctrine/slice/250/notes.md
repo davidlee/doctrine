@@ -788,10 +788,28 @@ operator watched the session and saw no import read. That is better than a log
 line — the agent did not merely receive the snapshot, it *acted* on it. A
 registered-but-inert hook yields an agent that writes the component.
 
-`WorktreeCreate` and `PreToolUse` remain. `WorktreeCreate` is the one worth
-observing rather than inferring: `isolation: worktree` teardown is conditional on
-it firing (`mem_019f1a5ce1f472219da91d0724bb766b`), which is the design's
-strongest argument for leaving the plugin at all.
+`WorktreeCreate` is **confirmed** — the one worth observing rather than
+inferring, since `isolation: worktree` teardown is conditional on it firing
+(`mem_019f1a5ce1f472219da91d0724bb766b`). A probe subagent landed at
+`/tmp/install_test/.worktrees/agent-a7f941dff23e28c41` against a main session at
+`/tmp/install_test`, with the fork registered in the parent's `git worktree list`
+at `21b9d75` (detached HEAD) and no Agent-tool error or fallback. What makes it
+doctrine's hook rather than harness-native worktree support is the path:
+`.worktrees/<name>` is doctrine's layout, and `src/worktree/dispatch_record.rs:301`
+names `create-fork` "THE one owner of the `.worktrees/<name>` layout, in both
+directions".
+
+`PreToolUse` is the sole remaining effect.
+
+**A trap the probe surfaced, unrelated to this slice.** The probe subagent's
+`git` commands all failed `fatal: not a git repository: (null)`, and it
+diagnosed the parent repo as deleted — asserting it had "confirmed with the
+sandbox disabled". Both claims were false; the operator refuted them from the
+main session. The cause is the linked worktree's `.git` file holding a `gitdir:`
+pointer outward that the subagent's sandboxed filesystem view could not follow.
+It will recur for any dispatch worker running `git` inside a fork, and it
+presents as catastrophic repo loss. Captured as a memory rather than left in
+this slice's notes.
 
 ### Owed at close
 

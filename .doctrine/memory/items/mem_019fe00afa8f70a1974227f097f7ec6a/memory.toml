@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe00afa8f70a1974227f097f7ec6a"
+memory_key = "mem.fact.worktree.gitdir-pointer-unresolvable-in-sandboxed-subagent"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Worktree subagent git failure reads as a deleted parent repo, and is not one"
+summary = "A sandboxed worktree subagent's git commands fail `not a git repository: (null)` because the .git gitdir pointer resolves outward; agents misdiagnose this as catastrophic repo loss"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/worktree/create.rs", "src/worktree/dispatch_record.rs"]
+globs = []
+commands = ["worktree create-fork", "dispatch"]
+tags = ["worktree", "dispatch", "git", "sandbox", "claude-code", "misdiagnosis"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "eef47416d1f82985c07e47825780d4a39ae5fae4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b644d62c487cd3003d8c96016f831ff354b8d97851b2762bb51e6bd35aa4ae1b"
+base_commit = "3afb0def27cad2afd1c17989f5c3423184d66e60"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
