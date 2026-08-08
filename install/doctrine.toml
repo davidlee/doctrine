@@ -19,10 +19,13 @@
 # default-actor    = "self"
 # default-autonomy = "auto"
 
-# --- Install / marketplace ------------------------------------------------
-# Git repo slug for npx-skills / the plugin marketplace.
+# --- Install ----------------------------------------------------------------
+# Git repo slug for the universal npx-skills delegation, and which Claude
+# settings file doctrine writes its hooks into ("project" | "local"; default
+# "project"). See the shipped reference `claude-activation.md`.
 # [install]
 # repo = "davidlee/doctrine"
+# claude-settings-scope = "project"
 
 # --- Dispatch -------------------------------------------------------------
 # The trunk delivery ref dispatch advances to / the close gate checks against.

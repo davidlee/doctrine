@@ -873,6 +873,15 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
+address       = "reference/claude-activation.md"
+backing       = "claude-activation.md"
+kind          = "reference"
+title         = "Claude Code activation guide"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
 address       = "integration/workflows/drive-slice.js"
 backing       = "workflows/drive-slice.js"
 kind          = "integration"

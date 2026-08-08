@@ -71,8 +71,12 @@
 # gate = ["just", "check"]
 #
 # [install]
-# # Git repo slug for npx-skills / plugin marketplace (default: davidlee/doctrine).
+# # Git repo slug for the universal npx-skills delegation (default: davidlee/doctrine).
 # repo = "davidlee/doctrine"
+# # Which Claude settings file doctrine writes its hooks into: "project"
+# # (.claude/settings.json, committed, default) or "local"
+# # (.claude/settings.local.json, gitignored). See `claude-activation.md`.
+# claude-settings-scope = "project"
 #
 # [dispatch]
 # # Preferred subprocess harness for dispatch workers.
