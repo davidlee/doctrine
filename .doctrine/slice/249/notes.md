@@ -308,6 +308,22 @@ fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `kebab_flag`, and one existing test body took a one-line rename-through
   (`built_edit_command` → `built_knowledge_verb("edit")`) — declared by the
   worker, not a behaviour-preservation `S1`.
+- **`CHR-060`'s title names a now-contested target, and `PHASE-06` declined to
+  settle it.** `CHR-060` is "rename `facet_write::FacetField` → `FacetValue`",
+  `ISS-329`'s ruled option 2. `PHASE-06` needs a leaf-local wire type for the
+  facet payload — design §5.2 spells it `BTreeMap<String, RawValue>`, but
+  `RawValue` lives in `knowledge` (command tier) and `design_run` is
+  `leaf, out=0` (`layering.toml:31`), so the design's literal spelling is
+  unreachable and would hard-fail the layering gate. **Design-wording departure
+  owed at reconcile.** The new type is named `WireFacetValue` — sibling to the
+  existing `type WireKey` (`submission.rs:495`), and collision-proof under every
+  `CHR-060` outcome including `FacetEdit`, which `knowledge::FacetEdit` holds.
+  The counter-argument is recorded rather than exercised: `facet_write`'s type
+  is **key + value**, so it really is a *field*, and an unkeyed value type has
+  the better claim to `FacetValue` — which would make `CHR-060`'s premise wrong
+  rather than merely blocked. That belongs at `CHR-060`, argued openly, not
+  settled by a phase taking the name first. **Nobody reopens `CHR-060` until
+  pickup, so this note is the only thing that will carry it there.**
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
