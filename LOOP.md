@@ -117,10 +117,16 @@ Every brief carries, and carries nothing else:
 - "end green: `doctrine check gate`. Do not flip your own phase status."
 
 **Planner** — Opus, always. Runs `/phase-plan` for one phase: reads that phase's
-`plan.toml` entry and only the `design.md` sections its Reading list names, then
-writes tasks, carried constraints, STOP conditions, the `VT`/`VA` mapping, risks
-and decisions into the sheet. Writes no source. Hands back ≤10 lines: task count,
-open decisions, and the worker model it recommends.
+`plan.toml` entry, and of `design.md` **only what that phase's row in `plan.md`
+§ *Design-section provenance* grants it**, then writes tasks, carried
+constraints, STOP conditions, the `VT`/`VA` mapping, risks and decisions into
+the sheet. Writes no source. Hands back ≤10 lines: task count, open decisions,
+and the worker model it recommends.
+
+`plan.toml` has **no** Reading-list field — the sheet's § *Reading list* is
+something the planner **writes**, derived from the provenance row. Do not brief a
+planner to go read one; it will find nothing and improvise a scope for itself,
+which is the failure the provenance table exists to prevent.
 
 **Worker** — Sonnet when the sheet is fully specified and the work is mechanical:
 a known edit shape, no open decisions. Opus when the sheet carries an open
@@ -166,6 +172,15 @@ load-bearing only there.
 - `notes_01-03.md`, `notes_04-06.md`, … — the execution record for those phases:
   what was done, what diverged, what was measured. A worker appends to its own
   shard and touches no other.
+
+  **The sheet names the shard; a brief must not.** Those ranges track the order
+  phases *executed*, not their ids — phases do not run in id order, so a shard
+  boundary drifts away from the numbering as soon as one is taken out of turn.
+  An orchestrator deriving the filename from `PHASE-NN` will eventually name a
+  shard the sheet disagrees with, and the worker then has two instructions and no
+  way to rank them. The brief says "the shard the sheet names"; if the sheet
+  names none, `ls .doctrine/slice/<N>/notes_*.md` and take the newest, or the
+  worker opens the next one.
 - `notes.md` stays small and holds only what outlives a phase:
   1. an index of the shards;
   2. **Owed to the reconciliation brief** — the ledger `/audit` reads first.
