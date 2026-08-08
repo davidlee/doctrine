@@ -4,7 +4,12 @@ A self-paced `/loop` drives one slice to completion. Each firing may be a **cold
 context**: it knows nothing except this file, the disk, and the CLI. Nothing
 load-bearing is carried in an agent's head between firings, and nothing may be.
 
-Subject slice: `SL-248`. Substitute `<N>` = `248`, `<PP>` = the current phase.
+**Subject slice: named by the `/loop` prompt that fires this file.** That prompt
+is the only place the slice lives — it is passed verbatim to each firing, so a
+cold context learns `<N>` from the instruction that woke it, never from this
+file. Substitute `<N>` = that slice's number, `<PP>` = the current phase. If the
+prompt did not name a slice, stop and ask; do not guess from `doctrine status`,
+which lists every active slice and adjudicates between none of them.
 
 > **This file is read every firing.** Its own length is a recurring cost. Keep
 > it under ~200 lines; push anything phase-specific into the phase sheet.
@@ -26,16 +31,21 @@ Subject slice: `SL-248`. Substitute `<N>` = `248`, `<PP>` = the current phase.
 
 ## Where this runs
 
-A **clone** of the primary repo (`origin` → `/home/david/dev/doctrine`), on
-branch **`sl-248`**, merged back by hand at the end. Rationale and the merge-time
-conflict list: `.doctrine/slice/248/notes.md` § *Execution posture*.
+The **primary worktree**, on branch **`edge`**, with **no worktree isolation** —
+orchestrator and sub-agent share one tree, one index, one `target/`. Nothing is
+merged back at the end because nothing was forked; commits land on `edge` as
+they are made.
 
-**The clone mints no entities.** `DEC-`/`ISS-`/`RV-`/`REQ-` ids are allocated by
-scanning a corpus frozen at fork time while the parent keeps minting — two trees
-mint the same id, and renumbering breaks immutability. Capture decisions and
-findings in the phase sheet and the notes shard; mint on the parent at merge.
-**Exempt:** `doctrine memory record` and `doctrine observation record` — both
-key- or UUID-named, so collision-free. Use them freely.
+Two consequences, and they are the reason this section exists:
+
+- **Never switch the branch.** No `git checkout <ref>`, no worktree fork, no
+  stash. Read another ref with `git show <ref>:<path>`; restore files with
+  `git restore --source=<ref> -- <explicit paths>`.
+- **Minting is normal.** A corpus-scanning id allocator (`DEC-`/`ISS-`/`RV-`/
+  `REQ-`) sees the live corpus here, so mint entities as findings arise. (An
+  earlier revision of this file ran the loop from a clone and banned minting to
+  avoid colliding with the parent's allocations. That constraint is gone with
+  the clone; do not reintroduce it.)
 
 ## Cadence and the re-entrancy guard
 
@@ -106,13 +116,13 @@ planning and spawning.
 
 ## Sub-agent briefs
 
-Both roles run in-tree on `sl-248`, **no worktree isolation**, and are told so.
+Both roles run in-tree on `edge`, **no worktree isolation**, and are told so.
 Every brief carries, and carries nothing else:
 
 - the slice and phase id, and the sheet path
-  `.doctrine/slice/<N>/phases/phase-<PP>.md` — **the sheet is the brief**;
+  `.doctrine/state/slice/<N>/phases/phase-<PP>.md` — **the sheet is the brief**;
 - "read `LOOP.md` § Sub-agent discipline and § Where this runs — both bind you";
-- "in-tree on branch `sl-248`, no isolation; another agent shares this index, so
+- "in-tree on branch `edge`, no isolation; another agent shares this index, so
   `git status --porcelain` first and path-limit every commit";
 - "end green: `doctrine check gate`. Do not flip your own phase status."
 
@@ -142,9 +152,9 @@ ending, not the exception.
 - durable gotcha / pattern / footgun → `doctrine memory record`;
 - friction, confusion, token waste → `doctrine observation record friction …`;
 - execution record, divergences, measurements → the notes shard;
-- anything needing a new `DEC-`/`ISS-`/`RV-` id → **do not mint it** (§ Where
-  this runs). Write it into the sheet's Findings for the orchestrator to mint at
-  merge.
+- a decision, issue, or finding needing a `DEC-`/`ISS-`/`RV-` id → mint it (§
+  Where this runs) and cite the id in the sheet's Findings, so the orchestrator
+  reads a reference rather than re-deriving the content.
 
 **Stop, do not improvise.** A STOP condition in the sheet, a design gap, a
 criterion that does not compile as written, a decision needing a human ruling:
@@ -203,7 +213,7 @@ If it exceeds ~50 lines, something belongs in `notes.md` instead.
 | `notes_NN-MM.md` shard | the phase's worker |
 | `notes.md`, `handover.md` | orchestrator only |
 | authored `.doctrine/` entities (plan, design, backlog) | orchestrator only |
-| new entity **ids** | nobody, in this clone — mint on the parent at merge |
+| new entity **ids** | whoever needs one — the corpus here is live |
 | memories, observations | whoever learns it, at the moment it bites |
 
 ## Stop conditions
