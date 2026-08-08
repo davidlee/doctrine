@@ -1,0 +1,35 @@
+Repository: /workspace/doctrine (Rust CLI "doctrine"). READ-ONLY investigation.
+
+QUESTION. Map every INCUMBENT seam by which a confined dispatch worker can
+signal something other than "phase done", and by which the trusted orchestrator
+disposes of that signal. Specifically:
+
+1. Can a worker hand back a BLOCKED / needs-judgement / question outcome today,
+   as opposed to a completed phase commit? Look at: the worker_commit MCP tool
+   and its gate, dispatch phase receipts, dispatch conclude_phase / next /
+   next_ready, the dispatch funnel state machine, and any "blocked", "halt",
+   "refuse", "escalate", "question" vocabulary in src/dispatch*.
+2. What structured record, if any, can a worker author that the trusted side
+   later harvests? Consider the observation record path
+   (observation_record MCP tool, .doctrine/observations/), and note explicitly
+   whether a worker fork can or cannot write it.
+3. Does the managed design run (src/design_run/, `doctrine design` verbs:
+   start/apply/resume/materialise) carry an INQUIRY or open-question or
+   decision-pending state that pauses a run pending an answer, and who may
+   answer it? Name the types and the gate.
+4. Is there a durable "admission journal" or any append-only, control-plane-owned
+   ordered log implemented today (not merely specified)? If it exists, give the
+   type and module. If it does NOT exist in code, say so plainly.
+
+METHOD — MANDATORY, this repo has been burned by prior agents:
+- Every load-bearing claim must cite file:line and quote the line.
+- Line numbers drift: re-read the exact line before citing it.
+- For ANY claim that something is ABSENT from the corpus, you MUST run a
+  POSITIVE CONTROL first: grep for a token you know IS present (e.g. grep for
+  "worker_commit" which definitely exists), show the hit, prove the instrument
+  works, and only then report the zero. State the exact command used.
+- Do not infer behaviour from names. Read the function body.
+- If you cannot establish something, write "NOT ESTABLISHED" rather than guessing.
+
+OUTPUT: markdown. A findings section per question, each with file:line evidence,
+then a short "what I could not establish" list.

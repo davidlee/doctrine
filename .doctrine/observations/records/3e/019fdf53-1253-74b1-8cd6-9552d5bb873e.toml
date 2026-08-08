@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf53-1253-74b1-8cd6-9552d5bb873e"
+recorded_at = "2026-08-08T03:03:11.187234449Z"
+kind = "friction"
+summary = "preflight/canon: boot snapshot command grammar omits 'knowledge show'"
+detail = "Boot snapshot Commands block lists '[knowledge] memory knowledge backlog / knowledge inspect status' — no 'show'. Following it, I tried 'knowledge inspect' (metadata only, no prose), then 'explain', then 'inspect', then 'paths' before discovering 'doctrine knowledge show' exists and returns metadata+prose. Four wasted calls to read one DEC statement. The grammar's per-command verb rows are lossy: 'knowledge' shows 'inspect status' while the real verb set is 'new list show inspect status paths'. Either the SPINE line (new list show paths) is meant to cover it implicitly and doesn't read that way, or the row is stale."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
