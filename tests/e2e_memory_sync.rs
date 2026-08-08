@@ -177,9 +177,11 @@ fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
     );
     assert!(ok, "boot install: {out}");
 
-    // SL-152 PHASE-06: `boot install` no longer settings-wires the boot
-    // (SessionStart) hook for Claude — it ships via the doctrine plugin. So no
-    // ` boot"` command lands in settings (the file may carry only baseRef).
+    // The `<exec> boot` hook is never settings-wired: the SessionStart emit spec
+    // writes the canonical `prompt resolve --role orchestrator`, and
+    // `HookSpec::boot` has no production caller at all (SL-250 `DEC-162`). So no
+    // ` boot"` command lands in settings — even though SL-250 PHASE-04 does now
+    // wire eleven other entries here.
     if let Ok(json) = std::fs::read_to_string(&settings) {
         assert!(
             !json.contains(" boot\""),
@@ -187,8 +189,8 @@ fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
         );
     }
 
-    // then sync install — the sync hook is a separate, retained settings wire
-    // (memory sync install is unchanged by SL-152 PHASE-06).
+    // then sync install — the sync hook is a separate settings wire, and the one
+    // spec `memory sync install` merges on its own (SL-250 `sec-4`).
     let (ok, out) = run(
         repo.path(),
         &["memory", "sync", "install", "-p", &path(&repo), "-y"],

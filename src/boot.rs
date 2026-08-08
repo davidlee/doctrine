@@ -636,11 +636,15 @@ const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
 
 /// The `SubagentStart` / `SubagentStop` matcher set: a subagent-event matcher IS
 /// an agent type, and the types these two hooks care about are exactly the
-/// nomination-eligible ones. Aliased rather than re-spelled (STD-001) — the leaf
-/// const is documented as the single source for "nomination-eligible set == the
-/// gate's privileged deny-set", and a type added there without its hook matcher
-/// is the same drift the single-source rule exists to prevent.
-const SUBAGENT_MATCHERS: &[&str] = crate::worktree::PRIVILEGED_AGENT_TYPES;
+/// nomination-eligible ones (`worktree::PRIVILEGED_AGENT_TYPES`).
+///
+/// Spelled out rather than aliased. Reaching into `worktree` for the const would
+/// buy single-sourcing at the price of a new command-tier edge (ADR-001), and
+/// the established answer here is a DRIFT TEST instead —
+/// `subagent_matchers_track_the_privileged_agent_types` fails the moment the two
+/// diverge, which is the actual hazard: a privileged type added to nomination
+/// without its hook matcher never fires the hook.
+const SUBAGENT_MATCHERS: &[&str] = &["dispatch-orchestrator"];
 
 /// The `PreToolUse` matcher sets. TWO specs share this event and both emit a
 /// `Bash` entry — safe because ownership is proven by COMMAND alone, so each
@@ -1679,8 +1683,8 @@ fn install_refresh(
 /// `worktree.baseRef` set (SL-064 §8). Pi carries `None`/`NotApplicable`.
 struct RefreshReport {
     /// One outcome per spec merged, in emission order. The Codex arm carries
-    /// exactly one; the Claude arm carries none until SL-250 PHASE-04 ships its
-    /// spec set (the boot hook currently arrives via the plugin).
+    /// exactly one; the Claude arm carries the whole `claude_hook_specs`
+    /// registry — seven specs, eleven entries (SL-250 PHASE-04).
     hooks: Vec<RefreshOutcome>,
     /// The scope written and what the sweep of its sibling found, folded across
     /// specs. `None` on the Codex arm, which has exactly one settings file and
@@ -4553,6 +4557,24 @@ mod tests {
             );
             assert!(!is_ours(args), "bare args are not a command: {args}");
         }
+    }
+
+    /// SL-250 PHASE-04. The `SubagentStart`/`SubagentStop` matcher set and the
+    /// nomination-eligible set are the SAME set stated twice — the hooks exist
+    /// to act on privileged agents, so a type added to
+    /// `worktree::PRIVILEGED_AGENT_TYPES` without a matching hook matcher would
+    /// simply never fire the hook, silently.
+    ///
+    /// Pinned by a test rather than by aliasing the const: the alias is a
+    /// command-tier edge the ADR-001 gate counts, and this catches the same
+    /// drift at the same moment for none of that cost.
+    #[test]
+    fn subagent_matchers_track_the_privileged_agent_types() {
+        assert_eq!(
+            SUBAGENT_MATCHERS,
+            crate::worktree::PRIVILEGED_AGENT_TYPES,
+            "a privileged agent type without its hook matcher never fires the hook"
+        );
     }
 
     // SL-250 PHASE-04 VT-1. The registry is internally safe: no spec's predicate

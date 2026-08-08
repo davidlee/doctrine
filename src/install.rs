@@ -269,10 +269,55 @@ fn seed_authoring_memories(root: &Path, manifest: &Manifest) -> anyhow::Result<(
     Ok(())
 }
 
+/// The boot harnesses an explicit `--agent` set implies.
+///
+/// `install`'s agent vocabulary is the SKILLS one — `claude`, `codex`, `pi`,
+/// `universal` — while boot wires two harnesses. `pi` rides the codex arm (the
+/// `AGENTS.md` @-import and the `.pi/` extensions are installed there), and
+/// `universal` has no boot surface at all. Duplicates collapse; first-seen order
+/// is preserved.
+fn boot_harness_names(agents: &[String]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for agent in agents {
+        let harness = match agent.to_lowercase().as_str() {
+            "claude" => "claude",
+            "codex" | "pi" => "codex",
+            _ => continue,
+        };
+        if !names.iter().any(|n| n == harness) {
+            names.push(harness.to_string());
+        }
+    }
+    names
+}
+
+/// The boot harnesses this install wires. An explicit `--agent` set is a
+/// DIRECTIVE — honoured even in a project with no harness directory yet, and
+/// honoured when it implies none. With no flags, directory detection governs, as
+/// before.
+///
+/// SL-250 PHASE-04: this used to be `resolve_harnesses(&[], root)`, which
+/// discarded the `--agent` the operator had just typed. In a fresh project
+/// `.claude/` does not exist when the leg is resolved (the agent-def leg creates
+/// it later), so `doctrine install --agent claude` wired no @-import and no
+/// hooks and reported only "no harness directories detected — skipped". That is
+/// the silent-inertness failure class this slice exists to end, one layer above
+/// the one it was chartered to fix.
+fn install_harnesses(agents: &[String], root: &Path) -> Vec<crate::boot::Harness> {
+    if agents.is_empty() {
+        return crate::boot::resolve_harnesses(&[], root).unwrap_or_default();
+    }
+    let names = boot_harness_names(agents);
+    if names.is_empty() {
+        return Vec::new();
+    }
+    crate::boot::resolve_harnesses(&names, root).unwrap_or_default()
+}
+
 /// Print the forward-step summary (dry-run or live).
 fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<()> {
     let agents = detect_agents(args.agents, root);
-    let harnesses = crate::boot::resolve_harnesses(&[], root).unwrap_or_default();
+    let harnesses = install_harnesses(args.agents, root);
 
     let mut stdout = io::stdout();
     if args.dry_run {
@@ -338,7 +383,7 @@ fn print_forward_summary(root: &Path, args: &InstallArgs<'_>) -> anyhow::Result<
 /// is non-fatal — errors are printed and the next step proceeds.
 fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow::Result<()> {
     let agents = detect_agents(args.agents, root);
-    let harnesses = crate::boot::resolve_harnesses(&[], root).unwrap_or_default();
+    let harnesses = install_harnesses(args.agents, root);
 
     print_forward_summary(root, args)?;
 
@@ -4187,6 +4232,54 @@ mod tests {
     // ---------------------------------------------------------------
     // PHASE-02: detect_agents + prompt_step
     // ---------------------------------------------------------------
+
+    // SL-250 PHASE-04. An explicit `--agent` used to be DROPPED on the way to
+    // the boot leg, so a fresh project got no @-import and no hooks and said
+    // only "no harness directories detected — skipped".
+
+    #[test]
+    fn boot_harness_names_maps_the_skills_vocabulary() {
+        let names = |v: &[&str]| {
+            boot_harness_names(&v.iter().map(|s| (*s).into()).collect::<Vec<String>>())
+        };
+        assert_eq!(names(&["claude"]), vec!["claude".to_string()]);
+        assert_eq!(names(&["codex"]), vec!["codex".to_string()]);
+        // pi rides the codex arm — the AGENTS.md import and the `.pi/`
+        // extensions are wired there, not by a third harness.
+        assert_eq!(names(&["pi"]), vec!["codex".to_string()]);
+        // `universal` is a skills-only agent with no boot surface.
+        assert!(names(&["universal"]).is_empty());
+        // codex + pi collapse to ONE harness, in first-seen order — else boot
+        // would wire the same arm twice.
+        assert_eq!(
+            names(&["pi", "claude", "codex"]),
+            vec!["codex".to_string(), "claude".to_string()]
+        );
+    }
+
+    #[test]
+    fn an_explicit_agent_reaches_the_boot_leg_in_a_bare_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // Directory detection finds nothing in a bare project…
+        assert!(
+            crate::boot::resolve_harnesses(&[], root)
+                .unwrap_or_default()
+                .is_empty()
+        );
+        // …but an explicit flag is a DIRECTIVE, so the boot leg still fires.
+        assert_eq!(
+            install_harnesses(&["claude".to_string()], root).len(),
+            1,
+            "--agent claude wires the claude harness with no .claude/ on disk"
+        );
+        // A skills-only agent implies no harness — and must not silently fall
+        // back to detection, which would wire something the user did not name.
+        assert!(install_harnesses(&["universal".to_string()], root).is_empty());
+        // No flags: unchanged — detection governs.
+        assert!(install_harnesses(&[], root).is_empty());
+    }
 
     #[test]
     fn detect_agents_empty_when_no_agent_dirs_and_no_flags() {

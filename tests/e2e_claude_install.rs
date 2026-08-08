@@ -5,10 +5,10 @@
 //! proves the Claude-surface install (design §9):
 //!   * VT-1: `install --agent claude --skill code-review` wires skills + agent def.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
-//!   * SL-152: Claude hooks now ship as a skills-directory plugin — `doctrine install`
-//!     copies `.claude-plugin/plugin.json` + `hooks/` directly into `.claude/skills/doctrine/`,
-//!     so Claude auto-discovers them with no marketplace install step. No SessionStart,
-//!     WorktreeCreate, or retired SubagentStart hook is settings-wired.
+//!   * SL-250 PHASE-04: Claude hooks are settings-wired again, by direct write —
+//!     eleven entries across five events, from the `claude_hook_specs` registry
+//!     into the scope-selected settings file (project by default, `DEC-163`).
+//!     The plugin channel still carries them too until PHASE-06 retires it.
 
 #![allow(
     clippy::expect_used,
@@ -139,9 +139,16 @@ fn resolved_stage_band(dir: &Path, stage: &str) -> String {
     String::from_utf8(out.stdout).expect("utf8 stdout")
 }
 
+/// The scope-selected Claude settings file. SL-250 `DEC-163` made the default
+/// `[install] claude-settings-scope = "project"`, and these fixtures carry no
+/// `doctrine.toml`, so every install here writes the TRACKED file.
+fn settings_path(dir: &Path) -> std::path::PathBuf {
+    dir.join(".claude/settings.json")
+}
+
 /// Assert the post-install state holds for a project at `dir`: the agent def
-/// resolves, and NO Claude hooks are settings-wired (they ship via the plugin —
-/// SL-152 PHASE-06).
+/// resolves, and the Claude hooks ARE settings-wired (SL-250 PHASE-04 — the
+/// activation flip; they used to ship via the plugin).
 fn assert_installed(dir: &Path) {
     // VT-2: the agent def is a link resolving to materialised content.
     let agent_link = dir.join(".claude/agents/dispatch-worker.md");
@@ -162,22 +169,33 @@ fn assert_installed(dir: &Path) {
         "canonical agent def materialised"
     );
 
-    // SL-152 PHASE-06: no hooks are settings-wired — they ship via the doctrine
-    // plugin. The boot (SessionStart) and create-fork (WorktreeCreate) hooks, plus
-    // the retired SubagentStart stamp, are all absent (settings file may carry only
-    // baseRef, or not exist at all). `event_entries` treats absent-file as empty.
-    let settings = dir.join(".claude/settings.local.json");
-    assert!(
-        event_entries(&settings, "WorktreeCreate").is_empty(),
-        "no WorktreeCreate hook settings-wired (ships via plugin)"
+    // SL-250 PHASE-04: the hooks are settings-wired, where nothing was between
+    // SL-152 PHASE-06 and here. The SubagentStart assertion changes MEANING
+    // rather than merely flipping: the retired SL-152 stamp hook stays gone, and
+    // what is present is the `worktree nominate` entry.
+    let settings = settings_path(dir);
+    assert_eq!(
+        event_entries(&settings, "WorktreeCreate").len(),
+        1,
+        "the create-fork hook is settings-wired"
     );
-    assert!(
-        event_entries(&settings, "SessionStart").is_empty(),
-        "no SessionStart boot hook settings-wired (ships via plugin)"
+    assert_eq!(
+        event_entries(&settings, "SessionStart").len(),
+        2,
+        "the emit and memory-sync hooks are settings-wired"
     );
+    let subagent_start = event_entries(&settings, "SubagentStart");
+    assert_eq!(
+        subagent_start.len(),
+        1,
+        "the nominate hook is settings-wired"
+    );
+    let command = subagent_start[0]["hooks"][0]["command"]
+        .as_str()
+        .expect("command");
     assert!(
-        event_entries(&settings, "SubagentStart").is_empty(),
-        "no SubagentStart stamp hook after retirement"
+        command.ends_with("worktree nominate"),
+        "SubagentStart carries nominate, NOT the retired SL-152 stamp hook: {command}"
     );
 }
 
@@ -214,6 +232,74 @@ fn install_wires_skills_agent_and_hooks_directly() {
         "no old-style skills symlink: {out}"
     );
     assert_installed(dir);
+}
+
+/// SL-250 PHASE-04 VT-3 / `EX-4`. A real install wires **eleven** entries across
+/// **five** events into the scope-selected settings file, where the Claude arm
+/// wired none since SL-152 PHASE-06.
+///
+/// Eleven is the number a human counts in `/hooks`. Seven is the spec count, and
+/// a criterion written against seven would pass a four-entries-short install —
+/// two specs carry multi-element matcher sets (four for `worktree pretooluse`,
+/// two for `memory surface`).
+#[test]
+fn install_wires_eleven_hook_entries_across_five_events() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    install(dir);
+    let settings = settings_path(dir);
+
+    // Per event, then the total — the per-event breakdown is what localises a
+    // regression, the total is what a partial install cannot fake.
+    let expected: &[(&str, usize)] = &[
+        ("SessionStart", 2),
+        ("WorktreeCreate", 1),
+        ("SubagentStart", 1),
+        ("SubagentStop", 1),
+        ("PreToolUse", 6),
+    ];
+    let count = |dir: &Path| -> Vec<(&str, usize)> {
+        expected
+            .iter()
+            .map(|(event, _)| (*event, event_entries(&settings_path(dir), event).len()))
+            .collect()
+    };
+    assert_eq!(count(dir), expected.to_vec(), "entries per event");
+    let total: usize = count(dir).iter().map(|(_, n)| n).sum();
+    assert_eq!(total, 11, "eleven entries across five events");
+
+    // Two `PreToolUse` specs share the `Bash` matcher token, and ownership is
+    // proven by COMMAND alone — so a re-install must refresh in place rather
+    // than treat the sibling's entries as its own stale copies and drop them,
+    // or append a duplicate set. Idempotence is the assertion that says so.
+    install(dir);
+    assert_eq!(count(dir), expected.to_vec(), "re-install is idempotent");
+
+    // Both PreToolUse commands are present, four entries to two.
+    let pretooluse: Vec<String> = event_entries(&settings, "PreToolUse")
+        .iter()
+        .map(|e| e["hooks"][0]["command"].as_str().expect("command").into())
+        .collect();
+    assert_eq!(
+        pretooluse
+            .iter()
+            .filter(|c| c.ends_with("worktree pretooluse"))
+            .count(),
+        4,
+        "four confinement entries: {pretooluse:?}"
+    );
+    assert_eq!(
+        pretooluse
+            .iter()
+            .filter(|c| c.ends_with("memory surface"))
+            .count(),
+        2,
+        "two memory-surface entries: {pretooluse:?}"
+    );
 }
 
 #[test]
