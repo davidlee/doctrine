@@ -341,3 +341,339 @@ where the code says `FacetFieldRow` (ISS-329's rename), and **ISS-330** —
 `required`/`required_unless*` conflict, which is why VT-4 introspects the
 `knowledge` subtree rather than the built root command. The workaround carries
 the id and its own removal condition in a comment.
+
+## PHASE-05 — settling, in one write
+
+**How this record was written, because it bears on how much to trust it.** One
+worker took T0–T5 and was killed by a session limit at T7, with the whole phase
+green but uncommitted. The orchestrator recovered the working tree as
+`582ac7ba8` and re-ran the gate (exit 0). A second worker wrote T6 and this
+record — **reconstructed from that commit's diff, not from the first worker's
+context.** Everything below is a fact about the code as it stands in
+`582ac7ba8`; where the first worker's *process* cannot be recovered from the
+artefact, it says so rather than guessing. One control (T1's C2) is in that
+category, and it is stated as a gap, not narrated as a success.
+
+Recorded during the phase and surviving it: `mem.pattern.doctrine.compose-two-write-cores-bind-both-legs`
+(`28a5da9d8`). The habit-shaped friction — the whole execution record parked in
+a single terminal task, which is what made this reconstruction necessary — is
+captured as a `friction` observation against `/phase-plan`.
+
+### T0 — the baseline (reconstructed; the pair collapsed to a point)
+
+The first worker's T0 numbers were never written down. Re-measured at T7:
+`cargo test --bin doctrine commands::facet::` → **33 passed, 0 failed**, and
+`git diff --stat src/commands/facet.rs` empty.
+
+`R-red` named the T0/T7 *pair* as the compensating control for a task with
+nothing to fail. With one half missing, the surviving measurement proves the
+number is 33 but not that it never moved. That gap is closed by the diff's
+shape rather than by the measurement: `git show --stat 582ac7ba8` lists three
+files — `src/commands/guard.rs` (+1), `src/facet_write.rs` (+7/−1),
+`src/knowledge.rs` (+1193/−26) — and `src/commands/facet.rs` is not among them.
+A file the phase never opened cannot have had its suite bent to pass.
+
+### T1 — EN-2: the vocabulary check, extracted
+
+`ensure_status_token(kind, state) -> anyhow::Result<()>` at `knowledge.rs:249`,
+sited beside `statuses` (`:230`) as the sheet asked. A guard, not a predicate
+(`D-E`): the refusal *sentence* is the part that must not be retyped, and it is
+byte-identical to the inline original — the deleted `anyhow::bail!` and the new
+`anyhow::ensure!` carry the same format string, `` `{state}` is not a {kind}
+status (known: {joined}) ``.
+
+Two callers, and only two: `set_record_status:2699` and `run_settle:2520`. A
+brace-balance extraction of `set_record_status` across the commit confirms its
+whole delta is the eight inline lines becoming one call — no other line moved.
+
+`C1` discharged and labelled in place: `ensure_status_token_refuses_a_foreign_kind_state`
+(`:5500`) pins the sentence as a literal with the known-set read from
+`statuses`, never retyped (STD-001), plus a totality companion
+`ensure_status_token_admits_every_token_of_its_own_kind` (`:5519`) that
+generates over all seven vocabularies, so a new token joins the coverage without
+a test edit.
+
+**`C2` is an evidence gap, and is recorded as one.** C2 wanted either a named
+pre-existing characterization test of `set_record_status`'s foreign-state
+refusal (left unedited, as the control), or a new one watched green *before* the
+refactor. Neither is in the tree. No test names `set_record_status`; `run_status`
+— its only production caller — has no refusal test either. The sentence is
+pinned at the extracted guard (`:5500`) and, through the settle path, at
+`vt3_3` (`:6126`, whose doc comment names the shared check). So the extraction's
+behavioural equivalence rests on **inspection** — one call site, identical format
+string, unchanged callers — rather than on a control that would have gone red.
+Whether the first worker ran a green-first characterization and dropped it
+cannot be established from the commit, and is not asserted here.
+
+### T2 — the `Settlement` annotation, the derived set, the pins
+
+`Settlement { state, captures }` and `settlements(kind)` at `:1048`/`:1090`;
+four rows and no more — QUE `answered`/`answer`, ASM `validated`/none, ASM
+`invalidated`/none, CON `waived`/`waiver_reason`. `DEC`, `EVD`, `HYP`, `CPT`
+share one `NO_SETTLEMENTS` empty slice, and its doc comment carries the point
+worth keeping: the empty row is what makes `I5` hold **by shape** — `accepted`
+is not guarded out of `settle`, it was never in the derived set.
+
+`derived_settleable` (`:1113`) is the `D-A` reading: quantified over
+`statuses(kind)`, kept iff `facet_fields(kind)` carries both
+`<state>_by` and `<state>_on`. The two suffixes are named constants
+(`SETTLEMENT_ACTOR_SUFFIX` / `SETTLEMENT_DATE_SUFFIX`), so `run_settle` spells
+the keys it writes by the same derivation that admitted the state.
+
+All four pins landed, `P-c` with both exclusions asserted by name:
+`every_settlement_captures_a_field_its_kind_owns` (P-a, `:5541`),
+`the_annotations_states_equal_the_derived_settleable_set` (P-b, `:5561`),
+`the_derived_settleable_union_is_exactly_the_ruling_table` (P-c, `:5587`),
+`kinds_without_an_actor_date_pair_derive_nothing` (P-d, `:5625`).
+
+`R-dead` never bit: T2–T4 landed as one commit, and no `#[expect(dead_code)]`
+appears anywhere in the diff.
+
+### T3 — `apply_settlement`: the one write
+
+`edit_in_place` promoted to `pub(crate)` (`facet_write.rs:335`, `D-B`) with the
+reason in its doc comment rather than in a commit message. `apply_settlement`
+(`knowledge.rs:1352`) is the composition: one `edit_in_place`, `set_facet_mixed`
+under `KeyPosture::RequirePresent`, then `dep_seq::apply_status`, both bound to
+locals before the `||`. The `R-short-circuit` footgun is written into the body
+as a comment, not just avoided — which is the only form in which it survives the
+next reader.
+
+The `FacetEdit` → `facet_write::FacetField` conversion came out of
+`apply_facet_edits` into `writer_fields` (`:1322`), used by both callers. No
+copy (carried constraint 3). `malformed_status_hint` (`:2683`) is the single
+source of the F-1 bail sentence for `set_record_status` and `apply_settlement`
+alike (constraint 4, STD-001).
+
+The three VT-1 tests are the sheet's, named for it —
+`vt1a_a_settlement_moves_the_capture_the_actor_the_date_and_the_status` (`:5755`),
+`vt1b_a_failing_status_leg_leaves_the_facet_leg_unwritten` (`:5804`),
+`vt1c_a_failing_facet_leg_leaves_the_status_unmoved` (`:5838`). VT-1b and VT-1c
+are the ones that carry the claim: each kills one leg and asserts the file's
+bytes are unchanged, so a two-write implementation passes VT-1a and fails both.
+Whether the first worker wrote the sequential version to watch them fail is not
+recoverable from the commit.
+
+### T4 — `run_settle`, the CLI variant, the guard
+
+`run_settle` (`:2504`) implements the eight steps in the sheet's order, and the
+order is documented at the function rather than left as a property of the
+listing. Notes worth keeping:
+
+- Steps 1–4 complete before `read_record`, which is what makes the "refused
+  before any open" observable possible at all (see T5).
+- Step 3 refuses via the **derived** set, so the message is
+  `` `accepted` is not a settle transition for a decision; use `knowledge status` ``
+  and no line anywhere names `accepted`. The `settlements` lookup that follows
+  supplies only `captures`, and its `None` safely means "captures no text"
+  rather than "unknown state" precisely because `P-b` pins the two sets equal.
+- Step 4 grew a case the sheet did not list: a **blank `--by`**. clap makes
+  `--by` required, but required is not non-empty, and for an assumption the
+  actor is the *whole* disposition — so it is checked on the same footing as a
+  capture, through the same `blank_settle_flag_refusal` sentence.
+- Step 6 calls `clock::today()` once and spends the same `String` on
+  `<state>_on` and on `updated` (constraint 6), so the two cannot disagree by a
+  midnight.
+
+`R-inventory` held at three touch sites, all present in the diff: the
+`KnowledgeCommand::Settle(SettleArgs)` variant (`:2812`), `dispatch`'s arm
+(`:3265`), and `guard.rs:216` classifying it `Write("knowledge settle")`.
+
+`R-clippy` did not fire as predicted: `SettleArgs` is a `#[derive(clap::Args)]`
+struct held by a **tuple** variant, `Settle(SettleArgs)`, not a `Box`. The
+struct-per-variant shape sidesteps `large_enum_variant` without the indirection
+the sheet budgeted for, and it also gives the argv→capture mapping one home —
+`SettleArgs::captures()` returns the `(field, value)` pairs argv actually
+carried, mirroring `KnowledgeFacetEdit::raw_edits` a tier down.
+
+The optional flag oracle was kept: `every_captured_field_has_a_declared_settle_flag`
+(`:6249`) asserts every `Settlement.captures` name has a declared `--<kebab>`
+flag, so a fifth settlement cannot ship unreachable from argv. It reuses
+PHASE-04's ISS-330 workaround by generalising that helper —
+`built_edit_command()` became `built_knowledge_verb(verb)`. **That is a
+one-line edit inside an existing test body**
+(`every_subverbs_flags_are_exactly_its_kinds_facet_row`, `built_edit_command()`
+→ `built_knowledge_verb("edit")`). Declared rather than buried: it is a
+rename-through, no assertion changed, and it is not one of the three suites `S1`
+protects.
+
+### T5 — the refusal catalogue (VT-3, I7)
+
+**The inventory ran larger for the third time in this slice.** The plan said
+five cases, the sheet corrected it to six, and the shipped catalogue is **nine**:
+
+| # | case | test |
+|---|---|---|
+| 1 | capture flag omitted | `vt3_1_an_omitted_capture_flag_is_refused` `:6072` |
+| 2 | capture flag blank | `vt3_2_a_blank_capture_flag_is_refused` `:6091` |
+| 2b | **`--by` blank** | `vt3_2b_a_blank_actor_is_refused` `:6109` |
+| 3 | foreign-kind state | `vt3_3_a_foreign_kind_state_is_refused` `:6126` |
+| 4 | non-settleable state | `vt3_4_…_names_the_escape_hatch` `:6143` |
+| 5 | state-to-itself | `vt3_5_a_state_to_itself_transition_is_refused` `:6164` |
+| 5b | **the D-D precedence case** | `vt3_5b_the_overlapping_case_gets_the_more_precise_remedy` `:6184` |
+| 6 | withdrawn record | `vt3_6_a_withdrawn_record_is_refused` `:6210` |
+| 7 | **wrong capture flag** | `vt3_a_foreign_capture_flag_is_refused_naming_the_right_one` `:6230` |
+
+The three additions are all things the sheet's *prose* asked for (T4 step 4's
+one `if`, the blank-actor case, `D-D`'s ordering) that its *table* omitted.
+`5b` is the one that earns its keep as more than a variant: an already-`waived`
+constraint is simultaneously the state-to-itself case and the withdrawn case,
+and the test pins that it gets `D7`'s more actionable remedy, which is the only
+observable difference `D-D` makes.
+
+Two helpers carry the evidence, and the second is the interesting one:
+`settle_refused_leaving_bytes_intact` (`:6026`) compares the file's bytes across
+the refusal, and `settle_refused_before_any_open` (`:6053`) runs the *same*
+argv against an id naming no record on disk and asserts the same refusal
+message. Cases 1, 2, 2b, 3 and 4 assert both. That pair is what distinguishes
+"refused early" from "refused late without writing" — a bytes assertion alone
+cannot, and `I7` is a claim about *order*, not about damage. Cases 5, 5b and 6
+necessarily read the record first, so only the bytes half applies to them.
+
+Fixtures were generalised rather than pasted (`R-fixtures`): `fixture_literal`
++ `facet_bearing_record(kind, id, status)` (`:5656`, `:5675`) build any kind's
+scaffold from its own `facet_fields` row, with `settle_fixture` (`:5727`)
+seeding it on disk.
+
+### T6 — VA-1: does `settle` still earn a separate verb? **Confirm.**
+
+Design §10 press item 2 reasons: `DEC-178`'s case was *partly* that the
+transition is a coupled multi-write; `F-2` made it one write of one document;
+`knowledge edit question` is also one write of one document; so the remaining
+case is `DEC-062`'s alone — the whole case rather than the larger half of one.
+
+Two of those steps do not survive contact with the record and the code.
+
+**1. The multi-write argument was never `DEC-178`'s.** Read the record
+(`doctrine knowledge show DEC-178`): its `context` is that `set_record_status`
+"documents itself as having no resolution coupling — `status` and `updated`,
+nothing else", and its `rationale` is entirely about **reach** — the status
+vocabularies laid against the facet field names. It nowhere argues atomicity or
+write ordering. The ordering argument was the design's own drafted `D6`, which
+`F-2` superseded. So `F-2` struck a *drafting* artefact and removed nothing from
+`DEC-178`'s recorded case. The press item is accounting for a loss the ledger
+never booked.
+
+**2. "One write of one document" is true of the mechanism and false of the
+reach.** `knowledge edit question` writes `[facet]` keys and nothing else —
+`apply_facet_edits` (`:1305`) hands `FacetField`s to the facet writer and never
+touches `status` or `updated`. `run_settle` step 7 passes
+`&[("status", state), ("updated", &today)]` into the **same**
+`apply_settlement` call as the facet edits. Both commands write one document;
+they write **disjoint key sets**. Reaching `answered` *with* its answer through
+the existing verbs takes `knowledge edit question QUE-005 --answer … --answered-by …
+--answered-on …` **and** `knowledge status QUE-005 answered` — two commands,
+two writes, and the window between them is exactly the 0-of-38 half-settlement.
+`F-2` collapsed an ordering *inside* `settle`; it gave no other verb the ability
+to move both key sets.
+
+So the mechanical likeness is real and beside the point. What earns the verb is
+what it **refuses**, and every one of these is in T4's code and none can be added
+to `edit`:
+
+- **The token moves with the disposition or neither moves** (step 7). No other
+  single command spans both key sets.
+- **The omitted capture is refused** (step 4): *"the disposition is part of
+  resolving, not a field to fill in later"* — `DEC-062`'s rule, made mechanical.
+  It cannot live on `edit`, whose job is to write one field at a time.
+- **The blank capture is refused** (`blank_settle_flag_refusal`, `:2483`).
+  `plan_facet_edits` reads `Text("")` as a legitimate *clear* (`:1126`), so
+  without this check a blank settlement writes green. `edit` **must** keep the
+  clear semantics; `settle` **must not**. The two verbs need opposite readings
+  of the same empty string — on its own a reason they cannot be one verb wearing
+  a flag.
+- **The date is not the caller's** (step 6): one `clock::today()`, spent twice.
+  `edit question --answered-on` takes any date typed and cannot stamp `updated`
+  in the same act, so `D7`'s requirement that `answered_on` mean *when answered*
+  is enforceable only on the settle path.
+
+Two further supports that are structural rather than about a single write. The
+reach is **derived**, so QUE/ASM/CON are covered by one rule and `accepted` is
+excluded by absence (`I5`, `DEC-088`); expressing settling as an `edit` flag
+combination would mean hand-listing per kind which combination constitutes a
+resolution — the "coverage hand-listed rather than derived" alternative
+`DEC-178` explicitly rejected. And `settle` refuses a state-to-itself
+transition while `edit` exists precisely to amend one; each refusal names the
+other verb as the remedy, which makes the pair a **division** rather than a
+duplication.
+
+**Verdict.** `DEC-062`'s case carries the verb on its own, and carries it
+comfortably. The verb exists to make forgetting the disposition impossible, and
+every mechanism that achieves that is a refusal — none of which can be added to
+`edit` without breaking `edit`. `F-2` narrowed the design's *rationale* for the
+verb; it did not narrow the *case*. **No id minted**: there is no open question
+left to carry into reconcile, only a stale press item.
+
+**Owed to reconcile:** design §10 press item 2 should be **struck**, citing this
+adjudication — and, if the wording is preserved anywhere, corrected on the point
+that `DEC-178` never made the multi-write argument. Not done here: `design.md`
+is outside this phase's write scope (carried constraint 5, the storage rule).
+
+### Divergences
+
+- **`D-A` — design §5.2 is under-stated, not wrong.** §5.2 says a state is
+  settleable when the kind's facet carries `<state>_by` and `<state>_on`,
+  "mechanical over `facet_fields`", yielding four transitions. Read literally
+  over `facet_fields` alone it yields **five**: `DECISION_FACET_FIELDS` carries
+  `decided_by` and `decided_on`, so `decided` derives — and `decided` is not a
+  decision status. The shipped derivation is the intersection `DEC-178`'s own
+  rationale describes ("laying the status vocabularies against the facet field
+  names"): quantified over `statuses(kind)`, filtered by the facet row. `I5`
+  then holds from **both** sides — `accepted` excluded by the facet leg,
+  `decided` by the status leg — and `P-c` pins both by name. `S2` did not fire.
+  Reconcile should tighten §5.2's sentence to say intersection.
+- **`D-C` — `apply_settlement`'s signature.** Takes `canonical` and `hint`
+  beyond the design's illustrative signature (§5.2), both mechanically forced by
+  the cores composed: `canonical` by `KeyPosture::RequirePresent`'s refusal,
+  `hint` by `apply_status`'s F-1 bail. A divergence of signature, not of design;
+  the reason is in the function's doc comment.
+- **`R-withdrawn-overlap` — intended, and surprising enough to write down.**
+  `waived` and `invalidated` sit in both a settleable set and
+  `WITHDRAWN_STATUSES`. Consequence: an already-`invalidated` assumption cannot
+  be settled to `validated`, and an already-`waived` constraint cannot be
+  re-settled. `knowledge status` remains the correction path, and both refusals
+  say so. This falls out of reusing one `is_withdrawn` predicate rather than
+  writing a second list, which is the right trade — but it means `settle` is a
+  one-way door per record, and that is a product fact, not an implementation
+  detail.
+- **Inventory, third occurrence.** VT-3's refusal cases: plan 5 → sheet 6 →
+  shipped 9. Every addition was named in the sheet's prose and missing from its
+  table. Worth carrying to audit as a pattern about this slice rather than as
+  three separate deltas.
+
+### Residual, small, for audit not for now
+
+`kebab_flag` (`:2475`, production) and the test-only `kebab` (`:5194`,
+PHASE-04's) are two spellings of one transform, `field.replace('_', "-")` — and
+clap's derive is a third, since it kebab-cases `waiver_reason` into
+`--waiver-reason` itself. The oracle at `:6249` binds clap to `kebab`, so the
+flag *names* cannot drift; what is unbound is `kebab_flag`, which spells the
+flag names inside the refusal *messages*. A mild STD-001 residual, no observable
+defect.
+
+### PHASE-05 close
+
+- `cargo test --bin doctrine` → **4468 passed, 0 failed, 2 ignored**. PHASE-04's
+  movement-2 close measured 4447, and `582ac7ba8` is the only source commit
+  between: **21 tests added**, which is exactly the count of `#[test]` items in
+  the diff. The two numbers were derived independently and agree.
+- `cargo test --bin doctrine commands::facet::` → **33 passed**, `git diff --stat
+  src/commands/facet.rs` empty. `S1` did not fire.
+- `I1`/`I8` behaviour preservation, checked the way T9 checked it — by brace-balance
+  extraction of the named items from `582ac7ba8^` and `582ac7ba8`, not by trusting a
+  diff line count:
+
+  ```
+  IDENTICAL  728 bytes  fn render_record_toml(                             (the I1 oracle)
+  IDENTICAL  778 bytes  fn populated_record_round_trips_byte_stable_per_kind(
+  IDENTICAL  410 bytes  fn scaffold_escapes_hostile_title_and_slug(
+  ```
+
+  The only two production items that changed are the two intended extractions,
+  `set_record_status` and `apply_facet_edits`.
+- `./target/debug/doctrine check gate` → **exit 0** (run by the orchestrator on
+  recovery; not re-run for this record, which changes no source).
+- `doctrine slice verify-vt 249` → PHASE-05 `VT-1`, `VT-2`, `VT-3` all **PASS**.
+  `VA-1` is discharged by the adjudication above.
+- No `STOP` condition fired: `S1`–`S5` all clear. `S5` in particular was the live
+  one, and T6 came down on confirm.
