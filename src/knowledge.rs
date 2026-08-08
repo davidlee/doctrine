@@ -3496,6 +3496,11 @@ target = \"ADR-001\"
     /// A facet-BEARING fixture: populated `[facet]` values, `[evidence]`,
     /// `[relationships]`, a `[[relation]]` row and a hand-written comment —
     /// every tier `knowledge edit` must leave byte-identical (EX-3, EX-4).
+    ///
+    /// `notes` inside `[facet]` is an UNKNOWN sibling (SL-249 PHASE-04): no
+    /// `facet_fields` row names it and `RawFacet` does not carry it, so it is
+    /// exactly the forward-compatibility case I11 protects — a key a future
+    /// schema might add, which today's writer must not eat.
     fn facet_bearing_decision() -> String {
         format!(
             "\
@@ -3519,6 +3524,7 @@ rationale    = \"because\"
 consequences = [\"c\"]
 decided_by   = \"david\"
 decided_on   = \"2026-01-01\"
+notes        = \"keep me\"
 
 [evidence]
 supports    = [\"SL-249\"]
@@ -4304,6 +4310,128 @@ target = \"SL-249\"
             before,
             std::fs::read(&path).unwrap(),
             "a refusal writes nothing at all"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // I11 / VT-3 — edit preservation (SL-249 PHASE-04 T4)
+    //
+    // Asserted by D8's THREE-REGION partition, never by a whole-file equality
+    // built from a string `replace`. `toml_edit`'s `insert` preserves an existing
+    // key and its decor but RESETS the value's decor, so a fixture whose values
+    // are column-aligned would make a substituted-text equality a coin flip on
+    // alignment. Splitting the file instead removes the gamble.
+    //
+    // `inert_tail` is deliberately NOT used here: it slices from `\n[facet]`
+    // onward, which is precisely the region this phase writes. It is PHASE-08's
+    // oracle, not this one's.
+    // -----------------------------------------------------------------------
+
+    /// D8's partition: everything above `[facet]`, the `[facet]` region itself,
+    /// and everything from `[evidence]` on (which carries `[relationships]`, the
+    /// hand-written comment and the `[[relation]]` row).
+    fn three_regions(text: &str) -> (&str, &str, &str) {
+        let facet_at = text
+            .find("\n[facet]")
+            .expect("the fixture carries a [facet] table");
+        let evidence_at = text
+            .find("\n[evidence]")
+            .expect("the fixture carries an [evidence] table");
+        (
+            text.get(..facet_at).unwrap_or_default(),
+            text.get(facet_at..evidence_at).unwrap_or_default(),
+            text.get(evidence_at..).unwrap_or_default(),
+        )
+    }
+
+    #[test]
+    fn apply_preserves_every_byte_it_did_not_intend_to_change() {
+        // The values these edits are expected to leave behind, as TOML source.
+        // Read off the line's right-hand side after trimming, so the assertion
+        // never gambles on `toml_edit`'s value decor.
+        const EDITED: &[(&str, &str)] = &[
+            ("rationale", "\"a fresh reason\""),
+            ("consequences", "[\"c\", \"d\"]"),
+        ];
+
+        let root = edit_root("i11-preservation");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+        let before = std::fs::read_to_string(&path).unwrap();
+
+        let plan = || {
+            plan_facet_edits(
+                RecordKind::Decision,
+                &[
+                    text("rationale", "a fresh reason"),
+                    list("consequences", &["c", "d"]),
+                ],
+            )
+            .unwrap()
+        };
+        assert!(apply_facet_edits(&path, "DEC-007", &plan()).unwrap());
+        let after = std::fs::read_to_string(&path).unwrap();
+
+        let (head_before, facet_before, tail_before) = three_regions(&before);
+        let (head_after, facet_after, tail_after) = three_regions(&after);
+
+        // (a) everything above `[facet]`.
+        assert_eq!(
+            head_before, head_after,
+            "the meta tier above [facet] must be byte-identical"
+        );
+        // (b) `[evidence]`, `[relationships]`, the comment, `[[relation]]`.
+        assert_eq!(
+            tail_before, tail_after,
+            "everything from [evidence] on must be byte-identical"
+        );
+        // The test would be vacuous if nothing had moved.
+        assert_ne!(
+            facet_before, facet_after,
+            "the [facet] region really was written"
+        );
+
+        // (c) inside `[facet]`, line by line and in place.
+        let lines_before: Vec<&str> = facet_before.lines().collect();
+        let lines_after: Vec<&str> = facet_after.lines().collect();
+        assert_eq!(
+            lines_before.len(),
+            lines_after.len(),
+            "no line is added to or removed from [facet]:\n{facet_after}"
+        );
+        for (line_before, line_after) in lines_before.iter().zip(&lines_after) {
+            let key = line_before.split('=').next().unwrap_or_default().trim();
+            match EDITED.iter().find(|(edited, _)| *edited == key) {
+                Some((_, want)) => {
+                    let got = line_after
+                        .split_once('=')
+                        .expect("an edited line is a key/value pair")
+                        .1
+                        .trim();
+                    assert_eq!(got, *want, "`{key}` should hold the new value");
+                }
+                None => assert_eq!(
+                    line_before, line_after,
+                    "`{key}` was not edited and must be byte-identical"
+                ),
+            }
+        }
+        // Named explicitly, because it is the whole point of the fixture change:
+        // a key no `facet_fields` row and no `RawFacet` field knows about.
+        assert!(
+            after.contains("notes        = \"keep me\""),
+            "the unknown [facet] sibling survives verbatim:\n{after}"
+        );
+
+        // Idempotence: the same edits again write nothing at all.
+        assert!(
+            !apply_facet_edits(&path, "DEC-007", &plan()).unwrap(),
+            "a second identical application is a no-op"
+        );
+        assert_eq!(
+            after,
+            std::fs::read_to_string(&path).unwrap(),
+            "a no-op leaves the file byte-identical"
         );
     }
 }
