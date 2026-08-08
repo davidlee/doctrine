@@ -355,8 +355,16 @@ impl Confidence {
     }
 
     /// The known-set — the drift-canary authority (VT-3). Lockstep with the
-    /// variants (`confidence_known_set_matches_variants`), its only consumer.
-    #[cfg(test)]
+    /// variants (`confidence_known_set_matches_variants`); read by that canary and
+    /// by `facet_fields`, which takes its `Closed` tokens from here rather than
+    /// retyping them (STD-001, SL-249 D4).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
+        )
+    )]
     pub(crate) const KNOWN: &'static [&'static str] = &["low", "medium", "high"];
 }
 
@@ -381,8 +389,15 @@ impl Provenance {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
+        )
+    )]
     pub(crate) const KNOWN: &'static [&'static str] =
         &["inspection", "experiment", "reproduction", "citation"];
 }
@@ -411,8 +426,15 @@ impl Basis {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
+        )
+    )]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "observation",
         "prior-art",
@@ -450,8 +472,15 @@ impl ConstraintSource {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
+        )
+    )]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "canon",
         "adr",
@@ -612,7 +641,12 @@ struct RawRecordToml {
 /// `#[serde(default)]`, all raw `String`/`Vec<String>` (the `"" -> None` seam is a
 /// `validate` pass, not a serde derive). `validate` reads only the fields its
 /// `record_kind` owns and discards the rest.
-#[derive(Debug, Default, Deserialize)]
+/// `Serialize` is carried for one reader: `I2` derives this struct's key set
+/// through serde rather than restating it, so a field added here without a
+/// `facet_fields` row fails the suite (DEC-169's idiom). Nothing serialises a
+/// `RawFacet` in production — the emit goes through `render_record_toml` /
+/// `toml_edit`.
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct RawFacet {
     // assumption
     #[serde(default)]
@@ -803,6 +837,284 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
             RecordFacet::Concept(ConceptFacet::default())
         }
     })
+}
+
+// ---------------------------------------------------------------------------
+// The per-kind facet field table (SL-249 §5.1) — the single authored derivation
+//
+// Four consumers share it: `knowledge edit <kind>`'s flag set, `knowledge
+// settle`'s settleable states (DEC-178), `doctor`'s inert-key tripwire
+// (DEC-177), and the step-5 write's shape dispatch. It sits beside
+// `validate_facet` because it is the data form of what that function's arms
+// already say in code, and splitting them across modules is how the two drift.
+//
+// Authoring is forced — Rust has no reflection over struct fields and DEC-169
+// refused a proc macro written for one table — so the design question is only
+// how it is kept honest. Three pins in `mod tests`, each one comparison:
+//
+// - `I2` totality: the union over `RecordKind::ALL` equals `RawFacet`'s serde
+//   key set. A model field with no row fails; a row naming no field fails too.
+// - `I3` placement, as an EQUALITY: the fields `validate_facet` retains for a
+//   kind equal that kind's row. Inclusion is blind to a row handed a field its
+//   kind does not own (RV-349 F-3 round one).
+// - `I3b` uniqueness: no row names a field twice — the case both set
+//   comparisons collapse silently (F-3 round two).
+//
+// What no pin can see: the row ORDER (EX-1's "template order"), which only the
+// template pin (`VT-2`, R5) reads, and then only as a set. Order is a reading
+// convenience, not an enforced invariant.
+// ---------------------------------------------------------------------------
+
+/// One facet field: its key, and the shape a writer must emit for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+pub(crate) struct FacetField {
+    pub(crate) name: &'static str,
+    /// Read by the pins (which derive each field's test value from it) and by
+    /// PHASE-04's `toml_edit` write dispatch.
+    pub(crate) shape: FieldShape,
+}
+
+/// The emit shape of a facet field — free text, a list of strings, or one token
+/// from a closed set. `Closed` carries the enum's own `KNOWN` set rather than a
+/// retyped literal (STD-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the shape column's production reader is SL-249 PHASE-04's write dispatch; until then only the pins read it"
+    )
+)]
+pub(crate) enum FieldShape {
+    Text,
+    List,
+    Closed(&'static [&'static str]),
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const ASSUMPTION_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "claim",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "confidence",
+        shape: FieldShape::Closed(Confidence::KNOWN),
+    },
+    FacetField {
+        name: "basis",
+        shape: FieldShape::Closed(Basis::KNOWN),
+    },
+    FacetField {
+        name: "validation_plan",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "validated_by",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "validated_on",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "invalidated_by",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "invalidated_on",
+        shape: FieldShape::Text,
+    },
+];
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const DECISION_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "context",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "choice",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "alternatives",
+        shape: FieldShape::List,
+    },
+    FacetField {
+        name: "rationale",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "consequences",
+        shape: FieldShape::List,
+    },
+    FacetField {
+        name: "decided_by",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "decided_on",
+        shape: FieldShape::Text,
+    },
+];
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const QUESTION_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "question",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "why_matters",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "answer",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "answered_by",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "answered_on",
+        shape: FieldShape::Text,
+    },
+];
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const CONSTRAINT_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "statement",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "source",
+        shape: FieldShape::Closed(ConstraintSource::KNOWN),
+    },
+    FacetField {
+        name: "applies_to",
+        shape: FieldShape::List,
+    },
+    FacetField {
+        name: "waiver_reason",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "waived_by",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "waived_on",
+        shape: FieldShape::Text,
+    },
+];
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const EVIDENCE_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "datum",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "provenance",
+        shape: FieldShape::Closed(Provenance::KNOWN),
+    },
+    // Legitimately shared with the assumption row — multiplicity ACROSS rows is
+    // sound (§5.5 "The one shared field name"); only within a row is it damage.
+    FacetField {
+        name: "confidence",
+        shape: FieldShape::Closed(Confidence::KNOWN),
+    },
+];
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const HYPOTHESIS_FACET_FIELDS: &[FacetField] = &[
+    FacetField {
+        name: "proposition",
+        shape: FieldShape::Text,
+    },
+    FacetField {
+        name: "predicts",
+        shape: FieldShape::Text,
+    },
+];
+
+/// Concept's `[facet]` is empty by design (DEC-172/DEC-173) — its content is its
+/// prose. The empty row is a case, not an exception: `I3` confirms it retains
+/// nothing, and `VT-2` confirms the template's bare `[facet]` header matches.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+const CONCEPT_FACET_FIELDS: &[FacetField] = &[];
+
+/// Every field one record kind owns, in template order — the single authored
+/// derivation of the per-kind field sets (STD-001).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
+    )
+)]
+pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetField] {
+    match kind {
+        RecordKind::Assumption => ASSUMPTION_FACET_FIELDS,
+        RecordKind::Decision => DECISION_FACET_FIELDS,
+        RecordKind::Question => QUESTION_FACET_FIELDS,
+        RecordKind::Constraint => CONSTRAINT_FACET_FIELDS,
+        RecordKind::Evidence => EVIDENCE_FACET_FIELDS,
+        RecordKind::Hypothesis => HYPOTHESIS_FACET_FIELDS,
+        RecordKind::Concept => CONCEPT_FACET_FIELDS,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3471,5 +3783,151 @@ target = \"SL-249\"
             "the post-state print names the canonical id"
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // -----------------------------------------------------------------------
+    // The facet field table's three pins (SL-249 PHASE-03, VT-1 / EX-2..EX-4)
+    //
+    // `facet_fields` is authored by hand — Rust has no reflection over struct
+    // fields and DEC-169 refused a proc macro for exactly this. So the table is
+    // held honest by three comparisons, none of which restates a field name:
+    // I2 (totality, through `RawFacet`'s serde form), I3 (per-kind placement, by
+    // differencing `validate_facet`'s retention) and I3b (no row repeats a name).
+    // -----------------------------------------------------------------------
+
+    /// The union of every kind's row, as a set of names. A **set**: the rows sum
+    /// to 31 slots while the distinct union is 30, because `confidence` is
+    /// legitimately owned by both assumption and evidence. Comparing lengths here
+    /// would fail by exactly one and look like a missing row.
+    fn tabled_field_union() -> BTreeSet<&'static str> {
+        RecordKind::ALL
+            .into_iter()
+            .flat_map(|kind| facet_fields(kind).iter().map(|field| field.name))
+            .collect()
+    }
+
+    /// A TOML value `validate_facet` will accept for one field, derived from the
+    /// field's own declared shape (D2). This is what makes the shape column
+    /// load-bearing under test: a closed field wrongly declared `Text` yields its
+    /// own name, which `optional_enum` refuses, and I3 fails loudly.
+    fn shaped_value(field: &FacetField) -> toml::Value {
+        match field.shape {
+            FieldShape::Text => toml::Value::String(field.name.to_string()),
+            FieldShape::List => {
+                toml::Value::Array(vec![toml::Value::String(field.name.to_string())])
+            }
+            FieldShape::Closed(tokens) => toml::Value::String(
+                (*tokens.first().expect("a closed shape names its tokens")).to_string(),
+            ),
+        }
+    }
+
+    /// Every field in the union, populated — I3's input, built from the table's
+    /// own `(name, shape)` pairs rather than from a restated list.
+    fn populated_union() -> toml::Table {
+        let mut table = toml::Table::new();
+        for kind in RecordKind::ALL {
+            for field in facet_fields(kind) {
+                table.insert(field.name.to_string(), shaped_value(field));
+            }
+        }
+        table
+    }
+
+    fn raw_facet_from(table: &toml::Table) -> RawFacet {
+        toml::Value::Table(table.clone())
+            .try_into()
+            .expect("the populated union deserialises into the kind-blind superset")
+    }
+
+    /// `I2` — totality. The table's union is exactly `RawFacet`'s serde key set.
+    ///
+    /// The oracle is the **serialised** superset, not a hand-written list: a facet
+    /// field added to the model and forgotten in the table fails here, and a table
+    /// row naming a key no field carries fails equally. DEC-169's
+    /// read-through-serde idiom, second application (the first is
+    /// `Declaration::WIRE_KEYS`, SL-249 PHASE-02).
+    #[test]
+    fn the_facet_table_union_holds_exactly_raw_facets_serde_keys() {
+        let serialised =
+            serde_json::to_value(RawFacet::default()).expect("the raw facet serialises");
+
+        let on_the_wire: BTreeSet<&str> = serialised
+            .as_object()
+            .expect("the raw facet serialises to an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        assert_eq!(on_the_wire, tabled_field_union());
+    }
+
+    /// `I3` — per-kind placement, as an **equality**.
+    ///
+    /// For each kind, populate every field in the union and read it back through
+    /// the untouched `validate_facet`; a field is *retained* by that kind iff
+    /// removing it changes the typed facet. Then assert the retained set equals
+    /// the kind's row exactly.
+    ///
+    /// The oracle is the layer *below* the table
+    /// (`mem.pattern.testing.mapping-oracle-lives-below-the-check`):
+    /// `validate_facet` does not consult `facet_fields`, so a row handed a field
+    /// its kind does not own fails rather than agreeing with itself. Inclusion
+    /// would be blind to exactly that case — RV-349 `F-3` round one. Concept is a
+    /// case, not an exception: it retains nothing and its row is empty.
+    #[test]
+    fn each_kinds_row_equals_the_fields_validate_facet_retains() {
+        let full_input = populated_union();
+        let union = tabled_field_union();
+
+        for kind in RecordKind::ALL {
+            let full = validate_facet(kind, raw_facet_from(&full_input))
+                .expect("the fully populated union validates for every kind");
+
+            let mut retained: BTreeSet<&str> = BTreeSet::new();
+            for name in &union {
+                // Removing the key is how a field is un-populated: every
+                // `RawFacet` field is `#[serde(default)]`, so an absent key
+                // deserialises to `""`/`[]`, which the `"" -> None` seams map to
+                // absent. Mutating by name would need a 30-arm match — another
+                // restated list.
+                let mut minus = full_input.clone();
+                minus.remove(*name);
+                let without = validate_facet(kind, raw_facet_from(&minus))
+                    .expect("a one-field-lighter union still validates");
+                if without != full {
+                    retained.insert(name);
+                }
+            }
+
+            let row: BTreeSet<&str> = facet_fields(kind).iter().map(|f| f.name).collect();
+            assert_eq!(
+                retained,
+                row,
+                "{}: the fields validate_facet retains must EQUAL its table row",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// `I3b` — no row names a field twice.
+    ///
+    /// `I2` and `I3` both compare sets, which collapse a duplicate silently while
+    /// every consumer that *iterates* a row sees the field twice: a duplicated
+    /// clap flag, a doubled write, a doubled coverage row. RV-349 `F-3` round two.
+    /// Multiplicity *across* rows stays legitimate — `confidence` is owned by two
+    /// kinds — and this says nothing about it.
+    #[test]
+    fn no_facet_row_names_a_field_twice() {
+        for kind in RecordKind::ALL {
+            let row = facet_fields(kind);
+            let distinct: BTreeSet<&str> = row.iter().map(|f| f.name).collect();
+            assert_eq!(
+                row.len(),
+                distinct.len(),
+                "{}: each row must name every field exactly once",
+                kind.as_str()
+            );
+        }
     }
 }
