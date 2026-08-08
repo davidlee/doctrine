@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0f6-6964-7bc0-a150-2300e5ac4512"
+recorded_at = "2026-08-08T10:41:13.060190506Z"
+kind = "friction"
+summary = "execute (SL-248 PHASE-03): git checkout -- <path> to restore a probe deletion wiped the same file's uncommitted edits"
+detail = "T12 of the phase sheet asks: delete a layering.toml row, run the gate, confirm red, restore. I restored with 'git checkout -- .doctrine/adr/001/layering.toml' inside the loop. But the three rows under test were themselves UNCOMMITTED, so the restore reverted the file to HEAD and silently destroyed all three — iterations 2 and 3 then measured a file with no rows at all and reported 6 Unclassified instead of the per-row signal. Cost: one full re-run of a 3x cargo-test loop plus the re-authoring. The failure is quiet: the loop keeps running and every iteration still reds, so the output looks like success. Rule: for a delete-and-observe probe on a file with uncommitted edits, either commit first or snapshot to the scratchpad and restore with cp - never git checkout/restore, whose baseline is HEAD and not your working tree."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

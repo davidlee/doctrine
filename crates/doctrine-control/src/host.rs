@@ -161,7 +161,8 @@ pub(crate) mod fixture {
         }
 
         pub(crate) fn with_resolution(mut self, from: &str, to: &str) -> Self {
-            self.resolutions.insert(PathBuf::from(from), PathBuf::from(to));
+            self.resolutions
+                .insert(PathBuf::from(from), PathBuf::from(to));
             self.existing.insert(PathBuf::from(from));
             self
         }

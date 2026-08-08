@@ -471,6 +471,8 @@ version = "0.1.0"
 dependencies = [
  "doctrine",
  "rustix",
+ "serde",
+ "toml",
 ]
 
 [[package]]

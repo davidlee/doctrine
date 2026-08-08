@@ -7,10 +7,10 @@ status = "active"
 title = "Revert a negative control by re-editing, never by git checkout/restore on the path"
 summary = "A path-scoped git checkout/restore reverts the whole file to HEAD — the control line AND the uncommitted work it was testing"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-08"
 
 [scope]
-paths = ["src/**", "install/**", "publication/**"]
+paths = ["src/**", "crates/**", "install/**", "publication/**", ".doctrine/**"]
 globs = []
 commands = ["git checkout", "git restore"]
 tags = ["git", "tdd", "negative-control", "footgun"]

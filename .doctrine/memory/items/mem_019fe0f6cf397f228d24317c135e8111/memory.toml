@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe0f6cf397f228d24317c135e8111"
+memory_key = "mem.pattern.git.probe-restore-not-checkout"
+schema_version = 1
+memory_type = "pattern"
+status = "superseded"
+title = "Restore a delete-and-observe probe from a copy, never git checkout"
+summary = "A delete-and-observe gate probe must restore from a scratchpad copy; git checkout restores HEAD and eats the uncommitted edit under test"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = ["git checkout"]
+tags = ["git", "testing"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "56f78c53feef18f88e6cd19083dda998a5fa1a3b"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "7620c582d37b2eb061f14f340cfc0f63c3f46d399efae2d8ff3fc97ed546b1db"
+base_commit = "2f3a6db78b9bc3d322e83ee9798fb5d02a5368d8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019fd0ceae9d7913840328c2ded75ee7"
+

@@ -42,6 +42,12 @@ doctrine = { path = "../.." }
 # `rustix::process` stays undeclared and unreachable — it is behind a `process`
 # feature neither manifest declares, so a call into it is E0433 (RV-346 F-29).
 rustix = { version = "1", default-features = false, features = ["fs", "std"] }
+# `config.rs` — the `[capsule]` serde projection and its `deny_unknown_fields`
+# (sec-5, EX-4/EX-5), and the TOML parse behind it. Neither is inherited: the
+# root package's manifest says nothing that reaches this compilation unit, and
+# omitting either is E0433 for both crates (RV-346 F-29, reproduced).
+serde = { workspace = true }
+toml = { workspace = true }
 
 [lints]
 workspace = true
