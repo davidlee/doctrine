@@ -652,3 +652,27 @@ code-review → …/.doctrine/skills/code-review` materialise line, and a real
 `.claude/skills/code-review` symlink on disk (checked via
 `fs::symlink_metadata(..).is_symlink()`). The plugin-summary assertion (`:53`)
 was left untouched, as PHASE-06's `EX-8` owns it.
+
+### F1 — the design's golden inventory named one file; two carried the assertion
+
+`tests/e2e_claude_install.rs::install_wires_skills_agent_and_hooks_directly`
+carried the same now-false `!out.contains("linked    code-review")` assertion as
+`tests/e2e_skills_symlink.rs`, and is named in neither design `sec-5` nor
+PHASE-06's `EX-8` (whose only `e2e_claude_install.rs` citation is the
+plugin-summary line at `:196`). It surfaced from the full suite, not from the
+design's inventory or from a grep of the enumerated files.
+
+Inverted here under `D1`'s already-settled reasoning rather than deferred — the
+phase cannot end red, and a second instance of a ratified decision is a
+mechanical application, not a new design question.
+
+**Two consequences for reconciliation.** First, `EX-8`'s inventory is
+incomplete as authored: PHASE-06's author will find the skills half of it
+already satisfied, and should not read that as scope drift. Second, this is the
+same defect class as PHASE-04's `F1` — an enumerated inventory that reads as
+exhaustive because it is precise. The remedy is the same one PHASE-04 reached
+for: run the full suite before trusting a file list, and grep the *class* of
+assertion rather than the cited paths
+(`mem.pattern.testing.absence-assertion-over-an-unwritten-file`,
+`mem_019fa3c8737f7812b59f86db053d456b` — fix the defect class, not the
+instance).
