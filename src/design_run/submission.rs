@@ -235,6 +235,27 @@ impl Dispose {
     }
 }
 
+/// One facet value as it arrives on the wire — free text, or a list of strings.
+///
+/// **Why not `knowledge::RawValue`, which this maps onto one-for-one (SL-249
+/// `D-A`).** Same reason [`CreateRecord::kind`] is a `String`: this is a leaf
+/// with crate out-degree zero (ADR-001, `layering.toml`), so it may not name a
+/// command-tier type, and the shell does the mapping. Untagged, so the wire form
+/// is the natural JSON — `"x"` or `["a","b"]` — with no tag a caller must supply.
+///
+/// **Why not spelled `FacetValue`.** `CHR-060` is an open chore aimed at that
+/// name for `facet_write::FacetField`; taking it here would plant the very
+/// two-modules-one-name defect `ISS-329` was raised for, and would foreclose an
+/// open backlog item by squatting on its target. `WireKey` below is the
+/// same-file precedent for the `Wire` prefix: the wire form of a concept the
+/// crate already names elsewhere takes it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum WireFacetValue {
+    List(Vec<String>),
+    Text(String),
+}
+
 /// What a `create` disposition asks Doctrine to materialise.
 ///
 /// `kind` is a **string** and stays one: this is a leaf with crate out-degree
@@ -267,6 +288,18 @@ pub(crate) struct CreateRecord {
     /// concept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) body: Option<String>,
+    /// The record's `[facet]` content, keyed by field name (SL-249).
+    ///
+    /// A **map**, not a typed per-kind struct: [`CreateRecord::kind`] is a
+    /// runtime token, so no per-kind struct can be selected at compile time. The
+    /// keys are therefore unvalidated here and validated at admission by
+    /// `knowledge::plan_facet_edits` — the same function the CLI runs, before any
+    /// id is reserved (`D5`).
+    ///
+    /// `BTreeMap` and not a `HashMap`: its serde form is key-ordered, so the
+    /// payload digest is stable under a caller's key order (§5.3).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) facet: BTreeMap<String, WireFacetValue>,
     /// The user's acceptance of this record as true (DEC-088).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) acceptance: Option<AcceptanceDeclaration>,
