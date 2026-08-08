@@ -332,7 +332,12 @@ pub(crate) fn set_facet_mixed(
 /// Read→parse→core→write-once-if-changed envelope. Reads the file, parses a
 /// `DocumentMut`, calls the closure `f`, and writes back iff the closure
 /// returned `true`. Returns the closure's bool.
-fn edit_in_place(
+///
+/// `pub(crate)` for `knowledge::apply_settlement` (SL-249 D-B), which composes
+/// TWO cores over one held document. Opening a second envelope there would be
+/// the parallel implementation `AGENTS.md` forbids, and would put a third
+/// writer in front of `I4`.
+pub(crate) fn edit_in_place(
     path: &Path,
     f: impl FnOnce(&mut toml_edit::DocumentMut) -> anyhow::Result<bool>,
 ) -> anyhow::Result<bool> {

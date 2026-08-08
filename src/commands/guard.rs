@@ -213,6 +213,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             KnowledgeCommand::New { .. } => Write("knowledge new"),
             KnowledgeCommand::Edit { .. } => Write("knowledge edit"),
             KnowledgeCommand::Status { .. } => Write("knowledge status"),
+            KnowledgeCommand::Settle(..) => Write("knowledge settle"),
             KnowledgeCommand::List { .. }
             | KnowledgeCommand::Show { .. }
             | KnowledgeCommand::Inspect { .. }

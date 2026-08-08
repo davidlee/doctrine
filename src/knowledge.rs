@@ -239,6 +239,24 @@ pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
     }
 }
 
+/// Refuse a token that is not in `kind`'s own status vocabulary — the check
+/// `set_record_status` carried inline and `settle` needs *before* it opens the
+/// document (SL-249 EN-2, I7). One check, one sentence, two callers.
+///
+/// A guard rather than a bare predicate (D-E): the refusal SENTENCE is the part
+/// that must not be retyped (STD-001), and a `bool` would leave every caller to
+/// restate it — which is the duplication EN-2 exists to prevent.
+pub(crate) fn ensure_status_token(kind: RecordKind, state: &str) -> anyhow::Result<()> {
+    let vocab = statuses(kind);
+    anyhow::ensure!(
+        vocab.contains(&state),
+        "`{state}` is not a {} status (known: {})",
+        kind.as_str(),
+        vocab.join(", ")
+    );
+    Ok(())
+}
+
 /// The token a DEC-088 user acceptance unlocks. One spelling, one owner (STD-001).
 const ACCEPTED_STATUS: &str = "accepted";
 
@@ -1020,6 +1038,91 @@ pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow] {
 }
 
 // ---------------------------------------------------------------------------
+// The settleable transitions (SL-249 §5.2, DEC-178) — a derived SET, and a
+// pinned annotation that may add detail to it but not extend it.
+// ---------------------------------------------------------------------------
+
+/// A resolving transition: its state, and the field whose content the
+/// transition exists to capture. The actor/date pair is NOT here — it is
+/// derived from the state token (DEC-178).
+pub(crate) struct Settlement {
+    state: &'static str,
+    /// `None` where the kind's facet carries no post-hoc text field for the
+    /// transition — an assumption records who validated it and when, and
+    /// nothing else.
+    captures: Option<&'static str>,
+}
+
+/// The suffixes that make a state settleable. A kind's facet must carry BOTH,
+/// spelled from the state token — `answered` needs `answered_by` and
+/// `answered_on`. One derivation, no retyped names (STD-001).
+const SETTLEMENT_ACTOR_SUFFIX: &str = "_by";
+const SETTLEMENT_DATE_SUFFIX: &str = "_on";
+
+const ASSUMPTION_SETTLEMENTS: &[Settlement] = &[
+    Settlement {
+        state: "validated",
+        captures: None,
+    },
+    Settlement {
+        state: "invalidated",
+        captures: None,
+    },
+];
+const QUESTION_SETTLEMENTS: &[Settlement] = &[Settlement {
+    state: "answered",
+    captures: Some("answer"),
+}];
+const CONSTRAINT_SETTLEMENTS: &[Settlement] = &[Settlement {
+    state: "waived",
+    captures: Some("waiver_reason"),
+}];
+/// `DEC`, `EVD`, `HYP` and `CPT` settle nothing, and the empty row is the case
+/// that makes `I5` hold by SHAPE: `accepted` is not guarded out of `settle`, it
+/// was never in the derived set to begin with (DEC-088).
+const NO_SETTLEMENTS: &[Settlement] = &[];
+
+/// Which resolving transitions a kind has, and what each captures — the one
+/// authored thing about settling. Its state set is pinned EQUAL to
+/// [`derived_settleable`] (EX-2), so this table cannot quietly widen `settle`'s
+/// reach; it only says which field holds the outcome, which no naming rule
+/// derives (§5.2).
+pub(crate) fn settlements(kind: RecordKind) -> &'static [Settlement] {
+    match kind {
+        RecordKind::Assumption => ASSUMPTION_SETTLEMENTS,
+        RecordKind::Question => QUESTION_SETTLEMENTS,
+        RecordKind::Constraint => CONSTRAINT_SETTLEMENTS,
+        RecordKind::Decision
+        | RecordKind::Evidence
+        | RecordKind::Hypothesis
+        | RecordKind::Concept => NO_SETTLEMENTS,
+    }
+}
+
+/// The states of `kind` a settle may reach: a status token of this kind whose
+/// facet carries both `<state>_by` and `<state>_on`.
+///
+/// Quantified over the STATUS VOCABULARY, intersected with the facet row (D-A) —
+/// not a scan of facet field names. The distinction is load-bearing and both
+/// legs do real work on the decision kind: `accepted` is a status but has no
+/// `accepted_by`, and `decided_by`/`decided_on` are facet fields but `decided`
+/// is no status of a decision. A facet-name scan would yield `decided` and give
+/// `settle` a transition to a state the vocabulary does not hold. This is the
+/// intersection `DEC-178`'s rationale describes as *"laying the status
+/// vocabularies against the facet field names"*.
+fn derived_settleable(kind: RecordKind) -> Vec<&'static str> {
+    let owned: BTreeSet<&str> = facet_fields(kind).iter().map(|row| row.name).collect();
+    statuses(kind)
+        .iter()
+        .copied()
+        .filter(|state| {
+            owned.contains(format!("{state}{SETTLEMENT_ACTOR_SUFFIX}").as_str())
+                && owned.contains(format!("{state}{SETTLEMENT_DATE_SUFFIX}").as_str())
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Pure: plan a facet edit (SL-249 PHASE-04)
 //
 // The kind-aware half of the WRITE path, and the mirror of `validate_facet` on
@@ -1204,7 +1307,20 @@ pub(crate) fn apply_facet_edits(
     canonical: &str,
     edits: &[FacetEdit],
 ) -> anyhow::Result<bool> {
-    let fields: Vec<crate::facet_write::FacetField> = edits
+    crate::facet_write::apply_set_mixed(
+        path,
+        FACET_TABLE,
+        &writer_fields(edits),
+        crate::facet_write::KeyPosture::RequirePresent { record: canonical },
+    )
+}
+
+/// Planned edits in the writer's own vocabulary — the ONE `FacetEdit` →
+/// `facet_write::FacetField` derivation, shared by [`apply_facet_edits`] and
+/// [`apply_settlement`]. Extracted rather than copied into the second caller
+/// (`AGENTS.md`: no parallel implementation).
+fn writer_fields(edits: &[FacetEdit]) -> Vec<crate::facet_write::FacetField> {
+    edits
         .iter()
         .map(|edit| match edit.value {
             RawValue::Text(ref value) => crate::facet_write::FacetField::Str {
@@ -1216,14 +1332,44 @@ pub(crate) fn apply_facet_edits(
                 values: values.clone(),
             },
         })
-        .collect();
+        .collect()
+}
 
-    crate::facet_write::apply_set_mixed(
-        path,
-        FACET_TABLE,
-        &fields,
-        crate::facet_write::KeyPosture::RequirePresent { record: canonical },
-    )
+/// Apply planned facet edits and a status transition to one record in a single
+/// edit-preserving write. Composes the two existing document-level cores over
+/// one held document; introduces no third writer (`I4`, `RV-349` `F-2`).
+///
+/// `[facet]`, `status` and `updated` are keys of the SAME `record-NNN.toml`, so
+/// there is no two-file transaction to order. Both cores mutate the held
+/// document in memory only, and `edit_in_place` writes once — iff the closure
+/// returns `Ok(true)`. A refusal from either leg propagates out of the closure
+/// and nothing is written at all, so the partial settlement is removed rather
+/// than mitigated.
+///
+/// Beyond the design's illustrative signature (§5.2) by two parameters, both
+/// mechanically forced by the cores composed (D-C): `canonical` by
+/// `KeyPosture::RequirePresent`'s F-1 refusal, `hint` by `apply_status`'s.
+pub(crate) fn apply_settlement(
+    path: &Path,
+    canonical: &str,
+    edits: &[FacetEdit],
+    managed: &[(&str, &str)],
+    hint: &str,
+) -> anyhow::Result<bool> {
+    let fields = writer_fields(edits);
+    crate::facet_write::edit_in_place(path, |doc| {
+        // Bound to locals, never `a()? || b()?`: `||` short-circuits, so a
+        // changed facet leg would skip the status leg entirely and write a
+        // green half-settlement — the exact defect this verb exists to remove.
+        let facet_changed = crate::facet_write::set_facet_mixed(
+            doc,
+            FACET_TABLE,
+            &fields,
+            crate::facet_write::KeyPosture::RequirePresent { record: canonical },
+        )?;
+        let status_changed = crate::dep_seq::apply_status(doc, managed, hint)?;
+        Ok(facet_changed || status_changed)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2324,6 +2470,176 @@ pub(crate) fn run_facet_edit(
     Ok(())
 }
 
+/// A facet field's flag spelling — `_` → `-`. One derivation for the refusals
+/// that name a flag and for the oracle that pins them (STD-001).
+fn kebab_flag(field: &str) -> String {
+    field.replace('_', "-")
+}
+
+/// The blank-value refusal, one sentence for `--by` and for the capture flag
+/// (STD-001). `EX-4`'s actual claim: a settlement whose evidence is blank is
+/// the 0-of-38 outcome wearing a green command, and `plan_facet_edits` reads
+/// `Text("")` as a legitimate *clear*, so nothing downstream will catch it.
+fn blank_settle_flag_refusal(flag: &str) -> String {
+    format!(
+        "`--{flag}` must not be blank — a settlement whose evidence is empty is \
+         what `settle` exists to prevent; use `knowledge status` to move the token alone"
+    )
+}
+
+/// `doctrine knowledge settle <ID> <state> --by WHO [--answer V | --waiver-reason V]`
+/// — the COUPLED transition (`DEC-178`, `DEC-062`): the disposition and the
+/// status token move together, in one write, or neither moves.
+/// `knowledge status` stays the uncoupled escape hatch, and every refusal below
+/// names it or the `knowledge edit` verb that would have worked instead.
+///
+/// **Validation order is the contract** (`EX-5`, `I7`). Steps 1–4 are settled
+/// before the record's file is opened at all, which is why a foreign state, an
+/// unsettleable one, and a missing or blank capture refuse *identically*
+/// against an id that names no record on disk — the only observable that
+/// distinguishes "refused early" from "refused late without writing".
+///
+/// `clock::today()` is called ONCE and the same string is used for `<state>_on`
+/// and for `updated`, so the two can never disagree by a midnight.
+pub(crate) fn run_settle(
+    path: Option<PathBuf>,
+    reference: &str,
+    state: &str,
+    by: &str,
+    given: &[(&'static str, &str)],
+    color: bool,
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // 1 — identity, from the reference alone.
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let canonical = kind.canonical_id(id);
+
+    // 2 — the kind's own status vocabulary. A foreign-kind state dies here, in
+    // the check `set_record_status` also calls (EN-2's extraction).
+    ensure_status_token(kind, state)?;
+
+    // 3 — settleability, decided by the DERIVED set and not by the annotation
+    // (EX-2: coverage is derived, never listed). This is where `accepted` dies
+    // (EX-3, I5): by ABSENCE from the derivation, never by a guard naming the
+    // token, so DEC-088's reservation is upheld by the derivation's shape
+    // rather than by a check someone could later relax.
+    let settleable: BTreeSet<&str> = derived_settleable(kind).into_iter().collect();
+    anyhow::ensure!(
+        settleable.contains(state),
+        "`{state}` is not a settle transition for a {}; use `knowledge status`",
+        kind.as_str()
+    );
+    // The annotation supplies ONLY the thing no naming rule derives: which
+    // field holds the outcome. Its state set is pinned EQUAL to the derived one
+    // (P-b), so a `None` here means "this state captures no text" and never
+    // "this state is unknown" — which is why the two collapse safely and why
+    // this is a lookup rather than an unwrap.
+    let captures = settlements(kind)
+        .iter()
+        .find(|candidate| candidate.state == state)
+        .and_then(|candidate| candidate.captures);
+
+    // 4 — the capture flags. `--by` is required by clap but may still arrive
+    // blank, and for an assumption it is the WHOLE evidence, so it is checked
+    // on the same footing as the capture.
+    anyhow::ensure!(!by.trim().is_empty(), "{}", blank_settle_flag_refusal("by"));
+    if let Some((wrong, _)) = given.iter().find(|(field, _)| Some(*field) != captures) {
+        anyhow::bail!(
+            "`--{}` is not part of settling a {} to `{state}`{}",
+            kebab_flag(wrong),
+            kind.as_str(),
+            match captures {
+                Some(field) => format!("; use `--{}`", kebab_flag(field)),
+                None => " — that state captures no text, only `--by`".to_string(),
+            }
+        );
+    }
+    let captured = match captures {
+        None => None,
+        Some(field) => {
+            let value = given
+                .iter()
+                .find(|(candidate, _)| *candidate == field)
+                .map(|(_, value)| *value)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "settling {canonical} to `{state}` requires `--{}` — the disposition is \
+                         part of resolving, not a field to fill in later",
+                        kebab_flag(field)
+                    )
+                })?;
+            anyhow::ensure!(
+                !value.trim().is_empty(),
+                "{}",
+                blank_settle_flag_refusal(&kebab_flag(field))
+            );
+            Some((field, value))
+        }
+    };
+
+    // 5 — the first disk touch. State-to-itself is checked BEFORE withdrawn
+    // (D-D): an already-`waived` constraint is both cases at once, and D7's
+    // remedy is the more actionable of the two messages.
+    let record = read_record(&root, kind, id)?;
+    anyhow::ensure!(
+        record.status != state,
+        "{canonical} is already `{state}`; a transition from a state to itself is not a \
+         transition. To amend what was captured, use `knowledge edit {} --<field>` — that keeps \
+         `{state}_on` meaning when it was settled rather than when the command last ran",
+        kind.as_str()
+    );
+    anyhow::ensure!(
+        !is_withdrawn(&record.status),
+        "{canonical} is `{}`, which withdraws it from use; use `knowledge status` to bring it \
+         back before settling it",
+        record.status
+    );
+
+    // 6 — the raws. The actor and date keys are spelled FROM the state token,
+    // which is the same derivation `derived_settleable` admitted it by.
+    let today = crate::clock::today();
+    let actor_key = format!("{state}{SETTLEMENT_ACTOR_SUFFIX}");
+    let date_key = format!("{state}{SETTLEMENT_DATE_SUFFIX}");
+    let mut raws: Vec<RawEdit<'_>> = Vec::new();
+    if let Some((field, value)) = captured {
+        raws.push(RawEdit {
+            field,
+            value: RawValue::Text(value.to_string()),
+        });
+    }
+    raws.push(RawEdit {
+        field: &actor_key,
+        value: RawValue::Text(by.to_string()),
+    });
+    raws.push(RawEdit {
+        field: &date_key,
+        value: RawValue::Text(today.clone()),
+    });
+    let edits = plan_facet_edits(kind, &raws)
+        .map_err(|refusal| anyhow::anyhow!("{canonical}: {refusal}"))?;
+
+    // 7 — ONE write of one document: the capture, the actor, the date, the
+    // status and the stamp, or none of them (F-2).
+    apply_settlement(
+        &record_toml_path(&root, kind, id),
+        &canonical,
+        &edits,
+        &[("status", state), ("updated", &today)],
+        &malformed_status_hint(&canonical),
+    )?;
+
+    // 8 — post-state, in `run_status`'s and `run_facet_edit`'s shapes together.
+    let set: Vec<&str> = edits.iter().map(|edit| edit.field.name).collect();
+    writeln!(
+        writer,
+        "{canonical}: {} — {}",
+        crate::listing::status_colored(state, color),
+        set.join(", ")
+    )?;
+    Ok(())
+}
+
 /// The per-record directory — `root/<kind-dir>/<id:03>` — the layout every path
 /// into one record's authored/prose files walks. Shared by `record_toml_path`,
 /// `read_record`'s two paths, and `write_record_body` (STD-001).
@@ -2361,6 +2677,16 @@ pub(crate) fn write_record_body(
     )
 }
 
+/// `dep_seq::apply_status`'s F-1 bail sentence for a knowledge record — the
+/// single source both `set_record_status` and `apply_settlement` pass in
+/// (STD-001). `name` is what the message calls the record.
+fn malformed_status_hint(name: &str) -> String {
+    format!(
+        "malformed record {name}: missing seeded `status`/`updated` \
+         — restore the missing keys and retry; the file is left untouched"
+    )
+}
+
 /// Transition one record's status through the edit-preserving seam, validating
 /// `state` against the kind's own vocabulary and **refusing a foreign-kind
 /// state** (FR-002). No resolution coupling: `status` and `updated`, nothing else.
@@ -2370,20 +2696,9 @@ pub(crate) fn set_record_status(
     id: u32,
     state: &str,
 ) -> anyhow::Result<()> {
-    let vocab = statuses(kind);
-    if !vocab.contains(&state) {
-        anyhow::bail!(
-            "`{state}` is not a {} status (known: {})",
-            kind.as_str(),
-            vocab.join(", ")
-        );
-    }
+    ensure_status_token(kind, state)?;
     let today = crate::clock::today();
-    let name = format!("{id:03}");
-    let hint = format!(
-        "malformed record {name}: missing seeded `status`/`updated` \
-         — restore the missing keys and retry; the file is left untouched"
-    );
+    let hint = malformed_status_hint(&format!("{id:03}"));
     crate::dep_seq::set_authored_status(
         &record_toml_path(root, kind, id),
         &[("status", state), ("updated", &today)],
@@ -2492,6 +2807,9 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Settle a knowledge record: move it to a resolving state and capture the
+    /// disposition that resolves it, in one write.
+    Settle(SettleArgs),
 
     /// Print the file paths of each knowledge record entity directory.
     Paths {
@@ -2515,6 +2833,54 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+}
+
+/// `doctrine knowledge settle <ID> <state> --by WHO [--answer V | --waiver-reason V]`.
+///
+/// A struct rather than inline variant fields, so [`captures`](Self::captures)
+/// can own the one argv→capture mapping — the seam the flag oracle reads, and
+/// the tier at which a flag declared but never mapped would otherwise write
+/// nothing in silence.
+///
+/// The capture flags are declared by their facet field's OWN name, kebab-cased
+/// (§5.2, refining `DEC-178`'s illustrative `--reason`), and pinned to
+/// `Settlement.captures` by a test — a fifth settlement cannot ship
+/// unreachable.
+#[derive(clap::Args)]
+pub(crate) struct SettleArgs {
+    /// Knowledge record reference — `QUE-005`, `ASM-007`, `CON-012`.
+    id: String,
+    /// The resolving state: `answered`, `validated`, `invalidated`, `waived`.
+    /// Every other state stays with `knowledge status`.
+    state: String,
+    /// Who settled it — written to `<state>_by`. The date is `today`, never
+    /// taken from the caller.
+    #[arg(long)]
+    by: String,
+    /// A question's answer — the disposition `answered` exists to capture.
+    #[arg(long)]
+    answer: Option<String>,
+    /// A constraint's waiver reason — the disposition `waived` exists to capture.
+    #[arg(long)]
+    waiver_reason: Option<String>,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
+impl SettleArgs {
+    /// The capture flags argv actually carried, each paired with the facet
+    /// field it names — the ONE argv→capture mapping (the shape
+    /// [`KnowledgeFacetEdit::raw_edits`] uses one tier down).
+    fn captures(&self) -> Vec<(&'static str, &str)> {
+        [
+            ("answer", self.answer.as_deref()),
+            ("waiver_reason", self.waiver_reason.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(field, given)| given.map(|value| (field, value)))
+        .collect()
+    }
 }
 
 /// The reference + root every facet subverb takes. Flattened so the seven
@@ -2896,6 +3262,15 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             &mut io::stdout(),
         ),
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
+        KnowledgeCommand::Settle(args) => run_settle(
+            args.path.clone(),
+            &args.id,
+            &args.state,
+            &args.by,
+            &args.captures(),
+            color,
+            &mut io::stdout(),
+        ),
         KnowledgeCommand::Paths {
             refs,
             toml,
@@ -4820,13 +5195,14 @@ target = \"SL-249\"
         name.replace('_', "-")
     }
 
-    /// `knowledge edit`'s built subcommand, with clap's generated args in place.
+    /// One knowledge verb's built subcommand, with clap's generated args in
+    /// place.
     ///
     /// Only the `knowledge` subtree is built, never the whole `Cli`:
     /// `Command::build` recurses every sibling, and `config set`'s
     /// `required` + `required_unless_present` positional trips clap's debug
     /// assert on the way past (ISS-330). Drop the narrowing once that is fixed.
-    fn built_edit_command() -> clap::Command {
+    fn built_knowledge_verb(verb: &str) -> clap::Command {
         use clap::CommandFactory;
         let mut knowledge = <crate::Cli as CommandFactory>::command()
             .find_subcommand("knowledge")
@@ -4834,14 +5210,14 @@ target = \"SL-249\"
             .clone();
         knowledge.build();
         knowledge
-            .find_subcommand("edit")
-            .expect("`edit` is a knowledge verb")
+            .find_subcommand(verb)
+            .unwrap_or_else(|| panic!("`{verb}` is a knowledge verb"))
             .clone()
     }
 
     #[test]
     fn every_subverbs_flags_are_exactly_its_kinds_facet_row() {
-        let edit = built_edit_command();
+        let edit = built_knowledge_verb("edit");
         for kind in RecordKind::ALL {
             let sub = edit
                 .find_subcommand(kind.as_str())
@@ -5097,6 +5473,798 @@ target = \"SL-249\"
         assert!(msg.contains("banana"), "names the rejected token: {msg}");
         for token in Confidence::KNOWN {
             assert!(msg.contains(token), "lists the known token {token}: {msg}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // EN-2 — the extracted status-vocabulary guard (SL-249 PHASE-05 T1)
+    //
+    // T1 is a pure refactor and so cannot stage a BEHAVIOURAL red. Two
+    // compensating controls stand in its place, and both are named here:
+    //
+    // - C1 is the test below. It was written BEFORE `ensure_status_token`
+    //   existed, so its first run was a compile failure (E0425) — the same red
+    //   PHASE-04's T1 used. A test written after the item it names compiles and
+    //   passes on sight and proves nothing.
+    // - C2 is `tests/e2e_knowledge_cli_golden.rs::
+    //   knowledge_status_refuses_a_foreign_kind_state`, which already existed
+    //   and pins the refusal SENTENCE byte-for-byte through argv. It is left
+    //   UNEDITED: it was green before the extraction and must be green after,
+    //   which is the whole claim a pure refactor makes.
+    // -----------------------------------------------------------------------
+
+    /// C1 — the guard refuses a token from another kind's vocabulary, and the
+    /// refusal names the kind and lists its own vocabulary. The known set is
+    /// read from `statuses`, never retyped (STD-001).
+    #[test]
+    fn ensure_status_token_refuses_a_foreign_kind_state() {
+        ensure_status_token(RecordKind::Assumption, "held")
+            .expect("`held` is an assumption status");
+
+        let err = ensure_status_token(RecordKind::Assumption, "accepted")
+            .expect_err("`accepted` is a decision status, not an assumption's");
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "`accepted` is not a assumption status (known: {})",
+                statuses(RecordKind::Assumption).join(", ")
+            )
+        );
+    }
+
+    /// The guard is total over the vocabulary it is given: every token of every
+    /// kind passes for its own kind. Generated, so a new status token joins the
+    /// coverage without a test edit.
+    #[test]
+    fn ensure_status_token_admits_every_token_of_its_own_kind() {
+        for kind in RecordKind::ALL {
+            for state in statuses(kind) {
+                ensure_status_token(kind, state).unwrap_or_else(|err| {
+                    panic!("{}/{state} is its own token: {err}", kind.as_str())
+                });
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // EX-2 / EX-3 / VT-2 — the settleable derivation and its pins
+    // (SL-249 PHASE-05 T2)
+    //
+    // The annotation may add DETAIL to the derived set; it may not EXTEND it.
+    // P-b is what says so, and it is an equality in both directions.
+    // -----------------------------------------------------------------------
+
+    /// P-a — every captured field name is a real field of its own kind's row.
+    /// An annotation naming `reason` on a constraint (`DEC-178`'s illustrative
+    /// spelling, refined to `waiver_reason` by §5.2) fails here.
+    #[test]
+    fn every_settlement_captures_a_field_its_kind_owns() {
+        for kind in RecordKind::ALL {
+            let owned: BTreeSet<&str> = facet_fields(kind).iter().map(|row| row.name).collect();
+            for settlement in settlements(kind) {
+                if let Some(field) = settlement.captures {
+                    assert!(
+                        owned.contains(field),
+                        "{}/{}: `{field}` is not a field of that kind's row",
+                        kind.as_str(),
+                        settlement.state
+                    );
+                }
+            }
+        }
+    }
+
+    /// P-b — the annotation's state set EQUALS the derived set, per kind. An
+    /// equality, both directions: a fifth authored row that the derivation does
+    /// not yield fails, and a derived state the annotation forgot fails too.
+    #[test]
+    fn the_annotations_states_equal_the_derived_settleable_set() {
+        for kind in RecordKind::ALL {
+            let annotated: BTreeSet<&str> = settlements(kind).iter().map(|s| s.state).collect();
+            let derived: BTreeSet<&str> = derived_settleable(kind).into_iter().collect();
+            assert_eq!(
+                annotated,
+                derived,
+                "{}: the annotation may add detail to the derived set, never extend it",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// P-c — the positive control. The union over all seven kinds is exactly
+    /// `DEC-178`'s ruling table, and the two decision exclusions are asserted by
+    /// name because each is excluded by a DIFFERENT leg of the intersection:
+    ///
+    /// - `accepted` by the FACET leg — DEC carries no `accepted_by`/`accepted_on`
+    ///   (I5, EX-3, DEC-088);
+    /// - `decided` by the STATUS leg — DEC *does* carry `decided_by`/`decided_on`,
+    ///   but `decided` is not in `DECISION_STATUSES`.
+    ///
+    /// The second assertion is what makes this a control rather than a
+    /// restatement: it fails against a derivation that scans facet field names
+    /// and passes against one seeded from the status vocabulary (D-A).
+    #[test]
+    fn the_derived_settleable_union_is_exactly_the_ruling_table() {
+        let union: BTreeSet<(&str, &str)> = RecordKind::ALL
+            .into_iter()
+            .flat_map(|kind| {
+                derived_settleable(kind)
+                    .into_iter()
+                    .map(move |state| (kind.as_str(), state))
+            })
+            .collect();
+        assert_eq!(
+            union,
+            BTreeSet::from([
+                ("assumption", "invalidated"),
+                ("assumption", "validated"),
+                ("constraint", "waived"),
+                ("question", "answered"),
+            ]),
+            "DEC-178's correspondence table, derived rather than listed"
+        );
+
+        let decisions = derived_settleable(RecordKind::Decision);
+        assert!(
+            !decisions.contains(&ACCEPTED_STATUS),
+            "I5/EX-3: `accepted` is excluded by the FACET leg — a decision carries \
+             no `accepted_by`/`accepted_on` — never by a named guard (DEC-088)"
+        );
+        assert!(
+            !decisions.contains(&"decided"),
+            "D-A: `decided` is excluded by the STATUS leg — a decision DOES carry \
+             `decided_by`/`decided_on`, but `decided` is not in DECISION_STATUSES. \
+             A facet-name-scanning derivation would yield it"
+        );
+    }
+
+    /// P-d — the three kinds with no actor/date pair derive nothing. `EVD` and
+    /// `HYP` carry a facet but no by/on pair (`DEC-174`); `CPT` carries no facet
+    /// at all (`DEC-172`), and the empty row is a case rather than an exception.
+    #[test]
+    fn kinds_without_an_actor_date_pair_derive_nothing() {
+        for kind in [
+            RecordKind::Evidence,
+            RecordKind::Hypothesis,
+            RecordKind::Concept,
+        ] {
+            assert!(
+                derived_settleable(kind).is_empty(),
+                "{}: no `<state>_by`/`<state>_on` pair, so nothing is settleable",
+                kind.as_str()
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-1 / EX-1 / EX-7 — `apply_settlement` writes ONCE (SL-249 PHASE-05 T3)
+    //
+    // The positive case is necessary and not sufficient. VT-1b and VT-1c are
+    // what actually prove "one write": each damages one leg's precondition and
+    // asserts the OTHER leg left no trace. A two-wrapper implementation passes
+    // VT-1a and fails both.
+    // -----------------------------------------------------------------------
+
+    /// The unknown sibling every facet fixture carries — a key no
+    /// `facet_fields` row names and `RawFacet` does not deserialize, so it is
+    /// exactly the forward-compatibility case `I11` protects.
+    const UNKNOWN_FACET_SIBLING: &str = "notes";
+
+    /// The TOML literal a fixture gives a row, derived from the row's own shape
+    /// — a `Closed` row takes its own `KNOWN`'s first token, never a retyped
+    /// literal (STD-001).
+    fn fixture_literal(row: &FacetFieldRow) -> String {
+        match row.shape {
+            FieldShape::List => "[\"a\", \"b\"]".to_string(),
+            FieldShape::Closed(known) => {
+                format!("\"{}\"", known.first().expect("a closed row knows a token"))
+            }
+            FieldShape::Text => format!("\"v-{}\"", row.name),
+        }
+    }
+
+    /// A facet-BEARING fixture for ANY kind, generated from that kind's own row
+    /// — ONE parameterised builder rather than a near-copy per kind
+    /// (`R-fixtures`; the hand-written `facet_bearing_decision` above predates
+    /// it and stays as PHASE-08's own fixture).
+    ///
+    /// It carries every tier a byte assertion needs to mean something: a
+    /// hand-written comment on the `[facet]` header, an unknown sibling inside
+    /// it, populated `[evidence]` and `[relationships]` tables, a free comment,
+    /// and a trailing `[[relation]]` row.
+    fn facet_bearing_record(kind: RecordKind, id: u32, status: &str) -> String {
+        let width = facet_fields(kind)
+            .iter()
+            .map(|row| row.name.len())
+            .chain(std::iter::once(UNKNOWN_FACET_SIBLING.len()))
+            .max()
+            .unwrap_or(0);
+        let mut facet = String::new();
+        for row in facet_fields(kind) {
+            facet.push_str(&format!(
+                "{:<width$} = {}\n",
+                row.name,
+                fixture_literal(row)
+            ));
+        }
+        facet.push_str(&format!("{UNKNOWN_FACET_SIBLING:<width$} = \"keep me\"\n"));
+
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = {id}
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"{}\"
+status = \"{status}\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"seed\"]
+
+[facet]                         # a hand-written comment on the facet header
+{facet}
+[evidence]
+supports    = [\"SL-249\"]
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = []
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+",
+            kind.as_str()
+        )
+    }
+
+    /// Seed one generated fixture and hand back its root and TOML path.
+    fn settle_fixture(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        status: &str,
+    ) -> (PathBuf, PathBuf) {
+        let root = edit_root(scratch);
+        seed_record(&root, kind, id, &facet_bearing_record(kind, id, status));
+        let path = record_toml_path(&root, kind, id);
+        (root, path)
+    }
+
+    /// The three raws a QUE settlement plans — the capture, the actor, the date.
+    fn answered_edits(who: &str, answer: &str, today: &str) -> Vec<FacetEdit> {
+        plan_facet_edits(
+            RecordKind::Question,
+            &[
+                text("answer", answer),
+                text("answered_by", who),
+                text("answered_on", today),
+            ],
+        )
+        .expect("the question row owns all three")
+    }
+
+    /// VT-1a — the positive case: the capture, the actor, the date, the status
+    /// and the `updated` stamp all move, and the untouched tiers survive.
+    #[test]
+    fn vt1a_a_settlement_moves_the_capture_the_actor_the_date_and_the_status() {
+        let (root, path) = settle_fixture("vt1a", RecordKind::Question, 5, "open");
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "because the table says so", &today);
+
+        let changed = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect("a well-formed record settles");
+        assert!(changed, "a settlement of an open question changes the file");
+
+        let record = read_record(&root, RecordKind::Question, 5).expect("it reads back");
+        let rendered = render_facet(&record.facet);
+        for expected in [
+            opt_text_line("answer", Some("because the table says so")),
+            opt_text_line("answered_by", Some("david")),
+            opt_text_line("answered_on", Some(&today)),
+        ] {
+            assert!(
+                rendered.contains(&expected),
+                "expected `{}`:\n{rendered}",
+                expected.trim_end()
+            );
+        }
+        assert_eq!(record.status, "answered", "the status moved");
+        assert_eq!(record.updated, today, "the same day the capture carries");
+
+        // The tiers the write must not eat.
+        let bytes = std::fs::read_to_string(&path).expect("the toml tier");
+        for survivor in [
+            "# a hand-written comment on the facet header",
+            "# a hand-written comment no verb may eat",
+            "keep me",
+            "[[relation]]",
+        ] {
+            assert!(bytes.contains(survivor), "`{survivor}` survived:\n{bytes}");
+        }
+    }
+
+    /// VT-1b — THE ORACLE. The top-level `status` key is deleted, so the status
+    /// leg takes `apply_status`'s F-1 bail. The facet leg would have succeeded,
+    /// and a two-write implementation would already have landed it. Assert the
+    /// file is byte-identical, facet included: that is "no intermediate state a
+    /// reader could observe", made observable.
+    #[test]
+    fn vt1b_a_failing_status_leg_leaves_the_facet_leg_unwritten() {
+        let (root, path) = settle_fixture("vt1b", RecordKind::Question, 5, "open");
+        let damaged = std::fs::read_to_string(&path)
+            .expect("the seeded toml")
+            .replace("status = \"open\"\n", "");
+        std::fs::write(&path, &damaged).expect("the damaged seed writes");
+
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "an answer that must not land", &today);
+        let err = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect_err("a record with no `status` key is malformed");
+        assert!(
+            err.to_string().contains("malformed record QUE-005"),
+            "the F-1 hint names the record: {err}"
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("the toml tier"),
+            damaged,
+            "the facet leg must not have landed ahead of the status leg's refusal"
+        );
+        let _ = root;
+    }
+
+    /// VT-1c — the mirror. The captured facet key is deleted, so the facet leg
+    /// takes `RequirePresent`'s F-1 refusal. Assert `status` and `updated` did
+    /// not move and the file is byte-identical.
+    #[test]
+    fn vt1c_a_failing_facet_leg_leaves_the_status_unmoved() {
+        let (root, path) = settle_fixture("vt1c", RecordKind::Question, 5, "open");
+        let damaged = std::fs::read_to_string(&path)
+            .expect("the seeded toml")
+            .replace("answer      = \"v-answer\"\n", "");
+        assert!(
+            !damaged.contains("\nanswer  "),
+            "the fixture's `answer` key was removed:\n{damaged}"
+        );
+        std::fs::write(&path, &damaged).expect("the damaged seed writes");
+
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "an answer with nowhere to go", &today);
+        let err = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect_err("a record missing a managed facet key is malformed");
+        assert!(
+            err.to_string().contains("`answer`"),
+            "the F-1 refusal names the missing key: {err}"
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("the toml tier"),
+            damaged,
+            "the status leg must not have landed after the facet leg's refusal"
+        );
+        let record = read_record(&root, RecordKind::Question, 5).expect("it still reads");
+        assert_eq!(record.status, "open", "the status did not move");
+        assert_eq!(record.updated, "2026-01-01", "nor did the stamp");
+    }
+
+    // -----------------------------------------------------------------------
+    // `knowledge settle` from ARGV (SL-249 PHASE-05 T4)
+    //
+    // Driven through `Cli::try_parse_from` and `SettleArgs::captures()` — the
+    // same seam `dispatch` reaches — so a capture flag DECLARED but never
+    // MAPPED is visible here, which is the drift `raw_edits` warns about one
+    // tier down.
+    // -----------------------------------------------------------------------
+
+    /// Parse an argv line to the settle variant and run it exactly as
+    /// `dispatch` does. Colour off: the assertions are on the text.
+    fn drive_settle(argv: &[&str]) -> anyhow::Result<String> {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from(argv)
+            .unwrap_or_else(|err| panic!("{argv:?} should parse: {err}"));
+        let crate::commands::cli::Command::Knowledge { command } = cli.command else {
+            panic!("{argv:?} is a knowledge command");
+        };
+        let KnowledgeCommand::Settle(args) = command else {
+            panic!("{argv:?} dispatches to `settle`");
+        };
+        let mut out = Vec::new();
+        run_settle(
+            args.path.clone(),
+            &args.id,
+            &args.state,
+            &args.by,
+            &args.captures(),
+            false,
+            &mut out,
+        )?;
+        Ok(String::from_utf8(out).expect("the post-state print is utf8"))
+    }
+
+    /// EX-1 end to end: one argv line moves the capture, the actor, the date
+    /// and the status — and the date is `clock::today()`, never a literal
+    /// (`clock::today` has no test override, carried constraint 6).
+    #[test]
+    fn a_question_settles_from_argv_in_one_line() {
+        let (root, _) = settle_fixture("t4-que", RecordKind::Question, 5, "open");
+        let root_arg = root.to_str().expect("a utf8 scratch root");
+
+        let printed = drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "QUE-005",
+            "answered",
+            "--by",
+            "david",
+            "--answer",
+            "the table says so",
+            "-p",
+            root_arg,
+        ])
+        .expect("a well-formed settle");
+
+        let record = read_record(&root, RecordKind::Question, 5).expect("it reads back");
+        let today = crate::clock::today();
+        assert_eq!(record.status, "answered");
+        assert_eq!(record.updated, today);
+        let rendered = render_facet(&record.facet);
+        for expected in [
+            opt_text_line("answer", Some("the table says so")),
+            opt_text_line("answered_by", Some("david")),
+            opt_text_line("answered_on", Some(&today)),
+        ] {
+            assert!(
+                rendered.contains(&expected),
+                "expected `{}`:\n{rendered}",
+                expected.trim_end()
+            );
+        }
+        assert!(printed.contains("QUE-005"), "names the record: {printed}");
+        assert!(printed.contains("answered"), "names the state: {printed}");
+        for field in ["answer", "answered_by", "answered_on"] {
+            assert!(printed.contains(field), "names {field}: {printed}");
+        }
+    }
+
+    /// A constraint waives with `--waiver-reason`, and an assumption validates
+    /// with no capture flag at all — the two shapes the QUE case cannot show.
+    #[test]
+    fn the_other_settleable_kinds_settle_from_argv() {
+        let (con_root, _) = settle_fixture("t4-con", RecordKind::Constraint, 12, "active");
+        drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "CON-012",
+            "waived",
+            "--by",
+            "david",
+            "--waiver-reason",
+            "superseded by the derivation",
+            "-p",
+            con_root.to_str().expect("a utf8 scratch root"),
+        ])
+        .expect("a well-formed waiver");
+        let con = read_record(&con_root, RecordKind::Constraint, 12).expect("it reads back");
+        assert_eq!(con.status, "waived");
+        let rendered = render_facet(&con.facet);
+        assert!(
+            rendered.contains(&opt_text_line(
+                "waiver_reason",
+                Some("superseded by the derivation")
+            )),
+            "the waiver reason landed:\n{rendered}"
+        );
+
+        let (asm_root, _) = settle_fixture("t4-asm", RecordKind::Assumption, 3, "held");
+        drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "ASM-003",
+            "validated",
+            "--by",
+            "david",
+            "-p",
+            asm_root.to_str().expect("a utf8 scratch root"),
+        ])
+        .expect("an assumption captures no text, so `--by` alone suffices");
+        let asm = read_record(&asm_root, RecordKind::Assumption, 3).expect("it reads back");
+        assert_eq!(asm.status, "validated");
+        let rendered = render_facet(&asm.facet);
+        assert!(
+            rendered.contains(&opt_text_line("validated_by", Some("david"))),
+            "the actor landed:\n{rendered}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-3 / EX-4 / EX-5 / EX-6 / I7 — the refusal catalogue
+    // (SL-249 PHASE-05 T5)
+    //
+    // The plan's VT-3 names five cases; there are SIX. EX-4's blank capture is
+    // distinct from its omitted sibling and is the one a naive implementation
+    // lets through: `plan_facet_edits` reads `Text("")` as a legitimate CLEAR
+    // (D6), so a blank settlement writes green unless `run_settle` stops it.
+    //
+    // Two observables per case, and they answer different questions:
+    //
+    // - the record's BYTES, both tiers, say the refusal wrote nothing;
+    // - the same invocation against an id naming NO record on disk says the
+    //   refusal ran BEFORE the open (EX-5). Bytes cannot distinguish "refused
+    //   early" from "refused late without writing"; this can.
+    // -----------------------------------------------------------------------
+
+    /// Seed one generated fixture, drive `knowledge settle <tail>` against it,
+    /// and assert it was refused with BOTH tiers byte-identical. Returns the
+    /// refusal message so a case can additionally pin its remedy.
+    fn settle_refused_leaving_bytes_intact(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        status: &str,
+        tail: &[&str],
+    ) -> String {
+        let (root, _) = settle_fixture(scratch, kind, id, status);
+        let before = record_tiers(&root, kind, id);
+
+        let mut argv = vec!["doctrine", "knowledge", "settle"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_settle(&argv).expect_err("this invocation must be refused");
+
+        assert_eq!(
+            before,
+            record_tiers(&root, kind, id),
+            "{tail:?}: a refusal writes nothing to either tier"
+        );
+        err.to_string()
+    }
+
+    /// EX-5's observable. The same invocation against an EMPTY root, so the id
+    /// names no record on disk. A check that ran after the open would report
+    /// not-found; one that ran before it repeats its own refusal.
+    fn settle_refused_before_any_open(scratch: &str, tail: &[&str]) -> String {
+        let root = edit_root(scratch);
+        let mut argv = vec!["doctrine", "knowledge", "settle"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_settle(&argv).expect_err("this invocation must be refused");
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("not found") && !msg.contains("no record"),
+            "{tail:?}: refused before the document was opened, so this is not a \
+             not-found error: {msg}"
+        );
+        msg
+    }
+
+    /// (1) EX-4 — the capture flag omitted. The whole point of the verb: the
+    /// disposition is part of resolving, not a field one may forget.
+    #[test]
+    fn vt3_1_an_omitted_capture_flag_is_refused() {
+        let tail = &["QUE-005", "answered", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-1", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-1-unseeded", tail),
+        ] {
+            assert!(msg.contains("requires `--answer`"), "names the flag: {msg}");
+            assert!(
+                !msg.contains("blank"),
+                "and is the OMITTED refusal, not its blank sibling — the two cases \
+                 are distinct and a shared message would hide (2): {msg}"
+            );
+        }
+    }
+
+    /// (2) EX-4 — the capture flag present but BLANK. Distinct from (1) and the
+    /// case a naive implementation lets through: `plan_facet_edits` would treat
+    /// `Text("")` as a clear and write green.
+    #[test]
+    fn vt3_2_a_blank_capture_flag_is_refused() {
+        let tail = &["QUE-005", "answered", "--by", "david", "--answer", "   "];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-2", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-2-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("`--answer` must not be blank"),
+                "names the flag and why: {msg}"
+            );
+        }
+    }
+
+    /// (2b) EX-4 again, for the kind that has no capture at all. An assumption
+    /// settles on `--by` ALONE, so a blank `--by` is the whole of its evidence
+    /// gone — the same defect (1) and (2) name, at the only kind where the
+    /// capture check cannot see it.
+    #[test]
+    fn vt3_2b_a_blank_actor_is_refused() {
+        let tail = &["ASM-003", "validated", "--by", "  "];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-2b", RecordKind::Assumption, 3, "held", tail),
+            settle_refused_before_any_open("vt3-2b-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("`--by` must not be blank"),
+                "names the flag and why: {msg}"
+            );
+        }
+    }
+
+    /// (3) EX-5 — a foreign-kind state. `waived` is a constraint's; on a
+    /// question it is out of vocabulary, and it dies in the check
+    /// `set_record_status` shares (EN-2).
+    #[test]
+    fn vt3_3_a_foreign_kind_state_is_refused() {
+        let tail = &["QUE-005", "waived", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-3", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-3-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("is not a question status"),
+                "the shared vocabulary refusal: {msg}"
+            );
+        }
+    }
+
+    /// (4) EX-3 / I5 — a state of the right kind that is not settleable.
+    /// `accepted` IS a decision status, so it passes the vocabulary check and
+    /// dies at the derived set. It must name the escape hatch.
+    #[test]
+    fn vt3_4_a_non_settleable_state_is_refused_and_names_the_escape_hatch() {
+        let tail = &["DEC-007", "accepted", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-4", RecordKind::Decision, 7, "proposed", tail),
+            settle_refused_before_any_open("vt3-4-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("is not a settle transition"),
+                "refused at the derived set: {msg}"
+            );
+            assert!(
+                msg.contains("knowledge status"),
+                "names the escape hatch: {msg}"
+            );
+        }
+    }
+
+    /// (5) EX-6 / D7 — a transition from a state to itself is not a transition.
+    /// The remedy is `knowledge edit`, which keeps `answered_on` meaning *when
+    /// it was answered* rather than when the command last ran.
+    #[test]
+    fn vt3_5_a_state_to_itself_transition_is_refused() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-5",
+            RecordKind::Question,
+            5,
+            "answered",
+            &["QUE-005", "answered", "--by", "david", "--answer", "again"],
+        );
+        assert!(msg.contains("already `answered`"), "says the state: {msg}");
+        assert!(
+            msg.contains("knowledge edit question"),
+            "names the amend verb (D7): {msg}"
+        );
+    }
+
+    /// (5b) D-D — the ORDER of the two EX-6 checks, on the record that is both
+    /// cases at once. `waived` is a settleable state AND a withdrawn one, so an
+    /// already-waived constraint re-waived falls in both arms. State-to-itself
+    /// goes first because its remedy is the more actionable of the two.
+    #[test]
+    fn vt3_5b_the_overlapping_case_gets_the_more_precise_remedy() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-5b",
+            RecordKind::Constraint,
+            12,
+            "waived",
+            &[
+                "CON-012",
+                "waived",
+                "--by",
+                "david",
+                "--waiver-reason",
+                "again",
+            ],
+        );
+        assert!(
+            msg.contains("already `waived`") && msg.contains("knowledge edit constraint"),
+            "the state-to-itself arm, not the vaguer withdrawn one: {msg}"
+        );
+    }
+
+    /// (6) EX-6 — a withdrawn record, refused by REUSING `is_withdrawn` rather
+    /// than a second list. The intended consequence, worth stating: an
+    /// already-`invalidated` assumption cannot be settled to `validated`;
+    /// `knowledge status` remains the correction path.
+    #[test]
+    fn vt3_6_a_withdrawn_record_is_refused() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-6",
+            RecordKind::Assumption,
+            3,
+            "invalidated",
+            &["ASM-003", "validated", "--by", "david"],
+        );
+        assert!(msg.contains("ASM-003"), "names the record: {msg}");
+        assert!(msg.contains("invalidated"), "names the status: {msg}");
+        assert!(
+            msg.contains("knowledge status"),
+            "names the correction path: {msg}"
+        );
+    }
+
+    /// The seventh refusal the sheet's `if` asks for: a capture flag that is
+    /// not THIS settlement's. `--answer` on a constraint's waiver names the
+    /// flag that would have worked.
+    #[test]
+    fn vt3_a_foreign_capture_flag_is_refused_naming_the_right_one() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-cross",
+            RecordKind::Constraint,
+            12,
+            "active",
+            &["CON-012", "waived", "--by", "david", "--answer", "nope"],
+        );
+        assert!(msg.contains("--answer"), "names the wrong flag: {msg}");
+        assert!(
+            msg.contains("--waiver-reason"),
+            "names the right one: {msg}"
+        );
+    }
+
+    /// D3's oracle, one tier over: every `Settlement.captures` name has a
+    /// declared `--<kebab>` flag on the settle command, so a fifth settlement
+    /// cannot ship unreachable from argv.
+    #[test]
+    fn every_captured_field_has_a_declared_settle_flag() {
+        let settle = built_knowledge_verb("settle");
+        let longs: BTreeSet<&str> = settle
+            .get_arguments()
+            .filter_map(clap::Arg::get_long)
+            .collect();
+        assert!(longs.contains("by"), "`--by` is declared: {longs:?}");
+        for kind in RecordKind::ALL {
+            for settlement in settlements(kind) {
+                if let Some(field) = settlement.captures {
+                    assert!(
+                        longs.contains(kebab(field).as_str()),
+                        "{}/{} captures `{field}` but `--{}` is undeclared: {longs:?}",
+                        kind.as_str(),
+                        settlement.state,
+                        kebab(field)
+                    );
+                }
+            }
         }
     }
 }
