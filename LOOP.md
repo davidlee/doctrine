@@ -144,6 +144,15 @@ Opus, and **thin** — it routes, it does not read source and it does not read
 6. **Close the firing** — rewrite `handover.md` (§ Handover), `ScheduleWakeup`
    ~20 min, one line to the user: phase, beat, what's next.
 
+**Hold your own commits while a worker is live.** A phase's delta is *one
+contiguous range*, so a driver or notes commit landing between the worker's first
+and last cannot be excluded by any `--start`/`--end` — it rides into the phase and
+surfaces in `slice conformance`'s undeclared cell. Every phase so far has needed
+`record-delta` for exactly this, and `PHASE-06` had one that could not be
+tightened out at all. Make the edit when it bites; **hold the commit** until after
+the worker's code tip. If you do commit mid-flight — a broken guard leg earns
+it — say so at close rather than leaving the auditor to find it.
+
 Beats 4 and 5 may fall in the same firing — planning and execution are separated
 by living in **different sub-agent contexts**, which is the whole point of
 delegating them. What must never share a context is planning and execution, not
