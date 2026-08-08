@@ -189,6 +189,15 @@ the conventional scope `feat(SL-<N>): PHASE-<PP> …`.
 (`.gitignore:51`) — it does not survive `rm -rf` of state. Never put anything
 load-bearing only there.
 
+**The sheet names the shard; the brief must not.** The orchestrator got this
+wrong twice — naming `notes_03-06.md` and `notes_07-08.md` in briefs whose
+sheets said `notes_04-06.md` and `notes_08.md` — and both times the worker had
+to adjudicate and leave a note. The orchestrator does not know the shard split,
+because phases do not execute in id order (`SL-249` ran `01 02 08 03 …`) and the
+ranges follow execution, not numbering. So: the planner writes the shard name
+into the sheet, the worker follows the sheet, and the brief says "the shard the
+sheet names" and nothing more.
+
 - `notes_01-03.md`, `notes_04-06.md`, … — the execution record for those phases:
   what was done, what diverged, what was measured. A worker appends to its own
   shard and touches no other.
