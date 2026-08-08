@@ -242,6 +242,18 @@ fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · e
   way — harmless there (it asserts containment only), but the entries it writes
   are not doctrine-owned.
 
+- **Selector gap found and closed during PHASE-03 (2026-08-08).** The slice
+  declared no `tests/` surface at all, so every test-file change since PHASE-02
+  had been landing in `slice conformance`'s **undeclared** cell — including
+  `tests/e2e_memory_sync.rs`, which `PHASE-02` `EX-10` names explicitly. Added
+  `tests/e2e_memory_sync.rs` and `tests/e2e_claude_install.rs` as
+  `design-target`; the first is now conformant and the second correctly reads
+  undelivered until PHASE-04 `EX-6` inverts its three "ships via plugin"
+  assertions. The design-time `review.selectors` pass reached only `src/` — worth
+  saying at reconcile, because a slice whose design enumerates test rewrites and
+  whose selectors exclude `tests/` cannot be checked by the conformance report
+  that exists to check it.
+
 - **At reconcile — `PHASE-02` `EX-7` is exact at the test-name level and lossy
   at the line level.** It says its eight sites are "rewritten to
   `SETTINGS_PROJECT_REL`", but at three of them the *command literals* flip too

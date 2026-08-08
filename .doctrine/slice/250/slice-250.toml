@@ -65,6 +65,16 @@ selector = "src/dtoml.rs"
 intent = "design-target"
 note = "The [install] module-doc mirror at :44-45 goes stale with the marketplace steps; the scope key itself lives in install_config.rs"
 
+[[selector]]
+selector = "tests/e2e_memory_sync.rs"
+intent = "design-target"
+note = "design.md sec-7 enumerates knowingly-rewritten assertions in both: PHASE-02 EX-10 (the .expect that panics once run_sync_install inherits the project scope) and PHASE-04 EX-6 (the three 'ships via plugin' assertions invert). Omitted at the design-time selector review, which reached only src/."
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+note = "design.md sec-7 enumerates knowingly-rewritten assertions in both: PHASE-02 EX-10 (the .expect that panics once run_sync_install inherits the project scope) and PHASE-04 EX-6 (the three 'ships via plugin' assertions invert). Omitted at the design-time selector review, which reached only src/."
+
 [[relation]]
 label = "fulfils"
 target = "IMP-400"
