@@ -124,6 +124,7 @@ Every brief carries, and carries nothing else:
 - "read `LOOP.md` § Sub-agent discipline and § Where this runs — both bind you";
 - "in-tree on branch `edge`, no isolation; another agent shares this index, so
   `git status --porcelain` first and path-limit every commit";
+- "commit per task, and harvest at that boundary — not at the end";
 - "end green: `doctrine check gate`. Do not flip your own phase status."
 
 **Planner** — Opus, always. Runs `/phase-plan` for one phase: reads that phase's
@@ -163,7 +164,9 @@ knowledge is a lie the next firing believes. This is also the heartbeat: an
 untouched sheet reads as a dead sub-agent.
 
 **Harvest as you go, never at the end.** Context exhaustion is the expected
-ending, not the exception.
+ending, not the exception — a worker has already been killed mid-phase by a
+session limit. Harvest at each task's commit boundary (§ *Commit per task*),
+which is where you still remember why.
 
 - durable gotcha / pattern / footgun → `doctrine memory record`;
 - friction, confusion, token waste → `doctrine observation record friction …`;
@@ -179,9 +182,27 @@ criterion that does not hold is a stop-and-report, **never** an
 adjust-the-criterion. The loop halting on a real question is the cheapest outcome
 available. `DEC-181` is what that looks like when it works.
 
+**Commit per task, not per phase.** One commit per ticked task, path-limited,
+scoped `feat(SL-<N>): PHASE-<PP> T<k> — …`. The commit is not the point; the
+*boundary* is. It is the moment you have just finished thinking about something
+and still remember why — so the commit message, the sheet's Findings, and any
+memory or observation the task earned all get written **there**, while the
+reasoning is cheap. Deferring that to the end trades a certainty (you will
+forget, or run out of context) against a convenience.
+
+What survives a dead worker is code and commits. What dies with it is every
+*insight* about that code that was still only in its head. `PHASE-05` proved
+both halves: the source was recovered intact from the working tree and the gate
+re-run green, but the sheet's Findings were empty and the evidence for what each
+control had actually done had to be reconstructed from the diff. The code was
+never at risk. The knowledge was, and some of it did not survive.
+
+So: a task is done when its commit, its Findings line, and its harvest all
+exist. Not before.
+
 **End green.** `doctrine check gate` — `check`/`gate` build before validating,
-which is what gives the corpus check a fresh binary. Commit path-limited, with
-the conventional scope `feat(SL-<N>): PHASE-<PP> …`.
+which is what gives the corpus check a fresh binary. Green at every commit if
+the task allows it; green without fail at hand-back.
 
 ## Notes, sharded
 
