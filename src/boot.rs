@@ -1270,29 +1270,11 @@ fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
 /// core to a per-harness path constant.
 fn plan_hook(existing_json: Option<&str>, spec: &HookSpec, form: CommandForm) -> HookPlan {
     let command = command_for(spec, form);
-    let mut value: Value = match existing_json.map(str::trim) {
-        None | Some("") => Value::Object(Map::new()),
-        Some(text) => match serde_json::from_str(text) {
-            Ok(parsed) => parsed,
-            Err(_) => {
-                return HookPlan {
-                    outcome: RefreshOutcome::PrintedFallback {
-                        hook_file: "",
-                        snippet: String::new(),
-                    },
-                    new_json: None,
-                };
-            }
-        },
+    let Some(mut value) = parse_settings(existing_json) else {
+        return hook_fallback();
     };
     let Some(arr) = hook_array_mut(&mut value, spec.event) else {
-        return HookPlan {
-            outcome: RefreshOutcome::PrintedFallback {
-                hook_file: "",
-                snippet: String::new(),
-            },
-            new_json: None,
-        };
+        return hook_fallback();
     };
     // Normalize to exactly the canonical entry SET, in matcher order, each
     // doctrine-sole (D2, generalised by SL-250). No-write iff that set is already
@@ -1335,13 +1317,35 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec, form: CommandForm) ->
             outcome,
             new_json: Some(json),
         },
-        Err(_) => HookPlan {
-            outcome: RefreshOutcome::PrintedFallback {
-                hook_file: "",
-                snippet: String::new(),
-            },
-            new_json: None,
+        Err(_) => hook_fallback(),
+    }
+}
+
+/// The fail-soft settings parse both hook planners share (SL-250 `EX-1`): absent
+/// or empty yields an empty object — a first install has nothing to merge into —
+/// and malformed yields `None`, because doctrine never clobbers a file it cannot
+/// understand.
+///
+/// The trichotomy is load-bearing one level up: an ABSENT sibling reaches
+/// [`EvictOutcome::Nothing`], never `Unreadable`. "There was nothing to sweep"
+/// and "we could not read it" are different facts about the file being
+/// abandoned, and only one of them is a warning.
+fn parse_settings(existing_json: Option<&str>) -> Option<Value> {
+    match existing_json.map(str::trim) {
+        None | Some("") => Some(Value::Object(Map::new())),
+        Some(text) => serde_json::from_str(text).ok(),
+    }
+}
+
+/// `plan_hook`'s fail-soft return: no write, and a fallback the caller annotates
+/// with the file and snippet (`annotate_fallback`). Mirrors [`mcp_fallback`].
+fn hook_fallback() -> HookPlan {
+    HookPlan {
+        outcome: RefreshOutcome::PrintedFallback {
+            hook_file: "",
+            snippet: String::new(),
         },
+        new_json: None,
     }
 }
 
@@ -4843,6 +4847,25 @@ mod tests {
         install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
         let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         assert_eq!(commands(&json), vec![format!("/abs/doctrine {SYNC_ARGS}")]);
+    }
+
+    // --- SL-250 PHASE-03: the abandoned-scope sweep and the shared report ---
+
+    // EX-1: the fail-soft parse both hook planners share. The trichotomy is what
+    // keeps `Nothing` and `Unreadable` distinct one level up — an ABSENT sibling
+    // has nothing to sweep; it is not a file doctrine failed to read.
+    #[test]
+    fn parse_settings_treats_absent_and_empty_as_an_empty_object() {
+        let empty = Some(Value::Object(Map::new()));
+        assert_eq!(parse_settings(None), empty, "absent");
+        assert_eq!(parse_settings(Some("")), empty, "empty");
+        assert_eq!(parse_settings(Some("  \n ")), empty, "whitespace");
+        assert_eq!(
+            parse_settings(Some(r#"{"hooks":{}}"#)),
+            Some(serde_json::json!({"hooks": {}})),
+            "well-formed round-trips"
+        );
+        assert_eq!(parse_settings(Some("{ not json")), None, "malformed");
     }
 
     /// Entries under an arbitrary `hooks.<event>` key (`None` if absent).
