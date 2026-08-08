@@ -124,6 +124,9 @@ adaptations naming the phase that surfaced them.
    SubagentStop premise]`: a live probe proved the worker tree persists
    post-return, so the dependency was retired outright.
 
+**All three were handled by hand-editing EN prose.** No lineage, no record of
+what else the change invalidated, no way to query which phases were affected.
+
 ### What this changes
 
 Brief 03's premise — *"missed dependencies should be a common execution discovery
@@ -135,26 +138,6 @@ adaptation record exists but is not queryable.** It lives in git subject lines,
 `/consult` transcripts, and notes prose. Nothing in the plan model can answer
 "which phases were re-scoped after execution began, and why". That is a real gap,
 independent of whether obligations are the answer to it.
-
-1. **SL-233 PHASE-11 EN-1** — *edge retarget, one-to-many.* Named PHASE-06; the
-   2026-07-29 split moved the marker machinery, so "both successors are required
-   — PHASE-13 for the grammar and the watermark, PHASE-14 for the parse-a-human-
-   edited-document path".
-2. **SL-233 PHASE-12 EN-1** — *edge retarget, one-to-one.* Same split; PHASE-06's
-   successor for section fingerprints is PHASE-13.
-3. **SL-182 PHASE-06 EN-1** — *edge removal.* `[AMENDED — RETIRES the
-   SubagentStop premise]`: a live probe proved the worker tree persists
-   post-return, so the dependency was retired outright.
-
-**All three were handled by hand-editing EN prose.** No lineage, no record of
-what else the change invalidated, no way to query which phases were affected.
-
-**But the rate is the finding.** Three corrections in 2,362 entrance criteria —
-about 0.13%. Brief 03's premise is that *"missed dependencies should be a common
-execution discovery and cheap to reconcile"*. In this corpus they are rare.
-Instrument limit: only `AMENDED`-tagged edits are counted, so this is a lower
-bound; silent corrections would not appear. Even allowing an order of magnitude
-of undertagging, the premise is not supported.
 
 ## 4. Model comparison
 
