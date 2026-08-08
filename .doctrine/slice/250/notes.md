@@ -164,6 +164,84 @@ fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · e
   `dead_code` allowances**. **Owed at reconcile:** the partition statement `D1`
   already owes should name PHASE-02 → PHASE-03 as well as PHASE-01 → PHASE-02/04.
 
+- **PHASE-03 discharged `EN-1` by creating both members, as PHASE-02 predicted
+  (2026-08-08).** `ClaudeSettingsScope::sibling()` acquired its first reader in
+  `install_claude_hook`'s sweep target and in `write_scope_report`'s rider;
+  `RefreshReport.claude_scope` acquired its in `wire`. No `dead_code` allowance
+  was spent, so the slice still carries **zero**. The partition statement `D1`
+  owes now covers PHASE-01 → PHASE-02/04 **and** PHASE-02 → PHASE-03.
+
+- **At reconcile — four PHASE-03 departures, all design-silent rather than
+  design-contradicting (2026-08-08, during execution).**
+
+  1. **`EX-8`'s reporting type is `BaseRefWrite`, which the design does not
+     name.** `design.md` § *Reporting shape* shows `RefreshReport` with no
+     stranded-`baseRef` field, and § *`install_baseref` follows the scope* gives
+     the message but not the type. `install_baseref` now returns
+     `BaseRefWrite { outcome, stranded }` and `RefreshReport.baseref` takes it.
+     Chosen over a separate inspector function on `HookWrite`'s own argument —
+     bundling makes the second fact unforgettable at the call site, the same
+     reasoning `DEC-163` used to resolve the scope *inside* the installer rather
+     than pass it. Cost: three mechanical `out.baseref` → `out.baseref.outcome`
+     rewrites in existing tests. Not class (ii) — the scope flip did not
+     invalidate them; a signature did.
+
+  2. **The stranded advisory is worded by DIRECTION; the design's message text
+     covers only one.** The design's line asserts "local settings override
+     project settings, so it still governs". True when the abandoned file is the
+     *local* one. In the other direction — scope `Local`, abandoned file
+     `.claude/settings.json` — precedence runs the other way and the stranded
+     value is the inert one, so the same sentence would overclaim by exactly one
+     degree. `stranded_baseref_line(scope, value)` renders both. **Owed:** amend
+     the design's message to show the pair, or state the Project-only scope.
+
+  3. **`EX-1` was taken one consumer further.** It requires `parse_settings`
+     shared by `plan_hook` and `plan_evict`; `plan_baseref` carried the
+     byte-identical prologue and now rides it too, with its five
+     `PrintedFallback` literals collapsed into `baseref_fallback` (beside the new
+     `hook_fallback`, in `mcp_fallback`'s existing shape). Suite unchanged at
+     4398 across the refactor.
+
+  4. **`boot::claude_scope` renamed `configured_scope`.** It would otherwise
+     share a name with `RefreshReport.claude_scope` and mean a different thing —
+     the configured scope, versus the scope plus what its sibling's sweep found.
+
+- **At reconcile — `VT-2`'s two-spec fold is asserted through `WorktreeCreate`,
+  not `SubagentStart`.** The criterion's example pairs `hooks.SessionStart` with
+  `hooks.SubagentStart`, but `HookSpec::nominate` does not exist until PHASE-04
+  `EX-1`. `a_partly_successful_sweep_reports_both_facts` drives the identical
+  shape — `removed == 1` **and** `unreadable == true`, both rider lines printed —
+  through `sync` (`SessionStart`, sweeps) plus `create_fork` (`WorktreeCreate`,
+  hand-edited to a string). The behavioural claim is asserted exactly; only the
+  event name differs.
+
+- **At reconcile — `PHASE-03`'s `EN-2` and `EN-3` line citations are stale, as
+  `EX-7`'s were.** Every `src/boot.rs` address in PHASE-03's authored criteria
+  predates PHASE-01's renames and PHASE-02's edits: `plan_hook` is at `:1271` not
+  `:1159`, its `PrintedFallback` returns at `:1278`/`:1289`, the `Ok` carry-out
+  at `:1611` → `install_hook_to_file:1747`, `BaseRefOutcome::Conflict` at `:1478`
+  not `:1333`. **Every cited fact re-verified by reading and holds.** This is the
+  third phase to hit it; the amendment should say once, generally, that a
+  criterion's line numbers are advisory and its named symbols are binding.
+
+- **New, not in the design: `wire`'s Claude arm announces the scope with zero
+  specs merged.** PHASE-03 wires `write_scope_report` into `wire` but PHASE-04
+  supplies the specs, so today the Claude arm prints the announcement and an
+  empty rider. Honest rather than vacuous — `install_baseref` writes to the very
+  file the line names — and `EX-7` makes the announcement a criterion rather than
+  a nicety. Recorded so it is not read as a leak at review.
+
+- **Durable, recorded as memory `mem_019fdf7cdacf7472948e5a48ceee98a9`
+  (`mem.pattern.boot.test-exec-is-not-doctrine-owned`).** `resolve_exec()` is
+  `current_exe()`, which under `cargo test` is `deps/doctrine-<hash>` — whose
+  file name is not `doctrine`, so `is_doctrine_program` says not-ours. A fixture
+  seeded by driving a real installer inside a test is therefore **unowned**, and
+  every ownership-dependent assertion over it silently exercises the foreign
+  branch. It bit `VT-5` during this phase: the eviction correctly found nothing.
+  Note that PHASE-02's `memory_sync_install_honours_the_scope_key` seeds the same
+  way — harmless there (it asserts containment only), but the entries it writes
+  are not doctrine-owned.
+
 - **At reconcile — `PHASE-02` `EX-7` is exact at the test-name level and lossy
   at the line level.** It says its eight sites are "rewritten to
   `SETTINGS_PROJECT_REL`", but at three of them the *command literals* flip too
