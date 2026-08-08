@@ -57,19 +57,26 @@ else:
 ```bash
 ./target/debug/doctrine slice status <N>
 find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
-pgrep -a 'cargo|rustc' | head         # is it building right now?
+find target/debug/.fingerprint target/debug/deps -maxdepth 0 -mmin -30
 ```
 
-**Not `pgrep -af`.** `-f` matches the whole command line, and this jail's own
-`bwrap` argv carries a `--setenv PATH …/.cargo/bin…`, so `-f` matches pid 1 and
-reports "building" forever — a liveness probe that can never say no. Match the
-process *name* only.
+The third leg is the **build-activity** probe, and it is the one that decides
+whether a silent worker is alive. Two directory stats, no tree walk: cargo
+restamps both on every compile, so a hit means "built within 30 minutes".
+
+Prefer it to `pgrep`. A process check is an *instantaneous sample* — a worker
+between builds, reading a file or writing a test, shows no `cargo` at all and
+reads dead while it is plainly working. Artifact mtime is cumulative: it answers
+"has this tree been built recently", which is the question actually being asked.
+(And if you do reach for `pgrep`, never `-f` — this jail's own `bwrap` argv
+carries `--setenv PATH …/.cargo/bin…`, so `-f` matches pid 1 and reports
+"building" unconditionally.)
 
 | what you see | what you do |
 |---|---|
 | phase `in_progress`, sheet touched < 25 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
-| phase `in_progress`, sheet cold, **but cargo/rustc running** | **exit.** Still alive, just slow. Same as above. |
-| phase `in_progress`, sheet cold > 90 min **and** nothing building | it died. Re-spawn, resuming at the first unticked task. |
+| phase `in_progress`, sheet cold, **but the tree was built < 30 min ago** | **exit.** Still alive, just slow. Same as above. |
+| phase `in_progress`, sheet cold > 90 min **and** no build in 30 min | it died. Re-spawn, resuming at the first unticked task. |
 | phase `completed`, a next phase exists | beat 4 — spawn the planner. |
 | phase `planned`, sheet > 100 lines (filled) | beat 5 — spawn the worker. |
 | phase `planned`, sheet ~27 lines (bare template) | beat 4 — spawn the planner. |
@@ -84,8 +91,8 @@ worker.** Workers tick as they go (§ *Sub-agent discipline*), so the mtime is a
 to lose. A ten-mutation battery is ten build-and-test cycles with nothing
 tickable between them; so is a cold `cargo build` after a manifest edit. The
 proxy inverts under load: the more expensive the phase, the deader it looks.
-Hence the `pgrep` leg and the 90-minute floor — **a build in flight always wins
-over a cold sheet.** When the two disagree, believe the process table.
+Hence the build-activity leg and the 90-minute floor — **a recent build always
+wins over a cold sheet.** When the two disagree, believe the artifacts.
 
 Re-spawning is not free and not idempotent: a revived worker re-does everything
 since the last tick, and a worker reaped mid-write can leave a half-edited file
