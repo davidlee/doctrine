@@ -1,0 +1,8 @@
+- The four initial record kinds: **assumption**, **decision**, **question**,
+  **constraint**.
+- The kind set is exactly the four initial kinds — assumption (`ASM`), decision
+  (`DEC`), question (`QUE`), constraint (`CON`), three-character per-kind prefixes —
+- Capturing each of the four kinds yields a durable record with a reserved kind-correct
+  id and the kind's default lifecycle state and typed facets.
+Capture is proven by confirming each of the four kinds (REQ-060) produces a durable
+record with a reserved kind-correct id, the kind's default lifecycle state, its typed

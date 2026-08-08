@@ -1,0 +1,41 @@
+component of the entity engine (**SPEC-004**) — four `record_kind`s riding four engine
+`Kind`s over the same kind-blind materialiser, the structural sibling of the backlog
+specific to this family: the four-kind discrimination, the **per-kind lifecycle
+vocabularies**, the per-kind typed `[facet]` blocks plus the shared evidence structure,
+Mirrors the structured `responsibilities` list: bind the four record kinds onto the
+engine, carry the per-kind lifecycle vocabularies and hide-set, hold the per-kind typed
+### Four kinds, one engine
+
+A knowledge record exists in four subtypes — assumption (`ASM`), decision (`DEC`),
+question (`QUE`), constraint (`CON`) — each a data-valued engine `Kind` with its own
+Evidence is a single **shared** minimal support structure across all four kinds — a
+typed `[evidence]` table of `supports` / `contradicts` / `notes` citations (PRD-010
+four prefixes and selects the right lifecycle vocabulary and facet shape. Identity — the
+kind prefix plus number — is permanent; the slug is never authoritative; and
+Plugging the four record kinds in therefore requires, concretely:
+
+the four record kinds (cross-kind *within the family*, unlike the governance row's
+`SameKind`). Like governance supersession (SPEC-018 OD-3), it is
+the four kinds to `integrity::KINDS` forces **four full `priority::partition` entries** —
+one per kind, each `workable: &[]` with *every* status of that kind in `terminal` (the
+`Unrecognised`), plus the four VT-1 drift canaries binding each kind's `*_STATUSES` const.
+This is **not** the status-less REC path: REC carries no status and rides `status_class`'s
+- **Relation lockstep across SL-046/SL-048.** Admitting the record kinds touches four
+  coupled sites — `integrity::KINDS`, `RELATION_RULES`, the `outbound_for` dispatch, and
+  pinned in order) and `sources_match_shipped_accessors` — both of which the four new
+  kinds edit. The storage-ordering F1 invariant (typed tables before `[[relation]]`
+  **four** `priority::partition` entries (one per kind), each `workable: &[]` /
+  all-`Terminal`, plus four VT-1 drift canaries — *not* the status-less REC path. No
+  record state is ever `Workable`; IMP-047 later splits the unsettled states into the
+- **One entity discriminated by `record_kind` beats four schemas.** The four kinds share
+  enough structure (fileset, identity, evidence, relations, reassembly) that one
+  kind-blind materialiser serving all four — diverging only by prefix, lifecycle
+  vocabulary, and facet seed — is preferred over four parallel implementations, exactly
+  as the backlog's single-entity discipline (SPEC-015) proved for its five kinds.
+  four status vocabularies instead of one — is a `record_kind`-keyed lookup over the same
+  edit-preserving transition seam, not a second transition mechanism. The engine stays
+  component owns only the four-kind discrimination, the per-kind lifecycles and facets,
+  the evidence structure, prefix→kind resolution, and the supersession verb. It is the
+  serves all four kinds. `record_kind` is fixed at capture and identity is permanent.
+- **D5 — evidence is a shared minimal typed structure, not a kind.** All four kinds share
+  one `[evidence]` table of typed `supports`/`contradicts`/`notes` citations; it is never
