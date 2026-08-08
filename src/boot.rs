@@ -26,7 +26,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::{adr, fsutil, governance, install, memory, policy, root, standard};
+use crate::install_config::ClaudeSettingsScope;
+use crate::{adr, dtoml, fsutil, governance, install, memory, policy, root, standard};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
 /// (inherits the `.doctrine/*` ignore), `rm -rf`-able. Never authoritative.
@@ -533,6 +534,47 @@ pub(crate) fn session_start_hook_json(content: &str) -> anyhow::Result<String> {
 /// constant called "the settings file" is an ambiguity that will be misread.
 const SETTINGS_LOCAL_REL: &str = ".claude/settings.local.json";
 
+/// The committed, team-shared Claude settings file — TRACKED, so a hook command
+/// written here must carry no host abspath (`CommandForm::Portable`; SL-195
+/// `INV-1`, POL-002). SL-250 makes this the default target (`DEC-163`,
+/// `OQ-1`), which is why the pair needs two named constants rather than one.
+const SETTINGS_PROJECT_REL: &str = ".claude/settings.json";
+
+/// The Claude settings scope this project has chosen (SL-250 `DEC-163`). An
+/// absent key, an absent `[install]` table and an absent `doctrine.toml` all
+/// yield `Project`, so no fixture is needed to get the default.
+fn claude_scope(root: &Path) -> anyhow::Result<ClaudeSettingsScope> {
+    Ok(dtoml::load_doctrine_toml(root)?
+        .install
+        .claude_settings_scope)
+}
+
+/// The Claude settings file `scope` selects. The mapping lives HERE and not on
+/// `ClaudeSettingsScope` itself: `install_config` is a pure leaf at out=0
+/// (ADR-001) and owns no paths. See also [`command_form`].
+const fn settings_rel(scope: ClaudeSettingsScope) -> &'static str {
+    match scope {
+        ClaudeSettingsScope::Project => SETTINGS_PROJECT_REL,
+        ClaudeSettingsScope::Local => SETTINGS_LOCAL_REL,
+    }
+}
+
+/// The command form `scope`'s file requires, on the `baked ⟺ gitignored`
+/// invariant (SL-195 D2): the project file is tracked, the local one is not.
+///
+/// Sited beside [`settings_rel`] for the same reason, and NOT as a method on
+/// `ClaudeSettingsScope` as `design.md` `sec-2` first wrote it — that would make
+/// a leaf name a `command`-tier type, inverting the tiers and closing a cycle
+/// (`boot` already reaches `install_config` through `dtoml`). See SL-250
+/// `plan.md` § *The one departure from design `sec-2`*; `PHASE-02` `VA-2` is the
+/// gate. Do not "tidy" this back onto the enum.
+pub(crate) const fn command_form(scope: ClaudeSettingsScope) -> CommandForm {
+    match scope {
+        ClaudeSettingsScope::Project => CommandForm::Portable,
+        ClaudeSettingsScope::Local => CommandForm::Baked,
+    }
+}
+
 /// Codex hooks file (CLI codex) — project-root JSON under `.codex/`.
 const CODE_HOOKS_REL: &str = ".codex/hooks.json";
 
@@ -900,13 +942,6 @@ pub(crate) enum CommandForm {
     /// `<abs exec> <args>` — for a gitignored file.
     Baked,
     /// `${DOCTRINE_BIN:-doctrine} <args>` — for a tracked one (POL-002).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-250 PHASE-02 selects this variant from the scope key; PHASE-01 lands the axis"
-        )
-    )]
     Portable,
 }
 
@@ -1369,7 +1404,7 @@ fn install_refresh(
             let extension = install_pi_extension(root, exec, dry_run)?;
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
-                hook,
+                hooks: vec![hook],
                 baseref: BaseRefOutcome::NotApplicable,
                 mcp: RefreshOutcome::None,
                 append_system,
@@ -1384,13 +1419,16 @@ fn install_refresh(
             // plugin). The boot hook is no longer written to settings here; the
             // baseRef write below rides BESIDE the (retained, now-unused-for-Claude)
             // HookSpec merge core. baseRef + .mcp.json wiring are UNCHANGED.
-            let hook = RefreshOutcome::None;
-            let baseref = install_baseref(root, dry_run)?;
+            //
+            // SL-250 PHASE-02: no spec is merged here yet, so `hooks` is empty —
+            // the arm still resolves the scope, because `install_baseref`
+            // follows it. PHASE-04 fills the vec with the seven specs.
+            let baseref = install_baseref(root, claude_scope(root)?, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
             let mcp = install_mcp(root, dry_run)?;
             Ok(RefreshReport {
-                hook,
+                hooks: Vec::new(),
                 baseref,
                 mcp,
                 append_system: AppendSystemOutcome::NotApplicable,
@@ -1405,7 +1443,10 @@ fn install_refresh(
 /// The combined Claude refresh outcome: the `SessionStart` hook merge plus the
 /// `worktree.baseRef` set (SL-064 §8). Pi carries `None`/`NotApplicable`.
 struct RefreshReport {
-    hook: RefreshOutcome,
+    /// One outcome per spec merged, in emission order. The Codex arm carries
+    /// exactly one; the Claude arm carries none until SL-250 PHASE-04 ships its
+    /// spec set (the boot hook currently arrives via the plugin).
+    hooks: Vec<RefreshOutcome>,
     baseref: BaseRefOutcome,
     /// The `.mcp.json` doctrine server registration outcome (CHR-013); pi
     /// carries `None` (no `.mcp.json` wiring on the import-only arm).
@@ -1518,11 +1559,21 @@ fn plan_baseref(existing_json: Option<&str>) -> BaseRefPlan {
     }
 }
 
-/// Set `worktree.baseRef="head"` in `.claude/settings.local.json`, writing only on
-/// change (unless `dry_run`). Reads → [`plan_baseref`] → atomic write, mirroring
-/// [`install_claude_hook`]. Rides beside the hook installer in the Claude arm.
-fn install_baseref(root: &Path, dry_run: bool) -> anyhow::Result<BaseRefOutcome> {
-    let path = root.join(SETTINGS_LOCAL_REL);
+/// Set `worktree.baseRef="head"` in the scope-selected Claude settings file,
+/// writing only on change (unless `dry_run`). Reads → [`plan_baseref`] → atomic
+/// write, mirroring [`install_claude_hook`]. Rides beside the hook installer in
+/// the Claude arm.
+///
+/// It follows the scope rather than staying pinned to the local file, so that
+/// doctrine authors ONE Claude settings file per install (SL-250 `sec-3`).
+/// The value is project semantics — every collaborator wants forks taken from
+/// head — with nothing per-machine in it to keep out of git.
+fn install_baseref(
+    root: &Path,
+    scope: ClaudeSettingsScope,
+    dry_run: bool,
+) -> anyhow::Result<BaseRefOutcome> {
+    let path = root.join(settings_rel(scope));
     let existing = fs::read_to_string(&path).ok();
     let plan = plan_baseref(existing.as_deref());
     if let (Some(json), false) = (&plan.new_json, dry_run) {
@@ -1713,18 +1764,40 @@ fn install_hook_to_file(
     Ok(annotate_fallback(plan.outcome, rel_path, spec, form))
 }
 
-/// Merge a `HookSpec`'s hook entries into `.claude/settings.local.json`, writing
-/// only on change (unless `dry_run`). The generic Claude installer behind both
-/// `boot install`'s refresh and `memory sync install` (SL-018).
+/// One Claude hook write: the scope it resolved and what the merge did.
+/// The scope rides out because the caller needs it to render a matching
+/// manual-repair snippet, and (SL-250 PHASE-03) to report the sweep.
+pub(crate) struct HookWrite {
+    /// The settings file this write targeted, resolved from `doctrine.toml`.
+    pub(crate) scope: ClaudeSettingsScope,
+    /// What the merge into that file did.
+    pub(crate) written: RefreshOutcome,
+}
+
+/// Merge a `HookSpec`'s hook entries into the Claude settings file the
+/// `[install] claude-settings-scope` key selects, writing only on change
+/// (unless `dry_run`). The generic Claude installer behind both `boot install`'s
+/// refresh and `memory sync install` (SL-018).
 ///
-/// `Baked` because the file it writes is gitignored (`baked ⟺ gitignored`).
-/// SL-250 PHASE-02 replaces that single expression with the scope's form.
+/// **The scope is resolved HERE, not passed in** (SL-250 `DEC-163`). The second
+/// caller is `memory sync install` — the routine, flagless install — and a
+/// parameter it could forget would re-create the entry in the abandoned file on
+/// every memory sync. Resolving inside makes that unspellable; the cost is one
+/// small TOML read per spec, deliberately accepted.
 pub(crate) fn install_claude_hook(
     root: &Path,
     spec: &HookSpec,
     dry_run: bool,
-) -> anyhow::Result<RefreshOutcome> {
-    install_hook_to_file(root, SETTINGS_LOCAL_REL, spec, CommandForm::Baked, dry_run)
+) -> anyhow::Result<HookWrite> {
+    let scope = claude_scope(root)?;
+    let written = install_hook_to_file(
+        root,
+        settings_rel(scope),
+        spec,
+        command_form(scope),
+        dry_run,
+    )?;
+    Ok(HookWrite { scope, written })
 }
 
 /// Merge a `HookSpec`'s hook entries into `.codex/hooks.json`, writing only on
@@ -2027,6 +2100,69 @@ pub(crate) fn run_install(
     wire(&root, &exec, &harnesses, dry_run)
 }
 
+/// Report ONE spec's hook-merge outcome. Lifted out of [`wire`] unchanged when
+/// the Claude arm went from a single outcome to a set (SL-250 PHASE-02) — the
+/// four arms and their message strings are verbatim, which is what keeps the
+/// Codex arm's output byte-identical.
+fn write_hook_outcome(
+    stdout: &mut impl io::Write,
+    h: &Harness,
+    tag: &str,
+    outcome: RefreshOutcome,
+) -> anyhow::Result<()> {
+    match outcome {
+        RefreshOutcome::Wired(cmd) => {
+            writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
+            if matches!(h, Harness::Codex) {
+                write_codex_activation(stdout, h, tag)?;
+            }
+        }
+        RefreshOutcome::Refreshed(cmd) => {
+            writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
+            if matches!(h, Harness::Codex) {
+                write_codex_activation(stdout, h, tag)?;
+            }
+        }
+        RefreshOutcome::PrintedFallback { hook_file, snippet } => {
+            writeln!(
+                stdout,
+                "  {}: {hook_file} is malformed — add this hook manually:",
+                harness_label(h)
+            )?;
+            writeln!(stdout, "{snippet}")?;
+        }
+        RefreshOutcome::None => {}
+    }
+    Ok(())
+}
+
+/// The three manual steps a freshly-written `.codex/hooks.json` needs before it
+/// fires. Identical text under `Wired` and `Refreshed`; one copy, not two.
+fn write_codex_activation(
+    stdout: &mut impl io::Write,
+    h: &Harness,
+    tag: &str,
+) -> anyhow::Result<()> {
+    writeln!(
+        stdout,
+        "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
+        harness_label(h)
+    )?;
+    writeln!(
+        stdout,
+        "    1. Ensure [features] hooks = true in .codex/config.toml."
+    )?;
+    writeln!(
+        stdout,
+        "    2. Start codex in this project and accept the project trust prompt."
+    )?;
+    writeln!(
+        stdout,
+        "    3. Run /hooks in codex to trust the doctrine hook."
+    )?;
+    Ok(())
+}
+
 /// The exec-injected orchestration core: the shell (`run_install`) resolves
 /// `current_exe()` and prompts; this does the work — union + dedup import
 /// targets, prepend the `@`-import **once**, then refresh each harness, isolating
@@ -2058,60 +2194,11 @@ pub(crate) fn wire(
     for h in harnesses {
         match install_refresh(h, root, exec, dry_run) {
             Ok(report) => {
-                match report.hook {
-                    RefreshOutcome::Wired(cmd) => {
-                        writeln!(stdout, "  {tag}{}: wired hook: {cmd}", harness_label(h))?;
-                        if matches!(h, Harness::Codex) {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
-                                harness_label(h)
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    1. Ensure [features] hooks = true in .codex/config.toml."
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    2. Start codex in this project and accept the project trust prompt."
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    3. Run /hooks in codex to trust the doctrine hook."
-                            )?;
-                        }
-                    }
-                    RefreshOutcome::Refreshed(cmd) => {
-                        writeln!(stdout, "  {tag}{}: refreshed hook: {cmd}", harness_label(h))?;
-                        if matches!(h, Harness::Codex) {
-                            writeln!(
-                                stdout,
-                                "  {tag}{}: wrote {CODE_HOOKS_REL}. To activate:",
-                                harness_label(h)
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    1. Ensure [features] hooks = true in .codex/config.toml."
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    2. Start codex in this project and accept the project trust prompt."
-                            )?;
-                            writeln!(
-                                stdout,
-                                "    3. Run /hooks in codex to trust the doctrine hook."
-                            )?;
-                        }
-                    }
-                    RefreshOutcome::PrintedFallback { hook_file, snippet } => {
-                        writeln!(
-                            stdout,
-                            "  {}: {hook_file} is malformed — add this hook manually:",
-                            harness_label(h)
-                        )?;
-                        writeln!(stdout, "{snippet}")?;
-                    }
-                    RefreshOutcome::None => {}
+                // One line per spec merged (SL-250): the Claude arm merges a
+                // SET of specs, the Codex arm exactly one, and an empty vec is
+                // silent — which is what the single `None` outcome used to be.
+                for outcome in report.hooks {
+                    write_hook_outcome(&mut stdout, h, tag, outcome)?;
                 }
                 if report.spike_warning {
                     writeln!(
@@ -4331,7 +4418,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
-        let settings = root.join(SETTINGS_LOCAL_REL);
+        // SL-250 PHASE-02: baseRef follows the scope, and the default is
+        // Project — so the refresh writes the TRACKED settings file.
+        let settings = root.join(SETTINGS_PROJECT_REL);
         let mcp = root.join(MCP_REL);
 
         // SL-152 PHASE-06: the Claude boot hook now ships via the plugin — the
@@ -4339,7 +4428,7 @@ mod tests {
         // wiring are UNCHANGED.
         // dry-run plans a baseRef/mcp write but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
-        assert!(matches!(out.hook, RefreshOutcome::None));
+        assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         assert!(!settings.exists(), "dry-run must not write settings");
@@ -4347,7 +4436,7 @@ mod tests {
 
         // real run creates the settings file with the baseRef key but NO boot hook.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert!(matches!(out.hook, RefreshOutcome::None));
+        assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
         assert!(matches!(out.baseref, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         let json = fs::read_to_string(&settings).unwrap();
@@ -4376,8 +4465,8 @@ mod tests {
         // Codex arm: hook is wired into .codex/hooks.json, no Claude settings/MCP.
         let out = install_refresh(&Harness::Codex, root, exec, false).unwrap();
         assert!(matches!(
-            out.hook,
-            RefreshOutcome::Wired(_) | RefreshOutcome::None
+            out.hooks.as_slice(),
+            [RefreshOutcome::Wired(_) | RefreshOutcome::None]
         ));
         assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
@@ -4612,28 +4701,28 @@ mod tests {
         // wire boot, then sync — two independent SessionStart entries.
         install_claude_hook(root, &HookSpec::boot(exec), false).unwrap();
         let out = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.written, RefreshOutcome::Wired(_)));
 
-        let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
         let cmds = commands(&json);
         assert!(
-            cmds.contains(&"/abs/doctrine boot".to_string()),
+            cmds.contains(&format!("{PORTABLE_EXEC} {BOOT_ARGS}")),
             "boot kept"
         );
         assert!(
-            cmds.contains(&"/abs/doctrine memory sync".to_string()),
+            cmds.contains(&format!("{PORTABLE_EXEC} {SYNC_ARGS}")),
             "sync wired"
         );
 
         // re-running sync is a no-op; the boot entry is untouched.
         let again = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
-        assert!(matches!(again, RefreshOutcome::None));
-        let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        assert!(matches!(again.written, RefreshOutcome::None));
+        let json = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
         assert_eq!(
             commands(&json),
             vec![
-                "/abs/doctrine boot".to_string(),
-                "/abs/doctrine memory sync".to_string(),
+                format!("{PORTABLE_EXEC} {BOOT_ARGS}"),
+                format!("{PORTABLE_EXEC} {SYNC_ARGS}"),
             ],
             "two entries, neither duplicated nor clobbered"
         );
@@ -4645,11 +4734,115 @@ mod tests {
         let root = dir.path();
         let out =
             install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), true).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)));
+        assert!(matches!(out.written, RefreshOutcome::Wired(_)));
         assert!(
-            !root.join(SETTINGS_LOCAL_REL).exists(),
+            !root.join(SETTINGS_PROJECT_REL).exists(),
             "dry-run must not write settings"
         );
+    }
+
+    /// Seed `.doctrine/doctrine.toml` with an explicit `[install]` scope key.
+    /// Absent ⇒ `Project` by default, so only the non-default case needs a file.
+    fn seed_scope(root: &Path, scope: &str) {
+        let dir = root.join(".doctrine");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("doctrine.toml"),
+            format!("[install]\nclaude-settings-scope = \"{scope}\"\n"),
+        )
+        .unwrap();
+    }
+
+    // SL-250 PHASE-02 VT-2: the scope selects the file for BOTH writers, so
+    // doctrine authors one Claude settings file per install rather than two.
+    #[test]
+    fn scope_key_selects_the_settings_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+
+        // default (no doctrine.toml at all) ⇒ Project.
+        let write = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        assert_eq!(write.scope, ClaudeSettingsScope::Project);
+        assert!(matches!(write.written, RefreshOutcome::Wired(_)));
+        assert!(root.join(SETTINGS_PROJECT_REL).exists(), "project file");
+        assert!(
+            !root.join(SETTINGS_LOCAL_REL).exists(),
+            "the local file is not written at project scope"
+        );
+
+        // explicit local ⇒ the sibling, and only the sibling gains the entry.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_scope(root, "local");
+        let write = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        assert_eq!(write.scope, ClaudeSettingsScope::Local);
+        assert!(root.join(SETTINGS_LOCAL_REL).exists(), "local file");
+        assert!(!root.join(SETTINGS_PROJECT_REL).exists());
+    }
+
+    // SL-250 PHASE-02 VT-2: `worktree.baseRef` follows the scope too — calling
+    // it "unchanged" would leave doctrine writing hooks into one file and this
+    // key into the other, outside the pair the PHASE-03 sweep reasons about.
+    #[test]
+    fn baseref_follows_the_scope() {
+        for (scope, rel, other) in [
+            (
+                ClaudeSettingsScope::Project,
+                SETTINGS_PROJECT_REL,
+                SETTINGS_LOCAL_REL,
+            ),
+            (
+                ClaudeSettingsScope::Local,
+                SETTINGS_LOCAL_REL,
+                SETTINGS_PROJECT_REL,
+            ),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let out = install_baseref(root, scope, false).unwrap();
+            assert!(matches!(out, BaseRefOutcome::Set), "{scope:?}");
+            let parsed: Value =
+                serde_json::from_str(&fs::read_to_string(root.join(rel)).unwrap()).unwrap();
+            assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
+            assert!(!root.join(other).exists(), "{scope:?} must write one file");
+        }
+    }
+
+    // SL-250 PHASE-02 VT-3: the command form follows the file's TRACKING status.
+    // The project file is committed, so SL-195 INV-1 applies — no absolute host
+    // path may reach it.
+    #[test]
+    fn project_scope_writes_the_portable_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+
+        install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+        assert_eq!(
+            commands(&json),
+            vec![format!("{PORTABLE_EXEC} {SYNC_ARGS}")],
+            "the tracked file carries the env-expansion form"
+        );
+        assert!(
+            !json.contains("/abs/doctrine"),
+            "INV-1: no absolute host path in a tracked file: {json}"
+        );
+    }
+
+    // SL-250 PHASE-02 VT-3, the other direction: the gitignored file keeps the
+    // baked abspath (`baked ⟺ gitignored`, SL-195 D2).
+    #[test]
+    fn local_scope_keeps_the_baked_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        seed_scope(root, "local");
+
+        install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        assert_eq!(commands(&json), vec![format!("/abs/doctrine {SYNC_ARGS}")]);
     }
 
     /// Entries under an arbitrary `hooks.<event>` key (`None` if absent).
@@ -4675,7 +4868,7 @@ mod tests {
 
         // Pre-existing SessionStart hooks (boot + a foreign hook).
         install_claude_hook(root, &HookSpec::boot(exec), false).unwrap();
-        let settings_path = root.join(SETTINGS_LOCAL_REL);
+        let settings_path = root.join(SETTINGS_PROJECT_REL);
         let seeded = fs::read_to_string(&settings_path).unwrap();
         let mut value: Value = serde_json::from_str(&seeded).unwrap();
         hook_array_mut(&mut value, "SessionStart")
@@ -4692,7 +4885,10 @@ mod tests {
 
         // Wire the create-fork hook.
         let out = install_claude_hook(root, &HookSpec::create_fork(exec), false).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)), "create-fork wired");
+        assert!(
+            matches!(out.written, RefreshOutcome::Wired(_)),
+            "create-fork wired"
+        );
 
         let json = fs::read_to_string(&settings_path).unwrap();
 
@@ -4708,7 +4904,7 @@ mod tests {
         assert_eq!(
             session_cmds,
             vec![
-                "/abs/doctrine boot".to_string(),
+                format!("{PORTABLE_EXEC} {BOOT_ARGS}"),
                 "/usr/bin/foreign hook".to_string(),
             ],
             "SessionStart untouched"
@@ -4728,7 +4924,10 @@ mod tests {
             .and_then(|a| a.first())
             .and_then(|h| h.get("command"))
             .and_then(Value::as_str);
-        assert_eq!(wc_cmd, Some("/abs/doctrine worktree create-fork"));
+        assert_eq!(
+            wc_cmd,
+            Some(format!("{PORTABLE_EXEC} {CREATE_FORK_ARGS}").as_str())
+        );
 
         // VT-1 (negative): the retired SubagentStart stamp hook is never emitted.
         assert!(
@@ -4738,7 +4937,10 @@ mod tests {
 
         // Reinstall is idempotent — no duplicate WorktreeCreate entry.
         let again = install_claude_hook(root, &HookSpec::create_fork(exec), false).unwrap();
-        assert!(matches!(again, RefreshOutcome::None), "reinstall no-op");
+        assert!(
+            matches!(again.written, RefreshOutcome::None),
+            "reinstall no-op"
+        );
         let json = fs::read_to_string(&settings_path).unwrap();
         assert_eq!(
             event_entries(&json, "WorktreeCreate").unwrap().len(),
@@ -5194,7 +5396,7 @@ mod tests {
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
         // SL-152 PHASE-06: the Claude boot hook ships via the plugin — `wire` no
         // longer settings-wires it. Only the baseRef key lands in settings.
-        let settings = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        let settings = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
         assert!(
             commands(&settings).is_empty(),
             "no boot hook settings-wired for Claude (ships via plugin): {settings}"
@@ -5210,7 +5412,7 @@ mod tests {
             1,
             "re-run does not duplicate ref"
         );
-        let settings = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        let settings = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
         assert!(
             commands(&settings).is_empty(),
             "re-run still wires no boot hook for Claude"
@@ -5225,7 +5427,7 @@ mod tests {
         wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], true).unwrap();
         assert!(!root.join("CLAUDE.md").exists(), "dry-run wrote no import");
         assert!(
-            !root.join(SETTINGS_LOCAL_REL).exists(),
+            !root.join(SETTINGS_PROJECT_REL).exists(),
             "dry-run wrote no settings"
         );
     }
@@ -5237,7 +5439,7 @@ mod tests {
 
         // force Claude's refresh to fail: a directory squatting the settings path
         // makes write_atomic's rename fail.
-        fs::create_dir_all(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        fs::create_dir_all(root.join(SETTINGS_PROJECT_REL)).unwrap();
 
         // both harnesses; Claude refresh errs, pi import must still be wired and
         // the verb must not abort (A9).
@@ -6030,8 +6232,8 @@ weight = 0
         std::fs::create_dir_all(root.join(".claude")).unwrap();
         std::fs::write(&exec, b"fake").unwrap();
         let out = install_claude_hook(root, &HookSpec::boot(&exec), false).unwrap();
-        assert!(matches!(out, RefreshOutcome::Wired(_)));
-        let raw = std::fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
-        assert!(raw.contains(&format!("{} boot", exec.display())));
+        assert!(matches!(out.written, RefreshOutcome::Wired(_)));
+        let raw = std::fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+        assert!(raw.contains(&format!("{PORTABLE_EXEC} {BOOT_ARGS}")));
     }
 }

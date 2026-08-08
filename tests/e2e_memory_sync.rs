@@ -156,7 +156,11 @@ fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
         return;
     } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
-    let settings = repo.path().join(".claude/settings.local.json");
+    // SL-250 PHASE-02: the fixture has no `doctrine.toml`, so both installs
+    // resolve the default `[install] claude-settings-scope = "project"` and
+    // write the TRACKED settings file. Reading the local one here would not
+    // merely fail — the `expect` below would panic on a file nothing writes.
+    let settings = repo.path().join(".claude/settings.json");
 
     // boot install first (claude harness explicit — a bare repo auto-detects none).
     let (ok, out) = run(

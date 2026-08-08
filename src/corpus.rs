@@ -503,7 +503,11 @@ pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) 
 
     let mut out = io::stdout();
     let tag = if dry_run { "[dry-run] " } else { "" };
-    match crate::boot::install_claude_hook(&root, &spec, dry_run)? {
+    // The scope is `install_claude_hook`'s to resolve, not this caller's
+    // (SL-250 `DEC-163`): `memory sync install` is the routine, flagless install
+    // that must INHERIT the choice rather than re-elect it.
+    let write = crate::boot::install_claude_hook(&root, &spec, dry_run)?;
+    match write.written {
         crate::boot::RefreshOutcome::Wired(cmd) => {
             writeln!(out, "  {tag}claude: wired sync hook: {cmd}")?;
         }
@@ -518,13 +522,13 @@ pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) 
                 out,
                 "  claude: settings are malformed — add this hook manually:"
             )?;
-            // `Baked`: `install_claude_hook` writes the gitignored local file
-            // this phase, so the manual-repair snippet must match what it would
-            // have written. SL-250 PHASE-02 gives this a scope to ask instead.
+            // The snippet must match what the install WOULD have written, so it
+            // renders in the form the resolved scope's file requires — not a
+            // fixed one (SL-250 PHASE-02).
             writeln!(
                 out,
                 "{}",
-                crate::boot::fallback_for(&spec, crate::boot::CommandForm::Baked)
+                crate::boot::fallback_for(&spec, crate::boot::command_form(write.scope))
             )?;
         }
     }
@@ -975,6 +979,56 @@ weight = 0
             v.iter().any(|x| matches!(x, Violation::Schema(_))),
             "an unknown (non-reference) type must surface as Schema, got {v:?}"
         );
+    }
+
+    /// SL-250 PHASE-02 VT-4. Driven through `run_sync_install` and NOT through
+    /// `install_claude_hook`, because the claim under test is `DEC-163`'s: the
+    /// routine, flagless install INHERITS the scope and the command form
+    /// without electing to. A test that called the installer directly would
+    /// restate the decision rather than prove it.
+    #[test]
+    fn memory_sync_install_honours_the_scope_key() {
+        let scope_targets = [
+            (None, ".claude/settings.json", true),
+            (Some("project"), ".claude/settings.json", true),
+            (Some("local"), ".claude/settings.local.json", false),
+        ];
+        for (key, rel, portable) in scope_targets {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            std::fs::create_dir(root.join(".git")).unwrap();
+            if let Some(key) = key {
+                std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+                std::fs::write(
+                    root.join(".doctrine/doctrine.toml"),
+                    format!("[install]\nclaude-settings-scope = \"{key}\"\n"),
+                )
+                .unwrap();
+            }
+
+            run_sync_install(Some(root.to_path_buf()), false, true).unwrap();
+
+            let json = std::fs::read_to_string(root.join(rel))
+                .unwrap_or_else(|e| panic!("{key:?} must write {rel}: {e}"));
+            assert!(
+                json.contains("memory sync"),
+                "{key:?}: sync hook missing from {rel}: {json}"
+            );
+            assert_eq!(
+                json.contains("${DOCTRINE_BIN:-doctrine}"),
+                portable,
+                "{key:?}: the command form must follow the file's tracking status"
+            );
+            let sibling = if portable {
+                ".claude/settings.local.json"
+            } else {
+                ".claude/settings.json"
+            };
+            assert!(
+                !root.join(sibling).exists(),
+                "{key:?}: one Claude settings file per install, not two"
+            );
+        }
     }
 
     /// PHASE-04 EX-2: every EMBEDDED master lints clean. The embed is empty this
