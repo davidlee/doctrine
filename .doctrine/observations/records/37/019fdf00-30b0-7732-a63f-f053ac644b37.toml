@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf00-30b0-7732-a63f-f053ac644b37"
+recorded_at = "2026-08-08T01:32:39.472057533Z"
+kind = "friction"
+summary = "/plan: research staleness advisory fires on normal lifecycle progression"
+detail = "Running `doctrine slice research 248` at the /plan gate reported the research baseline as drifted, citing 'added .doctrine/slice/248/design.md' and 'changed slice-248.md'. But authoring design.md IS the expected next step after research — so every slice that completes its design will show its research artefact as stale at the plan gate, for a reason that carries no signal about whether the research is actually out of date. The advisory costs a read and a judgement call each time to dismiss. Candidate fix: exclude design.md's creation (and design-driven scope edits) from the drift set, or distinguish 'superseded by design' from 'drifted'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
