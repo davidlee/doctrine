@@ -260,3 +260,84 @@ snapshot; `git diff --stat src/knowledge.rs` after revert shows insertions only
 (the new test), zero deletions.
 
 Harvested as `mem.pattern.rust.exhaustive-destructure-pins-hand-written-mappings`.
+
+### T8 — the refusal catalogue (VT-5), and why it needed a *positive* control
+
+Four cases, one helper. `refused_leaving_bytes_intact` seeds a record from the
+shipped template, snapshots **both** authored tiers, drives the argv, asserts
+the refusal, and asserts both tiers verbatim. The helper owns the scratch root
+and builds the argv around it, so no case retypes a path — the earlier draft
+had each case hard-coding `std::env::temp_dir().join(…)` twice over, which is
+the sort of duplication that rots the first time the root convention moves.
+
+| case | argv | criterion |
+|---|---|---|
+| a | `assumption DEC-007 --claim x` | EX-3 — names `DEC-007` **and** `knowledge edit decision` |
+| b | `concept CPT-003` | EX-2 / D10 — "carry no facet fields", names `knowledge edit CPT-003` |
+| c | `decision DEC-007` (no flag) | mirrors `run_edit`'s at-least-one-flag guard |
+| d | `assumption ASM-003 --confidence banana` | refused by `plan_facet_edits`, before the open |
+
+(d) asserts every member of `Confidence::KNOWN` appears in the refusal, read
+from the row rather than retyped — STD-001, and it means a token added to the
+vocabulary joins the assertion without a test edit.
+
+**All four were green on first run, and no meaningful red was stageable.** T6
+landed these guards as part of `run_facet_edit`; VT-5 tests the surface T6
+built, and the sheet ordered T8 after T6 deliberately. Staging a red here would
+have meant deleting a guard I had just written and watching my own deletion —
+theatre, not evidence.
+
+So the control was aimed at the *oracle* rather than the guard. The proposition
+worth doubting is not "does it refuse" (four distinct messages came back) but
+"would these assertions have noticed a write at all". The same helper was run
+over a **valid** edit — `decision DEC-007 --rationale written` — and it failed
+exactly where it should: the toml tier moved `rationale = ""` to
+`rationale = "written"` while the `.md` tier stayed identical. The tier oracle
+sees writes; the four greens are assertions, not vacuities. Reverted.
+
+**Refactor out of the control.** That failure printed both tiers as `Vec<u8>` —
+some six hundred decimal integers, unreadable. The oracle now reads `String`.
+`String` equality *is* byte equality, so EX-7 is unweakened and a failure is
+legible. Worth stating plainly: "assert the bytes" is a claim about the
+comparison, not about the Rust type you hold them in.
+
+### T9 — the two behaviour-preservation gates
+
+Diffed against the **phase base** `c72bd7f61` (`1683a5703^`). Bare `git diff`
+is working-tree-vs-index, and movement 1 is committed, so it returns empty —
+which reads exactly like "nothing was edited" while being no evidence at all.
+
+`src/commands/facet.rs`: 6 insertions, 1 deletion, all of it the single
+`apply_set_mixed` call site gaining `KeyPosture::Create`, rustfmt-split across
+five lines. `mod tests` starts at `:784`; the only hunk is at `:708`. D1's
+boundary held exactly as movement 1 reported, and `commands::facet::` is 33
+passed — the T0 baseline.
+
+`src/knowledge.rs`: 1226 insertions, **2** deletions, both production (`Edit`'s
+`id: String` → `Option<String>`, and the dispatch arm's `&id`). That is where
+it would be tempting to stop, and it would be a bad stop: an insertion *inside*
+an existing test body is an edit too, and it lands in the same count as a new
+test appended below. So the three named risk-set items were extracted from both
+revisions by brace balance and compared:
+
+```
+IDENTICAL    728 bytes  fn render_record_toml(              (the I1 oracle)
+IDENTICAL    778 bytes  fn populated_record_round_trips_byte_stable_per_kind(
+IDENTICAL    410 bytes  fn scaffold_escapes_hostile_title_and_slug(
+```
+
+Harvested as `mem.pattern.testing.pin-named-items-not-diff-lines`.
+
+**S1 never fired across T6–T9.** No existing test was touched at any point.
+
+### Movement 2 close
+
+Full suite 4447 passed, 0 failed, 2 ignored. Five staged `expect(dead_code)`
+attributes: all gone, retired together in T6.
+
+Owed to reconcile, not fixed here: the design's §5.1 still says `FacetField`
+where the code says `FacetFieldRow` (ISS-329's rename), and **ISS-330** —
+`doctrine config set` panics in any debug build on a clap
+`required`/`required_unless*` conflict, which is why VT-4 introspects the
+`knowledge` subtree rather than the built root command. The workaround carries
+the id and its own removal condition in a comment.
