@@ -1,0 +1,50 @@
+memory_uid = "mem_019fe0773a8873c28dfdbaea92c73a85"
+memory_key = "mem.fact.lint.module-name-repetitions-needs-public"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clippy::module_name_repetitions fires only on genuinely-public items — the lib target is where it first bites"
+summary = "pub(crate) types in same-named modules escape the lint; exporting one through src/lib.rs makes it fire"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy"]
+tags = ["rust", "clippy", "lint", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "809b8eb00207d359ed90175ef491dadc74daca5e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c46f744ed386ebcc6a477fc5beab3d6859c9d8b2592d129842fdb1e3c55c5586"
+base_commit = "f0ffbd6428b7acd9f317fc3c400fcfa67d52b89e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "low"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
+[[relation]]
+label = "related"
+target = "mem_019fe008600970938f8e7f5cddefe4dd"
+

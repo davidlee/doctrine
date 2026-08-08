@@ -1,0 +1,54 @@
+memory_uid = "mem_019fe076f0d078d282a4e894a7682d02"
+memory_key = "mem.pattern.lint.dead-code-derives-count-as-reads"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Derived Clone/PartialEq read every field — the dead_code staging attribute is then unfulfilled"
+summary = "cfg_attr(not(test), expect(dead_code)) on a struct with value-semantics derives fails as unfulfilled_lint_expectations"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy"]
+tags = ["rust", "clippy", "dead_code", "lint", "phasing", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "809b8eb00207d359ed90175ef491dadc74daca5e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "696aeda02ce08d8ff7a22ba21bb59a38adc9ae63a5b6a979cd7312f1882e8581"
+base_commit = "f0ffbd6428b7acd9f317fc3c400fcfa67d52b89e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
+[[relation]]
+label = "related"
+target = "mem_019f182609fe7f52af536c2320779a49"
+
+[[relation]]
+label = "related"
+target = "mem_019fab1f3de77403adfe1487790e6d53"
+
