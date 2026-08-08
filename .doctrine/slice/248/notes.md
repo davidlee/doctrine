@@ -74,8 +74,9 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages); **the
-`/plan` critical pass is owing** · 3f96512b1
+fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages) **and the
+`/plan` critical pass run**; **the design is authorised to reopen and that work
+is owing** · 18121962d
 
 ### Produced
 
@@ -116,6 +117,18 @@ fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages); **the
   clean and `verify-vt` reports **0 `UNCHECKABLE`**. All `.doctrine` changes
   committed path-limited — another agent's `SL-249`/`SL-250` and
   `.doctrine/rfc/027/` left untouched.
+- **The `/plan` critical pass (steps 7–9) is run** (`18121962d`; plan.md
+  § *What the critical pass found*). Five findings, four landed as plan edits:
+  `PHASE-01` `EX-4` amended (`today` must go `pub`; `ISS-323`'s root cause in a
+  second instance), `PHASE-07` `EX-18` appended (sixteen `VT` mandates pin one
+  `conformance.rs`; a split would strand them behind `ISS-271`-shaped noise),
+  `PHASE-10` `VA-1` amended (falsifying measurement, no negative path),
+  `PHASE-06` `EX-12` corrected to `renameat_with`. Selectors tuned:
+  `+src/clock.rs`, `-tests/**`.
+- Checked and found sound, no change: `sec-9` obligation coverage (every
+  uncovered item a deliberate deferral), measured-versus-reasoned delta ordering
+  (no delta depended on before the phase that measures it), phase sizing
+  (`PHASE-02` largest, split point already pre-identified).
 
 ### Learned
 
@@ -133,15 +146,23 @@ fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages); **the
 
 ### Open
 
-- **The `/plan` critical pass (skill steps 7–9) is OWING.** Plan *authoring* is
-  complete across all three stages and the slice is `ready` with phase sheets
-  materialised — but that is a different obligation. Stages 1–3 established that
-  the plan is internally consistent and covers the design; the critical pass
-  asks whether it is sound as an execution instrument (under-specified, assumed,
-  ambiguous, oversized, optimistic, implementation risk). Not started. Nothing
-  downstream should begin until it has run — `handover.md` carries the brief.
-- `/phase-plan` for `PHASE-01` is the step *after* the critical pass, not
-  instead of it.
+- **The design reopen is OWING, and the user has authorised it.** The critical
+  pass found `C-1`: `fetch_refspec` is `pub(crate)` (`src/git.rs:2718`) and
+  absent from the export set, while `design.md:1222` says the per-base export
+  build rides it and `:2597` says nothing else becomes `pub` — so `PHASE-06`
+  `EN-3` reads as met while `EX-11` cannot compile. It is a design-text defect
+  and the design is locked (`ISS-320`), so it cannot be settled plan-side.
+  **Six further design corrections are to be folded into the same reopen**
+  rather than left owed to the reconciliation brief — `handover.md` § *The
+  design worklist* carries all seven as `D1`…`D7` with line numbers.
+- **`PHASE-06` must not start until `C-1` is settled.** `plan.toml` records this
+  at `PHASE-06` critical-pass note 5. `PHASE-01` is also exposed: if `C-1`
+  resolves by widening the export set, `EX-1`/`EX-2`/`EX-4`, `PHASE-02` `EX-8`
+  and two `VT` mandates all move, so the decision wants making before any phase
+  lands.
+- After the reopen: clear the design gates, then an **informal `codex` sanity
+  pass over the diff** — the user's call, explicitly *not* a new `RV` round.
+- `/phase-plan` for `PHASE-01` is the step after that, not instead of it.
 - `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
   because `sec-9`'s corrections list cannot be edited without a recovery cycle.
   Three more of the same shape joined it at stage 3, all in plan.md
