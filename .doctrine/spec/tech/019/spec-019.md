@@ -125,12 +125,12 @@ still not a *common* field (PRD-010 OQ-004) — the
 common schema is identity, summary, and tags only. A field name shared **across** rows
 is sound; the same name duplicated **within** one row would be damage. (The original
 wording said "assumption-only", which was true before `EVD` existed and is corrected
-here rather than being quietly dropped.) The closed enums (`confidence`,
-`basis`, constraint `source`) ride the same `"" -> None` optional seam the backlog's
-`Resolution`/risk axes use: a tolerant raw parse reads them as strings, a separate
-`validate` pass maps empty to absent and parses any non-empty token to its variant,
-erroring on an unknown one. This is the parent container's three-layer parse model,
-specialised for seeded-empty optionals.
+here rather than being quietly dropped.) The closed enums (`confidence`, `basis`,
+constraint `source`, evidence `provenance`) ride the same `"" -> None` optional
+seam the backlog's `Resolution`/risk axes use: a tolerant raw parse reads them as
+strings, a separate `validate` pass maps empty to absent and parses any non-empty
+token to its variant, erroring on an unknown one. This is the parent container's
+three-layer parse model, specialised for seeded-empty optionals.
 
 The `[evidence]` **support structure** is a single shared minimal table carried by
 every record kind — `supports` / `contradicts` / `notes` citations (PRD-010
@@ -351,9 +351,9 @@ spec acknowledges the provenance and owns none of that protocol.
   failure mode is a kind's known-set drifting from its enum, or a transition validated
   against the wrong kind's vocabulary after a prefix→kind misresolution.
 - **Facet-enum drift.** The closed facet enums (`confidence`, `basis`, constraint
-  `source`) each need a known-set guard mirroring their variant set — the facet analogue
-  of the status canary above — or a renamed/added variant silently slips the `validate`
-  pass.
+  `source`, evidence `provenance`) each need a known-set guard mirroring their
+  variant set — the facet analogue of the status canary above — or a renamed/added
+  variant silently slips the `validate` pass.
 - **Disjointness with the backlog.** No `record_kind` may be admitted as a
   `backlog_item.item_kind` and no `item_kind` as a `record_kind` (PRD-010 §4); the two
   families are disjoint by the work-intake membership test. The two prefix sets and two

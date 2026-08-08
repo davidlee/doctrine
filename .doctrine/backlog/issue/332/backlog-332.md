@@ -57,3 +57,17 @@ this amendment, and that boundary held — but a reader arriving cold cannot tel
 those sections are *scoped* rather than *stale*. A one-line pointer to `ISS-316`
 in each would settle it. Recorded here so the observation is not lost; it is not
 a defect in `REV-050`.
+
+## Resolution — fixed in PHASE-07, not carried
+
+Fixed in place rather than carried. `REV-050` staled these two sentences, so
+shipping the phase with them stale would ship exactly the defect class the phase
+exists to remove — a stale enumeration in one of the two entities it amends. The
+edit is two words in prose the orchestrator already owns, and it is inside the
+same amendment's blast radius, so deferring it would have cost more in carry than
+in fix. Both sites now read `` `confidence` ``, `` `basis` ``, constraint
+`` `source` ``, evidence `` `provenance` ``. The canary and `spec validate` stay
+green; the `\bfour\b` identity is unaffected (the fix adds no numeral).
+
+The §*Related legibility note* above is **not** discharged here — that is
+`ISS-316`'s, and it stays open on that item.
