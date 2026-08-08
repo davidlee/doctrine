@@ -6,8 +6,9 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 94b45e283
-· `PHASE-01` `PHASE-02` `PHASE-08` completed, `PHASE-03` next
+fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 6b814989b
+· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` completed, `PHASE-04` next
+· **blocked on a ruling: `ISS-329`**
 
 ### Produced
 
@@ -40,6 +41,16 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
 - `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
   mapping without the table deciding its own verdict.
+- `PHASE-03` (c1940d7c8 … 6b814989b, eight commits) — `knowledge::facet_fields`,
+  the declaration table, with its three pins; the injected-defect control; the
+  template pin; the inert-facet-key tripwire as `doctor` check #12. `VT-1`–`VT-3`
+  PASS under `slice verify-vt` (`VT-3` only after `record-delta` extended the
+  slice delta over `src/doctor_checks.rs` — it read `Unattributable` before, a
+  boundary artefact rather than a test failure). Gate green. Execution record:
+  shard `notes_03-06.md`. `ISS-329` minted. Memory
+  `mem.pattern.doctrine.finding-category-touch-sites`; amendments to the
+  re-embed memory (**core claim disproved** — cargo rebuilds on a lone
+  `install/` edit with no touch) and to `dead-code-derives-count-as-reads`.
 - `PHASE-08` (7a4e5bd07, 66539791f, 94b45e283) — the kind-blind `knowledge edit
   <ID>`: `--title` / `--tags` / `--body` / `--body-mode`, mirroring
   `memory::run_edit` over existing write cores. `resolve_body`,
@@ -174,6 +185,26 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   reason: the selector is a scope statement, and settling scope divergence is
   reconcile's to do, not a phase's. Both new entries are one-line widenings
   (`IdKind::declarable`; `declare` and `Pending` to `pub(super)`).
+- **`ISS-329` — two `FacetField` types in one crate.** `facet_write`'s
+  write-payload enum and `PHASE-03`'s declaration struct, named verbatim from
+  design § 5.1. `PHASE-04`'s `plan_facet_edits` imports both under one name.
+  **A ruling is owed before `PHASE-04`**, and whichever way it goes it wants a
+  design amendment or a reconciliation note, because the design named the type.
+- **A `PHASE-03` sheet expectation did not hold, and the code is right.** T3(b)
+  expected a field deleted from *every* row to fail both `I3` and `I2`; only
+  `I2` failed. `I3`'s input is built from the table's own rows, so a field
+  deleted everywhere leaves the input too — totality is `I2`'s job, placement
+  is `I3`'s (design § 5.1 P1/P2). The worker ran the complement (drop
+  `confidence` from `evidence` only) and `I3` caught it. Adjudicated as a
+  planner-side wording error in a disposable sheet, not a criterion failure:
+  `EX-2`/`EX-3`/`EX-4` all hold. No id owed.
+- **A latent defect fixed in passing, outside `PHASE-03`'s objective.**
+  `render_findings` carried a hand-written `[_; 11]` bucket array that
+  **silently dropped** findings past its length; a new category would have
+  exceeded it. Length now derived from `CATEGORIES_BY_ORDINAL.len()`. The
+  sheet's reading list named five touch sites for a new `Finding` category;
+  there are **six**. Worth a line at reconcile — the phase's diff is wider than
+  its objective, for a good reason.
 - **`PHASE-08` T4 and T6 shipped without a red step.** Not a criterion failure
   and no id owed — a process divergence the brief should see. T5's `mode`
   param was needed for T3 to compile, and T6's guards live inside `run_edit`,
