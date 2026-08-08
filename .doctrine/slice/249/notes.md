@@ -361,6 +361,74 @@ fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
 - Standing user steer: where two answers are defensible, prefer the one that
   lands the fix sooner.
 
+### Reconcile ledger — what PHASE-07 discharged, and what it hands on
+
+Read this before the rest of § *Open*. `PHASE-07` landed the four→seven
+governance amendment as `REV-050` (`done` · `approved`), amending `SPEC-019` and
+`PRD-010` in both tiers, and shipped `tests/governance_kind_coverage.rs` as the
+standing canary.
+
+**The departure reconcile must settle (`EX-11`).** `design.md` §3 and §5.3 say
+the amendment lands **at reconcile**; `DEC-182` moved it into `PHASE-07` and it
+landed there. The design's wording is now wrong in seven places, listed so
+reconcile does not have to grep: l.**132** (§3, `ADR-013`), l.**731** (§5.3),
+l.**1103** and l.**1127–1128** (§6), l.**1245** (§7, `D8a`), l.**1600** and
+l.**1609** (§10). A plan that quietly outranks its design is the failure `EX-11`
+exists to prevent — the fix is to correct the design, not to let the plan stand.
+
+**Discharged by PHASE-07 (5).** `inq-7` (SL-159/SL-197 lineage — dispositioned
+in `REV-050`'s prose by narrowing the claim: those slices discharged their
+*implementation* obligation themselves; what they left unlanded is the
+*governance axis*, and that is what this REV discharges); `inq-9`
+(`src/facet_write.rs` anchored to `SPEC-004`, which also gave **KeyPosture its
+first governing sentence anywhere in the corpus**); `D8a` (`DEC-168`'s false
+crash-resume rationale, **executed** in place via `knowledge edit decision`, the
+withdrawal recorded rather than silently dropped); `R1` (the two-entity
+amendment); `R2a` (SL-249's REV lands before `SL-246` derives its field lists —
+landing at PHASE-07 rather than reconcile moves this *earlier*, so the ordering
+constraint is satisfied with margin, not narrowly).
+
+**The boundary that decides the rest.** A REV's `revises` targets are
+`{SPEC, PRD, REQ, ADR, POL, STD}` (`ADR-013`). A slice's `design.md` is **not**
+among them — verified against `revision change add --help` ("Existing-target
+ops: the live peer FK"), and a design is not a peer entity. So every
+design-wording correction below **cannot** ride a REV whatever § *Open* implies;
+each is a `design.md` edit reconcile makes directly. That distinction is the
+useful thing PHASE-07 adds to this ledger.
+
+**Carried to reconcile as `design.md` edits:** `ISS-329` (§5.1 names
+`FacetField`, shipped as `FacetFieldRow`); the `I10`/`DEC-183` quantifier (§5.5
+overstates); `D-A` (§5.2's "mechanical over `facet_fields`" is under-stated);
+`PHASE-06`'s `RawValue` layering departure via `WireFacetValue` — which also
+carries `CHR-060`'s contested premise, and nobody reopens `CHR-060` until
+pickup, so this note is its only carrier; and striking §10 press item 2
+(`VA-1`/`F-2`).
+
+**Carried as scope/process notes, no id owed:** `PHASE-02`'s `slice conformance`
+selector widening (1 → 3 files); `PHASE-04`'s `Option<Box<KnowledgeFacetEdit>>`
+spelling; the planner-recipe divergences at `PHASE-08` T4/T6, `PHASE-06` `EX-4`,
+`PHASE-03` T3(b); `T1`'s `C2` evidence gap, which is the concrete cost of
+deferred harvest; and `R-withdrawn-overlap` — `settle` is a one-way door per
+record, intended but surprising, so state it rather than leave it to be
+rediscovered.
+
+**Carried as backlog at close:** `IMP-403` leads 3–5, `CHR-056`, `CHR-060`.
+`ISS-332` (SPEC-019's closed-enum lists omitted `provenance`) was **not**
+carried — `REV-050` staled those two sentences, so it was fixed in place inside
+the same amendment's blast radius and resolved `fixed`. Its §*Related legibility
+note* — that three knowingly four-kind `SPEC-019` sections read as stale rather
+than *scoped* — stays open on `ISS-316`.
+
+**Count the ledger, do not trust the brief's count.** The brief says twelve owed
+items in § *Open*; counting marked-owed bullets on the tree by the split above
+gives **fourteen**. Reconcile to fourteen and say why, rather than reconciling
+to the smaller number — that is `R-inventory`'s exact shape, and `R-inventory`
+has now fired **five** times on this slice (a `Finding` category's touch sites
+were 6 not 5; PHASE-04 staged 5 `expect(dead_code)` not 3; `VT-3` shipped 9
+refusal cases against 6; the paired-form census was 8 of 28 where a co-presence
+reading said 12; and `ISS-332`'s closed-enum list said three where four ship).
+Five occurrences is no longer a run of bad luck — name the pattern at close.
+
 ## Design surface triage
 <!-- exploring stage, runbook step `explore.triage`, design run dr-019fd6b6 rev 5 -->
 as-of 2026-08-06 · stage `design` (run open, `exploring`)
