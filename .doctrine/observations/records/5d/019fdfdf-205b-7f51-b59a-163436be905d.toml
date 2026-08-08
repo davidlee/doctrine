@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdfdf-205b-7f51-b59a-163436be905d"
+recorded_at = "2026-08-08T05:36:09.81918298Z"
+kind = "friction"
+summary = "/phase-plan: SL-250's third enumerated inventory that read as exhaustive and wasn't"
+detail = "PHASE-06's EX-4 enumerates four doc-comment claims the retirement falsifies. Three were already corrected by PHASE-01/02 in passing, and a fifth (install_config.rs's `repo` field doc, distinct from the module doc EX-4 names) was missing — wrong in both directions at once. This is the third instance on SL-250: PHASE-04 F1 and PHASE-05 F1 were the same shape, both golden-assertion inventories. Cost: phase-plan had to re-resolve every cited symbol and line number before the sheet could be trusted, and had to author an explicit 'these are already done, do not read as scope drift' assumption so the implementer would not re-derive it. The general shape is that a design authored against a tree is stale by the phase that consumes it, and precision reads as exhaustiveness. Structural mitigations that worked here: the workspace's dead_code denial caught the two closure residuals the design's hand-derived transitive closure missed, and a full-suite run catches golden inventories. Neither was a matter of attention."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

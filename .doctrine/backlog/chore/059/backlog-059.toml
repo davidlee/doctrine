@@ -1,0 +1,26 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 59
+slug = "backfill-empty-requirement-prose-statement-rationale-for-335-template-shell-reqs"
+title = "Backfill empty requirement prose (Statement + Rationale) for 335 template-shell REQs"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = ["area:backfill", "area:prose", "area:requirements"]
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "CHR-058", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "related"
+target = "IMP-410"

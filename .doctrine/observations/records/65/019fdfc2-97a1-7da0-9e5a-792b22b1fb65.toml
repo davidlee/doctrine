@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdfc2-97a1-7da0-9e5a-792b22b1fb65"
+recorded_at = "2026-08-08T05:04:59.809979Z"
+kind = "friction"
+summary = "phase-plan/execute: design sec-5's golden inventory named one test file; a second carried the identical assertion"
+detail = "SL-250 PHASE-05. design.md sec-5 and plan.toml PHASE-06 EX-8 enumerate tests/e2e_skills_symlink.rs as the file whose 'no skills symlink' assertions invert. tests/e2e_claude_install.rs::install_wires_skills_agent_and_hooks_directly carried the identical assertion and is named in neither. It surfaced only from the full suite at the close-out gate, after the phase-plan reading list had been built from the design's citations. Same class as PHASE-04's F1: a precise enumeration reads as exhaustive. Cost: a late unplanned edit inside a close-out gate run, plus an inventory in an authored plan (EX-8) that is now wrong. Cheap remedy the design could have used: grep the assertion CLASS across tests/ rather than citing paths."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
