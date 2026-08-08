@@ -232,3 +232,42 @@ the four `KNOWN` visibility promotions (`src/knowledge.rs`), the tripwire
 (`src/doctor_checks.rs`), the category and the derived bucket array
 (`src/finding.rs`), and check #12's wiring (`src/commands/doctor.rs`).
 `git diff --stat c1940d7c8^ -- src/` = 4 files, 693 insertions, 27 deletions.
+
+### T10 — harvest
+
+**Minted**
+
+- **ISS-329** — two unrelated `FacetField` types in one crate (the pre-existing
+  write-payload enum in `facet_write`, and the declaration struct this phase adds
+  per design § 5.1). PHASE-04 imports both under one name; a ruling is owed
+  before its write seam lands.
+- **`mem.pattern.doctrine.finding-category-touch-sites`**
+  (`mem_019fe112c6af7d908afe714d41ddb718`, severity high) — the six-site cost of a
+  new doctor `Category`, and why the sixth loses data silently. Sibling of
+  `mem.pattern.doctrine.record-kind-touch-sites`.
+- Friction `019fe113-2aad-7c22-ad81-b2136e89a058` (`/execute`) — the sheet's
+  per-test defect attributions and dead-code predictions were written as
+  *criteria* rather than as expectations, which makes a wrong prediction
+  indistinguishable from a fired STOP and pushes adjudication onto the worker.
+
+**Amended, not duplicated**
+
+- `mem_019e98a783ea7471ac4bfcefdc04ae5e` → *"rust-embed assets: cargo DOES rebuild
+  on an install/ edit"*. Core claim re-probed and disproved; embed site corrected
+  to `src/asset_source.rs`; the removed `CARGO_TARGET_DIR` redirect struck; live
+  residue kept. (See the T5 section.)
+- `mem.pattern.lint.dead-code-derives-count-as-reads` — appended this phase's two
+  confirmations. **No new memory minted for the dead-code findings**: that memory
+  was minted yesterday by SL-248 PHASE-02 and already prescribes
+  compile-don't-reason. What is new is (a) a never-constructed struct subsumes its
+  fields' deadness, so a field of a dead struct must *not* carry its own expect —
+  which qualifies `mem.pattern.lint.dead-code-staged-ahead-cfg-test`'s "every item
+  carries its own" — and (b) a second instance of the derives rule, firing in the
+  direction opposite to the sheet's prediction.
+
+Deliberately **not** minted: a "difference-oracle for a typed model" memory. T10
+lists it as a candidate, but it does not generalise past
+`mem.pattern.testing.mapping-oracle-lives-below-the-check`, which already says
+"pin a table's mapping by differencing the layer below it". D1 is that pattern's
+second application in this slice, not a new one. Minting it would be the parallel
+implementation AGENTS.md forbids, in the memory corpus.

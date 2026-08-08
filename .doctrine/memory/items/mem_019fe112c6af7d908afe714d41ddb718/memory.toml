@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe112c6af7d908afe714d41ddb718"
+memory_key = "mem.pattern.doctrine.finding-category-touch-sites"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Adding a doctor Finding category touches six sites — one drops findings silently"
+summary = "A new Category costs six production sites plus two tests; render_findings' bucket array silently drops findings past its hand-written length"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/finding.rs", "src/commands/doctor.rs", "src/doctor_checks.rs"]
+globs = []
+commands = ["doctrine doctor"]
+tags = ["doctor", "finding", "category", "footgun", "silent-loss", "touch-sites"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8a3256ba462247253896a16a58dbb0c1b1d4443e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9c1eeb6d701bd03d730e43b0b6ce063cf8a9e6cb07679321bd5869d495fc1e1c"
+base_commit = "dfd51354dca2d6c2689a16b21a4d20d652660d72"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
