@@ -3091,6 +3091,10 @@ target = \"SL-249\"
     /// The other end of the facet spectrum: a concept, whose `[facet]` is empty
     /// BY DESIGN (DEC-172 — a concept's content is its prose). `knowledge edit`
     /// is the whole edit surface such a record has.
+    ///
+    /// Its `tags` are deliberately UNSORTED — a hand-authored store is allowed
+    /// to be, and `apply_tags_set` compares as sets precisely so an idempotent
+    /// re-add against one does not spuriously write (R2).
     fn empty_facet_concept() -> String {
         format!(
             "\
@@ -3104,7 +3108,7 @@ record_kind = \"concept\"
 status = \"draft\"
 created = \"2026-01-01\"
 updated = \"2026-01-01\"
-tags = [\"seed\"]
+tags = [\"zeta\", \"alpha\"]
 
 [facet]                         # empty by design (DEC-172)
 
@@ -3199,6 +3203,229 @@ target = \"SL-249\"
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// Drive the verb's prose tier alone — no `--title`, no `--tags` — so a
+    /// body-only edit's stamping and no-op behaviour is observed in isolation.
+    fn edit_body(root: &Path, body: &str, mode: Option<&str>) -> anyhow::Result<()> {
+        run_edit(
+            Some(root.to_path_buf()),
+            "CPT-003",
+            &EditFields {
+                title: None,
+                tags: &[],
+                body: Some(body),
+                body_mode: mode,
+            },
+            &mut Vec::new(),
+        )
+    }
+
+    /// VT-2: `--body-mode`'s vocabulary and semantics are `entity::write_body`'s,
+    /// unchanged. `BodyMode::Append` OWNS the separator — its doc comment is the
+    /// specification these arms are read off, not recollection. Nothing new is
+    /// decided about prose here.
+    #[test]
+    fn knowledge_edit_body_mode_replace_and_append_match_write_body() {
+        let root = edit_root("bodymode");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+
+        // `replace` overwrites wholesale (and is the default when the flag is absent).
+        edit_body(&root, "first\n", Some("replace")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "first\n");
+
+        // `append` onto a body ending in ONE newline inserts exactly one blank line.
+        edit_body(&root, "second\n", Some("append")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "first\n\nsecond\n");
+
+        // `append` onto a body that ALREADY ends in a blank line does not double it.
+        std::fs::write(&md, "para\n\n").unwrap();
+        edit_body(&root, "next\n", Some("append")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "para\n\nnext\n");
+
+        // Vocabulary is normalised (trim + lowercase) and closed — never a
+        // silent default.
+        edit_body(&root, "tail\n", Some("  APPEND ")).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&md).unwrap(),
+            "para\n\nnext\n\ntail\n"
+        );
+        let err = edit_body(&root, "x\n", Some("prepend")).unwrap_err();
+        assert!(err.to_string().contains("unknown body mode"), "{err}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// VT-2's no-op arm, widened to all three concerns (T7): re-stating the
+    /// title a record already has, re-adding a tag it already carries, and
+    /// re-applying its exact prose writes NOTHING — both tiers hold their bytes
+    /// AND their mtime, and `updated` is not re-stamped.
+    ///
+    /// Three independent changed-flags feed one write decision, so a single
+    /// over-eager one would show up here: `dep_seq`'s core no-ops on identity
+    /// equality (excluding the derived `updated` stamp from the comparison),
+    /// `apply_tags_set` no-ops on SET equality against an unsorted store (R2),
+    /// and `entity::write_body` returns `false` without calling `write_atomic`.
+    #[test]
+    fn knowledge_edit_a_genuine_no_op_writes_nothing_at_all() {
+        let root = edit_root("noop");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+        let toml = record_toml_path(&root, RecordKind::Concept, 3);
+
+        let md_before = std::fs::read_to_string(&md).unwrap();
+        let toml_before = std::fs::read_to_string(&toml).unwrap();
+        let md_mtime = std::fs::metadata(&md).unwrap().modified().unwrap();
+        let toml_mtime = std::fs::metadata(&toml).unwrap().modified().unwrap();
+
+        run_edit(
+            Some(root.clone()),
+            "CPT-003",
+            &EditFields {
+                title: Some("Original title"),
+                tags: &["alpha".to_string()],
+                body: Some(&md_before),
+                body_mode: Some("replace"),
+            },
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), md_before);
+        assert_eq!(std::fs::read_to_string(&toml).unwrap(), toml_before);
+        assert!(
+            toml_before.contains("updated = \"2026-01-01\""),
+            "a no-op must not re-stamp `updated`: {toml_before}"
+        );
+        assert_eq!(
+            std::fs::metadata(&md).unwrap().modified().unwrap(),
+            md_mtime
+        );
+        assert_eq!(
+            std::fs::metadata(&toml).unwrap().modified().unwrap(),
+            toml_mtime
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// T7 / R1: a BODY-ONLY edit still stamps `updated` — neither TOML core can
+    /// see the prose tier, so the shell re-stamps explicitly. Exactly one
+    /// `updated` key results, carrying today.
+    #[test]
+    fn knowledge_edit_body_only_stamps_updated_exactly_once() {
+        let root = edit_root("stamp");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+
+        edit_body(&root, "fresh prose\n", None).unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Concept, 3);
+        assert!(
+            after.contains(&format!("updated = \"{}\"", crate::clock::today())),
+            "a body-only edit must stamp `updated`: {after}"
+        );
+        assert_eq!(
+            after.matches("\nupdated = ").count(),
+            1,
+            "exactly one `updated` key: {after}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// I7: every refusal leaves the corpus byte-identical. Asserted on FILE
+    /// BYTES for both tiers, never by inspecting the error — a message is not
+    /// evidence that nothing was written.
+    #[test]
+    fn knowledge_edit_refusals_leave_both_tiers_byte_identical() {
+        let root = edit_root("refuse");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+        let toml = record_toml_path(&root, RecordKind::Concept, 3);
+        let md_before = std::fs::read_to_string(&md).unwrap();
+        let toml_before = std::fs::read_to_string(&toml).unwrap();
+
+        let refuse = |fields: &EditFields<'_>| -> String {
+            run_edit(Some(root.clone()), "CPT-003", fields, &mut Vec::new())
+                .unwrap_err()
+                .to_string()
+        };
+        let none = EditFields {
+            title: None,
+            tags: &[],
+            body: None,
+            body_mode: None,
+        };
+
+        // (a) a lone `--body-mode`. The totality guard sits AHEAD of the
+        // at-least-one-flag gate, so this says why it is not an edit rather
+        // than falling through to the generic message.
+        let lone_mode = refuse(&EditFields {
+            body_mode: Some("append"),
+            ..none
+        });
+        assert!(
+            lone_mode.contains(crate::input::BODY_MODE_REQUIRES_BODY),
+            "{lone_mode}"
+        );
+
+        // (b) no flags at all.
+        let empty = refuse(&none);
+        assert!(empty.contains("at least one flag"), "{empty}");
+
+        // (c) a malformed tag — `normalize_tag`'s refusal names the offending
+        // token, and is raised before the document is ever opened.
+        let bad_tag = refuse(&EditFields {
+            tags: &["Good".to_string(), "bad tag!".to_string()],
+            ..none
+        });
+        assert!(bad_tag.contains("bad tag!"), "{bad_tag}");
+
+        // An empty `--title` after trim is refused (memory's posture).
+        let blank_title = refuse(&EditFields {
+            title: Some("   "),
+            ..none
+        });
+        assert!(blank_title.contains("must not be empty"), "{blank_title}");
+
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), md_before);
+        assert_eq!(std::fs::read_to_string(&toml).unwrap(), toml_before);
+
+        // A nonexistent record surfaces a clear not-found — `resolve_ref` does
+        // not check existence, the read does.
+        let missing = run_edit(
+            Some(root.clone()),
+            "CPT-099",
+            &EditFields {
+                title: Some("nope"),
+                ..none
+            },
+            &mut Vec::new(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(missing.contains("record not found at"), "{missing}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// VT-2, the stdin arm. `--body -` is resolved by `input::resolve_body`,
+    /// which takes `&mut impl Read` precisely so this is assertable without
+    /// driving a real pipe — the verb itself hands it `io::stdin()`, exactly as
+    /// `memory::run_edit` does, so the injectable seam is the helper.
+    #[test]
+    fn knowledge_edit_body_dash_reads_stdin_through_the_shared_resolver() {
+        let md = "# Definition\n\nTwo  spaces, and a trailing newline.\n";
+        let mut cursor = std::io::Cursor::new(md.as_bytes());
+        assert_eq!(
+            crate::input::resolve_body("-", &mut cursor).unwrap(),
+            md,
+            "stdin prose must survive unaltered — no size rule, no reflow"
+        );
+        let mut untouched = std::io::Cursor::new(b"never read".as_slice());
+        assert_eq!(
+            crate::input::resolve_body("# literal", &mut untouched).unwrap(),
+            "# literal"
+        );
+    }
+
     /// VT-1, the empty-facet end: a concept carries no facet by design
     /// (DEC-172), so `knowledge edit` reaches everything it has. Same verb, no
     /// kind dispatch — that is EX-5's whole claim.
@@ -3225,7 +3452,11 @@ target = \"SL-249\"
 
         let after = read_toml_text(&root, RecordKind::Concept, 3);
         assert!(after.contains("title = \"A concept, renamed\""), "{after}");
-        assert!(after.contains("tags = [\"glossary\", \"seed\"]"), "{after}");
+        // Additive merge over an UNSORTED hand-authored store, stored sorted.
+        assert!(
+            after.contains("tags = [\"alpha\", \"glossary\", \"zeta\"]"),
+            "{after}"
+        );
         assert_eq!(
             read_md_text(&root, RecordKind::Concept, 3),
             "# Definition\n\nThe prose IS the content.\n"

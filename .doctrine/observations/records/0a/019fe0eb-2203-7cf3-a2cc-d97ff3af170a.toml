@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0eb-2203-7cf3-a2cc-d97ff3af170a"
+recorded_at = "2026-08-08T10:28:53.891059928Z"
+kind = "friction"
+summary = "/execute (SL-249 PHASE-08): notes shard name disagreed between the phase sheet (notes_08.md) and the orchestrator's brief (notes_07-08.md)"
+detail = "The sheet's T9 says append to .doctrine/slice/249/notes_08.md; the spawning brief says .doctrine/slice/249/notes_07-08.md. The worker has to adjudicate between two writers of its own brief mid-task. Took the orchestrator's name (it owns the sharding scheme) and noted the divergence in both the shard and the sheet's Findings, so nobody hunts for a missing file. Cheap here; a silent pick would have cost the next reader more."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
