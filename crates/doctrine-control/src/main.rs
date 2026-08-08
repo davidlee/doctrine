@@ -17,6 +17,7 @@
 mod backend;
 mod capacity;
 mod config;
+mod conformance;
 mod host;
 mod provision;
 mod transaction;
