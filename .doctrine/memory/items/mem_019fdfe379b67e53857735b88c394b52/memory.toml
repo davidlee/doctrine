@@ -1,0 +1,42 @@
+memory_uid = "mem_019fdfe379b67e53857735b88c394b52"
+memory_key = "mem.pattern.review.done-is-not-concluded"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A review reading `done` is not concluded — the design run needs the raiser's marker"
+summary = "`review list` showing `done` is DERIVED from findings; a design run's `conducted` disposition needs `review.concluded`, set only by `doctrine review conclude`."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/review.rs", "src/design_run"]
+globs = ["src/review.rs", "src/design_run/*.rs"]
+commands = ["doctrine review conclude", "doctrine design apply"]
+tags = ["review", "design-run", "footgun", "lifecycle"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d6d0385ebc728d9ad0582a9d068aae833f778c23"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f9dfe43592b4da7c8dd72924b40108d4156f9e13861b09bce933a9262a514e14"
+base_commit = "192039f5bff26c5fe922b5ae559a80b4228f834f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
