@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe15abe327472ac838d89690d70e8"
+memory_key = "mem.pattern.testing.pin-named-items-not-diff-lines"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A diff stat cannot prove a test was not edited"
+summary = "Behaviour-preservation gates need the named test items compared byte-for-byte; insertions inside a test body are edits a line count cannot see."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "behaviour-preservation", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "aecf9a5fa08d35e50a2d218f01d73ea11cb42fd3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c839faed1f8644e8703ba0b8b5c40363c6ebba8ed062a52f95bda13fce3f5909"
+base_commit = "86536bdfa2136c4e04dbe3bfa4fc4e9160abe856"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

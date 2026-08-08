@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe153408a76f0a2cb90b7a326980c"
+memory_key = "mem.pattern.rust.exhaustive-destructure-pins-hand-written-mappings"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Destructure exhaustively so a new field is a compile error"
+summary = "A hand-written variant→payload mapping that destructures without `..` turns addition-drift into a compile error, leaving only deletion-drift for a test to catch."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["rust", "drift", "testing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3486e26c6c765114e84a8f36479ea9a974103b93"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3a2beb16402872af98661c6c7d038f9668fdfeea91585662bbacdf81318b897d"
+base_commit = "ea88aeb29f1dda4707efe19fe14fd6814355b9e7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
