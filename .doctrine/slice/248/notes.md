@@ -206,13 +206,65 @@ five places.
    `design_run/document.rs`, `spec.rs`, plus one comment in `main.rs`); every one
    is a string literal or a comment, and no `use` statement names `doctrine::`.
 
+### From `PHASE-02` execution (`10c57a30b`…`a11b158e0`)
+
+6. **`sec-8`'s "it acquires no exemption by being absent from the binary" is
+   half true, and the half that fails is the conclusion** (`design.md:4499-4505`).
+   `src/interpretation.rs` *is* discovered as a unit by the file-tree walk, as
+   the section says. But the gate's completeness assertion demands a tier only
+   for units appearing in an **edge**, and this module has neither an in-edge nor
+   an out-edge (`out=0` by design; un-imported because `main.rs` deliberately
+   does not declare it). **Measured:** deleting `interpretation = "leaf"` from
+   `layering.toml` leaves `architecture_layering_gate` green — the only test that
+   reddens is `every_exported_item_belongs_to_a_leaf_tier_module`, a different
+   mechanism that applies only because this module happens to be exported. `EX-8`
+   is satisfied and protected; the design's stated reason is not the one doing
+   the work. Filed as **`ISS-326`** (the gate gap, separable and general);
+   `VA-1`'s wording in `plan.toml` inherits the same error and is worth amending
+   at reconciliation.
+
+7. **`sec-4`'s rule-4 classification has a vacuous fourth case.**
+   `design.md:1818-1825` orders the diagnosis *removed → inserted → reordered →
+   otherwise*, and "otherwise" is unreachable: if no base row is missing, the
+   base either is a subsequence of the refinement (`Inserted`) or is not
+   (`Reordered`). A replacement is a removal plus an insertion and the removal is
+   diagnosed first. `RestrictionRefusal::VerificationRowReplaced` therefore ships
+   named-but-never-constructed, documented as such at the variant.
+   **Recommend deleting it at reconciliation** — `PHASE-06` is the first
+   consumer, and an impossible variant it must match on forever is a real cost.
+   `EX-7` names the four cases and would move with it.
+
+8. **`sec-4` rule 1 (`SchemaMismatch`) cannot be reached through `parse`.**
+   `parse` accepts exactly `INTERPRETATION_SCHEMA`, so two parsed policies always
+   agree. The rule guards a future v2 rather than any present input; its test is
+   the module's only hand-built fixture and says so. Not a correction — a
+   property of the algebra worth stating once in the brief, since an auditor
+   reading `restrict` will ask.
+
+9. **`sec-4` case 1 is set-shaped where the values are a sequence.** "Some base
+   row appears nowhere in the refinement" mis-diagnoses `base = [A, A]`,
+   `refinement = [A]` as a reordering; duplicate verification rows are legal
+   (only the two set-valued lists reject duplicates). Shipped multiset-aware, so
+   that case reports `Removed`. Mechanical, inside the design's intent.
+
+10. **`sec-4`'s validation table enumerates value rules, not shape refusals.**
+    Ten rules; thirteen `PolicyRefusal` variants. The four additions — `NotToml`,
+    `BlockMalformed`, `ListMalformed`, `EntryMalformed` — are what a total parser
+    needs before the table's rules apply. `NotToml` is the only variant carrying
+    a dependency's message, and it *carries* rather than *matches* it, which is
+    the distinction `sec-4` § *Why the table is walked* is protecting.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · **`PHASE-01` executed and green in-tree on `edge`**
-(`74c398acb` T1–T4, `6b58d48c8` T5–T8); `doctrine check gate` green, `verify-vt`
-0 `UNCHECKABLE`. **Phase status not yet flipped to `completed`** — two exit
-criteria are diverged-from as written (see § *Owed to the reconciliation brief*
-items 1–2) and `DEC-181` is a user ruling, so the flip waits on a re-ruling.
+fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green
+in-tree on `edge`.** `PHASE-01` `74c398acb`+`6b58d48c8`, flipped `completed`
+on the user's acceptance of the adaptations (`DEC-181` superseded — owed item
+1); its delta range tightened to `74c398acb^..6b58d48c8` because the automatic
+boundary had swept in four `SL-250` doc commits and one `IMP-412` backlog
+commit. `PHASE-02` `10c57a30b`…`a11b158e0`, four commits, `doctrine check gate`
+exit 0, lib target 210 tests (53 in `interpretation`, up from a 157 baseline).
+Five further items owed to reconciliation (6–10), one backlog item minted
+(`ISS-326`). Next: `/phase-plan` `PHASE-03`, the first phase in the clone.
 Design run locked at revision 93 · 6b5036c38
 
 ### Produced
@@ -275,6 +327,15 @@ Design run locked at revision 93 · 6b5036c38
   untouched). See Open for what this leaves owed.
 - § *Execution posture* added above — `PHASE-01`+`PHASE-02` in-tree on `edge`,
   clone from `PHASE-03`, and the clone-mints-no-entities rule.
+- **`/phase-plan` `PHASE-02` run.** Nine tasks, ten `VT` mapped, one `VA`.
+  Three decisions taken in the sheet: `D1` (no `proptest` — an exhaustive
+  generator over a small alphabet, emitting documents so the property covers
+  `parse` too), `D2` (no speculative accessors; `sec-3` step 6's reader arrives
+  with its consumer in `PHASE-06`), `D3` (pre-authorised `#[expect]` for
+  `module_name_repetitions`, which duly fired).
+- **`PHASE-02` executed** — `src/interpretation.rs`, 53 tests, four commits.
+  `ISS-326` minted from `VA-1`'s measurement. Five owed items added above
+  (6–10); `plan.toml` was not edited.
 
 ### Learned
 
