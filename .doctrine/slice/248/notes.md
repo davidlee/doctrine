@@ -448,6 +448,104 @@ the `PHASE-03` sheet as `F-7`, which supersedes `T14`'s escalation clause.
 `F-25`'s claim that "every conformance row would have failed before running"
 reproduced as a measurement rather than an assertion.
 
+Items 26–30 are `PHASE-05` **plan-time** findings (sheet `F-1`…`F-8`), raised
+before any source was written. That they are plan-time is itself the point:
+four of the five are criteria the design mandates but the workspace cannot
+satisfy or a method that would have produced a false failure, and all four were
+found by reading and *executing probes* against the criteria rather than by
+running into them mid-implementation.
+
+26. **A phase's exit criteria mandate a mechanism the workspace lint posture
+    forbids, and the conflict is not resolvable inside the phase.** `EX-15`
+    (per-file `RLIMIT_FSIZE` on the child) and `EX-16` (the `/proc/self/fd`
+    CLOEXEC sweep) each require an `unsafe` expression — `CommandExt::pre_exec`
+    and `BorrowedFd::borrow_raw` respectively — while `Cargo.toml:200` sets
+    `unsafe_code = "forbid"` workspace-wide, and `forbid` cannot be excepted by
+    `#[expect]` or `#[allow]`. Verified by executing `rustc` probes, not by
+    reading. There is **zero** `unsafe` in the repository, so the posture is
+    real rather than nominal. `EX-15` additionally needs `rustix`'s `process`
+    feature, which `crates/doctrine-control/Cargo.toml:42-44` deliberately
+    leaves undeclared citing `RV-346` `F-29`. The design never reconciled its
+    own § *Descriptors* / § *Bounds* mechanisms against the workspace posture;
+    the brief should record that the gap was structural and reached the phase
+    sheet unflagged. **Ruling owed to the slice owner** — see § *Open*.
+
+27. **`sec-6`'s unit table diverged from this slice's needs a third time — and
+    in a new direction.** The table gives `backend` the single out-edge
+    `config`, but `EN-4` requires `bubblewrap.rs` to reach `HostFacts` for its
+    hermetic `PATH` and declared-list probes, so the unit acquires
+    `backend → host`. Both are `leaf`, `host` is out=0, nothing cycles, no
+    `layering.toml` row moves. Items 11 and 20 were the table being *right*
+    against contradicting prose; this is the table being *incomplete*. Three
+    consecutive phases is a pattern in the artefact, not three incidents.
+
+28. **A named `Termination` variant had no observable behind it.** Measured:
+    bubblewrap exits **1** when `execvp` fails — indistinguishable from a
+    capsule that legitimately exits 1, which `PHASE-04` `EX-14` requires be
+    `Ok(Exited { code: 1 })` — and writes its diagnostic to the *shared*
+    stderr, which is capsule-forgeable and so unusable without violating
+    invariant 8. The design's § *Bounds* and § *Descriptors* are silent on the
+    channel. Resolved in-criteria via `--json-status-fd` (measured to emit
+    `exit-code` only when the child ran, and measured **not** to cross into the
+    capsule). The design owes a sentence naming the mechanism.
+
+29. **`EX-4`'s flag list does not say whether it is exhaustive**, and the two
+    readings differ in consequence: as an ordering constraint on the
+    confinement flags it is satisfied by a leading `--json-status-fd`; as an
+    inventory of bwrap options it is violated by it, and item 28's resolution
+    becomes a STOP. Ruled in-criteria on the ordering reading. The brief should
+    make the criterion say which it is.
+
+30. **A `VA` criterion is false as literally written — the third of its class.**
+    `VA-2` ("no bubblewrap flag token appears anywhere outside this module")
+    holds within `crates/doctrine-control/` and fails immediately across the
+    workspace: 67 hits in six root-package files, which is the worktree arm
+    `DEC-155` decided *not* to reuse. Scoped to the crate. Same class as item 19
+    — the criterion holds, the *method* needed naming, and an agent running the
+    literal grep would reasonably have raised a false failure. Items 19 and 30
+    are the mirror of the vacuous-criterion class (items 7, 8, 23): there a
+    passing check proved nothing; here a failing check disproves nothing.
+
+**Measurements worth keeping (`PHASE-05` plan time, bubblewrap 0.11.2).**
+(a) bwrap **creates** the mountpoint inside a `--tmpfs` for a bind resolving
+beneath it — the design declined to claim this either way, and `EX-3`'s lawful
+case does hold. (b) The *same* probe with `--ro-bind` before `--tmpfs /tmp`
+leaves `/tmp` empty inside the capsule: the tmpfs silently shadows the earlier
+bind, exit 0, no error anywhere. `EX-4`'s assembly order is load-bearing, and
+this executed control is stronger evidence than the argv-shape assertion the
+sheet mandates. (c) `--uid`/`--gid` take effect under nesting inside this
+project's own jail, but the overflow gid `65534` survives as a supplementary
+group — recorded for `PHASE-10`, whose rows 13/14 assert invariant 15's "no
+supplementary groups", so `--uid`/`--gid` are not later read as discharging it.
+
+## Open
+
+**Awaiting the slice owner — `PHASE-05` `T9`/`T10` are gated on it (sheet `S1`).**
+The workspace forbids `unsafe`; `EX-15` and `EX-16` require it (item 26). The
+loop is stopped here per `LOOP.md` § *Stop conditions* — a ruling is owed, so no
+worker is spawned. `T3`–`T8` and `T11`–`T14` are unaffected and could proceed,
+but splitting one phase's sheet across two worker contexts costs more than it
+saves unless the ruling is slow.
+
+Options as the planner put them, cheapest first:
+
+1. **`forbid` → `deny` at `Cargo.toml:200`**, plus exactly two
+   `#[expect(unsafe_code, reason = …)]` sites in `bubblewrap.rs` and a `VA`
+   inspection that the count stays at two; plus `"process"` on the existing
+   `rustix` feature list (a feature, not a new crate — `linux-raw-sys` is
+   already in `Cargo.lock`, and feature selections are not recorded there, so
+   the lockfile does not move). Keeps `unsafe` denied by default everywhere and
+   makes the two sites explicit and reviewable. **Planner's recommendation.**
+2. **`EX-15` only, no `unsafe`:** enable `process` and set `RLIMIT_FSIZE` on
+   the *parent* before the spawn — rlimits are inherited across `fork`/`exec` —
+   restoring it after. Correct, but it caps the trusted side for the window and
+   diverges from `EX-15`'s "on the child". Leaves `EX-16` unsatisfied.
+3. **Defer both**, leaving invariant 12 and `sec-7` row 10 with no mechanism
+   behind them. The option the design explicitly argues against.
+
+Either way this edits two files `PHASE-05` does not own, one of them a
+workspace-level safety posture — which is why it is not a planner's call.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green

@@ -220,30 +220,30 @@ Call `ScheduleWakeup(stop: true)` and report, on any of:
 one beat where getting the distinction wrong converts an autonomous loop back
 into a babysat one. It has its own section below.
 
-## Budget — come up fresh, do not stop
+## Budget — never a reason to stop
 
-At **~250k** the orchestrator is done, but **the loop is not**. Hand the role to
-a fresh context and keep driving; do not halt and ask the human to restart you.
-Halting here is not caution, it is the failure this file exists to prevent —
-the human set a loop up precisely so they would not be the thing that resumes it.
+Running low on context is **not** in § Stop conditions and must never be treated
+as if it were. Halting there is not caution; it is the exact failure this file
+exists to prevent — the human set a loop up precisely so they would not be the
+thing that resumes it.
 
-The beat, in order:
+**Compaction is survivable by construction.** Disk is truth and `handover.md` is
+rewritten every firing specifically so a firing can begin knowing nothing. That
+is the whole mechanism; there is nothing else to do. Autocompact is armed at
+200k, so the fresh context arrives on its own and the loop continues through it.
 
-1. finish the firing you are in — never hand over mid-phase with an unverified
-   claim outstanding;
-2. rewrite `handover.md` so a context that knows *nothing* can continue (it is
-   already written that way every firing — this is a check, not new work);
-3. **spawn a successor orchestrator sub-agent**, briefed with `LOOP.md`, the
-   slice id, and `handover.md`, to carry the next phases and hand back ≤15 lines;
-4. re-arm the loop and keep going, now paying only the successor's hand-back.
+Two things that are *not* available, recorded so no future firing re-derives
+them: an orchestrator **cannot** self-terminate and be respawned fresh —
+`ScheduleWakeup` and `CronCreate` both fire back into the *same* context — and a
+sub-agent is a child, not a successor: its hand-back lands in the parent's
+context, so spawning one does not reset anything. (A thin-supervisor shape, where
+the loop-holder owns only the timer and rotates a fresh full orchestrator per
+window, *is* mechanically possible — sub-agent nesting is verified working — but
+it has not been adopted here and is not this file's contract.)
 
-The human is told what happened, not asked to do it. The only conditions that
-stop the loop are in § Stop conditions, and running low on context is not one of
-them.
-
-A summarization is **survivable by construction** — disk is truth, `handover.md`
-is rewritten every firing precisely so a firing can begin knowing nothing. Prefer
-to come up fresh before one; do not treat one as a catastrophe.
+The only thing budget changes is **hygiene before a compaction**: finish the
+firing you are in, never leave an unverified claim outstanding across the
+boundary, and make sure `handover.md` reflects disk before you get close.
 
 Delegation is what keeps the orchestrator alive: planning a phase is a
 session-sized job, and doing it in-context burns the loop down in three or four
