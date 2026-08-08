@@ -273,10 +273,13 @@ expanding an argument, not an instruction.
   not distributed above. The risks and residuals that carry a phase obligation
   are on the rows that owe them (`R6`, `R7`, `R8`, `R9`, residual 3); the rest
   are recorded rather than built. The four sections named here are addressed to
-  the audit and the close, not to an executing phase — which is why `ISS-323`
-  and the two title divergences under § *Corrections owed* below are owed
-  **again** at reconcile: `sec-9`'s own corrections list cannot be extended in
-  place without a design recovery cycle (`ISS-320`).
+  the audit and the close, not to an executing phase. This used to add that
+  `ISS-323` and the divergences under § *Corrections owed* were owed **again**
+  at reconcile, because `sec-9`'s corrections list could not be extended in
+  place without a design recovery cycle (`ISS-320`). That is **no longer true**:
+  the user-authorised reopen that settled `C-1` applied them in the design, so
+  only item 4 — a deliberate ruling, not a defect — remains, and it needs
+  nothing at reconcile.
 
 ### Phase obligations the design defers to execution
 
@@ -353,13 +356,25 @@ rather than improvising.
 ### Corrections owed
 
 All transcription-grade, all resolving unambiguously against the design's own
-prose, and none reopening a decision. Items 1 and 2 are owed at execution; items
-3 to 5 were ruled at stage 3 and are owed only to the reconciliation brief,
-because they are corrections to design text and `sec-9`'s own corrections list
-cannot be extended in place without a design recovery cycle (`ISS-320`). They
-are recorded here so the audit does not have to rediscover them.
+prose, and none reopening a decision.
 
-1. **`sec-6`'s `EXPORTED` constant omits `today`.** The sketch above it declares
+**Four of the five are now fixed in the design and owed to nobody.** The list
+was written when the design was locked and its corrections could not be applied
+in place without a recovery cycle (`ISS-320`), so items 1, 2, 3 and 5 were
+addressed to the reconciliation brief. The user-authorised design reopen that
+settled `C-1` folded them in at the same time, so **the audit should not be sent
+after them**. Each is marked below with what actually happened. Item 4 is the
+one that stands, and it stands as a deliberate ruling rather than an omission.
+Kept rather than deleted because the reasoning is what makes item 4's ruling
+legible, and because a reader comparing this plan against an earlier revision
+should be able to see that the corrections landed rather than evaporated.
+
+1. **`sec-6`'s `EXPORTED` constant omits `today`. FIXED in the design.** The
+   constant now carries six entries, and `sec-6`'s prose names `today` among the
+   items that become `pub`, which it did not before — that second half was
+   `ISS-323`'s root cause in a fresh instance and is what made `PHASE-01` `EX-1`
+   and `EX-4` mutually unsatisfiable until the critical pass amended `EX-4`.
+   The original finding, for the record: the sketch above it declares
    `pub use clock::today;`, the same section's prose calls `clock::today` "the
    third export" and explains that taking it is what avoids a fourth dependency
    edge, and `sec-8`'s touch-set counts "five items behind three private
@@ -367,12 +382,14 @@ are recorded here so the audit does not have to rediscover them.
    four items plus the `interpretation` module. Implementation follows the
    prose: `EXPORTED` carries six entries, and the export-set assertion is
    written against that. Owned by PHASE-01.
-2. **`sec-8` enumerates `just check` as five legs.** It runs six —
+2. **`sec-8` enumerated `just check` as five legs. FIXED in the design.** It runs six —
    `fmt lint lint-js build validate test`. `lint-js` is a bun/eslint leg over
    `web/map` with no cargo package selection in it, so the checked-set ruling is
    unaffected and the omission changes nothing. Recorded so a stage-2 session
    reading `sec-8` against the recipe does not treat the difference as drift.
-3. **One refusal is spelled two ways.** `sec-2` § *Verification alignment* lists
+3. **One refusal was spelled two ways. FIXED in the design** — `sec-2` now
+   carries `sec-5`'s spelling, so the two agree and no mandate moved.
+   `sec-2` § *Verification alignment* listed
    `both_declared_lists_empty_refuses`; `sec-5` § lists
    `both_readable_lists_empty_refuses`. One refusal (`NoReadableInputs`), one
    test, one file (`config.rs`). **`sec-5`'s spelling stands** — it is the
@@ -393,13 +410,31 @@ are recorded here so the audit does not have to rediscover them.
    design's title authority to buy a grep convenience, which is the wrong trade;
    the cost accepted instead is that a reader greping the bare title finds two
    tests and disambiguates by module.
-5. **`sec-9` residual 2's count is stale.** It states `PropertyRemoval` at nine
-   variants; the vocabulary this plan lands is ten (`PHASE-07` `EX-4`), with
-   `AuthorityGrant::AllCapabilities` a separate enum on top. The residual's
-   claim is about the *trend* — the vocabulary grows every round — and that is
-   unaffected and still true. Nothing rests on the numeral: `PropertyRemoval` is
-   a closed enum the compiler checks, and `PHASE-07` `EX-4` is the authority.
-   Recorded so a reader does not take nine as current.
+5. **This item was itself wrong, and the design was right. CORRECTED on both
+   sides.** It claimed `sec-9` residual 2's count of nine `PropertyRemoval`
+   variants was stale and that the plan lands ten. Checked at the design reopen:
+   the design's own enum carries **nine** variants, and `SharedRoot` — the
+   obvious tenth to a fast reader — is a `Delta` variant, not a
+   `PropertyRemoval` one (`PHASE-07` `EX-8` says so explicitly). `PHASE-07`
+   `EX-4` was the actual defect: it said *all ten variants* while listing nine,
+   and `PHASE-09` `EN-1` repeated the ten. Both are fixed.
+
+   The distinction that caused it is worth keeping: **nine variants, ten
+   removals.** `ResourceBound(Bound)` is one variant carrying two removals
+   (`FileSize`, `Wall`), so a count of the vocabulary and a count of what
+   `execute_weakened` must handle legitimately differ by one, and `PHASE-09`
+   `EN-1`'s *ten removals land together* was right all along.
+
+   The design was not left untouched: residual 2 named `CredentialsConfined`
+   among the round-5 additions, and that variant no longer exists — it was
+   replaced by `MappedIdentity` after `RV-346` `F-32` measured it not to fire.
+   The residual now names the replacement, notes that `AuthorityGrant` is a
+   second enum in the same vocabulary (so nine understates the exposure by a
+   type, which strengthens rather than weakens the residual's trend claim), and
+   states the nine-versus-ten distinction. **The lesson is the one `sec-9` keeps
+   recording about itself**: a quantifier is only as strong as the enumeration
+   under it, and this is the fourth section to pay for asserting one without
+   checking the other — this time in the plan rather than the design.
 
 ### The design's premises were re-checked against the tree
 
@@ -441,7 +476,7 @@ scout conclusions were narrowed on confirmation.
 Five findings. Four are landed here; one is a design defect and is not.
 
 1. **`C-1` — `fetch_refspec` is unreachable from `doctrine-control`. Design
-   defect; open.** `src/git.rs:2718` is `pub(crate)`. `design.md:1222` — its only
+   defect; SETTLED at the design reopen.** `src/git.rs:2718` is `pub(crate)`. `design.md:1222` — its only
    mention anywhere in 5088 lines — says the per-base export build "rides
    `git init --bare` plus the existing `fetch_refspec`", while `design.md:2597`
    enumerates the four items that become `pub` and says *nothing else does*, and
@@ -455,9 +490,21 @@ Five findings. Four are landed here; one is a design defect and is not.
    and `sec-9` `R7`'s minimal-surface argument; driving `git` as a subprocess in
    `provision.rs` changes no export set and matches `EX-14`'s standing posture,
    but contradicts `design.md:1222`. **Expensive downstream** — it surfaces at
-   PHASE-06 and the first resolution must be executed at PHASE-01. Carried to the
-   design reopen as `D1`; recorded in `plan.toml` at PHASE-06 as critical-pass
-   note 5.
+   PHASE-06 and the first resolution must be executed at PHASE-01.
+
+   **Ruled by the slice owner: wrap `git` locally in `doctrine-control`**, with
+   a comment at the seam naming the alternative. Two facts found at the reopen
+   decided it. `fetch_refspec` is eight lines — `run_git(root, &["fetch",
+   remote, refspec])` plus error formatting — so widening a **published**
+   crate's permanent public API to reuse it pays `sec-9` `R7`'s minimal-surface
+   cost for almost nothing, and pays it at PHASE-01, five phases before the need
+   appears. And `SPEC-030` (`spec-030.md:79`) puts Doctrine-owned Git operations
+   under the ingestion contract rather than the
+   `trusted_side_forbidden_executables` check, so a trusted-side `git` in
+   `provision.rs` is governed rather than a new hazard. `design.md:1222`,
+   PHASE-06 `EN-3`/`EX-11` and `plan.toml`'s critical-pass note 5 all now say
+   this; the export set PHASE-01 lands is **unchanged**, so PHASE-01 and
+   PHASE-02 are untouched by the ruling and the two `VT` mandates do not move.
 2. **`C-2` — PHASE-01 `EX-1` and `EX-4` were mutually unsatisfiable. Fixed.**
    `today` is `pub(crate) fn today()` at `src/clock.rs:17`; `EX-1` re-exports it,
    so `E0364` forces the promotion; `EX-4` said no other item changes visibility.
