@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 183
+slug = "i10-quantifies-over-the-subject-kind-axis-only"
+title = "I10 quantifies over the subject-kind axis only"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 PHASE-02/EN-2 asked for I10's per-key cell semantics. Defining them established that four wire keys are read on only one of their honouring kind's two paths, so a submission carrying one at the honouring kind in the other state is neither effectful nor refused."
+choice       = "I10's cell is quantified existentially over submissions at a subject kind: a key is 'observably effectful' at kind K if some submission at K makes it so, and must be refused at every other kind. The state axis is out of PHASE-02's scope."
+alternatives = [
+  "Widen PHASE-02's refusal to state-inert keys — key -> (kind, applicable state) rather than key -> kind",
+  "Split the state axis into a named follow-up phase or its own slice rather than a backlog item",
+]
+rationale    = "PHASE-02 exists to close the SL-248 loss, which is kind-inert throughout; the existential reading covers it whole. Widening an approved phase's contract on the strength of something found while discharging its entrance criterion is the erosion R6 names. The design's own I10 wording overstates what its test proves, and that is cheaper to correct in prose at reconcile than to make true in code mid-phase."
+consequences = [
+  "PHASE-02 ships its planned scope; I10's generated matrix proves the kind axis and nothing wider",
+  "The four state-inert cells are named in the test module (VA-1's recording rule), not only in the gitignored phase sheet",
+  "design.md section 5.5's I10 wording is owed a narrowing correction at reconcile",
+  "The state axis and the nested-CreateRecord axis are carried as backlog, not as silent narrowing",
+]
+decided_by   = "user"
+decided_on   = "2026-08-08"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
