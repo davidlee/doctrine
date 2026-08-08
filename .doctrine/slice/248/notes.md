@@ -74,7 +74,8 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · plan · **authoring complete** (all three stages)
+fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages); **the
+`/plan` critical pass is owing** · 3f96512b1
 
 ### Produced
 
@@ -132,9 +133,15 @@ fresh-as-of: 2026-08-08 · plan · **authoring complete** (all three stages)
 
 ### Open
 
-- **Next is `doctrine slice phases 248`, then `slice status 248 ready`** — plan
-  authoring is complete and the gate that held them is discharged. After that,
-  `/phase-plan` for `PHASE-01`.
+- **The `/plan` critical pass (skill steps 7–9) is OWING.** Plan *authoring* is
+  complete across all three stages and the slice is `ready` with phase sheets
+  materialised — but that is a different obligation. Stages 1–3 established that
+  the plan is internally consistent and covers the design; the critical pass
+  asks whether it is sound as an execution instrument (under-specified, assumed,
+  ambiguous, oversized, optimistic, implementation risk). Not started. Nothing
+  downstream should begin until it has run — `handover.md` carries the brief.
+- `/phase-plan` for `PHASE-01` is the step *after* the critical pass, not
+  instead of it.
 - `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
   because `sec-9`'s corrections list cannot be edited without a recovery cycle.
   Three more of the same shape joined it at stage 3, all in plan.md
