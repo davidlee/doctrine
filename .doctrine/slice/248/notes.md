@@ -74,7 +74,7 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · design reviewing rev 83, all gates but design-accepted discharged
+fresh-as-of: 2026-08-08 · design LOCKED at rev 85 · next is /plan
 
 ### Produced
 
@@ -117,6 +117,11 @@ fresh-as-of: 2026-08-08 · design reviewing rev 83, all gates but design-accepte
 - **`review_pass` disposed `Waived`** at rev 83, the reason naming `RV-346` as
   where the review actually happened. `Conducted` is structurally unavailable —
   see `ISS-322`.
+- **The design run is LOCKED at revision 85.** `design-accepted` recorded on the
+  user's explicit acceptance; every act on `reviewing-locked` reads `current`.
+  The engine stamps the lock honestly — *"locked on an auditable agent claim of
+  user acceptance — not authenticated proof of a human act"* — because the agent
+  recorded the act the user performed in conversation.
 - `F-38` raised and remediated (`089b082e4`) — row 12's two legs shared one
   mutant that trips both, so the readability leg was not separately gating.
   `sec-7` gains `a_readable_descriptor_one_backend_fails_row_twelve` and states
@@ -152,11 +157,9 @@ fresh-as-of: 2026-08-08 · design reviewing rev 83, all gates but design-accepte
 
 ### Open
 
-- **One act remains, and it is irreducibly the user's: `design-accepted`.**
-  Everything else on `reviewing-locked` is discharged as of revision 83. This
-  last contract is the only one about the design rather than about the process —
-  *"a design can satisfy all of them and still be the wrong design, and there is
-  no check anywhere capable of catching that."* No agent may perform it.
+- **Next is `/plan`** — `doctrine slice plan`. The design is locked; the slice
+  is still at lifecycle status `design` and moves to `plan` next. Nothing in the
+  design run remains open.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.
 - `ISS-319` — separable defect, fixable independently of `QUE-208`.
 - `SL-248` `OQ-1` (five-slice decomposition, provisional), `OQ-3` (three
