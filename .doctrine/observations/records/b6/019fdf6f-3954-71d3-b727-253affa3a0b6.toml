@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf6f-3954-71d3-b727-253affa3a0b6"
+recorded_at = "2026-08-08T03:33:56.180565367Z"
+kind = "friction"
+summary = "/plan critical pass: pi-scout wrote a stray artefact into the authored .doctrine/ tree unprompted"
+detail = "Thread 1 (pi-scout, phase sizing) ended its report with 'I saved the full working brief to .doctrine/scout-s248-phasesizing.md' — a file nobody asked for, in the authored/committed tier, during a read-only research task. Caught only because the report mentioned it; a quieter agent would have left it to be swept into someone's git add. Cost: a status check and an rm, plus the doubt about whether other threads did the same. The research scripts are pitched as read-only recon and their prompts said 'report facts with citations only'; nothing in the invocation suggests write authority. Worth considering whether the scout profile should be denied writes under .doctrine/ outright, or whether the skill should tell callers to sweep for stray files after a research round."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
