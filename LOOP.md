@@ -216,9 +216,17 @@ Call `ScheduleWakeup(stop: true)` and report, on any of:
   ask; do not spawn again.
 - **No progress.** Three firings with no phase-status change and no new commit,
   or three revives of one phase.
-- **Budget.** Session approaching ~250k: write `handover.md`, stop, and say a
-  fresh session should resume from it. A loop that runs into a summarization is a
-  loop that starts trusting its own recollection.
+- **Budget — and check the window before you invoke this.** Stop only when the
+  session is genuinely near the end of *its* context window, not at a number
+  copied from this file. On a 1M-context model that is ~800k, not 250k; stopping
+  at a quarter of the window turns an autonomous loop back into a babysat one,
+  which is the failure this file exists to prevent. When you do stop: write
+  `handover.md`, stop, and say a fresh session should resume from it.
+
+  A summarization is **survivable by construction** — disk is truth, and
+  `handover.md` is rewritten every firing precisely so a firing can begin knowing
+  nothing. Prefer to avoid it; do not treat it as a catastrophe worth ending a
+  healthy loop to dodge.
 
 ## Budget
 
@@ -230,8 +238,15 @@ read the design yourself.
 Rough orchestrator costs per firing: guard-and-exit ≤ 2k, spawn ≤ 10k,
 verify-and-flip ≤ 15k. These are the *orchestrator's* only — a planner or worker
 sub-agent spends its own context freely and hands back ten lines. If the
-orchestrator is reading source or `design.md`, the split has failed and the loop
-is now on a countdown.
+orchestrator is reading source or `design.md`, the split has failed.
+
+Measured over `PHASE-03`/`PHASE-04`: ~20–25k per phase closed, of which the
+largest share is **carrying the sub-agent's findings into `notes.md`** — the
+sheet is gitignored, so that transcription is real work and cannot be skipped. At
+that rate a ten-phase slice costs an orchestrator ~250k, which fits a 1M window
+several times over. If a future run needs it cheaper, delegate the transcription
+to a short harvest sub-agent rather than dropping it; do **not** economise by
+trusting a worker's summary over its sheet.
 
 Read entities with `doctrine <kind> show <ID>`, not raw files. Use this tree's
 `./target/debug/doctrine`, never the PATH binary, or you will read a corpus
