@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe1fd-1633-7291-b969-421e8fd933e1"
+recorded_at = "2026-08-08T15:28:07.731807099Z"
+kind = "friction"
+summary = "/phase-plan specified an EX-4 idempotence fixture that a state guard makes vacuous (SL-249 PHASE-06)"
+detail = """
+The PHASE-06 sheet named a compensating fixture for EX-4: force a resume through step 5 via the abandoned-write hook, then assert the record's bytes are unchanged. The mechanism does not do what the sheet says. Once the mint has run in full, the intent is journalled at IntentState::Applied and execute_mint's 'intent.state() < IntentState::Applied' guard skips step 5 on resume, so the assertion would have compared a file to itself with no writer between the two reads — vacuous on ANY tree, including one with no feature at all.
+
+The sheet was unusually careful elsewhere: it correctly flagged this same test's byte-equality half as 'vacuous on its own' and prescribed control C1 for it. So the planner had the right instinct and still picked a mechanism whose failure mode is one level deeper than the one it was guarding against — it reasoned about whether the ASSERTION could discriminate, not about whether the FIXTURE reached the code.
+
+Cost: ~15 min of worker context reading execute_mint's resume guards and the FaultHook type to establish the fixture could not work, plus a judgement call on whether the divergence was a STOP (it was not — the criterion holds, only the recipe was wrong).
+
+Generalisable planner beat: when a sheet prescribes a compensating fixture that exercises a resume/retry path, name the guard that decides whether the step re-runs, and require the worker to pin it. 'Re-submit and assert unchanged' is the default shape and is wrong wherever recorded progress gates the step."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
