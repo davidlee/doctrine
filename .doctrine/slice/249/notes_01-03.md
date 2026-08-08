@@ -46,4 +46,52 @@ unilaterally. See Findings for the minted id.
 
 ### T3 — the injected-defect control
 
-(recorded below as it is run)
+T1's red was a compile failure, which proves the pins *run*, not that they
+*catch*. Five defects injected one at a time, each reverted immediately
+(`git restore --source=HEAD -- src/knowledge.rs`); `git diff --stat
+src/knowledge.rs` empty at the end, so nothing survived.
+
+| # | injected defect | I2 | I3 | I3b |
+|---|---|---|---|---|
+| a | `choice` moved from decision's row onto question's | green | **RED** (decision) | green |
+| a′ | `choice` *added* to question's row, decision's left intact | green | **RED** (question) | green |
+| b | `rationale` deleted from decision's row | **RED** | green | green |
+| b′ | `confidence` deleted from evidence's row (assumption still owns it) | green | **RED** (evidence) | green |
+| c | `context` duplicated inside decision's row | green | green | **RED** (8 vs 7) |
+
+(a) fires on decision rather than question only because `assert_eq!` aborts at
+the first kind in `RecordKind::ALL` order and decision precedes question; both
+halves of the defect are real. (a′) is the pure form of RV-349 `F-3` round one —
+a row handed a field its kind does not own, with the union unchanged so `I2`
+cannot see it. It failed with `left: {answer, answered_by, answered_on,
+question, why_matters}` / `right: {… choice …}`: the table claims `choice`,
+`validate_facet` retains nothing of the sort. An inclusion pin would have passed.
+
+(c) is the reason `I3b` exists: `I2` and `I3` both stayed **green** under a
+duplicated row entry, exactly as `F-3` round two predicted, while every consumer
+that iterates the row would see `context` twice.
+
+**Divergence from the sheet, and why it is not a hole.** T3(b) is specified as
+"`I3` must fail on decision AND `I2` must fail". `I2` failed; **`I3` did not**.
+Cause: `I3`'s input is `populated_union()`, built from the table's own rows, so a
+field deleted from *every* row is absent from the input as well — both sides of
+the comparison shrink together and `I3` is structurally blind to it. That is not
+a gap in the pin set, it is the division of labour the design's § 5.1 already
+draws: totality is `P1`/`I2`'s job, placement is `P2`/`I3`'s. To confirm the set
+is complete rather than merely assume it, (b′) was run as the complementary
+case — a field dropped from *one* row while another still owns it, so the union
+stays total and `I2` cannot see it. `I3` caught it. Between them the four defect
+classes are covered:
+
+| defect class | caught by |
+|---|---|
+| model field with no row anywhere | `I2` |
+| row naming a key no model field carries | `I2` |
+| field on a row whose kind does not own it | `I3` (a′) |
+| field missing from one row, present in another | `I3` (b′) |
+| field missing from every row | `I2` (b) |
+| name repeated within one row | `I3b` (c) |
+
+No STOP: the criteria that bind are `EX-2`/`EX-3`/`EX-4` and each holds. What
+diverged is the planner's per-test attribution for one injected defect, recorded
+here so the audit reads the measurement rather than the prediction.
