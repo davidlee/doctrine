@@ -114,3 +114,41 @@ marketplace-source and exec-path-baking are instances of that one axis.
   per-machine installer run; confirm no committed artifact carries it.
 - OQ-3: should `--dev` also support `--scope local` (gitignored
   `settings.local.json`) so a dev enable doesn't dirty the committed file?
+
+## Overlap assessment vs SL-250 (2026-08-08, SL-250 close)
+
+SL-250 `sec-6` owed this assessment and never recorded it. Doing it here: **the
+item is reduced, not resolved.**
+
+SL-250 removed the automated plugin steps from `doctrine install` outright —
+`select_marketplace_source`, `marketplace_action`, `claude_plugin_install`,
+`enable_key`, `parse_registered_source` and `refresh_failure_is_fatal` are gone
+from `src/` (verified by grep at close, with a positive control).
+
+That lands on this card's two axes unevenly:
+
+- **The marketplace-source axis is mooted on the automated path.** `--dev`
+  directory-link vs normal github-marketplace was a choice about *how doctrine
+  registers a marketplace during install*. Doctrine no longer registers one. The
+  distinction survives only as something an operator does by hand via the
+  published escape hatch, where a flag on `doctrine install` cannot reach it.
+  `OQ-1` and `OQ-2` go with it.
+- **The exec-path-baking axis survives, and was partly settled elsewhere.**
+  SL-250 fixed the rule for the Claude *settings* surface — `baked ⟺ gitignored`
+  via `CommandForm`, now governed by `REQ-476` (SPEC-011 `FR-008`): the tracked
+  project file gets portable `${DOCTRINE_BIN:-doctrine}`, the gitignored local
+  file a baked path. That is SL-195's rule applied to a new surface, not a new
+  answer to this card's `bake-nothing vs bake-resolved` question (still open on
+  [[IMP-249]]).
+- **`OQ-3` is answered, by a different mechanism than it proposed.** Scope
+  selection now exists — but as the sticky `[install] claude-settings-scope`
+  key, deliberately *not* a `--scope` flag (SL-250 `DEC-163`), so a dev who does
+  not want to dirty the committed file sets the key once rather than remembering
+  a flag.
+
+**What is left of this card:** the non-installer abspath hardcodes its own census
+already names — `.pi/extensions/doctrine/index.ts` and `.codex/hooks.json` both
+carrying a literal `/home/<user>/.cargo/bin/doctrine`. Those are untouched by
+SL-250 and are the same POL-002 class the settings surface just fixed. Retitling
+or re-scoping this card around that residue would be honest; left to whoever
+picks it up.

@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · ebe741aa6
+fresh-as-of: 2026-08-08 · reconciled + closed · RV-350 terminal, REV-049 done
 
 ### Produced
 
@@ -922,3 +922,55 @@ ids only here.
   binding*, and *an enumerated inventory is a starting set*.
 - **At close:** CHR-045 (resolve or explicitly retain), IMP-234 / CHR-037
   (assessed for overlap — no assessment recorded).
+
+### Discharged at reconcile + close (2026-08-08)
+
+Everything the *Owed at reconcile* and *At close* sections above asked for is
+done. Recorded here as ids, not restated content — the RV's
+`## Reconciliation Outcome` is the ledger.
+
+- **REV-049** (`reconcile SL-250`) — **done**. `QUE-209` settled by the user as a
+  **three-requirement split**, not a widened `REQ-186`: `REQ-186` modified to the
+  hook *set*, `REQ-476` (`FR-008`, scope key → file *and* command form) and
+  `REQ-477` (`FR-009`, the sweep) introduced and `active`, plus SPEC-011's prose
+  and its structured responsibility 6, which carried the identical falsehood.
+  `QUE-209` moved to `answered` with the reasoning on the record.
+  `REQ-186`'s slug rewritten — the old one encoded the retracted claim verbatim.
+- **Thirteen `design.md` direct edits** applied, each re-verified against shipped
+  code first. No `plan.toml` edits: criteria ids are immutable-append, so the two
+  general rules (`line numbers advisory / symbols binding`; `an enumerated
+  inventory is a starting set`) and the `D1` constant-partitioning rule landed as
+  prose in `sec-7`.
+- **Backlog disposition** — `sec-6`'s list, closed out:
+  - **CHR-045** — explicitly **retained**. It survives its moot-ness test (the
+    published marketplace stays an escape hatch, so a stale plugin is still a real
+    defect) and fails its build-it test (the residual is unchanged since CHR-048's
+    YAGNI call). Both halves recorded on the card so it is not re-derived a third
+    time.
+  - **IMP-234** — assessment recorded: **reduced, not resolved**. Its
+    marketplace-source axis is mooted with the removed plugin steps; what survives
+    is the `.pi/extensions/doctrine/index.ts` + `.codex/hooks.json` abspath census.
+    `OQ-3` answered by the sticky scope key rather than the `--scope` flag it
+    proposed.
+  - **CHR-037** — assessment recorded: legs 2–3 **moot** (they observe the removed
+    marketplace registration), leg 1 (`${DOCTRINE_BIN:-doctrine}` in `.mcp.json`
+    under `/mcp`) **survives** and is what the card now waits on. Deliberately not
+    closed on unrunnable legs — mooting is not observation.
+  - IMP-400 stays **open** on two counts (migration `OQ-4`, and the doctor leg
+    which is IMP-407's); IMP-406 and IMP-407 stay open and sequenced `after`.
+- **RFC-018** took the harness field notes: the `strictPluginOnlyCustomization`
+  asymmetry written up in §1h (*fewer failure modes overall, not a strict
+  improvement on every axis* — and the argument for IMP-407's doctor leg), plus
+  the two `VH-1` memories indexed into §1b and §1f.
+- **IMP-292 defect 4 reproduced** — a governance target discharged at reconcile is
+  undeliverable by construction, because every recorded delta binds to a
+  `PHASE-NN`. `slice conformance 250` still reports `undelivered (1):
+  .doctrine/spec/tech/011/**` and that cell is **correct in mechanism, wrong in
+  meaning**: the same command with `--against HEAD~1..HEAD` reports all three
+  touched files conformant under that very selector. Appended to IMP-292 as a
+  second instance (first was SL-244 / REV-048) with the `--against` isolation that
+  rules out selector imprecision. Not repaired here — extending the last phase's
+  boundary would falsify the phase record, and `slice selector rm` would erase a
+  promise that was kept.
+- **Gate:** `doctrine check gate` exit 0; `doctrine validate` corpus clean;
+  `doctrine spec validate SPEC-011` clean.

@@ -33,3 +33,30 @@ Releases are frequent enough that the window is short, and a lint hook coupling
 skill edits to a version bump would fire on every in-progress skill edit. Revisit
 only if a stale-cache incident actually recurs — CHR-048 was a missed *push*, not
 a missed bump, so it is not evidence for this gate.
+
+## Reassessed at SL-250 close (2026-08-08) — explicitly **retained**
+
+SL-250 (*Retire the Claude plugin delivery channel*) `sec-6` flagged this item as
+**no longer moot** and asked close to resolve or explicitly retain it. Retained,
+unchanged.
+
+The reasoning SL-250 supplies cuts both ways and nets to zero:
+
+- **Why it is not moot.** SL-250 retires the plugin *delivery path for doctrine's
+  own activation only*. `.claude-plugin/marketplace.json` stays published as the
+  escape hatch for anyone who prefers the plugin (IMP-400 `OQ-1`, settled by the
+  user 2026-08-05), and `plugins/` stays the canonical skill source for every
+  channel. A stale published plugin therefore remains a real defect with real
+  consumers — it is no longer *doctrine's* activation path, but it is still
+  somebody's.
+- **Why the residual still does not earn a gate.** SL-250 changes nothing about
+  the residual's shape. The coupling is still to releases rather than to the
+  skill set, `just sync-plugin-versions` inside `just release` still derives all
+  five manifests from the Cargo version, and the undone part is still the
+  release-checklist / lint hook the CHR-048 close (2026-07-25) deliberately
+  declined to build. No stale-cache incident has recurred since, which was the
+  stated revisit trigger.
+
+Net: the item survives its own moot-ness test and fails its build-it test, which
+is exactly the state "retain, YAGNI-tagged" describes. Recorded here so the next
+reader does not re-derive the question a third time.
