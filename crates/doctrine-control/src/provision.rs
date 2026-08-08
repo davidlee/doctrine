@@ -29,9 +29,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use doctrine::interpretation::{
-    self, InterpretationPolicy, PolicyRefusal, RestrictionRefusal,
-};
+use doctrine::interpretation::{self, InterpretationPolicy, PolicyRefusal, RestrictionRefusal};
 use doctrine::{DOCTRINE_TOML, read_path_at};
 
 use crate::backend::bubblewrap::{
@@ -360,9 +358,11 @@ struct CreationToken {
 /// creates no parents. The parent containers (`export/`, `tx/`) are shared and
 /// created separately; the *keyed leaf* is what this establishes ownership of.
 fn create_exclusively(path: &Path) -> Result<CreationToken, ProvisionRefusal> {
-    std::fs::create_dir(path).map_err(|error| ProvisionRefusal::DirectoryNotExclusivelyCreated {
-        path: path.to_path_buf(),
-        detail: error.to_string(),
+    std::fs::create_dir(path).map_err(|error| {
+        ProvisionRefusal::DirectoryNotExclusivelyCreated {
+            path: path.to_path_buf(),
+            detail: error.to_string(),
+        }
     })?;
     Ok(CreationToken {
         path: path.to_path_buf(),
@@ -381,7 +381,10 @@ fn create_exclusively(path: &Path) -> Result<CreationToken, ProvisionRefusal> {
 /// slice reaches for — so this is private, token-guarded and has no
 /// `pub(crate)` caller.
 fn roll_back(token: CreationToken) {
-    let _removed = std::fs::remove_dir_all(&token.path);
+    // Destructured rather than borrowed: the token is *spent* here, and moving
+    // the path out is what says so to the compiler as well as to the reader.
+    let CreationToken { path } = token;
+    let _removed = std::fs::remove_dir_all(path);
 }
 
 /// Create a shared container directory (`export/`, `tx/`, the capsule root
@@ -466,7 +469,10 @@ fn export_fault(path: &Path, base: &AcceptedBase) -> Result<(), ExportFault> {
     //    walks every reachable object and exits nonzero on the first that is
     //    missing, which a `cat-file -e` on the commit alone would not
     //    (`mem.pattern.tooling.git-cat-file-e-exit-masked-use-ls-tree`).
-    let closure = git_in(&repository, &["rev-list", "--quiet", "--objects", base.as_str()])?;
+    let closure = git_in(
+        &repository,
+        &["rev-list", "--quiet", "--objects", base.as_str()],
+    )?;
     if !closure.succeeded() {
         return Err(ExportFault::BaseNotAWholeClosure);
     }
@@ -478,7 +484,12 @@ fn export_fault(path: &Path, base: &AcceptedBase) -> Result<(), ExportFault> {
             detail: "for-each-ref".to_owned(),
         });
     }
-    let named: Vec<&str> = refs.stdout.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    let named: Vec<&str> = refs
+        .stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
     if named.len() != 1 {
         return Err(ExportFault::RefsOtherThanBase { found: named.len() });
     }
@@ -604,7 +615,8 @@ fn build_export(
     if !initialised.succeeded() {
         return Err(failed("git init --bare".to_owned()));
     }
-    let fetched = run_git(&["-C", &target, "fetch", "--no-tags", &source, &refspec]).map_err(failed)?;
+    let fetched =
+        run_git(&["-C", &target, "fetch", "--no-tags", &source, &refspec]).map_err(failed)?;
     if !fetched.succeeded() {
         return Err(failed(format!("git fetch {refspec}")));
     }
@@ -730,7 +742,8 @@ fn provision_with_query(
     // Findings note in the phase sheet.)
     let report = CapacityReport::of(
         assess_capacity(
-            host.available_bytes(config.root()).map(ByteCount::from_bytes),
+            host.available_bytes(config.root())
+                .map(ByteCount::from_bytes),
             config.capacity(),
         ),
         config.root().to_path_buf(),
@@ -744,8 +757,7 @@ fn provision_with_query(
     // refinement applied to it.
     let base_document = read_base_document(&request.repository_root, &request.base)?;
     let refinement_document = read_refinement_document(request.refinement.as_deref())?;
-    let (base_policy, policy) =
-        resolved_policy(&base_document, refinement_document.as_deref())?;
+    let (base_policy, policy) = resolved_policy(&base_document, refinement_document.as_deref())?;
 
     // Step 6 — admission, after step 5 and before any resolver invocation.
     admit_resolver(&policy, config.closure_resolver())?;
@@ -769,7 +781,16 @@ fn provision_with_query(
     let token = create_exclusively(&root_path)?;
     let root = TransactionRoot::new(root_path);
 
-    match finish(request, backend, &config, &root, &export, &readable, &policy, &base_policy) {
+    match finish(
+        request,
+        backend,
+        &config,
+        &root,
+        &export,
+        &readable,
+        &policy,
+        &base_policy,
+    ) {
         Ok(transaction) => Ok(transaction),
         Err(refusal) => {
             roll_back(token);
@@ -815,14 +836,7 @@ fn finish(
     }
 
     // Step 10 — assemble the placement.
-    let placement = assemble_placement(
-        request,
-        config,
-        root,
-        export,
-        readable,
-        &retained_scratch,
-    )?;
+    let placement = assemble_placement(request, config, root, export, readable, &retained_scratch)?;
 
     // Steps 11 and 12 — the clone, inside.
     clone_inside(backend, &placement, config.bounds(), &request.base)?;
@@ -837,7 +851,7 @@ fn finish(
         policy_hash: interpretation::canonical_hash(policy),
         policy: policy.clone(),
         placement,
-        bounds: config.bounds().clone(),
+        bounds: *config.bounds(),
     })
 }
 
@@ -989,7 +1003,13 @@ fn clone_inside(
         "remove".to_owned(),
         "origin".to_owned(),
     ];
-    run_inside(backend, placement, bounds, CloneStep::RemoveOrigin, remove_origin)?;
+    run_inside(
+        backend,
+        placement,
+        bounds,
+        CloneStep::RemoveOrigin,
+        remove_origin,
+    )?;
 
     // Step 12 — assert the identity **persisted**, by reading it back from
     // inside. This is not a trusted-side read of `<root>/capsule/repo/config`:
@@ -1003,7 +1023,13 @@ fn clone_inside(
         "--get-regexp".to_owned(),
         GIT_IDENTITY_PATTERN.to_owned(),
     ];
-    let observed = run_inside(backend, placement, bounds, CloneStep::ReadIdentity, read_back)?;
+    let observed = run_inside(
+        backend,
+        placement,
+        bounds,
+        CloneStep::ReadIdentity,
+        read_back,
+    )?;
     assert_identity_persisted(&observed)
 }
 
@@ -1097,18 +1123,16 @@ fn read_base_document(
 }
 
 /// Step 5's impure half: the refinement arrives as its own document, by path.
-fn read_refinement_document(
-    refinement: Option<&Path>,
-) -> Result<Option<String>, ProvisionRefusal> {
+fn read_refinement_document(refinement: Option<&Path>) -> Result<Option<String>, ProvisionRefusal> {
     let Some(path) = refinement else {
         return Ok(None);
     };
-    std::fs::read_to_string(path)
-        .map(Some)
-        .map_err(|error| ProvisionRefusal::RefinementUnreadable {
+    std::fs::read_to_string(path).map(Some).map_err(|error| {
+        ProvisionRefusal::RefinementUnreadable {
             path: path.to_path_buf(),
             detail: error.to_string(),
-        })
+        }
+    })
 }
 
 /// Emit a **non-refusing** capacity report (`REQ-461` criterion 1).
@@ -1125,7 +1149,10 @@ fn read_refinement_document(
 /// the ban's reason string asks for.
 fn emit_capacity(report: &CapacityReport) {
     let line = match report {
-        CapacityReport::Proceed { .. } => return,
+        // Silent for opposite reasons, and neither has anything to add here:
+        // `Proceed` because there is nothing to say, `Refuse` because the
+        // refusal *is* the report and `provision` returns it to the caller.
+        CapacityReport::Proceed { .. } | CapacityReport::Refuse { .. } => return,
         CapacityReport::Warn {
             available_bytes,
             expected_bytes,
@@ -1146,7 +1173,6 @@ fn emit_capacity(report: &CapacityReport) {
             capsule_root.display(),
             unknown_reason(*reason)
         ),
-        CapacityReport::Refuse { .. } => return,
     };
     let mut stderr = std::io::stderr().lock();
     let _written = writeln!(stderr, "{line}");
@@ -1164,5 +1190,733 @@ fn unknown_reason(reason: CapacityUnknown) -> String {
         CapacityUnknown::ProbeFailed { errno } => format!("{REASON_PROBE_FAILED}:{errno}"),
         CapacityUnknown::UnusableFigure => REASON_UNUSABLE_FIGURE.to_owned(),
         CapacityUnknown::FigureOverflows => REASON_FIGURE_OVERFLOWS.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io;
+    use std::os::unix::fs::symlink;
+    use std::path::{Path, PathBuf};
+
+    use tempfile::TempDir;
+
+    use super::{
+        CAPSULE_GIT_IDENTITY_EMAIL, CAPSULE_GIT_IDENTITY_NAME, CapsuleTransaction, CloneStep,
+        EXPORT_BASE_REF, EXPORT_BUILD_PREFIX, EXPORT_DIRECTORY_LEAF, ExportFault,
+        GIT_IDENTITY_EMAIL_KEY, GIT_IDENTITY_NAME_KEY, INNER_CAPSULE, INNER_SOURCE, PhaseIdentity,
+        ProvisionRefusal, ProvisionRequest, TRANSACTION_DIRECTORY_LEAF, TransactionId,
+        assert_identity_persisted, build_and_publish_export, provision_with_query,
+        publish_or_adopt_export, run_git, validate_export,
+    };
+    use crate::backend::bubblewrap::{ClosureQuery, ProfileRefusal, QueryOutput};
+    use crate::backend::fixture::{WitnessBackend, exited};
+    use crate::backend::{AcceptedBase, NetworkPosture, Termination};
+    use crate::config::Argv;
+    use crate::host::fixture::FixtureHost;
+
+    // ── The scratch world ─────────────────────────────────────────────────
+
+    /// Proof that a directory was not rebuilt: written into a published export
+    /// after it lands, and asserted still present by every adoption test.
+    /// Without it, "adopted" and "rebuilt identically" are the same observation.
+    const SENTINEL: &str = "adopted-sentinel";
+
+    /// Far more than any fixture needs, so capacity never decides a test that is
+    /// about something else.
+    const AMPLE_BYTES: u64 = 1 << 40;
+
+    /// A repository, a capsule root and one declared readable input, all inside
+    /// one temporary directory that is removed even when an assertion fails
+    /// (`D5`, `R4`).
+    struct Scratch {
+        _dir: TempDir,
+        repository: PathBuf,
+        capsules: PathBuf,
+        readable: PathBuf,
+        /// The first commit.
+        base: AcceptedBase,
+        /// A descendant of `base`, so an export of it holds `base`'s whole
+        /// object closure — which is what makes the ref-name rule separable
+        /// from the closure rule.
+        child: AcceptedBase,
+    }
+
+    impl Scratch {
+        fn new(capsule_extra: &str, forbidden: &str) -> Self {
+            let dir = TempDir::new().expect("a scratch directory");
+            let repository = dir.path().join("repo");
+            let capsules = dir.path().join("capsules");
+            let readable = dir.path().join("readable");
+            std::fs::create_dir_all(&repository).expect("the repository directory");
+            std::fs::create_dir_all(&capsules).expect("the capsule root");
+            std::fs::create_dir_all(&readable).expect("the readable root");
+
+            git(&repository, &["init", "--quiet"]);
+            git(&repository, &["config", "user.name", "Fixture"]);
+            git(
+                &repository,
+                &["config", "user.email", "fixture@example.invalid"],
+            );
+            write_file(
+                &repository.join(".doctrine/doctrine.toml"),
+                &document(&capsules, &readable, capsule_extra, forbidden),
+            );
+            git(&repository, &["add", "."]);
+            git(&repository, &["commit", "--quiet", "-m", "base"]);
+            let base = AcceptedBase::new(head(&repository));
+
+            write_file(&repository.join("later.txt"), "a descendant commit\n");
+            git(&repository, &["add", "."]);
+            git(&repository, &["commit", "--quiet", "-m", "child"]);
+            let child = AcceptedBase::new(head(&repository));
+
+            Self {
+                _dir: dir,
+                repository,
+                capsules,
+                readable,
+                base,
+                child,
+            }
+        }
+
+        /// The ordinary world: one readable root, no closure roots, nothing
+        /// forbidden.
+        fn plain() -> Self {
+            Self::new("", "")
+        }
+
+        fn host(&self) -> FixtureHost {
+            FixtureHost::new()
+                .with_available(&display(&self.capsules), Ok(AMPLE_BYTES))
+                .with_resolution(&display(&self.readable), &display(&self.readable))
+        }
+
+        fn export_directory(&self) -> PathBuf {
+            self.capsules.join(EXPORT_DIRECTORY_LEAF)
+        }
+
+        fn published(&self, base: &AcceptedBase) -> PathBuf {
+            self.export_directory().join(base.as_str())
+        }
+
+        fn transaction_root(&self, id: &str) -> PathBuf {
+            self.capsules.join(TRANSACTION_DIRECTORY_LEAF).join(id)
+        }
+
+        fn request(&self, id: &str) -> ProvisionRequest {
+            ProvisionRequest {
+                repository_root: self.repository.clone(),
+                base: self.base.clone(),
+                phase: PhaseIdentity {
+                    slice: "SL-248".to_owned(),
+                    phase: 6,
+                },
+                id: identity(id),
+                refinement: None,
+                network: NetworkPosture::Denied,
+            }
+        }
+
+        /// Publish the export for `base` and mark it, so any later rebuild or
+        /// replacement is visible.
+        fn publish_marked(&self, base: &AcceptedBase) -> PathBuf {
+            let path = publish_or_adopt_export(
+                &self.capsules,
+                &self.repository,
+                base,
+                &identity("publisher"),
+            )
+            .expect("the first publication");
+            write_file(&path.join(SENTINEL), "published once\n");
+            path
+        }
+    }
+
+    fn display(path: &Path) -> String {
+        path.to_string_lossy().into_owned()
+    }
+
+    fn identity(value: &str) -> TransactionId {
+        TransactionId::try_new(value.to_owned()).expect("a single path component")
+    }
+
+    fn git(root: &Path, args: &[&str]) {
+        let root_text = display(root);
+        let mut words = vec!["-C", root_text.as_str()];
+        words.extend_from_slice(args);
+        let run = run_git(&words).expect("git ran");
+        assert!(run.succeeded(), "git {args:?} failed in {root_text}");
+    }
+
+    fn head(root: &Path) -> String {
+        let root_text = display(root);
+        run_git(&["-C", root_text.as_str(), "rev-parse", "HEAD"])
+            .expect("git ran")
+            .stdout
+            .trim()
+            .to_owned()
+    }
+
+    /// `File::create` + `write_all`, never `std::fs::write` — banned crate-wide
+    /// with no test carve-out (`D6`).
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("the parent directory");
+        }
+        let mut file = File::create(path).expect("the file");
+        io::Write::write_all(&mut file, contents.as_bytes()).expect("the contents");
+    }
+
+    /// The one document both reads see: `[capsule]` from the working tree
+    /// (step 1) and `[interpretation]` from the committed blob (step 4).
+    fn document(capsules: &Path, readable: &Path, capsule_extra: &str, forbidden: &str) -> String {
+        format!(
+            "[capsule]\n\
+             root = \"{}\"\n\
+             readable-roots = [\"{}\"]\n\
+             execution-timeout-seconds = 900\n\
+             file-size-cap-mib = 512\n\
+             {capsule_extra}\n\
+             \n\
+             [interpretation]\n\
+             schema = 1\n\
+             trusted_side_forbidden_executables = [{forbidden}]\n\
+             interpreted_paths = []\n\
+             \n\
+             [[interpretation.verification]]\n\
+             argv = [\"true\"]\n",
+            display(capsules),
+            display(readable),
+        )
+    }
+
+    /// No closure root is declared in these fixtures, so a call here is itself
+    /// the assertion's failure.
+    struct NeverQuery;
+
+    impl ClosureQuery for NeverQuery {
+        fn query(&self, _resolver: &Argv, _realised: &Path) -> io::Result<QueryOutput> {
+            Err(io::Error::other("no closure root is declared"))
+        }
+    }
+
+    /// What step 12's fourth execution prints when the identity persisted.
+    fn identity_read_back() -> String {
+        format!(
+            "{GIT_IDENTITY_NAME_KEY} {CAPSULE_GIT_IDENTITY_NAME}\n\
+             {GIT_IDENTITY_EMAIL_KEY} {CAPSULE_GIT_IDENTITY_EMAIL}\n"
+        )
+    }
+
+    /// A backend on which every execution succeeds and every one answers with
+    /// the pinned identity.
+    ///
+    /// Deliberately **not** a per-call script. A script's positions bind the
+    /// fixture to the length of the clone sequence, so every test that merely
+    /// needs a *successful* provisioning would red when that length changed —
+    /// which `M11` demonstrated. How many executions there are is
+    /// `clone_inside_leaves_no_working_tree_trusted_side`'s claim and no other
+    /// test's; the one test that must script per call scripts its own.
+    fn clone_succeeds() -> WitnessBackend {
+        WitnessBackend::always(exited(0, &identity_read_back()))
+    }
+
+    fn run(
+        scratch: &Scratch,
+        id: &str,
+        backend: &WitnessBackend,
+    ) -> Result<CapsuleTransaction, ProvisionRefusal> {
+        provision_with_query(&scratch.request(id), &scratch.host(), backend, &NeverQuery)
+    }
+
+    // ── VT-1: the export's adoption rules ─────────────────────────────────
+
+    /// The point of a per-base export is that the *second* transaction on the
+    /// same base pays nothing.
+    ///
+    /// The **source repository is not supplied**, and that is the assertion. A
+    /// sentinel alone cannot discriminate here: without 8.1 the second call
+    /// builds, loses the no-replace rename and adopts the winner anyway, so it
+    /// converges on the same sentinel-bearing directory and every observable
+    /// after the fact is identical — the difference is only the build it paid
+    /// for. Naming a source that does not exist makes that build the one thing
+    /// that cannot succeed.
+    #[test]
+    fn export_is_adopted_across_transactions_on_the_same_base() {
+        let scratch = Scratch::plain();
+        let first = scratch.publish_marked(&scratch.base);
+
+        let second = publish_or_adopt_export(
+            &scratch.capsules,
+            Path::new("/nonexistent/there-is-no-repository-here"),
+            &scratch.base,
+            &identity("second"),
+        )
+        .expect("the second transaction adopts without reaching for a source");
+
+        assert_eq!(first, second, "one export, at the path the base names");
+        assert!(
+            second.join(SENTINEL).exists(),
+            "adopted, not rebuilt: a rebuild would not carry the sentinel"
+        );
+        assert!(
+            !scratch
+                .export_directory()
+                .join(format!("{EXPORT_BUILD_PREFIX}second"))
+                .exists(),
+            "the adopting call builds nothing, so it leaves no temporary"
+        );
+    }
+
+    /// Conditions 4 and 5, and they are separate rules: the closure check
+    /// catches a partial export of the right base, the cardinality check catches
+    /// an export carrying something else as well.
+    #[test]
+    fn export_holds_the_contracted_history_and_no_other_ref() {
+        let scratch = Scratch::plain();
+        let published = scratch.publish_marked(&scratch.base);
+
+        let published_text = display(&published);
+        let refs = run_git(&[
+            "-C",
+            published_text.as_str(),
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+        ])
+        .expect("git ran");
+        assert_eq!(
+            refs.stdout.trim(),
+            format!("{EXPORT_BASE_REF} {}", scratch.base.as_str()),
+            "exactly one ref, naming the contracted base"
+        );
+        assert_eq!(validate_export(&published, &scratch.base), Ok(()));
+
+        // A second ref — the whole difference between this and a general-purpose
+        // mirror, which would drag in every branch the host happens to have.
+        git(
+            &published,
+            &["update-ref", "refs/heads/extra", scratch.base.as_str()],
+        );
+        assert_eq!(
+            validate_export(&published, &scratch.base),
+            Err(ProvisionRefusal::Export {
+                path: published.clone(),
+                fault: ExportFault::RefsOtherThanBase { found: 2 },
+            })
+        );
+    }
+
+    /// An alternates file binds host object state the export exists to replace,
+    /// so the export would be a window onto the very store it was meant to
+    /// close over.
+    #[test]
+    fn export_with_an_alternates_file_refuses_rather_than_being_adopted() {
+        let scratch = Scratch::plain();
+        let published = scratch.publish_marked(&scratch.base);
+        write_file(
+            &published.join("objects/info/alternates"),
+            "/var/lib/somewhere/objects\n",
+        );
+
+        assert_eq!(
+            validate_export(&published, &scratch.base),
+            Err(ProvisionRefusal::Export {
+                path: published.clone(),
+                fault: ExportFault::AlternatesPresent,
+            }),
+            "not repaired — repairing a shared artefact is how it acquires a second writer"
+        );
+    }
+
+    /// `sec-2` `F-1`'s escape arriving by another route: a read-only bind
+    /// dereferences its source, so a symlinked export binds whatever it points
+    /// at. The target here is a **valid** export, so only the real-directory
+    /// check can be what refuses.
+    #[test]
+    fn export_that_is_a_symlink_refuses() {
+        let scratch = Scratch::plain();
+        let real = scratch.publish_marked(&scratch.child);
+        assert_eq!(validate_export(&real, &scratch.child), Ok(()));
+
+        let link = scratch.published(&scratch.base);
+        symlink(&real, &link).expect("the symlink");
+
+        assert_eq!(
+            validate_export(&link, &scratch.child),
+            Err(ProvisionRefusal::Export {
+                path: link.clone(),
+                fault: ExportFault::NotARealDirectory,
+            }),
+            "the target is valid, so nothing but the real-directory rule can refuse this"
+        );
+    }
+
+    // ── VT-2: publish-or-adopt, and the base pairing ──────────────────────
+
+    /// The loser of the race adopts the winner and removes **only** its own
+    /// temporary. Driven deterministically by publishing first and then calling
+    /// the building half directly: a thread-raced version would be flaky, and a
+    /// flaky test is worse than none.
+    #[test]
+    fn concurrent_publication_converges_on_one_export_and_the_loser_adopts_it() {
+        let scratch = Scratch::plain();
+        let winner = scratch.publish_marked(&scratch.base);
+
+        let loser = build_and_publish_export(
+            &scratch.export_directory(),
+            &winner,
+            &scratch.repository,
+            &scratch.base,
+            &identity("loser"),
+        )
+        .expect("the loser adopts the winner");
+
+        assert_eq!(loser, winner, "both builders converge on one export");
+        assert!(
+            winner.join(SENTINEL).exists(),
+            "the loser replaced nothing — the winner's export is the one that survived"
+        );
+        assert!(
+            !scratch
+                .export_directory()
+                .join(format!("{EXPORT_BUILD_PREFIX}loser"))
+                .exists(),
+            "the loser removed its own temporary, and only that"
+        );
+    }
+
+    /// An export of a *descendant* holds the base's whole object closure, so the
+    /// closure rule passes and only the ref-name rule can refuse. Without this
+    /// separation a capsule could be handed a sibling export and its contracted
+    /// base would be a fiction.
+    #[test]
+    fn placement_pairing_a_base_with_another_bases_export_refuses() {
+        let scratch = Scratch::plain();
+        let child_export = scratch.publish_marked(&scratch.child);
+
+        assert_eq!(
+            validate_export(&child_export, &scratch.base),
+            Err(ProvisionRefusal::Export {
+                path: child_export.clone(),
+                fault: ExportFault::RefDoesNotNameBase {
+                    found: scratch.child.as_str().to_owned(),
+                },
+            }),
+            "the base's objects are all present, so only the ref-name rule can refuse"
+        );
+    }
+
+    /// A provisioning that fails after step 8 must not take the shared export
+    /// down with it: the export belongs to every transaction on that base.
+    #[test]
+    fn failed_provision_leaves_an_existing_export_intact() {
+        let scratch = Scratch::plain();
+        let published = scratch.publish_marked(&scratch.base);
+
+        let refused = run(&scratch, "failing", &WitnessBackend::always(exited(1, "")));
+
+        assert!(matches!(
+            refused,
+            Err(ProvisionRefusal::CloneFailed {
+                step: CloneStep::Clone,
+                ..
+            })
+        ));
+        assert!(
+            published.join(SENTINEL).exists(),
+            "the export survived a failure in a transaction that merely used it"
+        );
+        assert_eq!(validate_export(&published, &scratch.base), Ok(()));
+    }
+
+    // ── VT-3: exclusive ownership at both keyed directories ───────────────
+
+    /// The exclusive create is what establishes ownership (`EX-13`), and a
+    /// second call with the same id is refused rather than adopting the
+    /// directory — adopting would put two transactions in one root.
+    #[test]
+    fn provision_onto_an_existing_transaction_root_refuses_and_removes_nothing() {
+        let scratch = Scratch::plain();
+        run(&scratch, "same", &clone_succeeds()).expect("the first provisioning");
+        let root = scratch.transaction_root("same");
+        write_file(&root.join(SENTINEL), "the first transaction's state\n");
+
+        let refused = run(&scratch, "same", &clone_succeeds());
+
+        assert!(
+            matches!(
+                refused,
+                Err(ProvisionRefusal::DirectoryNotExclusivelyCreated { ref path, .. })
+                    if *path == root
+            ),
+            "the second call refused at the root it did not create: {refused:?}"
+        );
+        assert!(
+            root.join(SENTINEL).exists(),
+            "the refusing call holds no creation token, so it removes nothing"
+        );
+    }
+
+    /// The same rule at the *other* keyed directory. It runs before step 9, so
+    /// nothing has yet established that this call owns the id — which is exactly
+    /// why ownership rests on the create and not on the id's entropy.
+    #[test]
+    fn provision_onto_an_existing_temporary_export_directory_refuses_and_removes_nothing() {
+        let scratch = Scratch::plain();
+        let temporary = scratch
+            .export_directory()
+            .join(format!("{EXPORT_BUILD_PREFIX}colliding"));
+        write_file(&temporary.join(SENTINEL), "another builder's work\n");
+
+        let refused = run(&scratch, "colliding", &clone_succeeds());
+
+        assert!(
+            matches!(
+                refused,
+                Err(ProvisionRefusal::DirectoryNotExclusivelyCreated { ref path, .. })
+                    if *path == temporary
+            ),
+            "refused at the temporary export directory: {refused:?}"
+        );
+        assert!(
+            temporary.join(SENTINEL).exists(),
+            "the other builder's work is untouched"
+        );
+        assert!(
+            !scratch.transaction_root("colliding").exists(),
+            "step 9 was never reached, so no root was created"
+        );
+    }
+
+    /// Both halves of invariant 6, because either alone passes a wrong
+    /// implementation: rollback keyed on the id rather than on the token would
+    /// satisfy the first half and delete live work in the second.
+    #[test]
+    fn failed_provision_removes_only_the_root_it_created() {
+        let scratch = Scratch::plain();
+
+        // Half one: a step-11 failure removes the root this call created.
+        let refused = run(&scratch, "own", &WitnessBackend::always(exited(1, "")));
+        assert!(refused.is_err());
+        assert!(
+            !scratch.transaction_root("own").exists(),
+            "the root this call created is gone"
+        );
+
+        // Half two: a root this call did **not** create survives, id or no id.
+        let foreign = scratch.transaction_root("foreign");
+        write_file(&foreign.join(SENTINEL), "someone else's live work\n");
+        let refused = run(&scratch, "foreign", &WitnessBackend::always(exited(1, "")));
+        assert!(matches!(
+            refused,
+            Err(ProvisionRefusal::DirectoryNotExclusivelyCreated { .. })
+        ));
+        assert!(
+            foreign.join(SENTINEL).exists(),
+            "rollback is keyed on the creation token, never on the id"
+        );
+    }
+
+    // ── VT-4: the clone, inside ───────────────────────────────────────────
+
+    /// No working tree is materialised trusted-side: the clone happens *inside*
+    /// the capsule, against `/source`, writing to `/capsule/repo`. Nothing at
+    /// that host path exists after provisioning, because nothing trusted-side
+    /// ever wrote there.
+    #[test]
+    fn clone_inside_leaves_no_working_tree_trusted_side() {
+        let scratch = Scratch::plain();
+        let backend = clone_succeeds();
+        let transaction = run(&scratch, "clone", &backend).expect("provisioning");
+
+        let root = transaction.root().path();
+        assert!(
+            !root.join("capsule/repo").exists(),
+            "the clone's working tree is the capsule's, and the capsule did not run"
+        );
+        assert!(
+            root.join("capsule/tmp").is_dir(),
+            "the retained scratch area is on host disk, beneath the root"
+        );
+
+        let calls = backend.calls();
+        assert_eq!(calls.len(), 4, "three clone executions plus the read-back");
+        let first: Vec<String> = calls[0].argv().as_slice().to_vec();
+        assert!(
+            first.contains(&INNER_SOURCE.to_owned())
+                && first.contains(&format!("{INNER_CAPSULE}/repo")),
+            "the clone reads the bound export and writes inside: {first:?}"
+        );
+        assert!(
+            first.contains(&"--no-hardlinks".to_owned()),
+            "a local clone hardlinks objects by default; a hostile capsule \
+             corrupting one would corrupt its source"
+        );
+    }
+
+    /// Step 12 exists because a git that stopped persisting `-c` would restore
+    /// the ~3.9s DNS stall silently. It is read back **from inside**, never from
+    /// a trusted-side read of the capsule's own config file (`SPEC-030`).
+    #[test]
+    fn capsule_identity_persists_into_the_clone_config() {
+        let scratch = Scratch::plain();
+        let backend = clone_succeeds();
+        run(&scratch, "identity", &backend).expect("provisioning");
+
+        let calls = backend.calls();
+
+        // The pins themselves, on the **clone**: `-c` takes effect after init
+        // and before the fetch, so it covers the clone's own reflog writes.
+        // Configured afterwards, git guesses and resolves the hostname, which
+        // inside `--unshare-all` is the ~3.9s stall this pinning exists to
+        // avoid. `M13` — dropping these two flags — reds here and nowhere else.
+        let clone: Vec<String> = calls
+            .first()
+            .expect("the clone execution")
+            .argv()
+            .as_slice()
+            .to_vec();
+        assert!(
+            clone.contains(&format!(
+                "{GIT_IDENTITY_NAME_KEY}={CAPSULE_GIT_IDENTITY_NAME}"
+            )) && clone.contains(&format!(
+                "{GIT_IDENTITY_EMAIL_KEY}={CAPSULE_GIT_IDENTITY_EMAIL}"
+            )),
+            "the clone pins both halves of the identity: {clone:?}"
+        );
+
+        // The read-back is the **last** execution, addressed as such rather than
+        // by index: how many executions precede it is
+        // `clone_inside_leaves_no_working_tree_trusted_side`'s claim, not this
+        // test's, and indexing here would make a change to the sequence red both.
+        let read_back: Vec<String> = calls
+            .last()
+            .expect("the read-back execution")
+            .argv()
+            .as_slice()
+            .to_vec();
+        assert_eq!(
+            read_back,
+            vec![
+                "git".to_owned(),
+                "-C".to_owned(),
+                format!("{INNER_CAPSULE}/repo"),
+                "config".to_owned(),
+                "--get-regexp".to_owned(),
+                r"^user\.(name|email)$".to_owned(),
+            ],
+            "the identity is read back from inside the capsule"
+        );
+
+        // The read-back is **acted on**, not merely issued: a capsule whose
+        // config answers with some other identity refuses the provisioning.
+        // Without this case the whole of step 12 could be deleted and every
+        // assertion above would still hold (`M12`).
+        let host_identity = "user.name Fixture\nuser.email fixture@example.invalid\n";
+        let unpinned = WitnessBackend::always(exited(0, host_identity));
+        assert_eq!(
+            run(&scratch, "unpinned", &unpinned),
+            Err(ProvisionRefusal::IdentityNotPersisted {
+                read_back: host_identity.to_owned(),
+            }),
+            "a git that stopped persisting `-c` refuses rather than reporting success"
+        );
+
+        // Half the identity is not the identity.
+        assert_eq!(
+            assert_identity_persisted(&format!(
+                "{GIT_IDENTITY_NAME_KEY} {CAPSULE_GIT_IDENTITY_NAME}\n"
+            )),
+            Err(ProvisionRefusal::IdentityNotPersisted {
+                read_back: format!("{GIT_IDENTITY_NAME_KEY} {CAPSULE_GIT_IDENTITY_NAME}\n"),
+            })
+        );
+        // Nor is the host's own identity, however plausible.
+        assert!(
+            assert_identity_persisted(host_identity).is_err(),
+            "the capsule's identity is pinned, never the host's"
+        );
+    }
+
+    /// Three executions rather than one aggregate status is what makes *which
+    /// step* answerable at all (`EX-14`).
+    #[test]
+    fn a_failing_execution_in_the_three_step_clone_refuses_at_that_step() {
+        let scratch = Scratch::plain();
+
+        let each = [
+            (0_usize, CloneStep::Clone),
+            (1, CloneStep::Detach),
+            (2, CloneStep::RemoveOrigin),
+            (3, CloneStep::ReadIdentity),
+        ];
+        for (index, step) in each {
+            let mut script = vec![exited(0, ""), exited(0, ""), exited(0, "")];
+            script.push(exited(0, &identity_read_back()));
+            script[index] = exited(42, "");
+            let backend = WitnessBackend::scripted(script, exited(0, ""));
+
+            assert_eq!(
+                run(&scratch, &format!("step{index}"), &backend),
+                Err(ProvisionRefusal::CloneFailed {
+                    step,
+                    termination: Termination::Exited { code: 42 },
+                }),
+                "a failure at execution {index} names {step:?}"
+            );
+        }
+    }
+
+    // ── VT-5: step 6's ordering ───────────────────────────────────────────
+
+    /// Step 6 admits the resolver against the policy **in force after any
+    /// refinement**, not against the base policy. A check against the base alone
+    /// would let a refinement forbid an executable that this very provisioning
+    /// had already run.
+    #[test]
+    fn resolver_whose_basename_is_forbidden_by_the_policy_refuses() {
+        let closure = "closure-roots = [\"/nix/store\"]\n\
+                       closure-resolver = [\"/usr/bin/node\", \"--closure\"]";
+        let scratch = Scratch::new(closure, "");
+        let host = scratch.host().with_resolution("/nix/store", "/nix/store");
+
+        // Without the refinement the resolver is admitted, and provisioning gets
+        // as far as *running* it — which is the ordering claim, stated from the
+        // other side.
+        let admitted = provision_with_query(
+            &scratch.request("admitted"),
+            &host,
+            &clone_succeeds(),
+            &NeverQuery,
+        );
+        assert!(
+            matches!(
+                admitted,
+                Err(ProvisionRefusal::Profile(
+                    ProfileRefusal::ResolverFailed { .. }
+                ))
+            ),
+            "step 6 admitted and step 7 invoked the resolver: {admitted:?}"
+        );
+
+        // The refinement adds the resolver's own basename.
+        let refinement = scratch.repository.join("refinement.toml");
+        write_file(
+            &refinement,
+            &document(&scratch.capsules, &scratch.readable, "", "\"node\""),
+        );
+        let mut request = scratch.request("forbidden");
+        request.refinement = Some(refinement);
+
+        assert_eq!(
+            provision_with_query(&request, &host, &clone_succeeds(), &NeverQuery),
+            Err(ProvisionRefusal::ForbiddenResolver {
+                executable: "/usr/bin/node".to_owned(),
+            }),
+            "the basename is derived from the candidate and matched exactly"
+        );
     }
 }

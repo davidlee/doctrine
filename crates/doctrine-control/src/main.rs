@@ -21,6 +21,7 @@ mod host;
 mod provision;
 mod transaction;
 
+use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -74,7 +75,7 @@ fn report(message: &str) {
 
 fn run(arguments: &[String]) -> Result<String, String> {
     match arguments.first().map(String::as_str) {
-        Some(VERB_PROVISION) => run_provision(&arguments[1..]),
+        Some(VERB_PROVISION) => run_provision(arguments.get(1..).unwrap_or_default()),
         Some(other) => Err(format!("unknown verb {other:?}\n{USAGE}")),
         None => Err(USAGE.to_owned()),
     }
@@ -122,7 +123,9 @@ fn run_provision(arguments: &[String]) -> Result<String, String> {
     let options = parse_options(arguments)?;
     let required = |name: &str| format!("{name} is required\n{USAGE}");
 
-    let repository_root = options.repository.ok_or_else(|| required(FLAG_REPOSITORY))?;
+    let repository_root = options
+        .repository
+        .ok_or_else(|| required(FLAG_REPOSITORY))?;
     let base = AcceptedBase::new(options.base.ok_or_else(|| required(FLAG_BASE))?);
     let slice = options.slice.ok_or_else(|| required(FLAG_SLICE))?;
     let phase: u32 = options
@@ -150,13 +153,18 @@ fn run_provision(arguments: &[String]) -> Result<String, String> {
     // `D3`: the configured kill grace is threaded here, at the verb, and not
     // moved onto `Execution` — which would change a type `EX-10` enumerates for
     // no observable difference. `notes.md` item 35 stays owed.
-    let config = host_capsule_config(&request.repository_root, &host).map_err(render_refusal)?;
+    let config = host_capsule_config(&request.repository_root, &host)
+        .map_err(|refusal| render_refusal(&refusal))?;
     let backend = BubblewrapBackend::new(&host).with_kill_grace(config.bounds().kill_grace());
 
-    let transaction = provision(&request, &host, &backend).map_err(render_refusal)?;
+    let transaction =
+        provision(&request, &host, &backend).map_err(|refusal| render_refusal(&refusal))?;
+    // The backend is named because an observation that cannot be attributed to a
+    // mechanism cannot be attributed to an admission verdict either.
     Ok(format!(
-        "provisioned id={} root={}",
+        "provisioned id={} backend={} root={}",
         transaction.id.as_str(),
+        transaction.backend.as_str(),
         transaction.root().path().display()
     ))
 }
@@ -183,13 +191,13 @@ fn mint_transaction_id() -> Result<TransactionId, TransactionIdRefusal> {
 /// `ProfileRefusal::paths`/`keys` — reaching their first real consumer. Those
 /// accessors exist so a refusal can name what to fix without an operator
 /// parsing a sentence, and this is where that becomes true.
-fn render_refusal(refusal: ProvisionRefusal) -> String {
+fn render_refusal(refusal: &ProvisionRefusal) -> String {
     let mut rendered = format!("provision refused: {refusal:?}");
     for path in refusal.paths() {
-        rendered.push_str(&format!("\n  path: {}", path.display()));
+        let _written = write!(rendered, "\n  path: {}", path.display());
     }
     for key in refusal.keys() {
-        rendered.push_str(&format!("\n  key:  capsule.{key}"));
+        let _written = write!(rendered, "\n  key:  capsule.{key}");
     }
     rendered
 }

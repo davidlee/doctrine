@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe20c-9bcf-7bb2-a3af-1cb31d6429d2"
+recorded_at = "2026-08-08T15:45:04.975859764Z"
+kind = "friction"
+summary = "/execute (SL-248 PHASE-06): a rustfmt pass mid-battery silently invalidated three mutation anchors"
+detail = "The mutation battery applies each mutation by exact text replacement against a snapshot of green source. Fixing the phase's clippy findings changed argument counts, so 'cargo fmt' reflowed three multi-argument call sites onto separate lines. The next battery run aborted on an anchor miss and had to be re-derived by hand from the reflowed source — three times, once per reflowed site, because the driver stops at the first miss rather than validating every anchor up front. Cost: three extra full battery runs and the reading to re-derive each anchor. Two cheap mitigations: validate all anchors before running any mutation (fail fast, once, with the full list), and re-snapshot after every format pass rather than after every edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

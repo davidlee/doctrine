@@ -47,18 +47,12 @@
 //! necessary and never sufficient. Nor does this unit restate a property count
 //! as a numeral (`EX-15`): `sec-7`'s Table A is the single source.
 //!
-//! Layering (`ADR-001`): `backend` is `leaf`, out-edges `{config}` — the one
-//! import is [`Argv`] and [`ByteCount`], which `sec-6`'s unit table records. A
-//! backend *profile* lands as a submodule of this unit, which the layering gate
-//! maps to `backend` itself, so a profile adds no row and no edge.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of PHASE-06's provision consumer (PHASE-03 D5); \
-                  PHASE-06 deletes this line when `provision` lands"
-    )
-)]
+//! Layering (`ADR-001`): `backend` is `leaf`, out-edges `{config, host}` — this
+//! file imports [`Argv`] and [`ByteCount`], and the `bubblewrap` submodule
+//! imports `crate::host`. A backend *profile* lands as a submodule of this unit,
+//! which the layering gate maps to `backend` itself, so a profile adds no **row**
+//! — but it does add that edge, which `sec-6`'s unit table does not record
+//! (`bubblewrap.rs`'s `F-2`; `notes.md` item 27, closed here).
 
 // `pub(crate)` because PHASE-06's `provision` calls two of its items directly —
 // `readable_set` (`D3`, the seam the profile publishes) and
@@ -608,6 +602,30 @@ impl CapsuleEnvVar {
             Self::Term => Some(TERM_VALUE),
             Self::GitAuthorName | Self::GitCommitterName => Some(CAPSULE_GIT_IDENTITY_NAME),
             Self::GitAuthorEmail | Self::GitCommitterEmail => Some(CAPSULE_GIT_IDENTITY_EMAIL),
+        }
+    }
+
+    /// The environment variable name this variant is set under.
+    ///
+    /// Here rather than in the profile, so a variable's **name** and its
+    /// **value** are single-sourced in the same place (`STD-001`; `notes.md`
+    /// item 34(b), closed in SL-248 PHASE-06). Same exhaustive-match discipline
+    /// as [`CapsuleEnvVar::fixed_value`]: widening the enum is a compile error
+    /// here rather than a silent gap.
+    ///
+    /// `PATH` has a *second* role — the host variable a profile reads through
+    /// `HostFacts::env_var` to derive the capsule's own — and the profile's
+    /// `HOST_PATH_VARIABLE` is defined as `CapsuleEnvVar::Path.name()`, so both
+    /// roles have one spelling and it is this one.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Path => "PATH",
+            Self::Home => "HOME",
+            Self::Term => "TERM",
+            Self::GitAuthorName => "GIT_AUTHOR_NAME",
+            Self::GitAuthorEmail => "GIT_AUTHOR_EMAIL",
+            Self::GitCommitterName => "GIT_COMMITTER_NAME",
+            Self::GitCommitterEmail => "GIT_COMMITTER_EMAIL",
         }
     }
 }

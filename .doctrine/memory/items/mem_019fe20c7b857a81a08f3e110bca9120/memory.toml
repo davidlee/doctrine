@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe20c7b857a81a08f3e110bca9120"
+memory_key = "mem.fact.rust.consume-guard-token-by-destructuring"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Consume a guard token by destructuring, or clippy calls it needless"
+summary = "clippy::needless_pass_by_value fires on a by-value token whose body only borrows it; destructure to make the consumption real."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["rust", "clippy", "api-design"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e9c29b301b77d0c2f676b32358f863da2bb801a5"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "03256804e2443408b160cb040537afba07990eeb59dbfdd548a24838d565e273"
+base_commit = "869034b07579e267614da1b510f8fe5c92163cf3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

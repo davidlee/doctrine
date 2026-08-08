@@ -32,14 +32,6 @@
 //!
 //! Layering (`ADR-001`): `config` is `leaf`, out-edges `{host}` — the one import
 //! is [`HostFacts`], for the root resolution.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of PHASE-06's provision consumer (PHASE-03 D5); \
-                  PHASE-06 deletes this line when `provision` lands"
-    )
-)]
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -274,6 +266,14 @@ pub(crate) struct UnrootedCapsuleConfig {
     bounds: ResourceBounds,
 }
 
+/// Read-only views of the pure stage's result.
+///
+/// `#[cfg(test)]` because the pure stage's only production consumer is
+/// [`root_capsule_config`], which moves the fields out by name rather than
+/// reading them (SL-248 PHASE-06 `T10`, ladder rung 1). The assertions that
+/// `parse_capsule_config` applied each list rule *before* the host was consulted
+/// are the reason these exist, and they are tests.
+#[cfg(test)]
 impl UnrootedCapsuleConfig {
     pub(crate) fn readable_roots(&self) -> &[PathBuf] {
         &self.readable_roots

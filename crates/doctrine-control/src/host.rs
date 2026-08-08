@@ -24,14 +24,6 @@
 //! returning the typed newtype here would make a two-node leaf-tier cycle that
 //! the layering gate's zero tangle baseline rejects outright. The caller does the
 //! one `ByteCount` conversion.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of PHASE-06's provision consumer (PHASE-03 D5); \
-                  PHASE-06 deletes this line when `provision` lands"
-    )
-)]
 
 use std::ffi::OsString;
 use std::io;

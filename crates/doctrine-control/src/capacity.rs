@@ -21,14 +21,6 @@
 //! Layering (`ADR-001`): `capacity` is `leaf`, out-edges `{config, host}` — the
 //! `host` edge is [`CapacityUnknown`], which lives with the probe that produces
 //! it (`D2`).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of PHASE-06's provision consumer (PHASE-03 D5); \
-                  PHASE-06 deletes this line when `provision` lands"
-    )
-)]
 
 use std::path::{Path, PathBuf};
 

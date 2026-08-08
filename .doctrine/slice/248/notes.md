@@ -647,6 +647,44 @@ is the strongest evidence this slice has that the battery earns its cost.
     touch of a capsule-authored repository (`SPEC-030`). No criterion needs to
     move (`EX-14`'s subject is the clone; step 12 is a separate step), but the
     total is four and three is reachable honestly. Pre-empted in the sheet.
+43. **The thirteen steps are a rule list, not a call list: steps 2 and 7 are one
+    call.** The declared-entry existence probes (step 2) and the closure
+    expansion (step 7) are both already inside PHASE-05's `readable_set`, and
+    separating them would re-implement it (`EN-2` forbids). `provision` calls it
+    once, at step 7's position. `EX-9`'s ordering still holds by construction —
+    step 6 runs strictly before the one call that can invoke the resolver — but
+    a reader checking thirteen steps against thirteen statements finds no
+    statement for step 2. Renumber, or say the list is rules. `PHASE-06` `F-4`.
+44. **`ForbiddenScopes`' credentials list has no configuration source, and is
+    passed empty.** Neither `[capsule]` (`EX-1`'s field set) nor
+    `ProvisionRequest` (`EX-6`) carries one, and inventing a source would be a
+    new configuration surface with no criterion behind it. The consequence is
+    exact: a declared readable entry naming `~/.ssh` or a token file is not
+    refused by the placement's scope check today. It is still read-only and
+    still authored trusted-side, so this is a defence-in-depth gap, not an open
+    door — most likely routed alongside admission (`REQ-455`). `PHASE-06` `F-5`.
+45. **A non-refusing capacity report has no return channel, so it goes to
+    stderr.** `EX-6` fixes `provision`'s three parameters and `EX-1` fixes
+    `CapsuleTransaction`'s nine fields, so a warn/report outcome cannot be
+    returned. `provision` refuses when the report refuses and otherwise writes
+    one structured `key=value` line to a locked stderr — a side effect in a
+    function the design describes as returning a value, invisible to a
+    non-terminal caller. Decide: an observation field on the transaction, a sink
+    parameter, or stderr made explicit. `PHASE-06` `F-6`.
+46. **`sec-3`'s `SliceId` / `PhaseNumber` do not exist, and `EN-3` forbids
+    adding them.** `PhaseIdentity` carries `String` / `u32` instead. `VT-6`'s
+    keyword floor is met; what is lost is parse-don't-validate on the slice id,
+    which is now an unvalidated `String` — a caller can pass `"248"` or
+    `"sl-248"` and nothing objects. `PHASE-06` `F-7`.
+47. **A mandated `VT` keyword is a floor on test *names*, and a name is not
+    evidence — three-for-three now.** PHASE-06's battery found three mandated
+    tests that redded under no mutation: the identity test covered neither step
+    12's wiring nor the clone's two `-c` pins, and the adoption test could not
+    discriminate adoption from build-lose-adopt, whose observables are identical.
+    All three were fixed in the tests, never in the rules. With `notes.md` items
+    31 and 32 this is the third consecutive phase in which the battery found what
+    review did not. Consider whether phase sheets should mandate the
+    discriminating *fixture* alongside the keyword. `PHASE-06` `F-8`.
 
 ## Open
 

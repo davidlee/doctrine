@@ -46,15 +46,6 @@
 //! `backend → host`. Both units are `leaf` and `host` is out=0, so nothing
 //! cycles and no tier inverts (`D1`; the divergence from `sec-6`'s unit table
 //! is `F-2`).
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of PHASE-06's provision consumer (PHASE-03 D5); \
-                  PHASE-06 deletes this line when `provision` lands — the fifth \
-                  such deletion, not the fourth"
-    )
-)]
 
 use std::collections::BTreeSet;
 use std::fs::File;
@@ -151,32 +142,16 @@ const FLAG_SHARE_NET: &str = "--share-net";
 // The environment, and the one variable read from the host
 // ---------------------------------------------------------------------------
 
-/// `PATH`, in both of its roles: the host variable this backend reads to derive
-/// the capsule's own (`EX-13`), and the name it is set under inside. One
-/// spelling for one string (`STD-001`).
-const HOST_PATH_VARIABLE: &str = "PATH";
+/// `PATH`'s *host* role: the variable this backend reads to derive the capsule's
+/// own (`EX-13`). Its *inside* role — the name it is set under — is
+/// [`CapsuleEnvVar::name`], and this is defined from it so the two roles cannot
+/// drift apart (`STD-001`).
+const HOST_PATH_VARIABLE: &str = CapsuleEnvVar::Path.name();
 
 /// What a `PATH` list is joined with. Not `std::env::join_paths`, whose
 /// `OsString` result would need a lossless-to-`String` step this argv cannot
 /// take anyway.
 const PATH_SEPARATOR: &str = ":";
-
-/// The environment variable name each closed-vocabulary variant is set under.
-///
-/// [`CapsuleEnvVar`] carries values, not names — widening it with a `name()`
-/// would be an edit to `backend.rs`, which this phase does not own — so the
-/// names are single-sourced here.
-const fn env_var_name(var: CapsuleEnvVar) -> &'static str {
-    match var {
-        CapsuleEnvVar::Path => HOST_PATH_VARIABLE,
-        CapsuleEnvVar::Home => "HOME",
-        CapsuleEnvVar::Term => "TERM",
-        CapsuleEnvVar::GitAuthorName => "GIT_AUTHOR_NAME",
-        CapsuleEnvVar::GitAuthorEmail => "GIT_AUTHOR_EMAIL",
-        CapsuleEnvVar::GitCommitterName => "GIT_COMMITTER_NAME",
-        CapsuleEnvVar::GitCommitterEmail => "GIT_COMMITTER_EMAIL",
-    }
-}
 
 // ---------------------------------------------------------------------------
 // The descriptor sweep's bounds, and the status channel
@@ -746,7 +721,7 @@ fn capsule_environment(env: &CapsuleEnv, inner_path: &str) -> Vec<(&'static str,
             let value = var
                 .fixed_value()
                 .map_or_else(|| inner_path.to_owned(), str::to_owned);
-            (env_var_name(var), value)
+            (var.name(), value)
         })
         .collect();
     pairs.sort_by_key(|(name, _)| *name);

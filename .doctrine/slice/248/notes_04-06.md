@@ -251,3 +251,179 @@ showing only `0 1 2 3`, the status descriptor not crossing.
 - **The `forbid` → `deny` flip wants an ADR** (recommendation, not a ruling —
   the sheet's `F-17`). The mechanised two-site budget is what makes `deny`
   acceptable, and a test can be deleted with no governance trace.
+
+## PHASE-06 — `provision`, the thirteen steps, and the five headers
+
+Landed: `transaction.rs` and `provision.rs` (new), the `provision` verb in
+`main.rs`, two `engine` rows in `[doctrine_control_tiers]`, one free function in
+`src/interpretation.rs` under `F-1/R`, and the five `dead_code` headers deleted.
+**114 tests pass** in `doctrine-control` (up from 90 at PHASE-05's close).
+
+### Measured
+
+- **`T10` residual: 2 error groups / 6 items**, against the plan-time baseline of
+  **164 errors** taken with the headers stripped and no `provision` present. So
+  ~96% of the baseline evaporated transitively once `main()` was wired into the
+  chain, which is what the staging predicted. The six:
+  `BackendId::as_str` (1) and `UnrootedCapsuleConfig`'s five accessors.
+- **Ladder rungs used: 1 and 2. Rung 3 was not reached.** `BackendId::as_str`
+  went to rung 2 — the `provision` verb's success line names the backend, because
+  an observation that cannot be attributed to a mechanism cannot be attributed to
+  an admission verdict either. The five `UnrootedCapsuleConfig` accessors went to
+  rung 1: every consumer is `config.rs`'s own test module, so the `impl` block
+  carries `#[cfg(test)]`. **Zero item-level `#[expect(dead_code)]` was added**, so
+  `S3` did not fire and no finding is owed for `T10`.
+- **`ProvisionRefusal::paths()`/`keys()` and, transitively, `ConfigRefusal::keys`,
+  `PlacementRefusal::paths`, `ProfileRefusal::paths`/`keys` reached their first
+  real consumer** — `render_refusal` in `main.rs`. That is what rung 2 means here:
+  the accessors were never dead, they were unwired.
+- **The `unsafe` budget is untouched.** Two `#[expect]` sites, both in
+  `bubblewrap.rs`, and `the_unsafe_budget_is_exactly_two_sites` stays green.
+
+### The mutation battery — 15 mandated rows, 2 supplementary, all green-restored
+
+Applied to green source, one at a time, restored by copy from a scratch snapshot
+and `diff`-verified after each (never `git checkout`). Reds, as measured:
+
+| id | reds | verdict |
+|---|---|---|
+| `M1` | `export_that_is_a_symlink_refuses` | exact |
+| `M2` | `export_with_an_alternates_file_refuses_rather_than_being_adopted` | exact |
+| `M3` | `export_holds_the_contracted_history_and_no_other_ref` | exact |
+| `M4` | `concurrent_publication_converges_on_one_export_and_the_loser_adopts_it` | **under-red** — see below |
+| `M5` | `concurrent_publication_converges_on_one_export_and_the_loser_adopts_it` | **under-red** — see below |
+| `M6` | `provision_onto_an_existing_temporary_export_directory_refuses_and_removes_nothing` | exact |
+| `M7` | that plus `failed_provision_removes_only_the_root_it_created` | over by one, within `VT-3` |
+| `M8` | `provision_onto_an_existing_transaction_root_…`, `failed_provision_removes_only_the_root_it_created` | exact |
+| `M9` | `placement_pairing_a_base_with_another_bases_export_refuses` | exact |
+| `M10` | `resolver_whose_basename_is_forbidden_by_the_policy_refuses` | exact |
+| `M11` | `a_failing_execution_in_the_three_step_clone_refuses_at_that_step`, `clone_inside_leaves_no_working_tree_trusted_side` | exact after a fixture fix |
+| `M12` | `capsule_identity_persists_into_the_clone_config` | **redded nothing first** |
+| `M13` | `capsule_identity_persists_into_the_clone_config` | **redded nothing first** |
+| `M14` | `a_transaction_id_carrying_a_path_separator_refuses_at_construction` | exact |
+| `M15` | `clone_inside_leaves_no_working_tree_trusted_side` | exact |
+| `M16` | `failed_provision_leaves_an_existing_export_intact` | supplementary, added because `M4`/`M5` under-redded |
+| `M17` | `export_is_adopted_across_transactions_on_the_same_base` | supplementary, added because nothing redded it |
+
+Every one of the 15 mandated `VT` test titles now reds under at least one
+mutation, and every mutation reds at least one test.
+
+**`M4`/`M5` under-red for one structural reason, and it is not a defect.** Both
+target the publish path, and `failed_provision_leaves_an_existing_export_intact`
+never reaches it: step 8.1 adopts the already-published export and returns before
+any rename. The prediction assumed a route the code does not take. `M16` — a
+transaction-failure rollback that also removes the export — is what gives that
+test its evidence, and it reds exactly it.
+
+**`M7`'s extra red is not entanglement.** Both `VT-3` titles assert the same rule
+at step 9 (a root this call did not create must survive), which the sheet's own
+`VT-3` row lists them under together. `failed_provision_removes_only_the_root_it_created`'s
+second half *is* the collision case.
+
+**`M11` first redded four, and two of those were fixture coupling.** The scripted
+backend's positions bound every test that merely needed a *successful*
+provisioning to the length of the clone sequence. `clone_succeeds()` is now
+`WitnessBackend::always(…)`, which succeeds at any length; `scripted` survives for
+the one test that must vary per call. How many executions there are is
+`clone_inside_leaves_no_working_tree_trusted_side`'s claim and no other test's.
+
+**`M12`, `M13` and `M17` are `F-8`** — three mandated tests with no evidence,
+fixed in the tests and never in the rules. Detail in the sheet.
+
+### `VA` sweeps
+
+**`VA-1` — invariant 6 at every `ProvisionRefusal` construction site.** 22 sites,
+walked one by one. Four classes, no exceptions:
+
+1. *Before any keyed create* (13 sites): `Config`, `ConfigUnreadable`, `Capacity`,
+   `BasePolicy`, `RefinementPolicy`, `Restriction`, `BaseDocumentAbsent`,
+   `BaseDocumentUnreadable`, `RefinementUnreadable`, `ForbiddenResolver`,
+   `Profile`, and `Export`/`DirectoryNotExclusivelyCreated` on their step-8.1
+   routes. Steps 1–7 create nothing this call owns, so there is nothing to roll
+   back. ✔
+2. *The create itself failed* (`create_exclusively`, both call sites): no token is
+   minted and nothing was created at that path. This is why the two collision
+   tests can assert that a pre-existing directory's contents survive. ✔
+3. *Under the export temporary's token* (`Export` at 8.3/8.5, `ExportBuildFailed`
+   from `build_export` and from the general rename error): every one of these
+   arms calls `roll_back(token)` before returning, including 8.5's, where the
+   rollback runs whether or not the adoption validated. ✔
+4. *Under the transaction root's token* (`Placement`,
+   `InnerDestinationNotAbsolute`, `EmptyExecutionArgv`, `Backend`, `CloneFailed`,
+   `IdentityNotPersisted`, and `DirectoryNotExclusivelyCreated` from `finish`'s
+   layout containers): all are reached from `finish`, whose single caller rolls
+   the root back on any `Err`. ✔
+
+One honest residual, by design: the **shared containers** — the capsule root,
+`export/`, `tx/` — are created by `ensure_container` and are never rolled back.
+They belong to no transaction and removing one would race every other. Invariant
+6 is "removes nothing it did not create", not "creates nothing when it refuses",
+and the second was never claimed.
+
+**`VA-2` — no delete capability leaks.** One delete exists in `provision.rs`:
+`std::fs::remove_dir_all(&token.path)` inside `roll_back`, which is a private
+`fn`, takes `CreationToken` **by value**, and has no `pub(crate)` caller.
+`CreationToken` is a private struct constructed only by `create_exclusively`,
+also private. `provision.rs`'s whole `pub(crate)` surface is `provision`,
+`host_capsule_config`, `ProvisionRefusal::paths`/`keys` and the vocabulary types
+— none removes anything. `main.rs`'s verb exposes no removal and no flag that
+reaches one. The crate's only other production delete is
+`bubblewrap.rs:341`, PHASE-05's removal of the status file it just created and
+read. ✔ (`DEC-156`'s hazard is a tidiness primitive a later slice reaches for;
+there is nothing here to reach for.)
+
+**`VA-3` — steps 1, 4, 5, 6 pure given `HostFacts`.** Structural, as `T6` kept
+the four as free functions: `capsule_config(&str, &dyn HostFacts)`,
+`resolved_policy(&str, Option<&str>)`, `admit_resolver(&InterpretationPolicy,
+Option<&Argv>)`. The last two take no host at all. `HostFacts` has exactly four
+methods — `available_bytes`, `resolve`, `path_exists`, `env_var` — none a clock,
+none an entropy source, so it is clock-free at the call site. The disk reads live
+in the thin shell: `host_capsule_config`, `read_working_tree_document`,
+`read_base_document`, `read_refinement_document`. The one clock in the crate is
+`SystemTime::now()` in `main.rs`'s `mint_transaction_id`, which is where `EX-7`
+puts it — outside `provision`, so a test can hand the same id twice, and both
+collision tests do. ✔
+
+### Diverged from the sheet
+
+- **`PhaseIdentity` is `{ slice: String, phase: u32 }`**, not `sec-3`'s
+  `SliceId`/`PhaseNumber` — those types do not exist and `EN-3` forbids widening
+  the root export set to add them. `F-7`.
+- **Steps 2 and 7 are one call** (`readable_set`), so there is no statement
+  numbered 2. `EX-9`'s ordering still holds by construction. `F-4`.
+- **`ForbiddenScopes`' credentials list is empty** — no configuration source
+  exists at this altitude. `F-5`.
+- **A non-refusing capacity report goes to stderr**, because `EX-6`'s three
+  parameters and `EX-1`'s nine fields leave it no return channel. `F-6`.
+- **`AcceptedBase::as_str()` was added** to `backend.rs` (already in the widened
+  set, `C1`): the export path, the fetch refspec and the detach all name the base
+  and none could read it.
+- **`backend.rs`'s `mod bubblewrap;` became `pub(crate)`** as `T7c` directed, and
+  `profile_owned_host_path` was promoted to `pub(crate)` rather than
+  re-deriving `<root>/capsule` in `provision.rs`.
+- **Two supplementary battery rows** (`M16`, `M17`) beyond the mandated fifteen.
+
+### `T11` — the three `backend.rs` debts (`notes.md` item 34)
+
+- **(a) closed.** `backend.rs`'s module doc now says out-edges `{config, host}`
+  and that a profile adds no **row** but does add that edge, citing
+  `bubblewrap.rs`'s `F-2`. Item 27 closes with it.
+- **(b) closed.** `CapsuleEnvVar::name()` now single-sources the seven names
+  beside their values; `bubblewrap.rs`'s `env_var_name` is deleted and
+  `HOST_PATH_VARIABLE` is defined as `CapsuleEnvVar::Path.name()`, so `PATH`'s
+  second role — the host variable read through `HostFacts::env_var` — keeps one
+  spelling.
+- **(c) closed as no-change** (`D7`, adjudicated at plan time). `backend.rs`'s
+  bare `"bwrap"` sits inside `WitnessBackend`, a test double describing an
+  *unavailable fake* backend. It is descriptive text about a fiction, not a
+  second spelling of the executable the profile execs, and importing
+  `BWRAP_EXECUTABLE` into it would couple a backend-agnostic witness to one
+  profile. Item 34(c) does not roll forward.
+
+### Still owed
+
+- **Item 35 stays open by decision, not by omission** (`D3`). `Execution` still
+  carries no kill grace; the verb threads the configured figure through
+  `BubblewrapBackend::with_kill_grace` instead. Moving the field would change a
+  type `EX-10` enumerates, for no observable difference. Recorded here so the
+  temporary default does not become permanent by silence.
