@@ -58,7 +58,7 @@ else:
 ./target/debug/doctrine slice status <N>
 find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
 find target/debug/.fingerprint target/debug/deps -maxdepth 0 -mmin -30
-git status --porcelain | cut -c4- | tr '\n' '\0' | xargs -0 -r find -maxdepth 0 -mmin -30
+git status --porcelain | cut -c4- | tr '\n' '\0' | xargs -0 -r -I{} find {} -maxdepth 0 -mmin -30
 git log -1 --format=%cr
 ```
 
@@ -78,7 +78,11 @@ was most productive. Hence the commit leg. Only silence on all four is death.
 
 Cost is a handful of stats. The churn leg rides `git status`, which respects
 `.gitignore` — do **not** substitute a `find` over the worktree, which walks
-`target/` and its 1,200-odd fingerprint entries.
+`target/` and its 1,200-odd fingerprint entries. It needs `-I{}` so each path
+lands *before* the expression; a bare `xargs … find -maxdepth 0 -mmin -30`
+appends them after and `find` exits with "paths must precede expression",
+which reads as a silent dead leg. This shipped broken and was caught by
+*running* the guard, not by reading it — as the `pgrep -f` defect was.
 
 Prefer artifact mtime to `pgrep`. A process check is an *instantaneous sample* —
 a worker between builds shows no `cargo` at all and reads dead while plainly
