@@ -36,7 +36,7 @@ use super::inquiry::{
 };
 use super::prompt::contract_block;
 use super::refusal::{ActFault, Refusal};
-use super::run::{DerivedInput, ObservedReview, live_reviews};
+use super::run::{DerivedInput, ObservedReview, declare, live_reviews};
 use super::runbook::{RunbookKey, RunbookStanding};
 use super::snapshot::{AgentDeclarationGroup, CheckpointActGroup, DesignSnapshot};
 use super::submission::{
@@ -2987,4 +2987,245 @@ fn a_non_declarable_subject_is_refused_as_such_rather_than_key_by_key() {
     let declaration = declared(r#"{"subject": "dlg-1", "body": "prose"}"#);
 
     assert_eq!(declaration.inert_key(), None);
+}
+
+/// `I10`'s subject fixture ids, one per kind, plus the two companions every
+/// other kind's fixture points at.
+///
+/// The subject ids are **not** seeded into the fixture universe and the
+/// companions are: a key like `provenance` is read only where a node is being
+/// created, so the subject must be absent for the differential to see it.
+const COMPANION_NODE: &str = "inq-2";
+const COMPANION_SECTION: &str = "sec-2";
+
+/// What state the subject must be in for a key to be observable at its
+/// honouring kind — the `EN-2` discharge, per `DEC-183`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubjectState {
+    /// The run does not hold the subject yet: the engine takes its create path.
+    Absent,
+    /// The run already holds the subject: the engine takes its update path.
+    Held,
+}
+
+/// The run every cell is measured against, and the shell-derived facts it needs.
+///
+/// Holds the two companions and, under [`SubjectState::Held`], the `inq-`
+/// subject itself. `section_digests` carries the `sec-` subject because a
+/// section body is digested by the shell and the pure layer never hashes.
+fn universe(state: SubjectState) -> (DesignSnapshot, DerivedInput) {
+    let mut snapshot = run_holding(&[(COMPANION_SECTION, "digest-companion")]);
+    snapshot
+        .map
+        .inquiry
+        .insert(InquiryNode::open(
+            id(COMPANION_NODE),
+            "a companion",
+            Provenance::AgentProposed,
+        ))
+        .expect("the companion node seats");
+    if state == SubjectState::Held {
+        snapshot
+            .map
+            .inquiry
+            .insert(InquiryNode::open(
+                id("inq-1"),
+                "the subject",
+                Provenance::AgentProposed,
+            ))
+            .expect("the held subject seats");
+    }
+    let derived = DerivedInput {
+        section_digests: BTreeMap::from([(id("sec-1"), Fingerprint::new("digest-subject"))]),
+        ..DerivedInput::default()
+    };
+    (snapshot, derived)
+}
+
+/// A JSON value for `key`, chosen to differ from whatever the engine defaults to
+/// when the key is absent — otherwise the differential cannot see it.
+///
+/// `None` for a key with no fixture, which **fails** the matrix rather than
+/// silently narrowing it: a wire key added without a value here shows up as an
+/// uncovered cell, not as a cell nobody ran.
+fn wire_value(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "question" => r#""why?""#,
+        "needs" => r#"["inq-2"]"#,
+        "parent" => r#""inq-2""#,
+        // Internally tagged, and deliberately not the `agent-proposed` default:
+        // a key whose value equals the default is invisible to a differential.
+        "provenance" => r#"{"provenance": "user-directed"}"#,
+        "lifecycle" => r#""deferred""#,
+        "body" => r###""## a section\n""###,
+        "attests" => r#""sec-2""#,
+        // Likewise not `human`, which is what an absent `reviewer` means.
+        "reviewer" => r#""adversarial""#,
+        "concerns" => r#""sec-2""#,
+        "summary" => r#""a finding""#,
+        "blocking" => "true",
+        "resolution" => r#""disposed""#,
+        "disposes" => r#""inq-2""#,
+        "dispose" => r#"{"form": "unresolved", "note": "retained"}"#,
+        _ => return None,
+    })
+}
+
+/// The keys a declaration at `kind` needs before the engine will apply it at all.
+///
+/// Not a second copy of the correspondence: these are the *required* keys, and
+/// the base for a cell is this set **minus the key under test** — which is how a
+/// required key's own cell gets a base that is refused, so that supplying the key
+/// is observable as the difference between a refusal and an application.
+fn companions(kind: IdKind) -> &'static [&'static str] {
+    match kind {
+        IdKind::Inquiry => &[],
+        IdKind::Section => &["body"],
+        IdKind::Attestation => &["attests"],
+        IdKind::Finding => &["summary", "concerns"],
+        IdKind::Checkpoint => &["disposes", "dispose"],
+        IdKind::Delegation | IdKind::CheckpointAct | IdKind::AgentDeclaration => &[],
+    }
+}
+
+/// One declaration at `kind` carrying `keys`.
+fn declaration_at(kind: IdKind, keys: &[&str]) -> Declaration {
+    let mut json = format!(r#"{{"subject": "{}1""#, kind.prefix());
+    for key in keys {
+        let value = wire_value(key).unwrap_or_else(|| panic!("`{key}` has no value fixture"));
+        json.push_str(&format!(r#", "{key}": {value}"#));
+    }
+    json.push('}');
+    declared(&json)
+}
+
+/// What the declaration engine did — the resulting run and how it answered.
+///
+/// Measured on [`declare`], which does not consult the wire-key table: this is
+/// the *behavioural* half of `I10`, and reading it through the admission path
+/// would let the table decide its own verdict.
+fn engine_outcome(
+    state: SubjectState,
+    kind: IdKind,
+    keys: &[&str],
+) -> (DesignSnapshot, Option<Refusal>) {
+    let (mut next, derived) = universe(state);
+    let refused = declare(&mut next, &declaration_at(kind, keys), &derived, "sub-1").err();
+    (next, refused)
+}
+
+/// Whether the whole admission path refuses this declaration — the wire-key
+/// check first, then the engine's own arms.
+fn admission_refuses(state: SubjectState, kind: IdKind, keys: &[&str]) -> bool {
+    let (mut next, derived) = universe(state);
+    let declaration = declaration_at(kind, keys);
+    match Batch::of(vec![declaration]).validate() {
+        Err(_) => true,
+        Ok(candidate) => candidate
+            .values()
+            .any(|declaration| declare(&mut next, declaration, &derived, "sub-1").is_err()),
+    }
+}
+
+/// `I10` — no wire key is accepted and ignored (`VT-2`, `EX-4`, `VA-1`).
+///
+/// # What a cell asserts
+///
+/// For every (wire key × subject kind) pair, **exactly one** of two behavioural
+/// facts holds:
+///
+/// - *effectful* — a base declaration at that kind and the same declaration
+///   plus the key yield different outcomes under [`declare`]: a different run,
+///   or one applying where the other is refused;
+/// - *refused* — the whole admission path refuses the declaration carrying it.
+///
+/// Both false is the silent acceptance `I10` forbids — the `ISS-318` defect.
+/// Both true is a table refusing a key its own engine honours, which is `F-4`'s
+/// hazard: `I9` compares two key sets and stays green if `body` is mapped to
+/// `cp-` and `dispose` to `sec-`, because the sets are identical either way.
+/// Here that swap fails twice — `body` at `sec-` becomes effectful *and*
+/// refused, and `body` at `cp-` becomes neither.
+///
+/// The effectful side is measured one layer below the check, on [`declare`],
+/// which never reads the table. That is what makes the oracle behaviour rather
+/// than the table under test.
+///
+/// # The generator
+///
+/// Both vocabularies are read from their own source — [`Declaration::WIRE_KEYS`]
+/// and [`IdKind::ALL`] — so adding a wire key or an id kind widens the covered
+/// set with no edit here, and narrowing coverage means deleting a loop rather
+/// than deleting rows nobody misses (`R10`). A key added without a
+/// [`wire_value`] fixture fails; it does not quietly skip.
+///
+/// # The subject state, and what `DEC-183` scopes out
+///
+/// Four keys are read on only *one* of their honouring kind's two paths, so the
+/// base's subject state decides whether the differential can see them:
+/// `provenance` is read only where a node is created, `lifecycle` only where one
+/// is updated, and `concerns` / `blocking` only where a finding is raised. The
+/// state is therefore stated per key ([`subject_state`]) rather than defaulted.
+///
+/// The other state of each of those four is where the key is **silently
+/// ignored** — accepted, no effect, no refusal. `DEC-183` rules that outside this
+/// matrix: `I10` is quantified over the subject-**kind** axis, so a cell asks
+/// whether *some* submission at that kind makes the key effectful. The state
+/// axis is `ISS-327`, and the nested-`CreateRecord` sibling is `ISS-328`.
+///
+/// # The addressing key
+///
+/// A key carried by *every* declaration is outside the frame: there is no
+/// submission that omits it, so "carrying it" distinguishes nothing. Detected by
+/// the row's own predicate holding on a bare declaration — a behavioural test,
+/// not a name on a list, and
+/// `every_rows_predicate_agrees_with_its_keys_presence_on_the_wire` pins that it
+/// selects the addressing key alone.
+#[test]
+fn no_wire_key_is_accepted_and_ignored_at_any_subject_kind() {
+    let bare = Declaration::about(id("inq-1"));
+    for (key, _, carried) in &Declaration::WIRE_KEYS {
+        if carried(&bare) {
+            continue;
+        }
+        for kind in IdKind::ALL {
+            let state = subject_state(key);
+            let base: Vec<&str> = companions(kind)
+                .iter()
+                .copied()
+                .filter(|companion| companion != key)
+                .collect();
+            let mut carrying = base.clone();
+            carrying.push(key);
+
+            let effectful =
+                engine_outcome(state, kind, &base) != engine_outcome(state, kind, &carrying);
+            let refused = admission_refuses(state, kind, &carrying);
+
+            assert_ne!(
+                effectful,
+                refused,
+                "`{key}` at a `{}` subject is {}",
+                kind.prefix(),
+                if effectful {
+                    "both effectful and refused — the table maps it to a kind its engine does not"
+                } else {
+                    "accepted and ignored — neither effectful nor refused (ISS-318)"
+                }
+            );
+        }
+    }
+}
+
+/// The subject state a key's honouring cell must be measured in (`DEC-183`).
+///
+/// [`SubjectState::Absent`] unless the key is read only on an update path. Two
+/// entries are load-bearing and both are `ISS-327`: `lifecycle` is read only
+/// where `declare_node` updates, so an absent subject would show it inert; and
+/// its mirror, `provenance`, is read only where `declare_node` creates, which is
+/// why the default is `Absent` rather than `Held`.
+fn subject_state(key: &str) -> SubjectState {
+    match key {
+        "lifecycle" => SubjectState::Held,
+        _ => SubjectState::Absent,
+    }
 }

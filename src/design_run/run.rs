@@ -243,7 +243,10 @@ pub(crate) fn admit(
 
 /// A row before its index is assigned — index is a property of the *sequence*,
 /// so assigning it while building would tie it to construction order.
-struct Pending {
+///
+/// Visible to the module rather than to this file alone only because [`declare`]
+/// is: its fields stay private, so nothing outside can read or build one.
+pub(super) struct Pending {
     event: ChangeEvent,
     subject: Option<DesignId>,
     terms: Vec<PayloadTerm>,
@@ -1119,7 +1122,14 @@ fn delegation_row(
 
 /// Apply one subject-addressed declaration. What it means is derived from the
 /// subject's kind, so a mistyped prefix is a refusal rather than a mismatch.
-fn declare(
+///
+/// Visible to the module's own suite because `I10` measures **effectfulness**
+/// here, one layer below the admission path: this function does not consult the
+/// wire-key table, so a differential over it is an observation of what a key
+/// actually does rather than a reading of what the table says it does. That
+/// separation is the whole of `VA-1`'s requirement — a cell whose oracle is the
+/// table under test proves only that the table equals itself.
+pub(super) fn declare(
     next: &mut DesignSnapshot,
     declaration: &Declaration,
     derived: &DerivedInput,
