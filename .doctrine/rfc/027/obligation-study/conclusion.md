@@ -60,10 +60,81 @@ it does not justify an ontology.
 
 ## 3. Historical dependency corrections
 
-Brief 03 § D asked for real cases of dependency omission or correction.
-Instrument: `grep 'id = "EN-'` over all `plan.toml`, filtered for `AMENDED`;
-2,362 entrance criteria scanned, **3 distinct corrections** (each doubled in raw
-counts by the slug symlink).
+> **Corrected 2026-08-08 after owner challenge.** This section first reported 3
+> corrections in 2,362 entrance criteria (~0.13%) and concluded that dependency
+> correction is rare. **That finding is withdrawn — it was wrong twice.** The
+> denominator was doubled by slug symlinks (1,191 distinct EN criteria, not
+> 2,362), and, far more seriously, the instrument counted adherence to *one
+> authoring convention in one field* rather than the phenomenon. The corrected
+> measurement is below, and it reverses the conclusion.
+
+### Why the first instrument failed
+
+`grep AMENDED` over EN rows yields 82 marker occurrences — concentrated in **4 of
+225 plans**. A phenomenon spread across the corpus does not concentrate like
+that; a house style does. The 4 plans are the ones whose authors annotate
+amendments in place. The other 221 amend their plans too — they just record it
+somewhere the grep could not see.
+
+### The convention-independent instrument
+
+Plan revision history. A `plan.toml` committed once was never adapted; one
+committed repeatedly was.
+
+| Measure | Value |
+|---|---|
+| Distinct plans with git history | 224 |
+| Committed once — never revised | 111 (**49.6%**) |
+| Revised at least once after authoring | 113 (**50.4%**) |
+| ≥3 commits | 42 (18.8%) |
+| ≥5 commits | 9 (4.0%) |
+| Post-authoring plan commits, total | **197** |
+| …naming a specific `PHASE-NN` | 47 |
+| …using adaptation verbs (retarget/amend/split/move/defer/repair) | 27 |
+
+**Half of all plans are revised after they are authored.** Commit-type is no help
+in classifying them — 321 of the plan-touching commits carry the `plan(` scope
+whether they land during authoring or mid-execution — so the subject line and the
+phase reference are the signal, not the prefix.
+
+### The phenomenon, in the corpus's own words
+
+- `plan(SL-105): after edge removal — move path refactor from PHASE-01 to
+  PHASE-02` — work relocated between phases after a discovery. This is exactly
+  the shape: *failed to account for x, so it happens here instead of there.*
+- `plan(SL-244): retarget PHASE-05 VT-4 to the shell (PHASE-05 T7 consult)` —
+  discovered during PHASE-05 task 7, routed through `/consult`, plan amended.
+- `plan(SL-244): amend PHASE-04 VT-4, settle EX-7 (PHASE-04 consult)`
+- `plan(SL-244): repair the plan against a code-surface sweep`
+- `plan(SL-233): adversarial pass — split two phases, assign six orphans`
+- `plan(SL-068): split PHASE-06 memory into global-ships vs project-local`
+
+SL-244 alone carries **nine** plan commits, at least five of them mid-execution
+adaptations naming the phase that surfaced them.
+
+### The three `AMENDED`-tagged cases (retained — they are still the clearest)
+
+1. **SL-233 PHASE-11 EN-1** — *edge retarget, one-to-many.* Named PHASE-06; the
+   2026-07-29 split moved the marker machinery, so "both successors are required
+   — PHASE-13 for the grammar and the watermark, PHASE-14 for the parse-a-human-
+   edited-document path".
+2. **SL-233 PHASE-12 EN-1** — *edge retarget, one-to-one.* Same split; PHASE-06's
+   successor for section fingerprints is PHASE-13.
+3. **SL-182 PHASE-06 EN-1** — *edge removal.* `[AMENDED — RETIRES the
+   SubagentStop premise]`: a live probe proved the worker tree persists
+   post-return, so the dependency was retired outright.
+
+### What this changes
+
+Brief 03's premise — *"missed dependencies should be a common execution discovery
+and cheap to reconcile"* — **is supported, not refuted.** So is RFC-027's `H11`
+(late dependency discovery reconciled as an ordinary path).
+
+There is also a finding here that the original section missed entirely: **the
+adaptation record exists but is not queryable.** It lives in git subject lines,
+`/consult` transcripts, and notes prose. Nothing in the plan model can answer
+"which phases were re-scoped after execution began, and why". That is a real gap,
+independent of whether obligations are the answer to it.
 
 1. **SL-233 PHASE-11 EN-1** — *edge retarget, one-to-many.* Named PHASE-06; the
    2026-07-29 split moved the marker machinery, so "both successors are required
@@ -171,10 +242,21 @@ Neither needs an obligation concept, a graph, or a new entity kind.
 - *Real dependencies are predominantly phase-wide* — **confirmed.** Phases share
   files; SL-233's plan states the serialism is forced, not chosen.
 - *Existing orchestration already derives the same frontier* — **confirmed.**
-- *Dependency upkeep exceeds its value* — **supported** by the 0.13% correction
-  rate.
+- *Dependency upkeep exceeds its value* — **WITHDRAWN.** This was asserted from
+  the discredited 0.13% correction rate (§ 3). With half of all plans revised
+  post-authoring, the rarity argument is gone. Upkeep cost may still exceed
+  value, but **this study no longer offers evidence either way.**
 - *Late edge changes entangle completion semantics* — **not reached**; moot
   without stored edges.
+
+**What now rests on a single leg.** The recommendation to reject the stored graph
+originally stood on three supports: duplicated fact ownership (§ 2), an unchanged
+frontier (thread C), and rare corrections (§ 3). The third is withdrawn. The
+first two are independent of it and unaffected — the frontier evidence is a
+direct comparison over three slices, and fact ownership is a structural
+comparison against `REQ-441`–`REQ-443`. The recommendation stands, but on a
+narrower base than when first written, and a future consumer that makes the
+frontier move would reopen it.
 
 **Unknowns:**
 
@@ -182,10 +264,21 @@ Neither needs an obligation concept, a graph, or a new entity kind.
   obligations may exist and was not sampled. Mitigation: the largest slice in the
   corpus was chosen deliberately, on the reasoning that if granularity does not
   help at 16 phases it will not help at three.
-- The `AMENDED`-tag instrument undercounts silent dependency corrections by an
-  unknown factor.
+- **How many of the 197 post-authoring plan commits are dependency corrections
+  specifically**, versus refinement, review repair, or scope change. 27 carry
+  adaptation verbs and 47 name a phase, but no instrument here separates "missed
+  a dependency" from "changed our minds". This is the natural next measurement
+  and it was not made.
 - Whether R1 (EX→VT) should be a field on the VT row, on the EX row, or a
   separate mapping is a spec question, not settled here.
+
+**Instrument lesson, recorded because this study nearly shipped on it.** Counting
+a convention is not counting a phenomenon. The first pass measured `AMENDED`
+tags, found them rare, and concluded the underlying event was rare — when the
+markers were concentrated in 4 of 225 plans, which should itself have been the
+tell. Where a phenomenon has no mandated recording site, measure a
+convention-independent proxy (here, revision history) or state plainly that it
+was not measured.
 
 **Retired.** An earlier note flagged a possible ordering defect —
 `src/dispatch.rs:6826` sorts funnel rows by phase id while `compute_next_phases`
@@ -215,5 +308,18 @@ proposed missing concept was not earned").
 already supplies split/merge/relocation lineage for criteria, so the refinement
 case has an owner.
 
-`H11`, `H12` and `H13` are untouched by this study — `H13` in particular is brief
-04's subject and remains live.
+`H11` (late dependency discovery reconciled as an ordinary path) is
+**supported**, and the § 3 correction is what supports it. Half of all plans are
+revised after authoring; SL-244 carries nine plan commits, several of them
+mid-execution retargets routed through `/consult`. Whatever the RFC-027 patch
+says about H11, it should not inherit this study's original claim that
+corrections are rare — that claim is withdrawn.
+
+The associated gap is worth stating in the RFC in its own right: **plan
+adaptation is recorded but not queryable.** It lives in git subject lines,
+consult transcripts and notes prose. Nothing can answer "which phases were
+re-scoped after execution began, and why" without archaeology. That is a real
+deficiency and it is independent of the obligation question — it would remain
+after R1 and R2 land.
+
+`H12` is untouched. `H13` is brief 04's subject and remains live.
