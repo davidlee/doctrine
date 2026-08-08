@@ -454,6 +454,78 @@ fn parse_verification_row(
     Ok(VerificationRow { argv })
 }
 
+// ---------------------------------------------------------------------------
+// The canonical hash.
+// ---------------------------------------------------------------------------
+
+/// The domain prefix. Keeps a future v2 encoding from colliding with a v1 one
+/// over the same bytes.
+const HASH_DOMAIN: &[u8] = b"doctrine.interpretation.v1";
+
+/// The canonical hash of a policy. A newtype with no constructor but
+/// [`canonical_hash`], so a hash cannot be fabricated from anything except a
+/// validated policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PolicyHash([u8; 32]);
+
+/// SHA-256 over a deterministic encoding of the **typed value** (PURE).
+///
+/// Never over source text and never over a re-serialized document: either would
+/// let a formatting choice — quoting style, key order, whitespace, integer
+/// spelling — re-enter a value whose entire purpose is to be stable across
+/// them.
+///
+/// Length prefixes are what make the encoding injective. Plain concatenation
+/// lets `["ab", "c"]` and `["a", "bc"]` hash identically, and those are two
+/// different forbidden-executable sets — one of which forbids an executable the
+/// other permits.
+#[must_use]
+pub fn canonical_hash(policy: &InterpretationPolicy) -> PolicyHash {
+    use sha2::{Digest as _, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(HASH_DOMAIN);
+    hasher.update(policy.schema.to_le_bytes());
+
+    hasher.update(count(policy.forbidden_executables.len()));
+    for entry in &policy.forbidden_executables {
+        hash_str(&mut hasher, &entry.0);
+    }
+
+    hasher.update(count(policy.interpreted_paths.len()));
+    for entry in &policy.interpreted_paths {
+        hash_str(&mut hasher, &entry.0);
+    }
+
+    hasher.update(count(policy.verification.len()));
+    for row in &policy.verification {
+        hasher.update(count(row.argv.len()));
+        for arg in &row.argv {
+            hash_str(&mut hasher, arg);
+        }
+    }
+
+    PolicyHash(hasher.finalize().into())
+}
+
+/// A length or count as little-endian `u64`.
+///
+/// `usize as u64` is `clippy::as_conversions`, and `unwrap`/`expect`/`panic`
+/// are equally denied, so the conversion is total by saturation. On every
+/// supported target `usize` is at most 64 bits and the fallback is unreachable;
+/// were it ever reachable, saturating is the safe direction — it cannot make
+/// two distinct policies collide without first exhausting memory.
+fn count(n: usize) -> [u8; 8] {
+    u64::try_from(n).unwrap_or(u64::MAX).to_le_bytes()
+}
+
+/// Length-prefixed UTF-8 bytes.
+fn hash_str(hasher: &mut sha2::Sha256, s: &str) {
+    use sha2::Digest as _;
+    hasher.update(count(s.len()));
+    hasher.update(s.as_bytes());
+}
+
 /// A document value rendered for a refusal message — its own TOML spelling for
 /// scalars, its type otherwise. Never parsed back; this is diagnosis only.
 fn render(value: &toml::Value) -> String {
@@ -484,16 +556,29 @@ mod tests {
         )
     }
 
-    /// The smallest well-formed block.
-    fn minimal() -> String {
-        document(
+    /// A block with the given list bodies and verification sequence, each
+    /// spliced verbatim so a test can state the exact TOML it means.
+    fn block(forbidden: &str, paths: &str, verification: &str) -> String {
+        document(&format!(
             "[interpretation]\n\
              schema = 1\n\
-             trusted_side_forbidden_executables = []\n\
-             interpreted_paths = []\n\n\
-             [[interpretation.verification]]\n\
-             argv = [\"just\", \"validate\"]\n\n",
-        )
+             trusted_side_forbidden_executables = [{forbidden}]\n\
+             interpreted_paths = [{paths}]\n\n\
+             {verification}\n"
+        ))
+    }
+
+    /// One verification row per `argv` body.
+    fn rows(argvs: &[&str]) -> String {
+        argvs
+            .iter()
+            .map(|argv| format!("[[interpretation.verification]]\nargv = [{argv}]\n\n"))
+            .collect()
+    }
+
+    /// The smallest well-formed block: both lists explicitly empty, one row.
+    fn minimal() -> String {
+        block("", "", &rows(&["\"just\", \"validate\""]))
     }
 
     // ── the table walk ──────────────────────────────────────────────────
@@ -688,6 +773,371 @@ mod tests {
             }),
             "a walk that stops at the first row is a strict outer sequence \
              wrapping a tolerant inner one"
+        );
+    }
+
+    // ── per-field validation ────────────────────────────────────────────
+
+    /// The refusal a single forbidden-executable entry earns.
+    fn executable_refusal(entry: &str) -> PolicyRefusal {
+        parse(&block(&format!("\"{entry}\""), "", &rows(&["\"just\""])))
+            .expect_err("the entry is invalid")
+    }
+
+    /// The refusal a single interpreted-path entry earns.
+    fn path_refusal(entry: &str) -> PolicyRefusal {
+        parse(&block("", &format!("\"{entry}\""), &rows(&["\"just\""])))
+            .expect_err("the entry is invalid")
+    }
+
+    #[test]
+    fn executable_with_a_slash_refuses() {
+        assert_eq!(
+            executable_refusal("/usr/bin/node"),
+            PolicyRefusal::InvalidExecutable {
+                entry: "/usr/bin/node".to_owned(),
+                reason: ExecutableFault::Slash,
+            },
+            "the list names basenames; a path would silently forbid nothing"
+        );
+        assert!(matches!(
+            executable_refusal("bin/node"),
+            PolicyRefusal::InvalidExecutable {
+                reason: ExecutableFault::Slash,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn executable_with_whitespace_refuses() {
+        for entry in ["node ", " node", "no de", "node\t"] {
+            assert!(
+                matches!(
+                    executable_refusal(entry),
+                    PolicyRefusal::InvalidExecutable {
+                        reason: ExecutableFault::Whitespace,
+                        ..
+                    }
+                ),
+                "`{entry}` must refuse for whitespace"
+            );
+        }
+    }
+
+    #[test]
+    fn executable_that_is_dot_or_dotdot_refuses() {
+        for entry in [".", ".."] {
+            assert!(
+                matches!(
+                    executable_refusal(entry),
+                    PolicyRefusal::InvalidExecutable {
+                        reason: ExecutableFault::DotOrDotDot,
+                        ..
+                    }
+                ),
+                "`{entry}` must refuse as a directory reference"
+            );
+        }
+    }
+
+    #[test]
+    fn executable_that_is_empty_refuses() {
+        assert!(matches!(
+            executable_refusal(""),
+            PolicyRefusal::InvalidExecutable {
+                reason: ExecutableFault::Empty,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn absolute_path_pattern_refuses() {
+        assert_eq!(
+            path_refusal("/etc/passwd"),
+            PolicyRefusal::InvalidPathPattern {
+                entry: "/etc/passwd".to_owned(),
+                reason: PathFault::Absolute,
+            },
+            "patterns are repository-relative; an absolute one names a path \
+             outside the tree it is meant to classify"
+        );
+    }
+
+    #[test]
+    fn backslash_path_pattern_refuses() {
+        assert!(matches!(
+            path_refusal("scripts\\\\run.sh"),
+            PolicyRefusal::InvalidPathPattern {
+                reason: PathFault::Backslash,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn nul_path_pattern_refuses() {
+        assert!(matches!(
+            path_refusal("scripts\\u0000run.sh"),
+            PolicyRefusal::InvalidPathPattern {
+                reason: PathFault::Nul,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn lexical_dotdot_component_refuses() {
+        for entry in ["../outside", "scripts/../../etc", "a/../b"] {
+            assert!(
+                matches!(
+                    path_refusal(entry),
+                    PolicyRefusal::InvalidPathPattern {
+                        reason: PathFault::DotDotComponent,
+                        ..
+                    }
+                ),
+                "`{entry}` must refuse for its `..` component"
+            );
+        }
+        assert!(
+            parse(&block("", "\"..hidden\"", &rows(&["\"just\""]))).is_ok(),
+            "the rule is a `..` *component*, not the two characters anywhere"
+        );
+    }
+
+    #[test]
+    fn empty_path_pattern_refuses() {
+        assert!(matches!(
+            path_refusal(""),
+            PolicyRefusal::InvalidPathPattern {
+                reason: PathFault::Empty,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_list_entry_that_is_not_a_string_refuses() {
+        let text = block("1", "", &rows(&["\"just\""]));
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::EntryMalformed {
+                key: KEY_FORBIDDEN_EXECUTABLES.to_owned(),
+                index: 0,
+                found: "integer",
+            })
+        );
+    }
+
+    #[test]
+    fn a_set_valued_key_that_is_not_an_array_refuses() {
+        let text = minimal().replace(
+            "trusted_side_forbidden_executables = []",
+            "trusted_side_forbidden_executables = \"node\"",
+        );
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::ListMalformed {
+                key: KEY_FORBIDDEN_EXECUTABLES.to_owned(),
+                found: "string",
+            })
+        );
+    }
+
+    // ── duplicate rejection, which precedes sorting ─────────────────────
+
+    #[test]
+    fn duplicate_forbidden_executable_refuses() {
+        let text = block("\"node\", \"deno\", \"node\"", "", &rows(&["\"just\""]));
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::DuplicateEntry {
+                field: KEY_FORBIDDEN_EXECUTABLES.to_owned(),
+                entry: "node".to_owned(),
+            }),
+            "a set type would have absorbed this silently — REQ-449 criterion 2 \
+             sorts *after* duplicate detection, which only means anything if \
+             detection can refuse"
+        );
+    }
+
+    #[test]
+    fn duplicate_interpreted_path_refuses() {
+        let text = block("", "\"*.sh\", \"*.py\", \"*.sh\"", &rows(&["\"just\""]));
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::DuplicateEntry {
+                field: KEY_INTERPRETED_PATHS.to_owned(),
+                entry: "*.sh".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_duplicate_is_refused_even_when_the_entries_are_also_invalid() {
+        let text = block("\"a b\", \"a b\"", "", &rows(&["\"just\""]));
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::DuplicateEntry {
+                field: KEY_FORBIDDEN_EXECUTABLES.to_owned(),
+                entry: "a b".to_owned(),
+            }),
+            "duplicate rejection runs over the raw entries, before validation \
+             and before the sort"
+        );
+    }
+
+    // ── argv rules ──────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_argv_row_refuses() {
+        let text = block("", "", &rows(&["\"just\"", ""]));
+        assert_eq!(parse(&text), Err(PolicyRefusal::EmptyArgv { row: 1 }));
+    }
+
+    #[test]
+    fn empty_argument_refuses() {
+        let text = block("", "", &rows(&["\"just\", \"\", \"validate\""]));
+        assert_eq!(
+            parse(&text),
+            Err(PolicyRefusal::EmptyArgument { row: 0, index: 1 }),
+            "TOML strings are UTF-8 by construction, so non-emptiness is the \
+             only executable half of SPEC-030's rule"
+        );
+    }
+
+    // ── normalization ───────────────────────────────────────────────────
+
+    #[test]
+    fn set_valued_lists_sort_by_raw_utf8_bytes() {
+        // `Z` is 0x5A and `a` is 0x61, so byte order and any case-folding order
+        // disagree — a payload both orders accept would prove nothing.
+        let text = block(
+            "\"a\", \"Z\", \"B\"",
+            "\"zed/*\", \"Alpha/*\", \"_under\"",
+            &rows(&["\"just\""]),
+        );
+        let policy = parse(&text).expect("valid");
+        assert_eq!(
+            policy.forbidden_executables,
+            vec![
+                ExecutableName("B".to_owned()),
+                ExecutableName("Z".to_owned()),
+                ExecutableName("a".to_owned()),
+            ]
+        );
+        assert_eq!(
+            policy.interpreted_paths,
+            vec![
+                PathPattern("Alpha/*".to_owned()),
+                PathPattern("_under".to_owned()),
+                PathPattern("zed/*".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn verification_row_and_argument_order_are_preserved() {
+        let text = block(
+            "",
+            "",
+            &rows(&["\"z\", \"a\", \"m\"", "\"cargo\", \"test\"", "\"a\""]),
+        );
+        let policy = parse(&text).expect("valid");
+        assert_eq!(
+            policy.verification,
+            vec![
+                VerificationRow {
+                    argv: vec!["z".to_owned(), "a".to_owned(), "m".to_owned()]
+                },
+                VerificationRow {
+                    argv: vec!["cargo".to_owned(), "test".to_owned()]
+                },
+                VerificationRow {
+                    argv: vec!["a".to_owned()]
+                },
+            ],
+            "the sequence is a sequence of checks to run, not a set — sorting \
+             it would reorder the operator's verification"
+        );
+    }
+
+    // ── the canonical hash ──────────────────────────────────────────────
+
+    /// The hash of a document that must parse.
+    fn hash_of(text: &str) -> PolicyHash {
+        canonical_hash(&parse(text).expect("valid"))
+    }
+
+    #[test]
+    fn canonical_hash_is_stable_across_key_order_and_whitespace() {
+        let ordered = block("\"node\"", "\"*.sh\"", &rows(&["\"just\", \"validate\""]));
+        let jumbled = document(
+            "[interpretation]\n\n\
+             # the operator's own note, which is not part of the value\n\
+             interpreted_paths   =   [ \"*.sh\" ]\n\
+             trusted_side_forbidden_executables = [\n  \"node\",\n]\n\
+             schema=1\n\n\
+             [[interpretation.verification]]\n\
+             argv = [\n  \"just\",\n  \"validate\",\n]\n\n",
+        );
+        assert_eq!(
+            hash_of(&ordered),
+            hash_of(&jumbled),
+            "quoting, key order, comments and whitespace are formatting — the \
+             hash is over the typed value, whose entire purpose is to be stable \
+             across them"
+        );
+    }
+
+    #[test]
+    fn canonical_hash_distinguishes_split_boundaries_in_adjacent_entries() {
+        let ab_c = block("\"ab\", \"c\"", "", &rows(&["\"just\""]));
+        let a_bc = block("\"a\", \"bc\"", "", &rows(&["\"just\""]));
+        assert_ne!(
+            hash_of(&ab_c),
+            hash_of(&a_bc),
+            "without length prefixes these two concatenate to the same bytes, \
+             and they are different forbidden sets — one forbids an executable \
+             the other permits"
+        );
+
+        let one_arg = block("", "", &rows(&["\"ab\", \"c\""]));
+        let other = block("", "", &rows(&["\"a\", \"bc\""]));
+        assert_ne!(hash_of(&one_arg), hash_of(&other));
+    }
+
+    #[test]
+    fn canonical_hash_is_not_computed_over_source_text() {
+        let text = block("\"node\"", "\"*.sh\"", &rows(&["\"just\""]));
+        let reformatted = text.replace('\n', "\r\n").replace("= [", "=[");
+        assert_eq!(
+            hash_of(&text),
+            hash_of(&reformatted),
+            "a hash over source text, or over a re-serialized document, would \
+             let a formatting choice re-enter the value"
+        );
+    }
+
+    #[test]
+    fn the_hash_separates_the_fields_it_covers() {
+        // The same three strings, moved between the two lists. A concatenation
+        // without per-field counts would hash these identically.
+        let left = block("\"a\"", "\"b\"", &rows(&["\"just\""]));
+        let right = block("\"b\"", "\"a\"", &rows(&["\"just\""]));
+        assert_ne!(hash_of(&left), hash_of(&right));
+    }
+
+    #[test]
+    fn the_hash_follows_verification_order() {
+        let one = block("", "", &rows(&["\"a\"", "\"b\""]));
+        let two = block("", "", &rows(&["\"b\"", "\"a\""]));
+        assert_ne!(
+            hash_of(&one),
+            hash_of(&two),
+            "row order is semantic — it is the order the checks run in"
         );
     }
 }
