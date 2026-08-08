@@ -1,5 +1,8 @@
 {
   "enabledPlugins": {
     "doctrine@doctrine": true
+  },
+  "worktree": {
+    "bgIsolation": "none"
   }
 }
