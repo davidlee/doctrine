@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe185-ac64-7560-bf5f-960da1102bd9"
+recorded_at = "2026-08-08T13:17:41.860973803Z"
+kind = "friction"
+summary = "/phase-plan: design provenance rows are prose, so every planner re-resolves them to line ranges by hand over a 301KB design"
+detail = "SL-248 PHASE-06 planning. plan.md's 'Design-section provenance' row grants sections by name ('sec-3 entire, less the freshness rows its Verification alignment hands to the harness'). design.md is 301KB and read-scope is explicitly capped, so the planner must convert names to line ranges before reading anything — a grep/sed hunt repeated per phase, per planner, over a file too large to scan. The ranges are stable once found (sec-3 = 1112-1601, sec-4's forbidden-list section = 1861-1875, sec-6's two-verbs = 2753-2806) and were written into the phase-06 sheet's Reading list so the worker does not repeat it, but nothing carries them back to plan.md for PHASE-07's planner. Either the provenance table should carry ranges, or 'doctrine slice' should offer a section-extract verb."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

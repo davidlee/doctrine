@@ -616,7 +616,70 @@ is the strongest evidence this slice has that the battery earns its cost.
     *before* `disk_used` is measured so the trusted side's bookkeeping is not
     billed to the capsule. If the MSRV moves, a pipe is the tidier form.
 
+### From `PHASE-06` planning (sheet `phase-06.md`, pre-execution)
+
+40. **`EX-9` / `VT-5` cannot be built against `src/interpretation.rs` as it
+    stands — the second phase in a row stopped by a criterion that needs an edit
+    outside its own file ownership.** The module has **zero `impl` blocks**;
+    `forbidden_executables` and `ExecutableName`'s tuple field are both private,
+    with no accessor, no `Deref` and no exposed round-trip. So there is no way
+    for `doctrine-control` to ask a restricted policy whether a resolver
+    basename is forbidden. Re-deriving `sec-4`'s normalization locally would be
+    a second spelling of a one-module rule (`STD-001`); reading the base TOML
+    directly bypasses `restrict` and checks the *base* list, the precise
+    ordering error `EX-9` exists to prevent. Ruled below.
+
+41. **`plan.md`'s file-ownership row is wrong for the fourth consecutive
+    phase.** Items 14 and 22 record `PHASE-03`, `04`, `05`; `PHASE-06`'s real
+    reach is six files wider than the table says. This has now been wrong every
+    time it has been checked, which makes it a defect in the table rather than
+    four incidents. Recommendation for the brief: regenerate the table from the
+    phases' criteria, or drop it in favour of the per-phase sheets, which have
+    been right each time.
+
+42. **`EX-14` and `design.md:1398` disagree on the execution count, and the
+    criterion is what a worker reads.** `EX-14` says "three separate
+    `backend.execute` calls" and enumerates three `git` commands; step 12 at
+    `design.md:1398-1401` adds a fourth that reads the identity back. A worker
+    reading only the exit criteria builds three and then satisfies
+    `capsule_identity_persists_into_the_clone_config` by a *trusted-side* read of
+    `<root>/capsule/repo/config` — a different assertion, and a trusted-side
+    touch of a capsule-authored repository (`SPEC-030`). No criterion needs to
+    move (`EX-14`'s subject is the clone; step 12 is a separate step), but the
+    total is four and three is reachable honestly. Pre-empted in the sheet.
+
 ## Open
+
+**Owed to the slice owner — `PHASE-06` `F-1`.** See item 40. `EX-9`, step 6 and
+`VT-5` are blocked until this is ruled; everything else in the phase proceeds
+regardless, so the ruling gates one task and one test, not the phase.
+
+Options, cheapest first — the first two both edit `src/interpretation.rs`, which
+`plan.md` assigns exclusively to `PHASE-02`:
+
+1. **One accessor carrying the comparison**, keeping normalization inside the
+   owning module. The planner recommended the method form
+   `pub fn forbids(&self, basename: &str) -> bool`; the orchestrator notes the
+   module's own idiom is free functions over `&InterpretationPolicy`
+   (`parse`, `restrict`, `canonical_hash`), so
+   `pub fn forbids(policy: &InterpretationPolicy, basename: &str) -> bool`
+   delivers the same thing without introducing the file's first `impl` block.
+   Either spelling: no export-set movement — `interpretation` is already
+   `pub mod` at `src/lib.rs:60` and `tests/architecture_layering.rs`'s `EXPORTED`
+   list names the module, not its members — so no assertion, no
+   `RootLibraryExports` binding and no layering row changes. Verified.
+2. **Expose the data**: `forbidden_executables() -> &[ExecutableName]` plus an
+   accessor on `ExecutableName`. Wider surface, and it moves the comparison rule
+   out of the module that owns the rule, which is how option 3's drift starts.
+3. **Defer `EX-9` and `VT-5`**, shipping step 6 unenforced. Leaves `REQ-449`'s
+   forbidden list a validated field nothing reads until launch exists — the
+   outcome `EX-9`'s own text says it exists to prevent. Not recommended.
+
+Third stop of the slice, and the same shape as the last one: a criterion that
+cannot be met without an edit outside the phase's ownership, caught at plan time
+before a worker spent a session on it.
+
+### Settled
 
 **RULED 2026-08-08 — option 1. Nothing open here.** The slice owner took the
 planner's recommendation; the ruling is written into the `PHASE-05` sheet as
