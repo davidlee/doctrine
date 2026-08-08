@@ -751,6 +751,14 @@ enum MintKind {
         /// `None` for the payloads that left `body` unset — step 5 then
         /// leaves the scaffold's template prose untouched.
         body: Option<String>,
+        /// The record's `[facet]` content, ALREADY VALIDATED at admission by
+        /// `knowledge::plan_facet_edits` (SL-249 `D-B`).
+        ///
+        /// Carried rather than re-planned at step 5: a second call would be a
+        /// second check, which is exactly what `EX-3` forbids. `FacetEdit` is
+        /// `Clone` and holds a `&'static FacetFieldRow`, so carrying it costs no
+        /// lifetime. Empty for a payload that declared no facet.
+        facet: Vec<crate::knowledge::FacetEdit>,
     },
     /// The run's review pass — `review` owns the semantics (DEC-125).
     Review(crate::review::NewArgs),
@@ -833,6 +841,20 @@ impl MintPlan {
         match &self.effect {
             MintEffect::Create(MintKind::Knowledge { body, .. }) => body.as_deref(),
             MintEffect::Create(MintKind::Review(_)) | MintEffect::Adopt { .. } => None,
+        }
+    }
+
+    /// The validated facet edits the payload declared, if any (SL-249).
+    ///
+    /// Lives on [`MintKind::Knowledge`] for [`record_body`](Self::record_body)'s
+    /// reason exactly: a review pass mints no knowledge record and structurally
+    /// has no facet, and an adoption's record already has one that this run did
+    /// not declare — so both read the empty slice here rather than carry a field
+    /// they would have to ignore.
+    fn record_facet(&self) -> &[crate::knowledge::FacetEdit] {
+        match &self.effect {
+            MintEffect::Create(MintKind::Knowledge { facet, .. }) => facet,
+            MintEffect::Create(MintKind::Review(_)) | MintEffect::Adopt { .. } => &[],
         }
     }
 }
@@ -960,7 +982,7 @@ fn plan_checkpoints(
                 // property of existing structure rather than a new guard —
                 // `plan_checkpoints` runs before `execute_mint`, so a refusal
                 // leaves no hollow record and burns no id.
-                crate::knowledge::plan_facet_edits(kind, &raw_facet(create))
+                let facet = crate::knowledge::plan_facet_edits(kind, &raw_facet(create))
                     .map_err(|refused| anyhow::anyhow!("{refused}"))
                     .with_context(|| {
                         format!(
@@ -975,6 +997,7 @@ fn plan_checkpoints(
                         title,
                         slug,
                         body: create.body.clone(),
+                        facet,
                     }),
                     create.acceptance.as_ref(),
                 )
@@ -1162,6 +1185,7 @@ fn execute_mint(
                 &record,
                 intent.acceptance(),
                 plan.record_body(),
+                plan.record_facet(),
             )?;
         }
         intent = intent.reaching(IntentState::Applied);
@@ -1171,22 +1195,39 @@ fn execute_mint(
 }
 
 /// DEC-086 step 5: the record's requested status, its legal relation edges, and
-/// — when the payload supplied one (SL-249) — its `.md` prose.
+/// — when the payload supplied them (SL-249) — its `.md` prose and its `[facet]`.
 ///
-/// All three are idempotent, which is what lets a resumed step 5 simply run
+/// All of them are idempotent, which is what lets a resumed step 5 simply run
 /// again: `set_authored_status` writes only on a change, `append_edge` returns
-/// `Noop` when the edge is already there, and the prose tier is written through
-/// `entity::write_body` under `BodyMode::Replace` — a re-applied payload
-/// overwrites with the same bytes rather than accumulating, so "apply again on
-/// resume" needs no absence check of its own.
+/// `Noop` when the edge is already there, the prose tier is written through
+/// `entity::write_body` under `BodyMode::Replace`, and `apply_facet_edits` rides
+/// `facet_write`'s `edit_in_place` (read → parse → mutate → write-once-if-changed),
+/// which SETS each key rather than appending to it. A re-applied payload
+/// therefore overwrites with the same bytes rather than accumulating, so "apply
+/// again on resume" needs no absence check of its own (`EX-4`).
+///
+/// The facet arrives ALREADY VALIDATED, planned once at admission (`D-B`); there
+/// is deliberately no second `plan_facet_edits` here.
 fn apply_record_effects(
     root: &Path,
     slice: u32,
     record: &str,
     acceptance: Option<&AcceptanceAttestation>,
     body: Option<&str>,
+    facet: &[crate::knowledge::FacetEdit],
 ) -> Result<()> {
     let (kind, id) = crate::knowledge::resolve_ref(record)?;
+    if !facet.is_empty() {
+        // Skipped entirely on an empty slice, and not merely no-op'd: the writer's
+        // posture is `KeyPosture::RequirePresent` (`I6`, DEC-170), so a `concept`
+        // record — whose `[facet]` is empty by design (DEC-173) — must never reach
+        // it at all.
+        crate::knowledge::apply_facet_edits(
+            &crate::knowledge::record_toml_path(root, kind, id),
+            record,
+            facet,
+        )?;
+    }
     if let Some(text) = body {
         // Always `BodyMode::Replace` here (SL-249 PHASE-08 D3): a resumed step 5
         // re-applies the same payload and must produce the same bytes, which
@@ -2569,6 +2610,199 @@ mod tests {
         crate::knowledge::plan_facet_edits(kind, &[crate::knowledge::RawEdit { field, value }])
             .expect_err("the raw edit is one plan_facet_edits refuses")
             .to_string()
+    }
+
+    /// The minted record's two tiers on disk, given its canonical ref.
+    fn record_tiers(root: &Path, record: &str) -> (String, toml_edit::DocumentMut) {
+        let (kind, id) = crate::knowledge::resolve_ref(record).unwrap();
+        let toml_path = crate::knowledge::record_toml_path(root, kind, id);
+        let prose = std::fs::read_to_string(toml_path.with_extension("md")).unwrap();
+        let structured = std::fs::read_to_string(&toml_path)
+            .unwrap()
+            .parse()
+            .unwrap();
+        (prose, structured)
+    }
+
+    /// The record the run's single checkpoint intent reserved.
+    fn minted_record(root: &Path, slice: u32) -> String {
+        read_snapshot(root, slice).unwrap().checkpoint.intents[0]
+            .reserved_record()
+            .unwrap()
+            .to_owned()
+    }
+
+    /// The prose and facet a filled `create` disposition carries below — named
+    /// once so the payload and the assertions cannot drift apart (STD-001).
+    const FILLED_BODY: &str = "# Checkpointed decision\n\nProse and facet, in one act.\n";
+    const FILLED_CHOICE: &str = "the leaf-local wire type";
+    const FILLED_ALTERNATIVES: [&str; 2] = ["name it RawValue", "name it FacetValue"];
+
+    /// A `create` disposition over `inq-1` at revision 2 carrying prose AND a
+    /// facet using BOTH wire value shapes — `choice` is a `Text` row,
+    /// `alternatives` a `List` one.
+    fn filled_create(root: &Path, slice: u32, submission: &str) -> String {
+        format!(
+            "{{{},\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+             \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+             \"title\":\"Checkpointed decision\",\"body\":{},\"facet\":{{\
+             \"choice\":{},\"alternatives\":{}}}}}}}]}}",
+            envelope(root, slice, 2, submission),
+            serde_json::to_string(FILLED_BODY).unwrap(),
+            serde_json::to_string(FILLED_CHOICE).unwrap(),
+            serde_json::to_string(&FILLED_ALTERNATIVES).unwrap(),
+        )
+    }
+
+    /// The same facet, planned — what admission hands step 5 (`D-B`). `choice` is
+    /// a parameter so a control can perturb one value.
+    fn filled_edits(choice: &str) -> Vec<crate::knowledge::FacetEdit> {
+        crate::knowledge::plan_facet_edits(
+            crate::knowledge::RecordKind::Decision,
+            &[
+                crate::knowledge::RawEdit {
+                    field: "choice",
+                    value: crate::knowledge::RawValue::Text(choice.to_owned()),
+                },
+                crate::knowledge::RawEdit {
+                    field: "alternatives",
+                    value: crate::knowledge::RawValue::List(
+                        FILLED_ALTERNATIVES
+                            .iter()
+                            .map(|it| (*it).to_owned())
+                            .collect(),
+                    ),
+                },
+            ],
+        )
+        .unwrap()
+    }
+
+    /// `EX-4` (SL-249) — step 5's facet write is idempotent on the same terms as
+    /// its neighbours. Running step 5 a second time over the same record with the
+    /// same validated edits leaves `record-NNN.toml` BYTE-IDENTICAL, and leaves
+    /// the `List` row holding EXACTLY its declared elements — not doubled, which
+    /// is the concrete failure an appending writer would produce.
+    ///
+    /// **Why this calls step 5 again directly rather than re-submitting.** A
+    /// resumed submission does not re-enter step 5 at all, and the first
+    /// assertion below pins that rather than arguing it: the abandoned-write
+    /// window leaves the run's revision unmoved, but the mint has already run in
+    /// full, so the intent is journalled at [`IntentState::Applied`] and
+    /// `execute_mint`'s `intent.state() < IntentState::Applied` guard skips the
+    /// step. A resume-shaped fixture would therefore assert byte-equality across
+    /// a step that never ran twice — vacuous in the strongest sense. Calling
+    /// [`apply_record_effects`] again is the property `EX-4` actually claims, and
+    /// is what a crash between step 5 and the journal write would produce.
+    #[test]
+    fn step_five_is_idempotent_over_the_facet_it_writes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture_with_node(root);
+        let doc = design_doc_path(root, slice);
+
+        // The mint runs in full; the write is then abandoned in the pre-write
+        // window, so the record survives and the run does not advance.
+        let hook = || std::fs::write(&doc, b"mid-invocation hand edit\n").unwrap();
+        apply(
+            root,
+            slice,
+            &filled_create(root, slice, "sub-cp"),
+            &hook,
+            &no_fault,
+        )
+        .unwrap_err();
+        std::fs::remove_file(&doc).unwrap();
+
+        let journal = read_journal(root, slice).unwrap();
+        assert_eq!(
+            journal.intents[0].state(),
+            IntentState::Applied,
+            "step 5 already ran and was journalled, so a resumed submission SKIPS it"
+        );
+        let record = journal.intents[0].reserved_record().unwrap().to_owned();
+        let (kind, id) = crate::knowledge::resolve_ref(&record).unwrap();
+        let toml_path = crate::knowledge::record_toml_path(root, kind, id);
+        // As a `String`, not a `Vec<u8>`: TOML is UTF-8 by definition, so the
+        // comparison is byte-for-byte either way — but a failure prints the two
+        // documents rather than two 700-element byte vectors, which is what makes
+        // control `C1`'s diff legible.
+        let after_mint = std::fs::read_to_string(&toml_path).unwrap();
+
+        // Step 5, again, with the same validated edits.
+        apply_record_effects(
+            root,
+            slice,
+            &record,
+            None,
+            Some(FILLED_BODY),
+            &filled_edits(FILLED_CHOICE),
+        )
+        .unwrap();
+
+        let after_resume = std::fs::read_to_string(&toml_path).unwrap();
+        assert_eq!(
+            after_resume, after_mint,
+            "a re-applied step 5 leaves the record's structured tier byte-identical"
+        );
+        let structured: toml_edit::DocumentMut = after_resume.parse().unwrap();
+        let alternatives: Vec<&str> = structured["facet"]["alternatives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            alternatives, FILLED_ALTERNATIVES,
+            "the List row holds exactly its declared elements, not a doubled copy"
+        );
+    }
+
+    /// `VT-1` / `EX-1` (SL-249) — ONE `apply`, one `create` disposition carrying
+    /// `kind` + `title` + `body` + `facet`, and the record it mints already holds
+    /// BOTH its prose and its `[facet]`. No follow-up write.
+    ///
+    /// `decision` so both wire value shapes ride in one payload: `choice` is a
+    /// `Text` row and `alternatives` a `List` one.
+    ///
+    /// A NEW test, modelled on PHASE-01's
+    /// [`create_disposition_body_is_written_verbatim_to_the_record`] rather than
+    /// an extension of it — editing an existing test is `S2`.
+    #[test]
+    fn a_create_disposition_mints_a_record_holding_its_facet_and_its_prose() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture_with_node(root);
+
+        apply(
+            root,
+            slice,
+            &filled_create(root, slice, "sub-cp"),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let (prose, structured) = record_tiers(root, &minted_record(root, slice));
+        assert_eq!(
+            prose, FILLED_BODY,
+            "the record's .md holds exactly the payload prose"
+        );
+        assert_eq!(
+            structured["facet"]["choice"].as_str().unwrap(),
+            FILLED_CHOICE,
+            "the Text row holds the declared value"
+        );
+        let alternatives: Vec<&str> = structured["facet"]["alternatives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            alternatives, FILLED_ALTERNATIVES,
+            "the List row holds exactly the declared elements"
+        );
     }
 
     /// `VT-2` / `EX-2` / `EX-3` (SL-249) — a `create` disposition naming a facet
