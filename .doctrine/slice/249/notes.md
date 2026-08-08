@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 5e4bba035
-· `PHASE-01` `PHASE-02` completed, `PHASE-08` next
+fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 94b45e283
+· `PHASE-01` `PHASE-02` `PHASE-08` completed, `PHASE-03` next
 
 ### Produced
 
@@ -40,6 +40,16 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
 - `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
   mapping without the table deciding its own verdict.
+- `PHASE-08` (7a4e5bd07, 66539791f, 94b45e283) — the kind-blind `knowledge edit
+  <ID>`: `--title` / `--tags` / `--body` / `--body-mode`, mirroring
+  `memory::run_edit` over existing write cores. `resolve_body`,
+  `parse_body_mode` and `BODY_MODE_REQUIRES_BODY` moved `src/memory.rs` →
+  `src/input.rs` to be shared rather than copied; `write_record_body` gained a
+  `mode` param. `VT-1`/`VT-2` PASS under `slice verify-vt` — stronger than the
+  sheet's expected `Unattributable`; gate green (4417 tests). Execution record:
+  shard `notes_07-08.md`. Memories
+  `mem.pattern.doctrine.new-cli-variant-needs-guard-classification` and
+  `mem.fact.doctrine.apply-tags-set-self-heals-before-noop`.
 - `PHASE-02` (85c322373, 58efc3be9, 5e4bba035) — `Declaration::WIRE_KEYS` and
   `inert_key` in `submission.rs`, wired at `Batch::validate`;
   `Refusal::InertKey`; `IdKind::declarable`; `I9`, its predicate-agreement
@@ -164,6 +174,13 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   reason: the selector is a scope statement, and settling scope divergence is
   reconcile's to do, not a phase's. Both new entries are one-line widenings
   (`IdKind::declarable`; `declare` and `Pending` to `pub(super)`).
+- **`PHASE-08` T4 and T6 shipped without a red step.** Not a criterion failure
+  and no id owed — a process divergence the brief should see. T5's `mode`
+  param was needed for T3 to compile, and T6's guards live inside `run_edit`,
+  so both test sets passed on first run. Compensated with a positive control:
+  swapping the guard order makes the refusal test fail. The general shape —
+  a phase whose enabling task lands before its test task cannot stage a red —
+  is worth a word at reconcile, because two of ten tasks is not an accident.
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
