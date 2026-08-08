@@ -32,3 +32,26 @@ structs carrying no derive beyond `Debug` — items with genuinely no reader
 until the next phase. See also
 [[mem.pattern.lint.dead-code-blanket-masks-siblings]] and
 [[mem.pattern.lint.expect-not-allow]].
+
+## Correction (SL-248 PHASE-07, measured): `Clone` does **not** count
+
+The paragraph above is half wrong, and relying on it cost a compile cycle.
+rustc says so in its own note:
+
+    error: fields `writer` and `reader` are never read
+    = note: `ArmShape` has derived impls for the traits `Clone` and `Debug`,
+      but these are intentionally ignored during dead code analysis
+
+**`Clone` and `Debug` are both ignored. `PartialEq` (and `Eq`/`Hash`/`Ord`, and
+any hand-written impl) is what makes a field live.** The PHASE-02 observation
+still holds — that struct derived `PartialEq` as well, which alone explains it.
+
+This bites hardest where `PartialEq` is *unavailable*. A struct holding a
+function pointer cannot derive it: `unpredictable_function_pointer_comparisons`
+is denied under `-D warnings`, because fn addresses are not unique across
+codegen units. So the moment a vocabulary type carries a `fn(..) -> ..` field,
+it loses `PartialEq` — and with it the derive that was keeping every *sibling*
+field alive. Dropping the derive to fix one lint hands you a fresh crop of
+`dead_code` on fields that were fine a moment ago.
+
+Still: do not reason about it, compile.

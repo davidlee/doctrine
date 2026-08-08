@@ -42,3 +42,37 @@ starts *without* `CLOEXEC`. The assertion is cheap and it is what stops the test
 quietly going vacuous again.
 
 Sibling: [[mem.pattern.tests.guard-needs-a-discriminating-difference]].
+
+## The other half: two failure modes folded onto one verdict
+
+**SL-248 PHASE-07** hit the same trap from the opposite side, and it is worth
+naming because the fixture there is fine.
+
+A concurrent-execution arm has two ways to establish nothing: the backend
+returned without ever calling the observer back, and the subject exited before
+the observer ran. Both classify `Indeterminate`. Two mutations were tabled —
+delete the never-called-back branch, delete the subject-alive check — with each
+other's test in the must-**not**-red column.
+
+The inert version writes itself: each test builds its witness and asserts
+`matches!(arm, ArmResult::Indeterminate { .. })`. Deleting *either* branch still
+leaves the other one catching the case, or leaves a downstream `None` producing
+the same verdict — so **both tests pass under both mutations**, and the phase
+ships two names and no evidence.
+
+The fix is in the *type* and then the *assertion*:
+
+- give the two modes **different reasons** (`NoLiveness` vs `NoObservation`),
+  so the verdict carries which branch produced it;
+- assert the **reason**, not the verdict — `assert_eq!(reason(&arm),
+  Indeterminacy::NoLiveness)`, plus `assert_ne!(arm, ArmResult::Held)`;
+- and give each fixture a positive control that would classify `Held` if the
+  branch under test were removed, so the mutation has somewhere to move to.
+
+Both mutations then red exactly their own test and neither reds the other's.
+
+**The generalisation.** A discriminating *fixture* is not enough when several
+rules share one output value. If two rules can be deleted independently and the
+verdict cannot say which one fired, the verdict is under-specified — widen what
+it carries rather than settling for a coarser assertion. A shared verdict with
+no discriminating payload is a fixture problem you cannot fix in the fixture.

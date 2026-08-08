@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe236-97fe-7a70-a2bc-6824d817afe0"
+recorded_at = "2026-08-08T16:30:56.510955238Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-07: a retrieved memory's central claim was wrong and cost a compile cycle"
+detail = "mem.pattern.lint.dead-code-derives-count-as-reads was retrieved during the mandated reading phase and states 'the derived Clone and PartialEq impls read every field'. I designed the module's derive set around it — dropping PartialEq from four types (a fn-pointer field makes it a denied lint) while keeping Clone, expecting Clone to hold the fields live. It does not: rustc's own note is 'has derived impls for the traits Clone and Debug, but these are intentionally ignored during dead code analysis'. Six dead_code errors, one wasted compile cycle, and a second design pass on the expect placement. The memory's original PHASE-02 measurement was on a type deriving PartialEq too, which alone explained it — the Clone half was inferred, not measured, and shipped at trust=high. Corrected in place. The general shape: a memory that generalises past its measurement is worse than no memory, because it is retrieved and trusted at exactly the moment it is load-bearing."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

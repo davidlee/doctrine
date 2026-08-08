@@ -1,0 +1,47 @@
+memory_uid = "mem_019fe235df747032a582772c4bd595bc"
+memory_key = "mem.pattern.lint.expect-dead-code-at-item-level"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "expect(dead_code) goes at item level, not on the field"
+summary = "Under cfg(test)/cfg(not(test)) splits, a field-level expect(dead_code) is unfulfilled in the build where the whole item is dead — rustc reports at the outermost dead item and never descends."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = ["cargo clippy"]
+tags = ["rust", "clippy", "dead_code", "lint", "phasing", "footgun"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1d86507beb5f7025796e595d4f3b106c76bfcef9"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "96530ea58ac2fab9ca2e20993e8bf7ef1dd7186cae7fa19887b5f6281c2817ce"
+base_commit = "570fe4853820b718cc09039a4b757b3367f2adae"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

@@ -686,6 +686,113 @@ is the strongest evidence this slice has that the battery earns its cost.
     review did not. Consider whether phase sheets should mandate the
     discriminating *fixture* alongside the keyword. `PHASE-06` `F-8`.
 
+### From `PHASE-07` planning (sheet `phase-07.md`, pre-execution)
+
+48. **`Axis` lands complete at PHASE-07, so a PHASE-09 criterion is discharged
+    one phase early.** `EX-14` defers `Property`'s membership, and PHASE-09
+    `EX-1` says `Property` gains its first eight variants "and `Axis` its five"
+    there — which leaves `RowId { Property(Property), Axis(Axis) }` uninhabited
+    at PHASE-07 and four mandated `VT` keywords unwritable as anything but names.
+    No PHASE-07 criterion mentions `Axis`'s membership, so landing it here
+    contradicts nothing in this phase; it does mean a later reader must not read
+    PHASE-09 `EX-1`'s `Axis` clause as skipped. Same shape as `PHASE-06` `F-4`, a
+    criterion satisfied by construction rather than by an edit. `PHASE-07` `F-1`.
+49. **`plan.md`'s ownership tables miss two unavoidable edits, for the fifth
+    consecutive phase, and `EX-1`'s out-edge list is aspirational.** `main.rs` is
+    assigned to phases 01, 06 and 10, but a module file must be declared in the
+    crate root or it is not compiled, linted, layering-checked or tested — so
+    `mod conformance;` had to be appended. Separately, `EX-1` requires
+    `layering.toml` to classify `conformance` as engine with out-edges
+    `provision`, `transaction`, `backend`, `config`, `host`; at this phase the
+    unit imports only the last three, and `provision`/`transaction` arrive with
+    PHASE-08's fixture and freshness delta. The row was written with `EX-1`'s
+    five and a trailing annotation naming which two are not yet real, which
+    satisfies the criterion's text without asserting an edge that does not exist.
+    `PHASE-07` `F-2`.
+50. **`HostDescriptor` has no source at this altitude; the in-ownership route was
+    taken and the better one is still open.** `EX-15` requires the verdict to
+    carry the host, `verify`'s three parameters are fixed by `EX-2`, and
+    `HostFacts` carries no OS, kernel or architecture. Shipped (`D7`):
+    `std::env::consts::OS`/`ARCH` plus a `/proc/sys/kernel/osrelease` read with a
+    documented `"unknown"` fallback — an engine unit reaching disk directly,
+    which `provision` already does. Per the orchestrator's `F-3/N`, the whole
+    derivation sits behind **one** named function, `host_descriptor()`, so the
+    swap is a one-function replacement. Two better homes remain live at merge and
+    both are `S1` edits: `rustix::system::uname()` (needs the `system` feature on
+    `crates/doctrine-control/Cargo.toml`), or a `descriptor()` method on
+    `HostFacts` (edits `host.rs`). **Lean toward the third**: `host.rs` exists to
+    be the host-facts seam, and an engine unit reading `/proc` is a second door
+    onto facts that module was built to own. A coupling argument, not a
+    correctness one. `PHASE-07` `F-3` / `F-3/N`.
+51. **`Indeterminacy`'s four variants cannot cleanly name "the subject exited
+    before the observer ran".** `EX-11` closes the vocabulary; the design requires
+    two concurrent failure modes to classify `Indeterminate`. The first (the
+    backend returned without ever calling the observer back) maps cleanly to
+    `NoLiveness`. The second does not map cleanly to anything — the observer
+    *did* run and *did* emit its marker; what failed is the subject's liveness
+    during the window, a property of the arm rather than of either payload.
+    `NoObservation` is adopted for it (`D5`) and is a stretch, taken because the
+    two modes must carry *different* reasons or `M5`/`M6` cannot be separated,
+    and written into the doc comment where `Indeterminacy` is declared. A fifth
+    variant was not taken. Worth revisiting at PHASE-08, which builds the
+    choreography and will discover whether the two modes are actually
+    distinguishable trusted-side; if they are not, `D5`'s witness is wrong.
+    `PHASE-07` `F-4`.
+
+### From `PHASE-07` execution (`570fe4853`)
+
+52. **`D2`'s `verify_over` signature is one parameter short of testable.** `D2`
+    specifies `verify_over(backend, host, today, &tables(), &run_row)`. `M13` and
+    `M14` — the two mutations proving a `Failed` and a `Skipped` auxiliary
+    outcome cannot reach `Admission` — are unfalsifiable unless a test can
+    *inject* an auxiliary outcome, so the shipped signature also takes
+    `auxiliary: Vec<(Claim, AuxOutcome)>`. `verify`'s own three-parameter
+    signature (`EX-2`) is untouched and `admission(rows)` still takes the row list
+    alone, so "table C cannot reach admission" remains structural rather than
+    promised. Not a design defect so much as a reminder that `D2`'s split existed
+    *for* the battery and was specified without it in view. `PHASE-07` `F-5`.
+53. **A `fn`-pointer field costs a type its `PartialEq`, and `PartialEq` is what
+    keeps sibling fields alive.** `PidProbe.argv` is `fn(HostPid) -> Argv` —
+    `D3`'s pid-rendered payload — so `PidProbe`, and transitively `ArmShape`,
+    `Delta` and `Row`, cannot derive `PartialEq`
+    (`unpredictable_function_pointer_comparisons`, denied). `Clone` and `Debug`
+    do **not** substitute: rustc ignores both for dead-code analysis. The four
+    types therefore carry item-level `#[expect(dead_code)]`, all self-clearing at
+    PHASE-08 or PHASE-09. No assertion was weakened — nothing compares two
+    payloads — but the accounting is a standing cost for any later vocabulary
+    type that holds a function. `PHASE-07` `F-6`.
+54. **`doctrine slice verify-vt 248` cannot attribute this phase's `VT`s.** Run
+    before and after committing, it reports PHASE-07 (and 08, 09, 10) as
+    `≈ UNATTRIBUTABLE VT-N — keyword present but crates/doctrine-control/src/
+    conformance.rs not modified by this slice`, while PHASE-01…06 `PASS`.
+    `git diff --name-only edge...HEAD` does list the file, so it *is* in the
+    branch delta and whatever base `verify-vt` resolves is not that. Two smaller
+    oddities in the same output: phases whose tests do not exist yet also report
+    "keyword present", and `UNATTRIBUTABLE` is indistinguishable at a glance from
+    a genuine keyword miss. Not chased — the driver owns the attribution base.
+    Friction observation recorded. `PHASE-07` `F-7`.
+55. **Item 47's suggestion works: mandate the discriminating fixture, not just
+    the keyword.** This sheet did exactly that — § *Verification map* spelled out,
+    per keyword, what the fixture must carry (the *failed* token with no marker; a
+    wrong-value sibling; a killed run that still printed; a non-empty row set with
+    a counting runner; one row of each non-proven kind *plus* a `Proven` one) —
+    and named the four sole-evidence mutations in advance. Result: **15 of 15
+    mutations red their mandated test and none redded nothing**, breaking a
+    three-phase run in which the battery found inert mandated tests every time.
+    One data point, but it is the first phase where the fixture requirements were
+    written at plan time rather than discovered at battery time.
+56. **`mem.pattern.lint.dead-code-derives-count-as-reads` was wrong where it was
+    load-bearing, and cost a compile cycle.** It claimed "the derived `Clone` and
+    `PartialEq` impls read every field". rustc's own note: *"has derived impls for
+    the traits `Clone` and `Debug`, but these are intentionally ignored during
+    dead code analysis."* Only `PartialEq` counts. Its PHASE-02 measurement was on
+    a type deriving `PartialEq` too, which alone explained the observation — the
+    `Clone` half was inferred, not measured, and shipped at `trust = high`.
+    Corrected in place; friction observation recorded. Worth a line in the brief
+    because it is a corpus-quality failure mode rather than a slice one: a memory
+    that generalises past its measurement is worse than no memory, since it is
+    retrieved precisely when it is being relied on.
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
