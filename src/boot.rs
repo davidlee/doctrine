@@ -1324,7 +1324,8 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec, form: CommandForm) ->
     }
 }
 
-/// The fail-soft settings parse both hook planners share (SL-250 `EX-1`): absent
+/// The fail-soft settings parse every settings planner shares (SL-250 `EX-1` —
+/// `plan_hook`, `plan_evict`, and `plan_baseref` beside them): absent
 /// or empty yields an empty object — a first install has nothing to merge into —
 /// and malformed yields `None`, because doctrine never clobbers a file it cannot
 /// understand.
@@ -1490,7 +1491,10 @@ fn install_refresh(
             Ok(RefreshReport {
                 hooks: vec![hook],
                 claude_scope: None,
-                baseref: BaseRefOutcome::NotApplicable,
+                baseref: BaseRefWrite {
+                    outcome: BaseRefOutcome::NotApplicable,
+                    stranded: None,
+                },
                 mcp: RefreshOutcome::None,
                 append_system,
                 extension,
@@ -1542,7 +1546,7 @@ struct RefreshReport {
     /// specs. `None` on the Codex arm, which has exactly one settings file and
     /// so nothing to abandon.
     claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
-    baseref: BaseRefOutcome,
+    baseref: BaseRefWrite,
     /// The `.mcp.json` doctrine server registration outcome (CHR-013); pi
     /// carries `None` (no `.mcp.json` wiring on the import-only arm).
     mcp: RefreshOutcome,
@@ -1585,6 +1589,15 @@ struct BaseRefPlan {
     new_json: Option<String>,
 }
 
+/// `plan_baseref`'s no-clobber return: a file (or a `worktree` key) doctrine
+/// cannot understand is left exactly as it is. Mirrors [`hook_fallback`].
+fn baseref_fallback() -> BaseRefPlan {
+    BaseRefPlan {
+        outcome: BaseRefOutcome::PrintedFallback,
+        new_json: None,
+    }
+}
+
 /// PURE planner for `worktree.baseRef="head"` in settings `JSON` (SL-064 §8.3).
 /// Sets the nested `worktree.baseRef` key WITHOUT disturbing `hooks` or any other
 /// `worktree` key (mutates a `serde_json::Value` at the narrow path). Absent ⇒
@@ -1592,33 +1605,18 @@ struct BaseRefPlan {
 /// file/`worktree` type ⇒ leave untouched (no clobber). Rides BESIDE the hook
 /// merge core — it never touches `plan_hook`.
 fn plan_baseref(existing_json: Option<&str>) -> BaseRefPlan {
-    let mut value: Value = match existing_json.map(str::trim) {
-        None | Some("") => Value::Object(Map::new()),
-        Some(text) => match serde_json::from_str(text) {
-            Ok(parsed) => parsed,
-            Err(_) => {
-                return BaseRefPlan {
-                    outcome: BaseRefOutcome::PrintedFallback,
-                    new_json: None,
-                };
-            }
-        },
+    let Some(mut value) = parse_settings(existing_json) else {
+        return baseref_fallback();
     };
     let Some(obj) = value.as_object_mut() else {
-        return BaseRefPlan {
-            outcome: BaseRefOutcome::PrintedFallback,
-            new_json: None,
-        };
+        return baseref_fallback();
     };
     let worktree = obj
         .entry("worktree")
         .or_insert_with(|| Value::Object(Map::new()));
     let Some(wt) = worktree.as_object_mut() else {
         // `worktree` present but not an object ⇒ malformed; never clobber.
-        return BaseRefPlan {
-            outcome: BaseRefOutcome::PrintedFallback,
-            new_json: None,
-        };
+        return baseref_fallback();
     };
     match wt.get("baseRef") {
         Some(Value::String(s)) if s == "head" => {
@@ -1647,10 +1645,7 @@ fn plan_baseref(existing_json: Option<&str>) -> BaseRefPlan {
             outcome: BaseRefOutcome::Set,
             new_json: Some(json),
         },
-        Err(_) => BaseRefPlan {
-            outcome: BaseRefOutcome::PrintedFallback,
-            new_json: None,
-        },
+        Err(_) => baseref_fallback(),
     }
 }
 
@@ -1667,7 +1662,7 @@ fn install_baseref(
     root: &Path,
     scope: ClaudeSettingsScope,
     dry_run: bool,
-) -> anyhow::Result<BaseRefOutcome> {
+) -> anyhow::Result<BaseRefWrite> {
     let path = root.join(settings_rel(scope));
     let existing = fs::read_to_string(&path).ok();
     let plan = plan_baseref(existing.as_deref());
@@ -1678,7 +1673,60 @@ fn install_baseref(
         }
         fsutil::write_atomic(&path, json.as_bytes())?;
     }
-    Ok(plan.outcome)
+    // The sibling is READ, never swept. `plan_baseref` is reused rather than a
+    // second parser written: `Conflict` is exactly the predicate that matters —
+    // a value doctrine would not have written. A stranded `"head"` agrees with
+    // what just landed and cannot disagree with it, so it is not a signal.
+    let sibling = fs::read_to_string(root.join(settings_rel(scope.sibling()))).ok();
+    let stranded = match plan_baseref(sibling.as_deref()).outcome {
+        BaseRefOutcome::Conflict(value) => Some(value),
+        _ => None,
+    };
+    Ok(BaseRefWrite {
+        outcome: plan.outcome,
+        stranded,
+    })
+}
+
+/// One `worktree.baseRef` write: what it did to the target, plus any override
+/// left stranded in the file the scope abandoned. Mirrors [`HookWrite`]'s
+/// outcome-plus-what-happened-to-the-sibling shape, and for the same reason —
+/// bundling them makes the second fact unforgettable at the call site.
+struct BaseRefWrite {
+    outcome: BaseRefOutcome,
+    /// A NON-`head` `worktree.baseRef` in the abandoned file. Never swept:
+    /// eviction is spec-keyed over `hooks.<event>` arrays and this is a
+    /// top-level key with no spec, and extending a destructive path to non-hook
+    /// keys is the wrong trade. No-clobber survives, so the report is the whole
+    /// of the signal.
+    stranded: Option<String>,
+}
+
+/// The stranded-`baseRef` advisory (`EX-8`), worded by DIRECTION because the
+/// consequence is not symmetric. Claude's Local settings "override project and
+/// user settings" for scalars (`docs/claude/settings.md`), so a value stranded
+/// in the local file STILL GOVERNS and doctrine's fresh `"head"` is the inert
+/// one — while a value stranded in the project file is itself overridden by the
+/// local one doctrine just wrote. Saying "it still governs" in both directions
+/// would overclaim by exactly one degree.
+///
+/// What rides on it: `worktree.baseRef` governs where the Claude dispatch arm
+/// forks from (SL-064 §8), and a wrong fork base is an already-bitten failure
+/// here (`mem.signpost.doctrine.dispatch-claude-arm-wrong-base`).
+fn stranded_baseref_line(scope: ClaudeSettingsScope, value: &str) -> String {
+    let abandoned = settings_rel(scope.sibling());
+    let target = settings_rel(scope);
+    match scope {
+        ClaudeSettingsScope::Project => format!(
+            "  claude: worktree.baseRef in {abandoned} is '{value}', not 'head' — local settings \
+             override project settings, so it still governs where the claude dispatch arm forks \
+             from; remove it there or set [install] {CLAUDE_SETTINGS_SCOPE_KEY} = \"local\""
+        ),
+        ClaudeSettingsScope::Local => format!(
+            "  claude: worktree.baseRef in {abandoned} is '{value}', not 'head' — left as-is; the \
+             'head' doctrine just wrote to {target} overrides it"
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2455,7 +2503,15 @@ pub(crate) fn wire(
                 // baseRef leg (SL-064 §8): report a fresh set or a respected
                 // non-head override. AlreadyHead / PrintedFallback / NotApplicable
                 // stay silent (no-op, or the hook leg already flagged a bad file).
-                match report.baseref {
+                // EX-8: a value the scope flip left behind in the abandoned
+                // file. Never swept, so this line IS the signal — and it matters
+                // because it decides where the claude dispatch arm forks from.
+                if let Some(value) = &report.baseref.stranded
+                    && let Some((scope, _)) = &report.claude_scope
+                {
+                    writeln!(stdout, "{}", stranded_baseref_line(*scope, value))?;
+                }
+                match report.baseref.outcome {
                     BaseRefOutcome::Set => {
                         writeln!(
                             stdout,
@@ -4665,7 +4721,7 @@ mod tests {
         // dry-run plans a baseRef/mcp write but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
         assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
-        assert!(matches!(out.baseref, BaseRefOutcome::Set));
+        assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         assert!(!settings.exists(), "dry-run must not write settings");
         assert!(!mcp.exists(), "dry-run must not write .mcp.json");
@@ -4673,7 +4729,7 @@ mod tests {
         // real run creates the settings file with the baseRef key but NO boot hook.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
-        assert!(matches!(out.baseref, BaseRefOutcome::Set));
+        assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         let json = fs::read_to_string(&settings).unwrap();
         assert!(
@@ -4704,7 +4760,7 @@ mod tests {
             out.hooks.as_slice(),
             [RefreshOutcome::Wired(_) | RefreshOutcome::None]
         ));
-        assert!(matches!(out.baseref, BaseRefOutcome::NotApplicable));
+        assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
     }
 
@@ -5037,7 +5093,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let root = dir.path();
             let out = install_baseref(root, scope, false).unwrap();
-            assert!(matches!(out, BaseRefOutcome::Set), "{scope:?}");
+            assert!(matches!(out.outcome, BaseRefOutcome::Set), "{scope:?}");
             let parsed: Value =
                 serde_json::from_str(&fs::read_to_string(root.join(rel)).unwrap()).unwrap();
             assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
@@ -5459,6 +5515,84 @@ mod tests {
             rendered.contains("nothing to replace it with"),
             "{rendered}"
         );
+    }
+
+    // VT-4, EX-8: the scope flip must not silence the operator's override.
+    // `worktree.baseRef` is never swept — eviction is spec-keyed over
+    // `hooks.<event>` arrays and this is a top-level key with no spec — so
+    // no-clobber survives and the REPORT is the whole of the signal. It matters
+    // because Claude's Local settings override Project for scalars: the stranded
+    // value still governs where the dispatch arm forks from, and doctrine's
+    // fresh "head" is the inert one.
+    #[test]
+    fn a_stranded_baseref_override_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_scope(root, "project");
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(
+            root.join(SETTINGS_LOCAL_REL),
+            r#"{"worktree":{"baseRef":"main"}}"#,
+        )
+        .unwrap();
+
+        let write = install_baseref(root, ClaudeSettingsScope::Project, false).unwrap();
+        assert!(matches!(write.outcome, BaseRefOutcome::Set), "the target");
+        assert_eq!(write.stranded.as_deref(), Some("main"));
+
+        let parsed: Value =
+            serde_json::from_str(&fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap())
+                .unwrap();
+        assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
+        assert_eq!(
+            fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap(),
+            r#"{"worktree":{"baseRef":"main"}}"#,
+            "never swept — a deliberate override is not doctrine's to delete"
+        );
+
+        let line = stranded_baseref_line(ClaudeSettingsScope::Project, "main");
+        assert!(line.contains(SETTINGS_LOCAL_REL), "the file: {line}");
+        assert!(line.contains("main"), "the value: {line}");
+        assert!(
+            line.contains(CLAUDE_SETTINGS_SCOPE_KEY),
+            "the remedy: {line}"
+        );
+        assert!(
+            line.contains("still governs"),
+            "the consequence, not just the fact: {line}"
+        );
+    }
+
+    // EX-8, the other direction: precedence is NOT symmetric. A value stranded
+    // in the PROJECT file is overridden by the local one doctrine just wrote, so
+    // claiming it "still governs" there would overclaim by exactly one degree —
+    // the failure mode both RV-348 rounds kept finding.
+    #[test]
+    fn the_stranded_advisory_is_worded_by_direction() {
+        let local_scope = stranded_baseref_line(ClaudeSettingsScope::Local, "main");
+        assert!(local_scope.contains(SETTINGS_PROJECT_REL), "{local_scope}");
+        assert!(
+            !local_scope.contains("still governs"),
+            "an overridden value does not govern: {local_scope}"
+        );
+        assert!(local_scope.contains("overrides it"), "{local_scope}");
+    }
+
+    // EX-8: a sibling that agrees with doctrine is not a signal. Only a
+    // non-`head` value is reported — `Conflict` is exactly that predicate, so
+    // the inspection rides `plan_baseref` rather than a second parser.
+    #[test]
+    fn a_sibling_that_agrees_is_not_reported() {
+        for sibling in [None, Some(r#"{"worktree":{"baseRef":"head"}}"#), Some("{}")] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            fs::create_dir_all(root.join(".claude")).unwrap();
+            if let Some(body) = sibling {
+                fs::write(root.join(SETTINGS_LOCAL_REL), body).unwrap();
+            }
+            let write = install_baseref(root, ClaudeSettingsScope::Project, false).unwrap();
+            assert_eq!(write.stranded, None, "{sibling:?}");
+        }
     }
 
     /// Entries under an arbitrary `hooks.<event>` key (`None` if absent).
