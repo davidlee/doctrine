@@ -713,3 +713,80 @@ wrong capsule.
 **`ArmShape`'s staged `dead_code` suppression is gone** — its own reason said it
 self-clears when the harness reads a payload, and it did. `R6`'s count is now
 three, all in `conformance.rs`: `Delta`, `Row`, `RowId`, all owed to `T7`.
+
+## T7 — delta application and the real `run_row` (EX-10)
+
+**The fixture is built lazily, and the laziness is invariant 1's ordering, not
+an optimisation.** `verify_over` reports availability and the missing shell
+*before* any row runs. A fixture built eagerly in `verify` would put a
+git-and-disk build ahead of both, so a host with no `bwrap` would be told about
+its disk. A `OnceCell` in `verify` builds it when the first row asks; a host
+that cannot build one gets every row `Indeterminate` naming the fault, which is
+`EX-11`'s rule for a mechanism that failed rather than a property that did.
+`verify_over`'s signature is untouched, so the algebra tests still run against
+hand-built rows and a counting runner.
+
+**`run_row` gained the fixture and the host as parameters.** `D6` already
+prescribed `auxiliary_claims(fixture, backend)`, so the fixture as a parameter
+is the sheet's own shape; the alternative — a fixture per row — would rebuild
+`sec-3`'s export for every one of them and contradicts the sheet's own cost
+note.
+
+**Trait upcasting is not available at this MSRV.** `provision` takes `&dyn
+CapsuleBackend`; `verify` holds `&dyn ConformanceBackend`. Coercing one to the
+other is *trait upcasting*, stable from Rust 1.86, and the workspace floor is
+1.85. `clippy::incompatible_msrv` catches std **APIs** below the floor, not
+language features — so the upcast would compile on the developer's 1.98
+toolchain and fail only on the oldest toolchain the crate claims. Hence
+`ConformanceBackend::as_capsule_backend`, three lines per impl and two impls
+exist. This generalises: an MSRV floor is only enforced for library calls, and
+language-feature regressions are silent.
+
+**Both arms run unconditionally, probe first.** `row_verdict` needs both
+readings, and short-circuiting on a failed probe would make `Violated` cheaper
+to reach than `Proven` — the wrong asymmetry for a suite whose green path must
+be the expensive one.
+
+**The probe arm never rebuilds.** Its capsule closure returns
+`transaction.placement` and nothing else touches it (invariant 4). The control
+arm's closure is the only one that calls `placed_under`.
+
+**`SharedRoot` keeps the root, not the transaction.** A `RefCell<Option<
+TransactionRoot>>` spans the control arm's two capsules; the second placement is
+rebuilt on the first's root. Both transactions are provisioned normally — a
+second provision *into* the first's root is what `sec-3` step 9 refuses, and a
+control the system refuses to build proves nothing. Nothing in the crate removes
+a transaction root, so the transactions themselves are dropped and the fixture's
+own `Drop` reclaims the whole capsule root (invariant 8).
+
+**Every rebuild goes back through `CapsulePlacement::try_new`, and that is
+evidence.** The widened control passes the same validating constructor the
+probe's placement passed, so a row that proves a property cannot be dismissed as
+having proved that its control was malformed. A refusal is reported as the
+mechanism failing.
+
+**`accepted_base` cannot be read back off a placement** — `try_new` checks it
+against the source export and discards it — so `parts_of` takes it from the
+fixture. Every transaction in a run contracts the same base, so this is exact
+rather than approximate, but a future fixture with two bases would break it
+silently. Written here because the type gives no warning.
+
+**Transaction ids are pid plus a monotonic counter, no clock.** Two capsules in
+one arm are two transactions and step 9 creates each root exclusively, so a
+repeated id refuses the second capsule of every two-capsule row — and it would
+read as a mechanism failure on a perfectly good backend.
+`every_transaction_is_allocated_its_own_id` is the guard.
+
+**What `T7` did *not* test, and where it is owed.** What each delta does to a
+placement needs two real provisioned transactions to discriminate, and the sheet
+already mandates exactly those two tests at `T10`:
+`a_probe_arm_placement_is_byte_identical_to_what_provision_returned` and
+`the_shared_root_delta_repoints_only_the_second_placement`. `T7` tested the
+routing (`only_the_two_backend_side_deltas_reach_the_profile`), the identity
+allocation, and the bound sourcing. Recorded so `T7`'s tick is not read as
+"`placed_under` has been exercised".
+
+**Two more staged suppressions discharged** — `Delta` and `Row`, both of whose
+reasons said they self-clear when the harness applies a delta and reads a row.
+`R6`'s count is now **one**: `RowId`, which needs PHASE-09's `Property` variants
+to inhabit it.

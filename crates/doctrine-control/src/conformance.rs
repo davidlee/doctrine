@@ -48,7 +48,7 @@
     )
 )]
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::fs::File;
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -65,12 +65,15 @@ use rustix::fs::FsWord;
 
 use crate::backend::bubblewrap::{BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed};
 use crate::backend::{
-    AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnvVar,
-    CapsulePlacement, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT, ForbiddenScopes,
-    MountedPath, Observation, Termination,
+    AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
+    CapsulePlacement, CapsuleStdio, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT,
+    ForbiddenScopes, MountedPath, NetworkPosture, Observation, PlacementParts, Termination,
+    TransactionRoot,
 };
-use crate::config::Argv;
+use crate::config::{Argv, ByteCount};
 use crate::host::HostFacts;
+use crate::provision::{ProvisionRequest, provision};
+use crate::transaction::{CapsuleTransaction, PhaseIdentity, TransactionId};
 
 // ---------------------------------------------------------------------------
 // Payload constants (`STD-001`, `EX-16`)
@@ -240,6 +243,16 @@ pub(crate) struct HostPid(pub(crate) i32);
 /// [`RowVerdict::Unproven`] — not admitted. There is no lazy implementation
 /// that yields a green verdict.
 pub(crate) trait ConformanceBackend: CapsuleBackend {
+    /// The supertrait view, spelled by hand.
+    ///
+    /// `provision` takes `&dyn CapsuleBackend`, and coercing `&dyn
+    /// ConformanceBackend` to it is *trait upcasting* — stable from Rust 1.86,
+    /// where this workspace's MSRV is 1.85. `clippy::incompatible_msrv` catches
+    /// std **APIs** below the floor, not language features, so an upcast here
+    /// would compile on the developer's toolchain and fail only on the oldest
+    /// one this crate claims to support. Three lines per impl buys that back.
+    fn as_capsule_backend(&self) -> &dyn CapsuleBackend;
+
     /// Run as `execute` does, with exactly one property removed from the
     /// profile.
     fn execute_weakened(
@@ -1242,6 +1255,10 @@ const fn weakening_granting(grant: AuthorityGrant) -> Weakening {
 /// *the same code the production path runs* — which is what `D2` buys: there is
 /// no second implementation of the confinement profile to drift from this one.
 impl ConformanceBackend for BubblewrapBackend<'_> {
+    fn as_capsule_backend(&self) -> &dyn CapsuleBackend {
+        self
+    }
+
     fn execute_weakened(
         &self,
         placement: &CapsulePlacement,
@@ -1530,13 +1547,6 @@ fn stat_of(path: &Path) -> Option<StatFacts> {
 /// Exactly one value, so *differs by one thing* is a type rather than a promise
 /// (invariant 3).
 #[derive(Debug, Clone)]
-#[expect(
-    dead_code,
-    reason = "SL-248: a delta's payload is applied by PHASE-08's harness — the removal reaches \
-              `execute_weakened`, the widening is called with the fixture. At PHASE-07 the \
-              variants are constructed and matched on but their payloads are not applied. \
-              Self-clears when the harness applies one."
-)]
 pub(crate) enum Delta {
     /// The second capsule's placement is rebuilt on the *first* capsule's
     /// `TransactionRoot`. The freshness control.
@@ -1572,15 +1582,6 @@ pub(crate) enum Delta {
 
 /// One row of either admission table.
 #[derive(Debug, Clone)]
-#[expect(
-    dead_code,
-    reason = "SL-248: `run_row` reads `shape` and `delta` at PHASE-08; at PHASE-07 rows are \
-              built and counted but never executed. Written at item level, not on the two \
-              fields: under cfg(not(test)) the whole struct is dead, rustc reports that at \
-              the struct and never descends to the fields, so field-level expectations go \
-              unfulfilled in one of the two compilation units and `unfulfilled_lint_\
-              expectations` is denied. Self-clears with the harness."
-)]
 pub(crate) struct Row {
     pub(crate) id: RowId,
     pub(crate) shape: ArmShape,
@@ -2125,15 +2126,202 @@ fn auxiliary_claims() -> Vec<(Claim, AuxOutcome)> {
     Vec::new()
 }
 
-/// Run one row. PHASE-08's named seam; unreachable at this phase because
-/// [`tables`] is empty.
-fn run_row(_backend: &dyn ConformanceBackend, _row: &Row) -> RowVerdict {
-    RowVerdict::Indeterminate {
-        arm: Which::Probe,
-        detail: Indeterminacy::BackendError(
-            "the executing harness lands in SL-248 PHASE-08".to_owned(),
-        ),
+/// The slice and phase every harness transaction records as its purpose.
+///
+/// A transaction's `PhaseIdentity` is "a durable reference to the phase this
+/// serves, and nothing more", and the phase these serve is this one. Spelling a
+/// real slice id here rather than a placeholder keeps a transaction found on
+/// disk after a crash attributable.
+const HARNESS_SLICE: &str = "SL-248";
+const HARNESS_PHASE: u32 = 8;
+const TRANSACTION_ID_PREFIX: &str = "conformance";
+
+/// The next transaction id within this process.
+///
+/// Pid plus a counter and no clock, for the reason [`ROOT_NONCE`] gives: two
+/// transactions provisioned in the same millisecond would collide on a clock,
+/// and `sec-3` step 9's exclusive create is what establishes ownership anyway.
+static TRANSACTION_NONCE: AtomicU32 = AtomicU32::new(0);
+
+fn next_transaction_id() -> Result<TransactionId, String> {
+    TransactionId::try_new(format!(
+        "{TRANSACTION_ID_PREFIX}-{}-{}",
+        std::process::id(),
+        TRANSACTION_NONCE.fetch_add(1, Ordering::Relaxed)
+    ))
+    .map_err(|refusal| format!("{refusal:?}"))
+}
+
+/// One transaction, provisioned into the fixture's own capsule root.
+///
+/// **The fixture's project root, never the operator's** (invariant 7): the
+/// request names `fixture.project_root()`, which is the synthetic repository
+/// `T2` built, so `provision` reads the synthesized `[capsule]` table and
+/// nothing on this machine outside the fixture root is named.
+fn provision_capsule(
+    fixture: &Fixture,
+    host: &dyn HostFacts,
+    backend: &dyn CapsuleBackend,
+) -> Result<CapsuleTransaction, String> {
+    let request = ProvisionRequest {
+        repository_root: fixture.project_root().to_path_buf(),
+        base: fixture.base().clone(),
+        phase: PhaseIdentity {
+            slice: HARNESS_SLICE.to_owned(),
+            phase: HARNESS_PHASE,
+        },
+        id: next_transaction_id()?,
+        refinement: None,
+        network: NetworkPosture::Denied,
+    };
+    provision(&request, host, backend).map_err(|refusal| format!("{refusal:?}"))
+}
+
+/// A placement decomposed back into the parts it was built from.
+///
+/// `accepted_base` is not readable off a [`CapsulePlacement`] — `try_new`
+/// checks it against the source export and discards it — so it comes from the
+/// fixture, which is the same base every transaction here contracts.
+fn parts_of(placement: &CapsulePlacement, base: &AcceptedBase) -> PlacementParts {
+    PlacementParts {
+        root: placement.root().clone(),
+        source: placement.source().clone(),
+        writable: placement.writable().to_vec(),
+        readable: placement.readable().to_vec(),
+        working_directory: placement.working_directory().clone(),
+        network: placement.network(),
+        accepted_base: base.clone(),
     }
+}
+
+/// The control arm's placement: the probe's, differing by exactly one delta.
+///
+/// **Every rebuild goes back through [`CapsulePlacement::try_new`]**, and that
+/// is evidence rather than ceremony: the widened control passes the same
+/// validating constructor the probe's placement passed, so a row that proves a
+/// property cannot be dismissed as having proved that the control was
+/// malformed. A refusal is reported as the mechanism failing (`EX-11`).
+///
+/// `first_root` is `Some` only for the **second** capsule of a two-capsule arm.
+/// [`Delta::SharedRoot`] re-points that one placement onto the first
+/// transaction's root; it never provisions a second transaction into the
+/// first's root, which `sec-3` step 9 refuses outright.
+fn placed_under(
+    delta: &Delta,
+    fixture: &Fixture,
+    placement: CapsulePlacement,
+    first_root: Option<&TransactionRoot>,
+) -> Result<CapsulePlacement, String> {
+    let mut parts = parts_of(&placement, fixture.base());
+    match *delta {
+        Delta::SharedRoot => match first_root {
+            // The first capsule of a `SharedRoot` arm is the one whose root is
+            // shared, so it is itself unchanged.
+            None => return Ok(placement),
+            Some(first) => parts.root = first.clone(),
+        },
+        Delta::Widened(entries) => parts.readable.extend(entries(fixture)),
+        Delta::NetworkPermitted => parts.network = NetworkPosture::Permitted,
+        // Placement-identical controls: `T4`'s weakening does the work, and the
+        // probe's placement must reach the backend untouched (invariant 4).
+        Delta::Removed(_) | Delta::Granted(_) => return Ok(placement),
+    }
+    CapsulePlacement::try_new(parts, fixture.scopes()).map_err(|refusal| format!("{refusal:?}"))
+}
+
+/// The backend-side control a delta implies. Only two of the five are
+/// backend-side; the other three are placement rebuilds.
+const fn under_for(delta: &Delta) -> Under {
+    match *delta {
+        Delta::Removed(removal) => Under::Removing(removal),
+        Delta::Granted(grant) => Under::Granting(grant),
+        Delta::SharedRoot | Delta::Widened(_) | Delta::NetworkPermitted => Under::Confining,
+    }
+}
+
+/// The bounds and stdio every harness payload runs under.
+///
+/// The two bounds are the fixture's own declared `[capsule]` values, so a
+/// payload that hangs is killed by the same wall bound `provision` would have
+/// applied — the suite has no separate timeout policy to drift from it.
+fn harness_execution(argv: &Argv) -> Execution {
+    Execution::new(
+        argv.clone(),
+        CapsuleEnv::complete(),
+        Duration::from_secs(FIXTURE_TIMEOUT_SECONDS),
+        ByteCount::from_bytes(FIXTURE_FILE_SIZE_CAP_MIB * BYTES_PER_MIB),
+        CapsuleStdio::EmptyInputCapturedOutput,
+    )
+}
+
+const BYTES_PER_MIB: u64 = 1024 * 1024;
+
+/// Run one row: the probe arm, then the control arm, then the algebra.
+///
+/// **The probe arm's placement is exactly what `provision` returned**
+/// (invariant 4) — no rebuild, no clone-and-edit, no delta. That is what makes
+/// the row a statement about the shipping configuration rather than about a
+/// configuration the suite assembled to be provable.
+///
+/// Both arms are run unconditionally, in that order. [`row_verdict`] needs both
+/// readings, and short-circuiting on a failed probe would make
+/// [`RowVerdict::Violated`] cheaper to reach than [`RowVerdict::Proven`] — the
+/// wrong asymmetry for a suite whose green path must be the expensive one.
+fn run_row(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+    row: &Row,
+) -> RowVerdict {
+    let live = |pid: HostPid| capsule_still_running(pid);
+
+    let untouched = || {
+        provision_capsule(fixture, host, backend.as_capsule_backend())
+            .map(|transaction| transaction.placement)
+    };
+    let probe = run_arm(
+        &Arm {
+            backend,
+            capsule: &untouched,
+            execution: &harness_execution,
+            live: &live,
+            under: Under::Confining,
+        },
+        &row.shape,
+    );
+
+    // Held across the control arm's capsules so `SharedRoot`'s second placement
+    // can be re-pointed onto the first's root. It is the *root* that is kept and
+    // not the transaction: nothing in this crate removes a transaction root, and
+    // the fixture's own `Drop` reclaims the whole capsule root at the end of the
+    // run (invariant 8).
+    let first_root: RefCell<Option<TransactionRoot>> = RefCell::new(None);
+    let deltaed = || {
+        let transaction = provision_capsule(fixture, host, backend.as_capsule_backend())?;
+        let placement = placed_under(
+            &row.delta,
+            fixture,
+            transaction.placement,
+            first_root.borrow().as_ref(),
+        )?;
+        let mut first = first_root.borrow_mut();
+        if first.is_none() {
+            *first = Some(placement.root().clone());
+        }
+        Ok(placement)
+    };
+    let control = run_arm(
+        &Arm {
+            backend,
+            capsule: &deltaed,
+            execution: &harness_execution,
+            live: &live,
+            under: under_for(&row.delta),
+        },
+        &row.shape,
+    );
+
+    row_verdict(probe, control)
 }
 
 /// The outcome, **computed from the row list alone**.
@@ -2195,14 +2383,25 @@ pub(crate) fn verify(
     host: &dyn HostFacts,
     today: String,
 ) -> AdmissionVerdict {
-    verify_over(
-        backend,
-        host,
-        today,
-        &tables(),
-        auxiliary_claims(),
-        &run_row,
-    )
+    // Built lazily, and that laziness is invariant 1's ordering rather than an
+    // optimisation: `verify_over` reports availability and the shell **before**
+    // any row runs, and a fixture built here would put a git-and-disk build
+    // ahead of both — so a host with no `bwrap` would be told about its disk.
+    // The first row to need it builds it; a host that cannot build one gets
+    // every row `Indeterminate` naming the fault, which is `EX-11`'s rule for a
+    // mechanism that failed rather than a property that did.
+    let fixture: OnceCell<Result<Fixture, FixtureFault>> = OnceCell::new();
+    let run = |mechanism: &dyn ConformanceBackend, row: &Row| match fixture
+        .get_or_init(|| Fixture::new(host))
+    {
+        Ok(fixture) => run_row(mechanism, host, fixture, row),
+        Err(fault) => RowVerdict::Indeterminate {
+            arm: Which::Probe,
+            detail: Indeterminacy::BackendError(format!("{fault:?}")),
+        },
+    };
+
+    verify_over(backend, host, today, &tables(), auxiliary_claims(), &run)
 }
 
 /// [`verify`] over an injected row set and row runner.
@@ -2275,7 +2474,7 @@ fn verify_over(
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs::File;
     use std::io::Write as _;
     use std::path::{Path, PathBuf};
@@ -2293,7 +2492,11 @@ mod tests {
         mount_points, on_real_disk, prepare_root, row_ids_in_more_than_one_table, row_verdict,
         second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
     };
-    use super::{Arm, Under, capsule_still_running, run_arm, still_running};
+    use super::{
+        Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
+        capsule_still_running, harness_execution, next_transaction_id, run_arm, still_running,
+        under_for,
+    };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use super::{
         ProcessFacts, STAT_LEAF, SessionId, StatFacts, capsule_session_leader, depth_from,
@@ -2524,6 +2727,10 @@ mod tests {
     }
 
     impl ConformanceBackend for Stub {
+        fn as_capsule_backend(&self) -> &dyn CapsuleBackend {
+            self
+        }
+
         fn execute_weakened(
             &self,
             placement: &CapsulePlacement,
@@ -4281,6 +4488,94 @@ mod tests {
             Indeterminacy::BackendError("Capacity".to_owned())
         );
         assert_eq!(backend.executions(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Delta routing and transaction identity (`T7`, `EX-10`)
+    // -----------------------------------------------------------------------
+    //
+    // What each delta *does to a placement* is `T10`'s two mandated `VT-2`
+    // tests, which need two real provisioned transactions to discriminate:
+    // `a_probe_arm_placement_is_byte_identical_to_what_provision_returned` and
+    // `the_shared_root_delta_repoints_only_the_second_placement`. What is
+    // testable without one is the routing — which deltas are placement-side and
+    // which are backend-side — and the identity every transaction is allocated.
+
+    /// Three deltas rebuild a placement and two reach the backend, and nothing
+    /// may do both: a delta that both widened the mount set and weakened the
+    /// profile would make a row's two arms differ by two things, which is the
+    /// one thing invariant 3 forbids.
+    #[test]
+    fn only_the_two_backend_side_deltas_reach_the_profile() {
+        let removal = PropertyRemoval::EnvCleared;
+        let grant = AuthorityGrant::AllCapabilities;
+
+        assert_eq!(
+            under_for(&Delta::Removed(removal)),
+            Under::Removing(removal)
+        );
+        assert_eq!(under_for(&Delta::Granted(grant)), Under::Granting(grant));
+
+        for placement_side in [
+            Delta::SharedRoot,
+            Delta::Widened(|fixture| {
+                vec![MountedPath::new(
+                    fixture.decoy_credential().to_path_buf(),
+                    inner("/capsule/decoy"),
+                )]
+            }),
+            Delta::NetworkPermitted,
+        ] {
+            assert_eq!(
+                under_for(&placement_side),
+                Under::Confining,
+                "{placement_side:?} is a placement rebuild, so its arm runs confined"
+            );
+        }
+    }
+
+    /// Two capsules in one arm are two transactions, and `sec-3` step 9 creates
+    /// each root **exclusively** — so a repeated id would refuse the second
+    /// capsule of every two-capsule row, which reads as a mechanism failure on a
+    /// perfectly good backend.
+    #[test]
+    fn every_transaction_is_allocated_its_own_id() {
+        let minted: Vec<String> = (0..8)
+            .map(|_| {
+                next_transaction_id()
+                    .expect("the harness mints a lawful id")
+                    .as_str()
+                    .to_owned()
+            })
+            .collect();
+
+        let distinct: BTreeSet<&String> = minted.iter().collect();
+        assert_eq!(distinct.len(), minted.len(), "{minted:?}");
+    }
+
+    /// The suite has no timeout policy of its own. Both bounds are read off the
+    /// same two constants the synthesized `[capsule]` table declares, so a
+    /// payload that hangs is killed by the bound `provision` would have applied
+    /// — a second, drifting number here is how a harness ends up outliving the
+    /// capsules it is supposed to bound.
+    #[test]
+    fn a_payload_runs_under_the_bounds_the_fixture_declares() {
+        let execution = harness_execution(&argv(&["true"]));
+
+        assert_eq!(
+            execution.timeout(),
+            Duration::from_secs(FIXTURE_TIMEOUT_SECONDS)
+        );
+        assert_eq!(
+            execution.file_size_cap(),
+            ByteCount::from_bytes(FIXTURE_FILE_SIZE_CAP_MIB * BYTES_PER_MIB)
+        );
+        assert!(
+            capsule_config_document(Path::new("/capsule"), &[PathBuf::from("/bin")]).contains(
+                &format!("execution-timeout-seconds = {FIXTURE_TIMEOUT_SECONDS}")
+            ),
+            "the declared table and the harness read the same constant"
+        );
     }
 
     // -----------------------------------------------------------------------
