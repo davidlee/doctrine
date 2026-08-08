@@ -538,3 +538,75 @@ announcement on both install paths.
 `review.selectors` discharged with it: `src/corpus.rs` promoted
 `scope-relevant` → `design-target`, `src/dtoml.rs` added as a design target for
 the module-doc mirror.
+
+## PHASE-04 harvest — activation flipped, and the verb that was never reaching it
+
+### The install verb discarded `--agent` on the way to the boot leg
+
+`VT-3` ("a real install wires eleven entries across five events") was
+**unsatisfiable as written**, and finding out why exposed a defect older than
+this slice. `run_forward_steps` and `print_forward_summary` both resolved the
+boot leg with `crate::boot::resolve_harnesses(&[], root)` — an *empty* explicit
+list — so `resolve_harnesses` fell through to filesystem auto-detection and the
+`--agent claude` the operator had just typed was discarded. In a fresh project
+`.claude/` does not exist at that moment (the agent-def leg creates it later in
+the same run), so the leg printed
+
+```
+  boot         (no harness directories detected — skipped)
+```
+
+and returned. `doctrine install --agent claude` wired no `@`-import, no hooks and
+no `.mcp.json`, and said so only in a line that reads like routine detection
+output. **This is the slice's own thesis one layer up**: activation failing
+silently, in the verb a new user actually runs.
+
+It had also been **falsifying the test suite**. The three
+`tests/e2e_claude_install.rs` assertions that "no hook is settings-wired (ships
+via plugin)" had passed since SL-152 PHASE-06 not because the plugin owned those
+hooks but because the settings file was never written at all — `event_entries`
+reads an absent file as empty. An absence assertion over a file the run never
+writes cannot distinguish absence from "the code path never executed". Captured
+durably as `mem.pattern.testing.absence-assertion-over-an-unwritten-file`.
+
+Fixed in-phase on the user's ruling (2026-08-08): `install_harnesses` +
+`boot_harness_names` in `src/install.rs`. An explicit `--agent` is a **directive**
+— honoured with no harness directory on disk, and honoured when it implies none
+(`universal`); `pi` maps onto the codex arm; no flags still means detection. The
+same derivation feeds the forward summary, so the summary cannot claim a leg the
+run will skip.
+
+**For reconciliation.** `src/install.rs` was already a `design-target` selector
+(conformance puts the change in the conformant cell), but the design's *Code
+impact* row for it describes only `reconcile_link`, the restored skills channel
+and the plugin-step removal. This is an **addition** to that row, not an instance
+of it — `QUE-209` territory when the REV is scoped, and arguably IMP-407's
+diagnostic leg has a sibling here: the install verb should be able to say why it
+wired nothing.
+
+### `SUBAGENT_MATCHERS` — the improvement the layering gate refused
+
+Aliasing the matcher set to `crate::worktree::PRIVILEGED_AGENT_TYPES` (the leaf
+const documented as the single source for the nomination-eligible set) is
+semantically exact and single-sources the literal. It also grew the ADR-001
+command-tier tangle 76 → 77 and failed `architecture_layering_gate`.
+
+The repo already had the right answer to this exact hazard and it is not an
+alias: SL-056 pinned the `SubagentStart` matcher to `DISPATCH_WORKER_AGENT_TYPE`
+with a **drift test**. Reverted to the design's literal plus
+`subagent_matchers_track_the_privileged_agent_types`, which fails the moment the
+two sets diverge — the actual hazard, since a privileged type added to nomination
+without its hook matcher never fires the hook — at no architectural cost. The
+design's constants block was right; the proposed improvement was not.
+
+### Confirmed in passing
+
+- The `EX-5` golden had an unenumerated sibling: `wire_adds_import_and_hook_then_is_idempotent`
+  carries it twice (first run and idempotent re-run) and inverted with it. No
+  other unenumerated golden surfaced — the only two reds after the registry
+  landed were the two predicted.
+- Two `PreToolUse` specs share the `Bash` matcher token and coexist, because
+  ownership is proven by command alone; each treats the other's entries as
+  foreign and appends at tail. Asserted by the re-install leg of
+  `install_wires_eleven_hook_entries_across_five_events` rather than reasoned
+  about.
