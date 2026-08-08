@@ -1,0 +1,36 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdff5-33e5-7953-ac69-d4c4d37020ba"
+recorded_at = "2026-08-08T06:00:16.613435768Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-01: DEC-181's ruled remedy denied by a lint the ruling never measured"
+detail = """
+The phase sheet's F-1 measured four arrangements for exporting `pub(crate)` items
+from a package that has both a bin and a lib target, and the user ruled on one:
+a `pub use` shim at the bin crate root. Implemented as ruled, it fails
+immediately — `clippy::pub_use` is `deny` in this workspace (Cargo.toml:253) and
+the repo had no prior `pub use` anywhere, so the lint was untested. The obvious
+escape, a per-item `#[expect(clippy::pub_use)]`, then fails
+`clippy::useless_attribute`, which permits lint attributes on `use` items only
+for a hardcoded allowlist that `pub_use` is not on.
+
+Cost: the ruling consumed a `/consult` round at phase-plan time and four probe
+builds, and still shipped an unbuildable answer. The measurement was performed
+on a scratch package that inherited the *rustc* lint config but evidently not
+the *clippy* restriction list — the same defect F-3 already recorded one round
+earlier, recurring in the remediation of the thing F-3 was about.
+
+The working arrangement was never on the table: declare the three modules
+`pub mod` at the bin crate root. Zero suppressions, no `pub use`, no attribute.
+A four-row table that omits the cheapest option reads as exhaustive and is not."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

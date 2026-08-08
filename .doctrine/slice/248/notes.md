@@ -152,10 +152,68 @@ standing instruction that a criterion which does not compile as written is a
 produced one such criterion (`PHASE-01` `EX-4`, `DEC-181`) and one count wrong in
 five places.
 
+## Owed to the reconciliation brief
+
+<!-- Lifted from the disposable phase sheets so it survives `rm -rf`ing
+     `.doctrine/state/`. Each item is a place the locked design or an approved
+     criterion is measurably wrong; none is fixed by reopening the design. -->
+
+### From `PHASE-01` execution (`74c398acb`, `6b58d48c8`)
+
+1. **`DEC-181` is superseded by measurement, and needs re-ruling.** The ruled
+   `pub use` shim at the bin crate root does not build here: `clippy::pub_use` is
+   `deny`, and a per-item `#[expect]` on the `use` hits
+   `clippy::useless_attribute` (clippy allows lint attributes on `use` items only
+   for a hardcoded allowlist that `pub_use` is not on). `DEC-181`'s four-row
+   table was measured on a scratch package under the *rustc* lint config only, so
+   the whole clippy restriction list went unexercised — and the repo held no
+   `pub use` anywhere, so the lint had never fired. **Shipped instead:**
+   `pub mod clock; pub mod config_file; pub mod git;` at the bin crate root — a
+   fifth arrangement, absent from the table, that satisfies `unreachable_pub` by
+   the same mechanism the shim reached for and costs no suppression at all.
+   `EX-3` and `EX-4` cite the shim explicitly and are therefore diverged-from as
+   written; `EX-4`'s load-bearing claim (`today` promoted, never dropped) is
+   untouched. Recorded durably as `mem.pattern.lint.bin-plus-lib-export-visibility`.
+
+2. **`sec-6`'s `crate::` closure is right as a class and one instance short as an
+   enumeration.** `EX-1` names four private modules. Measured: five — `kinds` is
+   a *directory* module and `kinds/resolve.rs` reaches `crate::fsutil`, which is
+   an `E0432` on the plain lib build, not merely the test build. Declaring
+   `fsutil` then makes `unused = "deny"` flag 17 items across `clock`, `fsutil`
+   and `kinds` as dead: live in the bin target, dead in the lib one by
+   construction. `src/lib.rs` carries `#![expect(dead_code, unused_imports)]`
+   and `#![expect(clippy::pub_use)]` accordingly — the latter superseded in
+   strength by `VT-1`'s `EXPORTED` assertion, which bounds the surface far more
+   tightly than the lint.
+
+3. **`sec-8`'s `cordage` premise is wrong for the `lint` leg.** The section
+   argues `default-members` is needed because a new crate inherits `cordage`'s
+   exclusion "including `cargo clippy`". Measured: `cordage` is a *path
+   dependency* of the root package, so it is in the build graph regardless, and
+   bare `cargo clippy` runs `clippy-driver` on it under the full workspace
+   deny-set with no `--cap-lints` — identically before and after this phase
+   (verified with `cargo clippy -p doctrine`, the pre-change selection). The
+   ruling stands: nothing depends on `doctrine-control`, so without the key it
+   would be in no build graph at all. Only the analogy was wrong. The exclusion
+   that is real is `test`.
+
+4. **`sec-6` / `sec-8`'s "35 call sites across 33 files" is wrong** (carried from
+   `/phase-plan` as `F-2`). Measured: 50 occurrences across 21 files. The
+   load-bearing claim — no call site is edited — holds.
+
+5. **`sec-9` `R6`'s baseline is wider than recorded and still zero.** 13 textual
+   `doctrine::` hits across 4 files under `src/` (`regression.rs`,
+   `design_run/document.rs`, `spec.rs`, plus one comment in `main.rs`); every one
+   is a string literal or a comment, and no `use` statement names `doctrine::`.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · **`/phase-plan` `PHASE-01` complete; execution not
-started** · design reopen DONE and the run **locked at revision 93** · 6b5036c38
+fresh-as-of: 2026-08-08 · **`PHASE-01` executed and green in-tree on `edge`**
+(`74c398acb` T1–T4, `6b58d48c8` T5–T8); `doctrine check gate` green, `verify-vt`
+0 `UNCHECKABLE`. **Phase status not yet flipped to `completed`** — two exit
+criteria are diverged-from as written (see § *Owed to the reconciliation brief*
+items 1–2) and `DEC-181` is a user ruling, so the flip waits on a re-ruling.
+Design run locked at revision 93 · 6b5036c38
 
 ### Produced
 

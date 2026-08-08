@@ -1,0 +1,37 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdff5-5a3c-7742-939e-17c6f21db311"
+recorded_at = "2026-08-08T06:00:26.428261934Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-01: the crate::kinds closure trap is a class the design measured only its first instance of"
+detail = """
+`sec-6` names the trap precisely — the lib export set must be transitively closed
+over `crate::` paths in `#[cfg(test)]` code as well as production code — and
+gives one instance: `git.rs`'s test module reaches `crate::kinds`, so declare
+`kinds`. EX-1 then enumerates exactly four modules as if the closure terminated
+there.
+
+It does not. `kinds` is a directory module and `src/kinds/resolve.rs` reaches
+`crate::fsutil`, so the closure is five. Declaring `fsutil` then surfaces a
+second-order consequence the design does not mention at all: `unused = "deny"`
+flags 17 items across `clock`, `fsutil` and `kinds` as never used, because they
+are live in the *bin* target and dead in the lib one by construction. A lib
+target that exposes a curated subset of modules the binary owns will always have
+this shape; it needed a crate-level `#![expect(dead_code, unused_imports)]`.
+
+Both are the same defect as F-3 and as the DEC-181 friction recorded alongside
+this one: a claim verified by execution on a *minimal reproduction* rather than
+against the real tree. The minimal package had one `kinds`-shaped module and no
+`unused = deny`. Verifying a closure claim on a two-module scratch package
+cannot find the third module."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
