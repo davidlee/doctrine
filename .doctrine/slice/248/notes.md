@@ -518,6 +518,104 @@ project's own jail, but the overflow gid `65534` survives as a supplementary
 group — recorded for `PHASE-10`, whose rows 13/14 assert invariant 15's "no
 supplementary groups", so `--uid`/`--gid` are not later read as discharging it.
 
+Items 31–39 are `PHASE-05` **execution** findings (sheet `F-9`…`F-19`). Two of
+them (31, 32) were produced by the mutation battery and by nothing else, which
+is the strongest evidence this slice has that the battery earns its cost.
+
+31. **A real defect, found by the battery rather than by review.** The CLOEXEC
+    sweep `mark_inherited_descriptors_close_on_exec` skipped a descriptor whose
+    `fcntl_getfd` failed but **propagated** a failing `fcntl_setfd` — so a
+    descriptor another thread closed between the listing and the mark failed the
+    whole sweep, roughly **1 full-suite run in 20**. Its own doc comment already
+    claimed the skip; the code implemented half of it. A flake that rare would
+    have shipped and been blamed on the test suite. It surfaced only because the
+    battery made an *unexplained extra red* visible against a known expectation
+    — the value was in the expectation, not the mutation. Fixed to skip on
+    `Errno::BADF` and only that errno (a sweep that swallows every failure is a
+    guard that cannot fail); 25 consecutive clean runs. Harvested as
+    `mem.fact.rust.cloexec-sweep-races-on-ebadf`.
+
+32. **A mutation redded nothing — and the criterion was fine.** `M10` (sort the
+    derived `PATH` instead of preserving host order) redded **zero** tests: the
+    fixture's host `PATH` was `/opt/toolchain/bin:/usr/bin`, whose host order and
+    lexical order coincide, so the mutation was a no-op *on that input* and the
+    assertion held under either rule. The rule and its mandated title were
+    untouched; the **fixture** could not discriminate. Fixed by a fixture whose
+    two orders disagree, plus an `assert_ne!` against a sorted copy so the
+    fixture's discriminating property is itself asserted. This is the
+    vacuous-criterion class (items 7, 8, 23) caught *by the method the sheet
+    mandated* — the criterion was sound, the evidence for it was not, and only
+    the battery could tell the difference. Harvested as
+    `mem.pattern.tests.mutation-needs-a-discriminating-fixture`.
+
+33. **Does the `forbid` → `deny` flip warrant an ADR? The worker recommends yes,
+    and so do I.** `F-1/R` asked the question explicitly and did not settle it.
+    The flip is repo-wide, is not reversible without finding every site, and
+    replaces a guarantee (`forbid` cannot be overridden by anyone, at all) with a
+    categorically weaker one. What makes `deny` acceptable is
+    `the_unsafe_budget_is_exactly_two_sites` — and **a test can be deleted by
+    anyone with no governance trace**, whereas an ADR records why the ceiling
+    exists. **Mint on the parent at merge.**
+
+34. **Three `S5`-blocked debts against `backend.rs`, all one-line, all owed to
+    whoever owns that file next.** (a) `backend.rs:50-53`'s module doc says the
+    `backend` unit is "`leaf`, out-edges `{config}`" and adds "no row **and no
+    edge**"; with `bubblewrap.rs` importing `crate::host` the out-edges are
+    `{config, host}` — the "no row" half holds, the "no edge" half is now false
+    (see item 27). (b) `CapsuleEnvVar` has `ALL` and `fixed_value()` but no
+    `name()`, so the seven environment-variable *names* are single-sourced in
+    `bubblewrap.rs` — names and values now live in different files, which is the
+    `STD-001` shape. (c) `backend.rs:1649`/`:1660` carry the bare string
+    `"bwrap"` in a PHASE-04 test fixture, now duplicating `bubblewrap.rs`'s
+    `BWRAP_EXECUTABLE`. None were fixable in `PHASE-05`: `S5` scoped it to one
+    line of `backend.rs` and `F-1/R` widened that by two manifests and nothing
+    else. The constraint worked exactly as intended — it converted three
+    temptations into three recorded debts.
+
+35. **`Execution` carries no kill grace, so `timeout -k` had no configured
+    figure.** `config::ResourceBounds::kill_grace()` parses
+    `execution-kill-grace-seconds`, but PHASE-04's `Execution` carries `argv`,
+    `env`, `timeout`, `file_size_cap`, `stdio` — and no grace. Worked around
+    without touching `backend.rs`: `BubblewrapBackend` holds a `kill_grace`
+    defaulting to 5s with a `with_kill_grace` builder for `PHASE-06` to thread
+    the configured figure through. **The clean fix is a field on `Execution`**,
+    and this is the note that stops a temporary default becoming permanent.
+
+36. **`D4`'s pure signature cannot perform `D5` step 4.** `D4` fixes
+    `closure_members(&QueryOutput, resolver) -> Result<Vec<PathBuf>, ProfileRefusal>`,
+    but `D5` step 4 is existence-and-resolution of each returned path, which
+    needs `HostFacts` — impure, unavailable behind that signature. Resolved by
+    keeping `closure_members` exactly as `D4` specifies and doing step 4 in
+    `expand_closure_root`, which has the host. `D5`'s step list should say which
+    half owns step 4.
+
+37. **`sec-2`'s assembly list omits the three profile-owned binds.** `/source`,
+    `/capsule` and `/agent` cannot arrive through either declared vector —
+    `RESERVED_INNER_DESTINATIONS` refuses an entry naming them (PHASE-04 `EX-6`)
+    — so the backend derives all three from the placement's typed fields. Ruled
+    in-criteria on the same order-not-inventory reading as item 29, but a reader
+    checking the design's list against the real argv finds three flags the list
+    does not mention. The design owes a sentence.
+
+38. **`D6` enumerates seven `ProfileRefusal` variants; eight were needed.**
+    `EmptyReadableSet` is the fail-closed floor for *every source declared, none
+    produced anything* — reachable when a closure resolver returns no members,
+    which `ConfigRefusal::NoReadableInputs` cannot catch because it runs at parse
+    time, before expansion. Without it the backend would assemble a capsule with
+    no readable input and report **confinement success** for what is really a
+    configuration failure. It is also what makes the sheet's own mandated
+    `the_readable_set_is_never_empty` reachable at all.
+
+39. **The MSRV forbids a pipe, so `D11`'s status channel is a file.**
+    `std::io::pipe` stabilised in 1.87; the workspace pins `rust-version =
+    "1.85"` and `clippy::incompatible_msrv` is in the denied `all` group.
+    `rustix`'s `pipe` feature is undeclared and `F-1/R` widened `S5` by exactly
+    two manifests, so declaring it was not this phase's call. Resolved with a
+    file under the transaction root, outside every bound path so the capsule can
+    neither read nor forge it, cleared of `CLOEXEC` *after* the sweep and removed
+    *before* `disk_used` is measured so the trusted side's bookkeeping is not
+    billed to the capsule. If the MSRV moves, a pipe is the tidier form.
+
 ## Open
 
 **RULED 2026-08-08 — option 1. Nothing open here.** The slice owner took the
