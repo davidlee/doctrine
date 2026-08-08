@@ -368,6 +368,43 @@ the `PHASE-03` sheet as `F-7`, which supersedes `T14`'s escalation clause.
     reasonably have raised a false criterion failure, which is a worse outcome
     than the grep simply being wrong.
 
+### From `PHASE-04` planning (sheet `phase-04.md`, pre-execution)
+
+20. **`sec-6`'s file map contradicts `sec-6`'s own unit table, and the table is
+    right — for the second time.** `design.md:2499-2500` assigns `AcceptedBase`
+    to `transaction.rs` and assigns `TransactionRoot` and `SourceExport` to no
+    unit at all, while `design.md:2516` records the edge `transaction → backend`
+    and `sec-2`'s `CapsulePlacement` carries all three. Defining them in
+    `transaction.rs` forces `backend → transaction` and closes a two-node cycle
+    the tree's synthesised **zero** tangle baseline rejects — the same mechanism,
+    in the same tree, as item 11. Resolved in-criteria by the sheet's `D1` (all
+    three in `backend.rs`; `PHASE-06`'s `AcceptedBase` keyword mandate is
+    satisfied by the import and the field) — no `EX`/`VT` moves. The brief should
+    say the *pattern* out loud: when `sec-6`'s prose and its table disagree, the
+    table has been right both times, and the zero baseline is what makes the
+    disagreement load-bearing rather than cosmetic.
+
+21. **`EN-3`'s test estimate is stale.** It predicts "≈20 pure tests"; the `VT`
+    set mandates **28** titles and the sheet adds two. `EN-3`'s load-bearing
+    claim — crate in the checked set, no dependency added — is untouched, and
+    both `plan.md:141` and `plan.toml:327` already concede that `sec-8`'s ≈39-test
+    row is *shared* across `PHASE-04`/`PHASE-05` rather than apportioned. Sizing
+    only; recorded so an auditor counting tests against `EN-3` does not read 28
+    as scope creep.
+
+22. **`plan.md`'s file-ownership table is wrong in two further ways — and item 14
+    is now the same finding three phases running.** (a) `plan.md:213` gives
+    `PHASE-04` only `backend.rs`, but nothing compiles it and none of its 28
+    tests run unless `main.rs` declares `mod backend;` — exactly item 14's defect,
+    unamended, so the row should read `main.rs | 01, 03, 04, 05, 06, 10`.
+    (b) `plan.md:213-214` treats `backend.rs` and `backend/bubblewrap.rs` as
+    exclusively owned by `PHASE-04` and `PHASE-05`, but `PHASE-05` must add
+    `mod bubblewrap;` to `backend.rs`, so that file is shared 04/05 by one line —
+    which `PHASE-05` `EX-19` half-anticipates. Recorded ahead of time so
+    `PHASE-05`'s worker does not read its own one-line edit as a boundary
+    violation and stop. A table that is wrong the same way in three consecutive
+    phases is a defect in the table, not three incidents.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green

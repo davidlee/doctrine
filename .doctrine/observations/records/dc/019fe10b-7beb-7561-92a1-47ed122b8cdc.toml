@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe10b-7beb-7561-92a1-47ed122b8cdc"
+recorded_at = "2026-08-08T11:04:14.059943355Z"
+kind = "friction"
+summary = "phase-plan: SL-248 plan.md file-ownership table omits the module-declaring file, re-derived per phase"
+detail = "Third phase running (PHASE-03 F-4/ledger 14, now PHASE-04 F-2, and PHASE-05 in the other direction as F-3), the planner has to re-derive that plan.md:213's 'exclusively owned' file list is incomplete: a phase introducing a module must also edit crates/doctrine-control/src/main.rs to declare it, or the module is compiled by no target and its tests never run. Each re-derivation costs a read of the ownership table, a read of main.rs, and a written finding. Cheap individually; it is the same finding three times because the authored table was never amended after the first. Class: a plan-level table that the execution repeatedly contradicts should be amended at the first contradiction, not carried as a per-phase finding."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
