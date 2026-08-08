@@ -51,18 +51,20 @@ to be designed out, not a cost to be budgeted.
   test; it proves nothing about a process that has already exited. Go to beat 3.
 - **Woken by the fallback clock** — run the guard below.
 
-The clock-wake guard is exactly two commands. Run them first, before reading
-anything else:
+The clock-wake guard is three commands. Run them first, before reading anything
+else:
 
 ```bash
 ./target/debug/doctrine slice status <N>
-find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -20 | head
+find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
+pgrep -af 'cargo|rustc' | head        # is it building right now?
 ```
 
 | what you see | what you do |
 |---|---|
-| phase `in_progress`, sheet touched < 20 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
-| phase `in_progress`, sheet cold > 40 min (two fallbacks, no tick) | it died. Re-spawn, resuming at the first unticked task. |
+| phase `in_progress`, sheet touched < 25 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
+| phase `in_progress`, sheet cold, **but cargo/rustc running** | **exit.** Still alive, just slow. Same as above. |
+| phase `in_progress`, sheet cold > 90 min **and** nothing building | it died. Re-spawn, resuming at the first unticked task. |
 | phase `completed`, a next phase exists | beat 4 — spawn the planner. |
 | phase `planned`, sheet > 100 lines (filled) | beat 5 — spawn the worker. |
 | phase `planned`, sheet ~27 lines (bare template) | beat 4 — spawn the planner. |
@@ -71,9 +73,19 @@ find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -20 | head
 `wc -l` on the sheet is the empty/filled test — the materialised template is 27
 lines, a planned sheet is several hundred. Don't eyeball it.
 
-The heartbeat is free because workers tick tasks as they go (§ Sub-agent
-discipline). The sheet's mtime *is* the liveness signal — that is a second reason
-for the tick-as-you-go rule, not a coincidence.
+**Sheet mtime alone is not liveness, and reaping on it is how you kill a healthy
+worker.** Workers tick as they go (§ *Sub-agent discipline*), so the mtime is a
+*cheap* signal — but it goes quiet exactly when the work is slowest and dearest
+to lose. A ten-mutation battery is ten build-and-test cycles with nothing
+tickable between them; so is a cold `cargo build` after a manifest edit. The
+proxy inverts under load: the more expensive the phase, the deader it looks.
+Hence the `pgrep` leg and the 90-minute floor — **a build in flight always wins
+over a cold sheet.** When the two disagree, believe the process table.
+
+Re-spawning is not free and not idempotent: a revived worker re-does everything
+since the last tick, and a worker reaped mid-write can leave a half-edited file
+the next one reads as finished. **Waiting is cheap, reaping is not** — when in
+doubt, exit and re-arm. That asymmetry, not the specific numbers, is the rule.
 
 Three consecutive revives of the same phase → stop and report. Do not loop on a
 sub-agent that cannot finish.
