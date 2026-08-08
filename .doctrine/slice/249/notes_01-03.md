@@ -95,3 +95,46 @@ classes are covered:
 No STOP: the criteria that bind are `EX-2`/`EX-3`/`EX-4` and each holds. What
 diverged is the planner's per-test attribution for one injected defect, recorded
 here so the audit reads the measurement rather than the prediction.
+
+### T4 / T5 — the template pin and its control
+
+**T4 green on first run**, as A-5 predicted and as the design intends: R5 is a
+*standing* pin over future template edits, not a red/green step. Its input is
+`render_record_toml_seed`, whose own `match` owns the kind → template-path
+mapping, so the test restates no path list.
+
+**T5's control fired.** Deleting `decided_on = ""` from
+`install/templates/knowledge-decision.toml` turned T4 **RED** naming decision:
+
+    assertion `left == right` failed: decision: the shipped template must seed
+    exactly its table row
+      left:  {alternatives, choice, consequences, context, decided_by, rationale}
+      right: {alternatives, choice, consequences, context, decided_by,
+              decided_on, rationale}
+
+Restored with `git restore --source=HEAD -- install/templates/…` (explicit
+pathspec), rebuilt, **PASS**. `git status --porcelain` shows the template clean.
+STOP-4 did not fire.
+
+### R2 re-probed — the re-embed footgun does not reproduce
+
+R2 and `mem_019e98a783ea7471ac4bfcefdc04ae5e` both say a lone `install/` edit
+leaves the binary carrying the old asset until you `touch` the embedding file.
+**Not true in this tree today.** From a fully built worktree:
+
+    cargo build   # Finished, 0.05s — nothing to do
+    <delete one key from install/templates/knowledge-decision.toml>
+    cargo build   # Compiling doctrine … — rebuilt, with NO touch
+
+and the test read the new asset on the first run without a touch anywhere.
+rust-embed 8 registers its `#[folder]` files as build dependencies, so cargo's
+staleness check already covers them. The touch is a harmless escape hatch, not a
+precondition — and if reached for, the file is `src/asset_source.rs:19`, since
+SL-223 moved the embed off `src/install.rs`.
+
+The memory was amended in place rather than left to misdirect: title, summary
+and body now carry the re-probe, keep the still-live residue (never trust
+`Finished`; verify through the render; the nix/crane `cleanCargoSource` strip is
+a *separate* and still-real trap), and bound the claim to the roots actually
+probed. The planner had already flagged two of its three stale claims; the third
+— the core one — needed the probe.

@@ -3910,6 +3910,49 @@ target = \"SL-249\"
         }
     }
 
+    /// `R5` — every shipped `install/templates/knowledge-*.toml` seeds exactly its
+    /// kind's row: no more, no fewer (`VT-2`, `EX-5`).
+    ///
+    /// A *standing* pin. Today's templates already agree (discharged by hand during
+    /// RV-349), so this goes green on first run and cannot stage a red — what it
+    /// guards is the invariant across future edits. Under the F-1 write posture a
+    /// dropped seed key silently converts every existing record of that kind into
+    /// one the writer refuses, which is a corpus-wide failure from a one-line
+    /// template edit.
+    ///
+    /// The template path is not restated: `render_record_toml_seed`'s own `match`
+    /// is the single source of the kind → path mapping, so calling it means this
+    /// test cannot drift from production's choice of file.
+    ///
+    /// Concept is a case, not an exception: its bare `[facet]` header parses to an
+    /// empty table and equals its empty row, which is what makes the F-1 posture
+    /// well-defined for a kind with no fields.
+    #[test]
+    fn each_shipped_template_seeds_exactly_its_kinds_facet_row() {
+        for kind in RecordKind::ALL {
+            let seeded = render_record_toml_seed(kind, 1, "slug", "title", "2026-01-01")
+                .expect("the shipped template renders");
+            let parsed: toml::Table = seeded.parse().expect("a seeded record is valid TOML");
+
+            let seeded_keys: BTreeSet<&str> = parsed
+                .get("facet")
+                .expect("every knowledge template carries a [facet] header")
+                .as_table()
+                .expect("[facet] is a table")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            let row: BTreeSet<&str> = facet_fields(kind).iter().map(|f| f.name).collect();
+
+            assert_eq!(
+                seeded_keys,
+                row,
+                "{}: the shipped template must seed exactly its table row",
+                kind.as_str()
+            );
+        }
+    }
+
     /// `I3b` — no row names a field twice.
     ///
     /// `I2` and `I3` both compare sets, which collapse a duplicate silently while
