@@ -8,11 +8,12 @@ schema  = "doctrine.plan.overview"
 version = 1
 slice   = "SL-248"
 
-# STAGE 1 OF 3 — the spine only. Every phase below carries its id, name and
-# objective; `entrance_criteria`, `exit_criteria` and `verification` are
-# deliberately empty and are stage 2's work (plan.md § Authoring stages).
-# The phase list is the artefact that had to be right first time, because
-# PHASE-NN ids are immutable and edits append rather than renumber.
+# STAGE 2 IN PROGRESS. The spine (stage 1) is complete: every phase carries its
+# id, name and objective. Criteria are expanded per phase — PHASE-02 is done;
+# the rest still carry empty `entrance_criteria` / `exit_criteria` /
+# `verification` and are the remaining stage-2 work (plan.md § Authoring stages).
+# The phase list itself is settled, because PHASE-NN ids are immutable and edits
+# append rather than renumber.
 
 [specs]                          # empty in v1 — no spec/requirement registry yet
 primary       = []
@@ -42,9 +43,42 @@ requirements      = []
 id        = "PHASE-02"
 name      = "Interpretation policy: parse, normalize, hash, restrict"
 objective = "Build `src/interpretation.rs` as a strict typed projection of `[interpretation]` beside the deliberately tolerant shared reader — six distinguishable refusals, duplicate rejection before sorting, an injective canonical hash, and the monotonic restriction algebra — and export it through the lib target."
-entrance_criteria = []
-exit_criteria     = []
-verification      = []
+
+entrance_criteria = [
+  { id = "EN-1", text = "`src/lib.rs` exists as the root package's lib target and `crates/doctrine-control` is in `default-members`, so a module declared in `lib.rs` is compiled and its `#[cfg(test)]` tests actually run under `just check` (PHASE-01). Without this the module is compiled by no target and this phase's tests are green by never running." },
+  { id = "EN-2", text = "`tests/architecture_layering.rs` carries the export-set assertion and `.doctrine/adr/001/layering.toml` carries the root tree's tier map, so this phase extends each by one entry rather than authoring either." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`src/interpretation.rs` exists, leaf-tier and out-edge-free, and is pure throughout: nothing in it reads a file, a clock, or a repository. It exposes `parse`, `canonical_hash`, `restrict`, `InterpretationPolicy`, `ExecutableName`, `PathPattern`, `VerificationRow`, `PolicyHash`, `INTERPRETATION_SCHEMA`, and the refusal types." },
+  { id = "EX-2", text = "`InterpretationPolicy` is constructible only through `parse` — no other public constructor, no public field mutation — so an unnormalized value of the type cannot exist, which is what lets `canonical_hash` and `restrict` assume normalization instead of re-checking it." },
+  { id = "EX-3", text = "The `[interpretation]` table is projected out of a tolerant outer document and then walked key-by-key against a known set rather than deserialized, so `BlockMissing`, `KeyMissing`, `UnknownKey`, `UnsupportedSchema`, invalid-value and `EmptyVerificationSequence` are six distinguishable typed refusals and not a formatted dependency error string." },
+  { id = "EX-4", text = "The walk is recursive: each verification row is walked against its own known key set (`argv`, and nothing else), with `RowKeyMissing` and `UnknownRowKey` distinguished. A row spelled `{ argv = [...], extra = true }` has a defined refusal rather than being projected silently." },
+  { id = "EX-5", text = "Duplicate rejection is an explicit refusing step that runs before sorting, and both run before the hash. Set-valued lists are `Vec` byte-sorted after that check — never a `BTreeSet`, which would make the sort free and the duplicate invisible. Verification row order and argument order are preserved." },
+  { id = "EX-6", text = "`canonical_hash` is SHA-256 over the domain-separated, length-prefixed encoding of the typed value — never over source text or a re-serialized TOML document. `PolicyHash` is a newtype with no public constructor other than `canonical_hash`." },
+  { id = "EX-7", text = "`restrict` evaluates its four rules in order, and rule 4's failure is diagnosed by the ordered classification: row-removed, then row-inserted (base is a subsequence but not a prefix), then row-reordered, then row-replaced. Prefix decides acceptance; subsequence decides which refusal." },
+  { id = "EX-8", text = "`src/lib.rs` declares `pub mod interpretation;`, the export-set constant names it, and `.doctrine/adr/001/layering.toml` classifies `interpretation = \"leaf\"` with out=0." },
+  { id = "EX-9", text = "`src/main.rs` does **not** declare `mod interpretation;` — nothing in the agent-facing binary consumes the policy in this slice, and declaring it in both targets would compile it twice for nothing. The module is still discovered and classified by the layering gate, which walks the file tree rather than `mod` declarations." },
+]
+
+# NOTE for the integration pass: `REQ-449` criterion 3 (read-once) is NOT
+# verified here. `sec-4` routes it to an executed test in `sec-7`'s environment
+# — `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy`
+# — which is table C and lands in PHASE-08. This phase proves the parser, not
+# the provenance.
+verification = [
+  { id = "VT-1", expects = "The six distinguishable table-level refusals, one test each, over the real parser.", test_file = "src/interpretation.rs", keywords = ["missing_interpretation_block_refuses", "missing_required_key_refuses_naming_the_key", "unknown_key_refuses_naming_the_key", "unsupported_schema_version_refuses_naming_the_version", "empty_verification_sequence_refuses"], waived = false },
+  { id = "VT-2", expects = "The recursive row walk: strictness that stops at the first level is a strict outer table wrapping a tolerant inner one (RV-346 F-11).", test_file = "src/interpretation.rs", keywords = ["unknown_key_inside_a_verification_row_refuses_naming_the_row_and_the_key", "verification_row_missing_argv_refuses_naming_the_row", "verification_row_that_is_not_a_table_refuses", "argv_that_is_not_an_array_of_strings_refuses"], waived = false },
+  { id = "VT-3", expects = "Per-field normalized-value validation and duplicate rejection, one test per rule of the validation table.", test_file = "src/interpretation.rs", keywords = ["executable_with_a_slash_refuses", "absolute_path_pattern_refuses", "lexical_dotdot_component_refuses", "duplicate_forbidden_executable_refuses", "duplicate_interpreted_path_refuses", "empty_argv_row_refuses", "empty_argument_refuses"], waived = false },
+  { id = "VT-4", expects = "An explicitly empty list is accepted and is not equivalent to omission — the distinction a serde default would collapse.", test_file = "src/interpretation.rs", keywords = ["explicitly_empty_list_is_accepted_and_is_not_the_same_as_omission"], waived = false },
+  { id = "VT-5", expects = "Normalization: set-valued lists sort by raw UTF-8 bytes; verification row and argument order survive.", test_file = "src/interpretation.rs", keywords = ["set_valued_lists_sort_by_raw_utf8_bytes", "verification_row_and_argument_order_are_preserved"], waived = false },
+  { id = "VT-6", expects = "The hash is stable across formatting, injective across split boundaries (the length prefixes), and not computed over source text.", test_file = "src/interpretation.rs", keywords = ["canonical_hash_is_stable_across_key_order_and_whitespace", "canonical_hash_distinguishes_split_boundaries_in_adjacent_entries", "canonical_hash_is_not_computed_over_source_text"], waived = false },
+  { id = "VT-7", expects = "What a refinement may lawfully do — the positive cases each refusal must not capture.", test_file = "src/interpretation.rs", keywords = ["refinement_may_add_forbidden_entries", "refinement_may_append_verification_rows", "restrict_is_identity_on_its_own_base"], waived = false },
+  { id = "VT-8", expects = "Every restriction refusal, and that rule 4's diagnosis is classified in the stated order — a refinement that both removes and reorders reports Removed.", test_file = "src/interpretation.rs", keywords = ["refinement_removing_a_forbidden_entry_refuses", "refinement_removing_an_interpreted_path_refuses", "refinement_removing_a_project_verification_row_refuses", "refinement_reordering_project_verification_refuses", "refinement_replacing_a_project_verification_row_refuses", "refinement_inserting_a_row_before_a_project_row_refuses_as_inserted", "refinement_inserting_a_row_between_project_rows_refuses_as_inserted", "refinement_swapping_two_project_rows_refuses_as_reordered", "the_diagnosis_is_classified_in_the_stated_order", "refinement_with_a_different_schema_refuses"], waived = false },
+  { id = "VT-9", expects = "Monotonicity as a property over generated policy pairs: there is no input for which restrict returns a policy weaker than its base on any axis.", test_file = "src/interpretation.rs", keywords = ["restrict_never_weakens_any_axis"], waived = false },
+  { id = "VT-10", expects = "The module joins the export set and the tier map, and the export-set assertion still bounds the crossing exactly.", test_file = "tests/architecture_layering.rs", keywords = ["interpretation", "the_root_library_exports_exactly_the_named_set", "every_exported_item_belongs_to_a_leaf_tier_module"], waived = false },
+  { id = "VA-1", expects = "`src/main.rs` declares no `mod interpretation;` (EX-9), and the layering gate still classifies the module despite its absence from the binary. Asserted by inspection rather than by test: a keyword mandate cannot express the absence of a line." },
+]
 specs             = []
 requirements      = []
 

@@ -240,6 +240,17 @@ worth knowing about in advance:
   an agent sandbox. This is the closest thing to a flag day in the slice, and it
   is a considered cost rather than an oversight.
 
+  **Accepted, explicitly, at plan time.** The slice owner's ruling: a state in
+  which doctrine does not build green on a machine without bubblewrap is
+  acceptable, because in practice nobody else runs this project's tests, and the
+  gate that matters is the end of the slice rather than the end of each phase —
+  phases are built inline on `edge`. So no mitigation is planned, no phase owes
+  one, and `sec-9` residual 3's open question is narrowed rather than closed:
+  what stays open is the **CI** ruling the design says is owed by whichever
+  slice first runs this suite in CI, not the local-host behaviour, which is now
+  decided. Recorded here so a later reader does not read the residual as an
+  unmade decision and re-open it.
+
 ## Notes
 
 ### If a phase proves oversized in stage 2
