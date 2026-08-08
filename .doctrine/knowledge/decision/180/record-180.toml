@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 180
+slug = "capsule-suite-may-red-the-tree-on-hosts-without-bubblewrap"
+title = "Capsule suite may red the tree on hosts without bubblewrap"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = ["area:confinement", "area:testing", "cluster:capsule"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "accepts the PHASE-10 admission-test landing; narrows sec-9 residual 3 to the CI question"
+target = "SL-248"

@@ -1,0 +1,50 @@
+memory_uid = "mem_019fdf265ab57f30b81d6435e5b4b1d1"
+memory_key = "mem.pattern.review.bind-scope-bar-and-never-self-rule"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "External adversarial review: bind the scope bar on the ledger, and never self-rule on your own remediation"
+summary = "Write a late round's blocker-or-regression bar into the ledger brief so it survives handover; put defects found in your own remediation to the reviewer rather than ruling on them."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:review", "cluster:review-system"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5e4a58b77a218b40ef842c1f96cb524fa81710b9"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c4ff361b71b5247f573739d40515286e33a308a9dfd304a60f7e5de58b14a164"
+base_commit = "bb3b7819a4fec76cd4c89b58fd177892bbfe4fea"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-346"
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

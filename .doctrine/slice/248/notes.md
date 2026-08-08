@@ -74,99 +74,60 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · design LOCKED at rev 85 · next is /plan
+fresh-as-of: 2026-08-08 · plan · stage 2 (spine done, PHASE-02 criteria done) · bb3b7819a
 
 ### Produced
 
-- `RV-346` round 6 released to codex, returned, and remediated in full
-  (`b8a779cca`). 27 verified, 2 withdrawn, 6 contested, 2 raised; all 8 open
-  items dispositioned, ledger back at `await=raiser`.
-- **The credential row is split** — table A rows 13 (`MappedIdentity`) and 14
-  (`Granted(AllCapabilities)`), on `EVD-014`'s measured arms. Two of the four
-  bundled mechanisms have no control under bubblewrap and are recorded
-  observed-but-unrowed. `Delta` gains a `Granted` variant; `PropertyRemoval`
-  loses `CredentialsConfined`.
-- **The bubblewrap profile now passes `--uid`/`--gid`** — a behaviour change,
-  not bookkeeping: row 13 asserts a declared identity, so one must be declared.
-- Row 10's holding condition repaired (`F-36`, reproduced); row 12 now tests
-  descriptor-1 *readability* rather than delivery (`F-30`).
-- `verify` takes `today: String` and `clock::today` becomes a third root-package
-  export — removes the `time` edge rather than declaring it (`F-29`).
-- Design re-adopted at revision 76 via `adopt_authored` after hand-edits; seven
-  of nine section fingerprints moved.
-- Minted: `ISS-320` — no verb emits the `adopt_authored` section map;
-  `ISS-280` — second instance recorded, sharpening the fix's shape (`5ffdea138`).
-- No code touched; no gate applicable. All `.doctrine` changes committed
-  path-limited — another agent's `SL-249`/`SL-250` files left untouched.
-- **`RV-346` is closed** — `done · await=none · concluded`, 38 findings over
-  nine rounds (`ba07f8674`). Round 7 verified 7 of 8 and raised nothing under a
-  scope-bound brief; rounds 8 and 9 closed the remainder.
-- Round 7's credential ruling went **with** the design: supplementary groups and
-  `no_new_privs` stay observed-but-unrowed. A permanent `Unproven` buys no
-  discrimination where no control fires, and would make `Admitted` unreachable.
-- `F-30` upheld (`3e0402b9b`) — the round-6 row 12 rewrite left `sec-7`'s test
-  title and gloss projecting the *repudiated* property (non-delivery, and the
-  bidirectionality reasoning). Renamed to name readability; row 12's containment
-  hazard, a second instance codex did not spot, fixed with it.
-- **Section review discharged in the adversarial lane.** Policy moved
-  `human-only` → `adversarial-only` at rev 81 on the user's direction, the basis
-  being truthfulness: this design was reviewed adversarially and not by a human,
-  so nine human attestations would have claimed a reading nobody performed.
-  `DEC-074` grants human-proxy standing. Codex then attested all nine; every
-  section reads `review=current`, `sections_outstanding_review=0` (rev 82).
-- **`review_pass` disposed `Waived`** at rev 83, the reason naming `RV-346` as
-  where the review actually happened. `Conducted` is structurally unavailable —
-  see `ISS-322`.
-- **The design run is LOCKED at revision 85.** `design-accepted` recorded on the
-  user's explicit acceptance; every act on `reviewing-locked` reads `current`.
-  The engine stamps the lock honestly — *"locked on an auditable agent claim of
-  user acceptance — not authenticated proof of a human act"* — because the agent
-  recorded the act the user performed in conversation.
-- `F-38` raised and remediated (`089b082e4`) — row 12's two legs shared one
-  mutant that trips both, so the readability leg was not separately gating.
-  `sec-7` gains `a_readable_descriptor_one_backend_fails_row_twelve` and states
-  the rule; `sec-8`'s test-cost narrative gains round 8. Table A stays fourteen.
+- Lifecycle `design` → `plan`. `plan.toml` + `plan.md` authored — the ten-phase
+  spine, objectives and provenance only, no criteria (`cb957d8a1`).
+- `PHASE-02` criteria expanded — 2 EN, 9 EX, 10 VT + 1 VA (`560959e05`). Nine
+  phases of criteria remain, then the stage-3 integration pass.
+- Minted `ISS-323` — `sec-6`'s `EXPORTED` constant omits `clock::today`.
+- Minted `DEC-180` — the `PHASE-10` admission test may red the tree on a host
+  without bubblewrap.
+- Design premises re-grepped against the tree at the `/plan` gate; none stale,
+  so no design back-edge was taken.
+- No code touched, so no `doctrine check gate` applies; `doctrine validate`
+  clean. All `.doctrine` changes committed path-limited — another agent's
+  `SL-249`/`SL-250` and `.doctrine/rfc/027/` left untouched. `flake.lock` and
+  `.claude/settings.json` were dirty on arrival and are left alone.
+- Friction: `observations/records/37/` — the research staleness advisory fires
+  on normal lifecycle progression.
 
 ### Learned
 
-- `EVD-014` — the measured arms now carry rows 13 and 14, not one bundled row.
+- `mem.pattern.doctrine.size-phases-on-evidence-not-lines` — why ten phases came
+  off `sec-8`'s evidence table rather than off the scope's line band.
+- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — routes two `RV-346`
+  lessons the previous pass left as unhomed prose.
 - `mem.fact.bubblewrap.unshare-user-is-a-no-op-unprivileged`.
-- Friction captured: `.doctrine/observations/records/d7/` — a contest's reasoning
-  has no durable home.
-- **A scope-bound review brief works, and the binding belongs on the ledger.**
-  Round 7 was told the bar was blocker-or-regression and that a nothing-raised
-  round was the successful outcome. It raised nothing out of scope and said so.
-  Written into the brief rather than the driver's prompt, so it survived handover
-  and codex read it directly.
-- **Don't self-rule on a scope bar you authored.** The row 12 mutant-parity gap
-  was found while remediating `F-30`; it was put to codex rather than fixed
-  unilaterally, and codex ruled it a *blocker* (`F-38`). A self-issued finding on
-  one's own remediation is worth little; the external ruling is the value.
-- **`ISS-322`** — a design run mints its own pass `RV` on entry to `reviewing`
-  and replaces it on re-entry; nothing binds an existing `RV` to the run. So an
-  externally conducted review can never be named by `Conducted`, while the
-  obligation itself offers *"a printed prompt for an external adversarial
-  reviewer"* as a route. **Correction to the prior handover chain:** the
-  `Conducted` arm being *reachable* (`IMP-392`) does not make it *usable* for an
-  external `RV` — two different questions, only the first had been checked.
-- `ISS-320` updated (`60a4f90ef`): the `adopt_authored` envelope is snake_case
-  while sibling enums are kebab-case, and the refusal names one field rather than
-  the convention. Also — the recomputation's cross-check is **not** luck: validate
-  it against the *unedited* document (all nine digests must reproduce) before
-  relying on it. Friction recorded at `observations/records/36/`.
+- `EVD-014` — the measured arms carry table A rows 13 and 14.
+- `ISS-322` — a design run mints its own pass `RV`, so an externally conducted
+  review can never be named by `Conducted`.
+- `ISS-320` — no verb emits the `adopt_authored` section map; validate the
+  recomputation against the unedited document before relying on it.
+- `ISS-271` / `ISS-226` — at plan time `verify-vt` FAILs a `test_file` that is
+  the phase's own output and mis-words `UNATTRIBUTABLE`; expected tooling
+  behaviour, not a defect in `PHASE-02`'s mandates.
 
 ### Open
 
-- **Next is `/plan`** — `doctrine slice plan`. The design is locked; the slice
-  is still at lifecycle status `design` and moves to `plan` next. Nothing in the
-  design run remains open.
+- **Next is stage-2 criteria for the remaining nine phases, `PHASE-01` first** —
+  `plan.md` § *Authoring stages* carries the recipe and § *Design-section
+  provenance* the per-phase reading list. Stage 3 is the integration pass.
+- `doctrine slice phases 248` deliberately **not** run — it would materialise
+  hollow sheets while criteria are still empty.
+- `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
+  because `sec-9`'s corrections list cannot be edited without a recovery cycle.
+- `DEC-180` — settles the local-host case only; the CI ruling stays owed by
+  whichever slice first runs this suite in CI.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.
 - `ISS-319` — separable defect, fixable independently of `QUE-208`.
 - `SL-248` `OQ-1` (five-slice decomposition, provisional), `OQ-3` (three
   cross-cutting requirements), `OQ-4` (what replaces `review/*` and `phase/*`).
-- `IMP-397` / `QUE-204` — egress allowlist and non-Git build inputs, adjacent to
-  `REQ-459`'s network row, out of scope.
+- `IMP-397` / `QUE-204` — egress allowlist and non-Git build inputs, out of
+  scope, adjacent to `REQ-459`'s network row.
 - `REQ-448`, `REQ-450`, `REQ-460` close in no single slice; this slice's share is
   `REQ-448`'s denial half and `REQ-450` criterion 1.
-- Corrections owed at reconcile and follow-ups at close are carried in `design.md`
-  `sec-9`, not restated here.
+- Corrections owed at reconcile and follow-ups at close are carried in
+  `design.md` `sec-9`, plus `ISS-323`.

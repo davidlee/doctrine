@@ -1,0 +1,46 @@
+memory_uid = "mem_019fdf25967278f29114d613bdd816a6"
+memory_key = "mem.pattern.doctrine.size-phases-on-evidence-not-lines"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Size phases on the design's evidence table, not its line count"
+summary = "A review-heavy design's line count measures how contested it was, not how much work it is — size phases on the evidence table's test counts."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["area:slice", "area:plan"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5e4a58b77a218b40ef842c1f96cb524fa81710b9"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e550df5a9d4eef1db81e441b103ba200c87a443844e35dfbd2c4c1323588e4cd"
+base_commit = "bb3b7819a4fec76cd4c89b58fd177892bbfe4fea"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
