@@ -255,6 +255,18 @@ pub(crate) struct CreateRecord {
     /// An explicit slug; else derived from the title the way `knowledge new` does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) slug: Option<String>,
+    /// The record's `.md` prose (SL-249).
+    ///
+    /// Spelled `body`, not `prose`: [`Declaration::body`] is a design
+    /// *section's* body, this is a *record's* body, and both name the same
+    /// thing — the `.md` content of what the subject names — which is what
+    /// `entity::write_body` and `memory edit --body` already call it. The
+    /// SL-248 loss this closes was a level error (record prose sent through a
+    /// slot for section prose), not a naming collision, so the fix keeps the
+    /// established word rather than inventing a second one for the same
+    /// concept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) body: Option<String>,
     /// The user's acceptance of this record as true (DEC-088).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) acceptance: Option<AcceptanceDeclaration>,

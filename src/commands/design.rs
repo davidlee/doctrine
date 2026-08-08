@@ -747,6 +747,10 @@ enum MintKind {
         kind: crate::knowledge::RecordKind,
         title: String,
         slug: String,
+        /// The record's `.md` prose, when the payload supplied one (SL-249).
+        /// `None` for the payloads that left `body` unset — step 5 then
+        /// leaves the scaffold's template prose untouched.
+        body: Option<String>,
     },
     /// The run's review pass — `review` owns the semantics (DEC-125).
     Review(crate::review::NewArgs),
@@ -789,6 +793,14 @@ struct MintPlan {
     effect: MintEffect,
     /// The user's acceptance, already bound to the digest Doctrine derived.
     acceptance: Option<AcceptanceAttestation>,
+    /// A digest of the payload this mint was planned from (SL-249 `D8`), for the
+    /// recovery intent to journal and a retry to be held to.
+    ///
+    /// On `MintPlan` and not on [`MintKind`] because it is a property of the
+    /// *submission* rather than of what is minted: an adoption carries one too,
+    /// and the run's own review pass carries `None` because it is planned from no
+    /// declaration and so has no payload that could change under it.
+    payload_digest: Option<Fingerprint>,
 }
 
 impl MintPlan {
@@ -809,6 +821,19 @@ impl MintPlan {
     /// names none, which is what keeps the resolved map keyed by `DesignId`.
     const fn checkpoint(&self) -> Option<&DesignId> {
         self.subject.checkpoint()
+    }
+
+    /// The record prose the payload supplied, if any (SL-249).
+    ///
+    /// Lives on [`MintKind::Knowledge`], not `MintPlan` itself: a review pass
+    /// mints no record and structurally has no prose to carry, so an
+    /// adoption and a review both read `None` here without a field they'd
+    /// otherwise have to ignore.
+    fn record_body(&self) -> Option<&str> {
+        match &self.effect {
+            MintEffect::Create(MintKind::Knowledge { body, .. }) => body.as_deref(),
+            MintEffect::Create(MintKind::Review(_)) | MintEffect::Adopt { .. } => None,
+        }
     }
 }
 
@@ -833,6 +858,9 @@ fn review_pass_plan(slice: u32) -> MintPlan {
         // Not a user judgement: the pass opens because the run entered
         // `reviewing`, so there is nothing for an acceptance to be bound to.
         acceptance: None,
+        // Nor a payload: the pass is derived from the stage move, not declared,
+        // so there is nothing a retry could change under it.
+        payload_digest: None,
     }
 }
 
@@ -904,7 +932,12 @@ fn plan_checkpoints(
                 let title = crate::input::resolve_title(Some(create.title.clone()))?;
                 let slug = crate::input::resolve_slug(&title, create.slug.clone())?;
                 (
-                    MintEffect::Create(MintKind::Knowledge { kind, title, slug }),
+                    MintEffect::Create(MintKind::Knowledge {
+                        kind,
+                        title,
+                        slug,
+                        body: create.body.clone(),
+                    }),
                     create.acceptance.as_ref(),
                 )
             }
@@ -920,29 +953,39 @@ fn plan_checkpoints(
             }
             Dispose::Unresolved { .. } | Dispose::NonDurable { .. } => continue,
         };
-        let acceptance = acceptance
-            .map(|declared| -> Result<AcceptanceAttestation> {
-                // Refuse rather than default: a discarded serialisation error
-                // would digest the EMPTY STRING, so every declaration that
-                // failed to serialise would attest identically and silently.
-                let payload = crate::git::sha256(serde_json::to_string(declaration)?.as_bytes());
-                let node = declaration.disposes().map_or("", DesignId::as_str);
-                Ok(AcceptanceAttestation::bind(
-                    declared.basis.clone(),
-                    declared.turn.clone(),
-                    Fingerprint::new(acceptance_digest(
-                        &payload,
-                        dispose.form().as_str(),
-                        node,
-                        prior.run.revision,
-                    )),
-                ))
-            })
-            .transpose()?;
+        // The mint's payload, digested ONCE and used twice (SL-249 D8). This is
+        // the term `acceptance_digest` has always bound; it is now also what the
+        // recovery intent journals, so "the payload changed" and "the acceptance
+        // no longer describes this content" are one comparison rather than two
+        // that can disagree. A second digest domain beside this one is the defect
+        // the reuse exists to avoid — there is one expression, and it is here.
+        //
+        // Computed unconditionally rather than only when an acceptance rides.
+        // Refuse rather than default: a discarded serialisation error would
+        // digest the EMPTY STRING, so every declaration that failed to serialise
+        // would attest identically and silently.
+        let payload = crate::git::sha256(serde_json::to_string(declaration)?.as_bytes());
+        let acceptance = acceptance.map(|declared| {
+            let node = declaration.disposes().map_or("", DesignId::as_str);
+            AcceptanceAttestation::bind(
+                declared.basis.clone(),
+                declared.turn.clone(),
+                Fingerprint::new(acceptance_digest(
+                    &payload,
+                    dispose.form().as_str(),
+                    node,
+                    prior.run.revision,
+                )),
+            )
+        });
         plans.push(MintPlan {
             subject: IntentSubject::Checkpoint(declaration.subject().clone()),
             effect,
             acceptance,
+            // The whole `Declaration`'s serde form, so a key added to the wire
+            // joins the binding automatically rather than by an enumeration
+            // somebody must keep current.
+            payload_digest: Some(Fingerprint::new(payload)),
         });
     }
     Ok(plans)
@@ -971,11 +1014,26 @@ fn execute_mint(
     // Step 1 — the intent, before anything else exists.
     let held = journalled_intent(root, slice, submission, &plan.subject)?;
     let mut intent = if let Some(held) = held {
+        // The retry guard (SL-249 D8). A held intent journalled a payload; this
+        // retry rebuilt one. If they disagree, the acceptance journalled with the
+        // intent is bound to content this submission is no longer writing, and
+        // resuming would apply it to different content. Refuse here — before any
+        // resumed effect, and before the run advances — rather than repair
+        // anything afterwards (DEC-083).
+        if !held.resumable_under(plan.payload_digest.as_ref()) {
+            anyhow::bail!(
+                "submission `{submission}` is mid-mint at `{}` and its payload has \
+                 changed; re-send the payload it was journalled with, or use a new \
+                 submission id",
+                held.reserved_record().unwrap_or(&plan.provisional_record())
+            );
+        }
         held
     } else {
         fault(CheckpointStep::IntentJournal);
         let fresh = RecoveryIntent::journalled(submission, plan.subject.clone())
-            .accepted(plan.acceptance.clone());
+            .accepted(plan.acceptance.clone())
+            .with_payload(plan.payload_digest.clone());
         journal_intent(root, slice, &fresh)?;
         fresh
     };
@@ -1009,7 +1067,9 @@ fn execute_mint(
                     Ok(())
                 };
                 match kind {
-                    MintKind::Knowledge { kind, title, slug } => {
+                    MintKind::Knowledge {
+                        kind, title, slug, ..
+                    } => {
                         crate::knowledge::create_record(root, *kind, title, slug, midpoint)?;
                     }
                     MintKind::Review(args) => {
@@ -1058,7 +1118,13 @@ fn execute_mint(
             MintEffect::Create(kind) => kind.has_record_effects(),
             MintEffect::Adopt { .. } => true,
         } {
-            apply_record_effects(root, slice, &record, intent.acceptance())?;
+            apply_record_effects(
+                root,
+                slice,
+                &record,
+                intent.acceptance(),
+                plan.record_body(),
+            )?;
         }
         intent = intent.reaching(IntentState::Applied);
         journal_intent(root, slice, &intent)?;
@@ -1066,19 +1132,26 @@ fn execute_mint(
     Ok(record)
 }
 
-/// DEC-086 step 5: the record's requested status and its legal relation edges.
+/// DEC-086 step 5: the record's requested status, its legal relation edges, and
+/// — when the payload supplied one (SL-249) — its `.md` prose.
 ///
-/// Both are idempotent, which is what lets a resumed step 5 simply run again:
-/// `set_authored_status` writes only on a change, and `append_edge` returns
-/// `Noop` when the edge is already there — so "apply the edge when absent" needs
-/// no absence check of its own.
+/// All three are idempotent, which is what lets a resumed step 5 simply run
+/// again: `set_authored_status` writes only on a change, `append_edge` returns
+/// `Noop` when the edge is already there, and the prose tier is written through
+/// `entity::write_body` under `BodyMode::Replace` — a re-applied payload
+/// overwrites with the same bytes rather than accumulating, so "apply again on
+/// resume" needs no absence check of its own.
 fn apply_record_effects(
     root: &Path,
     slice: u32,
     record: &str,
     acceptance: Option<&AcceptanceAttestation>,
+    body: Option<&str>,
 ) -> Result<()> {
     let (kind, id) = crate::knowledge::resolve_ref(record)?;
+    if let Some(text) = body {
+        crate::knowledge::write_record_body(root, kind, id, text)?;
+    }
     // EX-6/DEC-088: only a user-acceptance attestation moves a created record off
     // its kind's seeded default. A payload cannot ask for `accepted`; there is no
     // field for it, and this is the only route to the state.
@@ -2354,6 +2427,199 @@ mod tests {
         let after = read_snapshot(root, slice).unwrap();
         assert_eq!(after.run.revision, 3, "the retry advanced the run");
         assert_eq!(after.checkpoint.intents.len(), 1);
+    }
+
+    /// VT-1 (SL-249) — a `create` disposition carrying `body`, applied ONCE
+    /// (no abandoned write, no retry), lands the payload prose verbatim as the
+    /// minted record's `.md` — DEC-086 step 5, through `entity::write_body`.
+    #[test]
+    fn create_disposition_body_is_written_verbatim_to_the_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                envelope(root, slice, 1, "sub-seed")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let body = "# Checkpointed decision\n\nThe prose payload, verbatim.\n";
+        let checkpoint = format!(
+            "{{{},\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+             \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+             \"title\":\"Checkpointed decision\",\"body\":{}}}}}]}}",
+            envelope(root, slice, 2, "sub-cp"),
+            serde_json::to_string(body).unwrap()
+        );
+        apply(root, slice, &checkpoint, &|| {}, &no_fault).unwrap();
+
+        let after = read_snapshot(root, slice).unwrap();
+        let record = after.checkpoint.intents[0]
+            .reserved_record()
+            .unwrap()
+            .to_owned();
+        let (kind, id) = crate::knowledge::resolve_ref(&record).unwrap();
+        let name = format!("{id:03}");
+        let md_path = root
+            .join(kind.kind().dir)
+            .join(&name)
+            .join(format!("record-{name}.md"));
+        assert_eq!(
+            std::fs::read_to_string(&md_path).unwrap(),
+            body,
+            "the record's .md holds exactly the payload prose"
+        );
+    }
+
+    /// VT-2 (SL-249) — the retry guard's refusal arm. A submission is journalled
+    /// mid-mint; a retry under the SAME `submission_id` carrying a DIFFERENT
+    /// payload is refused before any resumed effect.
+    ///
+    /// The window is real and not hypothetical: the abandoned write below leaves
+    /// the run's revision unmoved, so the retry passes the CAS and is admitted as
+    /// fresh — exactly the state in which, before the guard, a changed payload
+    /// would have been written under an acceptance bound to the first one.
+    ///
+    /// Both halves are asserted. Checking the error alone would not prove the
+    /// effect was skipped, so the record's own bytes and the snapshot's are
+    /// compared before and after (DEC-083: the corpus is untouched by a refusal,
+    /// never repaired).
+    #[test]
+    fn a_retry_carrying_a_different_payload_is_refused_before_resuming() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        let doc = design_doc_path(root, slice);
+
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                envelope(root, slice, 1, "sub-seed")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let checkpoint = |body: &str| {
+            format!(
+                "{{{},\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+                 \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+                 \"title\":\"Checkpointed decision\",\"body\":{}}}}}]}}",
+                envelope(root, slice, 2, "sub-cp"),
+                serde_json::to_string(body).unwrap()
+            )
+        };
+
+        // The mint runs in full; the write is then abandoned in the pre-write
+        // window, so the intent and the record survive and the run does not move.
+        let hook = || std::fs::write(&doc, b"mid-invocation hand edit\n").unwrap();
+        let first = checkpoint("The prose the acceptance was bound to.\n");
+        apply(root, slice, &first, &hook, &no_fault).unwrap_err();
+        std::fs::remove_file(&doc).unwrap();
+
+        let journal = read_journal(root, slice).unwrap();
+        let record = journal.intents[0].reserved_record().unwrap().to_owned();
+        let (kind, id) = crate::knowledge::resolve_ref(&record).unwrap();
+        let md_path = crate::knowledge::record_toml_path(root, kind, id).with_extension("md");
+        let snapshot_path = crate::state::design_snapshot_path(root, slice);
+        let md_before = std::fs::read(&md_path).unwrap();
+        let toml_before =
+            std::fs::read(crate::knowledge::record_toml_path(root, kind, id)).unwrap();
+        let snapshot_before = std::fs::read(&snapshot_path).unwrap();
+
+        // Same submission, different prose.
+        let error = apply(
+            root,
+            slice,
+            &checkpoint("Different prose entirely.\n"),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("sub-cp") && error.contains(&record),
+            "the refusal names the submission and the record it is mid-mint on: {error}"
+        );
+
+        assert_eq!(
+            std::fs::read(&md_path).unwrap(),
+            md_before,
+            "the record's prose is untouched by the refusal"
+        );
+        assert_eq!(
+            std::fs::read(crate::knowledge::record_toml_path(root, kind, id)).unwrap(),
+            toml_before,
+            "and so is its structured tier"
+        );
+        assert_eq!(
+            std::fs::read(&snapshot_path).unwrap(),
+            snapshot_before,
+            "the snapshot is byte-identical"
+        );
+        assert_eq!(read_snapshot(root, slice).unwrap().run.revision, 2);
+
+        // And the guard is not a wall: the payload it was journalled with still
+        // resumes and completes (VT-3, arm one, end to end).
+        apply(root, slice, &first, &|| {}, &no_fault).unwrap();
+        assert_eq!(read_snapshot(root, slice).unwrap().run.revision, 3);
+    }
+
+    /// VT-3 (SL-249), arm two, end to end — a retry that rebuilt the same
+    /// declaration with its JSON keys in another order resumes and completes.
+    ///
+    /// The unit pin for this lives beside `RecoveryIntent`; this is the arm that
+    /// catches digesting the *raw request text*, which only exists here. A
+    /// legitimate re-send must not be refused for key order.
+    #[test]
+    fn a_retry_rebuilt_with_reordered_keys_still_resumes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+        let doc = design_doc_path(root, slice);
+
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                envelope(root, slice, 1, "sub-seed")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let sent = format!(
+            "{{{},\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+             \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\
+             \"title\":\"T\",\"body\":\"prose\"}}}}]}}",
+            envelope(root, slice, 2, "sub-cp")
+        );
+        let hook = || std::fs::write(&doc, b"mid-invocation hand edit\n").unwrap();
+        apply(root, slice, &sent, &hook, &no_fault).unwrap_err();
+        std::fs::remove_file(&doc).unwrap();
+
+        // The same declaration, rebuilt: every value identical, every key moved.
+        let rebuilt = format!(
+            "{{{},\"declare\":[{{\"dispose\":{{\"body\":\"prose\",\"title\":\"T\",\
+             \"kind\":\"decision\",\"form\":\"create\"}},\"disposes\":\"inq-1\",\
+             \"subject\":\"cp-1\"}}]}}",
+            envelope(root, slice, 2, "sub-cp")
+        );
+        assert_ne!(sent, rebuilt, "the bytes differ; the declaration does not");
+        apply(root, slice, &rebuilt, &|| {}, &no_fault).unwrap();
+        assert_eq!(read_snapshot(root, slice).unwrap().run.revision, 3);
     }
 
     // ── ObservedFact::GovernanceEdges (SL-244 EX-10, VT-4) ────────────────

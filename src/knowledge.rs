@@ -1067,21 +1067,15 @@ fn union_statuses() -> Vec<&'static str> {
 /// (the id must already be reserved — `show` never implicitly creates), mirroring
 /// `backlog::read_item`.
 fn read_record(root: &Path, kind: RecordKind, id: u32) -> anyhow::Result<KnowledgeRecord> {
-    let name = format!("{id:03}");
-    let path = root
-        .join(kind.kind().dir)
-        .join(&name)
-        .join(format!("{RECORD_STEM}-{name}.toml"));
+    let dir = record_dir(root, kind, id);
+    let path = dir.join(format!("{RECORD_STEM}-{id:03}.toml"));
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("record not found at {}", path.display()))?;
     let raw: RawRecordToml = dtoml::parse_entity_toml(&text, kind.prefix(), id)
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     let mut record = validate(raw)?;
     record.tier1 = crate::relation::tier1_edges(kind.kind(), &text)?;
-    let md_path = root
-        .join(kind.kind().dir)
-        .join(&name)
-        .join(format!("{RECORD_STEM}-{name}.md"));
+    let md_path = dir.join(format!("{RECORD_STEM}-{id:03}.md"));
     record.body = std::fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok(record)
@@ -1706,14 +1700,40 @@ pub(crate) fn run_status(
     Ok(())
 }
 
+/// The per-record directory — `root/<kind-dir>/<id:03>` — the layout every path
+/// into one record's authored/prose files walks. Shared by `record_toml_path`,
+/// `read_record`'s two paths, and `write_record_body` (STD-001).
+fn record_dir(root: &Path, kind: RecordKind, id: u32) -> PathBuf {
+    root.join(kind.kind().dir).join(format!("{id:03}"))
+}
+
 /// The authored `record-NNN.toml` for one record — the single derivation of that
 /// path, shared by the status seam, the relation seam, and the design-run
 /// checkpoint that writes both (STD-001).
 pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBuf {
-    let name = format!("{id:03}");
-    root.join(kind.kind().dir)
-        .join(&name)
-        .join(format!("{RECORD_STEM}-{name}.toml"))
+    record_dir(root, kind, id).join(format!("{RECORD_STEM}-{id:03}.toml"))
+}
+
+/// Write a record's `.md` prose tier wholesale (SL-249, DEC-086 step 5).
+///
+/// The seam a design-run checkpoint's `create` disposition writes its payload
+/// `body` through: `entity::write_body` takes `dir` + `file` so kind layout
+/// stays with the caller, and the owner of knowledge record layout is this
+/// module, not the design-run shell. Always `BodyMode::Replace` — a resumed
+/// step 5 re-applies the same payload and must produce the same bytes, which
+/// `Append` would double.
+pub(crate) fn write_record_body(
+    root: &Path,
+    kind: RecordKind,
+    id: u32,
+    text: &str,
+) -> anyhow::Result<bool> {
+    entity::write_body(
+        &record_dir(root, kind, id),
+        &format!("{RECORD_STEM}-{id:03}.md"),
+        text,
+        entity::BodyMode::Replace,
+    )
 }
 
 /// Transition one record's status through the edit-preserving seam, validating

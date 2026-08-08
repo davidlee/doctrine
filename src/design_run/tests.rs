@@ -859,6 +859,86 @@ fn the_review_pass_token_cannot_be_spelled_by_a_checkpoint_id() {
     assert_eq!(pass.subject().checkpoint(), None, "a pass names no node");
 }
 
+/// SL-249 `VT-4` — the pre-upgrade journal shape. An intent written before the
+/// payload digest existed carries no such key at all, and must resume exactly as
+/// it does today: the guard is additive and never converts a recoverable state
+/// into a stuck one (`R9`). Asserted over a literal wire fragment rather than a
+/// round-trip, because the shape that must keep parsing is the one an older
+/// binary wrote, not one this binary can still produce.
+#[test]
+fn an_intent_journalled_before_the_payload_digest_resumes_unguarded() {
+    let held: RecoveryIntent =
+        toml::from_str("submission = \"sub-1\"\nsubject = \"cp-1\"\nstate = \"materialised\"\n")
+            .unwrap();
+
+    assert_eq!(held.payload_digest(), None, "no digest was ever journalled");
+    assert!(
+        held.resumable_under(Some(&Fingerprint::new("sha256:anything"))),
+        "an unguarded intent resumes under whatever payload the retry carries"
+    );
+    assert!(held.resumable_under(None), "and under none at all");
+}
+
+/// SL-249 `VT-3`, arm one — a journalled digest admits the payload it bound and
+/// refuses any other. The `None`-current arm is asserted too: it is unreachable
+/// today (every declaration-borne mint digests), and asserting the conservative
+/// side is what keeps it unreachable rather than silently permissive.
+#[test]
+fn a_journalled_payload_digest_admits_only_the_payload_it_bound() {
+    let bound = Fingerprint::new("sha256:one");
+    let intent = RecoveryIntent::journalled("sub-1", IntentSubject::Checkpoint(id("cp-1")))
+        .with_payload(Some(bound.clone()));
+
+    assert!(intent.resumable_under(Some(&bound)), "the same payload");
+    assert!(
+        !intent.resumable_under(Some(&Fingerprint::new("sha256:two"))),
+        "a changed payload is refused before anything is resumed"
+    );
+    assert!(
+        !intent.resumable_under(None),
+        "a guarded intent is not unguarded by a retry that offers no digest"
+    );
+}
+
+/// SL-249 `VT-3`, arm two — what the digest is *over*. The material is the
+/// [`Declaration`]'s serde form, so a semantically identical payload rebuilt from
+/// scratch digests identically and a legitimate re-send is not refused for key
+/// order.
+///
+/// This is the arm that fails if someone digests the raw request text or a debug
+/// rendering instead: both differ between the two spellings below, which agree on
+/// every value. Asserted as an equality over the serialised form rather than over
+/// a hash, because the pure layer never hashes — it is handed the digest as a
+/// derived fact ([`Fingerprint::new`]), and equal material hashes equally.
+#[test]
+fn a_declaration_rebuilt_from_scratch_digests_as_the_one_it_retries() {
+    let sent = r#"{"subject":"cp-1","disposes":"inq-1","dispose":{"form":"create",
+        "kind":"decision","title":"T","body":"prose"}}"#;
+    // The same declaration, spelled by a caller that rebuilt it: keys in another
+    // order, and an optional the first spelling omitted written out as null.
+    let rebuilt = r#"{"dispose":{"title":"T","body":"prose","slug":null,
+        "kind":"decision","form":"create"},"disposes":"inq-1","subject":"cp-1"}"#;
+
+    let a: Declaration = serde_json::from_str(sent).unwrap();
+    let b: Declaration = serde_json::from_str(rebuilt).unwrap();
+    let (a, b) = (
+        serde_json::to_string(&a).unwrap(),
+        serde_json::to_string(&b).unwrap(),
+    );
+    assert_eq!(
+        a, b,
+        "the digest material is the Declaration's serde form, not the bytes the \
+         caller happened to send"
+    );
+
+    let intent = RecoveryIntent::journalled("sub-1", IntentSubject::Checkpoint(id("cp-1")))
+        .with_payload(Some(Fingerprint::new(a)));
+    assert!(
+        intent.resumable_under(Some(&Fingerprint::new(b))),
+        "so the rebuilt payload resumes rather than being refused"
+    );
+}
+
 /// `RequiredActor` names *where the actor comes from*, and resolution is what
 /// fixes the conjunction's arity (design sec-3, `RequiredActor`).
 ///

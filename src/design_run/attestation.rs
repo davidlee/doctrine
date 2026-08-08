@@ -998,6 +998,28 @@ pub(crate) struct RecoveryIntent {
     /// applies the same status the original would have (DEC-088).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     acceptance: Option<AcceptanceAttestation>,
+    /// A digest of the payload this mint was journalled for (SL-249 `D8`).
+    ///
+    /// Recovery is submission-keyed retry, and nothing enforced that a retry
+    /// under a given `submission_id` carried the *same* payload: a crash after
+    /// this intent is journalled and before the snapshot persists leaves the
+    /// run's revision unmoved, so a retry carrying different content passes the
+    /// CAS, is admitted as fresh, and resumes against `acceptance` above — an
+    /// acceptance bound by digest to content that is no longer being written.
+    /// The window predates this field (`title` and `slug` could already diverge
+    /// that way); what changed is the blast radius, once the payload carries the
+    /// record's own prose and facet.
+    ///
+    /// Defaulted — `#[serde(default)]` — because these rows outlive the binary
+    /// that wrote them: they ride the **snapshot** as well as the journal, and a
+    /// run spans weeks. An intent written before this field existed reads as
+    /// absent and resumes exactly as it did, so the guard is additive and never
+    /// converts a recoverable state into a stuck one (`R9`).
+    ///
+    /// The digest is derived by the shell and handed in — the pure layer never
+    /// hashes ([`Fingerprint`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    payload_digest: Option<Fingerprint>,
 }
 
 impl IntentState {
@@ -1017,6 +1039,7 @@ impl RecoveryIntent {
             reserved_record: None,
             state: IntentState::Journalled,
             acceptance: None,
+            payload_digest: None,
         }
     }
 
@@ -1068,5 +1091,35 @@ impl RecoveryIntent {
     /// The user acceptance journalled with it, if any.
     pub(crate) const fn acceptance(&self) -> Option<&AcceptanceAttestation> {
         self.acceptance.as_ref()
+    }
+
+    /// Bind the intent to the payload it is being journalled for (SL-249).
+    #[must_use]
+    pub(crate) fn with_payload(mut self, digest: Option<Fingerprint>) -> Self {
+        self.payload_digest = digest;
+        self
+    }
+
+    /// The payload digest journalled with it, if any.
+    pub(crate) const fn payload_digest(&self) -> Option<&Fingerprint> {
+        self.payload_digest.as_ref()
+    }
+
+    /// May a retry offering `current` resume this held intent?
+    ///
+    /// Two arms, and the asymmetry is the point. An intent journalled with **no**
+    /// digest is unguarded and resumes under anything — an older binary wrote it,
+    /// and refusing there would turn a recoverable state into a stuck one for no
+    /// gain. An intent that *does* carry one admits only that exact payload:
+    /// anything else, `None` included, is a retry writing content the journalled
+    /// acceptance was never bound to.
+    ///
+    /// The refusal itself belongs to the caller — nothing is rolled back to
+    /// repair a runtime failure (DEC-083), so this only says whether resuming is
+    /// honest, never what to do about it.
+    pub(crate) fn resumable_under(&self, current: Option<&Fingerprint>) -> bool {
+        self.payload_digest
+            .as_ref()
+            .is_none_or(|bound| current == Some(bound))
     }
 }
