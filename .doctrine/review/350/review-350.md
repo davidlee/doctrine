@@ -423,3 +423,26 @@ None. All eleven findings are `verified`; remediation is recorded here rather
 than by mutating any disposition.
 
 Reconcile pass complete — handoff to `/close`.
+
+### Correction to the brief's last line
+
+The brief's *Undelivered, and correctly so* section predicted that
+`.doctrine/spec/tech/011/**` "should clear when the REV lands". It did not, and
+the prediction was wrong about the mechanism rather than about the write.
+
+REV-049 landed in both tiers and validates clean, and the selector matches it —
+`slice conformance 250 --against HEAD~1..HEAD` reports all three touched
+`spec/tech/011/` files **conformant** under that very selector. What cannot see
+the write is the default *registry fold*: every recorded delta binds to a
+`PHASE-NN`, and a reconcile commit belongs to no phase, so a target discharged at
+reconcile reads `undelivered` forever.
+
+This is **IMP-292 defect 4**, already recorded and owned, with SL-244 / REV-048 /
+`.doctrine/spec/tech/029/**` as the first instance. SL-250 is appended there as a
+second data point, with the `--against` isolation that rules out selector
+imprecision. No finding is opened here: the gap is known, the write is real, and
+neither available workaround is correct — extending the last phase's boundary
+would falsify the phase record, and `slice selector rm` would erase a promise
+that was genuinely kept.
+
+`/close` should read the red cell accordingly.

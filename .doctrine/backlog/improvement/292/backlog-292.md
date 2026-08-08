@@ -91,3 +91,40 @@ reconcile write to, or a conformance rule that treats a target discharged by a
 
 Consequence, same as defects 1–3: `/close` reads a red cell that is correct in
 mechanism and wrong in meaning, and the reader is trained to discount the signal.
+
+### Defect 4 — second instance (SL-250 reconcile, RV-350)
+
+Reproduces exactly, one slice later and with a different spec. `SL-250` declared
+`.doctrine/spec/tech/011/**` as a design-target selector; `RV-350`'s
+reconciliation brief routed `REQ-186`'s amendment to a REV, and the brief itself
+predicted *"It should clear when the REV lands."* It did not.
+
+`REV-049` (`reconcile SL-250`) landed four rows in both tiers — `REQ-186`
+modified, `REQ-476` / `REQ-477` introduced and activated, and `SPEC-011`'s prose
+plus its structured responsibility 6 amended. `doctrine spec validate SPEC-011`
+clean, `doctrine validate` corpus clean. `slice conformance 250` still reports
+`undelivered (1): .doctrine/spec/tech/011/**`.
+
+The selector is not at fault, and this run isolates that cleanly — the same
+command with `--against HEAD~1..HEAD` over the reconcile commit reports all three
+touched files **conformant**, each matched by `.doctrine/spec/tech/011/**`:
+
+```
+conformant (3):
+  .doctrine/spec/tech/011/members.toml  ⟵ .doctrine/spec/tech/011/**
+  .doctrine/spec/tech/011/spec-011.md   ⟵ .doctrine/spec/tech/011/**
+  .doctrine/spec/tech/011/spec-011.toml ⟵ .doctrine/spec/tech/011/**
+```
+
+So the matcher works and the write is real; only the *registry fold* cannot see
+it, because every recorded delta binds to a `PHASE-NN` and a reconcile commit
+belongs to no phase. That narrows the fix candidates the parent section lists:
+this is not a selector-precision problem and cannot be repaired by
+`slice selector rm`, which would erase a promise that was genuinely kept.
+
+Worth noting for whoever takes this: the brief's confident prediction is itself
+evidence for the "trains readers to discount the signal" consequence — an auditor
+who knew the mechanism would not have written it, and the next one will predict
+the same thing again.
+
+Prior instance: SL-244 / REV-048 / `.doctrine/spec/tech/029/**` (above).
