@@ -52,6 +52,13 @@ mod fsutil;
 mod git;
 mod kinds;
 
+/// The `[interpretation]` policy (`sec-4`, `REQ-449`) — the one export that is
+/// a module rather than an item. It has its own refusal vocabulary and four
+/// public types, so re-exporting each at the crate root would put `sec-4`'s
+/// namespace into this one's; `EXPORTED` names the module and the boundary is
+/// the same size.
+pub mod interpretation;
+
 pub use clock::today;
 pub use config_file::{DOCTRINE_TOML, read_doctrine_toml_text};
 pub use git::{CaptureError, read_path_at};

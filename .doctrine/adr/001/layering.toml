@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (36) ────────────────────────────────────────────────────────────
+# ── leaf (43) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
@@ -41,6 +41,7 @@ git = "leaf"                # out=0: git ops — impure seam, no domain
 globmatch = "leaf"          # → glob (external): shared glob_matches matcher (SL-147 PHASE-03)
 finding = "leaf"            # out=0: unified doctor Finding type — pure (SL-168 PHASE-01, ADR-001 D2)
 hymns = "leaf"              # out=0: SL-186 pure prompt-cascade resolver engine — pure (no domain deps)
+interpretation = "leaf"     # out=0: [interpretation] policy — strict typed projection, canonical hash, restriction algebra; pure, exported to doctrine-control (SL-248 PHASE-02)
 kinds = "leaf"              # out=0: entity-kind vocabulary — pure constants
 ledger = "leaf"             # out=0: review ledger types — pure
 lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)

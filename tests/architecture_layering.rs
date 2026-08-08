@@ -61,8 +61,8 @@ const CONTROL_TIERS_SECTION: &str = "doctrine_control_tiers";
 /// The root package's lib target — the whole cross-crate surface.
 const LIB_RS: &str = "src/lib.rs";
 
-/// The root library's entire public export set (`STD-001`). `PHASE-02` appends
-/// `interpretation`, taking it to six.
+/// The root library's entire public export set (`STD-001`) — six names, five
+/// items and one module.
 ///
 /// Every name here is an item `doctrine-control` reaches, and no name here
 /// belongs to a module above `leaf` tier. `src/worktree/` is absent and stays
@@ -71,6 +71,7 @@ const LIB_RS: &str = "src/lib.rs";
 const EXPORTED: &[&str] = &[
     "CaptureError",
     "DOCTRINE_TOML",
+    "interpretation",
     "read_doctrine_toml_text",
     "read_path_at",
     "today",
@@ -1399,6 +1400,15 @@ pub fn scan() {
         read_doctrine_toml_text: fn(&Path) -> anyhow::Result<Option<String>>,
         read_path_at: fn(&Path, &str, &str) -> Result<Option<String>, doctrine::CaptureError>,
         today: fn() -> String,
+        /// The one export that is a module (`sec-4`). Bound through its entry
+        /// point, which is what makes the whole module's reachability a
+        /// compile-time fact rather than a name in a constant.
+        interpretation_parse: fn(
+            &str,
+        ) -> Result<
+            doctrine::interpretation::InterpretationPolicy,
+            doctrine::interpretation::PolicyRefusal,
+        >,
     }
 
     impl RootLibraryExports {
@@ -1408,6 +1418,7 @@ pub fn scan() {
                 read_doctrine_toml_text: doctrine::read_doctrine_toml_text,
                 read_path_at: doctrine::read_path_at,
                 today: doctrine::today,
+                interpretation_parse: doctrine::interpretation::parse,
             }
         }
     }
@@ -1525,6 +1536,14 @@ pub fn scan() {
             (exports.read_path_at)(&absent, "HEAD", "Cargo.toml")
                 .expect("a failed cat-file is Ok(None), never an error")
                 .is_none()
+        );
+        assert!(
+            matches!(
+                (exports.interpretation_parse)("[dispatch]\narm = \"claude\"\n"),
+                Err(doctrine::interpretation::PolicyRefusal::BlockMissing)
+            ),
+            "the interpretation module crossed the boundary but does not refuse \
+             a document without its block"
         );
 
         let surface: BTreeSet<String> = lib_public_surface().into_keys().collect();
