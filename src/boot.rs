@@ -526,27 +526,39 @@ pub(crate) fn session_start_hook_json(content: &str) -> anyhow::Result<String> {
 // a thin imperative wrapper (`ensure_boot_import`, `install_refresh`), so §9's
 // merge matrix is plain unit tests with no disk (house rule, A1).
 
-/// The machine-local Claude settings file carrying the `SessionStart` hook —
-/// gitignored (the absolute exec path belongs out of git, §5.3/D6).
-const SETTINGS_REL: &str = ".claude/settings.local.json";
+/// The machine-local Claude settings file — gitignored, so a hook command
+/// written here may bake an absolute exec path (`CommandForm::Baked`;
+/// baked ⟺ gitignored, SL-195 D2). Named `_LOCAL_` because SL-250 makes
+/// doctrine able to write either of two Claude settings files, at which point a
+/// constant called "the settings file" is an ambiguity that will be misread.
+const SETTINGS_LOCAL_REL: &str = ".claude/settings.local.json";
 
 /// Codex hooks file (CLI codex) — project-root JSON under `.codex/`.
 const CODE_HOOKS_REL: &str = ".codex/hooks.json";
 
 /// The project-root `.mcp.json` Claude Code reads for project-scoped MCP servers
-/// (CHR-013). Unlike `SETTINGS_REL` this is a committed, team-shared file — it
+/// (CHR-013). Unlike `SETTINGS_LOCAL_REL` this is a committed, team-shared file — it
 /// carries the doctrine MCP server registration (`doctrine serve --mcp`).
 const MCP_REL: &str = ".mcp.json";
 
 /// The `mcpServers` key doctrine registers its server under in `.mcp.json` — the
 /// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
 const MCP_SERVER_KEY: &str = "doctrine";
-/// The portable `.mcp.json` `command` (SL-195, POL-002): env-expansion resolved
-/// by Claude Code at load (`${VAR:-default}`, mcp.md:384). Single source of the
-/// literal — `desired_mcp_entry`, the `plan_mcp` comparator, and
-/// `is_doctrine_mcp_entry` all consume it (STD-001). NO host abspath in the
-/// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH.
-const MCP_COMMAND: &str = "${DOCTRINE_BIN:-doctrine}";
+/// The portable doctrine invocation (SL-195, POL-002) — NO host abspath in a
+/// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH. Single
+/// source of the literal (STD-001) across two surfaces:
+///
+/// - `.mcp.json` — expanded by Claude Code itself at load (`mcp.md:384`).
+///   Consumers: `desired_mcp_entry`, the `plan_mcp` comparator,
+///   `is_doctrine_mcp_entry`.
+/// - hook commands under `CommandForm::Portable` — expanded by whichever shell
+///   runs the hook (`sh -c` / Git Bash; `hooks.md:341`).
+///
+/// One string, two mechanisms: this names the *form*, and does NOT promise the
+/// form's portability is the same on both surfaces. `${VAR:-default}` is POSIX
+/// parameter expansion, so the hook surface is POSIX-shell-scoped (SL-250
+/// `sec-2`; doctrine does not target Windows).
+const PORTABLE_EXEC: &str = "${DOCTRINE_BIN:-doctrine}";
 
 /// The `SessionStart` matcher token — fires on a fresh session and on `/clear`
 /// (`clear` firing a `SessionStart` hook is already witnessed; the OR-token is
@@ -561,6 +573,18 @@ const SESSION_MATCHER_CODEX: &str = "startup|resume|clear|compact";
 /// `WorktreeCreate` has no matcher support (hooks.md:237), so this never scopes at
 /// runtime — it only gives the merge core a stable canonical-entry identity.
 const WORKTREE_CREATE_MATCHER: &str = "*";
+
+/// The hook events doctrine wires under (`hooks.<event>`). Named rather than
+/// inline (STD-001): a typo in an event key yields a silently-inert hook.
+const EVENT_SESSION_START: &str = "SessionStart";
+const EVENT_WORKTREE_CREATE: &str = "WorktreeCreate";
+
+/// The matcher SETS a spec emits entries for, in emission order. Single-element
+/// for every spec that shipped before SL-250; the ordered-set shape is what lets
+/// one command own several matchers without the normalize collapsing them.
+const SESSION_MATCHERS: &[&str] = &[SESSION_MATCHER];
+const SESSION_MATCHERS_CODEX: &[&str] = &[SESSION_MATCHER_CODEX];
+const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
 
 // ---------------------------------------------------------------------------
 // The harness seam (R2) — enum + match, one local id per wired harness.
@@ -848,12 +872,9 @@ struct HookPlan {
     new_json: Option<String>,
 }
 
-/// The hook command for `exec`: `<exec> boot`. A **single** space-free argument
-/// (`boot`) — the invariant the ownership match leans on (see
-/// `is_doctrine_boot_command`).
-fn boot_command(exec: &Path) -> String {
-    format!("{} boot", exec.display())
-}
+/// The `<exec> boot` hook's single space-free argument — the invariant the
+/// ownership match leans on (see `is_doctrine_boot_command`).
+const BOOT_ARGS: &str = "boot";
 
 /// The resolve-based session-start emit args (SL-187 PHASE-04, CHR-033 seam):
 /// the pi extension + Claude/Codex `SessionStart` hooks exec `<doctrine> prompt
@@ -865,19 +886,55 @@ const RESOLVE_EMIT_ARGS: &str = "prompt resolve --role orchestrator";
 /// resolve command on the next install (INV-D4 continuity), never abandoned.
 const LEGACY_EMIT_ARGS: &str = "boot --emit";
 
-/// The emit command for `exec`: `<exec> prompt resolve --role orchestrator`.
-fn emit_command(exec: &Path) -> String {
-    format!("{} {RESOLVE_EMIT_ARGS}", exec.display())
+/// Which program half a hook command gets. THE MERGE CORE'S AXIS — deliberately
+/// NOT `ClaudeSettingsScope`: `plan_hook` is shared with the Codex arm, which has
+/// no Claude-settings concept, and threading one through it purely to select
+/// "baked" would make that type stop denoting what its name says (ADR-001: a
+/// shared core does not acquire a caller's domain concept).
+///
+/// The underlying invariant is `baked ⟺ gitignored` (SL-195 D2), which is not
+/// Claude-specific: `.codex/hooks.json` is gitignored too, so the Codex arm
+/// answers `Baked` honestly on its own file's tracking status.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CommandForm {
+    /// `<abs exec> <args>` — for a gitignored file.
+    Baked,
+    /// `${DOCTRINE_BIN:-doctrine} <args>` — for a tracked one (POL-002).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-250 PHASE-02 selects this variant from the scope key; PHASE-01 lands the axis"
+        )
+    )]
+    Portable,
 }
 
-/// The canonical hook entry doctrine writes for `spec` — the matcher is the
-/// spec's own (not hardcoded), so a `SubagentStart` spec emits its agent-type
-/// matcher while a `SessionStart` spec emits `startup|clear`.
-fn desired_entry(spec: &HookSpec) -> Value {
-    serde_json::json!({
-        "matcher": spec.matcher,
-        "hooks": [ { "type": "command", "command": spec.command } ],
-    })
+/// Render `spec`'s command in `form`. Rendering is a function of the spec and
+/// the form, never a stored string: a spec is built once while the file it will
+/// be written to — and so the form — is resolved per write.
+fn command_for(spec: &HookSpec, form: CommandForm) -> String {
+    match form {
+        CommandForm::Portable => format!("{PORTABLE_EXEC} {}", spec.args),
+        CommandForm::Baked => format!("{} {}", spec.exec.display(), spec.args),
+    }
+}
+
+/// The canonical hook entries doctrine writes for `spec`, one per matcher in
+/// emission order, each carrying the one rendered command. Entry identity is the
+/// SET (SL-250): a hand-edit that deletes one of them no longer matches, so the
+/// whole set is rewritten on the next install.
+fn desired_entries(spec: &HookSpec, form: CommandForm) -> Vec<Value> {
+    let command = command_for(spec, form);
+    spec.matchers
+        .iter()
+        .map(|matcher| {
+            serde_json::json!({
+                "matcher": matcher,
+                "hooks": [ { "type": "command", "command": command } ],
+            })
+        })
+        .collect()
 }
 
 /// Whether `cmd` is doctrine's own `boot` hook — robust to spaces in the exec
@@ -896,79 +953,88 @@ fn is_doctrine_boot_command(cmd: &str) -> bool {
 }
 
 /// A program path is doctrine's iff — after dropping a trailing ` (deleted)`
-/// (the `/proc/self/exe` poison, SL-124 Defect B) — its file name is `doctrine`.
-/// Shared by all three ownership predicates so a poisoned command is still
-/// recognised as ours and healed, never abandoned beside a fresh duplicate.
+/// (the `/proc/self/exe` poison, SL-124 Defect B) — it is either the portable
+/// literal or a path whose file name is `doctrine`. Shared by every ownership
+/// predicate, so a poisoned command is still recognised as ours and healed,
+/// never abandoned beside a fresh duplicate.
+///
+/// The [`PORTABLE_EXEC`] arm (SL-250) is a strict widening: `Path::file_name`
+/// on that literal yields the whole token, never `doctrine`, so the two arms
+/// cannot collide and no foreign command becomes ours. It is what makes a scope
+/// switch HEAL — an abspath entry in the file now being written is owned but
+/// not canonical, so it is rewritten to the portable form.
 fn is_doctrine_program(program: &str) -> bool {
     let p = program.trim_end();
-    let p = p.strip_suffix(" (deleted)").unwrap_or(p);
-    Path::new(p.trim_end()).file_name() == Some(OsStr::new("doctrine"))
+    let p = p.strip_suffix(" (deleted)").unwrap_or(p).trim_end();
+    p == PORTABLE_EXEC || Path::new(p).file_name() == Some(OsStr::new("doctrine"))
 }
 
-/// The hook command for `exec`: `<exec> memory sync`. TWO trailing args, so the
-/// single-arg `rsplit_once` shape `is_doctrine_boot_command` leans on does NOT
-/// apply — ownership matches by suffix-strip (see `is_doctrine_sync_command`).
-fn sync_command(exec: &Path) -> String {
-    format!("{} memory sync", exec.display())
+/// The `memory sync` hook's fixed argument suffix (SL-018) — also its ownership
+/// key. TWO trailing args, so the single-arg `rsplit_once` shape
+/// `is_doctrine_boot_command` leans on does NOT apply; ownership matches by
+/// suffix-strip.
+const SYNC_ARGS: &str = "memory sync";
+
+/// The `WorktreeCreate` hook's fixed argument suffix (SL-152 PHASE-04) — also
+/// its ownership key. Multi-arg, so ownership matches by suffix-strip.
+const CREATE_FORK_ARGS: &str = "worktree create-fork";
+
+/// Whether `cmd` is `<doctrine> <args>` — the shared suffix-strip ownership
+/// shape. The program half may bear spaces, so the fixed `args` suffix and its
+/// preceding single space are stripped and the remainder checked with
+/// `is_doctrine_program` (poison-tolerant, and owning both command forms).
+///
+/// This is the shape four of the five predicates were written out in longhand.
+/// `is_doctrine_boot_command` deliberately does NOT ride it — see there.
+fn is_doctrine_command(cmd: &str, args: &str) -> bool {
+    cmd.trim()
+        .strip_suffix(args)
+        .and_then(|program| program.strip_suffix(' '))
+        .is_some_and(is_doctrine_program)
 }
 
-/// Whether `cmd` is doctrine's own `memory sync` hook. The command is
-/// `<program> memory sync` where `program` may bear spaces, so strip the fixed
-/// ` memory sync` suffix and check the remaining program's file name is
-/// `doctrine`. Disjoint from `is_doctrine_boot_command` (trailing arg `boot`):
-/// neither predicate matches the other's command, so the two `SessionStart`
-/// entries never clobber one another.
+/// Whether `cmd` is doctrine's own `memory sync` hook. Disjoint from
+/// `is_doctrine_boot_command` (trailing arg `boot`): neither predicate matches
+/// the other's command, so the two `SessionStart` entries never clobber one
+/// another.
 fn is_doctrine_sync_command(cmd: &str) -> bool {
-    let Some(program) = cmd.trim().strip_suffix(" memory sync") else {
-        return false;
-    };
-    is_doctrine_program(program)
+    is_doctrine_command(cmd, SYNC_ARGS)
 }
 
 /// Whether `cmd` is doctrine's own session-start emit command. Ours iff it ends
 /// with either the current `prompt resolve --role orchestrator` args OR the legacy
-/// `boot --emit` args (self-heal — a stale hook is still recognised and refreshed),
-/// preceded by a space, and the remaining program's file name is `doctrine`.
+/// `boot --emit` args (self-heal — a stale hook is still recognised and refreshed).
 fn is_doctrine_emit_command(cmd: &str) -> bool {
-    let trimmed = cmd.trim();
-    [RESOLVE_EMIT_ARGS, LEGACY_EMIT_ARGS].iter().any(|args| {
-        trimmed
-            .strip_suffix(args)
-            .and_then(|program| program.strip_suffix(' '))
-            .is_some_and(is_doctrine_program)
-    })
+    [RESOLVE_EMIT_ARGS, LEGACY_EMIT_ARGS]
+        .iter()
+        .any(|args| is_doctrine_command(cmd, args))
 }
 
-/// The `WorktreeCreate` hook command for `exec`:
-/// `<exec> worktree create-fork` (SL-152 PHASE-04). Multi-arg, so ownership
-/// matches by suffix-strip (see `is_doctrine_create_fork_command`).
-fn create_fork_command(exec: &Path) -> String {
-    format!("{} worktree create-fork", exec.display())
-}
-
-/// Whether `cmd` is doctrine's own `worktree create-fork` hook. Strip the fixed
-/// ` worktree create-fork` suffix and check the remaining program's file name is
-/// `doctrine`. Disjoint from the boot/sync predicates (neither owns the other's
-/// command), so the `WorktreeCreate` entry never clobbers the `SessionStart` ones.
+/// Whether `cmd` is doctrine's own `worktree create-fork` hook. Disjoint from
+/// the boot/sync predicates (neither owns the other's command), so the
+/// `WorktreeCreate` entry never clobbers the `SessionStart` ones.
 fn is_doctrine_create_fork_command(cmd: &str) -> bool {
-    let Some(program) = cmd.trim().strip_suffix(" worktree create-fork") else {
-        return false;
-    };
-    is_doctrine_program(program)
+    is_doctrine_command(cmd, CREATE_FORK_ARGS)
 }
 
-/// A `SessionStart` hook doctrine owns: its canonical `command` plus the predicate
-/// that recognizes a prior (possibly stale) copy in foreign settings JSON. The
-/// merge core (`plan_hook`/`owned_positions`/`fallback_for`/`install_claude_hook`) is
-/// generic over this; `boot install` and `memory sync install` are the two thin
-/// callers (no-parallel-impl), differing only in command string + ownership.
+/// A hook doctrine owns: how to render its command, the predicate that
+/// recognizes a prior (possibly stale) copy in foreign settings JSON, and the
+/// event + ordered matcher set its entries occupy. The merge core
+/// (`plan_hook`/`owned_positions`/`fallback_for`/`install_claude_hook`) is
+/// generic over this; the installers are thin callers (no-parallel-impl),
+/// differing only in args + ownership + placement.
 pub(crate) struct HookSpec {
-    command: String,
+    /// The resolved `current_exe()`, kept UNRENDERED — the program half of the
+    /// command depends on the file being written, which is resolved per write.
+    exec: PathBuf,
+    /// The fixed argument suffix, e.g. `memory sync`. Also the ownership key.
+    args: &'static str,
     is_ours: fn(&str) -> bool,
-    /// The Claude hooks event this spec wires under (`hooks.<event>`).
+    /// The hooks event this spec wires under (`hooks.<event>`).
     event: &'static str,
-    /// The matcher token for this spec's entry.
-    matcher: &'static str,
+    /// The matcher tokens this spec's entries carry, in emission order.
+    /// One-element for every spec that shipped before SL-250.
+    matchers: &'static [&'static str],
 }
 
 impl HookSpec {
@@ -982,32 +1048,41 @@ impl HookSpec {
     )]
     fn boot(exec: &Path) -> Self {
         Self {
-            command: boot_command(exec),
+            exec: exec.to_path_buf(),
+            args: BOOT_ARGS,
             is_ours: is_doctrine_boot_command,
-            event: "SessionStart",
-            matcher: SESSION_MATCHER,
+            event: EVENT_SESSION_START,
+            matchers: SESSION_MATCHERS,
         }
     }
 
-    /// The Codex `SessionStart` emit hook (SL-014). The command is `<exec>
-    /// prompt resolve --role orchestrator` since SL-187 PHASE-04 (was `boot
-    /// --emit`); the constructor name is retained for call-site continuity.
-    fn boot_emit(exec: &Path) -> Self {
+    /// The `SessionStart` emit hook (SL-014). The command is `<exec> prompt
+    /// resolve --role orchestrator` since SL-187 PHASE-04 (was `boot --emit`);
+    /// the constructor name is retained for call-site continuity.
+    ///
+    /// Takes its matcher set rather than hardcoding one, so the Codex arm's
+    /// `startup|resume|clear|compact` and Claude's `startup|clear` share one
+    /// constructor. Sharing `is_doctrine_emit_command` between them is safe:
+    /// they write different files, and ownership is only ever evaluated within
+    /// one file.
+    fn boot_emit(exec: &Path, matchers: &'static [&'static str]) -> Self {
         Self {
-            command: emit_command(exec),
+            exec: exec.to_path_buf(),
+            args: RESOLVE_EMIT_ARGS,
             is_ours: is_doctrine_emit_command,
-            event: "SessionStart",
-            matcher: SESSION_MATCHER_CODEX,
+            event: EVENT_SESSION_START,
+            matchers,
         }
     }
 
     /// The `<exec> memory sync` hook (SL-018) — a SEPARATE `SessionStart` entry.
     pub(crate) fn sync(exec: &Path) -> Self {
         Self {
-            command: sync_command(exec),
+            exec: exec.to_path_buf(),
+            args: SYNC_ARGS,
             is_ours: is_doctrine_sync_command,
-            event: "SessionStart",
-            matcher: SESSION_MATCHER,
+            event: EVENT_SESSION_START,
+            matchers: SESSION_MATCHERS,
         }
     }
 
@@ -1024,10 +1099,11 @@ impl HookSpec {
     )]
     pub(crate) fn create_fork(exec: &Path) -> Self {
         Self {
-            command: create_fork_command(exec),
+            exec: exec.to_path_buf(),
+            args: CREATE_FORK_ARGS,
             is_ours: is_doctrine_create_fork_command,
-            event: "WorktreeCreate",
-            matcher: WORKTREE_CREATE_MATCHER,
+            event: EVENT_WORKTREE_CREATE,
+            matchers: WORKTREE_CREATE_MATCHERS,
         }
     }
 }
@@ -1056,19 +1132,22 @@ fn owned_positions(arr: &[Value], is_ours: fn(&str) -> bool) -> Vec<(usize, usiz
 }
 
 /// The owned hook at `(ei, hi)` is canonical iff its entry's `matcher` and its
-/// `command` both equal the spec's — the no-write short-circuit's precondition.
-fn entry_is_canonical(arr: &[Value], ei: usize, hi: usize, spec: &HookSpec) -> bool {
+/// `command` equal the expected ones — the no-write short-circuit's
+/// precondition. Takes the command and the matcher rather than the whole spec,
+/// because the matcher is now POSITIONAL within the spec's ordered set and the
+/// command is form-dependent.
+fn entry_is_canonical(arr: &[Value], ei: usize, hi: usize, command: &str, matcher: &str) -> bool {
     let Some(entry) = arr.get(ei) else {
         return false;
     };
-    let matcher_ok = entry.get("matcher").and_then(Value::as_str) == Some(spec.matcher);
+    let matcher_ok = entry.get("matcher").and_then(Value::as_str) == Some(matcher);
     let command_ok = entry
         .get("hooks")
         .and_then(Value::as_array)
         .and_then(|h| h.get(hi))
         .and_then(|h| h.get("command"))
         .and_then(Value::as_str)
-        == Some(spec.command.as_str());
+        == Some(command);
     matcher_ok && command_ok
 }
 
@@ -1141,17 +1220,21 @@ fn hook_array_mut<'a>(value: &'a mut Value, event: &str) -> Option<&'a mut Vec<V
 /// `install_claude_hook`, so this wrapper is test-only).
 #[cfg(test)]
 fn plan_session_hook(existing_json: Option<&str>, exec: &Path) -> HookPlan {
-    plan_hook(existing_json, &HookSpec::boot(exec))
+    plan_hook(existing_json, &HookSpec::boot(exec), CommandForm::Baked)
 }
 
-/// The generic merge core: plan `spec`'s `SessionStart` hook into existing
-/// settings `JSON`. Preserves every foreign hook and unrelated key (mutates a
-/// `serde_json::Value` at the narrow path — never a typed round-trip that could
-/// drop unknown keys). Malformed JSON or an unexpectedly-typed
-/// `hooks`/`SessionStart` → fail soft. Both `boot install` and `memory sync
-/// install` ride this — see `HookSpec`.
-fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
-    let command = spec.command.clone();
+/// The generic merge core: plan `spec`'s hook entries into existing settings
+/// `JSON`, rendered in `form`. Preserves every foreign hook and unrelated key
+/// (mutates a `serde_json::Value` at the narrow path — never a typed round-trip
+/// that could drop unknown keys). Malformed JSON or an unexpectedly-typed
+/// `hooks`/`hooks.<event>` → fail soft. Every installer rides this — see
+/// `HookSpec`.
+///
+/// `form` is a PARAMETER, never re-derived from the file path: the caller has
+/// already decided, and reverse-engineering it here would re-couple the shared
+/// core to a per-harness path constant.
+fn plan_hook(existing_json: Option<&str>, spec: &HookSpec, form: CommandForm) -> HookPlan {
+    let command = command_for(spec, form);
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -1176,14 +1259,18 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
             new_json: None,
         };
     };
-    // Normalize to exactly one canonical, doctrine-sole entry (D2). No-write iff a
-    // single canonical sole entry already exists; otherwise drop every owned hook
-    // and insert one fresh canonical entry at the first owned hook's execution slot.
+    // Normalize to exactly the canonical entry SET, in matcher order, each
+    // doctrine-sole (D2, generalised by SL-250). No-write iff that set is already
+    // present; otherwise drop every owned hook and insert the whole set at the
+    // first owned hook's execution slot. `owned_positions` returns array order, so
+    // the zip requires the owned entries to appear IN MATCHER ORDER — a reordering
+    // hand-edit falls through to the rewrite, which is the healing property.
     let owned = owned_positions(arr, spec.is_ours);
-    if let [(ei, hi)] = owned[..]
-        && entry_is_canonical(arr, ei, hi, spec)
-        && hook_is_sole(arr, ei)
-    {
+    let canonical_set = owned.len() == spec.matchers.len()
+        && owned.iter().zip(spec.matchers).all(|(&(ei, hi), matcher)| {
+            entry_is_canonical(arr, ei, hi, &command, matcher) && hook_is_sole(arr, ei)
+        });
+    if canonical_set {
         return HookPlan {
             outcome: RefreshOutcome::None,
             new_json: None,
@@ -1191,16 +1278,20 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
     }
     let outcome = match owned.first() {
         None => {
-            arr.push(desired_entry(spec)); // Wired — append at tail
+            arr.extend(desired_entries(spec, form)); // Wired — append at tail
             RefreshOutcome::Wired(command)
         }
         Some(&(first, _)) => {
             // Insert at the first owned hook's slot: `first` if that entry is fully
             // removed (all-owned), `first + 1` if it survives (retains a foreign hook).
+            // `ins + k` is always in bounds: `ins <= len` before the loop, and the
+            // array has grown by exactly `k` by the time the k-th insert runs.
             let survives = entry_has_foreign_hook(arr, first, spec.is_ours);
             drop_owned_hooks(arr, spec.is_ours);
             let ins = (first + usize::from(survives)).min(arr.len());
-            arr.insert(ins, desired_entry(spec));
+            for (k, entry) in desired_entries(spec, form).into_iter().enumerate() {
+                arr.insert(ins + k, entry);
+            }
             RefreshOutcome::Refreshed(command)
         }
     };
@@ -1220,10 +1311,12 @@ fn plan_hook(existing_json: Option<&str>, spec: &HookSpec) -> HookPlan {
 }
 
 /// The snippet printed when the settings file can't be merged automatically —
-/// generic over a `HookSpec`.
-pub(crate) fn fallback_for(spec: &HookSpec) -> String {
-    let entry = desired_entry(spec);
-    serde_json::to_string_pretty(&entry).unwrap_or_else(|_| spec.command.clone())
+/// generic over a `HookSpec`. Renders the WHOLE matcher set in the form that
+/// file would actually have received, so a manual-repair snippet is complete
+/// rather than one entry of it.
+pub(crate) fn fallback_for(spec: &HookSpec, form: CommandForm) -> String {
+    let entries = Value::Array(desired_entries(spec, form));
+    serde_json::to_string_pretty(&entries).unwrap_or_else(|_| command_for(spec, form))
 }
 
 /// Check whether `.codex/hooks.json` carries more than one `SessionStart` entry
@@ -1235,7 +1328,7 @@ fn check_spike_coexistence(root: &Path) -> bool {
         && let Ok(val) = serde_json::from_str::<Value>(&raw)
         && let Some(arr) = val
             .get("hooks")
-            .and_then(|h| h.get("SessionStart"))
+            .and_then(|h| h.get(EVENT_SESSION_START))
             .and_then(Value::as_array)
     {
         return arr
@@ -1262,7 +1355,11 @@ fn install_refresh(
 ) -> anyhow::Result<RefreshReport> {
     match h {
         Harness::Codex => {
-            let hook = install_codex_hook(root, &HookSpec::boot_emit(exec), dry_run)?;
+            let hook = install_codex_hook(
+                root,
+                &HookSpec::boot_emit(exec, SESSION_MATCHERS_CODEX),
+                dry_run,
+            )?;
             let spike_warning = if dry_run {
                 false
             } else {
@@ -1425,7 +1522,7 @@ fn plan_baseref(existing_json: Option<&str>) -> BaseRefPlan {
 /// change (unless `dry_run`). Reads → [`plan_baseref`] → atomic write, mirroring
 /// [`install_claude_hook`]. Rides beside the hook installer in the Claude arm.
 fn install_baseref(root: &Path, dry_run: bool) -> anyhow::Result<BaseRefOutcome> {
-    let path = root.join(SETTINGS_REL);
+    let path = root.join(SETTINGS_LOCAL_REL);
     let existing = fs::read_to_string(&path).ok();
     let plan = plan_baseref(existing.as_deref());
     if let (Some(json), false) = (&plan.new_json, dry_run) {
@@ -1461,18 +1558,18 @@ fn mcp_fallback() -> McpPlan {
 
 /// The canonical server entry doctrine writes under `mcpServers.doctrine`:
 /// `{ "command": "${DOCTRINE_BIN:-doctrine}", "args": ["serve", "--mcp"] }`. The
-/// command is the portable env-expansion literal ([`MCP_COMMAND`]), NOT a host
+/// command is the portable env-expansion literal ([`PORTABLE_EXEC`]), NOT a host
 /// abspath — the committed `.mcp.json` must carry no per-machine path (POL-002,
 /// SL-195). `DOCTRINE_BIN` overrides when `doctrine` is off the harness PATH.
 fn desired_mcp_entry() -> Value {
     serde_json::json!({
-        "command": MCP_COMMAND,
+        "command": PORTABLE_EXEC,
         "args": ["serve", "--mcp"],
     })
 }
 
 /// Whether `entry` is doctrine's own MCP server entry — the command is EITHER
-/// the portable env form ([`MCP_COMMAND`], the new shape) OR a legacy abspath
+/// the portable env form ([`PORTABLE_EXEC`], the new shape) OR a legacy abspath
 /// whose file name is `doctrine` (the pre-SL-195 baked shape), AND the args are
 /// exactly `["serve", "--mcp"]`. Owning both forms lets `plan_mcp` migrate an old
 /// abs entry to the env form without treating it as foreign or double-registering
@@ -1483,7 +1580,7 @@ fn is_doctrine_mcp_entry(entry: &Value) -> bool {
         .get("command")
         .and_then(Value::as_str)
         .is_some_and(|c| {
-            c == MCP_COMMAND || Path::new(c).file_name() == Some(OsStr::new("doctrine"))
+            c == PORTABLE_EXEC || Path::new(c).file_name() == Some(OsStr::new("doctrine"))
         });
     let args_ok = entry
         .get("args")
@@ -1498,12 +1595,12 @@ fn is_doctrine_mcp_entry(entry: &Value) -> bool {
 /// ALREADY the portable env form ⇒ no-op; ours but a legacy abspath (or any other
 /// non-env command) ⇒ refresh to the env form (SL-195 migration); a foreign-shaped
 /// `doctrine` entry, a non-object `mcpServers`, or malformed JSON ⇒ leave
-/// untouched (no clobber). The desired command is the const [`MCP_COMMAND`], NOT a
+/// untouched (no clobber). The desired command is the const [`PORTABLE_EXEC`], NOT a
 /// host path — so the no-op test compares against it (SL-195 F-1: comparing
 /// against the abspath here made an already-env entry never no-op ⇒ thrash).
 /// Rides BESIDE the hook merge core.
 fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
-    let command = MCP_COMMAND.to_string();
+    let command = PORTABLE_EXEC.to_string();
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -1549,7 +1646,7 @@ fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
 /// entry that can't be merged automatically — the full `mcpServers` block to add.
 fn mcp_fallback_snippet() -> String {
     let block = serde_json::json!({ "mcpServers": { MCP_SERVER_KEY: desired_mcp_entry() } });
-    serde_json::to_string_pretty(&block).unwrap_or_else(|_| MCP_COMMAND.to_string())
+    serde_json::to_string_pretty(&block).unwrap_or_else(|_| PORTABLE_EXEC.to_string())
 }
 
 /// Register the doctrine MCP server in the project-root `.mcp.json`, writing only
@@ -1580,27 +1677,32 @@ fn annotate_fallback(
     outcome: RefreshOutcome,
     hook_file: &'static str,
     spec: &HookSpec,
+    form: CommandForm,
 ) -> RefreshOutcome {
     match outcome {
         RefreshOutcome::PrintedFallback { .. } => RefreshOutcome::PrintedFallback {
             hook_file,
-            snippet: fallback_for(spec),
+            snippet: fallback_for(spec, form),
         },
         other => other,
     }
 }
 
-/// Generic hook installer: merge `spec` into `rel_path` under `root`, writing
-/// only on change (unless `dry_run`).
+/// Generic hook installer: merge `spec` into `rel_path` under `root` in `form`,
+/// writing only on change (unless `dry_run`). The sole path from either arm's
+/// installer to `plan_hook`, and also the `annotate_fallback` caller — so it is
+/// where the caller's form decision joins the core. It is NOT derived from
+/// `rel_path` here (see `plan_hook`).
 fn install_hook_to_file(
     root: &Path,
     rel_path: &'static str,
     spec: &HookSpec,
+    form: CommandForm,
     dry_run: bool,
 ) -> anyhow::Result<RefreshOutcome> {
     let path = root.join(rel_path);
     let existing = fs::read_to_string(&path).ok();
-    let plan = plan_hook(existing.as_deref(), spec);
+    let plan = plan_hook(existing.as_deref(), spec, form);
     if let (Some(json), false) = (&plan.new_json, dry_run) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -1608,29 +1710,35 @@ fn install_hook_to_file(
         }
         fsutil::write_atomic(&path, json.as_bytes())?;
     }
-    Ok(annotate_fallback(plan.outcome, rel_path, spec))
+    Ok(annotate_fallback(plan.outcome, rel_path, spec, form))
 }
 
-/// Merge a `HookSpec`'s `SessionStart` hook into `.claude/settings.local.json`,
-/// writing only on change (unless `dry_run`). The generic Claude installer behind
-/// both `boot install`'s refresh and `memory sync install` (SL-018).
+/// Merge a `HookSpec`'s hook entries into `.claude/settings.local.json`, writing
+/// only on change (unless `dry_run`). The generic Claude installer behind both
+/// `boot install`'s refresh and `memory sync install` (SL-018).
+///
+/// `Baked` because the file it writes is gitignored (`baked ⟺ gitignored`).
+/// SL-250 PHASE-02 replaces that single expression with the scope's form.
 pub(crate) fn install_claude_hook(
     root: &Path,
     spec: &HookSpec,
     dry_run: bool,
 ) -> anyhow::Result<RefreshOutcome> {
-    install_hook_to_file(root, SETTINGS_REL, spec, dry_run)
+    install_hook_to_file(root, SETTINGS_LOCAL_REL, spec, CommandForm::Baked, dry_run)
 }
 
-/// Merge a `HookSpec`'s `SessionStart` hook into `.codex/hooks.json`,
-/// writing only on change (unless `dry_run`). The Codex hook installer for
-/// `boot install` (SL-014).
+/// Merge a `HookSpec`'s hook entries into `.codex/hooks.json`, writing only on
+/// change (unless `dry_run`). The Codex hook installer for `boot install`
+/// (SL-014).
+///
+/// `Baked` on its OWN file's gitignored status (`.gitignore:9`, `/.codex`) —
+/// not on any Claude-settings concept.
 fn install_codex_hook(
     root: &Path,
     spec: &HookSpec,
     dry_run: bool,
 ) -> anyhow::Result<RefreshOutcome> {
-    install_hook_to_file(root, CODE_HOOKS_REL, spec, dry_run)
+    install_hook_to_file(root, CODE_HOOKS_REL, spec, CommandForm::Baked, dry_run)
 }
 
 // ---------------------------------------------------------------------------
@@ -2222,6 +2330,23 @@ pub(crate) fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Baked-form renderers for the hook specs, kept as test fixtures after
+    // SL-250 PHASE-01 moved production rendering onto `command_for`. The arg
+    // suffixes are restated as LITERALS on purpose: an assertion that reaches
+    // for the same constant the production side renders from would stop being
+    // able to catch a change to that constant.
+    fn boot_command(exec: &Path) -> String {
+        format!("{} boot", exec.display())
+    }
+
+    fn sync_command(exec: &Path) -> String {
+        format!("{} memory sync", exec.display())
+    }
+
+    fn create_fork_command(exec: &Path) -> String {
+        format!("{} worktree create-fork", exec.display())
+    }
 
     fn headings() -> Vec<&'static str> {
         boot_sequence().iter().map(|(h, _)| *h).collect()
@@ -3829,6 +3954,307 @@ mod tests {
         assert!(!is_doctrine_program("(deleted)")); // bare token is not ours
     }
 
+    // SL-250 PHASE-01 VT-4. Ownership spans BOTH command forms, because a scope
+    // switch must heal (rewrite an abspath entry to the portable form) rather
+    // than orphan it beside a fresh duplicate. The two `is_doctrine_program`
+    // arms cannot collide: `Path::file_name` on the portable literal yields the
+    // whole token, never `doctrine`.
+    #[test]
+    fn ownership_spans_both_command_forms() {
+        // The portable literal is ours, in every predicate.
+        assert!(is_doctrine_program(PORTABLE_EXEC));
+        assert!(is_doctrine_sync_command(&format!(
+            "{PORTABLE_EXEC} memory sync"
+        )));
+        assert!(is_doctrine_create_fork_command(&format!(
+            "{PORTABLE_EXEC} worktree create-fork"
+        )));
+        assert!(is_doctrine_emit_command(&format!(
+            "{PORTABLE_EXEC} {RESOLVE_EMIT_ARGS}"
+        )));
+        assert!(is_doctrine_emit_command(&format!(
+            "{PORTABLE_EXEC} {LEGACY_EMIT_ARGS}"
+        )));
+
+        // The abspath form — including the `/proc/self/exe` poison suffix — is
+        // still ours, so the widening is strict.
+        assert!(is_doctrine_sync_command("/x/doctrine memory sync"));
+        assert!(is_doctrine_sync_command(
+            "/x/doctrine (deleted) memory sync"
+        ));
+        assert!(is_doctrine_create_fork_command(
+            "/x/doctrine (deleted) worktree create-fork"
+        ));
+
+        // The arms are disjoint: the portable token's file name is the whole
+        // token, so it can only be owned by the equality arm.
+        assert_ne!(
+            Path::new(PORTABLE_EXEC).file_name(),
+            Some(OsStr::new("doctrine"))
+        );
+
+        // No foreign program becomes ours by adding the arm.
+        assert!(!is_doctrine_sync_command(
+            "${OTHER_BIN:-doctrine} memory sync"
+        ));
+        assert!(!is_doctrine_sync_command("/x/doctrine-helper memory sync"));
+        assert!(!is_doctrine_program("${DOCTRINE_BIN:-other}"));
+    }
+
+    // SL-250 PHASE-01. The rendering axis: one spec, two program halves. The
+    // args suffix is invariant across forms — only the program half moves — and
+    // BOTH renderings are owned by the spec's predicate, which is what lets a
+    // scope switch rewrite an entry rather than orphan it.
+    #[test]
+    fn command_for_renders_both_forms() {
+        let spec = HookSpec::sync(Path::new("/abs/doctrine"));
+
+        let baked = command_for(&spec, CommandForm::Baked);
+        let portable = command_for(&spec, CommandForm::Portable);
+        assert_eq!(baked, "/abs/doctrine memory sync");
+        assert_eq!(portable, "${DOCTRINE_BIN:-doctrine} memory sync");
+
+        assert!(is_doctrine_sync_command(&baked));
+        assert!(is_doctrine_sync_command(&portable));
+        assert!(
+            !portable.contains("/abs/"),
+            "the portable form carries no host path (SL-195 INV-1)"
+        );
+    }
+
+    // --- SL-250 PHASE-01: the ordered matcher set (N>1) ---
+    //
+    // Driven by a TEST-LOCAL spec, not a production constructor (EX-9): the four
+    // multi-matcher specs arrive in PHASE-04 with their caller, and shipping them
+    // early would buy an `expect(dead_code)` allowance that phase then has to
+    // clean up. It also keeps the merge core's own suite independent of whatever
+    // the registry happens to contain.
+
+    const TEST_PRETOOLUSE_ARGS: &str = "worktree pretooluse";
+    const TEST_PRETOOLUSE_MATCHERS: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
+    const TEST_PRETOOLUSE_EVENT: &str = "PreToolUse";
+
+    fn is_test_pretooluse_command(cmd: &str) -> bool {
+        is_doctrine_command(cmd, TEST_PRETOOLUSE_ARGS)
+    }
+
+    /// A four-matcher spec over one command — the shape that could not be
+    /// expressed before this phase (one predicate marked all four entries owned
+    /// and the normalize collapsed them to one).
+    fn pretooluse_spec(exec: &Path) -> HookSpec {
+        HookSpec {
+            exec: exec.to_path_buf(),
+            args: TEST_PRETOOLUSE_ARGS,
+            is_ours: is_test_pretooluse_command,
+            event: TEST_PRETOOLUSE_EVENT,
+            matchers: TEST_PRETOOLUSE_MATCHERS,
+        }
+    }
+
+    fn pretooluse_entries(json: &str) -> Vec<Value> {
+        event_entries(json, TEST_PRETOOLUSE_EVENT).expect("PreToolUse entries")
+    }
+
+    fn matchers_of(entries: &[Value]) -> Vec<&str> {
+        entries
+            .iter()
+            .map(|e| e["matcher"].as_str().expect("matcher"))
+            .collect()
+    }
+
+    #[test]
+    fn plan_hook_emits_one_entry_per_matcher() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+        let plan = plan_hook(None, &spec, CommandForm::Baked);
+        assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
+
+        let json = plan.new_json.expect("wired ⇒ json");
+        let entries = pretooluse_entries(&json);
+        assert_eq!(entries.len(), TEST_PRETOOLUSE_MATCHERS.len());
+        assert_eq!(matchers_of(&entries), TEST_PRETOOLUSE_MATCHERS);
+        for entry in &entries {
+            assert_eq!(
+                entry["hooks"][0]["command"],
+                Value::String("/abs/doctrine worktree pretooluse".into())
+            );
+        }
+    }
+
+    #[test]
+    fn plan_hook_is_a_no_op_on_the_canonical_set() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+        let wired = plan_hook(None, &spec, CommandForm::Baked)
+            .new_json
+            .expect("wired ⇒ json");
+
+        let again = plan_hook(Some(&wired), &spec, CommandForm::Baked);
+        assert!(matches!(again.outcome, RefreshOutcome::None));
+        assert!(again.new_json.is_none(), "canonical set ⇒ no rewrite");
+    }
+
+    #[test]
+    fn plan_hook_heals_a_partial_hand_edit() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+        let wired = plan_hook(None, &spec, CommandForm::Baked)
+            .new_json
+            .expect("wired ⇒ json");
+
+        // Hand-delete the third of four entries. Entry identity is the SET, so
+        // the whole set is rewritten rather than the gap being patched.
+        let mut value: Value = serde_json::from_str(&wired).expect("valid json");
+        value["hooks"][TEST_PRETOOLUSE_EVENT]
+            .as_array_mut()
+            .expect("array")
+            .remove(2);
+        let edited = serde_json::to_string_pretty(&value).expect("serialisable");
+
+        let plan = plan_hook(Some(&edited), &spec, CommandForm::Baked);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.expect("refreshed ⇒ json");
+        assert_eq!(
+            matchers_of(&pretooluse_entries(&json)),
+            TEST_PRETOOLUSE_MATCHERS
+        );
+    }
+
+    #[test]
+    fn plan_hook_heals_a_stale_matcher() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+
+        // An owned entry on a matcher the spec no longer carries. Ownership is
+        // by command alone (DEC-161), so it is recognised as ours and rewritten
+        // onto the canonical set — never orphaned beside a fresh duplicate.
+        let seeded = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { TEST_PRETOOLUSE_EVENT: [
+                { "matcher": "Retired", "hooks": [
+                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] }
+            ] }
+        }))
+        .expect("serialisable");
+
+        let plan = plan_hook(Some(&seeded), &spec, CommandForm::Baked);
+        assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
+        let json = plan.new_json.expect("refreshed ⇒ json");
+        let entries = pretooluse_entries(&json);
+        assert_eq!(matchers_of(&entries), TEST_PRETOOLUSE_MATCHERS);
+        assert_eq!(
+            entries.len(),
+            TEST_PRETOOLUSE_MATCHERS.len(),
+            "no orphan left"
+        );
+    }
+
+    #[test]
+    fn plan_hook_preserves_foreign_entries_around_a_matcher_set() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+
+        // A foreign entry BEFORE and AFTER a stale owned one. The set replaces
+        // the owned entry in place; neither neighbour moves or is dropped.
+        let seeded = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { TEST_PRETOOLUSE_EVENT: [
+                { "matcher": "Bash", "hooks": [
+                    { "type": "command", "command": "/usr/bin/foreign before" } ] },
+                { "matcher": "Stale", "hooks": [
+                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] },
+                { "matcher": "Agent", "hooks": [
+                    { "type": "command", "command": "/usr/bin/foreign after" } ] }
+            ] }
+        }))
+        .expect("serialisable");
+
+        let json = plan_hook(Some(&seeded), &spec, CommandForm::Baked)
+            .new_json
+            .expect("refreshed ⇒ json");
+
+        assert_eq!(
+            event_commands(&json, TEST_PRETOOLUSE_EVENT),
+            vec![
+                "/usr/bin/foreign before".to_string(),
+                "/abs/doctrine worktree pretooluse".to_string(),
+                "/abs/doctrine worktree pretooluse".to_string(),
+                "/abs/doctrine worktree pretooluse".to_string(),
+                "/abs/doctrine worktree pretooluse".to_string(),
+                "/usr/bin/foreign after".to_string(),
+            ],
+            "the set inserts contiguously at the first owned slot, foreigns intact"
+        );
+    }
+
+    #[test]
+    fn plan_hook_preserves_a_foreign_hook_sibling() {
+        let exec = Path::new("/abs/doctrine");
+        let spec = pretooluse_spec(exec);
+
+        // One entry carrying BOTH an owned hook and a foreign one. The entry
+        // survives the drop (it retains the foreign hook), so the set is
+        // inserted AFTER it rather than at its slot.
+        let seeded = serde_json::to_string_pretty(&serde_json::json!({
+            "hooks": { TEST_PRETOOLUSE_EVENT: [
+                { "matcher": "shared", "keepKey": "v", "hooks": [
+                    { "type": "command", "command": "/usr/bin/foreign hook" },
+                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] }
+            ] }
+        }))
+        .expect("serialisable");
+
+        let json = plan_hook(Some(&seeded), &spec, CommandForm::Baked)
+            .new_json
+            .expect("refreshed ⇒ json");
+
+        let entries = pretooluse_entries(&json);
+        assert_eq!(matchers_of(&entries), {
+            let mut expected = vec!["shared"];
+            expected.extend(TEST_PRETOOLUSE_MATCHERS);
+            expected
+        });
+        assert_eq!(
+            entries[0].get("keepKey").and_then(Value::as_str),
+            Some("v"),
+            "unknown entry-level key preserved"
+        );
+        assert_eq!(
+            entries[0]["hooks"].as_array().expect("hooks").len(),
+            1,
+            "the foreign sibling survives alone"
+        );
+    }
+
+    // SL-250 PHASE-01 VT-3. The N=1 gate, ASSERTED rather than assumed: the
+    // matcher set is a strict generalisation, so a single-matcher spec must emit
+    // exactly what it emitted before the slice. Pinned as a literal, because a
+    // comparison against `desired_entries` would be tautological.
+    #[test]
+    fn single_matcher_specs_are_unchanged() {
+        let spec = HookSpec::sync(Path::new("/abs/doctrine"));
+        let json = plan_hook(None, &spec, CommandForm::Baked)
+            .new_json
+            .expect("wired ⇒ json");
+
+        assert_eq!(
+            json,
+            r#"{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "/abs/doctrine memory sync",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ]
+  }
+}"#
+        );
+    }
+
     // --- T2: plan_session_hook (pure merge matrix) ---
 
     #[test]
@@ -3905,7 +4331,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let exec = Path::new("/abs/doctrine");
-        let settings = root.join(SETTINGS_REL);
+        let settings = root.join(SETTINGS_LOCAL_REL);
         let mcp = root.join(MCP_REL);
 
         // SL-152 PHASE-06: the Claude boot hook now ships via the plugin — the
@@ -3936,7 +4362,7 @@ mod tests {
         let mcp_json: Value = serde_json::from_str(&fs::read_to_string(&mcp).unwrap()).unwrap();
         assert_eq!(
             mcp_json["mcpServers"]["doctrine"]["command"],
-            Value::String(MCP_COMMAND.into())
+            Value::String(PORTABLE_EXEC.into())
         );
         assert_eq!(
             mcp_json["mcpServers"]["doctrine"]["args"],
@@ -4039,7 +4465,7 @@ mod tests {
         // Empty/absent .mcp.json ⇒ Wired, with the nested server entry written.
         // SL-195: the command is the portable env literal, NEVER a host abspath.
         assert_eq!(
-            MCP_COMMAND, "${DOCTRINE_BIN:-doctrine}",
+            PORTABLE_EXEC, "${DOCTRINE_BIN:-doctrine}",
             "the portable command literal is pinned (POL-002, mcp.md:384)"
         );
         let plan = plan_mcp(None);
@@ -4048,7 +4474,7 @@ mod tests {
             serde_json::from_str(&plan.new_json.expect("a write is planned")).unwrap();
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String(MCP_COMMAND.into())
+            Value::String(PORTABLE_EXEC.into())
         );
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["args"],
@@ -4060,7 +4486,7 @@ mod tests {
     fn plan_mcp_idempotent_when_current() {
         // SL-195 F-1 (the blocker): an entry ALREADY in the portable env form is a
         // true no-op — no rewrite. The comparator must weigh the existing command
-        // against MCP_COMMAND, not a host abspath (which would never match ⇒ thrash).
+        // against PORTABLE_EXEC, not a host abspath (which would never match ⇒ thrash).
         let existing = r#"{"mcpServers":{"doctrine":{"command":"${DOCTRINE_BIN:-doctrine}","args":["serve","--mcp"]}}}"#;
         let plan = plan_mcp(Some(existing));
         assert!(matches!(plan.outcome, RefreshOutcome::None));
@@ -4078,7 +4504,7 @@ mod tests {
         let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String(MCP_COMMAND.into())
+            Value::String(PORTABLE_EXEC.into())
         );
     }
 
@@ -4095,7 +4521,7 @@ mod tests {
         );
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String(MCP_COMMAND.into())
+            Value::String(PORTABLE_EXEC.into())
         );
     }
 
@@ -4143,7 +4569,8 @@ mod tests {
     fn is_doctrine_mcp_entry_recognises_only_our_shape() {
         // SL-195: BOTH the new env form and a legacy abspath (file name `doctrine`)
         // are ours; foreign command or customised args is not.
-        let env_form: Value = serde_json::json!({"command": MCP_COMMAND, "args":["serve","--mcp"]});
+        let env_form: Value =
+            serde_json::json!({"command": PORTABLE_EXEC, "args":["serve","--mcp"]});
         assert!(is_doctrine_mcp_entry(&env_form), "env form is ours");
         let legacy_abs: Value =
             serde_json::json!({"command":"/nix/store/a b/doctrine","args":["serve","--mcp"]});
@@ -4187,7 +4614,7 @@ mod tests {
         let out = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
         assert!(matches!(out, RefreshOutcome::Wired(_)));
 
-        let json = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         let cmds = commands(&json);
         assert!(
             cmds.contains(&"/abs/doctrine boot".to_string()),
@@ -4201,7 +4628,7 @@ mod tests {
         // re-running sync is a no-op; the boot entry is untouched.
         let again = install_claude_hook(root, &HookSpec::sync(exec), false).unwrap();
         assert!(matches!(again, RefreshOutcome::None));
-        let json = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         assert_eq!(
             commands(&json),
             vec![
@@ -4220,7 +4647,7 @@ mod tests {
             install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), true).unwrap();
         assert!(matches!(out, RefreshOutcome::Wired(_)));
         assert!(
-            !root.join(SETTINGS_REL).exists(),
+            !root.join(SETTINGS_LOCAL_REL).exists(),
             "dry-run must not write settings"
         );
     }
@@ -4248,7 +4675,7 @@ mod tests {
 
         // Pre-existing SessionStart hooks (boot + a foreign hook).
         install_claude_hook(root, &HookSpec::boot(exec), false).unwrap();
-        let settings_path = root.join(SETTINGS_REL);
+        let settings_path = root.join(SETTINGS_LOCAL_REL);
         let seeded = fs::read_to_string(&settings_path).unwrap();
         let mut value: Value = serde_json::from_str(&seeded).unwrap();
         hook_array_mut(&mut value, "SessionStart")
@@ -4325,9 +4752,12 @@ mod tests {
     #[test]
     fn create_fork_spec_shape() {
         let spec = HookSpec::create_fork(Path::new("/abs/doctrine"));
-        assert_eq!(spec.matcher, WORKTREE_CREATE_MATCHER);
+        assert_eq!(spec.matchers, WORKTREE_CREATE_MATCHERS);
         assert_eq!(spec.event, "WorktreeCreate");
-        assert_eq!(spec.command, "/abs/doctrine worktree create-fork");
+        assert_eq!(
+            command_for(&spec, CommandForm::Baked),
+            "/abs/doctrine worktree create-fork"
+        );
     }
 
     // The ownership predicates are mutually disjoint — none owns another's
@@ -4384,7 +4814,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &spec);
+        let plan = plan_hook(Some(&seed), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         let wc = event_entries(&json, "WorktreeCreate").unwrap();
@@ -4400,7 +4830,7 @@ mod tests {
             "command preserved"
         );
         assert!(matches!(
-            plan_hook(Some(&json), &spec).outcome,
+            plan_hook(Some(&json), &spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4420,7 +4850,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &spec);
+        let plan = plan_hook(Some(&seed), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
@@ -4435,7 +4865,7 @@ mod tests {
             Some(WORKTREE_CREATE_MATCHER)
         );
         assert!(matches!(
-            plan_hook(Some(&json), &spec).outcome,
+            plan_hook(Some(&json), &spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4453,7 +4883,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &spec);
+        let plan = plan_hook(Some(&seed), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
@@ -4462,7 +4892,7 @@ mod tests {
             "poison stripped to clean canonical command"
         );
         assert!(matches!(
-            plan_hook(Some(&json), &spec).outcome,
+            plan_hook(Some(&json), &spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4486,7 +4916,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &spec);
+        let plan = plan_hook(Some(&seed), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
@@ -4507,7 +4937,7 @@ mod tests {
             "foreign entry keeps its position"
         );
         assert!(matches!(
-            plan_hook(Some(&json), &spec).outcome,
+            plan_hook(Some(&json), &spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4531,7 +4961,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &spec);
+        let plan = plan_hook(Some(&seed), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         let wc = event_entries(&json, "WorktreeCreate").unwrap();
@@ -4557,7 +4987,7 @@ mod tests {
             "doctrine survivor is canonical + sole"
         );
         assert!(matches!(
-            plan_hook(Some(&json), &spec).outcome,
+            plan_hook(Some(&json), &spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4566,23 +4996,24 @@ mod tests {
     /// proves the shared merge core has no event-specific behaviour (VT-7).
     fn assert_session_foreign_sibling_extraction(spec: &HookSpec) {
         assert_eq!(spec.event, "SessionStart");
+        let command = command_for(spec, CommandForm::Baked);
         let foreign = "/usr/bin/foreign hook";
         let seed = serde_json::to_string(&serde_json::json!({
             "hooks": { "SessionStart": [
                 { "matcher": "shared", "keepKey": "v", "hooks": [
                     { "type": "command", "command": foreign },
-                    { "type": "command", "command": spec.command }
+                    { "type": "command", "command": command }
                 ] }
             ]}
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), spec);
+        let plan = plan_hook(Some(&seed), spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
             commands(&json),
-            vec![foreign.to_string(), spec.command.clone()],
+            vec![foreign.to_string(), command],
             "foreign preserved before the extracted doctrine entry"
         );
         assert_eq!(
@@ -4593,7 +5024,7 @@ mod tests {
             "unknown entry-level key preserved"
         );
         assert!(matches!(
-            plan_hook(Some(&json), spec).outcome,
+            plan_hook(Some(&json), spec, CommandForm::Baked).outcome,
             RefreshOutcome::None
         ));
     }
@@ -4624,7 +5055,7 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan_hook(Some(&seed), &HookSpec::boot(new_exec));
+        let plan = plan_hook(Some(&seed), &HookSpec::boot(new_exec), CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.unwrap();
         assert_eq!(
@@ -4763,7 +5194,7 @@ mod tests {
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
         // SL-152 PHASE-06: the Claude boot hook ships via the plugin — `wire` no
         // longer settings-wires it. Only the baseRef key lands in settings.
-        let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let settings = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         assert!(
             commands(&settings).is_empty(),
             "no boot hook settings-wired for Claude (ships via plugin): {settings}"
@@ -4779,7 +5210,7 @@ mod tests {
             1,
             "re-run does not duplicate ref"
         );
-        let settings = fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let settings = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         assert!(
             commands(&settings).is_empty(),
             "re-run still wires no boot hook for Claude"
@@ -4794,7 +5225,7 @@ mod tests {
         wire(root, Path::new(FAKE_EXEC), &[Harness::Claude], true).unwrap();
         assert!(!root.join("CLAUDE.md").exists(), "dry-run wrote no import");
         assert!(
-            !root.join(SETTINGS_REL).exists(),
+            !root.join(SETTINGS_LOCAL_REL).exists(),
             "dry-run wrote no settings"
         );
     }
@@ -4806,7 +5237,7 @@ mod tests {
 
         // force Claude's refresh to fail: a directory squatting the settings path
         // makes write_atomic's rename fail.
-        fs::create_dir_all(root.join(SETTINGS_REL)).unwrap();
+        fs::create_dir_all(root.join(SETTINGS_LOCAL_REL)).unwrap();
 
         // both harnesses; Claude refresh errs, pi import must still be wired and
         // the verb must not abort (A9).
@@ -5378,7 +5809,12 @@ weight = 0
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let exec = codex_exec(root);
-        let out = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        let out = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         assert!(matches!(out, RefreshOutcome::Wired(_)));
         let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
         let val: Value = serde_json::from_str(&raw).unwrap();
@@ -5393,14 +5829,69 @@ weight = 0
         );
     }
 
+    // SL-250 PHASE-01 VT-3. The Codex arm answers `Baked` on its OWN file's
+    // gitignored status, never on a Claude-settings concept — and the file it
+    // writes is byte-identical to the pre-slice output. Pinned as a whole-file
+    // literal: the assertions above check fields, and a field check cannot see
+    // a change in key order or formatting.
+    #[test]
+    fn the_codex_arm_renders_the_baked_form() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let exec = codex_exec(root);
+        install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
+
+        let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
+        assert_eq!(
+            raw,
+            format!(
+                r#"{{
+  "hooks": {{
+    "SessionStart": [
+      {{
+        "hooks": [
+          {{
+            "command": "{} prompt resolve --role orchestrator",
+            "type": "command"
+          }}
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }}
+    ]
+  }}
+}}"#,
+                exec.display()
+            )
+        );
+        assert!(
+            !raw.contains(PORTABLE_EXEC),
+            "the Codex arm is Baked — the portable literal never appears"
+        );
+    }
+
     #[test]
     fn codex_hook_install_idempotent() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let exec = codex_exec(root);
-        let out1 = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        let out1 = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         assert!(matches!(out1, RefreshOutcome::Wired(_)));
-        let out2 = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        let out2 = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         assert!(matches!(out2, RefreshOutcome::None));
     }
 
@@ -5423,7 +5914,12 @@ weight = 0
             serde_json::to_string_pretty(&foreign).unwrap(),
         )
         .unwrap();
-        install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         let raw = std::fs::read_to_string(root.join(CODE_HOOKS_REL)).unwrap();
         let val: Value = serde_json::from_str(&raw).unwrap();
         let arr = val["hooks"]["SessionStart"].as_array().unwrap();
@@ -5437,7 +5933,12 @@ weight = 0
         let exec = codex_exec(root);
         std::fs::create_dir_all(root.join(".codex")).unwrap();
         std::fs::write(root.join(CODE_HOOKS_REL), "not json").unwrap();
-        let out = install_codex_hook(root, &HookSpec::boot_emit(&exec), false).unwrap();
+        let out = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         match out {
             RefreshOutcome::PrintedFallback { hook_file, snippet } => {
                 assert_eq!(hook_file, CODE_HOOKS_REL);
@@ -5462,8 +5963,18 @@ weight = 0
         let new_exec = new_dir.join("doctrine");
         std::fs::write(&old_exec, b"fake").unwrap();
         std::fs::write(&new_exec, b"fake").unwrap();
-        install_codex_hook(root, &HookSpec::boot_emit(&old_exec), false).unwrap();
-        let out = install_codex_hook(root, &HookSpec::boot_emit(&new_exec), false).unwrap();
+        install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&old_exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
+        let out = install_codex_hook(
+            root,
+            &HookSpec::boot_emit(&new_exec, SESSION_MATCHERS_CODEX),
+            false,
+        )
+        .unwrap();
         assert!(matches!(out, RefreshOutcome::Refreshed(_)));
     }
 
@@ -5520,7 +6031,7 @@ weight = 0
         std::fs::write(&exec, b"fake").unwrap();
         let out = install_claude_hook(root, &HookSpec::boot(&exec), false).unwrap();
         assert!(matches!(out, RefreshOutcome::Wired(_)));
-        let raw = std::fs::read_to_string(root.join(SETTINGS_REL)).unwrap();
+        let raw = std::fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
         assert!(raw.contains(&format!("{} boot", exec.display())));
     }
 }

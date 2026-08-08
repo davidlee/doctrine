@@ -518,7 +518,14 @@ pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) 
                 out,
                 "  claude: settings are malformed — add this hook manually:"
             )?;
-            writeln!(out, "{}", crate::boot::fallback_for(&spec))?;
+            // `Baked`: `install_claude_hook` writes the gitignored local file
+            // this phase, so the manual-repair snippet must match what it would
+            // have written. SL-250 PHASE-02 gives this a scope to ask instead.
+            writeln!(
+                out,
+                "{}",
+                crate::boot::fallback_for(&spec, crate::boot::CommandForm::Baked)
+            )?;
         }
     }
     Ok(())
