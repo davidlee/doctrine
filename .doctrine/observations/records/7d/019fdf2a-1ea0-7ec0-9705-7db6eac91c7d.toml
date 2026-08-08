@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf2a-1ea0-7ec0-9705-7db6eac91c7d"
+recorded_at = "2026-08-08T02:18:27.360576683Z"
+kind = "friction"
+summary = "correction rewrote a section head and left the contradicting tail in place (RFC-027 study 03)"
+detail = "While applying the pack's brief 02 I cited obligation-study/conclusion.md, whose section 3 opens with a dated withdrawal notice ('that finding is withdrawn — it was wrong twice') and then, 80 lines later, still carries the withdrawn text verbatim: a duplicate copy of the three AMENDED cases plus 'But the rate is the finding. Three corrections in 2,362 entrance criteria — about 0.13%'. A reader arriving mid-document gets the killed claim as live. Cost: one full read of a 320-line artefact to establish which half was current, plus a repair commit before the RFC could safely cite it. This is exactly RFC-026's R4 (sister tiers not updated uniformly) and its new S4 cluster (the correction is the high-risk edit) happening inside the corpus that documents them — the correction author swept the head of the section they were editing, not its whole population."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
