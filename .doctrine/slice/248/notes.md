@@ -333,6 +333,41 @@ reading the criterion.
 `sec-5`'s sample writes them (`900` / `512` / `8192` / `2` / `5`). Recorded in
 the `PHASE-03` sheet as `F-7`, which supersedes `T14`'s escalation clause.
 
+### From `PHASE-03` execution (`2f3a6db78`…`2a22084da`)
+
+17. **`EX-11`'s fieldless refusal variants cannot name the keys three `VT`
+    titles require them to name.** `VT-4`/`VT-7` mandate
+    `closure_roots_without_a_resolver_refuses_naming_both_keys`,
+    `neither_variable_usable_refuses_naming_the_config_key` and
+    `both_readable_lists_empty_refuses`, while `EX-11` fixes
+    `ClosureRootsWithoutResolver`, `NoReadableInputs`, `EmptyResolverArgv` and
+    `UnresolvableCapsuleRoot` as **fieldless**. The key survives only inside the
+    variant's identifier, which no test can assert and no operator can grep.
+    Resolved in-criteria by a structured `ConfigRefusal::keys() -> &[&'static
+    str]` returning the `KEY_*` constants — variant shapes untouched, and
+    structured rather than formatted, matching the posture `EX-16` takes for the
+    capacity warning. Same class as item 13: jointly satisfiable, but only once
+    someone notices the seam. Not a criterion failure.
+
+18. **`EX-17`'s literal manifest spelling was met by inheritance.** `serde` and
+    `toml` are declared `{ workspace = true }` rather than `EX-17`'s
+    `serde = { version = "1", features = ["derive"] }` / `toml`.
+    `[workspace.dependencies]` carries exactly those, so the *resolved*
+    dependency is character-for-character what the criterion names, and
+    inheritance is the root package's own convention (`Cargo.toml:61`). `rustix`
+    is spelled inline because it is not a workspace dependency. Recorded so an
+    auditor diffing the manifest against `EX-17`'s text does not read it as a
+    deviation. Form, not substance.
+
+19. **`VA-1`'s suggested grep cannot return empty, and would have produced a
+    false stop.** The bare alternative `now` is a substring of
+    `CapacityUnknown` — the type `EX-14` requires in `host.rs` — so the grep
+    matches fourteen lines of correct code. `VA-1` itself holds; only the method
+    was broken. The sound form strips comment lines and uses word boundaries.
+    Recorded because an agent running the suggested grep literally could
+    reasonably have raised a false criterion failure, which is a worse outcome
+    than the grep simply being wrong.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green
@@ -343,8 +378,16 @@ boundary had swept in four `SL-250` doc commits and one `IMP-412` backlog
 commit. `PHASE-02` `10c57a30b`…`a11b158e0`, four commits, `doctrine check gate`
 exit 0, lib target 210 tests (53 in `interpretation`, up from a 157 baseline).
 Five further items owed to reconciliation (6–10), one backlog item minted
-(`ISS-326`). Next: `/phase-plan` `PHASE-03`, the first phase in the clone.
-Design run locked at revision 93 · 6b5036c38
+(`ISS-326`). **`PHASE-03` executed in the clone** on branch `sl-248`
+(`2f3a6db78`, `a79408d37`, `2a22084da`), driven by the `LOOP.md` loop:
+orchestrator routes, an Opus planner writes the sheet, an Opus worker executes
+it. `doctrine check gate` exit 0, 33 `doctrine-control` tests (`EN-1` predicted
+≈33), `verify-vt` `PHASE-03` **8/8 PASS** after the `completed` flip. The
+auto-recorded boundary needed **no** tightening — it spanned exactly the phase's
+three commits, because the clone has no concurrent agents; that is the first
+phase of this slice for which that was true. `VH-1` discharged by owner ruling.
+Nine further items owed to reconciliation (11–19). Next: `/phase-plan`
+`PHASE-04`. Design run locked at revision 93 · 6b5036c38
 
 ### Produced
 
