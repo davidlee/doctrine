@@ -650,9 +650,19 @@ is the strongest evidence this slice has that the battery earns its cost.
 
 ## Open
 
-**Owed to the slice owner — `PHASE-06` `F-1`.** See item 40. `EX-9`, step 6 and
-`VT-5` are blocked until this is ruled; everything else in the phase proceeds
-regardless, so the ruling gates one task and one test, not the phase.
+**RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
+ruling is written into the `PHASE-06` sheet as `F-1/R`, which governs: one
+`pub fn forbids(policy: &InterpretationPolicy, candidate: &str) -> bool` in
+`src/interpretation.rs`, no `impl` block, basename derived inside the function so
+a caller cannot fail open by passing an unsplit path, exact byte comparison (no
+case folding — entries sort case-sensitively), two unit tests in that file, and
+nothing else in the module moves. `S5` widened by exactly that one file. `T6` and
+`VT-5` unblocked. Kept below for the auditor: the question as put, and the
+options not taken.
+
+**Was owed to the slice owner — `PHASE-06` `F-1`.** See item 40. `EX-9`, step 6
+and `VT-5` were blocked until this was ruled; everything else in the phase
+proceeded regardless, so the ruling gated one task and one test, not the phase.
 
 Options, cheapest first — the first two both edit `src/interpretation.rs`, which
 `plan.md` assigns exclusively to `PHASE-02`:
