@@ -8,8 +8,8 @@
 The knowledge-record entity surface is doctrine's epistemic-and-governance capture
 layer realising **PRD-010**: the durable, typed, citable home for the assumptions,
 decisions, questions, constraints, evidence, hypotheses, and concepts that *shape* work
-without being work. It is a
-component of the entity engine (**SPEC-004**) — seven `record_kind`s riding seven engine
+without being work. It is a component of the entity engine (**SPEC-004**) — seven
+`record_kind`s riding seven engine
 `Kind`s over the same kind-blind materialiser, the structural sibling of the backlog
 surface (**SPEC-015**). All shared mechanism (identity, the atomic claim, id
 allocation, edit-preserving status transition, and the scaffold/render pipeline) lives
@@ -23,8 +23,9 @@ The mechanism described here is **shipped**: the family is implemented in
 `src/knowledge.rs` and exercised by the suites, and this spec describes what the code
 does rather than what it was planned to do. The per-slice `/design` owns the concrete
 fileset names, module placement, and code-impact; what is fixed here is the durable
-architecture and the contracts that outlive any one change. The truth/work boundary is the spine — this family records what
-*shapes* slices, the backlog, and governance; it never becomes them.
+architecture and the contracts that outlive any one change. The truth/work boundary
+is the spine — this family records what *shapes* slices, the backlog, and
+governance; it never becomes them.
 
 ## Responsibilities
 
@@ -375,8 +376,8 @@ spec acknowledges the provenance and owns none of that protocol.
   lockstep is test/debug-time, not a compile error. The blast radius also includes two
   **ordered** goldens — `kinds_table_covers_the_numbered_kinds` (the prefix vector is
   pinned in order) and `sources_match_shipped_accessors` — both of which every newly
-  admitted record kind edits. The storage-ordering F1 invariant (typed tables before `[[relation]]`
-  arrays) is the other on-disk hazard.
+  admitted record kind edits. The storage-ordering F1 invariant (typed tables
+  before `[[relation]]` arrays) is the other on-disk hazard.
 - **Closed-vocabulary coverage gap.** `RelationLabel` is closed; PRD-010's link list
   resolves into source-set extensions plus two minted variants (the record→backlog-item
   relate label and `spawns`) — the verdict is pinned in D6, not deferred. Under-minting
@@ -405,8 +406,9 @@ spec acknowledges the provenance and owns none of that protocol.
   without a second materialiser, and `CPT` — whose `[facet]` is empty — rode the same
   seam as a degenerate case rather than an exception.
 - **Per-kind lifecycle is data, not a new engine.** The divergence from the backlog —
-  one status vocabulary per kind instead of one overall — is a `record_kind`-keyed lookup over the same
-  edit-preserving transition seam, not a second transition mechanism. The engine stays
+  one status vocabulary per kind instead of one overall — is a `record_kind`-keyed
+  lookup over the same edit-preserving transition seam, not a second transition
+  mechanism. The engine stays
   kind-blind; the kind table carries the per-kind status set, as `integrity::KINDS`
   already carries a stateful status set per kind.
 - **Supersession reuses IMP-006, not a bespoke fork.** The transactional supersede verb
