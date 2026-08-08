@@ -2895,3 +2895,96 @@ fn coverage_does_not_move_the_declaration_fingerprint() {
         "and `confirms` still matches, because nothing about the claim moved"
     );
 }
+
+// ── the inert-key refusal (SL-249 PHASE-02, ISS-318) ───────────────────────
+
+/// `I9` — the wire-key table is total (`VT-1`, `EX-3`).
+///
+/// The oracle is a **serialised** declaration, not a hand-written list: a field
+/// that reaches the wire without a table row fails here, and a table row naming a
+/// key no field emits fails equally. `resolved_record` is absent from both sides
+/// by construction rather than by an exception — it carries `#[serde(skip)]`, so
+/// it is not a wire key at all.
+#[test]
+fn the_wire_key_table_holds_exactly_a_populated_declarations_serde_keys() {
+    let populated = Declaration::fully_populated(id("inq-1"));
+    let serialised = serde_json::to_value(&populated).expect("a declaration serialises");
+
+    let on_the_wire: BTreeSet<&str> = serialised
+        .as_object()
+        .expect("a declaration serialises to an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let tabled: BTreeSet<&str> = Declaration::WIRE_KEYS
+        .iter()
+        .map(|(key, ..)| *key)
+        .collect();
+
+    assert_eq!(on_the_wire, tabled);
+}
+
+/// Each row's presence predicate agrees with the `skip_serializing_if` that
+/// decides whether its key reaches the wire.
+///
+/// `I9` compares key *sets* and so cannot see a row wired to the wrong field's
+/// predicate. Without this, a predicate reading `attests` under the `concerns`
+/// row would leave the table looking total while the refusal fired on the wrong
+/// key — the mapping-versus-inventory distinction `RV-349` `F-4` drew, one field
+/// along.
+#[test]
+fn every_rows_predicate_agrees_with_its_keys_presence_on_the_wire() {
+    for (key, _, carried) in &Declaration::WIRE_KEYS {
+        assert!(
+            carried(&Declaration::fully_populated(id("inq-1"))),
+            "`{key}`'s predicate must see it on a fully populated declaration"
+        );
+        assert_eq!(
+            carried(&Declaration::about(id("inq-1"))),
+            *key == "subject",
+            "`{key}`'s predicate must see it on a bare declaration only if it is \
+             the addressing key"
+        );
+    }
+}
+
+/// One declaration, as a caller actually sends it.
+///
+/// Built through serde rather than through builders: the keys under test are the
+/// *wire's*, and half of them have no Rust builder because nothing in the tree
+/// constructs a declaration that way.
+fn declared(json: &str) -> Declaration {
+    serde_json::from_str(json).expect("the fixture is a well-formed declaration")
+}
+
+/// The `SL-248` loss, at the unit that refuses it (`EX-1`, `EX-2`, `EX-5`).
+#[test]
+fn a_checkpoint_subject_carrying_section_prose_is_refused_naming_the_key_it_wanted() {
+    let refused = Batch::of(vec![declared(
+        r###"{"subject": "cp-4", "body": "## The two candidate sites\n"}"###,
+    )])
+    .validate()
+    .expect_err("`body` is section prose and means nothing on a checkpoint");
+
+    assert_eq!(
+        refused,
+        Refusal::InertKey {
+            subject: id("cp-4"),
+            key: "body",
+            honoured_by: IdKind::Section,
+            remedy: Some("dispose.create.body"),
+        }
+    );
+}
+
+/// A subject that may not be declared at all keeps its own refusal.
+///
+/// The per-key check yields to it deliberately: `SubjectNotDeclarable` names the
+/// run-level field to use instead, and an inert-key refusal on the same payload
+/// would trade that remedy for a symptom.
+#[test]
+fn a_non_declarable_subject_is_refused_as_such_rather_than_key_by_key() {
+    let declaration = declared(r#"{"subject": "dlg-1", "body": "prose"}"#);
+
+    assert_eq!(declaration.inert_key(), None);
+}

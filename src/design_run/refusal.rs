@@ -427,6 +427,31 @@ pub(crate) enum Refusal {
     /// exceeds the whole-envelope ceiling. The one irreducible state, refused
     /// rather than emitted as a quietly malformed envelope.
     EnvelopeIrreducible { budget: usize, rendered: usize },
+    /// A declaration carried a wire key that means nothing at its subject's kind
+    /// (`ISS-318`).
+    ///
+    /// `Declaration` is one flat struct, so every key is *spellable* on every
+    /// subject while each is *honoured* at exactly one — a correspondence serde
+    /// cannot express and which nothing else checked, so the submission was
+    /// accepted, bumped the revision and did nothing. `SL-248` lost six records'
+    /// prose that way.
+    ///
+    /// The subject's own kind is read off the id rather than carried beside it,
+    /// on [`super::submission::Declaration`]'s own reasoning: a second, redundant
+    /// discriminator could only disagree with the prefix.
+    ///
+    /// Scoped to the **kind** axis. A key inert at its honouring kind in one of
+    /// that kind's two states is a sibling defect this variant does not cover
+    /// (`DEC-183`, `ISS-327`).
+    InertKey {
+        subject: DesignId,
+        key: &'static str,
+        honoured_by: IdKind,
+        /// The key the caller wanted, where their intent is unambiguous
+        /// (`SL-249` `EX-2`). `None` where no remedy is derivable and guessing
+        /// one would send them somewhere worse than the honouring kind.
+        remedy: Option<&'static str>,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -788,6 +813,29 @@ impl fmt::Display for Refusal {
                  bytes — read the run with `design show --full` instead of trusting a \
                  malformed projection"
             ),
+            // All four things `EX-2` asks for: the subject, its kind, the key,
+            // and the kind that honours it — the second read off the id rather
+            // than stored beside it. The remedy is appended rather than
+            // substituted, because the honouring kind is useful even when a
+            // better key exists: it says *why* this was refused.
+            Refusal::InertKey {
+                subject,
+                key,
+                honoured_by,
+                remedy,
+            } => {
+                write!(
+                    f,
+                    "`{key}` is inert at {subject} — a `{}` subject; it is honoured for `{}` \
+                     subjects",
+                    subject.kind().prefix(),
+                    honoured_by.prefix()
+                )?;
+                match remedy {
+                    Some(instead) => write!(f, ". To carry it here, use `{instead}`"),
+                    None => Ok(()),
+                }
+            }
         }
     }
 }

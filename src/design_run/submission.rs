@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Stage;
 use super::attestation::{ActKind, AgentAct, ReviewDisposition, ReviewPolicy, Reviewer};
-use super::ids::DesignId;
+use super::ids::{DesignId, IdKind};
 use super::inquiry::{DispositionForm, InquiryLifecycle, Provenance};
 use super::refusal::Refusal;
 use super::traversal::{Authority, Posture};
@@ -454,6 +454,193 @@ impl Declaration {
     }
 }
 
+// ── the wire-key correspondence (SL-249, ISS-318, design §5.3) ─────────────
+
+/// Each [`Declaration`] wire key, as a named constant.
+///
+/// The [`WRITER_ACT_STAGE`] idiom and its reason: these are the keys a caller
+/// reads in a refusal and then removes from their own JSON, so the refusal has
+/// to name the key that is actually there (STD-001).
+const KEY_SUBJECT: &str = "subject";
+const KEY_QUESTION: &str = "question";
+const KEY_NEEDS: &str = "needs";
+const KEY_PARENT: &str = "parent";
+const KEY_PROVENANCE: &str = "provenance";
+const KEY_LIFECYCLE: &str = "lifecycle";
+const KEY_BODY: &str = "body";
+const KEY_ATTESTS: &str = "attests";
+const KEY_REVIEWER: &str = "reviewer";
+const KEY_CONCERNS: &str = "concerns";
+const KEY_SUMMARY: &str = "summary";
+const KEY_BLOCKING: &str = "blocking";
+const KEY_RESOLUTION: &str = "resolution";
+const KEY_DISPOSES: &str = "disposes";
+const KEY_DISPOSE: &str = "dispose";
+
+/// The nested key a record's prose actually rides (SL-249 PHASE-01) — the one
+/// remedy the correspondence can name today.
+const KEY_DISPOSE_CREATE_BODY: &str = "dispose.create.body";
+
+/// Where a wire key is honoured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyHome {
+    /// The addressing key: carried by every declaration, inert at none.
+    Universal,
+    /// Honoured at exactly one subject kind, and inert at every other.
+    At(IdKind),
+}
+
+/// One row of the correspondence: the key, where it is honoured, and the test
+/// for whether a declaration carries it.
+type WireKey = (&'static str, KeyHome, fn(&Declaration) -> bool);
+
+/// The key the caller wanted, where their intent is unambiguous (SL-249 `EX-2`).
+///
+/// A table rather than a clause inlined in the refusal, and a small one: there
+/// is no rule deriving a remedy from a pair, so each row is a judgement someone
+/// made. `body` on a checkpoint is `SL-248`'s loss exactly — record prose sent
+/// through the slot for *section* prose — and the key it wanted is the one
+/// PHASE-01 added.
+fn remedy(key: &str, kind: IdKind) -> Option<&'static str> {
+    match (key, kind) {
+        (KEY_BODY, IdKind::Checkpoint) => Some(KEY_DISPOSE_CREATE_BODY),
+        _ => None,
+    }
+}
+
+impl Declaration {
+    /// The `Declaration` wire key → honouring subject kind correspondence
+    /// (design § 5.3, `ISS-318`).
+    ///
+    /// One flat struct carries every key while each is honoured at exactly one
+    /// subject kind, and serde cannot express that — so the table does, and
+    /// [`Declaration::inert_key`] is the check that reads it.
+    ///
+    /// Each row pairs its key with the **predicate that tests for it**, on
+    /// [`ApplyRequest::WRITER_ACTS`]'s reasoning: the predicates ARE the guard,
+    /// so a row cannot be added without saying how presence is detected, and a
+    /// row whose predicate reads the wrong field is caught by a test rather than
+    /// by review. Pinned two independent ways — `I9`, that this key set equals a
+    /// fully populated declaration's serde key set, and `I10`, the behavioural
+    /// matrix. `I9` alone proves inventory and not mapping (`RV-349` `F-4`).
+    ///
+    /// `resolved_record` is absent because it carries `#[serde(skip)]` and is
+    /// therefore not a wire key — excluded by construction rather than by an
+    /// exception list (`EX-3`).
+    pub(crate) const WIRE_KEYS: [WireKey; 15] = [
+        (KEY_SUBJECT, KeyHome::Universal, |_| true),
+        (KEY_QUESTION, KeyHome::At(IdKind::Inquiry), |declared| {
+            !declared.question.is_omitted()
+        }),
+        (KEY_NEEDS, KeyHome::At(IdKind::Inquiry), |declared| {
+            !declared.needs.is_omitted()
+        }),
+        (KEY_PARENT, KeyHome::At(IdKind::Inquiry), |declared| {
+            !declared.parent.is_omitted()
+        }),
+        (KEY_PROVENANCE, KeyHome::At(IdKind::Inquiry), |declared| {
+            declared.provenance.is_some()
+        }),
+        (KEY_LIFECYCLE, KeyHome::At(IdKind::Inquiry), |declared| {
+            declared.lifecycle.is_some()
+        }),
+        (KEY_BODY, KeyHome::At(IdKind::Section), |declared| {
+            declared.body.is_some()
+        }),
+        (KEY_ATTESTS, KeyHome::At(IdKind::Attestation), |declared| {
+            declared.attests.is_some()
+        }),
+        (KEY_REVIEWER, KeyHome::At(IdKind::Attestation), |declared| {
+            declared.reviewer.is_some()
+        }),
+        (KEY_CONCERNS, KeyHome::At(IdKind::Finding), |declared| {
+            declared.concerns.is_some()
+        }),
+        (KEY_SUMMARY, KeyHome::At(IdKind::Finding), |declared| {
+            declared.summary.is_some()
+        }),
+        (KEY_BLOCKING, KeyHome::At(IdKind::Finding), |declared| {
+            declared.blocking.is_some()
+        }),
+        (KEY_RESOLUTION, KeyHome::At(IdKind::Finding), |declared| {
+            declared.resolution.is_some()
+        }),
+        (KEY_DISPOSES, KeyHome::At(IdKind::Checkpoint), |declared| {
+            declared.disposes.is_some()
+        }),
+        (KEY_DISPOSE, KeyHome::At(IdKind::Checkpoint), |declared| {
+            declared.dispose.is_some()
+        }),
+    ];
+
+    /// The first key this declaration carries that is inert at its subject's
+    /// kind, as the refusal a caller should see (`ISS-318`).
+    ///
+    /// **The first, not every one**, unlike [`super::admission::admit_act`]'s
+    /// collect-them-all rule: a caller who spelled one key at the wrong subject
+    /// has almost always spelled the *declaration* at the wrong subject, so the
+    /// second key is a consequence of the first mistake rather than a second one
+    /// to repair.
+    ///
+    /// `None` for a subject that may not be declared at all
+    /// ([`IdKind::declarable`]): the engine refuses those whole, and its message
+    /// names the run-level field to use — shadowing it here would trade a remedy
+    /// for a symptom.
+    ///
+    /// Scoped to the **kind** axis (`DEC-183`). A key honoured at this kind but
+    /// ignored in this subject's *state* is `ISS-327`, not this.
+    pub(crate) fn inert_key(&self) -> Option<Refusal> {
+        let kind = self.subject.kind();
+        if !kind.declarable() {
+            return None;
+        }
+        Declaration::WIRE_KEYS
+            .iter()
+            .find_map(|&(key, home, carried)| match home {
+                KeyHome::At(honoured_by) if honoured_by != kind && carried(self) => {
+                    Some(Refusal::InertKey {
+                        subject: self.subject.clone(),
+                        key,
+                        honoured_by,
+                        remedy: remedy(key, kind),
+                    })
+                }
+                KeyHome::Universal | KeyHome::At(_) => None,
+            })
+    }
+
+    /// A declaration carrying **every** wire key, for `I9`.
+    ///
+    /// An exhaustive struct literal with no `..` update syntax, deliberately:
+    /// that is what makes a newly added field a compile error *here*, before it
+    /// can be a silently missing row in [`Declaration::WIRE_KEYS`]. The values
+    /// are arbitrary — only each key's presence on the wire is observed — but
+    /// none may be a value its field's `skip_serializing_if` would drop.
+    #[cfg(test)]
+    pub(super) fn fully_populated(subject: DesignId) -> Declaration {
+        Declaration {
+            subject,
+            question: Sparse::Value("why?".to_owned()),
+            needs: Sparse::Value(Vec::new()),
+            parent: Sparse::Value(DesignId::parse("inq-0").expect("a literal id")),
+            provenance: Some(Provenance::AgentProposed),
+            lifecycle: Some(InquiryLifecycle::Open),
+            body: Some("## a section\n".to_owned()),
+            attests: Some(DesignId::parse("sec-0").expect("a literal id")),
+            reviewer: Some(Reviewer::Human),
+            concerns: Some(DesignId::parse("sec-0").expect("a literal id")),
+            summary: Some("a finding".to_owned()),
+            blocking: Some(true),
+            resolution: Some("disposed".to_owned()),
+            disposes: Some(DesignId::parse("inq-0").expect("a literal id")),
+            dispose: Some(Dispose::Unresolved {
+                note: "retained".to_owned(),
+            }),
+            resolved_record: Some("DEC-000".to_owned()),
+        }
+    }
+}
+
 // ── the apply payload ──────────────────────────────────────────────────────
 
 /// What every `apply` payload asserts, irrespective of the optional CLI
@@ -813,15 +1000,30 @@ impl Batch {
 
     /// Validate the whole candidate before any mutation (DEC-063).
     ///
-    /// Refuses a repeated subject — two declarations about one subject in a
-    /// batch with no order is genuinely ambiguous, and picking last-wins would be
-    /// inventing an order the contract says does not exist.
+    /// Two refusals, and the batch is the right home for both because neither is
+    /// about one declaration's *effect* — the engine's arms own those — and
+    /// because this runs before any arm has touched the snapshot, so a refused
+    /// batch cannot have half-applied even into the working copy.
+    ///
+    /// - A **repeated subject**: two declarations about one subject in a batch
+    ///   with no order is genuinely ambiguous, and picking last-wins would be
+    ///   inventing an order the contract says does not exist.
+    /// - An **inert key** ([`Declaration::inert_key`], `ISS-318`): a key that
+    ///   means nothing at its subject's kind, which serde admits because
+    ///   `Declaration` is one flat struct and which nothing else would catch.
+    ///
+    /// The inert-key check runs first. A declaration repeated at the wrong
+    /// subject kind is two mistakes with one cause, and the key-level refusal
+    /// names the cause.
     ///
     /// Returns the declarations keyed by subject, so iteration order is
     /// determined by the subjects present and not by how they were submitted.
     pub(crate) fn validate(self) -> Result<BTreeMap<DesignId, Declaration>, Refusal> {
         let mut candidate = BTreeMap::new();
         for declaration in self.declarations {
+            if let Some(inert) = declaration.inert_key() {
+                return Err(inert);
+            }
             let subject = declaration.subject().clone();
             if candidate.insert(subject.clone(), declaration).is_some() {
                 return Err(Refusal::DuplicateSubject { id: subject });
