@@ -12,10 +12,23 @@ use serde::Deserialize;
 use anyhow::{Context, bail};
 
 /// The authored implementation plan, read from `plan.toml`. Only the ordered
-/// phase list is consumed in v1 (phase materialisation, slice-004 §5.2); the
-/// specs/requirements link tables exist in the file but are empty (no registry
-/// yet) and are not modelled. The first relational *read* model — no shared
-/// `Meta` (slice-003 Non-Goal).
+/// phase list is consumed in v1 (phase materialisation, slice-004 §5.2).
+///
+/// The top-level `[specs]`/`[requirements]` tables and the per-phase `specs` /
+/// `requirements` arrays are **authored and populated in the corpus** — they are
+/// not modelled here, so this reader parses past them and discards them. No
+/// gate, projection, or read surface consumes them. `ISS-321` tracks the
+/// repair; their governed home is the "Phase plan surface" component spec that
+/// `IMP-382`'s `/spec-tech` half will author, and `RFC-029` carries the
+/// reasoning.
+///
+/// (This paragraph previously asserted the tables "exist in the file but are
+/// empty (no registry yet)". The second clause was true, the first was not, and
+/// a research agent surveying the plan model repeated the error into a written
+/// brief before corpus verification caught it. State what the corpus *does*,
+/// not what it is assumed to do.)
+///
+/// The first relational *read* model — no shared `Meta` (slice-003 Non-Goal).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct Plan {
     #[serde(default)]

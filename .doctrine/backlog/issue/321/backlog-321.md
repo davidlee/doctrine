@@ -18,7 +18,8 @@ parsed past and discarded — no gate, projection, or read surface consumes it.
 `src/plan.rs:14-18` asserts the link tables *"exist in the file but are empty (no
 registry yet) and are not modelled"*.
 
-The second clause is true. **The first is false** — ten plan files populate them:
+The second clause is true. **The first is false** — **eight** plan files populate
+them:
 
 ```
 .doctrine/slice/020-backlog-entity-v1/plan.toml:68   requirements = ["REQ-053", "REQ-058"]
@@ -27,6 +28,15 @@ The second clause is true. **The first is false** — ten plan files populate th
 ```
 
 Top-level `[requirements].targets` is populated in SL-043, SL-057 and SL-167.
+
+**Count corrected 2026-08-08: eight, not ten.** The full set is SL-020, SL-043,
+SL-057, SL-078, SL-129, SL-167, SL-231, SL-233. The original figure counted
+*paths*, not files: `.doctrine/slice/` carries 247 slug symlinks alongside the
+numbered directories, so a symlink-following scan sees the same eight plans as
+sixteen. (Note the shape — this item, filed about a false corpus claim, carried
+one of its own, from the same family as the withdrawn correction-rarity leg in
+the RFC-027 obligation study: counting the artefacts of a convention rather than
+the phenomenon. Verified by `realpath` dedup.)
 
 A pi-research agent surveying the plan model for the RFC-027 obligation study
 read the comment and reported the tables as scaffold-only across the whole
@@ -38,7 +48,7 @@ load-bearing for agent research, not just for humans.
 
 `REQ-439` AC-2 (PRD-001, `pending`, landed by REV-045 under IMP-382) requires
 that every phase state *"any applicable canonical spec or requirement links"*.
-The corpus already carries that data for ten slices; the model cannot read it.
+The corpus already carries that data for eight slices; the model cannot read it.
 So this is not a greenfield feature — it is a pending product requirement with
 authored data already waiting, and a reader that throws it away.
 
@@ -50,8 +60,13 @@ existing arrays are already citations. Modelling them is cheap conformance.
 
 Two separable pieces:
 
-1. **Cheap, now** — correct the `src/plan.rs` comment so it stops asserting a
-   false corpus fact.
+1. ~~**Cheap, now** — correct the `src/plan.rs` comment so it stops asserting a
+   false corpus fact.~~ **DONE 2026-08-08.** The comment now states what the
+   corpus does (tables authored and populated, reader discards them, no consumer)
+   and points at this item, `IMP-382` and `RFC-029`. It embeds no count —
+   counts rot, which is how this defect arose. A sibling sweep over `src/` and
+   `install/` for other stale corpus assertions found none; the one other "not
+   modelled" (`src/review.rs:690`) is a type-scope statement, not a corpus claim.
 2. **Needs a home** — model the link tables and give them a consumer. This
    belongs in the "Phase plan surface" component spec that IMP-382's `/spec-tech`
    half will author, not in an ad-hoc patch. Do not model fields without a named
