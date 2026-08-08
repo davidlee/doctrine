@@ -725,13 +725,47 @@ replacement line — `install skills + agent def for claude` — as positive
 assertions. The criterion's intent (the claim about plugin machinery goes) is
 served, and the forward summary keeps a golden it would otherwise have lost.
 
-### VH-1 is outstanding
+### VH-1 — registration evidenced, firing still outstanding
 
-The cold-install check — eleven entries in `/hooks`, all sourced from
-`.claude/settings.json`, with one observed effect per event class — is
-interactive and human-only (sheet `STOP-3`). It is the claim the slice rests on
-and no test can make it. Preconditions and evidence spec are in `plan.toml`'s
-`VH-1`; the transcript is transcribed verbatim into the reconciliation brief.
+Run by the human at PHASE-06 tip. The raw capture is verbatim at
+`evidence/vh-1-cold-install.txt`, with `evidence/vh-1-cold-install.md` deriving
+the count and stating the gaps. It is transcribed into the reconciliation brief
+from there.
+
+**Evidenced:** eleven entries across five events — PreToolUse 6, SessionStart 2,
+SubagentStart 1, SubagentStop 1, WorktreeCreate 1 — every one labelled
+`[Project]` / `Project Settings`. The scope label is the load-bearing part, not
+the count: eleven entries of unknown provenance would be consistent with the
+plugin still serving them. Distribution matches PHASE-04 `EX-4` exactly.
+
+The `/hooks` summary menu reports 16 and shows `SessionStart (3)`, which reads
+as a discrepancy and is not one — the menu's totals do not distinguish scope.
+It reconciles exactly: 11 doctrine `[Project]` + 5 foreign (the operator's
+user-scope hooks and an unrelated `caveman` plugin — SessionStart 1,
+Notification 1, UserPromptSubmit 1, Stop 2) = 16, with no unaccounted entry.
+
+That arithmetic doubles as the completeness check on a hand-transcribed
+capture: had a doctrine entry been missed in the paste, 11 + 5 would not equal
+16. It also shows PHASE-04's never-clobber property live — a foreign
+`SessionStart` hook coexisting with doctrine's two on an event doctrine writes.
+
+Two incidental confirmations worth the audit's attention. The `WorktreeCreate`
+row renders `${DOCTRINE_BIN:-doctrin…` in the live UI, so SL-195's `INV-1` (no
+absolute host path in a tracked file) is observed on the hooks surface for the
+first time rather than only asserted by PHASE-02 `VT-3`. And the capture's tree
+shows 35 `.claude/skills/<id>` → `../../.doctrine/skills/<id>` symlinks over a
+materialised canonical tree — SPEC-010 responsibilities 3–4 on a real cold
+install rather than in a tempdir.
+
+**Not evidenced, and the criterion's own second half:** that the entries
+*fire*. `VH-1` asks for one observed effect per event class — a session boot
+emitting, a `WorktreeCreate` fork, a `PreToolUse` surfacing — and the capture
+shows registration only. This distinction is in the criterion because
+`mem.fact.claude.reload-plugins-registers-pretooluse` records a case where
+`/hooks` reported hooks live and the `PreToolUse` wall did not fire. A count is
+not a firing. Also uncaptured: `enabledPlugins` / marketplace state directly
+(inferred from the `[Project]` labels, not shown), and the contents of the
+scratch project's `.claude/settings.local.json`.
 
 ### Owed at close
 

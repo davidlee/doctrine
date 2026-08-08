@@ -49,19 +49,20 @@ unknown provenance would be consistent with the plugin still serving them; the
 `[Project]` / `Project Settings` label is what says they came from
 `.claude/settings.json`, which is the whole claim.
 
-## The user-settings confound, reconciled
+## The foreign-hook confound, reconciled
 
 The summary menu reports **16 hooks configured** and shows event counts that do
 not match doctrine's — notably `SessionStart (3)` where doctrine writes two. The
-excess is user-scope hooks from `~/.claude/settings.json` bleeding into the
-menu's totals, which do not distinguish scope. The drill-downs do.
+excess is foreign: the operator's user-scope hooks from `~/.claude/settings.json`
+plus an unrelated plugin (`caveman`), all bleeding into the menu's totals, which
+do not distinguish scope. The per-event drill-downs do.
 
 It reconciles exactly:
 
 ```
 doctrine (all [Project])   PreToolUse 6 + SessionStart 2 + SubagentStart 1
                            + SubagentStop 1 + WorktreeCreate 1        = 11
-user scope                 SessionStart 1 + Notification 1
+foreign (user + caveman)   SessionStart 1 + Notification 1
                            + UserPromptSubmit 1 + Stop 2              =  5
                                                                        ---
 menu total                                                              16
@@ -69,6 +70,16 @@ menu total                                                              16
 
 No unaccounted entry, and no doctrine entry outside the eleven. The confound is
 in the summary menu's presentation, not in the install.
+
+**The arithmetic is also the completeness check on the capture itself.** The
+operator transcribed the drill-downs by hand and could not be certain every
+doctrine entry was pasted. It closing to the menu's own total settles that: had
+a doctrine entry been omitted from the paste, 11 + 5 would not equal 16. The
+transcript is complete for the eleven without needing to be trusted as complete.
+
+Incidentally this is `PHASE-04`'s never-clobber property observed live —
+foreign hooks on `SessionStart`, an event doctrine also writes, coexisting with
+doctrine's own rather than being normalised away.
 
 ## Incidental confirmations
 
