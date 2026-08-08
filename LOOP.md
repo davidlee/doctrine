@@ -1,6 +1,6 @@
 # LOOP.md — dumb-loop slice driver
 
-A `/loop` firing every ~3 minutes drives one slice to completion. Each firing is
+A `/loop` firing every ~10 minutes drives one slice to completion. Each firing is
 a **cold context**: it knows nothing except this file, the disk, and the CLI.
 Nothing is carried in an agent's head between firings, and nothing may be.
 
@@ -25,22 +25,29 @@ Subject slice: `SL-248`. Substitute `<N>` = `248`, `<PP>` = the current phase.
 
 ## Cadence and the re-entrancy guard
 
-At ~3 min the interval is far shorter than a phase. **Most firings must no-op**,
-and the no-op path is the budget: if it costs more than a couple of thousand
-tokens, the session dies of no-ops before the slice lands.
+**Interval: ~10 min.** The wake fires on the clock whether or not a worker is
+running — it does not block on one — and a phase outlasts several intervals. So
+most firings land mid-phase and **must no-op**, cheaply: a no-op that reads
+files before it checks the guard spends ten times what it needs to learn
+nothing.
 
 The no-op path is exactly two commands. Run them first, every firing, before
 reading anything else:
 
 ```bash
 ./target/debug/doctrine slice status <N>
-find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -10 | head
+find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -20 | head
 ```
+
+The windows below are **intervals, not minutes** — at ~10 min, live is two
+intervals of silence and dead is three. Change the interval and these move with
+it; a worker that ticks less often than one interval would otherwise be declared
+dead while it is working.
 
 | what you see | what you do |
 |---|---|
-| phase `in_progress`, sheet touched < 10 min ago | **exit.** A worker is live. Say one line and stop. |
-| phase `in_progress`, sheet cold > 15 min | the worker died. Re-spawn it, resuming at the first unticked task. |
+| phase `in_progress`, sheet touched < 2 intervals ago (~20 min) | **exit.** A worker is live. Say one line and stop. |
+| phase `in_progress`, sheet cold > 3 intervals (~30 min) | the worker died. Re-spawn it, resuming at the first unticked task. |
 | phase `completed`, a next phase exists | plan the next phase, spawn its worker. |
 | phase `planned` with a filled sheet | spawn its worker. |
 | phase `planned` with an empty sheet | `/phase-plan` it yourself, then stop. Planning is a whole firing. |
@@ -195,6 +202,12 @@ Call `ScheduleWakeup(stop: true)` — or stop the loop — and report, on any of
 Target per firing: no-op ≤ 2k, spawn ≤ 15k, plan ≤ 60k. The orchestrator's
 context is spent on *routing*; the worker's is spent on code. If the
 orchestrator is reading source files, the split has failed.
+
+At ~10 min the binding cost is the **plan** firings, not the no-ops: roughly
+three or four phases of planning fills a 250k session, and a day of no-ops
+barely dents it. So the discipline that matters is beat 2 — orient from
+`handover.md` and the phase's `plan.toml` entry, never from `design.md`
+wholesale.
 
 Read entities with `doctrine <kind> show <ID>`, not raw files. Use the coord
 tree's `./target/debug/doctrine`, never the PATH binary, or you will read a
