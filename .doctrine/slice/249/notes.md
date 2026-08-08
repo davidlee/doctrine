@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 22d73b193
-· `PHASE-01` completed, `PHASE-02` next
+fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 5e4bba035
+· `PHASE-01` `PHASE-02` completed, `PHASE-08` next
 
 ### Produced
 
@@ -32,6 +32,19 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 2
   `019fdfcc-ce76-77e0-8c30-7e3ce8603ae8`, `019fdfe5-72a7-7033-94b6-4debec579fd3`.
 - Gate status: no code modified this session — the planning probe of the
   `dead_code` denial was reverted and `git diff` on `src/` is clean.
+- `DEC-183` — `I10` quantifies over the subject-kind axis only; the `PHASE-02`
+  `EN-2` ruling, accepted by the user (dd8a7f7b6).
+- `ISS-327` — the state axis of `ISS-318`'s class. `ISS-328` — the nested
+  `CreateRecord` sibling, which also corrects a false claim in `ISS-318`'s
+  observation 3 and in
+  `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
+- `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
+  mapping without the table deciding its own verdict.
+- `PHASE-02` (85c322373, 58efc3be9, 5e4bba035) — `Declaration::WIRE_KEYS` and
+  `inert_key` in `submission.rs`, wired at `Batch::validate`;
+  `Refusal::InertKey`; `IdKind::declarable`; `I9`, its predicate-agreement
+  sibling, `I10`'s generated matrix, and the `SL-248` replay at the shell edge.
+  `VT-1`–`VT-3` PASS under `slice verify-vt`; gate clean.
 - `PHASE-01` (e76a95e6e) — `CreateRecord.body`; `knowledge::write_record_body`;
   `RecoveryIntent.payload_digest` + `resumable_under`; the `plan_checkpoints`
   payload digest lifted to unconditional and used twice. `VT-1`–`VT-4` PASS
@@ -99,6 +112,34 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 2
   applied. The guard sits at step 1 and fires at every state, so the assertion is
   sound; the earlier states are covered by the unit predicate (`VT-3`/`VT-4`),
   not by the fixture. Stated so an audit does not read `VT-2` as wider than it is.
+- **`EN-2`'s answer, and the thing it turned up.** Each `Declaration` wire key is
+  consumed by exactly one arm of `declare` — a clean key → kind mapping. But four
+  keys are read on only *one* of their honouring kind's two paths: `provenance`
+  only where a node is created, `lifecycle` only where one is updated,
+  `concerns` and `blocking` only where a finding is raised. So `I10` as written
+  in design § 5.5 was **falsified by current behaviour**, not merely undefined —
+  a `provenance` key on a held node is silently accepted, the third state `I10`
+  says does not exist, at the *honouring* kind. `DEC-183` scopes `I10` to the
+  kind axis; design § 5.5's wording is owed a narrowing correction at reconcile.
+- **The oracle has to sit below the check.** `I10`'s effectful side is measured on
+  `run::declare`, which never reads the table; the refused side on the full
+  admission path, which does. Asserting *exactly one* per cell is what catches a
+  swapped table — the disjunction alone ("effectful **or** refused") is satisfied
+  by a table that refuses everything, which is the vacuous form. Proven by three
+  positive controls, each of which fired with the right message.
+- `Batch::validate` was the right home for the check: it is the batch's admission
+  gate and runs before any arm has touched the working snapshot, and the shell's
+  pass 1 (`commands/design.rs:1479`) runs it before any id is reserved — so
+  `EX-1`'s *corpus untouched, revision unmoved* is a property of existing
+  structure rather than something `PHASE-02` had to build.
+- No existing e2e fixture was sending an inert key: the whole suite went green
+  unchanged. Worth recording because `SL-244`'s retirement of `evidence` left
+  three fixtures sending a dead key for two tasks
+  (`mem.pattern.serde.flatten-forbids-deny-unknown-fields`), so the negative here
+  is evidence, not an assumption.
+- `pub(super)` on a fn whose return type is private trips `-D private-interfaces`.
+  `Pending` was widened with it; its fields stay private, so nothing outside the
+  module can read or build one.
 - A review reading `done` is **not** concluded — `done` is derived from findings
   (ADR-007 D-C8), while a design run's `conducted` disposition needs
   `review.concluded`, set only by `doctrine review conclude`. →
@@ -113,17 +154,16 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 2
   the `PHASE-07` REV for want of an amend verb.
 - `PHASE-07/EX-11` — the `DEC-182` departure is carried to reconcile as a
   design-wording item; design §3 and §5.3 still say reconcile.
-- `PHASE-02/EN-2` — `I10`'s per-key cell semantics are undefined and owed before
-  the matrix is written (design §10 press item 1).
-- **An unknown key nested inside `CreateRecord` is silently dropped** (see
-  Learned). `PHASE-02` refuses a `Declaration` key inert *at its subject's kind*;
-  this is the adjacent hole — a key inert because it is not a key at all, one
-  level down, where `deny_unknown_fields` is absent. Same defect class as
-  `ISS-318`, and it belongs in `PHASE-02`'s reckoning rather than `PHASE-01`'s.
-  Not fixed here: it is outside `PHASE-01`'s criteria, and adding the attribute
-  needs a decision about stored proposal declarations, which ride the snapshot
-  and so outlive the binary that wrote them
-  (`mem.fact.design-run.snapshot-outlives-the-binary`).
+- **Design § 5.5's `I10` wording overstates what its test proves** — it asserts
+  the disjunction over *every* submission, and the generated matrix quantifies
+  over *some* submission at each kind. A prose correction owed at reconcile, per
+  `DEC-183`. `ISS-327` and `ISS-328` carry the code half; neither is a blocker.
+- `PHASE-02` widened `slice conformance`'s undeclared set from one file to three
+  — `src/design_run/tests.rs` (`PHASE-01`), now also `src/design_run/ids.rs` and
+  `src/design_run/run.rs`. Same judgement as `PHASE-01`'s and for the same
+  reason: the selector is a scope statement, and settling scope divergence is
+  reconcile's to do, not a phase's. Both new entries are one-line widenings
+  (`IdKind::declarable`; `declare` and `Pending` to `pub(super)`).
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.

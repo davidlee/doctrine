@@ -7,7 +7,7 @@ status = "active"
 title = "Retiring a wire field on a flatten-carrying request is a silent no-op, not a refusal"
 summary = "A struct with #[serde(flatten)] cannot carry deny_unknown_fields, so callers of a deleted field learn nothing — sweep fixtures for stale keys when you retire one."
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-08"
 
 [scope]
 paths = ["src/design_run/submission.rs", "tests/e2e_design_review.rs", "tests/e2e_design_delegation.rs", "tests/e2e_design_state.rs"]

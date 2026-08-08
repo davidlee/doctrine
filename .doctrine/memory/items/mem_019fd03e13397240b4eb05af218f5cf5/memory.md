@@ -29,3 +29,13 @@ not verify is not a fact.
 Related: [[mem.fact.design-run.snapshot-outlives-the-binary]] — the read side of
 the same question, where a *stored* vocabulary must keep parsing what earlier
 binaries wrote.
+
+**Correction, 2026-08-08 (SL-249 PHASE-02, `ISS-328`).** The claim above that
+*"Every inner submission type there carries `deny_unknown_fields`"* is **false**.
+Three types in `src/design_run/submission.rs` do — `Declaration`,
+`CheckpointActDeclaration`, `AgentActDeclaration` — and the rest do not,
+`CreateRecord` among them, nested two levels inside a `Declaration` that does. So
+an unknown key inside a `form = "create"` disposition is dropped by the same
+mechanism, with none of the structural excuse: nothing prevents the attribute
+there. The rest of this memory stands — `flatten` really does forbid the
+attribute on the outermost type, and the retirement discipline is unchanged.
