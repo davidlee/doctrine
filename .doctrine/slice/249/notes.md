@@ -6,9 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 6b814989b
-· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` completed, `PHASE-04` next
-· **blocked on a ruling: `ISS-329`**
+fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 86536bdfa
+· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` completed, `PHASE-05` next
 
 ### Produced
 
@@ -41,6 +40,27 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
 - `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
   mapping without the table deciding its own verdict.
+- `PHASE-04` (1683a5703 … 86536bdfa, two movements) — the facet write seam and
+  its surface. Movement 1: `KeyPosture` threaded through
+  `facet_write::set_facet_mixed` / `apply_set_mixed`; `plan_facet_edits` (pure,
+  10 tests) deriving the write payload from `knowledge::facet_fields`;
+  `apply_facet_edits` (thin shell, 2 tests); `I11`/`VT-3` edit preservation.
+  Movement 2: `knowledge edit --facet`, retiring all **five** staged
+  `expect(dead_code)` attributes (orchestrator-verified at zero remaining,
+  positive control 43 elsewhere in `src/`). `VT-1`–`VT-5` PASS under
+  `slice verify-vt`; gate exit 0, 4447 tests. `commands::facet::`
+  behaviour-preservation baseline held at 33 passed, `mod tests` unedited.
+  Execution record: shard `notes_04-06.md`. `ISS-330` minted (`doctrine config
+  set` panics in any debug build — a clap `required` / `required_unless`
+  conflict). Memories `mem.fact.rust.dead-code-staging-does-not-cascade`,
+  `mem.fact.clap.introspect-subtree-and-box-wide-subcommand`,
+  `mem.pattern.rust.exhaustive-destructure-pins-hand-written-mappings`,
+  `mem.pattern.testing.pin-named-items-not-diff-lines`.
+- `CHR-060` (dcd67b14d) — `ISS-329`'s option 2, costed separately: the honest
+  rename of `facet_write::FacetField` → `FacetValue`. `originates_from ISS-329`.
+  The option-1 half landed as `0d33ff872`, renaming the new declaration struct
+  to `FacetFieldRow` across 41 sites; it belongs to no phase and lands in
+  `slice conformance`'s undeclared cell by design.
 - `PHASE-03` (c1940d7c8 … 6b814989b, eight commits) — `knowledge::facet_fields`,
   the declaration table, with its three pins; the injected-defect control; the
   template pin; the inert-facet-key tripwire as `doctor` check #12. `VT-1`–`VT-3`
@@ -217,6 +237,12 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   swapping the guard order makes the refusal test fail. The general shape —
   a phase whose enabling task lands before its test task cannot stage a red —
   is worth a word at reconcile, because two of ten tasks is not an accident.
+- **`PHASE-04` spells `D4`'s edit payload `Option<Box<KnowledgeFacetEdit>>`, not
+  `Option<KnowledgeFacetEdit>`.** Forced by `clippy::large_enum_variant` under
+  `warnings = "deny"` — the unboxed variant makes `KnowledgeCommand` wide enough
+  to trip the lint, and the gate is zero-warnings. `D4`'s substance is intact
+  (one optional facet-edit payload on the edit command); only the indirection
+  differs from the design's literal spelling. A one-line reconcile note, no id.
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
