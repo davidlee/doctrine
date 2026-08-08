@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe2a3e1c379a398d672b75bf00b2d"
+memory_key = "mem.pattern.testing.run-concurrent-work-inside-the-seams-callback"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Run concurrent work inside the seam's callback, not on a thread racing it"
+summary = 'When a trait already exposes a callback for "the subject is live now", run the concurrent work in that callback; a thread that races for the same window is weaker and needs Send/Sync.'
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs", "crates/doctrine-control/src/backend.rs"]
+globs = []
+commands = []
+tags = ["testing", "concurrency", "rust", "traits", "observation"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b83bbfba993ae930c70c2bebeb658842738580ac"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "9457f70d122126a23758f714a7ed9bfed4c3e80499c111ee9c399c49f72c32e6"
+base_commit = "7ca72e0f5e3f4375afa2fa4ae4d82624e92325c1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

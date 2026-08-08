@@ -631,3 +631,85 @@ which needs both halves of the same machinery. Recorded here so `T5`'s tick is
 not read as "the descent has run against a real tree".
 
 Durable: `mem.fact.linux.session-leader-identifies-the-sandbox-subject`.
+
+## T6 — the three arm shapes, and what an arm is read from (EX-6, EX-7, S8)
+
+**The unit of reading is the arm, not the capsule.** `Under` — `Confining` /
+`Removing(PropertyRemoval)` / `Granting(AuthorityGrant)` — applies to *one*
+capsule in every shape: the sole capsule of `Single`, the **reader** of
+`Sequential`, the **observer** of `Concurrent`. The other capsule always runs
+confined, because a control that changed the scene rather than the reading
+would not be a control (invariant 3).
+
+That is the answer to what looked at PHASE-07 like a trait gap. Row B5's
+control removes process visibility from the *observer*, which is an ordinary
+weakened capsule reached through `execute_weakened`. The subject is the same
+confined capsule on both arms. So `execute_observed` needs no removal
+parameter, and PHASE-07's three-method seam is complete as shipped (`F-19`).
+
+**The choreography deviates from the sheet, and is stronger for it.** The sheet
+prescribed a thread: subject on its own thread through `execute_observed`, pid
+published to the main thread, observer run from there. The trait already
+defines its callback as the interval between the subject's top-level process
+existing and the trusted side waiting on it — so the observer capsule runs
+*inside* the callback. No threads, no `Send`/`Sync` bound on
+`ConformanceBackend`, and the window is guaranteed by construction rather than
+raced for. Cost, recorded so it is not rediscovered: the subject's stdout is
+unread for the duration of the callback (`wait_with_output` follows), so a
+subject payload that filled the 64 KiB pipe would block there. It would block
+*alive*, which widens the window rather than closing it, and every table-B
+subject prints one marker line.
+
+**The window closes when the observer finishes, not when it starts.**
+`subject_live_when_observer_ran` is sampled after the observer capsule returns.
+Sampling it before would credit an observer that outlived its subject — one
+that looked at a process which was there at launch and gone by the time it
+looked. `the_window_closes_when_the_observer_finishes_not_when_it_starts` is
+the only test that reds when the two lines are swapped, and it needs a `live`
+closure that changes its answer across the observer's run, which is why `live`
+is injected on `Arm` rather than being `capsule_still_running` directly.
+
+**`S8` is answered: the two concurrent indeterminacies are distinct, and both
+are reachable from a test.** The subject exiting before the observer ran is
+`NoObservation`; the backend returning without ever calling back is
+`NoLiveness`. Different repairs — a fixture whose subject is too short-lived
+versus a backend that did not implement the seam — so collapsing them would
+send the reader to the wrong half of the harness. A third case shares
+`NoLiveness`: a subject that never printed its liveness marker at all. That one
+is the dangerous one, because an observer that finds no live process is exactly
+what row B5's *probe* arm expects to see, so without the early return a subject
+that never ran would read as a **held** probe. `M?`-class mutation confirmed:
+deleting the early return reds
+`a_concurrent_arm_whose_subject_never_ran_reports_no_liveness` and nothing else.
+
+**A writer that did not write establishes nothing.** `Sequential`'s writer
+failing is `Indeterminate{NoObservation}`, never `Failed`, and the reader does
+**not** run — its observation would be of a state nobody staged. Two mutations
+red `a_sequential_arm_whose_writer_did_not_write_establishes_nothing`: mapping
+the writer's failure to `Failed`, and falling through to the reader anyway.
+
+**`EX-6` is asserted by counting, not by inspection.** The test `Stub` grew a
+`reached: RefCell<Vec<Under>>` entry-point recorder, and the arm's capsule
+closure is a counter. `a_sequential_arm_provisions_one_transaction_per_capsule`
+asserts two provisionings and two executions; the weakening tests assert the
+exact sequence — `[Confining, Removing]` for `Sequential`, and
+`[Removing, Confining]` for `Concurrent`, observer first because it runs inside
+the subject's callback.
+
+**Eight mutations run by hand at green, before `T11`,** restored by copy each
+time: single arm loses its weakening (reds the grant test); sequential reader
+loses its weakening, and sequential writer gains one (both red the sequential
+control test); writer-failure → `Failed`, and writer-failure → run the reader
+anyway (both red the establishes-nothing test); observer runs confined (reds
+the concurrent control test); the `NoLiveness` early return deleted (reds the
+never-ran test); liveness sampled before the observer (reds the window test);
+the observed pid never recorded (reds four). None redded nothing.
+
+**Fixtures read in execute order, which is not arm order.** For a `Concurrent`
+arm the observer's scripted observation is consumed *first*. Anyone extending
+these tests who scripts them subject-first will get a green test measuring the
+wrong capsule.
+
+**`ArmShape`'s staged `dead_code` suppression is gone** — its own reason said it
+self-clears when the harness reads a payload, and it did. `R6`'s count is now
+three, all in `conformance.rs`: `Delta`, `Row`, `RowId`, all owed to `T7`.

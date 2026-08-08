@@ -48,6 +48,7 @@
     )
 )]
 
+use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -357,15 +358,6 @@ pub(crate) struct PidProbe {
 /// the unit of execution, because six rows across tables A and B are two-capsule
 /// and one runs its two concurrently.
 #[derive(Debug, Clone)]
-#[expect(
-    dead_code,
-    reason = "SL-248: the payloads are executed by PHASE-08's harness. At PHASE-07 the shapes \
-              are constructed and matched on but nothing runs them, and no derive rescues \
-              this — rustc ignores Clone and Debug for dead-code analysis, and PartialEq is \
-              unavailable here because PidProbe holds a function pointer. Narrowed to this \
-              enum rather than left to the module-level blanket; it self-clears when the \
-              harness reads a payload."
-)]
 pub(crate) enum ArmShape {
     /// One capsule.
     Single(Probe),
@@ -1335,8 +1327,11 @@ const STAT_LEAF: &str = "stat";
 /// field may itself contain spaces and parentheses — `sh (deleted)` is a real
 /// process name — so the split is on the **last** `)` in the line and never on
 /// whitespace from the left.
+const STAT_STATE_FIELD: usize = 0;
 const STAT_PARENT_FIELD: usize = 1;
 const STAT_SESSION_FIELD: usize = 3;
+/// The process state of a process that has exited and not yet been waited on.
+const ZOMBIE_STATE: &str = "Z";
 /// The capsule's top-level process does not exist at the instant its wrapper is
 /// spawned, so the descent polls. Half a second at two milliseconds; a capsule
 /// that has not reached its own session by then is reported as no liveness
@@ -1447,11 +1442,11 @@ pub(crate) fn process_table() -> Vec<ProcessFacts> {
         .flatten()
         .filter_map(|entry| {
             let pid: i32 = entry.file_name().to_str()?.parse().ok()?;
-            let (parent, session) = stat_facts(&entry.path().join(STAT_LEAF))?;
+            let facts = stat_of(&entry.path().join(STAT_LEAF))?;
             Some(ProcessFacts {
                 pid: HostPid(pid),
-                parent,
-                session,
+                parent: facts.parent,
+                session: facts.session,
             })
         })
         .collect()
@@ -1459,10 +1454,39 @@ pub(crate) fn process_table() -> Vec<ProcessFacts> {
 
 /// The session a live process belongs to — `EX-12`'s sweep predicate.
 pub(crate) fn session_of(pid: HostPid) -> Option<SessionId> {
-    let path = Path::new(PROC_DIRECTORY)
+    stat_of(&stat_path(pid)).map(|facts| facts.session)
+}
+
+/// Whether the capsule named by `pid` is still running its payload — row B5's
+/// window (`EX-7`).
+///
+/// Impure half only. The judgement is [`still_running`], which is where the two
+/// ways of getting this wrong are stated and tested.
+fn capsule_still_running(pid: HostPid) -> bool {
+    stat_of(&stat_path(pid)).is_some_and(|facts| still_running(pid, &facts))
+}
+
+/// Is this `/proc` entry still the capsule we named, and still running?
+///
+/// Two independent things, and dropping either one gives a wrong answer that
+/// looks right:
+///
+/// - **Reaped.** A process that has exited but not been waited on keeps its
+///   `/proc` entry, so "the directory exists" is not liveness. Row B5's window
+///   is about a payload that is still executing, and a zombie is executing
+///   nothing.
+/// - **Recycled.** Between naming the pid and asking after it, the kernel may
+///   have handed that number to something else. The capsule was identified as a
+///   session *leader*, so `session == pid` still holds for it and holds for
+///   almost nothing else; a recycled pid fails it.
+const fn still_running(pid: HostPid, facts: &StatFacts) -> bool {
+    !facts.reaped && facts.session.0 == pid.0
+}
+
+fn stat_path(pid: HostPid) -> PathBuf {
+    Path::new(PROC_DIRECTORY)
         .join(pid.0.to_string())
-        .join(STAT_LEAF);
-    stat_facts(&path).map(|(_, session)| session)
+        .join(STAT_LEAF)
 }
 
 /// The trusted side's **own** session, recorded so a foreign one is
@@ -1474,16 +1498,27 @@ pub(crate) fn session_of(pid: HostPid) -> Option<SessionId> {
 /// it is the half that makes the other identifiable.
 pub(crate) fn own_session() -> Option<SessionId> {
     let path = Path::new(PROC_DIRECTORY).join(PROC_SELF).join(STAT_LEAF);
-    stat_facts(&path).map(|(_, session)| session)
+    stat_of(&path).map(|facts| facts.session)
 }
 
-fn stat_facts(path: &Path) -> Option<(HostPid, SessionId)> {
+/// What one `/proc/<pid>/stat` line says, past its `comm`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StatFacts {
+    /// The process has exited and not yet been waited on.
+    reaped: bool,
+    parent: HostPid,
+    session: SessionId,
+}
+
+fn stat_of(path: &Path) -> Option<StatFacts> {
     let text = std::fs::read_to_string(path).ok()?;
     let after_comm = text.rsplit_once(')')?.1;
     let fields: Vec<&str> = after_comm.split_whitespace().collect();
-    let parent = fields.get(STAT_PARENT_FIELD)?.parse().ok()?;
-    let session = fields.get(STAT_SESSION_FIELD)?.parse().ok()?;
-    Some((HostPid(parent), SessionId(session)))
+    Some(StatFacts {
+        reaped: fields.get(STAT_STATE_FIELD).copied() == Some(ZOMBIE_STATE),
+        parent: HostPid(fields.get(STAT_PARENT_FIELD)?.parse().ok()?),
+        session: SessionId(fields.get(STAT_SESSION_FIELD)?.parse().ok()?),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1840,6 +1875,192 @@ fn classify_concurrent(witness: &ConcurrentWitness, observed: &Observed) -> ArmR
 }
 
 // ---------------------------------------------------------------------------
+// Running an arm (`T6`, `EX-6`, `EX-7`)
+// ---------------------------------------------------------------------------
+
+/// Which of the backend's three entry points a capsule reaches.
+///
+/// **It applies to the capsule the arm is read from**, and to no other: the sole
+/// capsule of a [`ArmShape::Single`], the *reader* of a
+/// [`ArmShape::Sequential`], the *observer* of a [`ArmShape::Concurrent`]. The
+/// capsule that merely sets the scene — the writer, the subject — always runs
+/// confined, because weakening it would change what the observed capsule is
+/// looking at rather than what it is allowed to see, and the row would no longer
+/// differ from its probe by one property (invariant 3).
+///
+/// That rule is also why [`ConformanceBackend::execute_observed`] needs no
+/// removal parameter (`F-19`): row B5's control removes process visibility from
+/// the **observer**, which is an ordinary weakened capsule, and the subject is
+/// the same confined capsule in both arms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Under {
+    /// The confining profile — every probe arm, and every control arm whose
+    /// delta is a change to the *placement* rather than to the profile.
+    Confining,
+    Removing(PropertyRemoval),
+    Granting(AuthorityGrant),
+}
+
+/// Everything running one arm needs, and nothing about which arm it is.
+///
+/// The two closures are the phase's seams. `capsule` is called **once per
+/// capsule the shape runs** (`EX-6`) — a capsule that left state behind
+/// contaminates the next, so a two-capsule shape gets two transactions and never
+/// one reused — and `execution` supplies the fixture's bounds, environment and
+/// stdio around a payload's argv, so the payload is the only thing a row varies.
+pub(crate) struct Arm<'a> {
+    pub(crate) backend: &'a dyn ConformanceBackend,
+    pub(crate) capsule: &'a dyn Fn() -> Result<CapsulePlacement, String>,
+    pub(crate) execution: &'a dyn Fn(&Argv) -> Execution,
+    /// Whether the concurrent subject is still running its payload. Injected
+    /// rather than called directly so both readings of row B5's window are
+    /// reachable from a test — the window that existed and the one that did not
+    /// — which is the difference between the two concurrent indeterminacies
+    /// being *specified* and being *tested* (`S8`).
+    pub(crate) live: &'a dyn Fn(HostPid) -> bool,
+    pub(crate) under: Under,
+}
+
+impl std::fmt::Debug for Arm<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Arm")
+            .field("backend", &self.backend.id())
+            .field("under", &self.under)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Arm<'_> {
+    /// Provision one capsule and run one payload in it.
+    ///
+    /// The error side is already an [`ArmResult`]: everything that can go wrong
+    /// here is the mechanism failing rather than the property failing, and
+    /// `EX-11` gives that exactly one reading.
+    fn observation(&self, argv: &Argv, under: Under) -> Result<Observation, ArmResult> {
+        let placement = (self.capsule)()
+            .map_err(|detail| indeterminate(Indeterminacy::BackendError(detail), None))?;
+        let execution = (self.execution)(argv);
+        let outcome = match under {
+            Under::Confining => self.backend.execute(&placement, &execution),
+            Under::Removing(removal) => self
+                .backend
+                .execute_weakened(&placement, &execution, removal),
+            Under::Granting(grant) => self.backend.execute_granted(&placement, &execution, grant),
+        };
+        outcome
+            .map_err(|error| indeterminate(Indeterminacy::BackendError(format!("{error:?}")), None))
+    }
+
+    fn read(&self, probe: &Probe, under: Under) -> ArmResult {
+        match self.observation(&probe.argv, under) {
+            Ok(observation) => classify(&observation, &probe.observed),
+            Err(failure) => failure,
+        }
+    }
+
+    /// Row B5's choreography.
+    ///
+    /// The observer capsule runs **inside** `execute_observed`'s callback, which
+    /// the trait defines as the interval between the subject's top-level process
+    /// existing and the trusted side waiting on it. So the window is the
+    /// callback rather than something raced for on a second thread, and the arm
+    /// needs no threads, no `Send` bound on the trait, and no synchronisation.
+    ///
+    /// The subject's stdout is unread for the duration of the callback: the
+    /// backend spawns, calls back, and only then collects output. A payload that
+    /// filled a pipe buffer would block until the observer finished — still
+    /// alive, so the window is if anything wider, but a reason to keep the
+    /// subject's output to the marker and a token.
+    fn observe_concurrently(&self, subject: &Probe, observer: &PidProbe) -> ArmResult {
+        let placement = match (self.capsule)() {
+            Ok(placement) => placement,
+            Err(detail) => return indeterminate(Indeterminacy::BackendError(detail), None),
+        };
+        let execution = (self.execution)(&subject.argv);
+
+        let seen: Cell<Option<HostPid>> = Cell::new(None);
+        let alive = Cell::new(false);
+        let reported: RefCell<Option<Result<Observation, ArmResult>>> = RefCell::new(None);
+
+        let run_observer = |pid: HostPid| {
+            seen.set(Some(pid));
+            let outcome = self.observation(&(observer.argv)(pid), self.under);
+            // Sampled **after** the observer capsule finished, not before: the
+            // question row B5 asks is whether the observation was taken while
+            // the subject was running, and a subject that exited halfway
+            // through leaves an observation of nothing in particular.
+            alive.set((self.live)(pid));
+            *reported.borrow_mut() = Some(outcome);
+        };
+
+        let observed = match self
+            .backend
+            .execute_observed(&placement, &execution, &run_observer)
+        {
+            Ok(observation) => observation,
+            Err(error) => {
+                return indeterminate(Indeterminacy::BackendError(format!("{error:?}")), None);
+            }
+        };
+
+        // The arm is read off the observer, but a subject that never ran leaves
+        // nothing to have been observed — and it would otherwise be reported as
+        // a held probe, since an observer that finds no live process is exactly
+        // what the probe arm expects to see.
+        if let ArmResult::Indeterminate {
+            reason: Indeterminacy::NoLiveness,
+            ..
+        } = classify(&observed, &subject.observed)
+        {
+            return indeterminate(Indeterminacy::NoLiveness, Some(&observed));
+        }
+
+        let reported = reported.into_inner();
+        let witness = match reported {
+            Some(Err(failure)) => return failure,
+            Some(Ok(observation)) => ConcurrentWitness {
+                observed_pid: seen.get(),
+                subject_live_when_observer_ran: alive.get(),
+                observer: Some(observation),
+            },
+            None => ConcurrentWitness {
+                observed_pid: None,
+                subject_live_when_observer_ran: false,
+                observer: None,
+            },
+        };
+        classify_concurrent(&witness, &observer.observed)
+    }
+}
+
+/// Run one arm of one row.
+fn run_arm(arm: &Arm<'_>, shape: &ArmShape) -> ArmResult {
+    match shape {
+        ArmShape::Single(probe) => arm.read(probe, arm.under),
+        ArmShape::Sequential { writer, reader } => {
+            let staged = match arm.observation(&writer.argv, Under::Confining) {
+                Ok(observation) => observation,
+                Err(failure) => return failure,
+            };
+            match classify(&staged, &writer.observed) {
+                ArmResult::Held => arm.read(reader, arm.under),
+                // The writer's job is to make the reader's observation mean
+                // something. A writer that did not do it is a broken fixture,
+                // not a violated property, and reporting it as
+                // `ArmResult::Failed` would put a fixture bug into the verdict
+                // as evidence about the backend.
+                ArmResult::Failed => indeterminate(Indeterminacy::NoObservation, Some(&staged)),
+                // The writer's own capsule could not be read: that is already
+                // the right answer, and it carries the right reason.
+                unresolved @ ArmResult::Indeterminate { .. } => unresolved,
+            }
+        }
+        ArmShape::Concurrent { subject, observer } => arm.observe_concurrently(subject, observer),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The row verdict algebra (`EX-13`)
 // ---------------------------------------------------------------------------
 
@@ -2072,10 +2293,11 @@ mod tests {
         mount_points, on_real_disk, prepare_root, row_ids_in_more_than_one_table, row_verdict,
         second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
     };
+    use super::{Arm, Under, capsule_still_running, run_arm, still_running};
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use super::{
-        ProcessFacts, STAT_LEAF, SessionId, capsule_session_leader, depth_from, own_session,
-        process_table, session_of, stat_facts,
+        ProcessFacts, STAT_LEAF, SessionId, StatFacts, capsule_session_leader, depth_from,
+        own_session, process_table, session_of, stat_of,
     };
     use crate::backend::bubblewrap::{SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
@@ -2210,46 +2432,75 @@ mod tests {
         inner: WitnessBackend,
         weakening: Weakening,
         seam: ObserverSeam,
+        /// Which entry point each call came through, in order — the evidence
+        /// that a weakening reached the capsule it was meant for and no other.
+        reached: RefCell<Vec<Under>>,
     }
 
     impl Stub {
-        fn ignoring_its_removal(stdout: &[&str]) -> Self {
+        fn new(inner: WitnessBackend, weakening: Weakening, seam: ObserverSeam) -> Self {
             Self {
-                inner: WitnessBackend::always(Ok(ran(stdout))),
-                weakening: Weakening::DelegatesToExecute,
-                seam: ObserverSeam::CallsBack(HostPid(4242)),
+                inner,
+                weakening,
+                seam,
+                reached: RefCell::new(Vec::new()),
             }
+        }
+
+        fn ignoring_its_removal(stdout: &[&str]) -> Self {
+            Self::new(
+                WitnessBackend::always(Ok(ran(stdout))),
+                Weakening::DelegatesToExecute,
+                ObserverSeam::CallsBack(HostPid(4242)),
+            )
         }
 
         fn weakening_honestly(probe: &[&str], weakened: &[&str]) -> Self {
-            Self {
-                inner: WitnessBackend::always(Ok(ran(probe))),
-                weakening: Weakening::Answers(Ok(ran(weakened))),
-                seam: ObserverSeam::CallsBack(HostPid(4242)),
-            }
+            Self::new(
+                WitnessBackend::always(Ok(ran(probe))),
+                Weakening::Answers(Ok(ran(weakened))),
+                ObserverSeam::CallsBack(HostPid(4242)),
+            )
         }
 
         fn unavailable(missing: &str, remedy: &str) -> Self {
-            Self {
-                inner: WitnessBackend::always(exited(0, "")).reporting(Availability::Unavailable {
+            Self::new(
+                WitnessBackend::always(exited(0, "")).reporting(Availability::Unavailable {
                     missing: missing.to_owned(),
                     remedy: remedy.to_owned(),
                 }),
-                weakening: Weakening::DelegatesToExecute,
-                seam: ObserverSeam::CallsBack(HostPid(4242)),
-            }
+                Weakening::DelegatesToExecute,
+                ObserverSeam::CallsBack(HostPid(4242)),
+            )
         }
 
         fn never_calling_back() -> Self {
-            Self {
-                inner: WitnessBackend::always(Ok(ran(&[LIVENESS_MARKER, HELD]))),
-                weakening: Weakening::DelegatesToExecute,
-                seam: ObserverSeam::NeverCallsBack,
-            }
+            Self::new(
+                WitnessBackend::always(Ok(ran(&[LIVENESS_MARKER, HELD]))),
+                Weakening::DelegatesToExecute,
+                ObserverSeam::NeverCallsBack,
+            )
+        }
+
+        /// One scripted outcome per `execute` call, and one fixed answer for
+        /// every weakened call.
+        fn scripted(script: Vec<Observation>, weakened: Observation) -> Self {
+            Self::new(
+                WitnessBackend::scripted(
+                    script.into_iter().map(Ok).collect(),
+                    Ok(ran(&[LIVENESS_MARKER])),
+                ),
+                Weakening::Answers(Ok(weakened)),
+                ObserverSeam::CallsBack(HostPid(4242)),
+            )
         }
 
         fn executions(&self) -> usize {
             self.inner.calls().len()
+        }
+
+        fn reached(&self) -> Vec<Under> {
+            self.reached.borrow().clone()
         }
     }
 
@@ -2267,6 +2518,7 @@ mod tests {
             placement: &CapsulePlacement,
             execution: &Execution,
         ) -> Result<Observation, BackendError> {
+            self.reached.borrow_mut().push(Under::Confining);
             self.inner.execute(placement, execution)
         }
     }
@@ -2276,11 +2528,14 @@ mod tests {
             &self,
             placement: &CapsulePlacement,
             execution: &Execution,
-            _removal: PropertyRemoval,
+            removal: PropertyRemoval,
         ) -> Result<Observation, BackendError> {
             match &self.weakening {
                 Weakening::DelegatesToExecute => self.execute(placement, execution),
-                Weakening::Answers(answer) => answer.clone(),
+                Weakening::Answers(answer) => {
+                    self.reached.borrow_mut().push(Under::Removing(removal));
+                    answer.clone()
+                }
             }
         }
 
@@ -2288,11 +2543,14 @@ mod tests {
             &self,
             placement: &CapsulePlacement,
             execution: &Execution,
-            _grant: AuthorityGrant,
+            grant: AuthorityGrant,
         ) -> Result<Observation, BackendError> {
             match &self.weakening {
                 Weakening::DelegatesToExecute => self.execute(placement, execution),
-                Weakening::Answers(answer) => answer.clone(),
+                Weakening::Answers(answer) => {
+                    self.reached.borrow_mut().push(Under::Granting(grant));
+                    answer.clone()
+                }
             }
         }
 
@@ -3669,6 +3927,363 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // Running an arm (`T6`, `EX-6`, `EX-7`)
+    // -----------------------------------------------------------------------
+    //
+    // Tables A and B are empty this phase, so nothing else runs a `Sequential`
+    // or a `Concurrent` shape. These are the whole of their coverage until
+    // PHASE-09 and PHASE-10 (`C3`: the `VT` keywords are a floor).
+
+    /// The fixture's bounds and stdio around a payload's argv — the shape the
+    /// real harness's closure will have.
+    fn executing(argv: &Argv) -> Execution {
+        Execution::new(
+            argv.clone(),
+            CapsuleEnv::complete(),
+            Duration::from_secs(5),
+            ByteCount::from_bytes(1024),
+            CapsuleStdio::EmptyInputCapturedOutput,
+        )
+    }
+
+    /// Counts what `EX-6` is about: one transaction per capsule, never a reuse.
+    fn counting_capsules(count: &Cell<usize>) -> impl Fn() -> Result<CapsulePlacement, String> {
+        move || {
+            count.set(count.get() + 1);
+            Ok(placement())
+        }
+    }
+
+    fn arm<'a>(
+        backend: &'a Stub,
+        capsule: &'a dyn Fn() -> Result<CapsulePlacement, String>,
+        live: &'a dyn Fn(HostPid) -> bool,
+        under: Under,
+    ) -> Arm<'a> {
+        Arm {
+            backend,
+            capsule,
+            execution: &executing,
+            live,
+            under,
+        }
+    }
+
+    const ALWAYS_LIVE: &dyn Fn(HostPid) -> bool = &|_pid| true;
+    const NEVER_LIVE: &dyn Fn(HostPid) -> bool = &|_pid| false;
+
+    #[test]
+    fn a_single_arm_runs_one_capsule_and_reads_it() {
+        let backend = Stub::scripted(vec![ran(&[LIVENESS_MARKER, HELD])], ran(&[]));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+                &ArmShape::Single(a_probe())
+            ),
+            ArmResult::Held
+        );
+        assert_eq!(count.get(), 1);
+    }
+
+    /// `EX-6`, and the reading: the arm is the *reader's*, not the writer's.
+    /// The two payloads observe opposite things here, so a harness that read the
+    /// writer would answer `Held` where this answers `Failed`.
+    #[test]
+    fn a_sequential_arm_provisions_one_transaction_per_capsule() {
+        let backend = Stub::scripted(
+            vec![
+                ran(&[LIVENESS_MARKER, HELD]),
+                ran(&[LIVENESS_MARKER, HELD_NOT]),
+            ],
+            ran(&[]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+                &ArmShape::Sequential {
+                    writer: a_probe(),
+                    reader: a_probe(),
+                }
+            ),
+            ArmResult::Failed
+        );
+        assert_eq!(count.get(), 2, "one transaction per capsule, never a reuse");
+        assert_eq!(backend.executions(), 2);
+    }
+
+    /// A writer that did not write leaves the reader with nothing to observe.
+    /// Reporting that as `Failed` would put a broken fixture into the verdict as
+    /// evidence about the backend — and the reader must not run at all, since
+    /// its observation would be of a state nobody established.
+    #[test]
+    fn a_sequential_arm_whose_writer_did_not_write_establishes_nothing() {
+        let backend = Stub::scripted(
+            vec![
+                ran(&[LIVENESS_MARKER, HELD_NOT]),
+                ran(&[LIVENESS_MARKER, HELD]),
+            ],
+            ran(&[]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        let result = run_arm(
+            &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &ArmShape::Sequential {
+                writer: a_probe(),
+                reader: a_probe(),
+            },
+        );
+
+        assert_eq!(reason(&result), Indeterminacy::NoObservation);
+        assert_ne!(result, ArmResult::Failed);
+        assert_eq!(count.get(), 1, "the reader never ran");
+        assert_eq!(backend.executions(), 1);
+    }
+
+    /// The observer capsule runs inside `execute_observed`'s callback, so the
+    /// execute order is observer-then-subject. Two capsules, one arm.
+    #[test]
+    fn a_concurrent_arm_reads_the_observer_taken_while_the_subject_ran() {
+        let backend = Stub::scripted(
+            vec![ran(&[LIVENESS_MARKER, HELD]), ran(&[LIVENESS_MARKER, HELD])],
+            ran(&[]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+                &ArmShape::Concurrent {
+                    subject: a_probe(),
+                    observer: PidProbe {
+                        argv: observer_argv,
+                        observed: token(),
+                    },
+                }
+            ),
+            ArmResult::Held
+        );
+        assert_eq!(count.get(), 2);
+    }
+
+    /// `S8`, half one: the subject exited before the observer ran. The observer
+    /// *did* report — it reported about a process that was no longer there — so
+    /// the arm produced no usable observation, and that is
+    /// `NoObservation` rather than a held probe.
+    #[test]
+    fn a_concurrent_arm_that_missed_its_window_reports_no_observation() {
+        let backend = Stub::scripted(
+            vec![ran(&[LIVENESS_MARKER, HELD]), ran(&[LIVENESS_MARKER, HELD])],
+            ran(&[]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        let result = run_arm(
+            &arm(&backend, &capsule, NEVER_LIVE, Under::Confining),
+            &ArmShape::Concurrent {
+                subject: a_probe(),
+                observer: PidProbe {
+                    argv: observer_argv,
+                    observed: token(),
+                },
+            },
+        );
+
+        assert_eq!(reason(&result), Indeterminacy::NoObservation);
+        assert_ne!(result, ArmResult::Held);
+    }
+
+    /// `S8`, half two: the backend never called back. Distinct reason, distinct
+    /// repair — this one is a backend that did not implement the seam, and a
+    /// suite reading it as a passing probe would admit the backend it was least
+    /// able to check. The observer capsule must not have run at all.
+    #[test]
+    fn a_concurrent_arm_against_a_silent_seam_reports_no_liveness() {
+        let backend = Stub::never_calling_back();
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        let result = run_arm(
+            &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &ArmShape::Concurrent {
+                subject: a_probe(),
+                observer: PidProbe {
+                    argv: observer_argv,
+                    observed: token(),
+                },
+            },
+        );
+
+        assert_eq!(reason(&result), Indeterminacy::NoLiveness);
+        assert_ne!(result, ArmResult::Held);
+        assert_eq!(count.get(), 1, "the observer capsule never ran");
+    }
+
+    /// A subject that never printed its marker never ran, so there was nothing
+    /// to observe — and this is the case that would otherwise read as a *held*
+    /// probe, because an observer that finds no live process is exactly what the
+    /// probe arm expects to see.
+    #[test]
+    fn a_concurrent_arm_whose_subject_never_ran_reports_no_liveness() {
+        let backend = Stub::scripted(vec![ran(&[LIVENESS_MARKER, HELD]), ran(&[])], ran(&[]));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        let result = run_arm(
+            &arm(&backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &ArmShape::Concurrent {
+                subject: a_probe(),
+                observer: PidProbe {
+                    argv: observer_argv,
+                    observed: token(),
+                },
+            },
+        );
+
+        assert_eq!(reason(&result), Indeterminacy::NoLiveness);
+        assert_ne!(result, ArmResult::Held);
+    }
+
+    /// Invariant 3, as a property of the harness rather than of a row: the
+    /// capsule that sets the scene always runs confined, and only the capsule
+    /// the arm is read from is weakened.
+    #[test]
+    fn a_sequential_control_weakens_the_reader_and_never_the_writer() {
+        let removal = PropertyRemoval::EnvCleared;
+        let backend = Stub::scripted(
+            vec![ran(&[LIVENESS_MARKER, HELD])],
+            ran(&[LIVENESS_MARKER, HELD_NOT]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Removing(removal)),
+                &ArmShape::Sequential {
+                    writer: a_probe(),
+                    reader: a_probe(),
+                }
+            ),
+            ArmResult::Failed
+        );
+        assert_eq!(
+            backend.reached(),
+            vec![Under::Confining, Under::Removing(removal)]
+        );
+    }
+
+    /// `F-19`: row B5's control removes process visibility from the **observer**,
+    /// which is an ordinary weakened capsule — the subject is the same confined
+    /// capsule in both arms. That is why `execute_observed` needs no removal
+    /// parameter.
+    #[test]
+    fn a_concurrent_control_weakens_the_observer_and_never_the_subject() {
+        let removal = PropertyRemoval::ProcessVisibility;
+        let backend = Stub::scripted(
+            vec![ran(&[LIVENESS_MARKER, HELD])],
+            ran(&[LIVENESS_MARKER, HELD_NOT]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Removing(removal)),
+                &ArmShape::Concurrent {
+                    subject: a_probe(),
+                    observer: PidProbe {
+                        argv: observer_argv,
+                        observed: token(),
+                    },
+                }
+            ),
+            ArmResult::Failed
+        );
+        assert_eq!(
+            backend.reached(),
+            vec![Under::Removing(removal), Under::Confining],
+            "the observer runs first, inside the subject's callback"
+        );
+    }
+
+    /// A grant is the other direction, and it must reach the same capsule.
+    #[test]
+    fn a_granting_control_reaches_the_capsule_the_arm_is_read_from() {
+        let grant = AuthorityGrant::AllCapabilities;
+        let backend = Stub::scripted(Vec::new(), ran(&[LIVENESS_MARKER, HELD_NOT]));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+
+        assert_eq!(
+            run_arm(
+                &arm(&backend, &capsule, ALWAYS_LIVE, Under::Granting(grant)),
+                &ArmShape::Single(a_probe())
+            ),
+            ArmResult::Failed
+        );
+        assert_eq!(backend.reached(), vec![Under::Granting(grant)]);
+    }
+
+    /// The window is the observer's *whole* run, not its start. Sampling
+    /// liveness before the observer executes would credit an observer that
+    /// outlived its subject — it would have looked at a process that was there
+    /// when it was launched and gone by the time it looked. Here the subject
+    /// dies during the observer's run, and only an after-the-fact sample sees
+    /// it.
+    #[test]
+    fn the_window_closes_when_the_observer_finishes_not_when_it_starts() {
+        let backend = Stub::scripted(
+            vec![ran(&[LIVENESS_MARKER, HELD]), ran(&[LIVENESS_MARKER, HELD])],
+            ran(&[]),
+        );
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+        let observer_ran = |_pid: HostPid| count.get() < 2;
+
+        let result = run_arm(
+            &arm(&backend, &capsule, &observer_ran, Under::Confining),
+            &ArmShape::Concurrent {
+                subject: a_probe(),
+                observer: PidProbe {
+                    argv: observer_argv,
+                    observed: token(),
+                },
+            },
+        );
+
+        assert_eq!(reason(&result), Indeterminacy::NoObservation);
+    }
+
+    /// A transaction that could not be provisioned is the mechanism failing, not
+    /// the property failing (`EX-11`).
+    #[test]
+    fn an_arm_whose_capsule_could_not_be_provisioned_names_the_mechanism() {
+        let backend = Stub::scripted(Vec::new(), ran(&[]));
+        let refusal = || Err("Capacity".to_owned());
+
+        let result = run_arm(
+            &arm(&backend, &refusal, ALWAYS_LIVE, Under::Confining),
+            &ArmShape::Single(a_probe()),
+        );
+
+        assert_eq!(
+            reason(&result),
+            Indeterminacy::BackendError("Capacity".to_owned())
+        );
+        assert_eq!(backend.executions(), 0);
+    }
+
+    // -----------------------------------------------------------------------
     // The pid seam (`T5`, `EX-7`, `D3`)
     // -----------------------------------------------------------------------
 
@@ -3803,8 +4418,12 @@ mod tests {
             .expect("the fixture writes");
         drop(file);
         assert_eq!(
-            stat_facts(&path),
-            Some((HostPid(111), SessionId(333))),
+            stat_of(&path),
+            Some(StatFacts {
+                reaped: false,
+                parent: HostPid(111),
+                session: SessionId(333),
+            }),
             "ppid 111, pgrp 222 and sid 333 are distinct on purpose"
         );
     }
@@ -3813,7 +4432,58 @@ mod tests {
     #[test]
     fn a_missing_stat_is_absence_rather_than_failure() {
         let dir = TempDir::new().expect("a scratch directory");
-        assert_eq!(stat_facts(&dir.path().join(STAT_LEAF)), None);
+        assert_eq!(stat_of(&dir.path().join(STAT_LEAF)), None);
+    }
+
+    /// A leader that has exited but not been reaped still has a readable
+    /// `/proc` entry with its own sid in it, so "the entry is there" is not
+    /// liveness. `T8`'s sweep signs off on the session only once the leader is
+    /// gone, and a zombie leader read as alive would hang the sweep out to the
+    /// wall bound every time.
+    #[test]
+    fn a_zombie_leader_is_not_running() {
+        let leader = HostPid(4242);
+        let facts = |state: &str| StatFacts {
+            reaped: state == "Z",
+            parent: HostPid(1),
+            session: SessionId(leader.0),
+        };
+
+        assert!(still_running(leader, &facts("S")));
+        assert!(!still_running(leader, &facts("Z")));
+    }
+
+    /// The other half of the recycling problem: the kernel reuses pids, so an
+    /// entry at the capsule's pid that is *not* its own session leader is a
+    /// different process wearing the number.
+    #[test]
+    fn a_recycled_pid_is_not_the_capsule_still_running() {
+        let leader = HostPid(4242);
+        assert!(!still_running(
+            leader,
+            &StatFacts {
+                reaped: false,
+                parent: HostPid(1),
+                session: SessionId(9),
+            }
+        ));
+    }
+
+    /// The live wiring: this process is alive and readable, and it is *not* a
+    /// session leader — so a `false` here can only have come from reading this
+    /// process's real sid. A reader that took the wrong pid's file, or dropped
+    /// the leader predicate, would answer `true`.
+    #[test]
+    fn the_liveness_reader_reads_the_pid_it_was_given() {
+        let own = HostPid(std::process::id().try_into().expect("a positive pid"));
+        assert_ne!(
+            own_session(),
+            Some(SessionId(own.0)),
+            "the harness is not a session leader, or this test proves nothing"
+        );
+
+        assert!(!capsule_still_running(own));
+        assert!(!capsule_still_running(HostPid(-1)), "no such entry");
     }
 
     /// The live half: the two `/proc` readers agree about this process, and the
