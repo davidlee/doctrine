@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde_json::{Map, Value};
 
-use crate::install_config::ClaudeSettingsScope;
+use crate::install_config::{CLAUDE_SETTINGS_SCOPE_KEY, ClaudeSettingsScope};
 use crate::{adr, dtoml, fsutil, governance, install, memory, policy, root, standard};
 
 /// The snapshot lives in the runtime-state tree — derived, gitignored
@@ -543,7 +543,10 @@ const SETTINGS_PROJECT_REL: &str = ".claude/settings.json";
 /// The Claude settings scope this project has chosen (SL-250 `DEC-163`). An
 /// absent key, an absent `[install]` table and an absent `doctrine.toml` all
 /// yield `Project`, so no fixture is needed to get the default.
-fn claude_scope(root: &Path) -> anyhow::Result<ClaudeSettingsScope> {
+///
+/// Named for what it reads, not for the harness: `RefreshReport.claude_scope`
+/// is a different thing (the scope PLUS what the sweep of its sibling found).
+fn configured_scope(root: &Path) -> anyhow::Result<ClaudeSettingsScope> {
     Ok(dtoml::load_doctrine_toml(root)?
         .install
         .claude_settings_scope)
@@ -1349,6 +1352,83 @@ fn hook_fallback() -> HookPlan {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The abandoned-scope sweep (SL-250 `DEC-164`).
+// ---------------------------------------------------------------------------
+
+/// The outcome of ONE SPEC's sweep. Four states, mutually exclusive at this
+/// granularity: a given spec either swept, found nothing, could not, or was not
+/// asked to. "Could not read it", "nothing to do" and "not attempted" are
+/// different facts about the file being abandoned, and collapsing any pair of
+/// them makes a failed or skipped sweep indistinguishable from an empty one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EvictOutcome {
+    /// Nothing owned was there — the legitimate no-op. An ABSENT sibling
+    /// reaches here, never `Unreadable`.
+    Nothing,
+    /// `n` owned entries removed.
+    Removed(usize),
+    /// This spec's `hooks.<event>` could not be swept: malformed JSON, or a
+    /// `hooks` / `hooks.<event>` of the wrong type. Left untouched, and SAID SO.
+    Unreadable,
+    /// Not attempted, because this spec's write to the TARGET did not land.
+    /// Sweeping would remove the only working copy.
+    NotAttempted,
+}
+
+/// A planned eviction: the outcome plus the new settings JSON (`None` when no
+/// write is needed). Mirrors [`HookPlan`] / [`BaseRefPlan`].
+struct EvictPlan {
+    outcome: EvictOutcome,
+    new_json: Option<String>,
+}
+
+impl EvictPlan {
+    const NOTHING: Self = Self {
+        outcome: EvictOutcome::Nothing,
+        new_json: None,
+    };
+    const UNREADABLE: Self = Self {
+        outcome: EvictOutcome::Unreadable,
+        new_json: None,
+    };
+}
+
+/// The abandoned-scope half of `DEC-164`: drop this spec's owned entries from
+/// `existing_json` WITHOUT inserting. Same ownership predicate as [`plan_hook`],
+/// so a foreign entry is never at risk; same fail-soft, so a malformed file is
+/// left untouched — but fail-soft here is REPORTED, because the entries it
+/// leaves behind are still firing (settings hooks merge across scopes rather
+/// than shadowing).
+///
+/// It takes no [`CommandForm`]. Ownership is command-only (`DEC-161`), so BOTH
+/// renderings are owned in either file — which is exactly what makes a scope
+/// switch heal rather than orphan.
+///
+/// The `Nothing` arm returns BEFORE serialising, and must: `hook_array_mut`
+/// inserts an empty `hooks.<event>` on its way past, so writing here would grow
+/// the one file this path is only ever allowed to shrink.
+fn plan_evict(existing_json: Option<&str>, spec: &HookSpec) -> EvictPlan {
+    let Some(mut value) = parse_settings(existing_json) else {
+        return EvictPlan::UNREADABLE;
+    };
+    let Some(arr) = hook_array_mut(&mut value, spec.event) else {
+        return EvictPlan::UNREADABLE;
+    };
+    let count = owned_positions(arr, spec.is_ours).len();
+    if count == 0 {
+        return EvictPlan::NOTHING;
+    }
+    drop_owned_hooks(arr, spec.is_ours);
+    match serde_json::to_string_pretty(&value) {
+        Ok(json) => EvictPlan {
+            outcome: EvictOutcome::Removed(count),
+            new_json: Some(json),
+        },
+        Err(_) => EvictPlan::UNREADABLE,
+    }
+}
+
 /// The snippet printed when the settings file can't be merged automatically —
 /// generic over a `HookSpec`. Renders the WHOLE matcher set in the form that
 /// file would actually have received, so a manual-repair snippet is complete
@@ -1409,6 +1489,7 @@ fn install_refresh(
             let mcp_extension = install_mcp_extension(root, exec, dry_run)?;
             Ok(RefreshReport {
                 hooks: vec![hook],
+                claude_scope: None,
                 baseref: BaseRefOutcome::NotApplicable,
                 mcp: RefreshOutcome::None,
                 append_system,
@@ -1427,12 +1508,18 @@ fn install_refresh(
             // SL-250 PHASE-02: no spec is merged here yet, so `hooks` is empty —
             // the arm still resolves the scope, because `install_baseref`
             // follows it. PHASE-04 fills the vec with the seven specs.
-            let baseref = install_baseref(root, claude_scope(root)?, dry_run)?;
+            let scope = configured_scope(root)?;
+            let baseref = install_baseref(root, scope, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
             let mcp = install_mcp(root, dry_run)?;
             Ok(RefreshReport {
                 hooks: Vec::new(),
+                // SL-250 PHASE-03: with no specs merged, the fold is empty — but
+                // the announcement is not vacuous, because `install_baseref`
+                // writes to the very file it names. PHASE-04's loop absorbs each
+                // spec's `evicted` into this report.
+                claude_scope: Some((scope, SweepReport::default())),
                 baseref,
                 mcp,
                 append_system: AppendSystemOutcome::NotApplicable,
@@ -1451,6 +1538,10 @@ struct RefreshReport {
     /// exactly one; the Claude arm carries none until SL-250 PHASE-04 ships its
     /// spec set (the boot hook currently arrives via the plugin).
     hooks: Vec<RefreshOutcome>,
+    /// The scope written and what the sweep of its sibling found, folded across
+    /// specs. `None` on the Codex arm, which has exactly one settings file and
+    /// so nothing to abandon.
+    claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
     baseref: BaseRefOutcome,
     /// The `.mcp.json` doctrine server registration outcome (CHR-013); pi
     /// carries `None` (no `.mcp.json` wiring on the import-only arm).
@@ -1776,6 +1867,8 @@ pub(crate) struct HookWrite {
     pub(crate) scope: ClaudeSettingsScope,
     /// What the merge into that file did.
     pub(crate) written: RefreshOutcome,
+    /// What the sweep of the ABANDONED file did for this spec (`DEC-164`).
+    pub(crate) evicted: EvictOutcome,
 }
 
 /// Merge a `HookSpec`'s hook entries into the Claude settings file the
@@ -1793,7 +1886,7 @@ pub(crate) fn install_claude_hook(
     spec: &HookSpec,
     dry_run: bool,
 ) -> anyhow::Result<HookWrite> {
-    let scope = claude_scope(root)?;
+    let scope = configured_scope(root)?;
     let written = install_hook_to_file(
         root,
         settings_rel(scope),
@@ -1801,7 +1894,140 @@ pub(crate) fn install_claude_hook(
         command_form(scope),
         dry_run,
     )?;
-    Ok(HookWrite { scope, written })
+    // `EX-4`: sweep the abandoned file ONLY when this spec's write to the target
+    // landed. Ordering write-before-evict does not buy this on its own —
+    // `PrintedFallback` is an Ok VALUE carrying a manual-repair snippet, so `?`
+    // never sees it, the sibling still reads fine, and the sweep would SUCCEED.
+    // That pairing (a fallback snippet beside "evicted 11 stale entries") reads
+    // like routine cleanup and is in fact the announcement that nothing fires
+    // any more.
+    //
+    // The gate is on the OUTCOME, not on bytes reaching disk, so `--dry-run`
+    // stays a faithful preview rather than a run that reports it skipped
+    // everything.
+    let evicted = match &written {
+        RefreshOutcome::PrintedFallback { .. } => EvictOutcome::NotAttempted,
+        RefreshOutcome::Wired(_) | RefreshOutcome::Refreshed(_) | RefreshOutcome::None => {
+            evict_hook_from_file(root, settings_rel(scope.sibling()), spec, dry_run)?
+        }
+    };
+    Ok(HookWrite {
+        scope,
+        written,
+        evicted,
+    })
+}
+
+/// What the whole Claude arm did to the ABANDONED file: a count and two flags,
+/// not a sum type. At file granularity these facts are independent — a run can
+/// remove two entries AND fail to sweep a third event AND skip a fourth — so
+/// there is no absorbing state and the rider prints every line that is true
+/// rather than the most severe one.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct SweepReport {
+    /// Total owned entries removed, summed across specs.
+    removed: usize,
+    /// Some spec's `hooks.<event>` could not be swept — entries may still fire.
+    unreadable: bool,
+    /// Some spec's sweep was skipped because its write to the target did not
+    /// land.
+    skipped: bool,
+}
+
+impl SweepReport {
+    /// Fold one spec's outcome in. `Nothing` is the legitimate no-op and
+    /// contributes nothing — it is the only state that leaves the report silent.
+    fn absorb(&mut self, outcome: EvictOutcome) {
+        match outcome {
+            EvictOutcome::Nothing => {}
+            EvictOutcome::Removed(n) => self.removed += n,
+            EvictOutcome::Unreadable => self.unreadable = true,
+            EvictOutcome::NotAttempted => self.skipped = true,
+        }
+    }
+}
+
+impl From<EvictOutcome> for SweepReport {
+    /// Lift a single spec's outcome — the shape `memory sync install` reports,
+    /// having merged exactly one spec.
+    fn from(outcome: EvictOutcome) -> Self {
+        let mut report = Self::default();
+        report.absorb(outcome);
+        report
+    }
+}
+
+/// The `DEC-163` scope announcement and the `DEC-164` sweep rider — the SINGLE
+/// writer of both, called by `wire`'s Claude arm once with the folded report and
+/// by `run_sync_install` with its one `HookWrite` lifted through
+/// [`SweepReport::from`]. Siting it on `wire` alone was the earlier mistake:
+/// `run_sync_install` never enters `wire`, so the routine path would have
+/// inherited the sweep and none of the reporting — and it is the highest-
+/// frequency caller of the slice's one destructive write.
+///
+/// Takes the handle its callers already hold; `print_stdout` is denied
+/// (`Cargo.toml`), so no new output surface is created here.
+pub(crate) fn write_scope_report(
+    out: &mut dyn io::Write,
+    tag: &str,
+    scope: ClaudeSettingsScope,
+    swept: &SweepReport,
+) -> io::Result<()> {
+    let target = settings_rel(scope);
+    let abandoned = settings_rel(scope.sibling());
+    let toml = dtoml::DOCTRINE_TOML;
+    writeln!(
+        out,
+        "  {tag}claude: hooks → {target}  ([install] {CLAUDE_SETTINGS_SCOPE_KEY} in {toml})"
+    )?;
+    if swept.removed > 0 {
+        let plural = if swept.removed == 1 {
+            "entry"
+        } else {
+            "entries"
+        };
+        writeln!(
+            out,
+            "  {tag}claude: evicted {} stale hook {plural} from {abandoned}",
+            swept.removed
+        )?;
+    }
+    if swept.unreadable {
+        writeln!(
+            out,
+            "  claude: could not sweep part of {abandoned} (malformed) — stale doctrine hooks may still fire there"
+        )?;
+    }
+    if swept.skipped {
+        writeln!(
+            out,
+            "  claude: did not sweep {abandoned} — {target} could not be written, so there is nothing to replace it with"
+        )?;
+    }
+    Ok(())
+}
+
+/// [`install_hook_to_file`] with [`plan_evict`] in place of [`plan_hook`]: drop
+/// this spec's owned entries from `rel_path`, writing only on change (unless
+/// `dry_run`).
+///
+/// It creates no file that does not exist — an absent sibling parses to an empty
+/// object, reaches `Nothing`, and plans no write — so there is deliberately no
+/// `create_dir_all` here. A plan carrying JSON implies the file was read, so its
+/// parent is already there.
+fn evict_hook_from_file(
+    root: &Path,
+    rel_path: &'static str,
+    spec: &HookSpec,
+    dry_run: bool,
+) -> anyhow::Result<EvictOutcome> {
+    let path = root.join(rel_path);
+    let existing = fs::read_to_string(&path).ok();
+    let plan = plan_evict(existing.as_deref(), spec);
+    if let (Some(json), false) = (&plan.new_json, dry_run) {
+        fsutil::write_atomic(&path, json.as_bytes())?;
+    }
+    Ok(plan.outcome)
 }
 
 /// Merge a `HookSpec`'s hook entries into `.codex/hooks.json`, writing only on
@@ -2198,6 +2424,12 @@ pub(crate) fn wire(
     for h in harnesses {
         match install_refresh(h, root, exec, dry_run) {
             Ok(report) => {
+                // The scope announcement and the sweep rider come FIRST (EX-7):
+                // an operator reading "evicted 2 stale entries" needs to already
+                // know which file doctrine chose and which key changes it.
+                if let Some((scope, swept)) = &report.claude_scope {
+                    write_scope_report(&mut stdout, tag, *scope, swept)?;
+                }
                 // One line per spec merged (SL-250): the Claude arm merges a
                 // SET of specs, the Codex arm exactly one, and an empty vec is
                 // silent — which is what the single `None` outcome used to be.
@@ -4868,6 +5100,367 @@ mod tests {
         assert_eq!(parse_settings(Some("{ not json")), None, "malformed");
     }
 
+    /// A settings file whose `hooks.<event>` holds `entries`, pretty-printed.
+    fn seeded_event(event: &str, entries: Value) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({ "hooks": { event: entries } }))
+            .expect("serialisable")
+    }
+
+    /// One `hooks.<event>` entry: a matcher and a single command hook.
+    fn entry(matcher: &str, command: &str) -> Value {
+        serde_json::json!({
+            "matcher": matcher,
+            "hooks": [ { "type": "command", "command": command } ],
+        })
+    }
+
+    // EX-2/EX-3, VT-1: the drop-only planner never grows the file it is walking
+    // away from. `hook_array_mut` INSERTS an empty `hooks.<event>` into the
+    // in-memory value on its way past, so serialising on the no-op path would
+    // write a key into a file doctrine was only supposed to read.
+    #[test]
+    fn eviction_never_inserts() {
+        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+
+        let plan = plan_evict(None, &spec);
+        assert!(matches!(plan.outcome, EvictOutcome::Nothing), "absent");
+        assert!(plan.new_json.is_none(), "an absent sibling writes nothing");
+
+        let plan = plan_evict(Some(r#"{"permissions":{}}"#), &spec);
+        assert!(
+            matches!(plan.outcome, EvictOutcome::Nothing),
+            "no hooks key"
+        );
+        assert!(
+            plan.new_json.is_none(),
+            "the drop-only path never grows a file"
+        );
+
+        let plan = plan_evict(
+            Some(&seeded_event(
+                TEST_PRETOOLUSE_EVENT,
+                serde_json::json!([entry("Bash", "/usr/bin/foreign")]),
+            )),
+            &spec,
+        );
+        assert!(
+            matches!(plan.outcome, EvictOutcome::Nothing),
+            "foreign only"
+        );
+        assert!(plan.new_json.is_none(), "nothing owned ⇒ no write");
+    }
+
+    // EX-3, VT-2: a file that exists and cannot be understood is left untouched
+    // and reported. `Unreadable` is a fact about THIS SPEC's `hooks.<event>`,
+    // which is why a wrongly-typed one event reaches it while its siblings in
+    // the same file stay sweepable.
+    #[test]
+    fn plan_evict_is_fail_soft_on_malformed_json() {
+        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        for (label, seeded) in [
+            ("malformed json", "{ not json".to_string()),
+            ("hooks is a string", r#"{"hooks":"nope"}"#.to_string()),
+            (
+                "hooks.<event> is a string",
+                seeded_event(TEST_PRETOOLUSE_EVENT, Value::String("nope".into())),
+            ),
+        ] {
+            let plan = plan_evict(Some(&seeded), &spec);
+            assert!(
+                matches!(plan.outcome, EvictOutcome::Unreadable),
+                "{label}: must report, not silently no-op"
+            );
+            assert!(plan.new_json.is_none(), "{label}: left untouched");
+        }
+    }
+
+    // VT-1: eviction is gated by exactly the predicate that protects foreign
+    // entries during a normal merge — never-clobber is untouched on the
+    // destructive path.
+    #[test]
+    fn eviction_spares_foreign_entries() {
+        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let seeded = seeded_event(
+            TEST_PRETOOLUSE_EVENT,
+            serde_json::json!([
+                entry("Bash", "/usr/bin/foreign before"),
+                entry("Bash", "/abs/doctrine worktree pretooluse"),
+                entry("Agent", "/usr/bin/foreign after"),
+            ]),
+        );
+
+        let plan = plan_evict(Some(&seeded), &spec);
+        assert!(matches!(plan.outcome, EvictOutcome::Removed(1)));
+        let json = plan.new_json.expect("removed ⇒ json");
+        assert_eq!(
+            event_commands(&json, TEST_PRETOOLUSE_EVENT),
+            vec![
+                "/usr/bin/foreign before".to_string(),
+                "/usr/bin/foreign after".to_string(),
+            ],
+            "only the owned entry leaves"
+        );
+    }
+
+    // VT-1, the healing property: ownership is command-only (DEC-161), so a
+    // stale-MATCHER owned entry in the abandoned file is still recognised as
+    // ours and still evicted. Under the rejected `(command, matcher)` ownership
+    // it would be orphaned in the file doctrine is walking away from — the worst
+    // possible place for an unreachable double-fire, since no later install can
+    // reach it.
+    #[test]
+    fn eviction_heals_a_stale_matcher_in_the_abandoned_file() {
+        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let seeded = seeded_event(
+            TEST_PRETOOLUSE_EVENT,
+            serde_json::json!([
+                entry("Retired", "/abs/doctrine worktree pretooluse"),
+                entry(
+                    "AlsoRetired",
+                    "${DOCTRINE_BIN:-doctrine} worktree pretooluse"
+                ),
+            ]),
+        );
+
+        let plan = plan_evict(Some(&seeded), &spec);
+        assert!(
+            matches!(plan.outcome, EvictOutcome::Removed(2)),
+            "both forms are owned in either file — that is what makes a scope switch heal"
+        );
+        let json = plan.new_json.expect("removed ⇒ json");
+        assert!(
+            event_commands(&json, TEST_PRETOOLUSE_EVENT).is_empty(),
+            "no orphan left behind: {json}"
+        );
+    }
+
+    // VT-1, the R10 behavioural criterion: installing at one scope removes the
+    // owned entry from the other, and the abandoned file only ever shrinks.
+    #[test]
+    fn writing_one_scope_evicts_the_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::sync(exec);
+
+        // Install at local scope, then flip the key: the entry seeded in
+        // settings.local.json is exactly the state a pre-SL-250 install leaves.
+        seed_scope(root, "local");
+        let write = install_claude_hook(root, &spec, false).unwrap();
+        assert_eq!(write.evicted, EvictOutcome::Nothing, "nothing to sweep yet");
+        assert!(!commands(&fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap()).is_empty());
+
+        seed_scope(root, "project");
+        let write = install_claude_hook(root, &spec, false).unwrap();
+        assert_eq!(write.scope, ClaudeSettingsScope::Project);
+        assert_eq!(
+            write.evicted,
+            EvictOutcome::Removed(1),
+            "the sibling is swept"
+        );
+
+        let project = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+        let local = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+        assert_eq!(
+            commands(&project).len(),
+            1,
+            "the entry moved here: {project}"
+        );
+        assert!(
+            commands(&local).is_empty(),
+            "the abandoned file keeps no copy — settings hooks MERGE across \
+             scopes, so a survivor double-fires forever: {local}"
+        );
+    }
+
+    // VT-3, the F-12 criterion — and the one that would go red without the
+    // guard. `PrintedFallback` is an Ok VALUE (it carries a manual-repair
+    // snippet), so `?` never sees it and write-before-evict buys nothing on its
+    // own: the sibling reads fine and the sweep SUCCEEDS. The failure this
+    // catches is a successful sweep, leaving zero activation anywhere.
+    #[test]
+    fn a_failed_target_write_does_not_trigger_the_sweep() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::sync(exec);
+
+        seed_scope(root, "local");
+        install_claude_hook(root, &spec, false).unwrap();
+        let seeded = fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap();
+
+        // The TARGET is malformed; the sibling is perfectly readable.
+        seed_scope(root, "project");
+        fs::write(root.join(SETTINGS_PROJECT_REL), "{ not json").unwrap();
+
+        let write = install_claude_hook(root, &spec, false).unwrap();
+        assert!(
+            matches!(write.written, RefreshOutcome::PrintedFallback { .. }),
+            "the target could not be merged"
+        );
+        assert_eq!(write.evicted, EvictOutcome::NotAttempted);
+        assert_eq!(
+            fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap(),
+            seeded,
+            "the only working copy survives"
+        );
+    }
+
+    // VT-4: a scope switch HEALS rather than orphans. Ownership is command-only
+    // (DEC-161), so the baked form is owned in the file now being written — it
+    // is rewritten to the portable form rather than duplicated — and owned in
+    // the file being abandoned, so it is evicted rather than stranded.
+    #[test]
+    fn a_scope_switch_rewrites_the_command_form() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        let spec = HookSpec::sync(exec);
+        seed_scope(root, "project");
+
+        let baked = seeded_event(
+            EVENT_SESSION_START,
+            serde_json::json!([entry("startup", &format!("/abs/doctrine {SYNC_ARGS}"))]),
+        );
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(root.join(SETTINGS_PROJECT_REL), &baked).unwrap();
+        fs::write(root.join(SETTINGS_LOCAL_REL), &baked).unwrap();
+
+        let write = install_claude_hook(root, &spec, false).unwrap();
+        assert!(matches!(write.written, RefreshOutcome::Refreshed(_)));
+        assert_eq!(write.evicted, EvictOutcome::Removed(1));
+
+        let project = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+        assert!(
+            !project.contains("/abs/doctrine"),
+            "the tracked file is rewritten to the portable form (INV-1): {project}"
+        );
+        assert!(
+            commands(&fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap()).is_empty(),
+            "the baked entry in the abandoned file is owned, so it is evicted"
+        );
+    }
+
+    /// `write_scope_report` rendered to a string.
+    fn scope_report(scope: ClaudeSettingsScope, swept: &SweepReport) -> String {
+        let mut buf: Vec<u8> = Vec::new();
+        write_scope_report(&mut buf, "", scope, swept).expect("in-memory write");
+        String::from_utf8(buf).expect("utf8")
+    }
+
+    // EX-7: the announcement names the target file AND the key that changes it.
+    // This is what replaces the `--scope` flag DEC-163 drops, so it is a
+    // criterion rather than a nicety — with the flag gone, the installer is the
+    // only place an operator learns the choice exists.
+    #[test]
+    fn the_announcement_names_the_target_and_the_key() {
+        let quiet = SweepReport::default();
+
+        let project = scope_report(ClaudeSettingsScope::Project, &quiet);
+        assert!(project.contains(SETTINGS_PROJECT_REL), "{project}");
+        assert!(project.contains(CLAUDE_SETTINGS_SCOPE_KEY), "{project}");
+        assert!(project.contains(dtoml::DOCTRINE_TOML), "{project}");
+        assert_eq!(project.lines().count(), 1, "a quiet sweep is one line");
+
+        let local = scope_report(ClaudeSettingsScope::Local, &quiet);
+        assert!(local.contains(SETTINGS_LOCAL_REL), "{local}");
+    }
+
+    // VT-2: NO state is absorbing. `Unreadable` is a fact about ONE SPEC's
+    // `hooks.<event>` — `hook_array_mut` returns `None` for a wrongly-typed
+    // event while every other event in the same well-formed file stays
+    // sweepable — so a run can remove entries AND fail to sweep another event,
+    // and both facts must print. An absorbing fold discards the `Removed(1)` and
+    // reports only that it could not sweep a file it just deleted an entry from.
+    //
+    // The design's example pairs SessionStart with SubagentStart; `nominate`
+    // arrives in PHASE-04, so this drives the identical shape through
+    // `create_fork` (WorktreeCreate) instead.
+    #[test]
+    fn a_partly_successful_sweep_reports_both_facts() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        seed_scope(root, "project");
+
+        // One sibling, valid JSON: a sweepable owned SessionStart entry beside a
+        // hand-edited WorktreeCreate that is a string.
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(
+            root.join(SETTINGS_LOCAL_REL),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "hooks": {
+                    EVENT_SESSION_START: [entry("startup", &format!("/abs/doctrine {SYNC_ARGS}"))],
+                    EVENT_WORKTREE_CREATE: "hand-edited to nonsense",
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut swept = SweepReport::default();
+        for spec in [HookSpec::sync(exec), HookSpec::create_fork(exec)] {
+            swept.absorb(install_claude_hook(root, &spec, false).unwrap().evicted);
+        }
+
+        assert_eq!(swept.removed, 1, "the readable event was swept");
+        assert!(swept.unreadable, "the wrongly-typed event was not");
+        assert!(!swept.skipped, "both target writes landed");
+
+        let rendered = scope_report(ClaudeSettingsScope::Project, &swept);
+        assert!(
+            rendered.contains("evicted 1"),
+            "the removal must survive the fold: {rendered}"
+        );
+        assert!(
+            rendered.contains("could not sweep"),
+            "and so must the failure: {rendered}"
+        );
+        assert_eq!(rendered.lines().count(), 3, "announcement + both facts");
+    }
+
+    // VT-2: a failed sweep is reported, not silent. The file is left untouched —
+    // fail-soft on a file being ABANDONED is the right safety posture, and
+    // correspondingly a stronger reporting obligation, because the entries it
+    // leaves behind are still firing.
+    #[test]
+    fn a_failed_sweep_is_reported_not_silent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_scope(root, "project");
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(root.join(SETTINGS_LOCAL_REL), "{ not json").unwrap();
+
+        let write =
+            install_claude_hook(root, &HookSpec::sync(Path::new("/abs/doctrine")), false).unwrap();
+        assert_eq!(write.evicted, EvictOutcome::Unreadable);
+        assert_eq!(
+            fs::read_to_string(root.join(SETTINGS_LOCAL_REL)).unwrap(),
+            "{ not json",
+            "left untouched"
+        );
+
+        let rendered = scope_report(write.scope, &SweepReport::from(write.evicted));
+        assert!(rendered.contains(SETTINGS_LOCAL_REL), "{rendered}");
+        assert!(rendered.contains("may still fire"), "{rendered}");
+    }
+
+    // EX-7: the skipped line reads as the warning it is — not "cleanup skipped"
+    // but "the activation is still in the other file, and it is the only copy".
+    #[test]
+    fn the_skipped_line_names_what_it_did_not_replace() {
+        let rendered = scope_report(
+            ClaudeSettingsScope::Project,
+            &SweepReport::from(EvictOutcome::NotAttempted),
+        );
+        assert!(rendered.contains(SETTINGS_LOCAL_REL), "{rendered}");
+        assert!(rendered.contains(SETTINGS_PROJECT_REL), "{rendered}");
+        assert!(
+            rendered.contains("nothing to replace it with"),
+            "{rendered}"
+        );
+    }
+
     /// Entries under an arbitrary `hooks.<event>` key (`None` if absent).
     fn event_entries(json: &str, event: &str) -> Option<Vec<Value>> {
         let value: Value = serde_json::from_str(json).expect("valid JSON");
@@ -5957,6 +6550,27 @@ weight = 0
 
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
         assert_eq!(out.mcp_extension, ExtOutcome::NotApplicable);
+    }
+
+    // SL-250 PHASE-03 EX-6: only the Claude arm has a scope to announce. Codex
+    // carries `None` — it has exactly one settings file and so nothing to
+    // abandon — which is what keeps its output byte-identical (VA-1). The Claude
+    // arm reports the scope even with no specs merged yet, because
+    // `install_baseref` writes to the very file the announcement names.
+    #[test]
+    fn only_the_claude_arm_carries_a_scope_to_announce() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+
+        let codex = install_refresh(&Harness::Codex, root, exec, false).unwrap();
+        assert!(codex.claude_scope.is_none());
+
+        let claude = install_refresh(&Harness::Claude, root, exec, false).unwrap();
+        assert_eq!(
+            claude.claude_scope,
+            Some((ClaudeSettingsScope::Project, SweepReport::default()))
+        );
     }
 
     // --- VT-2: build_and_render determinism ---

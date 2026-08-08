@@ -35,6 +35,28 @@ pub(crate) enum ClaudeSettingsScope {
     Local,
 }
 
+/// The documented spelling of the scope key, for the operator-facing
+/// announcement (STD-001). `DEC-163` drops the `--scope` flag, so the installer
+/// is the only place an operator learns the choice exists — and a message that
+/// misnames the key is worse than no message.
+pub(crate) const CLAUDE_SETTINGS_SCOPE_KEY: &str = "claude-settings-scope";
+
+impl ClaudeSettingsScope {
+    /// The other member of the pair — the scope this one abandons, and so the
+    /// one the `DEC-164` sweep targets.
+    ///
+    /// Pure vocabulary, which is why it sits here rather than in `boot`: it maps
+    /// a scope to a scope, never to a path. The path mapping (`settings_rel`) and
+    /// the command-form mapping (`command_form`) stay in `boot`, which owns both
+    /// — this leaf is still out=0 (ADR-001).
+    pub(crate) const fn sibling(self) -> Self {
+        match self {
+            Self::Project => Self::Local,
+            Self::Local => Self::Project,
+        }
+    }
+}
+
 /// The `[install]` table from `doctrine.toml`.
 ///
 /// The container carries `rename_all = "kebab-case"` and NOT only the enum:

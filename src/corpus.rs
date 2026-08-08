@@ -487,8 +487,6 @@ fn print_plan(plan: &CorpusPlan, shipped: &Path, dry_run: bool) -> Result<()> {
 /// a `.claude/settings.local.json` `SessionStart` command (codex has no equivalent).
 pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) -> Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    let exec = crate::boot::resolve_exec()?;
-    let spec = crate::boot::HookSpec::sync(&exec);
 
     if !yes && !dry_run {
         let proceed = crate::install::prompt_confirm(&format!(
@@ -501,12 +499,30 @@ pub(crate) fn run_sync_install(path: Option<PathBuf>, dry_run: bool, yes: bool) 
         }
     }
 
-    let mut out = io::stdout();
+    sync_install_report(&mut io::stdout(), &root, dry_run)
+}
+
+/// The install-and-report body of `memory sync install`, with its output
+/// threaded rather than reaching for stdout — which is what makes the
+/// destructive write assertable (SL-250 `VT-5`). The confirmation prompt stays
+/// with the caller; only the part worth testing lives here.
+fn sync_install_report(out: &mut dyn Write, root: &Path, dry_run: bool) -> Result<()> {
+    let exec = crate::boot::resolve_exec()?;
+    let spec = crate::boot::HookSpec::sync(&exec);
     let tag = if dry_run { "[dry-run] " } else { "" };
     // The scope is `install_claude_hook`'s to resolve, not this caller's
     // (SL-250 `DEC-163`): `memory sync install` is the routine, flagless install
     // that must INHERIT the choice rather than re-elect it.
-    let write = crate::boot::install_claude_hook(&root, &spec, dry_run)?;
+    let write = crate::boot::install_claude_hook(root, &spec, dry_run)?;
+    // The shared writer, not a second copy (SL-250 `EX-6`): this path never
+    // enters `boot::wire`, so siting the announcement there would have given the
+    // routine install the sweep and none of the reporting.
+    crate::boot::write_scope_report(
+        out,
+        tag,
+        write.scope,
+        &crate::boot::SweepReport::from(write.evicted),
+    )?;
     match write.written {
         crate::boot::RefreshOutcome::Wired(cmd) => {
             writeln!(out, "  {tag}claude: wired sync hook: {cmd}")?;
@@ -1029,6 +1045,55 @@ weight = 0
                 "{key:?}: one Claude settings file per install, not two"
             );
         }
+    }
+
+    // SL-250 PHASE-03 VT-5, the F-2 criterion: `memory sync install` is the
+    // highest-frequency caller of the slice's one destructive write — it is the
+    // documented ritual after any shipped-memory edit — and it never enters
+    // `boot::wire`. Without this the eviction is silent on exactly the path that
+    // performs it most often, and every other test still passes.
+    #[test]
+    fn memory_sync_install_reports_scope_and_eviction() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join(".doctrine")).unwrap();
+        std::fs::write(
+            root.join(".doctrine/doctrine.toml"),
+            "[install]\nclaude-settings-scope = \"project\"\n",
+        )
+        .unwrap();
+
+        // A pre-SL-250 install: the sync hook sitting in the local file. Seeded
+        // literally rather than by running the installer at local scope —
+        // `resolve_exec` yields the TEST binary here, whose file name is not
+        // `doctrine`, so a real install would seed an entry doctrine does not
+        // own and the sweep would correctly find nothing.
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        std::fs::write(
+            root.join(".claude/settings.local.json"),
+            r#"{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[
+                 {"type":"command","command":"/abs/doctrine memory sync"}]}]}}"#,
+        )
+        .unwrap();
+
+        let mut buf: Vec<u8> = Vec::new();
+        sync_install_report(&mut buf, root, false).unwrap();
+        let printed = String::from_utf8(buf).unwrap();
+
+        assert!(
+            printed.contains(".claude/settings.json") && printed.contains("claude-settings-scope"),
+            "the announcement names the file and the key that changes it: {printed}"
+        );
+        assert!(
+            printed.contains("evicted 1 stale hook entry from .claude/settings.local.json"),
+            "the destructive write must not be silent here: {printed}"
+        );
+        let local = std::fs::read_to_string(root.join(".claude/settings.local.json")).unwrap();
+        assert!(
+            !local.contains("memory sync"),
+            "and it must actually have happened: {local}"
+        );
     }
 
     /// PHASE-04 EX-2: every EMBEDDED master lints clean. The embed is empty this
