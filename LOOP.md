@@ -127,10 +127,26 @@ Every brief carries, and carries nothing else:
 - "end green: `doctrine check gate`. Do not flip your own phase status."
 
 **Planner** — Opus, always. Runs `/phase-plan` for one phase: reads that phase's
-`plan.toml` entry and only the `design.md` sections its Reading list names, then
-writes tasks, carried constraints, STOP conditions, the `VT`/`VA` mapping, risks
-and decisions into the sheet. Writes no source. Hands back ≤10 lines: task count,
-open decisions, and the worker model it recommends.
+`plan.toml` entry — `objective`, `entrance_criteria`, `exit_criteria`,
+`verification`, `specs`, `targets` — and only the `design.md` sections that
+entry's prose actually cites. **There is no Reading-list field in `plan.toml`;
+the Reading list is something the planner writes.** Where the entry cites no
+section, the planner chooses, and records in the sheet which sections it read
+and why. It then writes tasks, carried constraints, STOP conditions, the
+`VT`/`VA` mapping, risks and decisions into the sheet. Writes no source.
+
+Two things every planner brief should carry, both learned the hard way:
+
+- **Name any task that structurally cannot stage a red**, with the compensating
+  positive control that must fail in its place. A test written after the code
+  that makes it compile passes on first run and proves nothing.
+- **Verify inventories against the tree**, never against a prior sheet or a
+  memory — "the five touch sites for a new `Finding` category" were six, and the
+  sixth silently dropped data.
+
+Hands back ≤12 lines: task count, open decisions, which tasks cannot stage a red
+and their controls, whether the phase wants one worker or two in sequence (with
+the split point and the first's exit state), and the worker model it recommends.
 
 **Worker** — Sonnet when the sheet is fully specified and the work is mechanical:
 a known edit shape, no open decisions. Opus when the sheet carries an open
