@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf2c-f022-73a3-aa1b-fd51c24e3d40"
+recorded_at = "2026-08-08T02:21:32.066405365Z"
+kind = "friction"
+summary = "concurrent agents given the same patch task; uncommitted edit swept into the other's commit"
+detail = "The user asked this session to patch RFC-026 (brief 01) while a fresh agent, spawned from the RFC-027 handover, already owned briefs 01 and 02. Neither knew of the other. Both authored a '## Synthesis' section. This session's edit was still uncommitted in the shared working tree when the other agent committed bb3b7819a, so the duplicate rode into that commit — the shared-index hazard AGENTS.md warns about, but via 'git add <path>' on a file a second agent was concurrently editing, not via a pathless commit. Detected only because the Edit tool warned the file had changed on disk mid-edit; without that warning the duplication would have shipped silently in a governance artefact. Two gaps: (1) no cheap way for a session to discover that another live agent owns the same artefact - 'doctrine status' shows lifecycle, not in-flight agent claims (IDE-021 lease-based edit-exclusion is the standing idea); (2) the handover packet named the next agent's task but nothing surfaced that ownership to a concurrent session. Repair was clean (177-line deletion, cd6c22781) because the duplicate was contiguous and attributable."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
