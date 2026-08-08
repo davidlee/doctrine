@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe1653d817712904d6cb2381f85f8"
+memory_key = "mem.pattern.tests.mutation-needs-a-discriminating-fixture"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Mutation battery: a mutation that reds nothing is usually a non-discriminating fixture"
+summary = "Pick fixture values where the wrong rule gives a different answer; assert the discriminating property itself"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["crates/doctrine-control"]
+globs = []
+commands = []
+tags = ["testing", "mutation-testing"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8124cf5213257bee5e98608d96f8c640b632541a"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "f21b642e34b273f5bf269ed3c1ab2ae05221a75b6d01b71bc3042058d1e448bc"
+base_commit = "dc87be90ee7e5d656f319ea3be99fc84939cc000"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

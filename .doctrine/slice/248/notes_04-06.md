@@ -163,3 +163,91 @@ types, none restating `sec-7` Table A.
 - **`AcceptedBase` lives in `backend.rs`** (`D1`/`F-4`). PHASE-06 `VT-6`'s
   keyword mandate over `transaction.rs` is satisfied by
   `use crate::backend::AcceptedBase;` plus the field.
+
+## PHASE-05 — the bubblewrap backend
+
+`crates/doctrine-control/src/backend/bubblewrap.rs`, ~2050 lines, 34 tests.
+Suite 63 → **97**, gate exit 0, `Cargo.lock` unmoved.
+
+### What diverged from the sheet
+
+- **`S1` was discharged before work started.** The `F-1/R` ruling landed on the
+  sheet (option i): `unsafe_code` `forbid` → `deny`, `"process"` on `rustix`,
+  exactly two `#[expect(unsafe_code, reason = …)]` sites, and a mechanised check
+  holding the count. Both manifest edits made; `Cargo.lock` md5 identical before
+  and after, `cargo metadata` clean — the plan-time reasoning confirmed by
+  measurement rather than assumed.
+- **An eighth `ProfileRefusal` variant.** `D6` lists seven; `EmptyReadableSet` is
+  the fail-closed floor for *everything declared, nothing produced* — reachable
+  when a resolver returns no members, which `ConfigRefusal::NoReadableInputs`
+  cannot catch because it runs before expansion. It is also what makes the
+  sheet's own `the_readable_set_is_never_empty` reachable.
+- **`D4`'s pure seam could not perform `D5` step 4.** Existence and resolution of
+  each resolver-returned path needs `HostFacts`; `closure_members` is pure by
+  construction. Step 4 moved to `expand_closure_root`, which has the host.
+  `D4`'s actual constraint — refusals in production code, not fixtures — is met.
+- **Three profile-owned binds the design's assembly list does not mention.**
+  `/source`, `/capsule` and `/agent` cannot arrive through the declared vectors
+  (`RESERVED_INNER_DESTINATIONS` refuses them), so the backend derives them from
+  the placement's typed fields and emits them first in their block.
+- **The status channel is a file, not a pipe.** `std::io::pipe` is 1.87; the
+  workspace pins `rust-version = "1.85"` and `clippy::incompatible_msrv` is
+  denied. `rustix`'s `pipe` feature was outside the ruling's widened file set.
+  A regular file under the transaction root, outside every bound path.
+- **`Execution` carries no kill grace**, so `timeout -k` had no configured
+  figure. `BubblewrapBackend` holds one with a `with_kill_grace` builder for
+  PHASE-06; the clean fix is a field on `Execution` and is not this phase's.
+
+### The mutation battery (the reconstructed red phase)
+
+All ten mutations applied from a green snapshot and restored by copy; `diff`
+clean at the end. Nine redded exactly their named test on the first run. Two
+results are worth carrying:
+
+- **`M10` redded nothing** — and the rule was fine. The fixture's host `PATH`
+  had host order and lexical order *coinciding*, so `sort()` was a no-op on that
+  input and the assertion held under either rule. Fixture changed so the two
+  orders disagree, plus an `assert_ne!` on the sorted copy so the discriminating
+  property is itself asserted. The criterion was never touched. This is the
+  vacuous-criterion class caught by the method the sheet mandated — the battery
+  paid for itself here alone.
+- **An `M7` run produced an unexplained extra red**, once in ~20. Not the
+  mutation: the descriptor sweep skipped a failed `fcntl_getfd` but *propagated*
+  a failed `fcntl_setfd`, so another thread closing a descriptor between the
+  listing and the mark failed the whole sweep. Its doc comment already claimed
+  the skip. Fixed to skip on `Errno::BADF` and only that errno. An intermittent
+  found by an expectation, not by chance.
+
+`M8` behaved exactly as the sheet predicted: the floor mutation left
+`every_descriptor_above_two_…` **green**. `RV-346` `F-30`'s lesson reproduced as
+a measurement instead of quoted.
+
+### `VA-1` ran the argv the code assembles
+
+A throwaway `#[test]` printed `confinement_argv`'s real output; the fixture-only
+paths were swapped for real ones and *that* vector went to `bwrap` 0.11.2. Probe
+removed by restoring the snapshot. Four things fell out of one run: `F-3`
+reproduced (the `/tmp`-resident bind works, `EX-3` lawful, `S2` did not fire);
+`F-4`'s reversed-order control reproduced (`/tmp` empty, input gone, exit 0 —
+silent); `F-5` reproduced (`uid=1000 gid=1000 groups=1000,65534` — the overflow
+gid survives, so invariant 15 is still PHASE-10's); and `D11` confirmed —
+`{ "exit-code": 0 }` in the status file, and `/proc/self/fd` inside the capsule
+showing only `0 1 2 3`, the status descriptor not crossing.
+
+### Carried forward
+
+- **PHASE-06 deletes five dead-code headers**, not four: `host.rs`, `config.rs`,
+  `capacity.rs`, `backend.rs`, and now `backend/bubblewrap.rs`. Identical
+  `reason` string in all five, so they are greppable.
+- **`backend.rs:50-53` is now stale** and `S5` blocked fixing it: it says the
+  `backend` unit's out-edges are `{config}` and that a profile adds "no row and
+  no edge". With `bubblewrap.rs` importing `crate::host` the edges are
+  `{config, host}`. The *row* claim still holds — `VA-4` green, 25 passed.
+- **`"bwrap"` is a literal in `backend.rs`'s test fixture** and now duplicates
+  `BWRAP_EXECUTABLE`. `STD-001` wants the constant; `S5` blocked it here.
+- **`CapsuleEnvVar` has no `name()`**, so the seven variable *names* live in
+  `bubblewrap.rs` and their *values* in `backend.rs`. One `name()` would reunite
+  them.
+- **The `forbid` → `deny` flip wants an ADR** (recommendation, not a ruling —
+  the sheet's `F-17`). The mechanised two-site budget is what makes `deny`
+  acceptable, and a test can be deleted with no governance trace.

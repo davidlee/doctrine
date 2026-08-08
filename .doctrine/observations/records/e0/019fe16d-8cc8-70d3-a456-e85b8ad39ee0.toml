@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe16d-8cc8-70d3-a456-e85b8ad39ee0"
+recorded_at = "2026-08-08T12:51:20.904086921Z"
+kind = "friction"
+summary = "/execute (PHASE-05 worker): the mandated mutation battery has no tooling — every worker hand-rolls a snapshot/mutate/run/restore driver"
+detail = "SL-248 PHASE-05's sheet mandates a 10-mutation battery as the reconstructed red phase, and PHASE-04's sheet mandated one before it. There is no affordance for it, so the worker writes a throwaway script each time: copy the green file to a scratchpad, apply one textual mutation, run the suite, parse which tests redded, restore by copy. Roughly 150 lines of Python and two rounds of needle-matching bugs (indentation mismatches in the literal search strings) before the first mutation ran, plus a re-run when a mutation redded nothing and the fixture had to be fixed. The battery is unambiguously worth it — it caught a vacuous fixture and, via an unexplained extra red, a real intermittent bug in the descriptor sweep. That is exactly why the cost recurs: every future phase that mandates one pays it again. A 'doctrine mutate' verb, or even a documented driver script in the repo, would turn a per-phase authoring cost into a per-phase table of mutations. Related: the mutation table already lives in the phase sheet in a machine-readable-ish markdown table (id | mutation | must red | must not red), so the missing piece is the driver, not the specification."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

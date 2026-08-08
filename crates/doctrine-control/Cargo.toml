@@ -39,9 +39,17 @@ doctrine = { path = "../.." }
 # that `std::fs::File` does not implement and every call site is E0277. The root
 # package gets `std` by unification from crossterm/which/tempfile; this crate
 # depends on none of the three, so it must say so itself (EX-17).
-# `rustix::process` stays undeclared and unreachable — it is behind a `process`
-# feature neither manifest declares, so a call into it is E0433 (RV-346 F-29).
-rustix = { version = "1", default-features = false, features = ["fs", "std"] }
+# `process` is declared since SL-248 PHASE-05, for `rustix::process::setrlimit`
+# — `EX-15`'s per-file `RLIMIT_FSIZE`, set on the child before the `bwrap` exec
+# so the bound is unreachable from inside the namespace. A feature on a crate
+# already built, not a new dependency: `Cargo.toml:77`'s zero-new-crates posture
+# is intact and `Cargo.lock` does not move (feature selections are not recorded
+# there, and `linux-raw-sys` was already resolved).
+rustix = { version = "1", default-features = false, features = [
+  "fs",
+  "process",
+  "std",
+] }
 # `config.rs` — the `[capsule]` serde projection and its `deny_unknown_fields`
 # (sec-5, EX-4/EX-5), and the TOML parse behind it. Neither is inherited: the
 # root package's manifest says nothing that reaches this compilation unit, and

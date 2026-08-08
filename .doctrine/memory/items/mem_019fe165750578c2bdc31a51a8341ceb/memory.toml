@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe165750578c2bdc31a51a8341ceb"
+memory_key = "mem.fact.rust.cloexec-sweep-races-on-ebadf"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A /proc/self/fd CLOEXEC sweep races other threads: skip EBADF and only EBADF"
+summary = "fcntl_setfd can EBADF when another thread closes the fd between the listing and the mark; propagating it fails the sweep intermittently"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["crates/doctrine-control/src/backend"]
+globs = []
+commands = []
+tags = ["rust", "file-descriptors", "flaky-tests"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8124cf5213257bee5e98608d96f8c640b632541a"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "6c6f83b470665431de9cfef9a2b12ddfb8d476e60a1ec6631c8c624204703b48"
+base_commit = "dc87be90ee7e5d656f319ea3be99fc84939cc000"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

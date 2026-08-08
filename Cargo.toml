@@ -197,7 +197,15 @@ textwrap = { version = "0.16", default-features = false, features = ["unicode-wi
 [workspace.lints.rust]
 # Absolute nasties.
 warnings = "deny"
-unsafe_code = "forbid"
+# `deny`, not `forbid`, since SL-248 PHASE-05: `forbid` cannot be excepted at
+# all, and the capsule backend's two bounds outside the sandbox — the child's
+# `RLIMIT_FSIZE` (`CommandExt::pre_exec`) and the `/proc/self/fd` sweep
+# (`BorrowedFd::borrow_raw`) — have no safe route. `deny` keeps `unsafe` denied
+# by default everywhere and makes the exceptions explicit, reviewable and
+# countable: exactly TWO `#[expect(unsafe_code, reason = …)]` sites exist in the
+# workspace, both in `crates/doctrine-control/src/backend/bubblewrap.rs`, and
+# the test `the_unsafe_budget_is_exactly_two_sites` holds the count there.
+unsafe_code = "deny"
 
 # Public API hygiene.
 # missing_docs paused: doc-comment absence is rarely the defect in agent code,

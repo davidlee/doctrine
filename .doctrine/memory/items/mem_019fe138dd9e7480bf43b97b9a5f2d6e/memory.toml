@@ -3,8 +3,8 @@ memory_key = "mem.fact.lint.unsafe-code-forbid-blocks-rawfd-and-pre-exec"
 schema_version = 1
 memory_type = "fact"
 status = "active"
-title = "unsafe_code is forbid workspace-wide and forbid cannot be excepted"
-summary = "Cargo.toml sets unsafe_code = forbid for the whole workspace; borrow_raw and pre_exec are therefore unreachable, and #[expect] cannot buy them back."
+title = "unsafe_code was forbid workspace-wide; SL-248 flipped it to deny with a two-site budget"
+summary = "The forbid/deny distinction and what forbid blocked. Superseded in fact by SL-248's ruling: now deny, two #[expect] sites, budget held by a test"
 created = "2026-08-08"
 updated = "2026-08-08"
 
