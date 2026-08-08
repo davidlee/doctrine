@@ -1,0 +1,42 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 182
+slug = "rev-lands-in-phase"
+title = "Objective 4's REV lands in a phase, not at reconcile"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-249 objective 4 amends SPEC-019 and PRD-010 from four record kinds to seven. ADR-013 routes a governance amendment through a REV landing at reconcile, and SL-249's design says so at §3 and §5.3. But DEC-176/D9's coverage canary is CODE — a test asserting every kinds::RECORD kind is named in both entities' authored tiers, and that the word `four` occurs nowhere outside a declared allowlist held to a count identity. Code lands in a phase. Authored in a phase while the prose waits for reconcile, the canary is red for that whole interval, and no phase may end red."
+choice       = "The REV is created, populated, approved and APPLIED inside SL-249's PHASE-07, the prose amendment is authored there, and the canary ships green. Reconcile records a REV already done rather than performing it."
+alternatives = [
+  "Move objective 4 wholly to reconcile, canary included — honours ADR-013 literally, but puts code authorship in a stage that does not otherwise write code.",
+  "Split: the counting machinery and its fixture tests ship in a phase (green immediately), only the thin live-corpus assertion lands at reconcile — defensible, but cuts a small test across two stages for no gain once the whole amendment moves.",
+  "Ship the canary #[ignore]d or red until reconcile — rejected outright; a disabled control is D9's own stated failure mode.",
+]
+rationale    = "The canary is R4's CONTROL, and R4 — that objective 4's completion is easy to assert and expensive to get wrong — is the risk this slice has already recurred on once, via SL-159's undelivered governance axis. RV-349 spent five findings (F-5, F-7, F-9, F-11, F-14) getting the canary to actually bite. A control left red across a reconcile cycle is one somebody disables, so shipping it red would be R4 recurring through the very mechanism built to catch it. Probing `revision apply` also removed the practical argument for waiting: it auto-lands only `status` rows and surfaces prose rows for manual handling, so a prose-heavy amendment is hand-authored at whichever stage owns it — the choice is about which stage, not about how much work it is."
+consequences = [
+  "A plan does not outrank its design, so the departure is carried into reconcile as a wording item (SL-249 PHASE-07/EX-11) rather than absorbed silently; reconcile settles design.md §3 and §5.3 to say what happened.",
+  "PHASE-07/EN-2 no longer gates the phase.",
+  "inq-7, inq-9 and D8a's correction to DEC-168's rationale all ride this REV, so they move with the landing point rather than independently of it.",
+  "Generalises beyond SL-249: where a governance amendment's control is code, the amendment lands where the control can be green.",
+]
+decided_by   = "david"
+decided_on   = "2026-08-08"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-249"

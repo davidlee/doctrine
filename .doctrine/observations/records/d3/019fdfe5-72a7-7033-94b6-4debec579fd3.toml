@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdfe5-72a7-7033-94b6-4debec579fd3"
+recorded_at = "2026-08-08T05:43:04.103142758Z"
+kind = "friction"
+summary = "/harvest: minting DEC-182 needed a hand-edit of record-182.toml — the exact hole SL-249 exists to close"
+detail = "The 'open' leg of the harvest wanted a durable DEC for the PHASE-07 landing ruling. 'doctrine knowledge new decision' minted DEC-182 with all seven facet fields seeded empty and no verb to fill them, so context/choice/alternatives/rationale/consequences/decided_by/decided_on were written by hand-editing the TOML, and the .md body by a heredoc. This is IMP-403 lead 1 and SL-249 objective 1, observed on the decision that plans SL-249 objective 4. Cost: one full TOML hand-edit plus the risk of desyncing from validate_facet's expectations, on a record that a 'knowledge edit decision' subverb would have filled in one command."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

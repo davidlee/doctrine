@@ -6,94 +6,81 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-06 · stage `design`, run `dr-019fd6b6` rev 26 `inquiring` · 1b6758d01
+fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 3e2d8d28e
 
 ### Produced
 
-- `SL-249` — this slice; scope card carries four objectives, four settled
-  questions, R1/R2/R2a/R4 and A1/A2.
-- `CHR-056` — SL-222's unretired dead `facet_write` float writers + stale marker.
-- Research artefact — `.doctrine/slice/249/research/` (runtime tier), three
-  threads, baseline stamped at f31b6187.
-- `ISS-318` — widened from one instance to the inert-key defect class; absorbed
-  the `body`-on-checkpoint instance from SL-248's run.
-- `IMP-403` — lead 2 corroborated with the SL-248 evidence; related to `ISS-318`.
-- `ISS-316` — absorbed as objective 4, narrowed to its lifecycle-vocabulary half.
-- Design run `dr-019fd6b6` (runtime tier) — 17-node inquiry map, 11 resolved,
-  blocking set discharged.
+- `SL-249` — this slice; four objectives, design locked, plan authored.
+- `RV-349` — the design pass: 35 findings, all verified, concluded and disposed
+  `conducted` (4d0f02428, 192039f5b).
+- Design run `dr-019fd6b6` (runtime tier) — 17 nodes, locked at rev 89.
 - `DEC-165` `DEC-168` `DEC-169` `DEC-170` `DEC-172` `DEC-173` `DEC-174`
-  `DEC-175` `DEC-176` `DEC-177` `DEC-178` — the eleven rulings taken this run.
-- Scope card amended in place against those rulings (`inquire.scope`): objective
-  4 grows PRD-010 and drops its precondition claim, OQ-1's second argument and
-  its concept-subverb clause withdrawn, OQ-2 answered, R1 spans two entities, R2
-  retired, R3's residual narrowed to six subverbs, OQ-4/OQ-6 answered, A2
-  confirmed, closure intent restated.
-- `HYP-001` — the corpus's first hypothesis record; references `IMP-403`.
-- Friction observation `019fd6c8-ecbf-7b71-9001-a4ba464daf48`.
+  `DEC-175` `DEC-176` `DEC-177` `DEC-178` `DEC-179` — the twelve rulings.
+- `DEC-182` — objective 4's REV lands in `PHASE-07`, not at reconcile; `shapes`
+  this slice.
+- `plan.toml` / `plan.md` — eight phases (3fbc17784, 396866db2, 192039f5b);
+  runtime phase sheets materialised.
+- `design-history.md` — the non-normative working history `sec-14` shed.
+- `CHR-056` — SL-222's unretired dead `facet_write` float writers.
+- `ISS-318` — widened to the inert-key defect class.
+- `IMP-403` — lead 2 corroborated with SL-248 evidence.
+- `ISS-316` — absorbed as objective 4, narrowed to its lifecycle half.
+- `HYP-001` — the corpus's first hypothesis record.
+- `mem.pattern.review.done-is-not-concluded` (3e2d8d28e).
+- Friction observations `019fd6c8-ecbf-7b71-9001-a4ba464daf48`,
+  `019fdfcc-ce76-77e0-8c30-7e3ce8603ae8`, `019fdfe5-72a7-7033-94b6-4debec579fd3`.
+- Gate status: no code modified this session — the planning probe of the
+  `dead_code` denial was reverted and `git diff` on `src/` is clean.
 
 ### Learned
 
-- The facet write seam already exists and ships: `facet_write::set_facet_mixed` /
-  `apply_set_mixed`, consumer at `src/commands/facet.rs:711` serving
-  `doctrine risk set`. Objective 1 is wiring.
-- SL-222's `deletes at SL-222 deletion phase` marker covers only three
-  float-valued symbols; its reason string's premise is false (the migration
-  scripts are Python). → `CHR-056`.
-- Two write postures already exist in `dep_seq` and the choice is forced:
-  `apply_status` refuses a missing key (scaffold-seeded, F-1), `apply_scalar`
-  creates one. Facet fields are scaffold-seeded blank, so F-1 applies. → `DEC-170`.
-- The facet field inventory is 31 slots / 30 distinct names / 1 shared — the fact
-  that decided OQ-1.
+- The facet write seam already ships: `facet_write::set_facet_mixed` /
+  `apply_set_mixed`, consumer at `src/commands/facet.rs:711`. Objective 1 is
+  wiring.
+- The facet field inventory is 31 slots / 30 distinct names / 1 shared —
+  re-derived against the current tree at plan time and unchanged.
 - `src/commands/knowledge.rs` does not exist; the knowledge CLI is in
   `src/knowledge.rs`.
-- `src/facet_write.rs` is anchored by **no spec** — no `sources` list names it,
-  and the string appears nowhere in the authored corpus (positive control run).
-  Its only governance is `SPEC-004`'s edit-preservingly clause. → open `inq-9`.
-- `SL-159` scoped a governance-axis REV for EVD+HYP that never landed; `SL-197`
-  added CPT with none. Third instance of the promised-but-uncriterioned pattern.
-  → `DEC-176` (the canary), open `inq-7` (whether this REV discharges it).
-- Objective 3's correspondence table is `Declaration` keys × design-run **subject**
-  kinds, not facet keys × record kinds — the fact that decoupled it from
-  governance. → `DEC-169`, and it is why `DEC-165`'s phase split works.
-- The prior rulings for all three ungoverned kinds already existed in closed
-  slices' designs (`SL-197` D2, `SL-159` §5.3/D5), so the REV elevates rather
-  than invents and `R2` retires. → `DEC-172`, `DEC-174`.
-- Shipped skill `/knowledge` handoffs enumerate only the original four kinds;
-  EVD/HYP/CPT appear in none. → `HYP-001`.
+- `src/facet_write.rs` is anchored by **no spec**; its only governance is
+  `SPEC-004`'s edit-preserving clause. → open `inq-9`.
+- Objective 3's table is `Declaration` keys × design-run **subject** kinds, not
+  facet keys × record kinds — why `DEC-165`'s phase split works.
+- `Cargo.toml` `[lints]` sets `warnings = "deny"` + `unused = "deny"`, so
+  `-D dead-code` is a **hard error**, not a warning — verified by probe. An item
+  cannot land a phase ahead of its first production consumer without
+  `cfg_attr(not(test), expect(dead_code, …))` on every link of the chain
+  (`mem.pattern.lint.dead-code-staged-ahead-cfg-test`). This shaped the phase
+  cut.
+- `revision apply` auto-lands only `status` rows and **surfaces** prose rows for
+  manual handling — resolves design §6's stated unknown, and is half of
+  `DEC-182`'s argument.
+- `entity::write_body` creates an absent file under both `BodyMode`s (§10 press
+  item 4, now evidence).
+- `doctor_checks.rs`'s `*_findings(root) -> Vec<Finding>` is the tripwire's
+  precedent — not `catalog::scan`, which the design named and which does not
+  exist under that name.
+- A review reading `done` is **not** concluded — `done` is derived from findings
+  (ADR-007 D-C8), while a design run's `conducted` disposition needs
+  `review.concluded`, set only by `doctrine review conclude`. →
+  `mem.pattern.review.done-is-not-concluded`.
 
 ### Open
 
-- **Blocking set discharged.** `inq-16` → `DEC-177`, `inq-11` → `DEC-178`. All
-  three invalidated acts re-taken over the current 17 nodes and current again:
-  `blocking-set-declared` (eleven nodes, `inq-17` added), `graph-reviewed`,
-  `governance-confirmed` (restated with `DEC-175`'s correction to the PRD-010
-  reading, not a repeat of the rev-10 statement). Both `inquiring` runbook steps
-  discharged attested.
-- **The one gate left before drafting:** `sufficiency-accepted` — the user's
-  separate judgement that the right questions were asked, not merely that the
-  raised ones were closed.
-- `inq-7` `inq-9` `inq-12` (non-blocking, still open) — SL-159 lineage; a spec
-  anchor for `facet_write.rs`; extract-or-fourth-bespoke `edit` transaction.
+- `inq-7` `inq-9` — SL-159 lineage; a spec anchor for `facet_write.rs`. Both
+  ride the `PHASE-07` REV with recommendations recorded in design §6.
 - `inq-1` `inq-2` `inq-3` — framing parents, resolved by their children.
-- **Rider carried by `DEC-177` and `DEC-178` both:** they load-bear on the
-  per-kind facet field sets existing as *data*, not only as clap flag
-  declarations. Objective 1's subverbs need the same table, so the cost is
-  shared — but if objective 1's design does not produce one, `DEC-177` falls back
-  to plain read-tolerance plus a backlog item and `DEC-178` to a hand-listed
-  coverage set. Watch for this when drafting objective 1.
-- **User steer on `inq-12`, in the `graph-reviewed` basis (rev 23), not yet in a
-  durable record:** the refactor is contingent on cost and added design
-  complexity; the governing motivation is closing the data-loss hole soonest, so
-  a fourth bespoke verb is the acceptable outcome if extraction is not
-  demonstrably cheap. Same steer is the tie-breaker generally — where two answers
-  are defensible, prefer the one that lands the fix sooner.
-- `R1` — the amendment is owed a REV (ADR-013). Now two entities, but the PRD
-  half is a refresh not a reversal (`DEC-175`).
-- `R2a` — ordering dependency: SL-249's REV lands before `SL-246` derives its
-  per-kind field lists.
-- Unverified limit: whether ADR-013's apply path can auto-apply a prose-heavy
-  amendment. (The PRD-010 four-kind limit is now resolved — `DEC-175`.)
+- `D8a` — `DEC-168`'s recorded rationale is known-false; the correction rides
+  the `PHASE-07` REV for want of an amend verb.
+- `PHASE-07/EX-11` — the `DEC-182` departure is carried to reconcile as a
+  design-wording item; design §3 and §5.3 still say reconcile.
+- `PHASE-02/EN-2` — `I10`'s per-key cell semantics are undefined and owed before
+  the matrix is written (design §10 press item 1).
+- `R1` — the amendment is authorship across two entities.
+- `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
+- `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
 - `CHR-056` — open, not a blocker.
+- Standing user steer: where two answers are defensible, prefer the one that
+  lands the fix sooner.
 
 ## Design surface triage
 <!-- exploring stage, runbook step `explore.triage`, design run dr-019fd6b6 rev 5 -->

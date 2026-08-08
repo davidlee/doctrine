@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdfcc-ce76-77e0-8c30-7e3ce8603ae8"
+recorded_at = "2026-08-08T05:16:09.206394786Z"
+kind = "friction"
+summary = "/design: `slice notes <n>` reads as a getter but is a create verb"
+detail = "Wanted to read SL-249's notes.md while resuming its design run; ran `doctrine slice notes 249` expecting a read and got 'Refusing to overwrite existing .doctrine/slice/249/notes.md'. The SPINE (new/list/show/paths) does not cover notes, so the reader has no obvious read verb and the bare-noun form is the natural guess. One wasted round-trip plus the ambiguity about whether notes are readable via the CLI at all."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
