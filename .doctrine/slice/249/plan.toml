@@ -1,0 +1,375 @@
+# Implementation plan for SL-249 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-249"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order; never sort by id. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber, so the id
+# sequence goes non-monotonic after a split and that is expected. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The prose payload and its binding"
+objective = """
+Give a `form = "create"` disposition somewhere to put the record's prose, and
+bind a resumed mint to the payload it was journalled with.
+
+`CreateRecord` gains a prose field written at DEC-086 step 5
+(`apply_record_effects`, src/commands/design.rs) through the existing
+`entity::write_body` — not by pre-filling the scaffold at step 4. `RecoveryIntent`
+(src/design_run/attestation.rs) gains a `#[serde(default)]` digest of the mint's
+payload, recorded at step 1; on resume, `execute_mint` compares the rebuilt plan's
+digest against the journalled one and refuses before any resumed effect.
+
+The digest material is not a new invention and must not become one: it is the
+`payload` term `plan_checkpoints` already computes for `acceptance_digest` — the
+`Declaration`'s serde form — now computed unconditionally rather than only when
+an acceptance rides. A second digest domain beside the acceptance's is the defect
+this phase exists to avoid, one level up (D8, RV-349 F-1 round two).
+
+Touches the design-run wire only. No record kind, no facet, no knowledge
+governance — DEC-165's boundary, which the phase order makes structural: the
+facet table does not exist in the tree until PHASE-03.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design run dr-019fd6b6 is locked (revision 89) and RV-349 is concluded and disposed conducted." },
+  { id = "EN-2", text = "`Declaration` carries `#[serde(deny_unknown_fields)]` and `CreateRecord` sits inside it (A2), so the payload extension needs no serde change at `ApplyRequest`, which cannot carry the attribute (it flattens its envelope)." },
+  { id = "EN-3", text = "`entity::write_body` creates an absent file under both `BodyMode`s, so step 5 needs no pre-create step (§10 press item 4, resolved during planning)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A `form = \"create\"` disposition carrying record prose writes that prose to the record's `.md` at DEC-086 step 5, through `entity::write_body` — one act, no follow-up write." },
+  { id = "EX-2", text = "The prose key is spelled `body`, matching `entity::write_body` and `memory edit --body` (D4). The SL-248 level error is made loud by PHASE-02's refusal, not by inventing a fourth spelling for one concept." },
+  { id = "EX-3", text = "`RecoveryIntent` carries a payload digest, `#[serde(default)]`. An intent journalled without one resumes exactly as it does today — the guard is additive and never converts a recoverable state into a stuck one (R9)." },
+  { id = "EX-4", text = "The digest is computed from the same material `acceptance_digest` binds, by the same expression, computed unconditionally. No second digest domain is introduced — a reader can find one spelling of 'the payload' and one place it is derived (STD-001)." },
+  { id = "EX-5", text = "A resumed mint whose rebuilt plan digests differently is refused before any resumed effect, naming the submission and the record it is mid-mint on. The corpus and the run's revision are untouched by the refusal (DEC-083)." },
+  { id = "EX-6", text = "The phase's diff introduces no per-kind facet knowledge: no field table, no `[facet]` write, no `RecordKind`-dispatched behaviour. Structural, not disciplinary — the table is authored in PHASE-03, so a reference here would not compile." },
+]
+verification = [
+  { id = "VT-1", expects = "A create disposition carrying prose mints a record whose .md holds it, asserted after one apply with no second write. Covers the absent-file case, since a freshly scaffolded record's .md may not exist.", test_file = "src/commands/design.rs", keywords = ["apply_record_effects", "write_body"], waived = false },
+  { id = "VT-2", expects = "I12, the refusal arm: journal an intent, retry the same submission_id with a changed payload, assert refusal before any effect and that the record and run are byte-unchanged.", test_file = "src/commands/design.rs", keywords = ["execute_mint", "digest"], waived = false },
+  { id = "VT-3", expects = "I12, the resume arms — both of them. A byte-identical retry resumes and completes; a semantically identical payload rebuilt from scratch ALSO resumes, which is what pins the digest to Declaration's serde form rather than to incidental construction or key order. The second arm is the one that fails if someone digests a debug rendering.", test_file = "src/design_run/attestation.rs", keywords = ["RecoveryIntent", "digest"], waived = false },
+  { id = "VT-4", expects = "An intent journalled with no digest field at all — the pre-upgrade shape — deserialises and resumes unguarded rather than erroring or refusing (R9).", test_file = "src/design_run/attestation.rs", keywords = ["serde(default)", "RecoveryIntent"], waived = false },
+  { id = "VA-1", expects = "Read the phase's own diff and confirm EX-6: no facet table, no per-kind field dispatch, no [facet] write. The diff is the subject — this is not an assertion about the absence of a thing nobody wrote yet, it is a reading of what this phase added." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "The inert-key refusal"
+objective = """
+Make a wire key that is inert at its subject's kind a typed refusal at
+submission, across the whole field set rather than at the two instances someone
+noticed (ISS-318).
+
+Author the `Declaration` wire-key × design-run subject-kind correspondence in
+src/design_run/submission.rs, pinned two independent ways. `I9` is an *inventory*
+pin: a fully-populated `Declaration`'s serde key set equals the table's key set,
+so a new wire key cannot be added without a row. `I10` is a *mapping* pin, and it
+is the one that matters: for every (key × subject kind) pair a submission carrying
+that key on that subject is either observably effectful or refused, never
+silently accepted. `I9` alone would stay green with `body` mapped to `cp-` and
+`dispose` to `sec-`, because the two key sets are identical either way
+(RV-349 F-4).
+
+The refusal names the subject, its kind, the key, and the kind that honours it —
+and for `body` on a `cp-` subject it names `dispose.create.body`, the key the
+caller actually wanted, which PHASE-01 has by then made real.
+
+All six of SL-248's lost dispositions take that path. After this phase the loss
+becomes a refusal the agent can act on in the same turn, while the content is
+still in its context.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `CreateRecord` carries the prose key, so the refusal's remedy names a key that exists rather than one the caller cannot yet use." },
+  { id = "EN-2", text = "I10's cell semantics are defined per key before the matrix is written — for each wire key, what 'observably effectful' means on each subject kind. §10 press item 1 names this the largest thing left undefined; a cell asserting the wrong side of the disjunction is a green test over a wrong mapping, which is F-4 one level up." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A `Declaration` key inert at its subject's kind is refused at admission, with the run's revision unmoved and the corpus untouched." },
+  { id = "EX-2", text = "The refusal names four things: the subject, its kind, the offending key, and the kind that would honour it — or, where the caller's intent is unambiguous, the key they wanted instead." },
+  { id = "EX-3", text = "I9 holds: a fully-populated `Declaration`'s serde key set equals the table's. A field carrying `#[serde(skip)]` is not a wire key and is excluded by construction rather than by an exception list." },
+  { id = "EX-4", text = "I10 holds, and its matrix is GENERATED by iterating the two vocabularies — the wire-key set and the subject-kind set — never written out cell by cell. Adding a wire key or a subject kind changes the covered set with no test edit; trimming coverage requires deleting a loop rather than deleting rows nobody misses (R10)." },
+  { id = "EX-5", text = "The SL-248 replay passes: a `cp-` subject carrying `body` is refused, naming `dispose.create.body`. This is one cell of the matrix and does not stand in for it — EX-4 is the criterion, EX-5 is the anecdote." },
+  { id = "EX-6", text = "The phase's diff introduces no per-kind facet knowledge (as PHASE-01/EX-6)." },
+]
+verification = [
+  { id = "VT-1", expects = "I9: the table's key set equals a fully-populated Declaration's serde key set, derived from serialising a value with every field populated rather than from a hand-written list.", test_file = "src/design_run/submission.rs", keywords = ["Declaration", "inert"], waived = false },
+  { id = "VT-2", expects = "I10: the generated matrix over (wire key × subject kind). Every cell asserts effectful-or-refused; a cell that is neither fails. The generator iterates both source vocabularies, so the covered set is derived, not enumerated.", test_file = "src/design_run/submission.rs", keywords = ["inert", "subject"], waived = false },
+  { id = "VT-3", expects = "The SL-248 replay: a cp- subject carrying body is refused at admission, the message names dispose.create.body, and the run revision is unchanged.", test_file = "src/commands/design.rs", keywords = ["inert", "cp-"], waived = false },
+  { id = "VA-1", expects = "Read the per-key cell semantics recorded under EN-2 against the matrix as built, and confirm each key's 'effectful' side is asserted by an observation of effect rather than by the table the code consults. A cell whose oracle is the table under test proves only that the table equals itself." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The facet field table and the standing scan"
+objective = """
+Author the per-kind facet field table — the single derivation four consumers
+share — and land the `doctor` tripwire as its first production consumer.
+
+The table lives in src/knowledge.rs beside `validate_facet`, because it is the
+data form of what that function's arms already say in code; splitting them across
+modules is how the two drift. Authoring is forced: Rust has no reflection over
+struct fields and DEC-169 already refused a proc macro written for one table. So
+the design question is only how it is kept honest, and the answer is three pins,
+each one comparison (D1, as twice amended by RV-349 F-3).
+
+The tripwire (§5.4 path E) walks the corpus and reports each `[facet]` key that is
+populated but inert at its record's kind, naming the record, the key, and the kind
+that would honour it. It reads; it never refuses and never repairs, and
+`knowledge list` keeps working on a damaged corpus — DEC-177's rule, and the
+reason this is a report where PHASE-02's is a refusal: locality of the report, not
+symmetry.
+
+Pairing them is not thematic. `warnings = "deny"` with `unused = "deny"`
+(Cargo.toml) makes an item with no production consumer a hard build error, so the
+table cannot land alone; the tripwire is the cheapest real consumer and needs
+nothing this phase does not already build.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "A1 holds: the read model — `RecordFacet`, the closed value-enums, `RawFacet`, `validate_facet` — is sound and stays put. If the write path forces a change to it, that is a `/consult` trigger and not a quiet edit." },
+  { id = "EN-2", text = "A4 holds: `RawFacet` can gain `Serialize` as a derive-only change (private struct, no manual `Deserialize`), and the per-kind variant structs need no serde derives at all, because I3's oracle is `validate_facet`'s retention rather than a per-kind serde form." },
+  { id = "EN-3", text = "`doctor_checks.rs`'s `*_findings(root) -> Vec<Finding>` shape is the tripwire's precedent (§10 press item 4, resolved during planning)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`facet_fields(kind)` returns each kind's fields in template order, carrying each field's name and the shape the writer must emit (text, list, or a closed token set)." },
+  { id = "EX-2", text = "I2 — totality. The union of the table over every record kind EQUALS `RawFacet`'s serde key set. A model field with no table row fails the suite; the comparison is derived through serde, not typed twice (DEC-169's idiom, second application)." },
+  { id = "EX-3", text = "I3 — partition, as an EQUALITY. For each kind: write every field in the union, read back through the untouched `validate_facet`, and assert the retained set equals that kind's row. Inclusion is not enough — it is blind to a field the table hands a kind that does not own it, which is the hole F-3 found." },
+  { id = "EX-4", text = "I3b — no row repeats a name: each row's length equals its deduplicated length. I2 and I3 both compare SETS, which collapse a duplicate silently while every consumer that iterates a row sees the field twice (F-3 round two). Multiplicity ACROSS rows stays legitimate — `confidence` is owned by two kinds — and I3b says nothing about it." },
+  { id = "EX-5", text = "R5's standing pin: every `install/templates/knowledge-*.toml` seeds exactly its kind's row — no more, no fewer. Discharged for today's templates during RV-349, retained because what is at stake is the invariant across future edits: under F-1, a dropped seed silently converts every existing record of that kind into one the writer refuses." },
+  { id = "EX-6", text = "`doctor` reports every populated-but-inert `[facet]` key, naming the record, the key, and the honouring kind. It never refuses and never repairs." },
+  { id = "EX-7", text = "`knowledge list` still succeeds on a corpus carrying an inert key — the read path stays tolerant (DEC-177)." },
+  { id = "EX-8", text = "The missing-key mirror of the tripwire is NOT built. It is cheap and tempting and deliberately out of scope: adding a facet field to a kind would make every prior record of that kind trip it, so it needs a migration story this slice does not owe (§5.5)." },
+]
+verification = [
+  { id = "VT-1", expects = "I2 and I3 and I3b together. I3 in particular writes every union field for each kind and asserts an equality against what validate_facet retained — the read model is the oracle, so the pin needs no argument about which fields validate_facet's arms happen to read.", test_file = "src/knowledge.rs", keywords = ["facet_fields", "RawFacet"], waived = false },
+  { id = "VT-2", expects = "R5: each shipped knowledge template's [facet] key set equals facet_fields(kind), including concept's degenerate empty-table case, which is what makes the F-1 posture well-defined for a kind with no fields.", test_file = "src/knowledge.rs", keywords = ["facet_fields", "knowledge-"], waived = false },
+  { id = "VT-3", expects = "The tripwire reports a populated inert key with record, key and honouring kind; reports nothing on a clean corpus; and knowledge list succeeds on the damaged one.", test_file = "src/doctor_checks.rs", keywords = ["facet", "findings"], waived = false },
+  { id = "VA-1", expects = "Confirm the table is consulted rather than restated: no consumer added in this phase carries its own copy of a per-kind field list. Three hand-maintained copies is the failure this slice exists to fix, and the first duplicate would be it recurring inside its own fix." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The write seam and the edit surface"
+objective = """
+Make every facet field of every facet-bearing kind writable through a verb, and
+the prose tier with it.
+
+`set_facet_mixed` (src/facet_write.rs) gains a posture parameter rather than a
+guard at each call site: `doctrine risk set` passes the creating posture it has
+today and keeps its behaviour by construction, knowledge passes F-1 —
+refuse-if-absent. A call-site guard would have to be repeated by every future
+caller and is the parallel implementation AGENTS.md forbids (D2).
+
+Above it, the pure/imperative split the project requires: `plan_facet_edits`
+holds every decision and is exhaustively testable with no filesystem;
+`apply_facet_edits` is the thin shell. `plan_facet_edits` is the sole constructor
+of a validated edit, which makes I4's facet half a property of the type rather
+than a convention.
+
+The surface splits by tier, as OQ-1 settled: invariant fields kind-blind
+(`knowledge edit <ID>` — title, tags, body), `[facet]` kind-dispatched (six
+`knowledge edit <kind> <ID>` subverbs). Args stay clap-derive-declared as the
+rest of this CLI is, and the table is their ORACLE rather than their source: a
+per-kind test asserts each subverb's arg names equal its row, kebab-cased.
+Generating them would mean the builder API for six commands alone, a second idiom
+for the benefit of not typing thirty flag names once (D3).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `facet_fields` exists and is pinned, so the subverbs' args and the seam's validation both consult one table." },
+  { id = "EN-2", text = "`doctrine risk set`'s suite is green and untouched at entry — it is the baseline the posture parameter must preserve, so its state must be known before the parameter is threaded." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every facet field of the six facet-bearing kinds round-trips through its kind's subverb: written, read back, byte-stable." },
+  { id = "EX-2", text = "`knowledge edit concept` is refused, naming the kind-blind verb — concept records carry no facet by design, and their content is their prose (DEC-172, DEC-173)." },
+  { id = "EX-3", text = "A subverb naming a kind the id contradicts is refused, naming the correct subverb. The check is relocated rather than removed: per-kind subverbs make a wrong-FIELD error unspellable, and the kind check is one comparison against a value the id already resolves." },
+  { id = "EX-4", text = "I6 — no facet key is ever created. An absent key is a refusal naming the record, and the file is left byte-identical. Clearing is `\"\"` (or `[]` for a list); clearing by omitting the key is unspellable in the seam's types (DEC-170)." },
+  { id = "EX-5", text = "I8 — `doctrine risk set`'s suite passes UNCHANGED. This is the behaviour-preservation gate: an edit to that suite is a signal the design is wrong, not that the test is." },
+  { id = "EX-6", text = "I11 — edit preservation, on its own fixture. A record carrying comments, unknown sibling keys, `[[relation]]` and `[relationships]`, written through the seam, differs only in the intended `[facet]` values; a second application of the same edits changes nothing. This is SPEC-004's actual requirement, and the existing round-trip suite does NOT stand in for it — that suite exercises a `#[cfg(test)]` emit with no production caller and no relation tables (D10, F-6)." },
+  { id = "EX-7", text = "I7 — every refusal leaves the corpus byte-identical, asserted by comparing the file's bytes before and after, not by inspecting the error." },
+  { id = "EX-8", text = "D3's oracle holds: each subverb's clap arg names equal its kind's row, kebab-cased. The surface stays in one idiom and drift fails a test." },
+  { id = "EX-9", text = "`--body` / `--body-mode` (replace | append, `-` reads stdin) behave as `memory edit`'s do, riding `entity::write_body`. Nothing new is invented on the prose tier." },
+]
+verification = [
+  { id = "VT-1", expects = "Per-kind round-trip through each subverb for every field of that kind, driven by iterating facet_fields rather than by a hand-written field list — so a new field joins the coverage without a test edit.", test_file = "src/knowledge.rs", keywords = ["plan_facet_edits", "FacetEdit"], waived = false },
+  { id = "VT-2", expects = "The posture parameter: F-1 refuses an absent key naming the record and leaves the file byte-identical; the creating posture still creates. Both arms asserted, so neither posture can be quietly collapsed into the other.", test_file = "src/facet_write.rs", keywords = ["KeyPosture", "set_facet_mixed"], waived = false },
+  { id = "VT-3", expects = "I11 edit preservation on the hostile fixture — comments, unknown sibling keys, [[relation]], [relationships] — asserting byte-identity outside the intended values, and idempotence on a second application.", test_file = "src/knowledge.rs", keywords = ["apply_facet_edits", "relationships"], waived = false },
+  { id = "VT-4", expects = "D3: for each of the six kinds, the subverb's clap argument names equal facet_fields(kind) kebab-cased. Derived from clap's own get_arguments, not from a restated list.", test_file = "src/knowledge.rs", keywords = ["get_arguments", "facet_fields"], waived = false },
+  { id = "VT-5", expects = "The refusal catalogue: kind mismatch names the right subverb; concept names the kind-blind verb; each leaves the corpus byte-identical.", test_file = "src/knowledge.rs", keywords = ["knowledge edit", "concept"], waived = false },
+  { id = "VA-1", expects = "Confirm the behaviour-preservation gate held honestly: `git diff` shows doctrine risk set's tests unmodified. A green suite that was edited to stay green is the failure this criterion exists to catch." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Settling, in one write"
+objective = """
+Make a resolving transition a single act that cannot be half-remembered.
+
+`answer`/`answered_by`/`answered_on` on QUE stand at 0 of 38 — not because
+authors tire halfway, but because `set_record_status` documents itself as
+deliberately uncoupled and so a question reaches `answered` with its answer
+fields empty. DEC-062's argument, which DEC-178 carries: a disposition is part of
+RESOLVING, not a field one may forget.
+
+`settle` derives its COVERAGE and authors nothing it can derive — a state is
+settleable when the kind's facet carries `<state>_by` and `<state>_on`, which is
+mechanical over the table. It does not derive which field holds the OUTCOME:
+QUE's is `answer`, CON's is `waiver_reason`, and no naming rule connects either
+to its state token without contrivance. So a small annotation sits beside the
+table, pinned so it can add detail to the derived set but cannot quietly extend
+it. Saying this plainly rather than claiming full derivation is the point (§5.2).
+
+It writes ONCE. `[facet]`, `status` and `updated` are keys of the same
+`record-NNN.toml`, and both mutating cores already take a held `&mut DocumentMut`
+— so there is no two-file transaction to order, and the first draft's ordering
+argument was answering a question the storage layout does not ask (F-2). The
+single write does not mitigate the partial-settlement state; it removes it.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: the planned-edit seam exists, so `settle` composes it rather than reaching for `facet_write` directly." },
+  { id = "EN-2", text = "The status-vocabulary check currently sits inside `set_record_status` above the call. `settle` needs it too and must not copy it — the extraction into a named predicate beside `statuses(kind)` is the only refactor this path forces, and it is extraction, not a second implementation." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`settle` populates the captured field, the actor and the date, and moves the status, in ONE write of one document." },
+  { id = "EX-2", text = "The settleable set is DERIVED from the presence of `<state>_by` / `<state>_on` in the kind's row, not listed. The annotation beside the table supplies only which field captures the outcome, and is pinned two ways: every captured name is in that kind's row, and the annotation's state set EQUALS the derived set — so it can add detail but cannot extend the set." },
+  { id = "EX-3", text = "I5 — `accepted` is unreachable from `settle`. Not by a guard: the token is absent from the derived settleable set entirely, so DEC-088's reservation is upheld by the shape of the derivation rather than by a check someone could later relax." },
+  { id = "EX-4", text = "Omitting the captured field is a refusal, not an empty write. A settlement whose evidence is blank is the 0-of-38 outcome wearing a green command." },
+  { id = "EX-5", text = "A foreign-kind or non-settleable state is refused BEFORE the document is opened, so I7 covers the whole verb rather than its facet half." },
+  { id = "EX-6", text = "`settle` refuses a state-to-itself transition, and refuses on a withdrawn record by reusing the existing predicate rather than a second list. Amending an answer already given is `knowledge edit question --answer` — which keeps `answered_on` meaning when it was answered rather than when the command last ran (D7)." },
+  { id = "EX-7", text = "I4 holds by composition: `dep_seq::apply_status` remains the sole author of `status`/`updated`, reached through a second wrapper rather than through a second implementation." },
+]
+verification = [
+  { id = "VT-1", expects = "A settle writes the captured field, actor, date and status in one write — asserted by the resulting bytes, and by there being no intermediate state a reader could observe.", test_file = "src/knowledge.rs", keywords = ["settlements", "apply_settlement"], waived = false },
+  { id = "VT-2", expects = "I5 plus the derivation pins: the derived settleable set excludes every decision state (so `accepted` is unreachable), the annotation's state set equals the derived set, and every captured field name is in its kind's row.", test_file = "src/knowledge.rs", keywords = ["settlements", "accepted"], waived = false },
+  { id = "VT-3", expects = "The refusal set — omitted capture, foreign kind, non-settleable state, state-to-itself, withdrawn record — each leaving the file byte-identical, and each refused before the document is opened.", test_file = "src/knowledge.rs", keywords = ["settle", "withdrawn"], waived = false },
+  { id = "VA-1", expects = "Re-read §10 press item 2 against what shipped: DEC-178's case was partly that the transition is a coupled multi-write, and after F-2 it is one write of one document — which is what `knowledge edit question` also is. Confirm the remaining case (DEC-062: a disposition is part of resolving) still carries the verb on its own, or raise it rather than leaving the question standing in the design's press list." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "The filled mint"
+objective = """
+Close the hole. A `form = "create"` disposition mints a record already holding
+its facet and its prose, in one act, with no follow-up write.
+
+`CreateRecord` gains the facet payload as a map keyed by field name, because
+`CreateRecord.kind` is a runtime token and a typed per-kind struct cannot be
+selected at compile time. The map is validated at ADMISSION by the same
+`plan_facet_edits` the CLI runs — not a second check — so a disposition naming a
+field the kind does not own is refused with the run unchanged: no hollow record,
+no reserved id burned (D5).
+
+The write joins the prose write PHASE-01 sited at step 5, for the reason DEC-168
+actually holds on: `apply_record_effects` already exists, is already idempotent,
+and already carries the status move and the `shapes` edge, so a record's content
+joins effects that resume as a unit rather than splitting across two steps with
+different resume semantics. (DEC-168's RECORDED rationale — that step 4 can only
+reach the journal — is false about the code; D8a carries the correction, and it
+rides the objective-4 REV because this slice has no verb for amending a knowledge
+record, which is precisely the hole it exists to close.)
+
+After this phase the two headline losses are both closed: the wire has a slot and
+the sink is loud.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: `plan_facet_edits` exists, so admission validates through the same seam the CLI does." },
+  { id = "EN-2", text = "PHASE-01 complete: the prose half is already written at step 5, so this phase adds a second payload to an existing site rather than opening one." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A `form = \"create\"` disposition mints a record whose facet AND prose are populated in one act, with no follow-up write. This is the criterion that closes the data loss." },
+  { id = "EX-2", text = "The facet payload is validated at admission, before any id is reserved, by the same `plan_facet_edits` the CLI runs. A bad payload costs no hollow record and no burned id." },
+  { id = "EX-3", text = "The validation is the same function, not a second copy — a facet key rejected at the CLI is rejected on the wire with the same refusal." },
+  { id = "EX-4", text = "The step-5 write is idempotent on the same terms as its neighbours: the same payload applied twice produces the same bytes, so a resumed mint completes rather than double-writing." },
+  { id = "EX-5", text = "PHASE-01's payload digest covers the facet automatically, because the material is the whole `Declaration`'s serde form — no enumeration is extended and no second digest domain appears. A test pins this rather than leaving it to the reader: changing only the facet payload changes the digest." },
+]
+verification = [
+  { id = "VT-1", expects = "A create disposition carrying kind, title, body and facet mints one record holding all of it, after one apply, asserted from the record's two tiers on disk.", test_file = "src/design_run/submission.rs", keywords = ["CreateRecord", "facet"], waived = false },
+  { id = "VT-2", expects = "Admission refuses a facet key the kind does not own, with the run revision unmoved, no record on disk and no id consumed — the whole of D5's claim, not just the refusal.", test_file = "src/commands/design.rs", keywords = ["apply_record_effects", "facet"], waived = false },
+  { id = "VT-3", expects = "EX-5: two submissions differing only in the facet payload digest differently, so the PHASE-01 retry guard covers the facet by construction rather than by an enumeration someone must maintain.", test_file = "src/commands/design.rs", keywords = ["digest", "facet"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Governance coverage — the kinds that actually exist"
+objective = """
+Make the kinds the corpus has the kinds governance describes, and make that
+correspondence checkable by something other than a promise.
+
+SPEC-019 is emphatically four-kind and PRD-010 § 4 carries the same enumeration.
+The corpus has seven. SL-159 (EVD, HYP) and SL-197 (CPT) each ruled their
+contracts in a closed slice's design and neither landed the governance axis it
+scoped — the debt this slice pays. DEC-175 rules how PRD-010 binds: its kind-set
+clause is a stale ENUMERATION plus an extension RULE, and only the enumeration is
+stale, because "may not be extended without a reserved id" names a precondition
+SL-159 and SL-197 met. So the PRD half is a refresh, not a reversal.
+
+R4 is the risk that this gets ASSERTED rather than done, and it is the risk this
+slice has already recurred on once. RV-349 spent five findings on the canary
+alone (F-5, F-7, F-9, F-11, F-14) and each attempt claimed a totality without
+enumerating what would have to be true. So the canary is specified by an
+arithmetic identity a reader can evaluate, not by a claim a reader must trust —
+see EX-3.
+
+NOTE — the objective-4 landing point is the one open plan question. ADR-013
+routes the amendment through a REV landing at RECONCILE, and `revision apply`
+auto-lands only `status` rows while surfacing prose rows for manual handling
+(probed during planning; this resolves §6's stated unknown). A canary authored in
+a phase is therefore RED until the prose lands at reconcile, which no phase may
+end on. This phase is authored on the reading that it stages AND lands the
+amendment so the canary ships green; if the amendment is instead held to
+reconcile, this phase's criteria move there with it and the phase is withdrawn.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 complete: the verb set objective 4 must register is the set that actually shipped, so the registration describes fact rather than intent." },
+  { id = "EN-2", text = "The landing-point question in the objective is settled with the user before the prose is touched." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A REV over SPEC-019 and PRD-010 carries the typed change rows, is approved, and its prose amendment has landed in both entities' authored tiers." },
+  { id = "EX-2", text = "Every kind in `kinds::RECORD` is named, in its paired form (`assumption (ASM)`), in BOTH authored tiers of BOTH entities. Reading both tiers is load-bearing for SPEC-019: its structured `responsibilities` carry three of the stale sites, which a prose-only canary would never see." },
+  { id = "EX-3", text = "The word `four` — matched case-insensitively on a word boundary, over whitespace-collapsed text — occurs in neither entity's two tiers outside a declared allowlist, and the allowlist is held to an ARITHMETIC IDENTITY: total occurrences equal the sum of the allowlist entries' expected counts, and each entry's own count matches. Presence is not enough (F-11): an entry that must merely occur keeps its exemption alive when the phrase is duplicated elsewhere, so the escape hatch widens with no allowlist edit and no red test. Under the identity a duplicated exemption fails, a new arrival fails, and a stale entry expires loudly." },
+  { id = "EX-4", text = "The whitespace collapse is implemented, not assumed. The one legitimate `four` (`spec-019.md`, \"four coupled sites\" — a correct count of integration sites, independent of the kind count) WRAPS MID-PHRASE, so a literal match finds it zero times and the identity would have been red on the day it was authored, with no green path but rewording the very sentence the exemption protects (F-14)." },
+  { id = "EX-5", text = "Each allowlist entry carries, in the test, the argument for why its `four` is independent of the kind count. An exception has to be STATED to exist, and stating it is where a bad one gets caught in review." },
+  { id = "EX-6", text = "The per-kind FACET contracts for EVD, HYP and CPT are present and coherent in SPEC-019, and the verb set names what this slice ships. NOT their lifecycle vocabularies or supersession rules — the scope card defers those to ISS-316, and an earlier draft of this criterion quietly re-acquired them (F-13)." },
+  { id = "EX-7", text = "SPEC-019's false self-description (\"forward-intent: no code is shipped yet\") is corrected." },
+  { id = "EX-8", text = "It is a project-local test, never a `validate` rule (POL-002) — no host-project convention leaks into engine rules." },
+  { id = "EX-9", text = "The REV records, as stated consequences of the F-1 posture: that the scaffold templates are load-bearing for the write posture (a future template edit dropping a seeded field silently converts every record of that kind into one the writer refuses), and that adding a facet field to an existing kind is a corpus MIGRATION rather than an edit (R7)." },
+  { id = "EX-10", text = "D8a's correction to DEC-168's recorded rationale rides this REV, and inq-7 / inq-9 are dispositioned at authorship against §6's recorded recommendations rather than re-derived." },
+]
+verification = [
+  { id = "VT-1", expects = "The canary: paired-form presence for every kinds::RECORD kind across both tiers of both entities, plus the four-identity with its allowlist. Driven by iterating kinds::RECORD, so a new record kind joins the assertion with no test edit — the same totality argument the wire-key and facet tables make.", test_file = "tests/governance_kind_coverage.rs", keywords = ["kinds", "four", "spec-019"], waived = false },
+  { id = "VT-2", expects = "The identity's own failure modes, on fixtures rather than on the live corpus: a duplicated exempt phrase fails, a new non-exempt `four` fails, a removed exempt phrase fails. Fixtures because the live corpus can only be in one state at a time, and a control that is never seen red is not known to work.", test_file = "tests/governance_kind_coverage.rs", keywords = ["allowlist", "collapse"], waived = false },
+  { id = "VA-1", expects = "Read SPEC-019's EVD / HYP / CPT facet contracts and the registered verb set for coherence — a canary proves the enumeration moved, not that the contracts are right. Confirm the ISS-316 boundary held: lifecycle vocabularies and supersession rules are NOT in scope and must not have been re-acquired." },
+  { id = "VH-1", expects = "Human acceptance that the amendment says what the project means, across two governance entities. This is prose that outlives the fix, and R4's whole point is that its completion is easy to assert and expensive to get wrong." },
+]
+specs        = []
+requirements = []

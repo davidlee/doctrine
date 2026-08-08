@@ -1,0 +1,164 @@
+# Implementation Plan SL-249: Knowledge facet write seam
+
+Prose companion to `plan.toml`. Narrative only — no queried data lives here
+(the storage rule); the phase list, criteria, verification, and links are
+authored in the TOML. Use this for the plan's rationale and sequencing.
+<!-- Cite entities by padded id (SL-020, REQ-059); phases as PHASE-01,
+     criteria as EN-1/EX-1/VT-1/VA-1/VH-1. See glossary.md § reference forms. -->
+
+## Overview
+
+Seven phases in two movements. `PHASE-01` and `PHASE-02` are the wire fix —
+together, exactly what would have prevented the SL-248 loss. `PHASE-03` through
+`PHASE-06` build the facet surfaces the corpus measurement demands. `PHASE-07`
+is the governance amendment, and its landing point is the plan's one open
+question (below).
+
+`DEC-165` — the ruling that objective 4 does not gate objectives 1–3 — is what
+makes that split available, and `R6` warns it erodes under convenience: Phase A
+is small, the facet work is adjacent, and *just add the table while we're here*
+is how the ordering is lost.
+
+## Sequencing & Rationale
+
+### Why the prose payload precedes the refusal
+
+The design presents objective 3 (the inert-key refusal) and the prose half of
+objective 2 as one phase. They are split here, and the order is the reason.
+
+`PHASE-02`'s refusal, on a `cp-` subject carrying `body`, names
+`dispose.create.body` as the key the caller actually wanted. If the refusal
+ships first, that remedy names a key that does not exist — the message is
+aspirational, and the agent it refuses has nowhere to go. So the slot is built
+first and the sink is made loud second. The dependency runs one way and the
+plan follows it.
+
+### Why the boundary is structural rather than disciplinary
+
+`R6`'s mitigation in the design is an exit criterion asserting that nothing
+Phase A ships references a symbol from the facet table, with §10 noting *the
+cheapest review is still a grep*. A grep over a symbol nobody has written yet
+asserts very little; it is the vacuous-absence shape.
+
+The plan gets the property for free instead. `facet_fields` is authored in
+`PHASE-03`, so a reference to it from `PHASE-01` or `PHASE-02` would not
+compile. The criterion that remains (`PHASE-01/EX-6`, `PHASE-02/EX-6`) is
+therefore about the phase's own **diff** — a subject that exists and can be
+read — rather than about the absence of a thing nobody has authored.
+
+### Why the table and the tripwire share a phase
+
+Not theme. `Cargo.toml` sets `warnings = "deny"` with `unused = "deny"`, which
+makes `dead_code` a hard build error — verified during planning, not assumed.
+An item with no production consumer therefore cannot land alone, and the
+project's established alternative is to stage the whole chain behind
+`cfg_attr(not(test), expect(dead_code, reason = …))`, where every link carries
+its own attribute and they all retire together when the first production caller
+arrives.
+
+That is real friction to buy nothing. The `doctor` tripwire is the cheapest
+genuine consumer of `facet_fields` — it reads the table, needs no write seam,
+and is owed by the slice anyway — so pairing them keeps the phase honest with
+no staged attributes at all.
+
+One residual is expected rather than discovered: each field's *shape* has no
+reader until `PHASE-04`'s writer needs it. If that trips `dead_code`, the
+staging attribute is the sanctioned answer for exactly that field, and it
+retires in `PHASE-04`.
+
+### Why `settle` is its own phase
+
+`PHASE-04` could absorb it — it is another verb over the same seam. It is kept
+separate because the design's own review left a live question against it
+(§10 press item 2): `DEC-178`'s case was partly that a settlement is a coupled
+multi-write, and after `RV-349`'s `F-2` it is one write of one document, which
+is what `knowledge edit question` also is. The remaining case is `DEC-062`'s and
+stands on its own — but it is now the *whole* case rather than the larger half
+of one.
+
+A phase boundary is where that gets answered deliberately. Folded into
+`PHASE-04`, it gets answered by whoever is mid-implementation, or not at all.
+`PHASE-05/VA-1` makes it an obligation.
+
+### How the criteria are written
+
+Two rules, applied throughout, and both are reactions to what this slice has
+already cost.
+
+**No criterion carries a count.** Every count in this design moves: the `four`
+occurrences become one when the REV lands; the `I10` matrix grows with every
+wire key; the facet slot total changes the moment a kind gains a field. A
+criterion pinned to a number is an amendment waiting to happen, and `EN-`/`EX-`/
+`VT-` ids are immutable, so amendments append rather than replace. The criteria
+therefore bind **identities and equalities** — the union equals the serde key
+set, the retained set equals the row, total occurrences equal the allowlist's
+sum — which hold at every count.
+
+**Closure is proved by a generator, never by an inventory.** A precise
+inventory reads as exhaustive and is not; this slice has now paid for that
+three times, and `R4`'s five review rounds are all the same error. So where a
+criterion needs *and nothing was missed*, it names the mechanism that fails on
+the miss: the matrix is generated by iterating both vocabularies rather than
+written cell by cell (`PHASE-02/EX-4`), the table pins compare derived sets
+rather than typed lists (`PHASE-03/EX-2`…`EX-4`), the canary iterates
+`kinds::RECORD` (`PHASE-07/VT-1`), and the `dead_code` denial is what proves
+nothing was left behind on the source side.
+
+The corollary is `R10`: a generated matrix is trimmed by deleting a loop, which
+is visible in review, where a hand-written one is trimmed by deleting rows
+nobody misses.
+
+## Notes
+
+### The open question: where objective 4 lands
+
+`PHASE-07` is authored provisionally and its entrance criterion `EN-2` says so.
+
+`ADR-013` routes a governance amendment through a REV **landing at reconcile**,
+and the design says so in three places. Planning probed `revision apply` and
+resolved §6's stated unknown — it auto-lands only `status` rows and *surfaces*
+introduce/create/modify/move/prose rows for manual handling — so a prose-heavy
+amendment is manual work at whichever stage owns it.
+
+The tension is that the canary is **code**, and code lands in a phase. A canary
+authored in a phase while the prose lands at reconcile is red for the whole
+interval, and no phase may end red. Three readings:
+
+1. **The phase lands both** (as authored). The REV is created, populated,
+   approved and applied within `PHASE-07`, the prose is hand-edited there, and
+   the canary ships green. Reconcile records a REV already done. This is the
+   recommendation: the canary is `R4`'s *control*, `R4` is the risk this slice
+   has already recurred on once, and a control that sits red across a reconcile
+   cycle is one somebody disables — which is `D9`'s own stated failure mode.
+2. **Objective 4 moves wholly to reconcile**, canary included. Honours
+   `ADR-013` literally; puts code authorship in a stage that does not otherwise
+   write code.
+3. **Split** — the counting machinery and its fixture tests ship in a phase
+   (green immediately, since `PHASE-07/VT-2` runs on fixtures), and only the
+   thin live-corpus assertion lands at reconcile. Defensible, at the cost of
+   splitting a small test across two stages.
+
+This is a design-level question, not a planning preference: reading 1
+contradicts a locked design's stated timing. It is settled with the user before
+`PHASE-07` is executed, and `PHASE-01`…`PHASE-06` are unaffected either way.
+
+### Resolved during planning, worth not re-deriving
+
+- `entity::write_body` creates an absent file under both `BodyMode`s
+  (`PHASE-01/EN-3`) — §10 press item 4's first claim, now evidence.
+- `doctor_checks.rs`'s `*_findings(root) -> Vec<Finding>` is the tripwire's
+  precedent (`PHASE-03/EN-3`) — press item 4's third claim.
+- `revision apply` does not auto-apply prose rows (above) — §6's unknown.
+- The `dead_code` denial is real and is a hard error, not a warning.
+
+### Deliberately not in the plan
+
+- **No refactor phase.** `DEC-179`: the edit transaction is already extracted —
+  `memory`, `backlog` and `spec` all ride `dep_seq` and `entity::write_body` —
+  and what stays bespoke is each verb's flag set, which shares no field with the
+  others. This slice adds a caller and one parameter.
+- **No `src/knowledge.rs` split.** `R8` records that the module grows on both
+  axes and that splitting it is a real improvement and a different slice. Doing
+  it here would put a layering refactor in front of the data-loss fix.
+- **No missing-key mirror** of the tripwire (`PHASE-03/EX-8`). Cheap, tempting,
+  and needs a migration story this slice does not owe.
