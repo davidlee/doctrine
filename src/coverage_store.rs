@@ -300,8 +300,9 @@ impl CoverageRecordArgs<'_> {
     }
 
     /// Build the optional [`Matcher`] from `--matcher-source`/`--matcher-pattern`/
-    /// `--regex`. `None` when no matcher field is set (an alias/default-base check
-    /// with no matcher is rejected downstream by [`coverage::valid`]). The source
+    /// `--regex`. `None` when no matcher field is set — and a check with no
+    /// effective matcher is rejected downstream by [`coverage::valid`] on every
+    /// base, literal `command` included (ISS-324). The source
     /// parses through the existing [`MatchSource`] `TryFrom<String>`.
     fn matcher(&self) -> Result<Option<Matcher>> {
         if self.matcher_source.is_none() && self.matcher_pattern.is_none() && !self.regex {
@@ -707,30 +708,43 @@ mod tests {
     #[test]
     fn valid_failure_blocks_the_write() {
         let tmp = tempfile::tempdir().unwrap();
-        // An alias with an EMPTY matcher fails `coverage::valid` (MatcherRequired).
-        let bad = VtCheck {
-            alias: Some("unit".to_owned()),
-            command: None,
-            extra_args: Vec::new(),
-            matcher: None,
-        };
-        let err = record(
-            tmp.path(),
-            57,
-            input(
-                key("SL-057", "REQ-200", "SL-057", "VT"),
-                CoverageStatus::Planned,
-                Some(bad),
-            ),
-            &cfg_with_unit(),
-            "2026-06-14",
-            None,
-        );
-        assert!(err.is_err(), "a valid() failure blocks the write");
-        assert!(
-            !coverage_path(tmp.path(), 57).exists(),
-            "no file written — store unchanged"
-        );
+        // Every base with an EMPTY matcher fails `coverage::valid`
+        // (MatcherRequired) — the literal command included, since ISS-324 removed
+        // its exemption. `doctrine coverage record --command …` with no
+        // `--matcher-pattern` is a live authoring path; this is where it dies.
+        let bad_shapes = [
+            VtCheck {
+                alias: Some("unit".to_owned()),
+                command: None,
+                extra_args: Vec::new(),
+                matcher: None,
+            },
+            VtCheck {
+                alias: None,
+                command: Some(vec!["true".to_owned()]),
+                extra_args: Vec::new(),
+                matcher: None,
+            },
+        ];
+        for bad in bad_shapes {
+            let err = record(
+                tmp.path(),
+                57,
+                input(
+                    key("SL-057", "REQ-200", "SL-057", "VT"),
+                    CoverageStatus::Planned,
+                    Some(bad.clone()),
+                ),
+                &cfg_with_unit(),
+                "2026-06-14",
+                None,
+            );
+            assert!(err.is_err(), "a valid() failure blocks the write: {bad:?}");
+            assert!(
+                !coverage_path(tmp.path(), 57).exists(),
+                "no file written — store unchanged: {bad:?}"
+            );
+        }
     }
 
     #[test]
