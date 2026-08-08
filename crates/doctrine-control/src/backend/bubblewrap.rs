@@ -237,14 +237,6 @@ const SIGXFSZ: i32 = 25;
 /// The eleven axes are ten property removals plus one authority grant. Adding a
 /// twelfth is a governed decision, not a convenience.
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "SL-248 PHASE-08 `T3` lands the seam; `T4`'s `impl ConformanceBackend` in \
-              conformance.rs is its only consumer and lands next. Staged one task apart \
-              because the seam is in `backend` and the mapping onto it is in `conformance` \
-              (`D2` — the edge may not run the other way). Removed at `T4`, and `R6` \
-              tracks the count."
-)]
 pub(crate) enum Weakening {
     /// Omit `--chdir`, so the capsule starts wherever bubblewrap leaves it.
     WorkingDirectory,
@@ -313,12 +305,6 @@ impl std::fmt::Debug for WeakenedProfile<'_> {
     }
 }
 
-#[expect(
-    dead_code,
-    reason = "as `Weakening` above: `confining()` is live through `execute`, and the two \
-              weakening constructors have their only consumer in `T4`'s `impl \
-              ConformanceBackend`. Removed at `T4`."
-)]
 impl<'o> WeakenedProfile<'o> {
     /// The full confining profile: nothing removed, nothing granted.
     pub(crate) const fn confining() -> Self {
@@ -345,6 +331,40 @@ impl<'o> WeakenedProfile<'o> {
 
     const fn weakening(&self) -> Option<&Weakening> {
         self.weakening.as_ref()
+    }
+}
+
+/// What a profile changes about the **spawn** rather than about the argv.
+///
+/// Four of the eleven axes leave every bubblewrap word untouched and move a
+/// property of the child process instead, so an argv diff alone reads them as
+/// "changed nothing" — which is exactly the reading `VA-4` must not be given.
+/// They are named here as data, read once by [`BubblewrapBackend::run`] and
+/// compared once by `each_removal_changes_exactly_its_own_flags`, so the run and
+/// the assertion cannot drift apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SpawnOptions {
+    /// `timeout -k` wraps the confinement argv.
+    pub(crate) wall_bounded: bool,
+    /// `RLIMIT_FSIZE` is applied to the child.
+    pub(crate) file_size_capped: bool,
+    /// Inherited descriptors above 2 are marked close-on-exec.
+    pub(crate) descriptors_closed: bool,
+    /// Descriptors 0, 1 and 2 come from the parent-owned endpoints
+    /// [`Execution::stdio`] names, rather than from descriptors the caller owns.
+    pub(crate) parent_owned_stdio: bool,
+}
+
+impl SpawnOptions {
+    /// The confining profile — `None` — selects every option; each axis switches
+    /// exactly one of them off and leaves the other three alone.
+    pub(crate) fn under(weakening: Option<&Weakening>) -> Self {
+        Self {
+            wall_bounded: !matches!(weakening, Some(Weakening::WallBound)),
+            file_size_capped: !matches!(weakening, Some(Weakening::FileSizeBound)),
+            descriptors_closed: !matches!(weakening, Some(Weakening::Descriptors)),
+            parent_owned_stdio: !matches!(weakening, Some(Weakening::StdioOwned { .. })),
+        }
     }
 }
 
@@ -465,7 +485,7 @@ impl BubblewrapBackend<'_> {
     /// bubblewrap is told to write to; and the status file is read and removed
     /// **before** `disk_used` is measured, because it is the trusted side's
     /// bookkeeping and not the capsule's residue.
-    fn run(
+    pub(crate) fn run(
         &self,
         placement: &CapsulePlacement,
         execution: &Execution,
@@ -489,10 +509,11 @@ impl BubblewrapBackend<'_> {
             execution.argv(),
             profile.weakening(),
         );
-        let argv = if matches!(profile.weakening(), Some(Weakening::WallBound)) {
-            confinement
-        } else {
+        let options = SpawnOptions::under(profile.weakening());
+        let argv = if options.wall_bounded {
             wall_bounded_argv(execution.timeout(), self.kill_grace, &confinement)
+        } else {
+            confinement
         };
         let (program, arguments) =
             argv.split_first()
@@ -515,11 +536,11 @@ impl BubblewrapBackend<'_> {
             _ => standard_stream_endpoints(execution.stdio()).map(endpoint_stdio),
         };
         command.stdin(input).stdout(output).stderr(errors);
-        if !matches!(profile.weakening(), Some(Weakening::FileSizeBound)) {
+        if options.file_size_capped {
             apply_file_size_cap(&mut command, execution.file_size_cap());
         }
 
-        if !matches!(profile.weakening(), Some(Weakening::Descriptors)) {
+        if options.descriptors_closed {
             mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
         }
         clear_close_on_exec(&status_file).map_err(|error| mechanism_failed(&error))?;
@@ -585,7 +606,11 @@ fn host_pid(child: &std::process::Child) -> i32 {
     i32::try_from(child.id()).unwrap_or(-1)
 }
 
-fn mechanism_failed(error: &io::Error) -> BackendError {
+/// The one shape a host-side I/O failure takes in this backend — never a
+/// capsule's own nonzero exit (`EX-14`). `pub(crate)` because `conformance.rs`'s
+/// `impl ConformanceBackend` opens descriptors on this backend's behalf and owes
+/// its failures the same shape.
+pub(crate) fn mechanism_failed(error: &io::Error) -> BackendError {
     BackendError::MechanismFailed {
         detail: error.to_string(),
     }
@@ -996,7 +1021,7 @@ fn push_bind(argv: &mut Vec<String>, flag: &str, host: &Path, inner: &Path) {
 /// else* is the property `each_removal_changes_exactly_its_own_flags` asserts
 /// against this function's output, and the reason each branch below is a
 /// conditional over the confining assembly rather than a second assembly.
-fn confinement_argv(
+pub(crate) fn confinement_argv(
     placement: &CapsulePlacement,
     environment: &[(&'static str, String)],
     status_fd: RawFd,

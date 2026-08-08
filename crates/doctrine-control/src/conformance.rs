@@ -49,9 +49,11 @@
 )]
 
 use std::fs::File;
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
+use std::os::fd::OwnedFd;
 use std::os::unix::fs::PermissionsExt as _;
+use std::os::unix::net::UnixStream;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -59,6 +61,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use doctrine::DOCTRINE_TOML;
 use rustix::fs::FsWord;
 
+use crate::backend::bubblewrap::{BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed};
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnvVar,
     CapsulePlacement, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT, ForbiddenScopes,
@@ -242,6 +245,26 @@ pub(crate) trait ConformanceBackend: CapsuleBackend {
         placement: &CapsulePlacement,
         execution: &Execution,
         removal: PropertyRemoval,
+    ) -> Result<Observation, BackendError>;
+
+    /// Run as `execute` does, with exactly one authority **granted** to the
+    /// capsule.
+    ///
+    /// A second method rather than an eleventh [`PropertyRemoval`], for the
+    /// reason [`AuthorityGrant`] is a second enum: a grant moves the capsule in
+    /// the opposite direction from a removal, and a caller counting removals
+    /// must not silently count a grant among them. `sec-7`'s ruling — *a control
+    /// must negate exactly one protection* — is what both methods serve; which
+    /// direction the backend negates it from is the backend's business.
+    ///
+    /// **Divergence from `design.md:2960`**, whose trait sketch has two methods
+    /// and no execution path for `Delta::Granted` at all. Recorded as PHASE-08
+    /// `F-13`; the row it serves (14) is in the design's own table.
+    fn execute_granted(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        grant: AuthorityGrant,
     ) -> Result<Observation, BackendError>;
 
     /// Run as `execute` does, and call `observer` exactly once — trusted-side,
@@ -1086,6 +1109,212 @@ fn decode_octal_escape(escape: &str) -> Option<char> {
 }
 
 // ---------------------------------------------------------------------------
+// `BubblewrapBackend`'s admission instrumentation (`EX-8`, `EX-9`, `EX-18`)
+// ---------------------------------------------------------------------------
+
+/// The trusted side's end of row 12's descriptors (`D4`).
+///
+/// [`PropertyRemoval::StdioOwned`] carries no payload, so the descriptors reach
+/// the profile by this road rather than through the removal — and
+/// `Stdio::inherit()` is not that road (`R3`): it hands the capsule the
+/// harness's *own* descriptor 1, which loses the observation the control arm
+/// exists to make, so every arm goes indeterminate and the row can never be
+/// proven.
+///
+/// Both ends are created here, trusted-side, and neither is a descriptor the
+/// harness holds for real. `UnixStream::pair` rather than `std::io::pipe`
+/// because the latter is 1.87 and the MSRV is 1.85 (`C7`).
+///
+/// **Divergence from `D4`, recorded as PHASE-08 `F-14`.** `D4` says descriptor 0
+/// is "a decoy file the fixture opened"; [`ConformanceBackend::execute_weakened`]
+/// receives a placement and an execution and no fixture, so there is no channel
+/// by which a fixture-opened file could arrive, and the two routes that would
+/// build one — a descriptor field on `Execution`, a second `CapsuleStdio`
+/// variant — are exactly what `S5` forbids. A socket pair carrying a decoy body
+/// meets the substance: descriptor 0 is a trusted-side descriptor the capsule
+/// inherits and reads real bytes from, against a probe arm whose descriptor 0 is
+/// an empty parent-owned endpoint. Nothing is written to disk, so `VA-1`'s write
+/// half and `VA-3`'s no-delete rule are both untouched.
+#[derive(Debug)]
+struct OwnedStdio {
+    input: OwnedFd,
+    output: OwnedFd,
+    errors: OwnedFd,
+}
+
+/// What a capsule reads on descriptor 0 under row 12's control arm, and never
+/// under its probe arm.
+const STDIO_DECOY_INPUT: &str = "TRUSTED-SIDE-DECOY-INPUT\n";
+
+impl OwnedStdio {
+    /// The three endpoints, and the trusted side's capture end for descriptors 1
+    /// and 2.
+    ///
+    /// The decoy body is written and its end dropped before the run, so the
+    /// capsule reads it and then sees end-of-file — a capsule blocking forever
+    /// on descriptor 0 would be a containment failure of this function's own
+    /// making.
+    fn opened() -> Result<(Self, UnixStream), BackendError> {
+        let (mut source, input) = UnixStream::pair().map_err(|error| mechanism_failed(&error))?;
+        source
+            .write_all(STDIO_DECOY_INPUT.as_bytes())
+            .map_err(|error| mechanism_failed(&error))?;
+        drop(source);
+
+        let (capture, output) = UnixStream::pair().map_err(|error| mechanism_failed(&error))?;
+        let errors = output
+            .try_clone()
+            .map_err(|error| mechanism_failed(&error))?;
+
+        Ok((
+            Self {
+                input: OwnedFd::from(input),
+                output: OwnedFd::from(output),
+                errors: OwnedFd::from(errors),
+            },
+            capture,
+        ))
+    }
+}
+
+/// The exhaustive mapping from the property-shaped vocabulary onto
+/// `bubblewrap.rs`'s flag-shaped one (`EX-8`).
+///
+/// Exhaustive by construction: widening [`PropertyRemoval`] fails to compile
+/// here, which is the whole reason the vocabulary is an enum rather than a list
+/// of names. Nine variants, ten removals — [`Bound`] is where the tenth lives.
+///
+/// **Which of these deltas are measured, and which are reasoned (`EX-18`).**
+/// Three are measured. [`PropertyRemoval::Teardown`] by `EVD-013` — the
+/// pid-namespace × `--die-with-parent` 2×2 that settles row 7's control, and it
+/// measures nothing else. [`PropertyRemoval::MappedIdentity`] and
+/// [`AuthorityGrant::AllCapabilities`] by `EVD-014`, which is also the record of
+/// the delta they replaced failing. `EVD-013`'s adjacent fact — that bubblewrap
+/// has no `--share-pid` — tells us how
+/// [`PropertyRemoval::ProcessVisibility`]'s delta must be *expressed*, which is
+/// **not** the same as having seen that delta produce its row's control failure.
+/// **Every other delta below is reasoned, and this design cites no measurement
+/// for any of them.** A caption claiming otherwise is what `EX-18` exists to
+/// correct; measuring the rest is a phase obligation, and a delta that turns out
+/// not to produce its row's control failure means the row is wrong rather than
+/// that the measurement is inconvenient.
+fn weakening_for(removal: PropertyRemoval, stdio: Option<OwnedStdio>) -> Weakening {
+    match removal {
+        PropertyRemoval::WorkingDirectory => Weakening::WorkingDirectory,
+        PropertyRemoval::Teardown => Weakening::Teardown,
+        PropertyRemoval::ProcessVisibility => Weakening::ProcessVisibility,
+        PropertyRemoval::ResourceBound(Bound::FileSize) => Weakening::FileSizeBound,
+        PropertyRemoval::ResourceBound(Bound::Wall) => Weakening::WallBound,
+        PropertyRemoval::InputsWritable => Weakening::InputsWritable,
+        PropertyRemoval::DescriptorsClosed => Weakening::Descriptors,
+        PropertyRemoval::EnvCleared => Weakening::EnvironmentCleared,
+        PropertyRemoval::StdioOwned => match stdio {
+            Some(OwnedStdio {
+                input,
+                output,
+                errors,
+            }) => Weakening::StdioOwned {
+                input,
+                output,
+                errors,
+            },
+            // Unreachable through `execute_weakened`, which opens the endpoints
+            // for exactly this removal. Falling back to the *confining*
+            // descriptors rather than to some other axis is the fail-closed
+            // reading: the control arm then shows the property still holding and
+            // the row reports `Unproven`, which is the honest verdict for a
+            // control that was never built.
+            None => Weakening::Descriptors,
+        },
+        PropertyRemoval::MappedIdentity => Weakening::MappedIdentity,
+    }
+}
+
+/// The same mapping for the one control that **grants** (`EX-18`).
+///
+/// Measured, by `EVD-014`: `--cap-add ALL` under `--unshare-all` returned
+/// `CapInh`/`CapPrm`/`CapEff`/`CapBnd` all `000001ffffffffff` against the probe
+/// arm's all-zero, exiting clean — capabilities inside the capsule's *own* user
+/// namespace, which is exactly the threat invariant 15 names.
+const fn weakening_granting(grant: AuthorityGrant) -> Weakening {
+    match grant {
+        AuthorityGrant::AllCapabilities => Weakening::AllCapabilities,
+    }
+}
+
+/// The Linux backend seeks admission, so it owes the suite its controls
+/// (`DEC-156`).
+///
+/// Every method here is [`BubblewrapBackend::run`] under a different profile —
+/// *the same code the production path runs* — which is what `D2` buys: there is
+/// no second implementation of the confinement profile to drift from this one.
+impl ConformanceBackend for BubblewrapBackend<'_> {
+    fn execute_weakened(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        removal: PropertyRemoval,
+    ) -> Result<Observation, BackendError> {
+        let owned = match removal {
+            PropertyRemoval::StdioOwned => Some(OwnedStdio::opened()?),
+            _ => None,
+        };
+        let (stdio, capture) = match owned {
+            Some((stdio, capture)) => (Some(stdio), Some(capture)),
+            None => (None, None),
+        };
+
+        let profile = WeakenedProfile::weakened(weakening_for(removal, stdio));
+        let mut observation = self.run(placement, execution, &profile)?;
+
+        // The capsule's output went to descriptors this side owns, so `run` saw
+        // nothing to capture. Read it here — and only after dropping the profile,
+        // which holds the write ends: a socket pair reports end-of-file when its
+        // peer is fully closed, and this side is one of the peers.
+        drop(profile);
+        if let Some(mut capture) = capture {
+            let mut captured = Vec::new();
+            capture
+                .read_to_end(&mut captured)
+                .map_err(|error| mechanism_failed(&error))?;
+            observation.stdout = captured;
+        }
+        Ok(observation)
+    }
+
+    fn execute_granted(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        grant: AuthorityGrant,
+    ) -> Result<Observation, BackendError> {
+        self.run(
+            placement,
+            execution,
+            &WeakenedProfile::weakened(weakening_granting(grant)),
+        )
+    }
+
+    fn execute_observed(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        observer: &dyn Fn(HostPid),
+    ) -> Result<Observation, BackendError> {
+        // `T5` owes this the descent from the immediate child — which under the
+        // wall bound is `timeout(1)` — to the capsule's own top-level process,
+        // and the session id `EX-12`'s containment needs (`D3`). The seam is
+        // here; the descent is not.
+        let relay = |pid: i32| observer(HostPid(pid));
+        self.run(
+            placement,
+            execution,
+            &WeakenedProfile::confining().observed_by(&relay),
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The delta and row vocabulary (`EX-8`, `EX-14`)
 // ---------------------------------------------------------------------------
 
@@ -1653,10 +1882,12 @@ fn verify_over(
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
+    use std::collections::BTreeMap;
     use std::io::Write as _;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
+    use super::Weakening as ProfileWeakening;
     use super::{
         Admission, AdmissionVerdict, ArmResult, ArmShape, AuthorityGrant, AuxOutcome, Axis, Bound,
         Claim, ConcurrentWitness, ConformanceBackend, Delta, Fixture, HOME_VARIABLE, HostPid,
@@ -1666,6 +1897,8 @@ mod tests {
         mount_points, on_real_disk, prepare_root, row_ids_in_more_than_one_table, row_verdict,
         second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
     };
+    use super::{OwnedStdio, weakening_for, weakening_granting};
+    use crate::backend::bubblewrap::{SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
@@ -1865,6 +2098,18 @@ mod tests {
             placement: &CapsulePlacement,
             execution: &Execution,
             _removal: PropertyRemoval,
+        ) -> Result<Observation, BackendError> {
+            match &self.weakening {
+                Weakening::DelegatesToExecute => self.execute(placement, execution),
+                Weakening::Answers(answer) => answer.clone(),
+            }
+        }
+
+        fn execute_granted(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+            _grant: AuthorityGrant,
         ) -> Result<Observation, BackendError> {
             match &self.weakening {
                 Weakening::DelegatesToExecute => self.execute(placement, execution),
@@ -2375,6 +2620,49 @@ mod tests {
         let control = classify(
             &honest
                 .execute_weakened(&placement, &execution, PropertyRemoval::MappedIdentity)
+                .expect("runs"),
+            &token(),
+        );
+        assert_eq!(row_verdict(probe, control), RowVerdict::Proven);
+    }
+
+    /// The same fails-closed property for the one control that **grants**.
+    ///
+    /// It needs its own case because the grant travels a second method: a
+    /// backend that implemented `execute_weakened` honestly and delegated
+    /// `execute_granted` to `execute` would pass the test above and still prove
+    /// nothing about row 14.
+    #[test]
+    fn a_backend_ignoring_its_grant_yields_unproven() {
+        let placement = placement();
+        let execution = execution();
+
+        let dishonest = Stub::ignoring_its_removal(&[LIVENESS_MARKER, HELD]);
+        let probe = classify(
+            &dishonest
+                .execute(&placement, &execution)
+                .expect("the stub runs"),
+            &token(),
+        );
+        let control = classify(
+            &dishonest
+                .execute_granted(&placement, &execution, AuthorityGrant::AllCapabilities)
+                .expect("the stub runs"),
+            &token(),
+        );
+        assert_eq!(row_verdict(probe, control), RowVerdict::Unproven);
+
+        // Discriminating: a backend whose grant changes what the capsule
+        // observes proves the row through the same pipeline.
+        let honest =
+            Stub::weakening_honestly(&[LIVENESS_MARKER, HELD], &[LIVENESS_MARKER, HELD_NOT]);
+        let probe = classify(
+            &honest.execute(&placement, &execution).expect("runs"),
+            &token(),
+        );
+        let control = classify(
+            &honest
+                .execute_granted(&placement, &execution, AuthorityGrant::AllCapabilities)
                 .expect("runs"),
             &token(),
         );
@@ -2967,5 +3255,237 @@ mod tests {
             })
             .collect();
         assert_eq!(bounds, vec![Bound::FileSize, Bound::Wall]);
+    }
+
+    // ── VA-4: one axis, one delta (`T4`) ───────────────────────────────────
+    //
+    // `M1`…`M10` bite here. Each case is a prediction about *one* axis, stated
+    // as the multiset of argv words it adds and removes against the confining
+    // baseline plus the spawn options it switches off — so a delta that also
+    // moves a second thing fails its own case, and a delta that moves the second
+    // thing *instead* fails two.
+
+    const CONFINING_OPTIONS: SpawnOptions = SpawnOptions {
+        wall_bounded: true,
+        file_size_capped: true,
+        descriptors_closed: true,
+        parent_owned_stdio: true,
+    };
+
+    /// A non-empty `--setenv` list, because `M5` predicts that dropping it reds
+    /// the environment case and an empty list makes dropping it a no-op.
+    fn capsule_environment() -> Vec<(&'static str, String)> {
+        vec![
+            ("DOCTRINE_CAPSULE", "1".to_owned()),
+            ("HOME", WORKING_DIRECTORY.to_owned()),
+        ]
+    }
+
+    fn assembled(weakening: Option<&ProfileWeakening>) -> Vec<String> {
+        confinement_argv(
+            &placement(),
+            &capsule_environment(),
+            9,
+            &argv(&["/bin/true"]),
+            weakening,
+        )
+    }
+
+    /// The multiset difference between two argvs as `(removed, added)`, both
+    /// sorted — so a case says *what* moved without restating the whole order,
+    /// which `argv_is_assembled_in_the_declared_order` already holds.
+    fn word_delta(baseline: &[String], variant: &[String]) -> (Vec<String>, Vec<String>) {
+        let mut counts: BTreeMap<&str, isize> = BTreeMap::new();
+        for word in baseline {
+            *counts.entry(word.as_str()).or_default() -= 1;
+        }
+        for word in variant {
+            *counts.entry(word.as_str()).or_default() += 1;
+        }
+
+        let mut removed = Vec::new();
+        let mut added = Vec::new();
+        for (word, count) in counts {
+            let sink = if count < 0 { &mut removed } else { &mut added };
+            for _ in 0..count.abs() {
+                sink.push(word.to_owned());
+            }
+        }
+        (removed, added)
+    }
+
+    fn sorted(words: &[&str]) -> Vec<String> {
+        let mut owned: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        owned.sort();
+        owned
+    }
+
+    fn assert_axis(
+        label: &str,
+        weakening: &ProfileWeakening,
+        removed: &[&str],
+        added: &[&str],
+        options: SpawnOptions,
+    ) {
+        assert_eq!(
+            word_delta(&assembled(None), &assembled(Some(weakening))),
+            (sorted(removed), sorted(added)),
+            "{label}: the argv delta is not exactly its own"
+        );
+        assert_eq!(
+            SpawnOptions::under(Some(weakening)),
+            options,
+            "{label}: the spawn options are not exactly its own"
+        );
+    }
+
+    #[test]
+    fn each_removal_changes_exactly_its_own_flags() {
+        let (stdio, _capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+
+        assert_axis(
+            "working directory",
+            &weakening_for(PropertyRemoval::WorkingDirectory, None),
+            &["--chdir", WORKING_DIRECTORY],
+            &[],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "teardown",
+            &weakening_for(PropertyRemoval::Teardown, None),
+            &["--die-with-parent"],
+            &[],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "process visibility",
+            &weakening_for(PropertyRemoval::ProcessVisibility, None),
+            &["--unshare-all"],
+            &[
+                "--unshare-user-try",
+                "--unshare-ipc",
+                "--unshare-net",
+                "--unshare-uts",
+                "--unshare-cgroup-try",
+            ],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "file-size bound",
+            &weakening_for(PropertyRemoval::ResourceBound(Bound::FileSize), None),
+            &[],
+            &[],
+            SpawnOptions {
+                file_size_capped: false,
+                ..CONFINING_OPTIONS
+            },
+        );
+        assert_axis(
+            "wall bound",
+            &weakening_for(PropertyRemoval::ResourceBound(Bound::Wall), None),
+            &[],
+            &[],
+            SpawnOptions {
+                wall_bounded: false,
+                ..CONFINING_OPTIONS
+            },
+        );
+        assert_axis(
+            "inputs writable",
+            &weakening_for(PropertyRemoval::InputsWritable, None),
+            &["--ro-bind", "--ro-bind"],
+            &["--bind", "--bind"],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "descriptors",
+            &weakening_for(PropertyRemoval::DescriptorsClosed, None),
+            &[],
+            &[],
+            SpawnOptions {
+                descriptors_closed: false,
+                ..CONFINING_OPTIONS
+            },
+        );
+        assert_axis(
+            "environment cleared",
+            &weakening_for(PropertyRemoval::EnvCleared, None),
+            &["--clearenv"],
+            &[],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "stdio owned",
+            &weakening_for(PropertyRemoval::StdioOwned, Some(stdio)),
+            &[],
+            &[],
+            SpawnOptions {
+                parent_owned_stdio: false,
+                ..CONFINING_OPTIONS
+            },
+        );
+        assert_axis(
+            "mapped identity",
+            &weakening_for(PropertyRemoval::MappedIdentity, None),
+            &["--uid", "1000", "--gid", "1000"],
+            &[],
+            CONFINING_OPTIONS,
+        );
+        assert_axis(
+            "capability grant",
+            &weakening_granting(AuthorityGrant::AllCapabilities),
+            &[],
+            &["--cap-add", "ALL"],
+            CONFINING_OPTIONS,
+        );
+    }
+
+    /// The `--setenv` list survives every axis byte-for-byte, including the one
+    /// that drops `--clearenv` — `VA-4` names this, and the multiset above cannot
+    /// see a *reordering* of it.
+    #[test]
+    fn every_axis_leaves_the_setenv_list_byte_identical() {
+        let (stdio, _capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+        let expected = setenv_list(&assembled(None));
+        assert_eq!(expected.len(), capsule_environment().len());
+
+        let axes: Vec<ProfileWeakening> = PropertyRemoval::ALL
+            .iter()
+            .map(|removal| {
+                weakening_for(
+                    *removal,
+                    match removal {
+                        PropertyRemoval::StdioOwned => {
+                            Some(OwnedStdio::opened().expect("a socket pair").0)
+                        }
+                        _ => None,
+                    },
+                )
+            })
+            .chain(std::iter::once(weakening_granting(
+                AuthorityGrant::AllCapabilities,
+            )))
+            .collect();
+        drop(stdio);
+
+        for axis in &axes {
+            assert_eq!(
+                setenv_list(&assembled(Some(axis))),
+                expected,
+                "{axis:?} moved the `--setenv` list"
+            );
+        }
+    }
+
+    /// The `(name, value)` pairs following each `--setenv`, in order.
+    fn setenv_list(assembled: &[String]) -> Vec<(String, String)> {
+        assembled
+            .windows(3)
+            .filter(|window| window.first().is_some_and(|word| word == "--setenv"))
+            .filter_map(|window| match window {
+                [_, name, value] => Some((name.clone(), value.clone())),
+                _ => None,
+            })
+            .collect()
     }
 }

@@ -449,3 +449,95 @@ seam is in `backend` and its only consumer is the mapping in `conformance`, and
 level (`mem.pattern.lint.expect-dead-code-at-item-level`). `R6`'s count is now
 four staged sites carried in from PHASE-07 **plus** these two; all six must be
 gone by `T12`.
+
+## PHASE-08 `T4` — `impl ConformanceBackend for BubblewrapBackend`
+
+**Where it lives, and why.** `conformance.rs`, per `D2` and ADR-001: `backend`
+is a leaf and `conformance` is engine with an out-edge to it, so the mapping
+from the property-shaped vocabulary onto the flag-shaped one may only sit on the
+`conformance` side. Every method is `BubblewrapBackend::run` under a different
+`WeakenedProfile` — the same code the production path runs — which is the whole
+of what `D2` buys: there is no second implementation of the confinement profile
+to drift from this one. `run` and `confinement_argv` became `pub(crate)` for it;
+nothing else in `bubblewrap.rs` widened.
+
+**The mapping is one exhaustive `match`.** `weakening_for(removal, stdio)`, nine
+arms, ten removals — `ResourceBound(Bound::FileSize|Wall)` is where the tenth
+lives. Widening `PropertyRemoval` fails to compile here, which is the reason the
+vocabulary is an enum and not a list of names. Two name changes to bridge:
+`DescriptorsClosed` → `Descriptors`, `EnvCleared` → `EnvironmentCleared`.
+
+**`EX-18`'s split is recorded above the mapping, and honestly.** Three deltas
+measured — `Teardown` by `EVD-013`, `MappedIdentity` and
+`Granted(AllCapabilities)` by `EVD-014`. `EVD-013`'s adjacent fact that
+bubblewrap has no `--share-pid` tells us how `ProcessVisibility` must be
+*expressed*, which is not the same as having seen it produce its row's control
+failure. **Every other delta is reasoned and cites no measurement.** The comment
+says exactly that and no more; a caption claiming all ten were measured is what
+`EX-18` exists to correct.
+
+**The grant needed a third trait method** (`F-13`). `design.md:2960`'s sketch has
+two, and `Delta::Granted` has no way to run under either — folding it into
+`PropertyRemoval` is what `sec-7`'s ruling and `F-31` forbid. `execute_granted`
+mirrors `execute_weakened`; `weakening_granting` is its one-arm mapping, named
+so the test and the run read the same function. Its cost is a second fails-closed
+case: `a_backend_ignoring_its_grant_yields_unproven`, because a backend honest in
+`execute_weakened` and lazy in `execute_granted` passes the removal test and
+proves nothing about row 14.
+
+**Row 12's descriptors are two socket pairs, not a file** (`F-14`).
+`execute_weakened` sees no fixture and `S5` forbids both channels that would
+carry one, so `OwnedStdio::opened()` builds them: descriptor 0 is the read end of
+a pair the trusted side wrote a decoy body into and closed (so the capsule reads
+real bytes and then sees EOF — a capsule blocking forever on descriptor 0 would
+be a containment failure of this function's own making); descriptors 1 and 2 are
+the write end of a second pair. `UnixStream::pair`, not `std::io::pipe`, which is
+1.87 against an MSRV of 1.85 (`C7`).
+
+**The capture must be drained after the profile is dropped.** Under
+`StdioOwned` the child's stdout is not piped, so `Command::output()` returns an
+empty `stdout` and `Observation.stdout` has to be filled from this side's end.
+A socket pair reports end-of-file only when its peer is *fully* closed, and
+`Weakening::StdioOwned` owns the write ends — so `drop(profile)` before
+`read_to_end`, or the read blocks forever. Written as an explicit `drop` with the
+reason at the site rather than left to scope order.
+
+**`SpawnOptions` is the phase's one design improvement** (`F-16`). Four of the
+eleven axes change no argv word at all — the two resource bounds, the descriptor
+sweep, owned stdio — so an argv diff reads them as "changed nothing", which is
+indistinguishable from a delta nobody implemented. `SpawnOptions::under` names
+the four as data; `run` reads it in place of three open-coded `matches!` guards,
+and `each_removal_changes_exactly_its_own_flags` compares it. One table, two
+readers, no drift.
+
+**`each_removal_changes_exactly_its_own_flags` is a multiset diff.** Eleven
+cases, each stating the words its axis removes and adds against the confining
+baseline plus the spawn options it switches off. Multiset rather than positional
+because `argv_is_assembled_in_the_declared_order` already holds the order byte
+for byte and restating it eleven times would make every case brittle to an
+unrelated insertion. Two fixture decisions that carry the discrimination:
+
+- the environment passed to `confinement_argv` is **non-empty**. `M5` predicts
+  that dropping the `--setenv` list reds the environment case; against an empty
+  list, dropping it is a no-op and `M5` would red nothing.
+- a sibling test, `every_axis_leaves_the_setenv_list_byte_identical`, walks all
+  eleven axes and compares the `(name, value)` pairs in order — the multiset
+  cannot see a *reordering*, and `VA-4` names the `--setenv` list specifically.
+
+**`M1` is predicted not to red, in advance** (`F-15`). `execute_weakened`
+returns an `Observation` and nothing else, so no static test can observe which
+profile it chose; a backend that ignores its removal is caught by the
+fails-closed pair instead, which is where `EX-7` puts it. `M2`…`M10` all bite on
+the flags test, because each is a change to a delta rather than a bypass of the
+mapping. Recorded now so `T11` records a prediction rather than a discovery.
+
+**`R6` is back to four.** Both `bubblewrap.rs` staged suppressions are gone —
+`Weakening` and the `WeakenedProfile` impl both have live consumers now. The
+four carried in from PHASE-07 (`ArmShape`, `Delta`, `Row`, `RowId`) remain and
+must all be gone by `T12`.
+
+**Still owed by `T5`.** `execute_observed` is plumbed and calls back exactly
+once, but with the immediate child's pid — `timeout(1)` under the wall bound.
+The `/proc` descent to the capsule's top-level process and the session id (`D3`)
+are `T5`'s, and the obligation is written at the call site so it cannot be
+mistaken for finished.
