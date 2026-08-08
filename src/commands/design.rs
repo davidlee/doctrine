@@ -2622,6 +2622,68 @@ mod tests {
         assert_eq!(read_snapshot(root, slice).unwrap().run.revision, 3);
     }
 
+    /// VT-3 (SL-249 PHASE-02, EX-5) — the `SL-248` replay, end to end.
+    ///
+    /// Six checkpoint dispositions sent a record's prose as a top-level `body`,
+    /// which is *section* prose and inert at a `cp-` subject. All six were
+    /// admitted and the prose was discarded without a word (`ISS-318`
+    /// observation 2). Now the same payload is refused before anything is
+    /// reserved, and the refusal names the key the caller wanted.
+    ///
+    /// The anecdote, not the criterion: `EX-4`'s generated matrix is what proves
+    /// the whole field set, and this cell does not stand in for it. What only
+    /// this test can show is that the refusal reaches the shell's caller ahead of
+    /// the mint — the run does not advance and no record is created.
+    #[test]
+    fn a_checkpoint_carrying_section_prose_is_refused_before_anything_is_minted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture(root);
+
+        apply(
+            root,
+            slice,
+            &format!(
+                "{{{},\"declare\":[{{\"subject\":\"inq-1\",\"question\":\"q\"}}]}}",
+                envelope(root, slice, 1, "sub-seed")
+            ),
+            &|| {},
+            &no_fault,
+        )
+        .unwrap();
+
+        let payload = format!(
+            "{{{},\"declare\":[{{\"subject\":\"cp-1\",\"disposes\":\"inq-1\",\
+             \"body\":\"## The two candidate sites\\n\",\
+             \"dispose\":{{\"form\":\"create\",\"kind\":\"decision\",\"title\":\"T\"}}}}]}}",
+            envelope(root, slice, 2, "sub-cp")
+        );
+        let refused = apply(root, slice, &payload, &|| {}, &no_fault)
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            refused.contains("`body` is inert at cp-1"),
+            "the refusal names the key and the subject: {refused}"
+        );
+        assert!(
+            refused.contains("`sec-` subjects"),
+            "and the kind that honours it: {refused}"
+        );
+        assert!(
+            refused.contains("dispose.create.body"),
+            "and the key the caller wanted, which PHASE-01 made real: {refused}"
+        );
+
+        let after = read_snapshot(root, slice).unwrap();
+        assert_eq!(after.run.revision, 2, "the run does not advance");
+        assert!(
+            !root.join(".doctrine").join("knowledge").exists(),
+            "the refusal precedes the mint, so no id was reserved and no record \
+             materialised"
+        );
+    }
+
     // ── ObservedFact::GovernanceEdges (SL-244 EX-10, VT-4) ────────────────
 
     /// A `governed_by` edge — the label-only half of the projected set.
