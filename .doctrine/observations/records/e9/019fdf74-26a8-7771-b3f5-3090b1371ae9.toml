@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf74-26a8-7771-b3f5-3090b1371ae9"
+recorded_at = "2026-08-08T03:39:19.080328677Z"
+kind = "friction"
+summary = "/design: design apply silently accepts an unrecognised top-level payload key, reporting success and bumping the revision"
+detail = """
+Probing the design-run apply grammar (no read-back verb for the payload shape), I sent a payload carrying an unrecognised top-level key: {"run_uid":..,"known_revision":85,"submission_id":"probe-grammar-1","reopen":{}}. The CLI answered "revision 86 stage locked" — i.e. it ACCEPTED the submission and advanced the revision counter, rather than refusing an unknown key. A follow-up `design show` confirmed "changes: none since revision 85", so nothing material happened, but the agent-visible signal was a success line.
+
+Two costs. (1) A grammar probe reads as applied: the natural next move is to believe the key was honoured, and only a second command reveals it was not. (2) It burns a revision on a no-op, which is noise in a log whose whole value is that every revision means something.
+
+ApplyRequest (src/design_run/submission.rs:691) has no serde deny_unknown_fields, so every field is silently discarded. The run refuses duplicate subjects, uncleared gates, watermark divergence and stale known_revision loudly and well — the strictness is there everywhere except the outermost envelope. Discovering the real grammar required reading the struct in src/, which is what the managed-run design is meant to make unnecessary.
+
+Suggestion: deny_unknown_fields on ApplyRequest, and/or skip the revision bump when a submission declares nothing."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
