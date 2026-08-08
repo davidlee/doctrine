@@ -17,6 +17,7 @@ responsibilities = [
   "Provide the atomic claim seam for collision-safe id allocation and named-entity placement, interpreted per caller (race-retry for numbered, duplicate-error for named).",
   "Hold the corpus-wide kind table (`integrity::KINDS`) that enumerates every entity kind, its directory, prefix, and stateful status set.",
   "Enforce the runtime-state boundary: mutable session/progress state lives outside the authored taxonomy, and mutating verbs write entity TOML edit-preservingly.",
+  "Own the kind-agnostic edit-preserving `[facet]` write seam (`src/facet_write.rs`) that every facet-bearing kind rides — backlog risk facets and knowledge-record facets alike — so a typed facet write is one shared mechanism, never a per-kind writer. The seam carries a declared **key posture**: whether a field absent from the on-disk table is seeded on write or is a refusal. The refusing posture makes the scaffold templates load-bearing (a template that stops seeding a field makes every existing record of that kind unwritable) and makes adding a facet field to an existing kind a corpus MIGRATION rather than an edit — the new field must be seeded into every existing record of that kind. Whoever adds a facet field owes that migration in the same change.",
 ]
 
 # category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
@@ -49,3 +50,8 @@ module = "doctrine::registry"
 language = "rust"
 identifier = "src/integrity.rs"
 module = "doctrine::integrity::KINDS"
+
+[[source]]
+language = "rust"
+identifier = "src/facet_write.rs"
+module = "doctrine::facet_write"
