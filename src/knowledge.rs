@@ -839,7 +839,7 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 
 /// One facet field: its key, and the shape a writer must emit for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FacetField {
+pub(crate) struct FacetFieldRow {
     pub(crate) name: &'static str,
     /// Read by the pins (which derive each field's test value from it) and by
     /// PHASE-04's `toml_edit` write dispatch.
@@ -856,145 +856,145 @@ pub(crate) enum FieldShape {
     Closed(&'static [&'static str]),
 }
 
-const ASSUMPTION_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const ASSUMPTION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "claim",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "confidence",
         shape: FieldShape::Closed(Confidence::KNOWN),
     },
-    FacetField {
+    FacetFieldRow {
         name: "basis",
         shape: FieldShape::Closed(Basis::KNOWN),
     },
-    FacetField {
+    FacetFieldRow {
         name: "validation_plan",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "validated_by",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "validated_on",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "invalidated_by",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "invalidated_on",
         shape: FieldShape::Text,
     },
 ];
 
-const DECISION_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const DECISION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "context",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "choice",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "alternatives",
         shape: FieldShape::List,
     },
-    FacetField {
+    FacetFieldRow {
         name: "rationale",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "consequences",
         shape: FieldShape::List,
     },
-    FacetField {
+    FacetFieldRow {
         name: "decided_by",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "decided_on",
         shape: FieldShape::Text,
     },
 ];
 
-const QUESTION_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const QUESTION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "question",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "why_matters",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "answer",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "answered_by",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "answered_on",
         shape: FieldShape::Text,
     },
 ];
 
-const CONSTRAINT_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const CONSTRAINT_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "statement",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "source",
         shape: FieldShape::Closed(ConstraintSource::KNOWN),
     },
-    FacetField {
+    FacetFieldRow {
         name: "applies_to",
         shape: FieldShape::List,
     },
-    FacetField {
+    FacetFieldRow {
         name: "waiver_reason",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "waived_by",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "waived_on",
         shape: FieldShape::Text,
     },
 ];
 
-const EVIDENCE_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const EVIDENCE_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "datum",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "provenance",
         shape: FieldShape::Closed(Provenance::KNOWN),
     },
     // Legitimately shared with the assumption row — multiplicity ACROSS rows is
     // sound (§5.5 "The one shared field name"); only within a row is it damage.
-    FacetField {
+    FacetFieldRow {
         name: "confidence",
         shape: FieldShape::Closed(Confidence::KNOWN),
     },
 ];
 
-const HYPOTHESIS_FACET_FIELDS: &[FacetField] = &[
-    FacetField {
+const HYPOTHESIS_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
         name: "proposition",
         shape: FieldShape::Text,
     },
-    FacetField {
+    FacetFieldRow {
         name: "predicts",
         shape: FieldShape::Text,
     },
@@ -1003,11 +1003,11 @@ const HYPOTHESIS_FACET_FIELDS: &[FacetField] = &[
 /// Concept's `[facet]` is empty by design (DEC-172/DEC-173) — its content is its
 /// prose. The empty row is a case, not an exception: `I3` confirms it retains
 /// nothing, and `VT-2` confirms the template's bare `[facet]` header matches.
-const CONCEPT_FACET_FIELDS: &[FacetField] = &[];
+const CONCEPT_FACET_FIELDS: &[FacetFieldRow] = &[];
 
 /// Every field one record kind owns, in template order — the single authored
 /// derivation of the per-kind field sets (STD-001).
-pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetField] {
+pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow] {
     match kind {
         RecordKind::Assumption => ASSUMPTION_FACET_FIELDS,
         RecordKind::Decision => DECISION_FACET_FIELDS,
@@ -3712,7 +3712,7 @@ target = \"SL-249\"
     /// field's own declared shape (D2). This is what makes the shape column
     /// load-bearing under test: a closed field wrongly declared `Text` yields its
     /// own name, which `optional_enum` refuses, and I3 fails loudly.
-    fn shaped_value(field: &FacetField) -> toml::Value {
+    fn shaped_value(field: &FacetFieldRow) -> toml::Value {
         match field.shape {
             FieldShape::Text => toml::Value::String(field.name.to_string()),
             FieldShape::List => {
