@@ -11,6 +11,7 @@
 //! conformance suite's weakening vocabulary public (`E0603`). Every test in this
 //! crate is a `#[cfg(test)]` module inside the unit it tests.
 
+mod backend;
 mod capacity;
 mod config;
 mod host;

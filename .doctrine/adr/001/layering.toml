@@ -258,3 +258,4 @@ main = "command"            # the two verbs — `provision` (PHASE-06), `backend
 host = "leaf"               # HostFacts/SystemHost/CapacityUnknown — out=0 (SL-248 PHASE-03, EX-18)
 config = "leaf"             # the [capsule] reader and ByteCount — → host (SL-248 PHASE-03, EX-18)
 capacity = "leaf"           # assess_capacity and the tiers — → config, host (SL-248 PHASE-03, EX-18)
+backend = "leaf"            # CapsuleBackend, CapsulePlacement and the vocabularies — → config (SL-248 PHASE-04, EX-1)
