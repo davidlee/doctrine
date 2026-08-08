@@ -167,3 +167,165 @@ publication/**` and the file at issue is `.doctrine/adr/001/layering.toml`.
   the incumbent rather than left as corpus noise.
 - Friction observation recorded (`019fe0f6-6964-7bc0-a150-2300e5ac4512`).
 - Method for the T12 redo: snapshot to the scratchpad, restore with `cp`.
+
+### T12 — the three rows bite (`EN-3`, `F-5`)
+
+Method: snapshot `layering.toml` to the scratchpad, delete one row, run
+`cargo test --test architecture_layering`, restore with `cp`. **Not**
+`git checkout` — see § *Harvest* above for why the first attempt lost the rows.
+
+| row deleted | verdict | violations raised |
+|---|---|---|
+| `host` | RED — `the_layering_gate_runs_over_both_source_trees` FAILED | `Unclassified("host")` ×2 |
+| `config` | RED — same test FAILED | `Unclassified("config")` ×2 |
+| `capacity` | RED — same test FAILED | `Unclassified("capacity")` ×2 |
+
+Restored: 25/25 green, `git diff` on the file empty.
+
+**Each row reds twice, and the doubling is `F-5`'s mechanism made visible.** The
+completeness assertion is keyed on *edge endpoints*, not on units: `host`
+appears in `config → host` and `capacity → host`; `config` in `config → host`
+and `capacity → config`; `capacity` in `capacity → config` and
+`capacity → host`. Two edges each, two violations each.
+
+So `EN-3`'s "an unclassified unit fails the gate, so the appends are
+self-enforcing" holds **for these three units** and for the reason `F-5` gives —
+they all sit in edges — not for the reason the criterion states. Measured
+directly at T2, before the rows landed: the gate was **green** over a tree
+containing an edge-free `host` unit with no row. A unit with out=0 that nothing
+imports is still invisible to this gate. That is `ISS-326` reaching this phase,
+exactly as `F-5` predicted, and it is not a licence to omit a row.
+
+### T13 — the manifest derived from `use` statements (`VA-2`, `VA-5`, `EX-17`)
+
+Derivation performed by grepping the three new files for their own imports and
+inline paths, **not** by copying `sec-6`'s table.
+
+| file | non-`std`, non-`crate` paths |
+|---|---|
+| `host.rs` | `rustix::fs::statvfs` (`:93`) |
+| `config.rs` | `serde::Deserialize` (`:47`), `toml::from_str` (`:404`) |
+| `capacity.rs` | none — `std` + `crate::{config,host}` only |
+| `main.rs` | none |
+
+**Derived list: `rustix` (features `fs`, `std`), `serde` (derive), `toml`.**
+No `doctrine::` path is named by any of the three — this phase reaches nothing
+in the root package, so PHASE-01's export set is untouched here.
+
+- **Agrees with `sec-6`'s table** on the three edges. One difference in *form*
+  only (`F-9`): `serde`/`toml` are `{ workspace = true }` because the workspace
+  already declares exactly the versions/features `EX-17` names; `rustix` is
+  spelled inline because it is not a workspace dependency.
+- `capacity.rs` needs no `rustix` even though `sec-6`'s table attributes the
+  `statvfs` call to `capacity`. It does not disagree about the *edge* — `D1`/`D2`
+  put the probe in `host`, which the table already lists — so this is a note,
+  not a staleness report.
+- **`rustix::process` absent**: `grep -rn 'rustix::process|rustix::thread|Uid|Gid|getpid|kill('` over the whole crate returns NONE. It is behind an
+  undeclared feature, so a call would be `E0433` by design (`RV-346` `F-29`).
+- `Cargo.lock`: **zero** new `[[package]]` stanzas across the whole phase
+  (`git diff Cargo.lock` = three names added to the member's dependency list).
+  A2 holds; `S3` does not fire.
+
+### T14 — `.doctrine/doctrine.toml` gains `[capsule]` (`EX-19`, `VH-1`)
+
+`VH-1` is **DISCHARGED**, not owed: the slice owner ruled the figures on
+2026-08-08 and the sheet's `F-7` carries the ruling. `T14`'s
+"mark `VH-1` owed" clause is superseded by `F-7` and was not executed.
+
+Written exactly as `F-7` gives them:
+
+```toml
+execution-timeout-seconds    = 900
+file-size-cap-mib            = 512
+expected-capsule-size-mib    = 8192
+capacity-warn-multiplier     = 2
+execution-kill-grace-seconds = 5
+```
+
+plus a provisional `readable-roots = ["/bin/sh", "/usr/bin/env"]` with a comment
+naming PHASE-06 as its first consumer, and a comment recording the owner's
+scoping of 900 to the **build/verification** workload — the separate
+agent-execution bound is `notes.md` § *Owed* item 16 and **not** a key this
+phase may add (`EX-19` fixes the key set; adding one would be `S4`).
+
+Validation method: **a scratch test, not a reading.** A temporary
+`#[test] fn scratch_the_repository_capsule_table_round_trips` in `config.rs`
+pulled the file in with `include_str!("../../../.doctrine/doctrine.toml")`, ran
+it through `parse_capsule_config`, and asserted all five figures plus the
+readable list, the empty closure list and the absent resolver. **Passed.** The
+test was then deleted; the suite is back to 33.
+
+### T15 — the inspection criteria (`VA-1`, `VA-3`)
+
+**`VA-1` — no clock in `host.rs`.** The sheet's suggested grep
+(`grep -nE 'now|Instant|SystemTime|crate::clock' host.rs`) **cannot** be empty:
+the bare alternative `now` is a substring of `CapacityUnknown`, which `EX-14`
+requires and `D2` places in this file. Tightened to word boundaries and with
+comment lines stripped:
+
+```
+grep -vE '^\s*(//|/\*|\*)' host.rs |
+  grep -nE '\bnow\b|now\(|\bInstant\b|\bSystemTime\b|crate::clock|std::time|Duration'
+→ EMPTY
+```
+
+The only match before stripping comments is `host.rs:13`, a doc line saying a
+`now()` here *would be a second one*. `host.rs` imports no `std::time` at all.
+`VA-1` holds. (Recorded as `F-10` — the criterion is satisfiable as written; the
+task's suggested method is not, and the next reader will hit the same false
+positive.)
+
+**`VA-3` — `REQ-461`'s four negatives are structural.** Confirmed by inspection,
+each separately:
+
+1. *No reserved figure on `CapacityPolicy`* — the struct is two fields,
+   `expected_capsule_size: ByteCount` and `warn_multiplier: u32`. Nothing else.
+2. *`assess_capacity` admits no capsule count or queue* — its signature is
+   `(probe: Result<ByteCount, CapacityUnknown>, policy: &CapacityPolicy) ->
+   CapacityVerdict`. Neither parameter can express how many capsules exist, and
+   the function has no other input.
+3. *No removal call anywhere in the phase's files* —
+   `grep -E 'remove_file|remove_dir|remove_dir_all|std::fs::(copy|rename|write)|unlink|truncate'`
+   over `host.rs`, `config.rs`, `capacity.rs` with comment lines stripped
+   returns NONE. There is no delete capability to misuse.
+4. *Nothing copied or compressed on any refusal path* — same grep covers
+   `copy`/`rename`/`tar`/`zip`/`flate`/`compress`: NONE. Every refusal path in
+   this phase returns a typed value and performs no IO whatsoever.
+
+The only surviving occurrences of "reserved" in the crate are two doc comments:
+`host.rs:87` (`f_bfree` includes the reserved blocks a capsule cannot have) and
+`capacity.rs:115` (nothing is reserved at `Low`).
+
+### T16 — green, and the VT mapping
+
+- `doctrine check gate` — **green, exit 0**. (`check`/`gate` build before they
+  validate, which is what gives the corpus check a fresh binary.) 33
+  `doctrine-control` tests among them.
+- `doctrine slice verify-vt 248` — PHASE-03's **eight `VT` keyword mandates are
+  all satisfied**: every mandated title is present in its mandated file. All
+  eight report `UNATTRIBUTABLE`, not `PASS`, with the same reason — *"keyword
+  present but `<file>` not modified by this slice"*. That is the slice's
+  recorded source-delta boundary, not a test problem: `record-delta` is the
+  **orchestrator's** surface (`LOOP.md` § *Writer map*) and has not been run for
+  this phase's commits yet. Flagged in the hand-back.
+- The `FAIL` rows in the same output are later phases' — `backend.rs`,
+  `backend/bubblewrap.rs`, `provision.rs` do not exist yet. Expected, not ours.
+- PHASE-01/02's `VT`s all still `PASS`: nothing this phase did moved them.
+
+#### Divergences from the sheet, collected
+
+1. **`ConfigRefusal::keys()`** — an accessor `EX-11` does not name, added
+   because three `VT-4`/`VT-7` titles require refusals to *name keys* that
+   `EX-11` gives no field to carry. Variant shapes unchanged. Sheet `F-8`.
+2. **`serde`/`toml` declared `{ workspace = true }`** rather than spelled out as
+   `EX-17` writes them; the resolved dependency is identical. Sheet `F-9`.
+3. **`T15`'s suggested `VA-1` grep is broken** — bare `now` matches
+   `CapacityUnknown`. The criterion holds; the method needed word boundaries.
+   Sheet `F-10`.
+4. **`D6`'s `#[expect(clippy::integer_division)]` escape hatch went unused** —
+   the ceiling is expressible as a shift derived from `BYTES_PER_MIB`.
+5. **`T14`'s "mark `VH-1` owed" clause not executed** — superseded by `F-7`,
+   which discharges `VH-1`. Deliberate, per the brief.
+
+Nothing in this list is an `S1`–`S5` stop. None of the twenty `EX` and none of
+the eight `VT` was adjusted.

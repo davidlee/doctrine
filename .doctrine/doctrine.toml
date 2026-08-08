@@ -38,3 +38,40 @@ gate = ["just", "gate"]
 # # Per-check timeout in seconds (default 300).
 # timeout-secs = 300
 #
+
+# ── [capsule] — this repository's own capsule configuration (SL-248 EX-19) ──
+# Operator configuration, NOT a platform default. `POL-002` facet 1 is why the
+# shipped default for `expected-capsule-size-mib` stays 4096 while this repo
+# sets the 8192 a Rust workspace actually needs: the platform must not inherit
+# this project's shape.
+#
+# Nothing parses this table until PHASE-06's `provision`, so it is inert today.
+# It is nonetheless valid under the PHASE-03 reader's own rules — round-tripped
+# through `parse_capsule_config` before it landed.
+#
+# Keys are kebab-case, with the unit spelled in the key (SL-248 `sec-5`).
+[capsule]
+# The readable inputs (sec-2). At least one of the two lists must be non-empty.
+# PROVISIONAL: PHASE-06's provisioning is the first consumer, and the real set
+# is whatever the capsule's verification workload needs to execute. Two entries
+# that every capsule needs, so the list is non-empty and honest rather than
+# speculative.
+readable-roots = ["/bin/sh", "/usr/bin/env"]
+
+# Capacity, advisory (REQ-461). Warn below expected x multiplier; refuse below
+# expected. Nothing is reserved at either tier.
+expected-capsule-size-mib = 8192
+capacity-warn-multiplier = 2
+
+# The execution bounds, enforced trusted-side. The first two are REQUIRED —
+# there is no measurement to default them from (EX-7).
+#
+# 900s is the spike's re-bounded figure for a **Rust workspace build** (352s
+# measured, re-bounded with headroom) and is scoped to that build/verification
+# workload. It is deliberately NOT sized for a headless agent run, whose
+# characteristics are different in both directions; that bound is separate work
+# and is not this table's key set (EX-19 fixes the keys).
+execution-timeout-seconds = 900
+file-size-cap-mib = 512
+# Directly measured between SIGTERM and SIGKILL (`capsule/sandbox.sh:68`).
+execution-kill-grace-seconds = 5
