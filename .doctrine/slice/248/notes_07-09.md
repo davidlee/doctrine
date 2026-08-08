@@ -385,3 +385,67 @@ Tests (10): `a_mount_point_is_decoded_rather_than_truncated`,
 `the_second_filesystem_is_on_another_device_or_absent`,
 `a_host_with_no_second_filesystem_selects_none`,
 `the_fixture_repository_holds_an_object_unreachable_from_the_base`.
+
+### `T3` — the weakening seam in `bubblewrap.rs`
+
+**An enum, not a bag of eleven booleans.** `Weakening` has one variant per axis
+(ten removals plus `AllCapabilities`), so a weakened run differs from the
+confining profile along *exactly one* axis **structurally** — a type that cannot
+express two at once beats a comment saying it should not. There is no
+`Weakening::None`: absence is `Option`'s job, and `WeakenedProfile::confining()`
+is the profile with nothing selected.
+
+- `WeakenedProfile { weakening: Option<Weakening>, observer: Option<&dyn Fn(i32)> }`.
+  The observer is **orthogonal** to the weakening — a probe arm observes an
+  otherwise fully confining run, so it cannot be a twelfth variant.
+- `CapsuleBackend::execute` is now literally
+  `self.run(placement, execution, &WeakenedProfile::confining())`. One assembly
+  of the profile in the tree; `conformance.rs` maps its own `PropertyRemoval`
+  onto `Weakening` and the ADR-001 edge stays conformance→backend (`D2`).
+- `Weakening` names **no `conformance` type** and carries only primitives and
+  `OwnedFd`s. `StdioOwned` is the only variant with a payload (`D4`) — three
+  `OwnedFd`s, duplicated with `try_clone` at spawn rather than consumed, since
+  the caller keeps the other end and the profile may run more than once.
+
+**`D5`'s network trap is handled inside `confinement_argv`, not by the caller.**
+`--share-net` is bubblewrap's only re-share flag and pairs with `--unshare-all`.
+Under `ProcessVisibility`'s enumerated set there is no `--unshare-all` to
+re-share against, so a permitted network is expressed by **filtering
+`--unshare-net` out of the set** and emitting no `--share-net` at all. Emitting
+both is an argv error — a control the mechanism refuses to build, which is `S7`
+in miniature. `the_enumerated_unshare_set_expresses_a_permitted_network_by_omission`
+holds it, and the discriminating fixture is the **pair**: the permitted
+placement alone passes under an implementation that drops `--unshare-net`
+unconditionally, the denied one alone passes under one that never drops it.
+
+**Order is unchanged under every axis.** The confining assembly was restructured
+from one `vec![…]` literal into conditional pushes, and
+`argv_is_assembled_in_the_declared_order` — which asserts the whole token vector
+byte for byte — still passes unedited. That test is the behaviour-preservation
+proof for the restructure, and it was already there.
+
+- The descriptor sweep still runs **before** the status fd is cleared of
+  `CLOEXEC`, including under `Weakening::Descriptors`, which skips the sweep but
+  not the clear. The sheet calls that order load-bearing and it does not move.
+- `--setenv` stays byte-identical under `EnvironmentCleared`, which drops only
+  `--clearenv` (`VA-4`).
+- `--cap-add ALL` is appended after the environment and before the payload argv,
+  so every other flag keeps its position.
+
+**The observer seam is plumbed but its pid is `T5`'s.** `spawn_and_wait` is
+`Command::output()` when no observer is set, and `spawn` + callback +
+`wait_with_output` when one is — `wait_with_output` is what `output()` does
+internally, so the piped stdout stays drained rather than deadlocking against a
+capsule that fills the pipe. **The pid handed over today is the immediate
+child's**, which under the wall bound is `timeout(1)`, not the capsule's
+top-level process. `T5` replaces it with the capsule's own; the seam is here,
+the `/proc` descent is not. Said out loud in the function's doc comment so it
+cannot be mistaken for finished.
+
+**Two staged `#[expect(dead_code)]` sites added, both removed at `T4`.** The
+seam is in `backend` and its only consumer is the mapping in `conformance`, and
+`D2` forbids the edge running the other way — so the two land one task apart and
+`unused = deny` collapses the gap into a hard error. Item level, never field
+level (`mem.pattern.lint.expect-dead-code-at-item-level`). `R6`'s count is now
+four staged sites carried in from PHASE-07 **plus** these two; all six must be
+gone by `T12`.

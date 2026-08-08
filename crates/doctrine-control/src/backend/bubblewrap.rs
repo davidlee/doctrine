@@ -50,7 +50,7 @@
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -138,6 +138,26 @@ const FLAG_SETENV: &str = "--setenv";
 /// floor, and a capsule must be default-denied.
 const FLAG_SHARE_NET: &str = "--share-net";
 
+/// What `Weakening::ProcessVisibility` puts in place of `--unshare-all`.
+///
+/// bubblewrap has **no `--share-pid`** (`EX-9`), so removing pid isolation is
+/// the one axis expressed by naming the namespaces that remain rather than by
+/// subtracting a flag. The `-try` forms because `--unshare-all` itself uses
+/// them, and a bare `--unshare-user` fails on a host without unprivileged user
+/// namespaces. Measured accepted and effective on bwrap 0.11.2 (`S7`).
+const FLAG_UNSHARE_NET: &str = "--unshare-net";
+const NON_PID_UNSHARE_SET: [&str; 5] = [
+    "--unshare-user-try",
+    "--unshare-ipc",
+    FLAG_UNSHARE_NET,
+    "--unshare-uts",
+    "--unshare-cgroup-try",
+];
+
+/// What `Weakening::AllCapabilities` appends, and the only flag it appends.
+const FLAG_CAP_ADD: &str = "--cap-add";
+const CAPABILITY_ALL: &str = "ALL";
+
 // ---------------------------------------------------------------------------
 // The environment, and the one variable read from the host
 // ---------------------------------------------------------------------------
@@ -194,6 +214,139 @@ const SIGNALLED_EXIT_BASE: i32 = 128;
 /// `SIGXFSZ` — what `RLIMIT_FSIZE` raises on the offending write, so
 /// `128 + 25 = 153` is the file-size-cap termination. Measured.
 const SIGXFSZ: i32 = 25;
+
+// ---------------------------------------------------------------------------
+// The weakening seam (SL-248 PHASE-08 `T3`, `EX-8`, `EX-9`, `D2`)
+// ---------------------------------------------------------------------------
+
+/// One axis of the confining profile, switched off.
+///
+/// **This is backend-tier vocabulary and names no `conformance` type.**
+/// `.doctrine/adr/001/layering.toml` classifies `backend` as a *leaf* and
+/// `conformance` as an *engine* with an out-edge to it; a `bubblewrap.rs` that
+/// imported `PropertyRemoval` would put a leaf→engine edge in a graph that
+/// already has the reverse, which is ADR-001's cycle (`D2`). So the mapping
+/// runs the other way: `conformance.rs` matches its own removals onto these.
+///
+/// An **enum, not a bag of booleans**, and that is the point: a weakened run
+/// differs from the confining profile along *exactly one* axis, and a type that
+/// cannot express two at once makes that structural instead of promised. There
+/// is no `Weakening::None` — absence is `Option`'s job, and the confining
+/// profile is the one with nothing selected.
+///
+/// The eleven axes are ten property removals plus one authority grant. Adding a
+/// twelfth is a governed decision, not a convenience.
+#[derive(Debug)]
+#[expect(
+    dead_code,
+    reason = "SL-248 PHASE-08 `T3` lands the seam; `T4`'s `impl ConformanceBackend` in \
+              conformance.rs is its only consumer and lands next. Staged one task apart \
+              because the seam is in `backend` and the mapping onto it is in `conformance` \
+              (`D2` — the edge may not run the other way). Removed at `T4`, and `R6` \
+              tracks the count."
+)]
+pub(crate) enum Weakening {
+    /// Omit `--chdir`, so the capsule starts wherever bubblewrap leaves it.
+    WorkingDirectory,
+    /// Omit `--die-with-parent`. Measured (`EVD-013`, and again at plan time)
+    /// to be what actually reaps an escaping detached grandchild — the pid
+    /// namespace is not.
+    Teardown,
+    /// Replace `--unshare-all` with [`NON_PID_UNSHARE_SET`], leaving the pid
+    /// namespace shared.
+    ProcessVisibility,
+    /// Skip [`apply_file_size_cap`], so `RLIMIT_FSIZE` is never set.
+    FileSizeBound,
+    /// Exec `bwrap` directly, with no `timeout -k` wrapper outside it.
+    WallBound,
+    /// `--ro-bind` becomes `--bind` for `/source` **and** every declared
+    /// readable entry. Same paths, same inner destinations, same count —
+    /// attachment alone changes.
+    InputsWritable,
+    /// Skip [`mark_inherited_descriptors_close_on_exec`]. The status
+    /// descriptor is still cleared of `CLOEXEC`; the order those two run in is
+    /// load-bearing and does not move.
+    Descriptors,
+    /// Omit `--clearenv`. The `--setenv` list is left byte-identical.
+    EnvironmentCleared,
+    /// Replace the three standard stream endpoints with descriptors the caller
+    /// owns (`D4`). Nothing above descriptor 2 moves.
+    ///
+    /// The descriptors arrive here rather than on [`Execution`] because the
+    /// weakening is a property of the weakened *run*, not of the execution
+    /// request — which is what keeps a descriptor channel out of the
+    /// production vocabulary (`S5`).
+    StdioOwned {
+        input: OwnedFd,
+        output: OwnedFd,
+        errors: OwnedFd,
+    },
+    /// Omit `--uid`/`--gid`, touching no namespace.
+    MappedIdentity,
+    /// Append `--cap-add ALL`, every other flag unchanged. The one *grant*
+    /// among ten removals. Measured effective on bwrap 0.11.2: `CapEff` moves
+    /// from `0000000000000000` to `000001ffffffffff` (`S7`).
+    AllCapabilities,
+}
+
+/// How one run of the profile differs from the confining one.
+///
+/// [`WeakenedProfile::confining`] is the profile [`CapsuleBackend::execute`]
+/// runs, and it selects nothing — so *the production path and the conformance
+/// suite's probe arm are the same code*, which is the whole reason the seam is
+/// here rather than a second implementation of the profile in `conformance.rs`
+/// (`D2`).
+///
+/// The observer is orthogonal to the weakening: a probe arm observes an
+/// otherwise fully confining run.
+pub(crate) struct WeakenedProfile<'o> {
+    weakening: Option<Weakening>,
+    observer: Option<&'o dyn Fn(i32)>,
+}
+
+impl std::fmt::Debug for WeakenedProfile<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WeakenedProfile")
+            .field("weakening", &self.weakening)
+            .field("observer", &self.observer.map(|_| "…"))
+            .finish()
+    }
+}
+
+#[expect(
+    dead_code,
+    reason = "as `Weakening` above: `confining()` is live through `execute`, and the two \
+              weakening constructors have their only consumer in `T4`'s `impl \
+              ConformanceBackend`. Removed at `T4`."
+)]
+impl<'o> WeakenedProfile<'o> {
+    /// The full confining profile: nothing removed, nothing granted.
+    pub(crate) const fn confining() -> Self {
+        Self {
+            weakening: None,
+            observer: None,
+        }
+    }
+
+    pub(crate) const fn weakened(weakening: Weakening) -> Self {
+        Self {
+            weakening: Some(weakening),
+            observer: None,
+        }
+    }
+
+    /// Call `observer` exactly once, trusted-side, with the capsule's host-side
+    /// pid while it is still alive.
+    #[must_use]
+    pub(crate) fn observed_by(mut self, observer: &'o dyn Fn(i32)) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    const fn weakening(&self) -> Option<&Weakening> {
+        self.weakening.as_ref()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // The backend
@@ -294,6 +447,30 @@ impl CapsuleBackend for BubblewrapBackend<'_> {
         placement: &CapsulePlacement,
         execution: &Execution,
     ) -> Result<Observation, BackendError> {
+        self.run(placement, execution, &WeakenedProfile::confining())
+    }
+}
+
+impl BubblewrapBackend<'_> {
+    /// The one confining profile, parameterised (`D2`, `T3`).
+    ///
+    /// [`CapsuleBackend::execute`] is this with nothing selected. There is no
+    /// second assembly of the profile anywhere in the tree — a conformance
+    /// suite that re-implemented it would be testing its own copy, on a
+    /// security boundary, and the copy is the thing guaranteed to drift.
+    ///
+    /// The order below is load-bearing and unchanged by any weakening. The
+    /// descriptor sweep runs **before** the status channel is cleared of
+    /// `CLOEXEC`, because the sweep would otherwise mark the very descriptor
+    /// bubblewrap is told to write to; and the status file is read and removed
+    /// **before** `disk_used` is measured, because it is the trusted side's
+    /// bookkeeping and not the capsule's residue.
+    fn run(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        profile: &WeakenedProfile<'_>,
+    ) -> Result<Observation, BackendError> {
         if let Availability::Unavailable { .. } = self.availability() {
             return Err(BackendError::Unavailable { id: BACKEND_ID });
         }
@@ -305,16 +482,18 @@ impl CapsuleBackend for BubblewrapBackend<'_> {
         let status_path = placement.root().path().join(STATUS_FILE_LEAF);
         let status_file = File::create(&status_path).map_err(|error| mechanism_failed(&error))?;
 
-        let argv = wall_bounded_argv(
-            execution.timeout(),
-            self.kill_grace,
-            &confinement_argv(
-                placement,
-                &environment,
-                status_file.as_raw_fd(),
-                execution.argv(),
-            ),
+        let confinement = confinement_argv(
+            placement,
+            &environment,
+            status_file.as_raw_fd(),
+            execution.argv(),
+            profile.weakening(),
         );
+        let argv = if matches!(profile.weakening(), Some(Weakening::WallBound)) {
+            confinement
+        } else {
+            wall_bounded_argv(execution.timeout(), self.kill_grace, &confinement)
+        };
         let (program, arguments) =
             argv.split_first()
                 .ok_or_else(|| BackendError::MechanismFailed {
@@ -323,17 +502,29 @@ impl CapsuleBackend for BubblewrapBackend<'_> {
 
         let mut command = Command::new(program);
         command.args(arguments);
-        let [input, output, errors] = standard_stream_endpoints(execution.stdio());
-        command
-            .stdin(endpoint_stdio(input))
-            .stdout(endpoint_stdio(output))
-            .stderr(endpoint_stdio(errors));
-        apply_file_size_cap(&mut command, execution.file_size_cap());
+        let [input, output, errors] = match profile.weakening() {
+            Some(Weakening::StdioOwned {
+                input,
+                output,
+                errors,
+            }) => [
+                owned_stdio(input)?,
+                owned_stdio(output)?,
+                owned_stdio(errors)?,
+            ],
+            _ => standard_stream_endpoints(execution.stdio()).map(endpoint_stdio),
+        };
+        command.stdin(input).stdout(output).stderr(errors);
+        if !matches!(profile.weakening(), Some(Weakening::FileSizeBound)) {
+            apply_file_size_cap(&mut command, execution.file_size_cap());
+        }
 
-        mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
+        if !matches!(profile.weakening(), Some(Weakening::Descriptors)) {
+            mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
+        }
         clear_close_on_exec(&status_file).map_err(|error| mechanism_failed(&error))?;
 
-        let observed = command.output().map_err(|error| mechanism_failed(&error))?;
+        let observed = spawn_and_wait(command, profile.observer)?;
         drop(status_file);
 
         let status_text = std::fs::read_to_string(&status_path).unwrap_or_default();
@@ -348,6 +539,50 @@ impl CapsuleBackend for BubblewrapBackend<'_> {
                 .map_err(|error| mechanism_failed(&error))?,
         })
     }
+}
+
+/// A caller-owned descriptor as a child endpoint, duplicated rather than
+/// consumed: the same profile may be run more than once, and the caller keeps
+/// the other end.
+fn owned_stdio(descriptor: &OwnedFd) -> Result<Stdio, BackendError> {
+    descriptor
+        .try_clone()
+        .map(Stdio::from)
+        .map_err(|error| mechanism_failed(&error))
+}
+
+/// Run to completion, giving `observer` the child's host-side pid while it is
+/// alive.
+///
+/// Without an observer this is exactly `Command::output()`. With one it is
+/// `spawn` + `wait_with_output`, which is what `output()` does internally — the
+/// callback goes in the window between them, and `wait_with_output` is what
+/// keeps the piped stdout drained rather than deadlocked against a capsule
+/// filling the pipe.
+///
+/// **The pid handed over is the immediate child's**, which under the wall bound
+/// is `timeout(1)`, not the capsule's top-level process. `T5` replaces this
+/// with the capsule's own — `REQ-448` criterion 3 wants the trusted parent's
+/// observation of the *subject*. The seam is here; the descent is not.
+fn spawn_and_wait(
+    mut command: Command,
+    observer: Option<&dyn Fn(i32)>,
+) -> Result<std::process::Output, BackendError> {
+    let Some(observer) = observer else {
+        return command.output().map_err(|error| mechanism_failed(&error));
+    };
+
+    let child = command.spawn().map_err(|error| mechanism_failed(&error))?;
+    observer(host_pid(&child));
+    child
+        .wait_with_output()
+        .map_err(|error| mechanism_failed(&error))
+}
+
+/// `Child::id` is a `u32` and a pid is an `i32`; `as` is denied, and a pid
+/// large enough to fail this conversion is a kernel that has changed shape.
+fn host_pid(child: &std::process::Child) -> i32 {
+    i32::try_from(child.id()).unwrap_or(-1)
 }
 
 fn mechanism_failed(error: &io::Error) -> BackendError {
@@ -756,39 +991,75 @@ fn push_bind(argv: &mut Vec<String>, flag: &str, host: &Path, inner: &Path) {
 /// ahead of the declared entries of their block. They cannot arrive through the
 /// declared vectors — `RESERVED_INNER_DESTINATIONS` refuses an entry naming
 /// them — so the profile derives them from the placement's typed fields.
+///
+/// `weakening` switches off exactly one axis and nothing else — that *nothing
+/// else* is the property `each_removal_changes_exactly_its_own_flags` asserts
+/// against this function's output, and the reason each branch below is a
+/// conditional over the confining assembly rather than a second assembly.
 fn confinement_argv(
     placement: &CapsulePlacement,
     environment: &[(&'static str, String)],
     status_fd: RawFd,
     argv: &Argv,
+    weakening: Option<&Weakening>,
 ) -> Vec<String> {
+    let network_permitted = placement.network() == NetworkPosture::Permitted;
+    let enumerated = matches!(weakening, Some(Weakening::ProcessVisibility));
+
     let mut assembled = vec![
         BWRAP_EXECUTABLE.to_owned(),
         FLAG_JSON_STATUS_FD.to_owned(),
         status_fd.to_string(),
-        FLAG_UNSHARE_ALL.to_owned(),
-        FLAG_UID.to_owned(),
-        CAPSULE_UID.to_string(),
-        FLAG_GID.to_owned(),
-        CAPSULE_GID.to_string(),
-        FLAG_PROC.to_owned(),
-        INNER_PROC.to_owned(),
-        FLAG_DEV.to_owned(),
-        INNER_DEV.to_owned(),
-        FLAG_TMPFS.to_owned(),
-        INNER_TMP.to_owned(),
     ];
 
+    if enumerated {
+        // `EX-9`/`D5`: no `--share-pid` exists, so this axis names the
+        // namespaces that remain. **And the network posture moves with it** —
+        // `--share-net` is bubblewrap's only re-share flag and pairs with
+        // `--unshare-all`, so under the enumerated set a permitted network is
+        // expressed by omitting `--unshare-net` instead. Emitting both is an
+        // argv error, which is a control the mechanism refuses to build.
+        assembled.extend(
+            NON_PID_UNSHARE_SET
+                .iter()
+                .filter(|flag| !(network_permitted && **flag == FLAG_UNSHARE_NET))
+                .map(|flag| (*flag).to_owned()),
+        );
+    } else {
+        assembled.push(FLAG_UNSHARE_ALL.to_owned());
+    }
+
+    if !matches!(weakening, Some(Weakening::MappedIdentity)) {
+        assembled.extend([
+            FLAG_UID.to_owned(),
+            CAPSULE_UID.to_string(),
+            FLAG_GID.to_owned(),
+            CAPSULE_GID.to_string(),
+        ]);
+    }
+    assembled.extend(
+        [
+            FLAG_PROC, INNER_PROC, FLAG_DEV, INNER_DEV, FLAG_TMPFS, INNER_TMP,
+        ]
+        .map(str::to_owned),
+    );
+
+    // Attachment alone: same paths, same inner destinations, same count.
+    let input_flag = if matches!(weakening, Some(Weakening::InputsWritable)) {
+        FLAG_BIND
+    } else {
+        FLAG_RO_BIND
+    };
     push_bind(
         &mut assembled,
-        FLAG_RO_BIND,
+        input_flag,
         placement.source().host(),
         Path::new(INNER_SOURCE),
     );
     for entry in placement.readable() {
         push_bind(
             &mut assembled,
-            FLAG_RO_BIND,
+            input_flag,
             entry.host(),
             entry.inner().as_path(),
         );
@@ -811,24 +1082,36 @@ fn confinement_argv(
         );
     }
 
-    assembled.push(FLAG_CHDIR.to_owned());
-    assembled.push(
-        placement
-            .working_directory()
-            .as_path()
-            .to_string_lossy()
-            .into_owned(),
-    );
-    assembled.push(FLAG_DIE_WITH_PARENT.to_owned());
+    if !matches!(weakening, Some(Weakening::WorkingDirectory)) {
+        assembled.push(FLAG_CHDIR.to_owned());
+        assembled.push(
+            placement
+                .working_directory()
+                .as_path()
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    if !matches!(weakening, Some(Weakening::Teardown)) {
+        assembled.push(FLAG_DIE_WITH_PARENT.to_owned());
+    }
     assembled.push(FLAG_NEW_SESSION.to_owned());
-    assembled.push(FLAG_CLEARENV.to_owned());
+    if !matches!(weakening, Some(Weakening::EnvironmentCleared)) {
+        assembled.push(FLAG_CLEARENV.to_owned());
+    }
+    // The `--setenv` list stays byte-identical under every axis, including the
+    // one that drops `--clearenv` — `VA-4` names this.
     for (name, value) in environment {
         assembled.push(FLAG_SETENV.to_owned());
         assembled.push((*name).to_owned());
         assembled.push(value.clone());
     }
-    if placement.network() == NetworkPosture::Permitted {
+    if network_permitted && !enumerated {
         assembled.push(FLAG_SHARE_NET.to_owned());
+    }
+    if matches!(weakening, Some(Weakening::AllCapabilities)) {
+        assembled.push(FLAG_CAP_ADD.to_owned());
+        assembled.push(CAPABILITY_ALL.to_owned());
     }
 
     assembled.extend(argv.as_slice().iter().cloned());
@@ -1174,7 +1457,11 @@ mod tests {
     }
 
     fn assembled(placement: &CapsulePlacement) -> Vec<String> {
-        confinement_argv(placement, &[], 9, &argv(&["/bin/true"]))
+        confinement_argv(placement, &[], 9, &argv(&["/bin/true"]), None)
+    }
+
+    fn assembled_under(placement: &CapsulePlacement, weakening: &Weakening) -> Vec<String> {
+        confinement_argv(placement, &[], 9, &argv(&["/bin/true"]), Some(weakening))
     }
 
     fn position(argv: &[String], token: &str) -> usize {
@@ -1684,6 +1971,57 @@ mod tests {
         );
     }
 
+    /// `D5`'s trap, and the reason `ProcessVisibility` cannot be composed from
+    /// the network axis independently.
+    ///
+    /// `--share-net` is bubblewrap's only re-share flag and it pairs with
+    /// `--unshare-all`. Once the enumerated set replaces `--unshare-all`, a
+    /// permitted network has to be expressed by **omitting `--unshare-net`**.
+    /// Emitting both is an argv error — a control the mechanism refuses to
+    /// build, which proves nothing (`S7`).
+    ///
+    /// The discriminating fixture is the *pair*: the permitted placement alone
+    /// passes under an implementation that drops `--unshare-net`
+    /// unconditionally, and the denied one alone passes under an
+    /// implementation that never drops it.
+    #[test]
+    fn the_enumerated_unshare_set_expresses_a_permitted_network_by_omission() {
+        let permitted = assembled_under(
+            &placement_with(
+                vec![mount(LAWFUL_HOST, LAWFUL_HOST)],
+                Vec::new(),
+                NetworkPosture::Permitted,
+            ),
+            &Weakening::ProcessVisibility,
+        );
+        assert!(
+            !permitted.iter().any(|word| word == FLAG_SHARE_NET),
+            "`--share-net` has no `--unshare-all` to re-share against here: {permitted:?}"
+        );
+        assert!(
+            !permitted.iter().any(|word| word == FLAG_UNSHARE_NET),
+            "a permitted network under the enumerated set is the omission of \
+             `--unshare-net`: {permitted:?}"
+        );
+
+        let denied = assembled_under(
+            &placement_with(
+                vec![mount(LAWFUL_HOST, LAWFUL_HOST)],
+                Vec::new(),
+                NetworkPosture::Denied,
+            ),
+            &Weakening::ProcessVisibility,
+        );
+        assert!(
+            denied.iter().any(|word| word == FLAG_UNSHARE_NET),
+            "removing pid isolation must not also permit the network: {denied:?}"
+        );
+        assert!(
+            !denied.iter().any(|word| word == FLAG_UNSHARE_ALL),
+            "the enumerated set replaces `--unshare-all` rather than joining it: {denied:?}"
+        );
+    }
+
     #[test]
     fn argv_is_assembled_in_the_declared_order() {
         let placement = placement_with(
@@ -1692,7 +2030,7 @@ mod tests {
             NetworkPosture::Denied,
         );
         let environment = capsule_environment(&CapsuleEnv::complete(), "/usr/bin");
-        let tokens = confinement_argv(&placement, &environment, 9, &argv(&["/bin/true"]));
+        let tokens = confinement_argv(&placement, &environment, 9, &argv(&["/bin/true"]), None);
 
         assert_eq!(
             tokens,
