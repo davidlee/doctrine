@@ -4,11 +4,17 @@
 # and links. Runtime status lives separately under .doctrine/state/ (phase
 # tracking) — never record progress here. Hand-edit freely: the tool reads this
 # file but does not rewrite it.
+#
+# The contract this file encodes is governed by SPEC-031 (Phase plan surface).
 schema  = "doctrine.plan.overview"
 version = 1
 slice   = "{{ref}}"
 
-[specs]                          # empty in v1 — no spec/requirement registry yet
+# Canonical governance links — cite ids, never restate what they say
+# (SPEC-031 REQ-473). Authors populate these and the corpus carries them, but
+# the plan reader does not model them yet, so nothing consumes them downstream
+# (ISS-321; SPEC-031 REQ-467 is the requirement that closes it).
+[specs]
 primary       = []
 collaborators = []
 
@@ -16,11 +22,15 @@ collaborators = []
 targets      = []
 dependencies = []
 
-# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
-# never reused once authored — edits append, they never renumber. Criterion ids
-# are local to their phase, bare, and equally immutable (glossary.md §
-# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
-# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+# One [[phase]] per ordered phase, in execution order — the authored array order
+# IS the order (SPEC-031 D2); never sort by id. Ids are PHASE-NN (zero-padded),
+# immutable and never reused once authored — edits append, they never renumber,
+# so the id sequence goes non-monotonic after a split and that is expected.
+# Criterion ids are local to their phase, bare, and equally immutable
+# (SPEC-031 REQ-464): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance. The prefix is
+# the only mode marker; there is no mode field. Reference a criterion from
+# another phase phase-qualified (PHASE-03/EX-8) — bare EX-8 is ambiguous.
 [[phase]]
 id        = "PHASE-01"
 name      = ""

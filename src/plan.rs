@@ -6,6 +6,11 @@
 //! layer can depend on a neutral home instead of reaching *up* into the
 //! slice-CLI module. Pure — no clock, disk, or git here; disk IO
 //! (`read_plan`) stays in the slice shell and calls `Plan::parse`.
+//!
+//! Governed by `SPEC-031` (*Phase plan surface*), which owns the plan content
+//! model — the file contract, phase and criterion identity and order, the VT
+//! mandate, the governance link surface, criterion evolution, and the read.
+//! `SPEC-014` owns the surrounding fileset and scaffold, not what is in it.
 
 use serde::Deserialize;
 
