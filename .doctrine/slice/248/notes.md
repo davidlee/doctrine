@@ -74,7 +74,7 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · design reviewing rev 80, RV-346 concluded · ba07f8674
+fresh-as-of: 2026-08-08 · design reviewing rev 83, all gates but design-accepted discharged
 
 ### Produced
 
@@ -108,6 +108,15 @@ fresh-as-of: 2026-08-08 · design reviewing rev 80, RV-346 concluded · ba07f867
   title and gloss projecting the *repudiated* property (non-delivery, and the
   bidirectionality reasoning). Renamed to name readability; row 12's containment
   hazard, a second instance codex did not spot, fixed with it.
+- **Section review discharged in the adversarial lane.** Policy moved
+  `human-only` → `adversarial-only` at rev 81 on the user's direction, the basis
+  being truthfulness: this design was reviewed adversarially and not by a human,
+  so nine human attestations would have claimed a reading nobody performed.
+  `DEC-074` grants human-proxy standing. Codex then attested all nine; every
+  section reads `review=current`, `sections_outstanding_review=0` (rev 82).
+- **`review_pass` disposed `Waived`** at rev 83, the reason naming `RV-346` as
+  where the review actually happened. `Conducted` is structurally unavailable —
+  see `ISS-322`.
 - `F-38` raised and remediated (`089b082e4`) — row 12's two legs shared one
   mutant that trips both, so the readability leg was not separately gating.
   `sec-7` gains `a_readable_descriptor_one_backend_fails_row_twelve` and states
@@ -128,6 +137,13 @@ fresh-as-of: 2026-08-08 · design reviewing rev 80, RV-346 concluded · ba07f867
   was found while remediating `F-30`; it was put to codex rather than fixed
   unilaterally, and codex ruled it a *blocker* (`F-38`). A self-issued finding on
   one's own remediation is worth little; the external ruling is the value.
+- **`ISS-322`** — a design run mints its own pass `RV` on entry to `reviewing`
+  and replaces it on re-entry; nothing binds an existing `RV` to the run. So an
+  externally conducted review can never be named by `Conducted`, while the
+  obligation itself offers *"a printed prompt for an external adversarial
+  reviewer"* as a route. **Correction to the prior handover chain:** the
+  `Conducted` arm being *reachable* (`IMP-392`) does not make it *usable* for an
+  external `RV` — two different questions, only the first had been checked.
 - `ISS-320` updated (`60a4f90ef`): the `adopt_authored` envelope is snake_case
   while sibling enums are kebab-case, and the refusal names one field rather than
   the convention. Also — the recomputation's cross-check is **not** luck: validate
@@ -136,15 +152,11 @@ fresh-as-of: 2026-08-08 · design reviewing rev 80, RV-346 concluded · ba07f867
 
 ### Open
 
-- **Both remaining gates are the user's, not an agent's.** The ledger is closed,
-  so nothing else blocks them.
-  - `review_pass` reads `STALE`. Dispose it `Conducted` naming `RV-346`, whose
-    pass is concluded and carries no open blocker. The arm is reachable
-    (`IMP-392`'s blocking leg landed); `Waived` is not forced.
-  - `sections_outstanding_review` is 9 of 9, ~4900 lines. Human review is the v1
-    default and the obligation says not to invent a reviewer posture. Every
-    fingerprint moved at rev 76 and `sec-7`/`sec-8` moved again at rev 80, so no
-    earlier attestation would have survived.
+- **One act remains, and it is irreducibly the user's: `design-accepted`.**
+  Everything else on `reviewing-locked` is discharged as of revision 83. This
+  last contract is the only one about the design rather than about the process —
+  *"a design can satisfy all of them and still be the wrong design, and there is
+  no check anywhere capable of catching that."* No agent may perform it.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.
 - `ISS-319` — separable defect, fixable independently of `QUE-208`.
 - `SL-248` `OQ-1` (five-slice decomposition, provisional), `OQ-3` (three
