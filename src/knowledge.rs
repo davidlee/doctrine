@@ -4987,4 +4987,116 @@ target = \"SL-249\"
             }
         }
     }
+
+    // -----------------------------------------------------------------------
+    // VT-5 / EX-2 / EX-3 / EX-7 — the refusal catalogue (SL-249 PHASE-04 T8)
+    //
+    // Every case asserts the record's BYTES, both tiers, rather than only
+    // reading the error text back: EX-7 is "the record is left untouched", and
+    // only the bytes can say that. The message assertions pin the remedy the
+    // refusal owes its caller; the bytes are the criterion.
+    // -----------------------------------------------------------------------
+
+    /// Both authored tiers of one record, verbatim. Read as text rather than
+    /// as `Vec<u8>`: `String` equality *is* byte equality, and it is the form a
+    /// failure can be read in.
+    fn record_tiers(root: &Path, kind: RecordKind, id: u32) -> (String, String) {
+        (
+            std::fs::read_to_string(record_toml_path(root, kind, id)).expect("the toml tier"),
+            std::fs::read_to_string(record_dir(root, kind, id).join(format!("record-{id:03}.md")))
+                .expect("the prose tier"),
+        )
+    }
+
+    /// Seed one record from the shipped template, drive `knowledge edit <tail>`
+    /// against it, and assert it was refused with BOTH tiers byte-identical.
+    /// Returns the refusal message so a case can additionally pin its remedy.
+    fn refused_leaving_bytes_intact(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        tail: &[&str],
+    ) -> String {
+        let root = edit_root(scratch);
+        seed_from_template(&root, kind, id);
+        let before = record_tiers(&root, kind, id);
+
+        let mut argv = vec!["doctrine", "knowledge", "edit"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_subverb(&argv).expect_err("this invocation must be refused");
+
+        assert_eq!(
+            before,
+            record_tiers(&root, kind, id),
+            "{tail:?}: a refusal writes nothing to either tier"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+        err.to_string()
+    }
+
+    /// (a) EX-3 — the subverb names one kind, the id carries another. The
+    /// refusal names the subverb that would have worked.
+    #[test]
+    fn vt5_kind_mismatch_is_refused_naming_the_right_subverb() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-a",
+            RecordKind::Decision,
+            7,
+            &["assumption", "DEC-007", "--claim", "x"],
+        );
+        assert!(msg.contains("DEC-007"), "names the record: {msg}");
+        assert!(
+            msg.contains("knowledge edit decision"),
+            "names the subverb that would have worked: {msg}"
+        );
+    }
+
+    /// (b) EX-2 / D10 — a concept carries no facet fields, so the subverb
+    /// exists only to refuse, naming the kind-blind verb with the caller's id.
+    #[test]
+    fn vt5_concept_is_refused_naming_the_kind_blind_verb() {
+        let msg =
+            refused_leaving_bytes_intact("vt5-b", RecordKind::Concept, 3, &["concept", "CPT-003"]);
+        assert!(msg.contains("carry no facet fields"), "says why: {msg}");
+        assert!(
+            msg.contains("knowledge edit CPT-003"),
+            "names the kind-blind verb with the caller's own id: {msg}"
+        );
+    }
+
+    /// (c) No field flag is not an edit — the kind-dispatched mirror of
+    /// `run_edit`'s at-least-one-flag guard.
+    #[test]
+    fn vt5_no_field_flag_is_refused() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-c",
+            RecordKind::Decision,
+            7,
+            &["decision", "DEC-007"],
+        );
+        assert!(
+            msg.contains("requires at least one field flag"),
+            "mirrors `run_edit`'s guard: {msg}"
+        );
+    }
+
+    /// (d) An unknown `Closed` token is refused by `plan_facet_edits`, before
+    /// the document is opened at all. The known set comes from the row's own
+    /// `KNOWN` slice, so this test retypes no token (STD-001).
+    #[test]
+    fn vt5_unknown_closed_token_is_refused_before_the_document_opens() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-d",
+            RecordKind::Assumption,
+            3,
+            &["assumption", "ASM-003", "--confidence", "banana"],
+        );
+        assert!(msg.contains("ASM-003"), "names the record: {msg}");
+        assert!(msg.contains("banana"), "names the rejected token: {msg}");
+        for token in Confidence::KNOWN {
+            assert!(msg.contains(token), "lists the known token {token}: {msg}");
+        }
+    }
 }
