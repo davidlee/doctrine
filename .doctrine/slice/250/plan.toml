@@ -1,0 +1,258 @@
+# Implementation plan for SL-250 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-250"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "The merge core: ordered matcher set and the command-form axis"
+objective = """
+Generalise `HookSpec` from one matcher to an ordered matcher set and from a
+rendered command to `exec` + `args`, introduce the `CommandForm` rendering axis
+threaded to both harness arms, and collapse the suffix-strip ownership
+predicates onto one helper. A strict generalisation with N=1 as the existing
+case, so both arms' emitted JSON stays byte-identical and nothing about
+activation changes yet.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md `sec-2` is the reference, and every symbol it names resolves in the current tree — `HookSpec` (`src/boot.rs:965`), `desired_entry` (`:876`), `owned_positions` (`:1039`), `entry_is_canonical` (`:1060`), `hook_is_sole` (`:1078`), `entry_has_foreign_hook` (`:1090`), `drop_owned_hooks` (`:1108`), `hook_array_mut` (`:1127`), `plan_hook` (`:1153`), `fallback_for` (`:1224`), `annotate_fallback` (`:1579`), `install_hook_to_file` (`:1595`), `install_claude_hook` (`:1617`), `install_codex_hook` (`:1628`). Verified 2026-08-08; the design's `:1587` for `fallback_for` is its call site inside `annotate_fallback`, not its definition." },
+  { id = "EN-2", text = "`MCP_COMMAND` (`src/boot.rs:549`) already holds the literal `${DOCTRINE_BIN:-doctrine}`, so `PORTABLE_EXEC` is a rename of a live constant with three existing consumers (`desired_mcp_entry`, the `plan_mcp` comparator, `is_doctrine_mcp_entry`) — not a new literal (STD-001)." },
+  { id = "EN-3", text = "`RESOLVE_EMIT_ARGS` (`:862`) and `LEGACY_EMIT_ARGS` (`:866`) exist and `is_doctrine_emit_command` (`:932`) already recognises both, so the `SessionStart` emit spec's canonical-vs-legacy healing needs no new machinery." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`HookSpec` carries `exec: PathBuf`, `args: &'static str`, `is_ours`, `event`, and `matchers: &'static [&'static str]`. No rendered `command` field remains — rendering is a function of the spec and the form." },
+  { id = "EX-2", text = "`CommandForm { Baked, Portable }` and `command_for(spec, form)` live in `src/boot.rs`. The form is an explicit parameter of `install_hook_to_file`, `plan_hook`, `annotate_fallback` and `fallback_for`, and is NEVER re-derived from `rel_path` inside the core — the caller's decision is passed, not reverse-engineered. `CommandForm` is `pub(crate)`, because `fallback_for` is and `src/corpus.rs:521` is its SIXTH call site: widening `fallback_for` compels a change in `corpus.rs` this phase, which passes `CommandForm::Baked` until PHASE-02 gives it a scope to ask." },
+  { id = "EX-3", text = "`install_codex_hook` passes `CommandForm::Baked` on its own file's gitignored status (`.gitignore:9`, `/.codex`), not on any Claude-settings concept. `install_claude_hook` also passes `CommandForm::Baked` this phase, because it still writes `settings.local.json`; PHASE-02 replaces that one expression. No Claude-settings scope type exists yet." },
+  { id = "EX-4", text = "`desired_entries(spec, form)` emits one entry per matcher in matcher order, each carrying the one rendered command. `fallback_for` renders the whole set, so a malformed-settings repair snippet is complete rather than one entry of it." },
+  { id = "EX-5", text = "`plan_hook`'s no-write short-circuit is a positional zip of `owned_positions` against `spec.matchers` — same length, same order, each canonical and sole. The write branch drops every owned hook and inserts the set contiguously at the first owned slot (`ins + k`), or appends at the tail when nothing is owned. `drop_owned_hooks`, `owned_positions`, `entry_has_foreign_hook`, `hook_is_sole` and `hook_array_mut` are unchanged." },
+  { id = "EX-6", text = "`is_doctrine_command(cmd, args)` is the shared suffix-strip ownership helper, and `is_doctrine_sync_command`, `is_doctrine_create_fork_command` and `is_doctrine_emit_command` become one-liners over it. `is_doctrine_boot_command` is deliberately LEFT ALONE: its `rsplit_once(char::is_whitespace)` form (`:891-896`) accepts a tab or newline separator where the helper requires a literal single space, so collapsing it would be a behaviour change, not a refactor." },
+  { id = "EX-7", text = "`is_doctrine_program` gains exactly one arm, `p == PORTABLE_EXEC`. It is a strict widening — `Path::new(\"${DOCTRINE_BIN:-doctrine}\").file_name()` yields the whole token, never `doctrine` — so the two arms cannot collide and no foreign command becomes owned." },
+  { id = "EX-8", text = "Constants are named per STD-001: `SETTINGS_LOCAL_REL` (renamed from `SETTINGS_REL`), `SETTINGS_PROJECT_REL`, `PORTABLE_EXEC` (renamed from `MCP_COMMAND`), the five `EVENT_*` names replacing inline event literals, and the matcher-set slices `SESSION_MATCHERS` / `SESSION_MATCHERS_CODEX` / `WORKTREE_CREATE_MATCHERS`." },
+  { id = "EX-9", text = "`HookSpec::boot_emit(exec, matchers)` takes its matcher set; the Codex caller passes `SESSION_MATCHERS_CODEX`. NO new production constructors land this phase — the four new specs arrive in PHASE-04 with their caller, so this phase introduces no `dead_code` allowance. Multi-matcher coverage is driven by a test-local `HookSpec`, which also keeps the core's tests independent of the registry." },
+  { id = "EX-10", text = "`HookSpec::create_fork` and `HookSpec::boot` keep their existing `expect(dead_code)` attributes — nothing ships them until PHASE-04 (`create_fork`) or ever (`boot`, `DEC-162`)." },
+]
+
+verification = [
+  { id = "VT-1", expects = "the matcher set emits, is idempotent, and heals: a four-matcher spec into empty settings yields four entries in matcher order; re-planning returns RefreshOutcome::None with no JSON; deleting one of the four rewrites all four; and an owned entry on a retired matcher is recognised by command-only ownership and rewritten onto the canonical set", test_file = "src/boot.rs", keywords = ["desired_entries", "plan_hook_emits_one_entry_per_matcher", "plan_hook_is_a_no_op_on_the_canonical_set", "plan_hook_heals_a_partial_hand_edit", "plan_hook_heals_a_stale_matcher"], waived = false },
+  { id = "VT-2", expects = "never-clobber survives N>1: foreign entries before and after the owned block survive and the set inserts at the first owned slot, and an entry carrying both an owned and a foreign hook keeps the foreign one with the set inserted after it", test_file = "src/boot.rs", keywords = ["plan_hook_preserves_foreign_entries_around_a_matcher_set", "plan_hook_preserves_a_foreign_hook_sibling"], waived = false },
+  { id = "VT-3", expects = "the N=1 gate, asserted rather than assumed: HookSpec::sync produces byte-identical JSON to the pre-slice output, and install_codex_hook under CommandForm::Baked emits a byte-identical .codex/hooks.json", test_file = "src/boot.rs", keywords = ["CommandForm", "single_matcher_specs_are_unchanged", "the_codex_arm_renders_the_baked_form"], waived = false },
+  { id = "VT-4", expects = "ownership spans both command forms — is_doctrine_program recognises the portable literal and an abspath including the `/proc/self/exe` ` (deleted)` poison suffix — and the shared suffix-strip helper backs the collapsed predicates", test_file = "src/boot.rs", keywords = ["PORTABLE_EXEC", "is_doctrine_command", "ownership_spans_both_command_forms"], waived = false },
+  { id = "VA-1", expects = "behaviour-preservation class (i): no file under tests/ is edited by this phase. `plan_mcp`'s tests change in the MCP_COMMAND → PORTABLE_EXEC identifier only, with no assertion rewritten; `check_spawn_seam_symmetry_passes_the_shipped_hooks_config` (src/doctor_checks.rs:1983) passes unmodified; `is_doctrine_boot_command` is textually unchanged. Any red here is a real narrowing of the merge core, not an expected consequence." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Scope selection: the sticky key and the scope-selected write"
+objective = """
+Add `ClaudeSettingsScope` and its sticky `[install] claude-settings-scope` key,
+resolve it INSIDE `install_claude_hook` rather than at its call sites, point
+both the hook write and `install_baseref` at the selected file, flip the default
+to `Project` with the portable command form that a tracked file requires — and
+rewrite the enumerated class-(ii) assertions the flip knowingly invalidates,
+and only those.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: `CommandForm` is a parameter of the merge core and `install_claude_hook` passes `CommandForm::Baked`. This phase replaces that one expression with the scope's form, so the wire already exists and nothing threads further." },
+  { id = "EN-2", text = "`InstallConfig` (`src/install_config.rs:21`) carries `repo` under `#[serde(default)]` with NO container `rename_all`, and `DispatchConfig` (`src/dispatch_config.rs:50-51`) carries `#[serde(rename_all = \"kebab-case\", default)]` — the precedent that makes `[dispatch] preferred-subprocess-harness` bind. Neither `InstallConfig` nor `DoctrineToml` sets `deny_unknown_fields`, so a misbound key is silently discarded. Verified 2026-08-08." },
+  { id = "EN-3", text = "ADR-001 layering is authoritative and encoded: `install_config = \"leaf\"` with out=0, `boot = \"command\"` (`.doctrine/adr/001/layering.toml:34`, `:90`). `install_config` therefore cannot name a type from `boot` — that is both a tier inversion and a cycle, since `boot` already reaches `install_config` through `dtoml`. See plan.md § The one departure from design sec-2." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`ClaudeSettingsScope { Project (#[default]), Local }` lives in `src/install_config.rs` with `#[serde(rename_all = \"kebab-case\")]` on the ENUM (governing the values `project` / `local`) and `#[serde(rename_all = \"kebab-case\", default)]` on the CONTAINER `InstallConfig` (governing the field name `claude-settings-scope`). Both attributes are present — the enum one alone leaves the documented spelling silently discarded." },
+  { id = "EX-2", text = "`ClaudeSettingsScope::sibling()` is defined in `install_config` (pure vocabulary, no path knowledge). The two mappings that need a `boot` type or a `boot` constant — `settings_rel(scope) -> &'static str` and `command_form(scope) -> CommandForm` — BOTH live in `src/boot.rs` beside the path constants and the core that consumes them. `install_config` gains no out-edge and stays out=0." },
+  { id = "EX-3", text = "`install_claude_hook` resolves the scope from `load_doctrine_toml(root)` ITSELF and returns `HookWrite { scope, written }`. The scope is not a parameter: `run_sync_install` is the routine flagless caller `DEC-163` argues about, and a parameter it could omit is the defect. The cost is one small TOML read per spec, deliberately accepted." },
+  { id = "EX-4", text = "`install_baseref(root, scope, dry_run)` writes `worktree.baseRef` into the SAME file as the hooks, so doctrine authors one Claude settings file per install rather than two. The value `\"head\"` is project semantics with nothing per-machine in it, so it is safe in a tracked file." },
+  { id = "EX-5", text = "`RefreshReport.hook: RefreshOutcome` becomes `hooks: Vec<RefreshOutcome>` and the struct gains `claude_scope: Option<ClaudeSettingsScope>` — `None` on the Codex arm, widened to a tuple with `SweepReport` in PHASE-03. `wire`'s `match report.hook { … }` becomes the same match inside a `for`, with the four `RefreshOutcome` arms and their message strings unchanged, so the Codex arm's output stays byte-identical." },
+  { id = "EX-6", text = "`run_sync_install` (`src/corpus.rs:506`) matches `write.written` for its four existing arms and passes `write.scope`'s form to `fallback_for` at `:521`. `memory sync install` inherits the scope and the command form without electing to." },
+  { id = "EX-7", text = "The class-(ii) sites the default flip invalidates are rewritten to `SETTINGS_PROJECT_REL` — NOT mechanically renamed to `SETTINGS_LOCAL_REL`, which would land red with the wrong constant: `install_claude_hook_wires_boot_and_sync_as_two_entries` (`src/boot.rs:4180`, reads `:4190`, `:4204`), `install_claude_hook_sync_respects_dry_run` (`:4216`, `:4223`), the create-fork case (`:4250`), `wire_adds_import_and_hook_then_is_idempotent` (`:4755`, `:4766`, `:4782`, `:4797`), the malformed-settings case (`:4809`), the hymns/boot case (`:5523`), the three and only three `out.hook` assertions (`:3916`, `:3924`, `:3953`), and the `worktree.baseRef` assertions in `:3904`. The design cites the last two by line only; they are `wire_isolates_one_harness_failure` (`:4802`, reads `:4809`) and `claude_hook_unchanged_after_dry_refactor` (`:5514`, reads `:5523`) — named here because PHASE-01's renames move every line number in this list." },
+  { id = "EX-8", text = "`install_refresh_writes_settings_and_respects_dry_run`'s `commands(&json).is_empty()` assertion is NOT touched here. The Claude arm still writes no hooks until PHASE-04, which is where that assertion inverts. Touching it now would move an expected red off the phase that causes it." },
+  { id = "EX-9", text = "`:3926`, `:3948` (`out.mcp`) and `:5303` (`out.mcp_extension`) are deliberately NOT edited — neither field changes shape. The class-(ii) enumeration is exact, because a table that exists so an uncited red reads as class (i) is worthless if it is loose." },
+  { id = "EX-10", text = "ONE class-(ii) site outside `src/boot.rs`, which design.md `sec-7`'s table does not reach because it is scoped to that file: `sync_install_wires_a_session_hook_no_boot_hook_settings_wired` (`tests/e2e_memory_sync.rs:154`) reads `.claude/settings.local.json` at `:159` and asserts the sync hook landed there with `.expect(\"settings written\")` at `:189`. `run_sync_install` writing to the project file makes that PANIC, not merely fail. It is rewritten to the scope-selected file. Found by re-grepping `tests/` for both settings paths on 2026-08-08; `tests/e2e_worktree_import.rs:333` / `:635` only SEED settings files as fixtures and are unaffected." },
+]
+
+verification = [
+  { id = "VT-1", expects = "the key binds from its documented spelling, written against PARSED TOML TEXT rather than the constructed enum: `[install]\\nclaude-settings-scope = \"local\"` yields Local, an absent key and an absent [install] table both yield Project, and the underscore spelling does NOT bind (so a serde alias cannot be used to 'fix' a missing container rename_all)", test_file = "src/install_config.rs", keywords = ["ClaudeSettingsScope", "claude_settings_scope", "rename_all", "absent_key_defaults_to_project_scope", "scope_key_binds_from_its_documented_spelling"], waived = false },
+  { id = "VT-2", expects = "the scope selects the file for both writers: `local` puts hooks and worktree.baseRef in .claude/settings.local.json and `project` puts both in .claude/settings.json, so doctrine authors one Claude settings file rather than two", test_file = "src/boot.rs", keywords = ["settings_rel", "SETTINGS_PROJECT_REL", "scope_key_selects_the_settings_file", "baseref_follows_the_scope"], waived = false },
+  { id = "VT-3", expects = "the command form follows the file's tracking status in both directions — the tracked project file carries ${DOCTRINE_BIN:-doctrine} and no absolute exec path anywhere, the gitignored local file keeps the baked abspath — which is SL-195's INV-1 (no absolute host path in any tracked file) asserted for hooks", test_file = "src/boot.rs", keywords = ["project_scope_writes_the_portable_command", "local_scope_keeps_the_baked_path"], waived = false },
+  { id = "VT-4", expects = "memory sync install honours the scope key, driven through run_sync_install rather than install_claude_hook — so it proves the resolution-inside-the-installer decision rather than restating it", test_file = "src/corpus.rs", keywords = ["run_sync_install", "HookWrite", "memory_sync_install_honours_the_scope_key"], waived = false },
+  { id = "VA-1", expects = "behaviour-preservation class (i) still holds under a knowingly-red class (ii): the Codex arm's emitted .codex/hooks.json is byte-identical, `check_spawn_seam_symmetry_passes_the_shipped_hooks_config` passes unmodified, and `plan_mcp`'s tests are untouched beyond PHASE-01's rename. Every rewritten assertion is on the EX-7 list; any red outside it is a real narrowing." },
+  { id = "VA-2", expects = "`install_config` remains a pure leaf with out=0 — `tests/architecture_layering.rs` passes with no new edge and no entry added to `.doctrine/adr/001/layering.toml` for it. This is the criterion the design's literal placement of `command_form()` would fail." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "The abandoned-scope sweep and the shared scope report"
+objective = """
+Add the drop-only sweep of the scope being left — gated on the target write
+actually landing, reported as a per-spec `EvictOutcome` folded into a per-file
+`SweepReport` that prints every true fact rather than the most severe one — and
+the shared announcement writer both install paths call, so the slice's one
+destructive write is never silent on either path.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: `install_claude_hook` resolves the scope and returns `HookWrite`, and `ClaudeSettingsScope::sibling()` exists. This phase adds the `evicted` field to `HookWrite` and widens `RefreshReport.claude_scope` to `Option<(ClaudeSettingsScope, SweepReport)>`." },
+  { id = "EN-2", text = "`plan_hook` turns malformed JSON and a wrongly-typed `hooks` / `hooks.<event>` into `RefreshOutcome::PrintedFallback` (`src/boot.rs:1159-1168`, `:1170-1178`), an Ok value carried out through `install_hook_to_file` (`:1611`). A bare `?` therefore CANNOT see a failed write — the guard must match on the value. Verified 2026-08-08." },
+  { id = "EN-3", text = "`BaseRefOutcome::Conflict(String)` (`src/boot.rs:1333-1340`) already exists and already reports a non-`head` override left untouched, and Claude settings precedence is explicit — Local 'overrides project and user settings' (`docs/claude/settings.md:56-57`), with only permission rules merging. Verified 2026-08-08." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`parse_settings(existing_json) -> Option<Value>` is extracted and shared by both planners: absent or empty yields an empty object, malformed yields `None`. This is what keeps `plan_evict` from being a second copy of `plan_hook`'s prologue." },
+  { id = "EX-2", text = "`plan_evict(existing_json, spec)` drops this spec's owned entries and NEVER inserts; `evict_hook_from_file` is `install_hook_to_file` with `plan_evict` in place of `plan_hook`, writes atomically through `fsutil::write_atomic`, and creates no file that does not exist. Neither takes a `CommandForm` — eviction is by ownership predicate and ownership is command-only (`DEC-161`), so both command forms are owned in either file, which is exactly what makes the scope switch heal rather than orphan." },
+  { id = "EX-3", text = "`EvictOutcome { Nothing, Removed(usize), Unreadable, NotAttempted }` — four states. `NotAttempted` ('we chose not to sweep') is distinct from `Nothing` ('there was nothing to sweep') and from `Unreadable` ('we could not'); an ABSENT sibling parses to an empty object and reaches `Nothing`, never `Unreadable`." },
+  { id = "EX-4", text = "The sweep runs ONLY when this spec's write to the target landed: `Wired` / `Refreshed` / `None` sweep, `PrintedFallback` yields `NotAttempted`. Ordering write-before-evict does not buy this on its own — the sibling reads fine and the sweep would SUCCEED, which is what makes it destructive. This guard is what stops one malformed committed settings file producing zero activation." },
+  { id = "EX-5", text = "`SweepReport { removed: usize, unreadable: bool, skipped: bool }` — a count and two flags, folded by `absorb`. NO state is absorbing: `Unreadable` is a fact about one spec's `hooks.<event>`, not about the file, so a run can remove entries AND fail to sweep another event AND skip a third, and all three print." },
+  { id = "EX-6", text = "`write_scope_report(out: &mut dyn Write, tag, scope, swept)` is the single writer of the scope announcement and the sweep rider, called by BOTH `wire`'s Claude arm (before its hook lines, with the folded report) and `run_sync_install` (with its single `HookWrite` lifted through `SweepReport::from`). It takes the handle its callers already hold — `print_stdout` is denied (`Cargo.toml:228`) and no new output surface is created." },
+  { id = "EX-7", text = "The announcement names the target file and the `[install] claude-settings-scope` key that changes it, and prints before any hook line — this is what replaces the `--scope` flag `DEC-163` drops, so it is a criterion, not a nicety. The rider prints one line per TRUE `SweepReport` fact, and the skipped line reads as the warning it is: the activation is still in the other file and it is the only copy." },
+  { id = "EX-8", text = "`install_baseref` inspects the sibling for a `worktree.baseRef` and the report names the stranded file, value and remedy. The key is NEVER swept — eviction is spec-keyed over `hooks.<event>` arrays and `worktree.baseRef` is a top-level key with no spec, and extending a destructive path to non-hook keys is the wrong trade. No-clobber survives, so the report is the whole of the signal, and it matters because local precedence means the stranded value still governs where the Claude dispatch arm forks from." },
+]
+
+verification = [
+  { id = "VT-1", expects = "the R10 behavioural criterion and its safety contracts: installing at project scope removes the owned entry seeded in settings.local.json, leaves it present in settings.json, and reports the count; a foreign hook in the abandoned file survives; a stale-matcher owned entry there is still evicted (the healing property, where an orphan would be unreachable by any later install); and the abandoned file only ever shrinks, with a sweep of an absent sibling creating nothing", test_file = "src/boot.rs", keywords = ["plan_evict", "EvictOutcome", "writing_one_scope_evicts_the_other", "eviction_spares_foreign_entries", "eviction_heals_a_stale_matcher_in_the_abandoned_file", "eviction_never_inserts"], waived = false },
+  { id = "VT-2", expects = "a failed sweep is reported, not silent, and the fold is not absorbing: malformed JSON and a wrongly-typed hooks.<event> are both left untouched and both yield Unreadable with the file named; and one sibling whose hooks.SessionStart holds an owned entry while hooks.SubagentStart is a string yields removed == 1 AND unreadable == true, with both rider lines printed", test_file = "src/boot.rs", keywords = ["SweepReport", "absorb", "plan_evict_is_fail_soft_on_malformed_json", "a_failed_sweep_is_reported_not_silent", "a_partly_successful_sweep_reports_both_facts"], waived = false },
+  { id = "VT-3", expects = "the F-12 criterion, and the one that would go red without the guard: with a malformed .claude/settings.json and a well-formed .claude/settings.local.json carrying the owned entries, installing at Project scope leaves the local entries SURVIVING, yields EvictOutcome::NotAttempted, and says it did not sweep and why. The failure this catches is a SUCCESSFUL sweep", test_file = "src/boot.rs", keywords = ["NotAttempted", "a_failed_target_write_does_not_trigger_the_sweep"], waived = false },
+  { id = "VT-4", expects = "a scope switch heals rather than orphans, and a stranded override is reported: an abspath entry in the file now being written is owned-but-not-canonical so it is rewritten to the portable form, an abspath entry in the abandoned file is evicted; and a seeded worktree.baseRef = \"main\" in the abandoned file is NOT removed while the project file gets \"head\" and the report names the stranded value and the remedy", test_file = "src/boot.rs", keywords = ["a_scope_switch_rewrites_the_command_form", "a_stranded_baseref_override_is_reported"], waived = false },
+  { id = "VT-5", expects = "the F-2 criterion: run_sync_install with a seeded owned entry in the sibling emits both the scope announcement and the eviction rider into its captured output — without this the slice's one destructive write is silent on the highest-frequency install path and every other test still passes", test_file = "src/corpus.rs", keywords = ["write_scope_report", "memory_sync_install_reports_scope_and_eviction"], waived = false },
+  { id = "VA-1", expects = "never-clobber is untouched on the destructive path: eviction is gated by exactly the predicate that protects foreign entries during a normal merge, `plan_evict` shares `owned_positions` and `drop_owned_hooks` with `plan_hook` rather than reimplementing either, and no new ownership predicate is introduced for the sweep." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The seven-spec registry: wire the Claude arm"
+objective = """
+Add the four new specs and their predicates, build `claude_hook_specs` as the
+single enumeration of what doctrine activates, and drive it from
+`install_refresh`'s Claude arm — eleven settings entries across five events
+where the arm has written none since SL-152 PHASE-06. This is the phase where
+activation flips and every golden that asserts the opposite inverts.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 through PHASE-03 landed: the matcher set, the command form, the scope dial, the sweep and the shared report all exist, so this phase adds specs and a loop rather than mechanism." },
+  { id = "EN-2", text = "`plugins/doctrine/hooks/hooks.json` carries exactly TEN entries across five events, every command already `${DOCTRINE_BIN:-doctrine} <verb>` with `${CLAUDE_PLUGIN_ROOT}` appearing nowhere. Verified 2026-08-08 by parsing the file. The ten collapse onto SIX specs; `sync` is the seventh because it shares the file, the scope dial and the sweep, having been direct-written since SL-018." },
+  { id = "EN-3", text = "The `SessionStart` emit spec writes the CANONICAL CURRENT command `prompt resolve --role orchestrator` on `startup|clear`, not the plugin's stale `boot --emit` on `*`. `is_doctrine_emit_command` (`src/boot.rs:932-934`) already recognises both `RESOLVE_EMIT_ARGS` and `LEGACY_EMIT_ARGS`, so the stale entry retires by the healing property with no migration step." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "Four new `HookSpec` constructors — `nominate`, `denominate`, `pretooluse`, `memory_surface` — and their four ownership predicates, each a one-liner over PHASE-01's `is_doctrine_command`. `HookSpec::create_fork`'s `expect(dead_code)` comes off: it acquires a production caller here. `HookSpec::boot` keeps its own — nothing ships it (`DEC-162`)." },
+  { id = "EX-2", text = "`claude_hook_specs(exec) -> Vec<HookSpec>` is the single enumeration, in emission order: `boot_emit` (SESSION_MATCHERS), `sync`, `create_fork`, `nominate`, `denominate`, `pretooluse`, `memory_surface`. Building it as a function rather than seven scattered calls is what makes IMP-407's conformance check cheap." },
+  { id = "EX-3", text = "`install_refresh`'s Claude arm loops the registry, folding each `HookWrite` into `hooks` and `swept`, then calls `install_baseref(root, scope, dry_run)` and the unchanged `install_mcp`. A mid-loop failure aborts the arm via `?` — the correct shape, since every write is atomic and independently idempotent and a re-run completes the set — but carries `with_context` naming the spec that failed and how many landed before it, because the accumulated report is dropped with the aborted arm and the interim state straddles both files." },
+  { id = "EX-4", text = "Eleven settings entries land in the scope-selected file across five events: SessionStart 2, WorktreeCreate 1, SubagentStart 1, SubagentStop 1, PreToolUse 6. Eleven is the number a human counts in `/hooks`; seven is the spec count, and a criterion written against seven would pass a four-entries-short install." },
+  { id = "EX-5", text = "`install_refresh_writes_settings_and_respects_dry_run`'s `commands(&json).is_empty()` assertion (`src/boot.rs:3904`) INVERTS — it is not renamed. Its comment ('no boot hook wired for Claude (ships via plugin)') goes with it." },
+  { id = "EX-6", text = "`tests/e2e_claude_install.rs`'s three 'ships via plugin' assertions (`:170`, `:174`, `:178`) invert to assert the entries are present in the scope-selected file. The SubagentStart assertion changes meaning: the retired SL-152 stamp hook stays absent, but the `worktree nominate` entry is now present." },
+  { id = "EX-7", text = "`plugins/doctrine/hooks/hooks.json` is NOT edited and `SpawnSeamSymmetry` (`src/doctor_checks.rs:673`) needs no change — its input survives this slice as the published plugin's payload." },
+]
+
+verification = [
+  { id = "VT-1", expects = "the registry is internally safe: no predicate matches another spec's command, asserted over claude_hook_specs itself rather than by hand so an eighth spec cannot join unchecked — non-obvious now that two specs share SessionStart and two share PreToolUse — and each of the four new arg strings is recognised with a spaced program path and with the `/proc/self/exe` ` (deleted)` poison suffix", test_file = "src/boot.rs", keywords = ["claude_hook_specs", "predicates_are_pairwise_disjoint", "is_doctrine_command_recognises_each_new_spec"], waived = false },
+  { id = "VT-2", expects = "every one of the eleven wired entries carries ${DOCTRINE_BIN:-doctrine} and NO entry contains the test's absolute exec path — SL-195's INV-1 asserted across the whole set rather than the single spec PHASE-02 could reach", test_file = "src/boot.rs", keywords = ["every_wired_entry_carries_the_portable_command"], waived = false },
+  { id = "VT-3", expects = "a real install wires eleven entries across five events into the scope-selected settings file — SessionStart 2, WorktreeCreate 1, SubagentStart 1, SubagentStop 1, PreToolUse 6 — where the arm previously wired none, with the pre-slice 'ships via plugin' assertions inverted rather than deleted", test_file = "tests/e2e_claude_install.rs", keywords = ["install_wires_eleven_hook_entries_across_five_events", "SubagentStop", "WorktreeCreate", "PreToolUse"], waived = false },
+  { id = "VA-1", expects = "the Codex arm's output is still byte-identical and `check_spawn_seam_symmetry_passes_the_shipped_hooks_config` still passes unmodified, with `plugins/doctrine/hooks/hooks.json` untouched in the diff. The registry and the shipped manifest now diverge only in the SessionStart emit command's canonical-vs-legacy form — un-policed drift, already live, and IMP-407's Leg 2 rather than this slice's." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Restore the Claude skills channel"
+objective = """
+Extract the byte-identical link-reconcile trichotomy into `reconcile_link`, and
+restore the binary-sourced canonical skills tree plus proven-ownership symlinks
+as `install_skills_direct`, parameterised over link dirs — the channel
+SPEC-010 responsibilities 3–6 already describe, deleted at `347197e8` with no
+amendment. Sequenced BEFORE the plugin retirement so the repo is never left with
+no skills channel at all.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "Every helper the channel needs is live in `src/install.rs` because the agents and workflows legs use them: `install_base` (`:1816`), `relative_path` (`:1859`), `relative_target` (`:1877`), `ForeignReason` (`:1883`), `Link` (`:1892`), `classify_link` (`:1918`), `staging_path` (`:1954`), `write_link` (`:1964`), `foreign_reason` (`:1981`), `Entry` (`:1670`), `discover` (`:1731`), `select_for_install` (`:2079`), `PluginAssets` (`:22`). Verified 2026-08-08." },
+  { id = "EN-2", text = "The deleted orchestration is recoverable verbatim at `git show 347197e8^:src/skills.rs` — the commit is reachable in this repo (verified 2026-08-08). Only `install_for_claude`, `claude_dir`, `canonical_dir`, `claude_links`, `materialise_canonical`, `copy_skill` and the `Canonical` struct went." },
+  { id = "EN-3", text = "`install/manifest.toml:46` already lists `.doctrine/skills/*`, so the install manifest's gitignore leg lands the entry and NO `ensure_gitignored` call is needed. Verified 2026-08-08." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`reconcile_link(name, dest, target, out)` replaces the byte-identical thirteen-line blocks at `src/install.rs:2179-2191` (agents) and `:2279-2291` (workflows). Skills is the third caller, not a fourth copy. The boundary is deliberate (`DEC-166`): no materialise callback, no trait, and no absorption of the agents leg's claude/pi dir branching — the three legs' materialise phases are genuinely unlike, and a generic driver would absorb precisely the part that varies." },
+  { id = "EX-2", text = "`install_skills_direct(root, selected, link_dirs, global, dry_run, out)` refreshes the canonical tree once per entry, then loops `link_dirs` reconciling one link each. `skills_canonical_dir` (`.doctrine/skills` under `install_base`) and `claude_skills_dir` (`.claude/skills`) are the two path helpers, and the latter is the only Claude-specific element in the leg." },
+  { id = "EX-3", text = "The name is `install_skills_direct`, not `install_for_claude`: once `link_dirs` is a parameter nothing in the body is Claude-specific, and a Claude-named function would mislead IMP-406's author. `run()`'s Claude branch calls it with ONE link dir; shipping `.agents/skills` as a second target is IMP-406's call-site change, not a mechanism change." },
+  { id = "EX-4", text = "`materialise_canonical` and `copy_skill` return VERBATIM — `.tmp-<id>` staging, remove-then-rename swap, and `symlink_metadata`-not-`exists` leftover clearing are settled SPEC-010 responsibility-5 reasoning and are not re-derived." },
+  { id = "EX-5", text = "The recovered `Canonical` struct does NOT return (it carried a plan between a `build_plan`/`execute` split the consolidated `install::run()` no longer has), and neither does the up-front `claude_links` classify — classification happens once, at mutation time, which is what `reconcile_link` does and what the agents and workflows legs already do." },
+  { id = "EX-6", text = "The restored code lands in `src/install.rs`, NOT a new module: every helper above is private to that file, and a `skills_claude` module would widen six private items to `pub(crate)` to buy separation for ~150 lines. Splitting `install.rs` is a distinct chore over the whole file, not a boundary to draw around one leg." },
+  { id = "EX-7", text = "`ensure_gitignored`'s doc-comment (`src/install.rs:1482`) stops claiming `skills install` reuses it and names `install/manifest.toml` instead, so the next reader does not go looking for a call site that should not exist." },
+]
+
+verification = [
+  { id = "VT-1", expects = "the channel materialises and links: a canonical tree at .doctrine/skills/<id> and a RELATIVE symlink at .claude/skills/<id> whose value is ../../.doctrine/skills/<id>, and a second run relinks without churn", test_file = "src/install.rs", keywords = ["install_skills_direct", "skills_canonical_dir", "install_skills_direct_materialises_and_links", "install_skills_direct_is_idempotent"], waived = false },
+  { id = "VT-2", expects = "proven ownership holds on both edges: a real directory at the link path is kept and warned rather than replaced, and a link whose value equals our target but whose canonical is missing is healed rather than reclassified as foreign", test_file = "src/install.rs", keywords = ["install_skills_direct_keeps_a_foreign_skill_dir", "install_skills_direct_heals_a_dangling_owned_link"], waived = false },
+  { id = "VT-3", expects = "the link phase is a real loop, driven with TWO link dirs — this slice ships one, and an untested loop driven with N=1 is indistinguishable from a hard-coded target, which is exactly the deliverable OQ-9 scopes for IMP-406", test_file = "src/install.rs", keywords = ["reconcile_link", "install_skills_direct_links_every_target_dir"], waived = false },
+  { id = "VA-1", expects = "SPEC-010 responsibilities 3–6 confirmed TRUE of the restored code — derived canonical .doctrine/skills/<id> tree, relative agent symlink reconciled by proven ownership, .tmp-<id> staging with remove-then-rename, and the self-enforced .doctrine/skills/* gitignore — with file/line citations transcribed into the reconciliation brief so the evidence is re-derivable at audit. DEC-171 makes this a conformance claim, not a REV amendment: SPEC-010 does not enter the REV." },
+  { id = "VA-2", expects = "the extraction is proven by the incumbent suites: the agents and workflows legs' existing link tests pass UNCHANGED. A changed assertion there is a defect in the extraction, not a licensed edit." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Retire the plugin activation, and document the cutover"
+objective = """
+Delete doctrine's automated marketplace and plugin-install steps with their
+transitive closure and their `--dev` flag, correct the four claims the
+retirement falsifies, and ship the activation, scope-key, command-form, cutover
+and escape-hatch documentation the removal makes load-bearing. Last, because
+activation and skills must both come from direct writes before the plugin path
+goes — order toward the degraded state, never the absent one.
+"""
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 and PHASE-05 landed, so both direct-write channels are live before the plugin path is removed. `DEC-167`'s ordering argument applied at phase granularity: between PHASE-04 and this phase every hook fires twice, which is the intended cost; the reverse order would leave an interval with no activation, and absence is the more dangerous state because `isolation: worktree` teardown is conditional on `WorktreeCreate` firing." },
+  { id = "EN-2", text = "The deletion inventory and its transitive closure are enumerated in design.md `sec-4`, and every symbol resolves at the cited line — `claude_plugin_install` (`src/install.rs:619`), `MarketplaceManifest` (`:672`), `ManifestPlugin` (`:679`), `select_plugin` (`:687`), `enable_key` (`:698`), `MARKETPLACE_MANIFEST_REL` (`:703`), `select_marketplace_source` (`:713`), `claude_list_has` (`:765`), `parse_registered_source` (`:796`), `source_matches` (`:830`), `marketplace_action` (`:843`), `refresh_failure_is_fatal` (`:858`), `InstallArgs.dev` (`:187`). Verified 2026-08-08. The workspace denies `dead_code`, so an implementer working a partial inventory ships a red gate, not a stale helper." },
+  { id = "EN-3", text = "`publication/manifest.toml` is the registry for published reference docs — `using-doctrine.md` is registered there as `address = \"reference/using-doctrine.md\"` (`:866-873`). Reference docs are published, not projected (ADR-019), so a new one is an `[[entry]]` there plus the file under `install/`, not a projected copy on disk." },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "`src/install.rs` loses the `run()` Claude branch's marketplace and plugin steps (`:445`–`:518`) with their prompts, the trailing 'Claude Code requires the doctrine plugin' reminder and its `skipped_marketplace` / `skipped_plugin` tracking, the twelve helper and type items EN-2 enumerates plus `claude_plugin_add_marketplace`, `claude_plugin_update`, `claude_plugin_has`, `claude_cmd_stdout`, `MarketplaceSource` / `as_arg`, `RegisteredSource` and `MarketplaceAction`, and the `--dev` manifest precondition checks." },
+  { id = "EX-2", text = "Their nine tests go with them: `enable_key_is_qualified_doctrine` (`:3031`), `select_plugin_picks_by_name_not_first` (`:3037`), `plugin_presence_is_exact_not_substring` (`:3059`), `marketplace_presence_is_exact_token` (`:3075`), `source_default_is_github_slug` (`:3084`), `parse_registered_source_reads_directory_and_github` (`:3148`), `parse_registered_source_absent_or_sibling_is_none` (`:3163`), `marketplace_action_add_skip_refresh` (`:3173`), `refresh_failure_is_fatal_only_on_refresh` (`:3210`), and the `--dev` precondition cases." },
+  { id = "EX-3", text = "`InstallArgs.dev` (`src/install.rs:187`) and the `--dev` flag (`src/commands/cli.rs:126`, threaded at `:1500` / `:1511`) are removed — its sole consumer was `select_marketplace_source`, and a flag selecting between two sources for a registration nobody performs is worse than no flag. `DOCTRINE_MARKETPLACE` has no remaining reader (its three were `:457`, `:699`, `:751`, all deleted). `[install] repo` SURVIVES: `delegate_argv` on the npx path still consumes it." },
+  { id = "EX-4", text = "The four claims the retirement falsifies are corrected, not left to be found later: the dead 'Hooks plugin leg' banner (`src/install.rs:2296-2301`) is DELETED — there is no code under it and after this slice it asserts the opposite of the slice's name; `src/install_config.rs:2-8` and its mirror `src/dtoml.rs:44-45` stop describing `[install]` as parameterising only the printed delegation instructions; `install_claude_hook`'s doc (`src/boot.rs:1614-1616`) stops naming `settings.local.json`; and `HookSpec`'s (`:960-964`) and `plan_hook`'s (`:1147-1152`) docs stop describing a `SessionStart` hook." },
+  { id = "EX-5", text = "`plugins/`, `plugins/doctrine/hooks/hooks.json`, `.claude-plugin/marketplace.json` and `SpawnSeamSymmetry` are untouched — the tree stays the canonical skill source (IMP-400 `OQ-1`), the manifest stays the published plugin's payload and `R9`'s escape hatch, and the check's input survives so it needs no change." },
+  { id = "EX-6", text = "`install/` acquires a published reference doc covering: which file doctrine writes and that Claude Code hot-reloads settings files (hooks included) so no restart is needed; the `[install] claude-settings-scope` key, its two values, its default and why a collaborator on a client project might set `local`; the command form, why the committed scope writes `${DOCTRINE_BIN:-doctrine}` (no host path in a tracked file — SL-195, POL-002), what to do when `doctrine` is off the harness PATH, and the stated POSIX-shell boundary; the two-act cutover note in the prescribed order (install first, THEN disable the plugin); the `R10` sweep description — doctrine-owned hook entries only, in the other of doctrine's two settings files, never anything foreign; and `R9`'s escape hatch for a `strictPluginOnlyCustomization` environment, framed honestly as FEWER failure modes rather than a subset, since direct-write sheds two plugin-only modes and ACQUIRES that one." },
+  { id = "EX-7", text = "The scope key is mirrored into `install/doctrine.toml.example` (`:73`, which already carries a commented `[install]` block) and `install/doctrine.toml` (`:24`), and the new reference doc is registered in `publication/manifest.toml` as a `kind = \"reference\"` entry." },
+  { id = "EX-8", text = "`tests/e2e_skills_symlink.rs`'s three 'no manual skills symlink' assertions (`:57`-`:71`) and its plugin-summary assertion (`:53`) invert to assert the direct channel's output, and `tests/e2e_claude_install.rs`'s 'register marketplace + install plugin' summary assertion (`:196`) goes." },
+]
+
+verification = [
+  { id = "VT-1", expects = "skills install by symlink again from a real install: the canonical tree and the linked output line are present where the pre-slice golden asserted their absence, and the plugin-summary line is gone", test_file = "tests/e2e_skills_symlink.rs", keywords = ["linked    code-review", ".doctrine/skills"], waived = false },
+  { id = "VT-2", expects = "a real install never invokes Claude plugin machinery — its output names no marketplace add, no plugin install and no plugin reminder — asserted alongside a POSITIVE CONTROL on an output line that DOES still print, so the absence assertion cannot pass vacuously on a broken capture", test_file = "tests/e2e_claude_install.rs", keywords = ["install_never_invokes_claude_plugin_machinery", "marketplace", "POSITIVE CONTROL"], waived = false },
+  { id = "VA-1", expects = "`just gate` is green with the full closure deleted and NOTHING re-added behind an allowance: no `expect(dead_code)` or `allow` gains a new site in `src/install.rs`, and `grep` for `DOCTRINE_MARKETPLACE`, `MarketplaceSource`, `RegisteredSource`, `MarketplaceAction` and `--dev` over `src/` returns nothing outside deleted-code history. The dead_code denial is the closure's proof, so a green gate with the inventory removed IS the criterion." },
+  { id = "VA-2", expects = "the new reference doc resolves through the published seam — `doctrine library tree` lists it and `doctrine library show reference/<name>.md` returns its body — and `doctrine publication validate` is green. Its content is checked against EX-6's six topics, each present and each naming its remedy rather than only its risk." },
+  { id = "VH-1", expects = "A COLD INSTALL ACTIVATES — the claim the whole slice rests on, and one no test can make: /hooks is the only surface reporting which hooks are live and which file each came from, and it is interactive-only. PRECONDITIONS, so the run is reproducible rather than recounted: a scratch project, no `enabledPlugins` entry for doctrine, no marketplace registration, the scope key absent (exercising the Project default), and a binary built from this slice. EVIDENCE TO CAPTURE: the /hooks output showing ALL ELEVEN entries sourced from .claude/settings.json — eleven, not seven; seven is the spec count and a criterion written against it would pass a four-entries-short install — plus one observed effect per event class: a session boot emitting, a WorktreeCreate fork, and a PreToolUse surfacing. WHERE IT LANDS: the transcript and the preconditions are transcribed VERBATIM into the reconciliation brief. In the prescribed scratch project the .claude/settings.json being reported from is itself untracked, so pasting the transcript is the only thing that makes this re-derivable by an auditor." },
+]
+specs        = []
+requirements = []
