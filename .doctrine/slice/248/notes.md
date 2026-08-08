@@ -72,6 +72,86 @@ Scope `A1`–`A3` stand. Added: **A4** — `git::read_path_at` reads a blob at a
 explicit OID with no working tree, and is the whole impure surface `REQ-449`'s
 resolution needs. To be verified at point of use, not assumed from the code map.
 
+## Execution posture — two phases in-tree, then a clone
+
+Decided 2026-08-08. **Not** a dispatch run and not a worktree: `PHASE-01` and
+`PHASE-02` land in the primary tree on `edge`; from `PHASE-03` the slice moves to
+a **separate git clone** on an `sl-248` branch, merged back manually at the end.
+
+**Waiting on `SL-250` `PHASE-06` to finish before starting.** Another agent is
+live in this repo (`SL-249`/`SL-250`, `.doctrine/rfc/027/`, `SPEC-031` and
+`REQ-462`–`REQ-475`).
+
+### Why a clone rather than a worktree
+
+No orchestrator, so the dispatch marker and confinement machinery is pure
+overhead. A clone has its own `.git`, keeps the history linear for the close-out
+audit, and cannot collide with the primary tree. Every phase from `PHASE-03`
+builds into its own in-tree `target/` regardless (`ADR-008` D-B1) — that cost is
+paid once either way.
+
+### Why the split falls after `PHASE-02` and not after `PHASE-01`
+
+Measured against `plan.toml`, not assumed:
+
+- `PHASE-01` is the slice's only phase touching shared machinery — `Cargo.toml`,
+  `Cargo.lock`, `justfile`, `layering.toml`'s **root** `[tiers]` section,
+  `tests/architecture_layering.rs`, `src/dtoml.rs`, `src/git.rs`, `src/clock.rs`,
+  `src/main.rs`.
+- `PHASE-02` is the last phase touching the root package at all
+  (`src/interpretation.rs`, plus `interpretation = "leaf"` in the root `[tiers]`
+  section).
+- **`src/lib.rs` and `tests/architecture_layering.rs` are shared append-only
+  between `PHASE-01` and `PHASE-02`** (plan stage-3 record item 1). Splitting
+  those two phases across two trees would have both trees appending to exactly
+  the two files the plan already flagged as contended — a manufactured conflict.
+- Every root-package path named in `PHASE-03`…`PHASE-10` is a **citation, not an
+  edit** — checked. `src/git.rs:2718` appears only to say the export build does
+  *not* reach `fetch_refspec`; `src/clock.rs`, `src/reserve.rs`, `src/tty.rs`,
+  `src/install.rs` are cited as precedent or rule.
+
+So after `PHASE-02` the clone's whole edit surface is `crates/doctrine-control/**`,
+appends to `layering.toml`'s **`doctrine-control`** tier section (created by
+`PHASE-01`, a region no other work touches), and one `[capsule]` table in
+`.doctrine/doctrine.toml`.
+
+### The hazard to respect in the clone
+
+**Entity id allocation.** The CLI allocates sequential ids by scanning the corpus
+it can see, which in a clone is frozen at fork time while `edge` keeps minting.
+Two trees can mint the same `DEC-NNN` / `ISS-NNN` / `RV-NNN`, and renumbering to
+resolve it breaks the immutability rule everything else references.
+
+**Rule: the clone mints no entities.** Capture decisions and findings in the
+phase sheets and here; mint them on `edge` at merge. The exception is
+`doctrine observation record` — records are UUID-filenamed, so they are
+collision-free and can run freely. Related: `QUE-208` (capsule-side entity id
+allocation) is the same problem one level down.
+
+### At merge
+
+`Cargo.lock` and `.doctrine/adr/001/layering.toml` are the two foreseeable
+conflicts. Regenerate the lock with a build rather than hand-resolving it.
+`.doctrine/state/` is gitignored, so phase status flips never travel — the
+tracking TOMLs on `edge` will still read `planned`; that is runtime state and
+`/audit` reconciles it.
+
+Courtesy owed on landing `PHASE-01`: it changes `just check`'s scope for everyone
+on `edge` — the fast inner loop starts compiling and testing `doctrine-control`,
+and `Cargo.lock` gains a member entry.
+
+### Model
+
+`PHASE-01` on **Opus**: it carries the two-tree layering gate (`T5`) and the
+`load_layering` change (`T8`), where a vacuously-passing gate is
+indistinguishable from a correct one, and it lands directly on `edge` where a
+mistake is shared rather than isolated. From `PHASE-03` the work is
+well-specified new files in an isolated clone and Sonnet is viable — with the
+standing instruction that a criterion which does not compile as written is a
+**stop-and-report**, never an adjust-the-criterion. This design has already
+produced one such criterion (`PHASE-01` `EX-4`, `DEC-181`) and one count wrong in
+five places.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · plan · authoring complete (all three stages) **and the
