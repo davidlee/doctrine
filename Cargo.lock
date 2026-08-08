@@ -470,6 +470,7 @@ name = "doctrine-control"
 version = "0.1.0"
 dependencies = [
  "doctrine",
+ "rustix",
 ]
 
 [[package]]

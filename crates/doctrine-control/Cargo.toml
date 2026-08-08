@@ -34,6 +34,14 @@ publish = false
 
 [dependencies]
 doctrine = { path = "../.." }
+# `host.rs` — `rustix::fs::statvfs` for the available-space probe (sec-5, EX-15).
+# `std` is NOT optional here: without it `rustix::fd::AsFd` is a no_std polyfill
+# that `std::fs::File` does not implement and every call site is E0277. The root
+# package gets `std` by unification from crossterm/which/tempfile; this crate
+# depends on none of the three, so it must say so itself (EX-17).
+# `rustix::process` stays undeclared and unreachable — it is behind a `process`
+# feature neither manifest declares, so a call into it is E0433 (RV-346 F-29).
+rustix = { version = "1", default-features = false, features = ["fs", "std"] }
 
 [lints]
 workspace = true
