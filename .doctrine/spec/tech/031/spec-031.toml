@@ -1,0 +1,54 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 31
+slug = "phase-plan-surface"
+title = "Phase plan surface"
+status = "draft"
+kind = "tech"
+category = "slice"
+c4_level = "component"
+parent = "SPEC-004"
+descends_from = "PRD-001"
+tags = ["plan", "criterion", "verification-modes", "vt-gate", "phase-order", "immutability", "lineage", "link-tables", "content-model"]
+responsibilities = [
+  "Fix the authored `plan.toml` content contract — the `doctrine.plan.overview` header, the ordered `[[phase]]` array, and the two criterion row shapes (`{id, text}` for EN/EX; the structured verification row) — as the single authored source of each phase's objective, criteria, and governance links.",
+  "Own phase and criterion identity and order: `PHASE-<digits>` uniqueness, the authored array as the sole order authority (never id arithmetic), bare phase-local criterion ids whose prefix carries the class or mode (EN/EX/VT/VA/VH), and the phase-qualified form for any reference outside the owning phase.",
+  "Own the VT structured mandate (`test_file` / `keywords` / `patterns` / `waived` / `waived_reason`), its two plan-time checks — shape completeness and design-target selector fit — and the five-verdict gate (Pass, Fail, Uncheckable, Unattributable, Waived) in which only `Fail` halts and no unproved row can read as proof.",
+  "Own the criterion evolution contract — replacement, withdrawal, split, merge, cross-phase relocation — as new immutable records plus recorded predecessor disposition, with the governing set derived and unchanged criteria carrying no ceremony. The lineage *encoding* is deliberately left open (IMP-382 boundary).",
+  "Own the plan's governance link surface: the plan-level `[specs]` / `[requirements]` tables, the per-phase narrowing arrays, and the verification→exit binding naming which obligation a proof discharges.",
+  "Own the plan validation and read contracts: what a malformed plan is refused for before it governs execution, and how the governing criterion set renders distinctly from superseded history.",
+  "State the ownership joints — SPEC-014 (fileset and scaffold), SPEC-002 (executable procedure identity and observed evidence), SPEC-018 (criterion lineage is document-local, not a corpus relation), ADR-009 (the `plan` lifecycle state) — so no plan fact is authored twice.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/plan.rs"
+module = "doctrine::plan"
+
+[[source]]
+language = "rust"
+identifier = "src/vtgate.rs"
+module = "doctrine::vtgate"
+
+[[source]]
+language = "toml"
+identifier = "install/templates/plan.toml"
+
+[[source]]
+language = "rust"
+identifier = "src/slice.rs"
+module = "doctrine::slice"
+
+[[source]]
+language = "rust"
+identifier = "src/state.rs"
+module = "doctrine::state"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-009"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"

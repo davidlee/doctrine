@@ -1,0 +1,25 @@
+[[edge]]
+target = "SPEC-014"
+type = "bounds"
+notes = "SPEC-014 owns the plan fileset and scaffold; SPEC-031 owns the plan content model. src/slice.rs and src/state.rs are anchored by both and disambiguated in prose on each side."
+
+[[edge]]
+target = "SPEC-002"
+type = "projects-into"
+notes = "Plan criteria reference or project into the executable verification seam and observed-coverage substrate; the plan grows no parallel command or evidence schema (RFC-027 H6)."
+
+[[edge]]
+target = "SPEC-018"
+type = "uses"
+notes = "Criterion lineage stays document-local inside plan.toml; criterion ids are not entity ids, so the cross-corpus relation vocabulary does not apply."
+
+[[edge]]
+target = "SPEC-012"
+type = "read-by"
+notes = "Dispatch reads the plan phase set, order and names and projects runtime status over it; the projection is read-only over authored plan truth."
+# Interactions — outbound spec -> spec edges (tech specs only).
+# Seeded empty; authored via `doctrine spec interactions add`:
+#   [[edge]]
+#   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
+#   type = "uses"             # free-text edge kind (calls / extends / uses / …)
+#   notes = "…"               # optional

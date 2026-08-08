@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 463
+slug = "take-authored-array-order-as-the-phase-order-authority"
+title = "Take authored array order as the phase-order authority"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "The authored order of the phase array is the plan's execution order; no consumer derives phase order from identifier arithmetic, and phase identities are unique, well-formed, and never renumbered or reused."
+tags = []
+acceptance_criteria = [
+  "Phase order is read from the authored array position, never sorted or inferred from the numeric part of a phase identity.",
+  "A plan whose phase identities are not unique is refused rather than aliasing two phases onto one runtime record.",
+  "A phase identity that is not well-formed is refused at the boundary where it becomes a filename.",
+  "Appending or splitting phases leaves existing identities and their relative order unchanged, even when the resulting identity sequence is non-monotonic.",
+]

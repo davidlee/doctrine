@@ -1,0 +1,23 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 469
+slug = "evolve-changed-criteria-as-new-immutable-records"
+title = "Evolve changed criteria as new immutable records"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "A criterion whose meaning changes is superseded by a new record that names it and records its disposition across replacement, withdrawal, split, merge, and cross-phase relocation, while unchanged criteria and non-semantic corrections require no evolution record."
+tags = []
+acceptance_criteria = [
+  "A change of meaning produces a new criterion record and leaves the predecessor preserved and no longer governing.",
+  "Replacement, withdrawal, one-to-many split, many-to-one merge, and cross-phase relocation each name every predecessor and successor without reusing an identity.",
+  "Cross-phase relocation withdraws the criterion in its source phase and mints a successor in the destination phase.",
+  "A non-semantic correction to a criterion's wording is an in-place edit that produces no evolution record.",
+  "An unchanged criterion governs with no evolution record and no restated copy.",
+  "Predecessor and successor sets plus a recorded disposition carry the whole audit history; evolution mints no separate act identity.",
+]

@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 467
+slug = "model-the-plans-spec-and-requirement-link-tables"
+title = "Model the plan's spec and requirement link tables"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "The plan-level specification and requirement tables and each phase's narrowing arrays are modelled by the plan reader and reachable from a read surface, rather than parsed past and discarded."
+tags = []
+acceptance_criteria = [
+  "The plan-level primary and collaborator specification links and the target and dependency requirement links are represented in the read model.",
+  "Each phase's narrowing specification and requirement arrays are represented per phase.",
+  "A reader can obtain a phase's applicable canonical links without re-parsing the authored file itself.",
+  "A plan that populates no links continues to read as it did before.",
+]

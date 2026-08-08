@@ -18,9 +18,9 @@ use anyhow::{Context, bail};
 /// `requirements` arrays are **authored and populated in the corpus** — they are
 /// not modelled here, so this reader parses past them and discards them. No
 /// gate, projection, or read surface consumes them. `ISS-321` tracks the
-/// repair; their governed home is the "Phase plan surface" component spec that
-/// `IMP-382`'s `/spec-tech` half will author, and `RFC-029` carries the
-/// reasoning.
+/// repair; their governed home is now `SPEC-031` (*Phase plan surface*),
+/// whose `REQ-467` requires this reader to model them rather than parse past
+/// them, and `RFC-029` carries the reasoning.
 ///
 /// (This paragraph previously asserted the tables "exist in the file but are
 /// empty (no registry yet)". The second clause was true, the first was not, and

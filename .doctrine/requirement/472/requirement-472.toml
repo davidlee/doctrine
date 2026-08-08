@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 472
+slug = "keep-runtime-progress-out-of-authored-plan-truth"
+title = "Keep runtime progress out of authored plan truth"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "The authored plan records no execution progress; runtime phase tracking is derived from it, writes nothing back, and can be discarded without changing the plan's contract."
+tags = []
+acceptance_criteria = [
+  "No phase status, progress log, or observed result is stored in the authored plan.",
+  "Runtime phase records are materialised from the authored plan and can be deleted and rebuilt from it.",
+  "Observed progress, test output, coverage, and discovered drift cannot rewrite authored plan content.",
+  "Consumers that project runtime status over the plan are read-only with respect to it.",
+]

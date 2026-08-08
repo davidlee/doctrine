@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 468
+slug = "bind-verification-criteria-to-the-exits-they-prove"
+title = "Bind verification criteria to the exits they prove"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "A verification criterion names the exit conditions it discharges, stored on the verification row and phase-qualified when it crosses phases, with the inverse view derived rather than authored a second time."
+tags = []
+acceptance_criteria = [
+  "A verification row can name one or more exit criteria it proves, in the same phase or phase-qualified across phases.",
+  "The set of proofs for a given exit criterion is derived from those authored links and is never maintained as a second authored list.",
+  "An exit criterion with no proof, and a verification criterion that proves nothing, are both derivable.",
+  "Exit and entry rows keep their identity-plus-text shape and need no edit to carry the link.",
+]

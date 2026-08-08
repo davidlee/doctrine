@@ -52,3 +52,7 @@ target = "REV-045"
 [[relation]]
 label = "related"
 target = "DEC-119"
+
+[[relation]]
+label = "related"
+target = "SPEC-031"

@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 465
+slug = "gate-the-vt-structured-mandate-at-plan-time"
+title = "Gate the VT structured mandate at plan time"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Before a plan governs execution, every non-waived automated-test criterion is checked for a complete structured mandate and for a mandated path that the slice's design-target selectors actually declare."
+tags = []
+acceptance_criteria = [
+  "A non-waived VT row without a mandated file is flagged as uncheckable at runtime.",
+  "A non-waived VT row with a mandated file but no keywords is flagged as a vacuous pass.",
+  "A waived row without a recorded reason is surfaced as an opaque waiver.",
+  "A non-waived VT row whose mandated path is declared by no design-target selector is flagged using the same predicate the integration belt applies, and an unscoped plan yields no such finding.",
+]

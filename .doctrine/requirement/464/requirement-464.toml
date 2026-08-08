@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 464
+slug = "fix-criterion-identity-and-its-mode-carrying-prefix"
+title = "Fix criterion identity and its mode-carrying prefix"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Criterion identities are bare, document-local, scoped to their owning phase, and immutable, and the identity prefix alone carries the condition class or verification mode with no second mode field."
+tags = []
+acceptance_criteria = [
+  "A criterion identity is unique within its owning phase and is never reused or renumbered once authored.",
+  "The prefix determines the class or mode — EN entry, EX exit, VT automated test, VA agent check, VH human acceptance — and no separate mode field exists to contradict it.",
+  "A criterion referenced outside its owning phase is phase-qualified so it cannot resolve to more than one criterion.",
+  "Criterion identities are document-local rows and are not promoted to corpus entity identities.",
+]

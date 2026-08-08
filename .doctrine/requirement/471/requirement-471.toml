@@ -1,0 +1,22 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 471
+slug = "render-governing-criteria-distinctly-from-history"
+title = "Render governing criteria distinctly from history"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "The ordinary plan read yields one deterministic ordered governing criterion set, and superseded or withdrawn criteria remain readable as history without ever appearing to govern."
+tags = []
+acceptance_criteria = [
+  "The ordinary read presents exactly one governing criterion set in a deterministic order.",
+  "A superseded or withdrawn criterion never appears as governing, including after split, merge, or relocation.",
+  "A history read preserves predecessor and successor identities, dispositions, and phase locations.",
+  "Reaching current meaning and relevant history requires no inspection of version-control history.",
+  "Governing criteria order by the authored position of the governing rows within their owning phase, never by identifier and never inherited from a predecessor.",
+]

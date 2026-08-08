@@ -73,3 +73,35 @@ across authored and observed tiers.
 DEC-119 records the local Revision workaround: `revision change introduce`
 rejects PRD members under the known IMP-297 gap, so REV-045's primary
 `modify PRD-001` row umbrellas the requirements created by `spec req add`.
+
+## Tech-spec result
+
+SPEC-031 — *Phase plan surface* — authored 2026-08-08, `descends_from PRD-001`,
+`parent SPEC-004`, C4 component, status **draft** pending review. It carries
+REQ-462 to REQ-475 (ten functional, four quality) and anchors `src/plan.rs`,
+`src/vtgate.rs`, `install/templates/plan.toml`, and the plan-specific portions
+of `src/slice.rs` and `src/state.rs`.
+
+It settles all three questions PRD-001 left for its descending technical spec:
+`OQ-2` (no separate evolution act identity — predecessor/successor sets plus
+disposition carry the audit history) as D9; `OQ-3` (the governing set orders by
+authored position of the governing rows, never by identifier and never inherited
+from a predecessor) as D10; `OQ-4` (additive changes get a compatibility read;
+only meaning-changing ones get an authored migration) as D11.
+
+It also settles the question RFC-029 § 6 left open for whoever wrote this spec:
+the verification-to-exit link lives **on the verification row**, with the inverse
+derived (D6) — the fact IMP-409 needs and deliberately did not decide.
+
+Interaction edges state the joints this item required: `bounds` SPEC-014
+(fileset versus contents), `projects-into` SPEC-002 (no parallel command or
+evidence schema), `uses` SPEC-018 (criterion lineage stays document-local),
+`read-by` SPEC-012 (dispatch projects runtime status read-only over the plan).
+
+Boundaries held: the lineage *storage location* is left open (spec OQ-2), no
+criterion id is promoted to a corpus entity id, and unchanged criteria stay
+zero-ceremony.
+
+Outstanding before this item resolves: flip SPEC-031 `draft` → `active`, and
+repoint `glossary.md` / `using-doctrine.md` at it so criterion identity and
+immutability stop having two independently authoritative homes.

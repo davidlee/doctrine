@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 462
+slug = "fix-the-authored-plan-file-contract"
+title = "Fix the authored plan file contract"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "An authored plan.toml declares its schema, version, and owning slice, then an ordered array of phase rows each carrying a stable identity, name, objective, entry and exit condition rows, verification rows, and its own canonical link narrowing."
+tags = []
+acceptance_criteria = [
+  "The plan header names the doctrine.plan.overview schema, its version, and the canonical id of the one slice it belongs to.",
+  "Each phase row carries an identity, a name, an objective, and its entrance, exit, and verification criterion collections.",
+  "An entry or exit criterion row is an identity plus prose text; a verification row additionally carries its structured mandate fields.",
+  "Prose in the sibling plan.md is narrative only and is never parsed as a second authority.",
+]

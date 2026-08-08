@@ -1,0 +1,22 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 470
+slug = "refuse-a-malformed-plan-before-it-governs"
+title = "Refuse a malformed plan before it governs"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "A plan that is malformed or ambiguous cannot cross into governing execution; every refusal names the offending subject and reason, and validation never silently repairs authored content."
+tags = []
+acceptance_criteria = [
+  "Duplicate or invalid phase and criterion identities, unsupported criterion modes, and ambiguous cross-phase references are refused.",
+  "A missing predecessor or successor, a lineage cycle, and malformed split or merge cardinality are refused.",
+  "An indeterminate governing order is refused rather than resolved by convention.",
+  "Each refusal identifies the offending plan subject and the reason, so the responsible actor can correct it.",
+  "No validation path rewrites authored plan content in order to make it valid.",
+]

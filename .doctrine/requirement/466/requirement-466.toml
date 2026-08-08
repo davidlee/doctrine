@@ -1,0 +1,22 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 466
+slug = "judge-vt-rows-into-five-distinct-verdicts"
+title = "Judge VT rows into five distinct verdicts"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Each automated-test criterion resolves to exactly one of pass, fail, uncheckable, unattributable, or waived; only fail halts, and no absent, inert, or waived result is ever presented as proof."
+tags = []
+acceptance_criteria = [
+  "A mandated file that is missing, or a mandated keyword or pattern that is absent, yields fail and halts the gate.",
+  "A row with no structured mandate yields uncheckable and does not halt.",
+  "A mandated file the slice did not modify yields unattributable and does not halt, because the match carries no signal about the slice's work.",
+  "A waived row short-circuits before any file is read and surfaces its recorded reason.",
+  "The four non-halting outcomes stay separately labelled and are never collapsed into a pass.",
+]

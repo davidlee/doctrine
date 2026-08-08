@@ -1,0 +1,22 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 474
+slug = "parse-every-previously-valid-plan-unchanged"
+title = "Parse every previously valid plan unchanged"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "Every plan that was valid before a content-model change stays readable with its criteria governing in declared order; added fields default, and a plan without evolution records has every authored row governing as a leaf."
+tags = []
+acceptance_criteria = [
+  "Every field except a phase identity defaults, so a plan authored before a field existed parses into defaulted empties.",
+  "A plan with no evolution records is read with every authored criterion governing in its declared order.",
+  "No lineage record, replacement identity, or re-authoring is generated for an unchanged criterion.",
+  "A migration that cannot complete leaves the prior authored plan intact and reports the blocking incompatibility.",
+  "A change that only adds defaulting fields is served by a compatibility read; an authored migration is required only where the meaning of rows already on disk would otherwise change.",
+]

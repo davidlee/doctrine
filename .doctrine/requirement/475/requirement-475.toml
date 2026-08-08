@@ -1,0 +1,21 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 475
+slug = "keep-plan-side-checks-host-language-neutral"
+title = "Keep plan-side checks host-language neutral"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+description = "No plan-side check depends on the host project's language, comment syntax, or build tooling; matching is over raw file content and any stronger shape assertion is author-supplied."
+tags = []
+acceptance_criteria = [
+  "Mandate matching reads raw file content and performs no comment or string-literal stripping.",
+  "No check assumes a host build tool, test runner, or language-specific file layout.",
+  "A stronger shape assertion is expressed as an author-supplied pattern rather than as built-in language knowledge.",
+  "The accepted consequence — a keyword satisfied from inside a comment — is documented rather than repaired by language-aware parsing.",
+]
