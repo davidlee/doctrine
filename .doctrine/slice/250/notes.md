@@ -819,13 +819,22 @@ own worktrees at `.claude/worktrees/agent-<id>`, doctrine's `create-fork` at
 `.worktrees/<name>`. The attribution now rests on a demonstrated difference
 rather than on doctrine owning the layout in its own source.
 
-**A premise of the slice, checked rather than assumed.** The harness's native
-`isolation: worktree` turns out to apply no kernel confinement at all — its
+The confirmation does not depend on that control alone. The harness's `/sandbox`
+mode *does* confine — distinct mount namespace, 78 mounts, shell at PID 1 — but
+with the **opposite** signature: it exposes the parent read-only (reads succeed
+and are true) and refuses writes loudly with `Read-only file system`. It cannot
+produce an invisible parent or a silent absorb, so the doctrine project's
+behaviour was doctrine's regardless of which mode was set there.
+
+**A premise of the slice, checked rather than assumed.** Absent `/sandbox`, the
+harness's native `isolation: worktree` applies no kernel confinement at all — its
 `Write` tool blocks the parent checkout while a plain shell redirect to the same
-path succeeds, and symlink, `cd` and python writes all walk through. So doctrine's
-jail is not made redundant by the harness; on the claude arm it is the only real
-confinement present. Recorded as
-`mem.fact.claude.native-worktree-isolation-is-tool-layer-only`.
+path succeeds, and symlink, `cd` and python writes all walk through. Its Bash
+guard refuses on syntax rather than path: it rejected a benign redirect *into*
+the worktree, then permitted the decomposed form writing *outside* it. So
+doctrine's jail is not made redundant by the harness; on the claude arm it is the
+only confinement a worker gets unless the operator happens to be in `/sandbox`.
+Recorded as `mem.fact.claude.native-worktree-isolation-is-tool-layer-only`.
 
 **A trap the probe surfaced, unrelated to this slice.** The probe subagent's
 `git` commands all failed `fatal: not a git repository: (null)`, and it

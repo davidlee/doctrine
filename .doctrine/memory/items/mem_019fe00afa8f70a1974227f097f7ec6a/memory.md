@@ -96,3 +96,24 @@ limit on a resolvable path. This is the path not resolving at all.
 
 See [[mem.pattern.harness.grep-negative-needs-positive-control]] — the same
 epistemics one layer down. Here the instrument lies positively too.
+
+
+## Telling doctrine's jail from Claude's `/sandbox` at a glance
+
+Both confine, with **opposite** signatures — so a symptom attributes itself:
+
+| | doctrine's wrap | Claude `/sandbox` |
+|---|---|---|
+| parent checkout readable | **no** — `git` fails `(null)` | **yes**, and the content is true |
+| write outside the worktree | **rc=0, silent, no file** | **exit 1, `Read-only file system`** |
+
+Doctrine hides the outside and absorbs writes; `/sandbox` exposes it read-only
+and refuses them loudly. **Only doctrine's posture produces the two lies above** —
+`/sandbox` reads true and fails honestly, so neither phantom arises there.
+
+This is also what makes the attribution robust: a silent absorb or an invisible
+parent cannot be `/sandbox`, whatever permission mode was set. Verified against a
+doctrine-free control, 2026-08-08.
+
+Full harness characterisation, including the modes where nothing confines at all:
+[[mem.fact.claude.native-worktree-isolation-is-tool-layer-only]].

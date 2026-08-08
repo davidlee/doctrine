@@ -258,6 +258,21 @@ No kernel confinement in either mode, so permission mode cannot explain the
 absorb. Doctrine's wrap is the only remaining candidate, and `PreToolUse` is
 confirmed.
 
+**And the confirmation does not rest on that control.** A later probe found the
+harness's `/sandbox` mode *does* apply real confinement — a distinct mount
+namespace, 78 mounts, the shell at PID 1. That would have reopened the question,
+except its signature is the **opposite** of what the doctrine project showed:
+
+| | doctrine project | Claude `/sandbox` |
+|---|---|---|
+| parent checkout readable | **no** — `git` failed `not a git repository: (null)` | **yes**, content true |
+| shell write outside | **rc=0, silent, no file** | **exit 1, `Read-only file system`** |
+
+`/sandbox` exposes the parent read-only and refuses writes loudly; it cannot
+produce an invisible parent or a silent absorb. So the doctrine project's
+behaviour was doctrine's whether or not `/sandbox` happened to be active there —
+the mode question turns out not to be load-bearing.
+
 **A free second confirmation of `WorktreeCreate`.** The control project's
 harness-native worktree landed at `.claude/worktrees/agent-<id>`; the doctrine
 project's at `.worktrees/agent-<id>` — `WORKTREES_SUBDIR`, doctrine's layout.
