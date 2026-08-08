@@ -623,6 +623,9 @@ const WORKTREE_CREATE_MATCHER: &str = "*";
 /// inline (STD-001): a typo in an event key yields a silently-inert hook.
 const EVENT_SESSION_START: &str = "SessionStart";
 const EVENT_WORKTREE_CREATE: &str = "WorktreeCreate";
+const EVENT_SUBAGENT_START: &str = "SubagentStart";
+const EVENT_SUBAGENT_STOP: &str = "SubagentStop";
+const EVENT_PRE_TOOL_USE: &str = "PreToolUse";
 
 /// The matcher SETS a spec emits entries for, in emission order. Single-element
 /// for every spec that shipped before SL-250; the ordered-set shape is what lets
@@ -630,6 +633,20 @@ const EVENT_WORKTREE_CREATE: &str = "WorktreeCreate";
 const SESSION_MATCHERS: &[&str] = &[SESSION_MATCHER];
 const SESSION_MATCHERS_CODEX: &[&str] = &[SESSION_MATCHER_CODEX];
 const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
+
+/// The `SubagentStart` / `SubagentStop` matcher set: a subagent-event matcher IS
+/// an agent type, and the types these two hooks care about are exactly the
+/// nomination-eligible ones. Aliased rather than re-spelled (STD-001) — the leaf
+/// const is documented as the single source for "nomination-eligible set == the
+/// gate's privileged deny-set", and a type added there without its hook matcher
+/// is the same drift the single-source rule exists to prevent.
+const SUBAGENT_MATCHERS: &[&str] = crate::worktree::PRIVILEGED_AGENT_TYPES;
+
+/// The `PreToolUse` matcher sets. TWO specs share this event and both emit a
+/// `Bash` entry — safe because ownership is proven by COMMAND alone, so each
+/// spec treats the other's entries as foreign and preserves them.
+const PRETOOLUSE_MATCHERS_WORKTREE: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
+const PRETOOLUSE_MATCHERS_SURFACE: &[&str] = &["Read|Edit|Write", "Bash"];
 
 // ---------------------------------------------------------------------------
 // The harness seam (R2) — enum + match, one local id per wired harness.
@@ -1017,6 +1034,15 @@ const SYNC_ARGS: &str = "memory sync";
 /// its ownership key. Multi-arg, so ownership matches by suffix-strip.
 const CREATE_FORK_ARGS: &str = "worktree create-fork";
 
+/// The four hooks SL-250 PHASE-04 moves off the plugin channel — each string is
+/// both the command's argument suffix and its ownership key. Taken verbatim from
+/// `plugins/doctrine/hooks/hooks.json`, which stays the published plugin's
+/// payload.
+const NOMINATE_ARGS: &str = "worktree nominate";
+const DENOMINATE_ARGS: &str = "worktree denominate";
+const PRETOOLUSE_ARGS: &str = "worktree pretooluse";
+const MEMORY_SURFACE_ARGS: &str = "memory surface";
+
 /// Whether `cmd` is `<doctrine> <args>` — the shared suffix-strip ownership
 /// shape. The program half may bear spaces, so the fixed `args` suffix and its
 /// preceding single space are stripped and the remainder checked with
@@ -1053,6 +1079,32 @@ fn is_doctrine_emit_command(cmd: &str) -> bool {
 /// `WorktreeCreate` entry never clobbers the `SessionStart` ones.
 fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     is_doctrine_command(cmd, CREATE_FORK_ARGS)
+}
+
+/// Whether `cmd` is doctrine's own `worktree nominate` hook (`SubagentStart`).
+fn is_doctrine_nominate_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, NOMINATE_ARGS)
+}
+
+/// Whether `cmd` is doctrine's own `worktree denominate` hook (`SubagentStop`).
+/// Disjoint from the nominate predicate despite the shared tail: the suffix
+/// strip is anchored, so `… worktree denominate` never ends with the whole
+/// literal `worktree nominate`.
+fn is_doctrine_denominate_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, DENOMINATE_ARGS)
+}
+
+/// Whether `cmd` is doctrine's own `worktree pretooluse` hook — one command
+/// across FOUR `PreToolUse` matchers, which is the shape command-only ownership
+/// (`DEC-161`) exists to express.
+fn is_doctrine_pretooluse_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, PRETOOLUSE_ARGS)
+}
+
+/// Whether `cmd` is doctrine's own `memory surface` hook — the second
+/// `PreToolUse` spec, sharing the `Bash` matcher with the first.
+fn is_doctrine_memory_surface_command(cmd: &str) -> bool {
+    is_doctrine_command(cmd, MEMORY_SURFACE_ARGS)
 }
 
 /// A hook doctrine owns: how to render its command, the predicate that
@@ -1128,13 +1180,6 @@ impl HookSpec {
     /// `WorktreeCreate` entry. `WorktreeCreate` has no matcher support
     /// (hooks.md:237), so `WORKTREE_CREATE_MATCHER` is cosmetic — it only feeds the
     /// merge core's canonical-entry identity, never runtime scoping.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-152 PHASE-06: create-fork hook ships via the plugin; retained as fallback, test-only callers"
-        )
-    )]
     pub(crate) fn create_fork(exec: &Path) -> Self {
         Self {
             exec: exec.to_path_buf(),
@@ -1144,6 +1189,75 @@ impl HookSpec {
             matchers: WORKTREE_CREATE_MATCHERS,
         }
     }
+
+    /// The `<exec> worktree nominate` hook — a `SubagentStart` entry that marks a
+    /// privileged orchestrator subagent unjailed.
+    fn nominate(exec: &Path) -> Self {
+        Self {
+            exec: exec.to_path_buf(),
+            args: NOMINATE_ARGS,
+            is_ours: is_doctrine_nominate_command,
+            event: EVENT_SUBAGENT_START,
+            matchers: SUBAGENT_MATCHERS,
+        }
+    }
+
+    /// The `<exec> worktree denominate` hook — the `SubagentStop` hygiene
+    /// counterpart to [`HookSpec::nominate`], on the same matcher set.
+    fn denominate(exec: &Path) -> Self {
+        Self {
+            exec: exec.to_path_buf(),
+            args: DENOMINATE_ARGS,
+            is_ours: is_doctrine_denominate_command,
+            event: EVENT_SUBAGENT_STOP,
+            matchers: SUBAGENT_MATCHERS,
+        }
+    }
+
+    /// The `<exec> worktree pretooluse` hook — FOUR `PreToolUse` entries under
+    /// one command, confining a subagent's tool calls to its worktree.
+    fn pretooluse(exec: &Path) -> Self {
+        Self {
+            exec: exec.to_path_buf(),
+            args: PRETOOLUSE_ARGS,
+            is_ours: is_doctrine_pretooluse_command,
+            event: EVENT_PRE_TOOL_USE,
+            matchers: PRETOOLUSE_MATCHERS_WORKTREE,
+        }
+    }
+
+    /// The `<exec> memory surface` hook — TWO `PreToolUse` entries surfacing
+    /// scope-relevant memories, sharing the `Bash` matcher with
+    /// [`HookSpec::pretooluse`].
+    fn memory_surface(exec: &Path) -> Self {
+        Self {
+            exec: exec.to_path_buf(),
+            args: MEMORY_SURFACE_ARGS,
+            is_ours: is_doctrine_memory_surface_command,
+            event: EVENT_PRE_TOOL_USE,
+            matchers: PRETOOLUSE_MATCHERS_SURFACE,
+        }
+    }
+}
+
+/// The Claude hook registry — the single enumeration of what doctrine activates.
+/// Order is emission order, both in the settings file and in the installer's
+/// output. Building it as a function rather than seven scattered calls is what
+/// keeps a later manifest-vs-registry conformance check (IMP-407) cheap.
+///
+/// Seven specs, ELEVEN entries: `pretooluse` carries four matchers and
+/// `memory_surface` two. `sync` is here despite never having shipped in the
+/// plugin — it shares the file, the scope dial and the sweep.
+fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
+    vec![
+        HookSpec::boot_emit(exec, SESSION_MATCHERS),
+        HookSpec::sync(exec),
+        HookSpec::create_fork(exec),
+        HookSpec::nominate(exec),
+        HookSpec::denominate(exec),
+        HookSpec::pretooluse(exec),
+        HookSpec::memory_surface(exec),
+    ]
 }
 
 /// All doctrine-owned `(entry_idx, hook_idx)` positions for `is_ours`, in array
@@ -1503,27 +1617,53 @@ fn install_refresh(
             })
         }
         Harness::Claude => {
-            // SL-152 PHASE-06: the Claude boot (SessionStart) hook now ships via
-            // the doctrine plugin, NOT settings-wired (it double-fired with the
-            // plugin). The boot hook is no longer written to settings here; the
-            // baseRef write below rides BESIDE the (retained, now-unused-for-Claude)
-            // HookSpec merge core. baseRef + .mcp.json wiring are UNCHANGED.
-            //
-            // SL-250 PHASE-02: no spec is merged here yet, so `hooks` is empty —
-            // the arm still resolves the scope, because `install_baseref`
-            // follows it. PHASE-04 fills the vec with the seven specs.
-            let scope = configured_scope(root)?;
+            // SL-250 PHASE-04: the arm merges the WHOLE registry — eleven entries
+            // across five events, where it wired none between SL-152 PHASE-06 and
+            // here (they shipped via the doctrine plugin, whose activation fails
+            // silently at three independent layers). PHASE-06 retires the plugin
+            // path; until then every hook exists on both channels and fires twice,
+            // which is the intended cost of the safe ordering (`DEC-167`) — the
+            // reverse would leave an interval with NO `WorktreeCreate` hook, and
+            // `isolation: worktree` teardown is conditional on it firing.
+            let specs = claude_hook_specs(exec);
+            let mut hooks = Vec::with_capacity(specs.len());
+            let mut swept = SweepReport::default();
+            let mut scope = configured_scope(root)?;
+            for (i, spec) in specs.iter().enumerate() {
+                // A mid-loop failure aborts the arm: every write is atomic and
+                // independently idempotent, so a re-run completes the set, and
+                // swallowing the error would hide exactly the half-activated
+                // install this slice exists to stop being silent about. But the
+                // accumulated report dies with the abort, so the context carries
+                // the boundary — which spec, and how far the set got.
+                let write = install_claude_hook(root, spec, dry_run).with_context(|| {
+                    format!(
+                        "Claude hook {}/{} ({} {}) failed; {} of {} specs were written before it",
+                        i + 1,
+                        specs.len(),
+                        spec.event,
+                        spec.args,
+                        i,
+                        specs.len(),
+                    )
+                })?;
+                scope = write.scope;
+                swept.absorb(write.evicted);
+                hooks.push(write.written);
+            }
+            // `install_baseref` follows the same scope, so doctrine authors ONE
+            // Claude settings file per install; it rides BESIDE the merge core as
+            // a separate pure planner + shell, and reads AFTER the hook writes so
+            // its plan merges onto current content.
             let baseref = install_baseref(root, scope, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
             let mcp = install_mcp(root, dry_run)?;
             Ok(RefreshReport {
-                hooks: Vec::new(),
-                // SL-250 PHASE-03: with no specs merged, the fold is empty — but
-                // the announcement is not vacuous, because `install_baseref`
-                // writes to the very file it names. PHASE-04's loop absorbs each
-                // spec's `evicted` into this report.
-                claude_scope: Some((scope, SweepReport::default())),
+                hooks,
+                // The scope the loop resolved, and every spec's eviction from the
+                // abandoned file folded into one file-level report.
+                claude_scope: Some((scope, swept)),
                 baseref,
                 mcp,
                 append_system: AppendSystemOutcome::NotApplicable,
@@ -4380,6 +4520,78 @@ mod tests {
         assert!(!is_doctrine_program("${DOCTRINE_BIN:-other}"));
     }
 
+    // SL-250 PHASE-04 VT-1. Each of the four new specs' arg strings is
+    // recognised by its own predicate — under a SPACED program path (the
+    // suffix-strip shape tolerates one, even though `sh -c` would split it) and
+    // under the `/proc/self/exe` ` (deleted)` poison suffix, so a hook written
+    // by a since-replaced binary is still healed rather than duplicated.
+    #[test]
+    fn is_doctrine_command_recognises_each_new_spec() {
+        let cases: &[(&str, fn(&str) -> bool)] = &[
+            (NOMINATE_ARGS, is_doctrine_nominate_command),
+            (DENOMINATE_ARGS, is_doctrine_denominate_command),
+            (PRETOOLUSE_ARGS, is_doctrine_pretooluse_command),
+            (MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command),
+        ];
+        for (args, is_ours) in cases {
+            assert!(is_ours(&format!("/x/doctrine {args}")), "abspath: {args}");
+            assert!(
+                is_ours(&format!("{PORTABLE_EXEC} {args}")),
+                "portable: {args}"
+            );
+            assert!(
+                is_ours(&format!("/a b/doctrine {args}")),
+                "spaced program path: {args}"
+            );
+            assert!(
+                is_ours(&format!("/x/doctrine (deleted) {args}")),
+                "poison suffix: {args}"
+            );
+            assert!(
+                !is_ours(&format!("/x/doctrine-helper {args}")),
+                "a foreign program is never ours: {args}"
+            );
+            assert!(!is_ours(args), "bare args are not a command: {args}");
+        }
+    }
+
+    // SL-250 PHASE-04 VT-1. The registry is internally safe: no spec's predicate
+    // claims another spec's command. Asserted over `claude_hook_specs` itself
+    // rather than a hand-written list, so an eighth spec cannot join unchecked —
+    // no longer self-evident now that two specs share `SessionStart` and two
+    // share `PreToolUse`. A collision here does not fail loudly at runtime: the
+    // normalize would silently drop the other spec's entries as its own stale
+    // copies, and the install would report success.
+    #[test]
+    fn predicates_are_pairwise_disjoint() {
+        let exec = Path::new("/abs/doctrine");
+        let specs = claude_hook_specs(exec);
+        assert_eq!(specs.len(), 7, "the registry is seven specs");
+
+        for (i, spec) in specs.iter().enumerate() {
+            // BOTH rendered forms, because both are owned and both can appear in
+            // a settings file mid-migration.
+            for form in [CommandForm::Baked, CommandForm::Portable] {
+                let command = command_for(spec, form);
+                assert!(
+                    (spec.is_ours)(&command),
+                    "spec {i} ({}) must own its own command: {command}",
+                    spec.args
+                );
+                for (j, other) in specs.iter().enumerate() {
+                    if i == j {
+                        continue;
+                    }
+                    assert!(
+                        !(other.is_ours)(&command),
+                        "spec {j} ({}) must NOT claim spec {i}'s command: {command}",
+                        other.args
+                    );
+                }
+            }
+        }
+    }
+
     // SL-250 PHASE-01. The rendering axis: one spec, two program halves. The
     // args suffix is invariant across forms — only the program half moves — and
     // BOTH renderings are owned by the spec's predicate, which is what lets a
@@ -4715,26 +4927,35 @@ mod tests {
         let settings = root.join(SETTINGS_PROJECT_REL);
         let mcp = root.join(MCP_REL);
 
-        // SL-152 PHASE-06: the Claude boot hook now ships via the plugin — the
-        // refresh no longer wires it into settings (hook == None). baseRef + .mcp
-        // wiring are UNCHANGED.
-        // dry-run plans a baseRef/mcp write but writes nothing.
+        // SL-250 PHASE-04: the Claude arm merges the whole registry — one
+        // outcome per spec. baseRef + .mcp wiring are UNCHANGED.
+        // dry-run plans the writes but writes nothing.
         let out = install_refresh(&Harness::Claude, root, exec, true).unwrap();
-        assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
+        assert_eq!(
+            out.hooks.len(),
+            claude_hook_specs(exec).len(),
+            "one outcome per registry spec"
+        );
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         assert!(!settings.exists(), "dry-run must not write settings");
         assert!(!mcp.exists(), "dry-run must not write .mcp.json");
 
-        // real run creates the settings file with the baseRef key but NO boot hook.
+        // real run creates the settings file with the baseRef key AND the hooks.
         let out = install_refresh(&Harness::Claude, root, exec, false).unwrap();
-        assert!(out.hooks.is_empty(), "the Claude arm merges no spec yet");
+        assert_eq!(out.hooks.len(), claude_hook_specs(exec).len());
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::Set));
         assert!(matches!(out.mcp, RefreshOutcome::Wired(_)));
         let json = fs::read_to_string(&settings).unwrap();
-        assert!(
-            commands(&json).is_empty(),
-            "no boot hook wired for Claude (ships via plugin): {json}"
+        // The two SessionStart specs — the emit hook and `memory sync` — are
+        // settings-wired now, where the arm wrote none since SL-152 PHASE-06.
+        // `commands` reads SessionStart only; the whole eleven-entry set is
+        // asserted by `every_wired_entry_carries_the_portable_command` and by
+        // the e2e count.
+        assert_eq!(
+            commands(&json).len(),
+            2,
+            "both SessionStart hooks wired for Claude: {json}"
         );
         let parsed: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
@@ -4762,6 +4983,50 @@ mod tests {
         ));
         assert!(matches!(out.baseref.outcome, BaseRefOutcome::NotApplicable));
         assert!(matches!(out.mcp, RefreshOutcome::None));
+    }
+
+    /// SL-250 PHASE-04 VT-2. SL-195's INV-1 — no absolute host path in a TRACKED
+    /// file — asserted across the whole eleven-entry set rather than the single
+    /// spec PHASE-02 could reach. The default scope is `Project`, which is
+    /// committed, so every one of the eleven commands must render portable; an
+    /// abspath in any one of them leaks this machine's layout into git.
+    #[test]
+    fn every_wired_entry_carries_the_portable_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // A path no portable rendering could ever contain.
+        let exec = Path::new("/host/only/doctrine");
+
+        install_refresh(&Harness::Claude, root, exec, false).unwrap();
+        let json = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
+
+        let mut wired = 0;
+        for event in [
+            EVENT_SESSION_START,
+            EVENT_WORKTREE_CREATE,
+            EVENT_SUBAGENT_START,
+            EVENT_SUBAGENT_STOP,
+            EVENT_PRE_TOOL_USE,
+        ] {
+            let entries =
+                event_entries(&json, event).unwrap_or_else(|| panic!("{event} entries: {json}"));
+            assert!(!entries.is_empty(), "{event} carries entries");
+            for entry in &entries {
+                for hook in entry["hooks"].as_array().expect("hooks array") {
+                    let command = hook["command"].as_str().expect("command");
+                    assert!(
+                        command.starts_with(PORTABLE_EXEC),
+                        "{event}: portable program half, got {command}"
+                    );
+                    assert!(
+                        !command.contains("/host/only/"),
+                        "{event}: no host abspath in a tracked file (SL-195 INV-1), got {command}"
+                    );
+                    wired += 1;
+                }
+            }
+        }
+        assert_eq!(wired, 11, "eleven entries across five events: {json}");
     }
 
     // --- SL-064 PHASE-08 T4 / VT-1: worktree.baseRef="head" installer ---
@@ -6144,12 +6409,13 @@ mod tests {
 
         let claude_md = fs::read_to_string(root.join("CLAUDE.md")).unwrap();
         assert_eq!(claude_md.matches(REF).count(), 1, "import ref wired once");
-        // SL-152 PHASE-06: the Claude boot hook ships via the plugin — `wire` no
-        // longer settings-wires it. Only the baseRef key lands in settings.
+        // SL-250 PHASE-04: `wire` settings-wires the registry, so both
+        // SessionStart commands land beside the baseRef key.
         let settings = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
-        assert!(
-            commands(&settings).is_empty(),
-            "no boot hook settings-wired for Claude (ships via plugin): {settings}"
+        assert_eq!(
+            commands(&settings).len(),
+            2,
+            "both SessionStart hooks settings-wired for Claude: {settings}"
         );
         let parsed: Value = serde_json::from_str(&settings).unwrap();
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
@@ -6163,9 +6429,10 @@ mod tests {
             "re-run does not duplicate ref"
         );
         let settings = fs::read_to_string(root.join(SETTINGS_PROJECT_REL)).unwrap();
-        assert!(
-            commands(&settings).is_empty(),
-            "re-run still wires no boot hook for Claude"
+        assert_eq!(
+            commands(&settings).len(),
+            2,
+            "re-run is idempotent — still exactly two SessionStart entries"
         );
     }
 
