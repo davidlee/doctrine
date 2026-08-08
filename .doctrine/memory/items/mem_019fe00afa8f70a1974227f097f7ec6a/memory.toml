@@ -4,7 +4,7 @@ schema_version = 1
 memory_type = "fact"
 status = "active"
 title = "A worktree subagent's filesystem view lies in both directions"
-summary = "A confined worktree subagent sees phantom absence (git reports the parent repo gone) and phantom success (a shell write outside returns exit 0 and lands nowhere); exit codes are not evidence"
+summary = "Inside doctrine's worktree jail a subagent sees phantom absence (git reports the parent repo gone) and phantom success (a shell write outside returns 0 and lands nowhere); exit codes are not evidence"
 created = "2026-08-08"
 updated = "2026-08-08"
 

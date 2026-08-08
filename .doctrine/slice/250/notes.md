@@ -799,7 +799,33 @@ doctrine's hook rather than harness-native worktree support is the path:
 names `create-fork` "THE one owner of the `.worktrees/<name>` layout, in both
 directions".
 
-`PreToolUse` is the sole remaining effect.
+`PreToolUse` is **confirmed**, and took three runs because the first two probes
+were each blind to it. The `Edit|Write` matchers are shadowed by the harness's
+own worktree guard, which intercepts first and carries no `worktree-jail: `
+prefix; and `memory surface` on an unremarkable file legitimately emits nothing.
+Bash is the unshadowed lever: a worktree subagent's `echo probe >
+<parent>/README.md` returned rc=0 in silence and the file never appeared. That
+is the `WrapBash` signature rather than `Deny` — `permissionDecision: "allow"`
+plus a rewritten command — so the missing prefix was expected, not exculpatory.
+
+A doctrine-free control project settled the alternative: under both default and
+auto modes it showed the init mount namespace, the full 31-entry host mount
+table, no `bwrap` in the shell's ancestry, and the equivalent parent-checkout
+write **landing for real**. No kernel confinement in either mode, so permission
+mode cannot explain the absorb. `VH-1` is fully evidenced at 3 of 3.
+
+The control also re-confirmed `WorktreeCreate` for free: the harness puts its
+own worktrees at `.claude/worktrees/agent-<id>`, doctrine's `create-fork` at
+`.worktrees/<name>`. The attribution now rests on a demonstrated difference
+rather than on doctrine owning the layout in its own source.
+
+**A premise of the slice, checked rather than assumed.** The harness's native
+`isolation: worktree` turns out to apply no kernel confinement at all — its
+`Write` tool blocks the parent checkout while a plain shell redirect to the same
+path succeeds, and symlink, `cd` and python writes all walk through. So doctrine's
+jail is not made redundant by the harness; on the claude arm it is the only real
+confinement present. Recorded as
+`mem.fact.claude.native-worktree-isolation-is-tool-layer-only`.
 
 **A trap the probe surfaced, unrelated to this slice.** The probe subagent's
 `git` commands all failed `fatal: not a git repository: (null)`, and it

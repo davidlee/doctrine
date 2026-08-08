@@ -219,10 +219,66 @@ suggested slug and consumes the hook's stdout as the path; the path that came
 back is doctrine's. A registered-but-inert hook would have produced either an
 in-situ subagent or a harness-native path elsewhere.
 
-### `PreToolUse` — outstanding
+### `PreToolUse` — CONFIRMED, by differential against a doctrine-free control
 
-Six entries across five matchers, the largest block. Trip any matched tool and
-confirm the memory-surface or worktree wall reports.
+Six entries across five matchers, the largest block. Confirming it took three
+runs, because two earlier probes were each blind to the hook in a different way.
+
+**Why the obvious probes failed.** The `Edit|Write` matchers are *shadowed*: the
+harness has its own worktree guard that intercepts those tools first, with a
+message naming the "shared-checkout path" and carrying no `worktree-jail: `
+prefix. And `memory surface` on an unremarkable file legitimately emits nothing,
+so silence there is uninformative. Neither probe could see doctrine's wall.
+
+**The discriminating probe is Bash**, which the harness guard does not shadow.
+In the doctrine project, a worktree subagent's `echo probe > <parent>/README.md`
+returned rc=0 in silence and the file **never appeared** — verified from the
+parent session by `cat` and a `find` across every worktree.
+
+That is doctrine's `WrapBash` signature, not its `Deny` signature, which is why
+no `worktree-jail: ` prefix appeared. `src/worktree/pretooluse.rs:172-194`:
+`Deny` emits `permissionDecision: "deny"` plus the prefixed reason, while
+`WrapBash` emits `permissionDecision: "allow"` plus a rewritten command. A
+successful wrap is silent by construction.
+
+**The control that rules out the alternative.** A silent absorb is also what
+harness-level Bash sandboxing would produce, and the two runs differed in
+permission mode as well as in doctrine's presence — two variables, so the first
+comparison proved nothing. A doctrine-free project was therefore probed
+directly, under both default and auto modes:
+
+| | doctrine project | clean control |
+|---|---|---|
+| shell write to parent checkout | rc=0, **absorbed** | rc=0, **landed for real** |
+| `readlink /proc/self/ns/mnt` | — | `mnt:[4026531832]` (init namespace) |
+| `wc -l /proc/self/mountinfo` | — | 31 (full host mount table) |
+| `bwrap` in shell ancestry | — | **absent** — plain `bash -c` |
+
+No kernel confinement in either mode, so permission mode cannot explain the
+absorb. Doctrine's wrap is the only remaining candidate, and `PreToolUse` is
+confirmed.
+
+**A free second confirmation of `WorktreeCreate`.** The control project's
+harness-native worktree landed at `.claude/worktrees/agent-<id>`; the doctrine
+project's at `.worktrees/agent-<id>` — `WORKTREES_SUBDIR`, doctrine's layout.
+The earlier attribution rested on doctrine owning that layout in its own source;
+it now rests on a demonstrated difference in where the harness puts its own.
+Path facts, unaffected by permission mode.
+
+## `VH-1` is fully evidenced
+
+Eleven entries across five events, all project-scoped, on a cold install with
+the plugin path deregistered — plus one observed effect per event class:
+`SessionStart` behaviourally, `WorktreeCreate` and `PreToolUse` by differential
+against a doctrine-free control.
+
+Two findings fell out that outlive this slice, recorded as memories rather than
+left here: a jailed worker's own instruments lie in both directions
+(`mem.fact.worktree.gitdir-pointer-unresolvable-in-sandboxed-subagent`), and the
+harness's native `isolation: worktree` applies no kernel confinement at all
+(`mem.fact.claude.native-worktree-isolation-is-tool-layer-only`). The second
+bears on the slice's own premise: doctrine's jail is not made redundant by the
+harness — on this arm it is the only real confinement present.
 
 ## A trap the probe surfaced, which is not a defect in this slice
 
@@ -249,7 +305,7 @@ nothing about `WorktreeCreate` firing — the fork demonstrably exists and is
 registered in the parent. Operator's note: worktrees behave oddly when the repo
 sits outside the usual workspace path, as this scratch project does at `/tmp`.
 
-### `PreToolUse` — outstanding
-
-Six entries across five matchers, the largest block. Trip any matched tool and
-confirm the memory-surface or worktree wall reports.
+**Attribution, settled later:** the confining view was doctrine's own bwrap jail,
+not a harness sandbox — established by the control run described under
+`PreToolUse` above. Carried out of this slice as
+`mem.fact.worktree.gitdir-pointer-unresolvable-in-sandboxed-subagent`.

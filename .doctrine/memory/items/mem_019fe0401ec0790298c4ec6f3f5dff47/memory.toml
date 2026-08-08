@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe0401ec0790298c4ec6f3f5dff47"
+memory_key = "mem.fact.claude.native-worktree-isolation-is-tool-layer-only"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Claude Code native worktree isolation is tool-layer only, and its two layers disagree"
+summary = "isolation:worktree applies no kernel confinement — the Write tool blocks the parent checkout while a plain shell redirect to the same path succeeds, and symlink/cd/python all walk through"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = ["src/worktree/**"]
+commands = []
+tags = ["claude-code", "worktree", "isolation", "security", "dispatch", "harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3b0266255d41cb837993602d639923b750ed66c7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7e064b7b23747f5b0f553e5dc8d7eae7673299b2ea855d75bd16276a0581f1b0"
+base_commit = "22e8abe00a5ae0b23f651ad88162b148f4f43376"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
