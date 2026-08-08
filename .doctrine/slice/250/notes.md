@@ -120,6 +120,37 @@ fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · e
   reconciliation owes:** amend `sec-2`'s sentence to match what shipped. This is
   a per-slice artefact edit, so it is a direct edit at reconciliation, not a REV
   — it changes no governance and does not join the SPEC-011 amendment.
+- **At reconcile — two forced departures from `PHASE-01`'s authored criteria
+  (2026-08-08, during execution).** Both are the workspace's own gates refusing
+  an authored placement, the same class as the `sec-2` patch above.
+
+  1. **`EX-8`'s constant list lands per-phase, at the consumer.** `Cargo.toml:175`
+     sets `warnings = "deny"`, so `dead_code` is a hard error and a constant with
+     no consumer fails the gate. Four of `EX-8`'s names have none in `PHASE-01`:
+     `SETTINGS_PROJECT_REL` (its consumer is `settings_rel(scope)`, which
+     `PHASE-02` `EX-2` already requires) and `EVENT_SUBAGENT_START` /
+     `EVENT_SUBAGENT_STOP` / `EVENT_PRE_TOOL_USE` (only `SessionStart` and
+     `WorktreeCreate` carry production inline literals today — verified by grep;
+     the other three events arrive with their specs in `PHASE-04` `EX-1`).
+     `PHASE-01` landed the two renames and the three matcher-set slices, so the
+     ambiguity `EX-8` argues about is removed in full.
+     **Owed:** note that `PHASE-01` `EX-8`, `PHASE-02` `EX-2` and `PHASE-04`
+     `EX-1` partition the constant list this way.
+
+  2. **One new `dead_code` allowance, on `CommandForm::Portable`.** `EX-2`
+     requires the enum with both variants; nothing constructs `Portable` until
+     `PHASE-02` selects it from the scope key. It carries
+     `cfg_attr(not(test), expect(dead_code))` with that reason, and `PHASE-02`
+     must remove it. This is narrower than `EX-9`'s "this phase introduces no
+     `dead_code` allowance", which is scoped to the four `HookSpec` constructors
+     — none of which landed — but it is a real, recorded exception.
+
+- **At reconcile — `fallback_for`'s output shape changed.** `EX-4` makes the
+  malformed-settings repair snippet render the whole matcher set, so it is now a
+  JSON **array** of entries rather than a single entry object, for N=1 as well
+  as N>1. Intended, and unasserted anywhere (the sole assertion is
+  `!snippet.is_empty()`), but it is user-visible on both install paths.
+
 - **At close:** IMP-400 does *not* close with this slice — its `OQ-4` (migrating
   existing `enabledPlugins` / marketplace registrations) is out of scope and
   keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.
