@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe076-d257-7cc2-97c2-7de272a68685"
+recorded_at = "2026-08-08T08:21:51.319245285Z"
+kind = "friction"
+summary = "reconcile/close: conformance can't see a reconcile-stage write (IMP-292 defect 4, second instance)"
+detail = "SL-250's audit brief predicted .doctrine/spec/tech/011/** would clear once REV-049 landed. It did not — every recorded delta binds to a PHASE-NN and a reconcile commit belongs to no phase, so a governance target discharged at reconcile reads undelivered forever. Cost: I burned a diagnosis cycle (a --against run plus a backlog search) to establish that the selector was fine and the fold was blind, on a defect already recorded as IMP-292 defect 4 with SL-244/REV-048 as the first instance. The brief's confident wrong prediction is itself the tell: an auditor who knew the mechanism would not have written it, so each slice pays the diagnosis again. Cheapest fix short of the real one: /audit should stop predicting the cell clears, and /close should know the red cell is expected for any slice with a governance design-target selector."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
