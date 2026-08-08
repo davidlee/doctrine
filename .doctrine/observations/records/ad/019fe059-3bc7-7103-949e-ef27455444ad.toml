@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe059-3bc7-7103-949e-ef27455444ad"
+recorded_at = "2026-08-08T07:49:32.231662177Z"
+kind = "friction"
+summary = "/audit — a concurrent agent's pathless commit swept RV-350's freshly-minted ledger files into an unrelated commit titled 'doctrine'"
+detail = "Opening RV-350 for the SL-250 audit created .doctrine/review/350/{review-350.toml,review-350.md} plus the title symlink. Before I committed them, another agent on the shared edge worktree ran a pathless 'git commit' and swept all three into 0ab60d545, message 'doctrine', alongside their own CHR-059/IMP-410 backlog items and two observation records. Nothing was lost and I did not rewrite shared history, but the ledger's provenance is now wrong in the log and my own audit commit shows the review files as modifications rather than additions. This is exactly the hazard AGENTS.md documents ('another agent's already-staged file rides a pathless git commit into your commit') observed from the receiving end: the discipline protects the committer from absorbing foreign work, and nothing protects the author of freshly-created files from having them absorbed. Cost was low here (one confused minute reading git log to work out why a new review read as tracked), but a review ledger is exactly the artefact whose commit provenance an auditor later reads."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
