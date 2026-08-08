@@ -57,6 +57,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use doctrine::DOCTRINE_TOML;
 use rustix::fs::FsWord;
@@ -1301,17 +1302,188 @@ impl ConformanceBackend for BubblewrapBackend<'_> {
         execution: &Execution,
         observer: &dyn Fn(HostPid),
     ) -> Result<Observation, BackendError> {
-        // `T5` owes this the descent from the immediate child — which under the
-        // wall bound is `timeout(1)` — to the capsule's own top-level process,
-        // and the session id `EX-12`'s containment needs (`D3`). The seam is
-        // here; the descent is not.
-        let relay = |pid: i32| observer(HostPid(pid));
+        // The backend's seam hands over the **immediate child**, which under the
+        // wall bound is `timeout(1)` and never the subject. The descent to the
+        // capsule's own top-level process happens here, trusted-side, inside the
+        // window where the child is spawned and not yet waited on.
+        //
+        // A descent that finds nothing does **not** call back, and
+        // `classify_concurrent` reads that as `Indeterminacy::NoLiveness`. That
+        // is the honest outcome: a pid we could not establish is not evidence,
+        // and calling back with the wrapper's pid would be worse than silence.
+        let relay = |pid: i32| {
+            if let Some(capsule) = observed_capsule_process(HostPid(pid)) {
+                observer(capsule);
+            }
+        };
         self.run(
             placement,
             execution,
             &WeakenedProfile::confining().observed_by(&relay),
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// The pid seam and the session it names (`T5`, `EX-7`, `EX-12`, `D3`)
+// ---------------------------------------------------------------------------
+
+const PROC_DIRECTORY: &str = "/proc";
+const PROC_SELF: &str = "self";
+const STAT_LEAF: &str = "stat";
+/// `/proc/<pid>/stat` fields, counted **after** the parenthesised `comm`. That
+/// field may itself contain spaces and parentheses — `sh (deleted)` is a real
+/// process name — so the split is on the **last** `)` in the line and never on
+/// whitespace from the left.
+const STAT_PARENT_FIELD: usize = 1;
+const STAT_SESSION_FIELD: usize = 3;
+/// The capsule's top-level process does not exist at the instant its wrapper is
+/// spawned, so the descent polls. Half a second at two milliseconds; a capsule
+/// that has not reached its own session by then is reported as no liveness
+/// rather than guessed at.
+const CAPSULE_DISCOVERY_ATTEMPTS: u32 = 250;
+const CAPSULE_DISCOVERY_INTERVAL: Duration = Duration::from_millis(2);
+
+/// A session as the host sees it.
+///
+/// Distinct from [`HostPid`] because `EX-12`'s containment turns on the
+/// difference: a **process-group** kill cannot reap the descendant row 7's
+/// payload deliberately detaches into its own session, and a bare `i32` makes
+/// the two indistinguishable at the point where the mistake is cheap to make.
+/// `M13` mutates the session field index into the process-group one; this
+/// newtype is why that mutation has something to red against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SessionId(pub(crate) i32);
+
+/// The three numbers the descent needs from one `/proc` entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProcessFacts {
+    pub(crate) pid: HostPid,
+    pub(crate) parent: HostPid,
+    pub(crate) session: SessionId,
+}
+
+/// The capsule's top-level process: the **nearest** descendant of the trusted
+/// side's immediate child that leads a session of its own.
+///
+/// Measured on this host (plan-time, and again here): the tree under the
+/// confining profile is `timeout` → `bwrap` → `bwrap`'s sandbox process, and
+/// only the last of the three has `session == pid` — bubblewrap's
+/// `--new-session` calls `setsid` there, inside the pid namespace, and the
+/// kernel reports that session to a host-namespace reader as the leader's host
+/// pid. So *leads its own session* identifies the subject without knowing how
+/// many wrappers stand between, which is what makes the same rule work under
+/// `Weakening::WallBound` (no `timeout`) and `Weakening::ProcessVisibility` (no
+/// pid namespace).
+///
+/// **Nearest, not first found.** Row 7's payload deliberately detaches a
+/// descendant into a *second* new session, so a later arm has two candidates and
+/// the deeper one is the escapee rather than the subject. Ties break on the
+/// lower pid, so the answer is a function of the table rather than of `/proc`'s
+/// directory order.
+///
+/// **A leader, not a member.** Once the top-level process exits, its surviving
+/// children keep its session id but none of them *is* the leader, and this
+/// answers `None` rather than naming a survivor. That is the right answer: the
+/// row wants a pid whose liveness it can reason about, and a departed leader's
+/// orphan is not that pid.
+///
+/// The harness's own session needs no exclusion here and gets none: a process
+/// that leads the harness's session predates the child, so it can never be the
+/// child's descendant. `own_session` exists for `EX-12`'s sweep (`F-3`), not for
+/// this filter — a guard that cannot fire is a guard that cannot be tested.
+///
+/// Pure: the table is a parameter. `A2`'s lesson — the branch this host never
+/// takes ships untested unless it can be forced — applies to every shape of
+/// process tree, and none of them can be conjured on demand.
+fn capsule_session_leader(child: HostPid, table: &[ProcessFacts]) -> Option<HostPid> {
+    table
+        .iter()
+        .filter(|facts| facts.session.0 == facts.pid.0)
+        .filter_map(|facts| depth_from(facts.pid, child, table).map(|depth| (depth, facts.pid)))
+        .min_by_key(|(depth, pid)| (*depth, pid.0))
+        .map(|(_, pid)| pid)
+}
+
+/// Parent hops from `pid` up to `ancestor`, or `None` when `ancestor` is not one.
+///
+/// Bounded by the table's own length, so a `/proc` snapshot torn mid-read into a
+/// parent cycle terminates rather than hanging the trusted side.
+fn depth_from(pid: HostPid, ancestor: HostPid, table: &[ProcessFacts]) -> Option<u32> {
+    let mut current = pid;
+    for hop in 0..table.len() {
+        if current == ancestor {
+            return u32::try_from(hop).ok();
+        }
+        let facts = table.iter().find(|entry| entry.pid == current)?;
+        if facts.parent.0 == 0 {
+            return None;
+        }
+        current = facts.parent;
+    }
+    None
+}
+
+/// Poll `/proc` until the capsule's top-level process exists, or give up.
+fn observed_capsule_process(child: HostPid) -> Option<HostPid> {
+    for _ in 0..CAPSULE_DISCOVERY_ATTEMPTS {
+        if let Some(capsule) = capsule_session_leader(child, &process_table()) {
+            return Some(capsule);
+        }
+        std::thread::sleep(CAPSULE_DISCOVERY_INTERVAL);
+    }
+    None
+}
+
+/// Every process the trusted side can read, as of one sweep.
+///
+/// Unreadable and vanishing entries are dropped rather than refused: `/proc` is
+/// a moving target and a process that exits mid-sweep is not an error.
+pub(crate) fn process_table() -> Vec<ProcessFacts> {
+    let Ok(entries) = std::fs::read_dir(PROC_DIRECTORY) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let pid: i32 = entry.file_name().to_str()?.parse().ok()?;
+            let (parent, session) = stat_facts(&entry.path().join(STAT_LEAF))?;
+            Some(ProcessFacts {
+                pid: HostPid(pid),
+                parent,
+                session,
+            })
+        })
+        .collect()
+}
+
+/// The session a live process belongs to — `EX-12`'s sweep predicate.
+pub(crate) fn session_of(pid: HostPid) -> Option<SessionId> {
+    let path = Path::new(PROC_DIRECTORY)
+        .join(pid.0.to_string())
+        .join(STAT_LEAF);
+    stat_facts(&path).map(|(_, session)| session)
+}
+
+/// The trusted side's **own** session, recorded so a foreign one is
+/// identifiable.
+///
+/// `F-3`: `EX-12` asks the fixture to record the capsule's session before the
+/// arm runs, and it cannot — the session does not exist until bubblewrap creates
+/// it inside the child. This is the half that *can* be recorded beforehand, and
+/// it is the half that makes the other identifiable.
+pub(crate) fn own_session() -> Option<SessionId> {
+    let path = Path::new(PROC_DIRECTORY).join(PROC_SELF).join(STAT_LEAF);
+    stat_facts(&path).map(|(_, session)| session)
+}
+
+fn stat_facts(path: &Path) -> Option<(HostPid, SessionId)> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let after_comm = text.rsplit_once(')')?.1;
+    let fields: Vec<&str> = after_comm.split_whitespace().collect();
+    let parent = fields.get(STAT_PARENT_FIELD)?.parse().ok()?;
+    let session = fields.get(STAT_SESSION_FIELD)?.parse().ok()?;
+    Some((HostPid(parent), SessionId(session)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1883,9 +2055,12 @@ fn verify_over(
 mod tests {
     use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
+    use std::fs::File;
     use std::io::Write as _;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
+
+    use tempfile::TempDir;
 
     use super::Weakening as ProfileWeakening;
     use super::{
@@ -1898,6 +2073,10 @@ mod tests {
         second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
+    use super::{
+        ProcessFacts, STAT_LEAF, SessionId, capsule_session_leader, depth_from, own_session,
+        process_table, session_of, stat_facts,
+    };
     use crate::backend::bubblewrap::{SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
@@ -3487,5 +3666,168 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // The pid seam (`T5`, `EX-7`, `D3`)
+    // -----------------------------------------------------------------------
+
+    /// The harness's session, in every fixture below.
+    const HARNESS_SESSION: i32 = 100;
+
+    /// One row of a `/proc` snapshot.
+    fn facts(pid: i32, parent: i32, session: i32) -> ProcessFacts {
+        ProcessFacts {
+            pid: HostPid(pid),
+            parent: HostPid(parent),
+            session: SessionId(session),
+        }
+    }
+
+    /// The tree this host actually produces, measured under the confining
+    /// profile: `timeout` → `bwrap` → the sandbox process, and only the last
+    /// leads a session of its own.
+    fn measured_tree() -> Vec<ProcessFacts> {
+        vec![
+            facts(HARNESS_SESSION, 1, HARNESS_SESSION),
+            facts(200, HARNESS_SESSION, HARNESS_SESSION), // timeout -k
+            facts(300, 200, HARNESS_SESSION),             // bwrap, outer
+            facts(400, 300, 400),                         // the capsule, --new-session
+        ]
+    }
+
+    #[test]
+    fn the_capsule_is_the_session_leader_below_the_immediate_child() {
+        assert_eq!(
+            capsule_session_leader(HostPid(200), &measured_tree()),
+            Some(HostPid(400))
+        );
+    }
+
+    /// Row 7's payload detaches a **second** session leader below the same
+    /// child. Nearest-wins is the whole difference between naming the subject
+    /// and naming the escapee; a first-match implementation passes the fixture
+    /// above and fails this one.
+    #[test]
+    fn an_escaping_orphan_is_not_mistaken_for_the_capsule() {
+        // The escapee is listed **first**: `/proc`'s directory order is not
+        // numeric and not stable, so a first-match implementation must fail here
+        // rather than pass by luck.
+        let mut table = vec![
+            facts(500, 400, 500), // the setsid'd descendant
+            facts(600, 500, 500), // and its own child, for good measure
+        ];
+        table.extend(measured_tree());
+        assert_eq!(
+            capsule_session_leader(HostPid(200), &table),
+            Some(HostPid(400))
+        );
+    }
+
+    /// Another agent's capsule, running concurrently under a different child, is
+    /// a foreign session leader too. Descent from *this* child is what excludes
+    /// it — the session predicate alone does not.
+    #[test]
+    fn a_foreign_session_outside_this_subtree_is_not_the_capsule() {
+        // Its pid is **lower** than the capsule's, so the depth-0 tie-break
+        // cannot rescue an implementation that forgot to descend.
+        let mut table = vec![facts(150, HARNESS_SESSION, 150)];
+        table.extend(measured_tree());
+        assert_eq!(
+            capsule_session_leader(HostPid(300), &table),
+            Some(HostPid(400))
+        );
+    }
+
+    /// The harness's own session leader satisfies `session == pid` too, and needs
+    /// no special case: it predates the child, so it lies *upward* in the tree
+    /// and the descent never reaches it. This is the fixture that says so.
+    #[test]
+    fn the_harnesss_own_session_leader_is_never_the_capsule() {
+        let table = vec![
+            facts(HARNESS_SESSION, 1, HARNESS_SESSION),
+            facts(200, HARNESS_SESSION, HARNESS_SESSION),
+        ];
+        assert_eq!(capsule_session_leader(HostPid(200), &table), None);
+    }
+
+    /// The top-level process has exited and its child survives, carrying the
+    /// dead leader's session id. A session *member* is not a session *leader*:
+    /// naming that survivor would hand the row a pid whose liveness means
+    /// nothing about the subject.
+    #[test]
+    fn a_survivor_of_a_departed_leader_is_not_the_capsule() {
+        let table = vec![
+            facts(HARNESS_SESSION, 1, HARNESS_SESSION),
+            facts(200, HARNESS_SESSION, HARNESS_SESSION),
+            facts(300, 200, HARNESS_SESSION),
+            facts(550, 300, 400), // reparented; session 400's leader is gone
+        ];
+        assert_eq!(capsule_session_leader(HostPid(200), &table), None);
+    }
+
+    /// No callback rather than a wrong one: `classify_concurrent` reads silence
+    /// as `Indeterminacy::NoLiveness`, and a pid we could not establish is not
+    /// evidence.
+    #[test]
+    fn a_capsule_that_never_appears_yields_no_pid() {
+        let table = vec![
+            facts(HARNESS_SESSION, 1, HARNESS_SESSION),
+            facts(200, HARNESS_SESSION, HARNESS_SESSION),
+            facts(300, 200, HARNESS_SESSION),
+        ];
+        assert_eq!(capsule_session_leader(HostPid(200), &table), None);
+    }
+
+    /// `/proc` is read entry by entry and can be torn between them, so a parent
+    /// chain that closes on itself is reachable. It must terminate.
+    #[test]
+    fn a_torn_parent_cycle_terminates() {
+        let table = vec![facts(10, 11, 10), facts(11, 10, 11)];
+        assert_eq!(depth_from(HostPid(10), HostPid(999), &table), None);
+        assert_eq!(capsule_session_leader(HostPid(999), &table), None);
+    }
+
+    /// `comm` is attacker-adjacent: it is the payload's own `argv[0]` basename,
+    /// it is not escaped, and it may hold spaces, parentheses and digits. This
+    /// line's `comm` is chosen so that splitting from the **left** on
+    /// whitespace, or on the **first** `)`, reads a different field —
+    /// and so that ppid, pgrp and sid are three distinct numbers, which is what
+    /// gives `M13`'s field-index mutation something to red against.
+    #[test]
+    fn stat_is_read_past_the_last_paren_of_a_hostile_comm() {
+        let dir = TempDir::new().expect("a scratch directory");
+        let path = dir.path().join(STAT_LEAF);
+        let mut file = File::create(&path).expect("the fixture opens");
+        file.write_all(b"4242 (evil ) 9 9 9 9) S 111 222 333 0 -1 4194304 0 0\n")
+            .expect("the fixture writes");
+        drop(file);
+        assert_eq!(
+            stat_facts(&path),
+            Some((HostPid(111), SessionId(333))),
+            "ppid 111, pgrp 222 and sid 333 are distinct on purpose"
+        );
+    }
+
+    /// A vanished process is not an error — `/proc` is a moving target.
+    #[test]
+    fn a_missing_stat_is_absence_rather_than_failure() {
+        let dir = TempDir::new().expect("a scratch directory");
+        assert_eq!(stat_facts(&dir.path().join(STAT_LEAF)), None);
+    }
+
+    /// The live half: the two `/proc` readers agree about this process, and the
+    /// sweep sees it. Cheap, and it is the only thing that catches `PROC_SELF`
+    /// and the `/proc/<pid>` join disagreeing.
+    #[test]
+    fn the_harness_can_read_its_own_session_by_both_routes() {
+        let own = own_session().expect("this process has a session");
+        let pid = HostPid(i32::try_from(std::process::id()).expect("a host pid fits in i32"));
+        assert_eq!(session_of(pid), Some(own));
+        let table = process_table();
+        assert!(
+            table.iter().any(|entry| entry.pid == pid),
+            "the sweep did not find the process running it"
+        );
     }
 }

@@ -541,3 +541,93 @@ once, but with the immediate child's pid — `timeout(1)` under the wall bound.
 The `/proc` descent to the capsule's top-level process and the session id (`D3`)
 are `T5`'s, and the obligation is written at the call site so it cannot be
 mistaken for finished.
+
+## `T5` — `execute_observed`, the descent, and the session id (`EX-7`, `D3`)
+
+**The measurement first.** Under the confining profile the tree the trusted side
+faces is three deep, and only the last one is the subject:
+
+```
+reader sid 1310932
+1310936 ppid=1310932 pgrp=1310936 sid=1310932   timeout -k 2 10 bwrap …
+1310938 ppid=1310936 pgrp=1310936 sid=1310932   bwrap …
+1310939 ppid=1310938 pgrp=1310939 sid=1310939   bwrap …   ← the capsule
+```
+
+`spawn_and_wait` hands over the **first** of those, which is `timeout(1)`. So the
+seam PHASE-07 left is a wrapper pid, and every row that reasons about the
+subject's liveness would have been reasoning about the wall-bound wrapper.
+
+**The rule that names the subject: nearest session leader below the child.**
+`--new-session` calls `setsid` in exactly the top-level sandbox process, and a
+host-namespace reader sees that session as the leader's **host** pid — so
+`session == pid` identifies the subject, and the number it yields is
+simultaneously the pid `EX-7` wants and the sid `EX-12`'s sweep wants. `D3`
+assumed the pid seam could supply the sid; the measurement is why it can, and
+the reason is stronger than the assumption — it is the same integer.
+
+The rule is a property, not a depth, which is what makes it survive the
+weakenings: `Weakening::WallBound` deletes the `timeout` layer and
+`Weakening::ProcessVisibility` deletes the pid namespace, and neither moves the
+answer. A wrapper count would have broken on both.
+
+**Three ways to get it wrong, each with a fixture.**
+
+- *First match rather than nearest.* Row 7's payload deliberately `setsid`s a
+  descendant, so a later arm has two leaders under the same child and the deeper
+  one is the escapee. `/proc`'s readdir order is neither numeric nor stable, so
+  `an_escaping_orphan_is_not_mistaken_for_the_capsule` lists the escapee
+  **first** — otherwise a first-match implementation passes by luck. Ties break
+  on the lower pid so the answer is a function of the table, not of readdir.
+- *Member rather than leader.* Once the top-level process exits, its children
+  keep its sid and none of them is the leader.
+  `a_survivor_of_a_departed_leader_is_not_the_capsule` pins the honest answer:
+  `None`. Naming a survivor would hand the row a pid whose liveness says nothing
+  about the subject.
+- *Field index off by one.* `comm` is the payload's own `argv[0]` basename,
+  unescaped, and may hold spaces and parentheses — so the split is on the **last**
+  `)`, never on whitespace from the left. After it, field 1 is ppid, field 2 is
+  **pgrp**, field 3 is sid. `stat_is_read_past_the_last_paren_of_a_hostile_comm`
+  uses a `comm` of `evil ) 9 9 9 9` and three distinct numbers, so both mistakes
+  red separately. `SessionId` is a newtype for the same reason: `M13`'s
+  process-group-instead-of-session mutation needs the two to be distinguishable
+  at the point where confusing them is cheap.
+
+**The guard that could never fire, removed** (`F-18`). The first draft filtered
+`session != own_session()` — "a foreign session". Probed with an ad-hoc mutation
+before `T11` rather than after: it redded **nothing**, and the reason is
+structural, not a fixture gap. A process leading the harness's own session
+predates the child the harness just spawned, so it can never be that child's
+descendant; the descent already excludes it. Deleted, with the reasoning at the
+site so it is not reinstated as an obvious omission. `own_session()` stays — it
+is `F-3`'s "record what you *can* record beforehand", and `EX-12`'s sweep is its
+real caller.
+
+**Six mutations run by hand at green, before `T11`:** first-match instead of
+nearest (reds the escaping-orphan case); drop the subtree restriction (reds the
+foreign-session case — its pid is deliberately **lower** than the capsule's so
+the depth tie-break cannot rescue it); drop the leader predicate (reds six);
+weaken the leader predicate to membership (reds the departed-leader case);
+`STAT_SESSION_FIELD` 3 → 2 (reds the hostile-`comm` case); own-session exclusion
+(reds nothing — see above). Restored by copy each time.
+
+**Silence is the honest failure.** `observed_capsule_process` polls for half a
+second (250 × 2ms) and, failing, does **not** call `observer`.
+`classify_concurrent` reads that as `Indeterminacy::NoLiveness`. Calling back
+with the wrapper's pid would be worse than silence: it is a pid that is always
+alive, so every liveness probe would pass and the concurrency row would be a
+rubber stamp.
+
+`depth_from` is bounded by the table's own length. `/proc` is read entry by
+entry and can tear between them, so a parent chain that closes on itself is
+reachable; `a_torn_parent_cycle_terminates` is that fixture.
+
+**Live coverage is owed, and where.** Everything above is unit-tested against
+process tables as data, which is the only way to get the shapes this host will
+not produce on demand (`A2`'s lesson generalised). The live half — a real
+capsule, a real callback, a real sid — arrives with `T6`'s arms and `T10`'s
+`the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness`,
+which needs both halves of the same machinery. Recorded here so `T5`'s tick is
+not read as "the descent has run against a real tree".
+
+Durable: `mem.fact.linux.session-leader-identifies-the-sandbox-subject`.

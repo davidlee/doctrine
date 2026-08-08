@@ -1,0 +1,54 @@
+memory_uid = "mem_019fe2945be57070bb6b2986555c76e9"
+memory_key = "mem.fact.linux.session-leader-identifies-the-sandbox-subject"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Find a sandboxed subject by session leadership, not by wrapper count"
+summary = "The capsule's top-level process is the nearest descendant whose /proc stat session id equals its own pid; --new-session makes it so, and the host namespace reports the leader's host pid."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["linux", "proc", "bubblewrap", "sandbox"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "25942aaff2485da25d3a2f951cb150e2de523864"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "7f2047e34920647ce28c4ab4bafeb85a997f4e6828854885adcfef40a08a3bac"
+base_commit = "b513320a47b58a8de0cb309c1fb864fef632299d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "measurement"
+ref = "SL-248 PHASE-08 T5"
+
+[[relation]]
+label = "related"
+target = "mem_019fe258162d7051b061cc868c9aca59"
+
+[[relation]]
+label = "related"
+target = "mem_019fe1653d817712904d6cb2381f85f8"
+
