@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe1d8-bd7a-7bd0-af06-6c750d4709f7"
+recorded_at = "2026-08-08T14:48:25.72266316Z"
+kind = "friction"
+summary = "LOOP.md worker: a session limit killed a worker at T7 with the whole phase green but uncommitted, losing the reasoning rather than the code"
+detail = """
+SL-249 PHASE-05. The worker did T0-T5, ran the gate green, and was killed by a session limit while writing the execution record at T7. Nothing was committed and the sheet's task boxes and Findings were both empty.
+
+Recovery cost the orchestrator a full re-verification: re-run the gate (exit 0), inspect the diff to establish what had actually shipped, commit the source and the worker's one recorded memory, record-delta, verify-vt. All three VTs passed. So the CODE was never at risk - it was on disk and the gate was re-runnable.
+
+What was lost was insight. The evidence for what each compensating control had actually done had to be reconstructed from the diff instead of read from Findings, and any memory or observation the worker had formed but not yet written died with it.
+
+Root cause in the driver: LOOP.md said 'harvest as you go, never at the end' but bound that to no concrete boundary, while 'End green ... commit path-limited' read as a single end-of-phase commit. Fixed at f033e11b8 - commit per task, harvest at that boundary, a task is not done until its commit, its Findings line and its harvest all exist."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
