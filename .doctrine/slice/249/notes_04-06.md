@@ -677,3 +677,188 @@ defect.
   `VA-1` is discharged by the adjudication above.
 - No `STOP` condition fired: `S1`–`S5` all clear. `S5` in particular was the live
   one, and T6 came down on confirm.
+
+## PHASE-06 — the filled mint
+
+The last of the three phases in this shard. It gives a `create` disposition a
+`facet` slot on the wire, validates it at **admission** (before any id is
+reserved), and writes it at **step 5** of the six-step mint — so a checkpoint
+that creates a decision can now land `choice`, `alternatives` and the rest in
+one act instead of minting a hollow record and editing it after.
+
+Harvested per task rather than at the end (PHASE-05's terminal-task habit is
+what forced that record to be reconstructed). Each task is one source commit
+plus its harvest commit, and every commit was path-limited — two foreign paths
+(`.claude/settings.json`, `scripts/find-empty-reqs.sh`) sat dirty in the shared
+index throughout and are absent from all seven commits.
+
+| task | source | harvest | criteria |
+|---|---|---|---|
+| T1 the wire slot, admission, refusals | `db93e4bd5` | `f921224df`, `b7a97b558` | `EX-2`, `EX-3`, `VT-2` |
+| T2 step 5 writes it, idempotently | `803e56e98` | `0088ef7c5` | `EX-1`, `EX-4`, `VT-1` |
+| T3 the digest covers it | `0096c7041` | `dd9e5a147` | `EX-5`, `VT-3` |
+
+### What shipped
+
+`WireFacetValue` (untagged `List`/`Text`) and `CreateRecord.facet:
+BTreeMap<String, WireFacetValue>` in `src/design_run/submission.rs`; in
+`src/commands/design.rs` a `raw_facet` mapper, a `plan_facet_edits` call inside
+`plan_checkpoints`' `Dispose::Create` arm, `MintKind::Knowledge.facet`,
+`MintPlan::record_facet()`, and an `apply_facet_edits` call in
+`apply_record_effects` that is **skipped entirely on an empty slice** — a
+`concept` owns no facet fields (`CONCEPT_FACET_FIELDS = &[]`), and
+`KeyPosture::RequirePresent` would refuse an empty write.
+
+`plan_facet_edits` runs **once**, at admission (`D-B`). There is deliberately no
+second validation at the writer: it is the sole constructor of `FacetEdit`
+(private fields), so possession of one is the proof, and a second check would be
+a second place to drift.
+
+Two files touched, `+585/−7`. The seven deleted lines are an import reflow and
+one doc comment this phase rewrote — **no existing test body was edited**.
+`src/knowledge.rs` and `src/commands/facet.rs` both have an empty diff for the
+whole phase.
+
+### The inventory, re-derived — and correct for once
+
+`R7` asked for the refusal catalogue to be re-derived against the tree rather
+than copied, because every counted inventory on this slice had shipped short
+three times (plan 5 → sheet 6 → shipped 9, at PHASE-05's VT-3). Re-derived here:
+`FacetEditRefusal` has **three** variants (`knowledge.rs:1170-1187`) and
+`check_shape` (`:1260-1285`) yields **two distinct** `ShapeMismatch` messages
+(`EXPECTED_LIST`, `EXPECTED_SINGLE`) — **five** reachable wire cases, which is
+exactly what the sheet's table said. Fourth occurrence of the check, first time
+it found nothing. All five are asserted: case **a** in `VT-2`, cases **b–e** in
+`every_other_facet_refusal_the_wire_can_reach_leaves_the_run_inert`.
+
+`EX-3` is discharged structurally: the test helper `refusal_of()` calls
+`knowledge::plan_facet_edits` directly for its expectation, so no refusal message
+is retyped in a test and the two cannot drift.
+
+### Measured
+
+- Suite **4468 → 4470 → 4472 → 4473**. The diff `5c11ea307..HEAD` adds **5**
+  `#[test]` items and removes none. The two numbers were derived independently
+  and agree.
+- `cargo test --bin doctrine commands::facet::` → **33 passed**, `git diff
+  src/commands/facet.rs` **empty** (`S1`).
+- `tests/architecture_layering.rs` → **25 passed**, with **no**
+  `ACCEPTED_VIOLATIONS` entry added (`S3`). `D-A`'s whole point.
+- `./target/debug/doctrine check gate` → **exit 0**.
+- `doctrine slice verify-vt 249` → PHASE-06 `VT-1`, `VT-2`, `VT-3` all **PASS**.
+- No STOP fired: `S1`–`S8` all clear.
+
+`VT-2` asserts `D5` whole, not merely that a refusal happened: `Err` with the
+typed message in the chain; snapshot bytes identical **and** `run.revision`
+still 2; no `decision/` directory on disk **and** an empty intent journal; and
+the next successful create reserving `DEC-001` — the assertion that separates
+"refused" from "refused *before reservation*".
+
+### The two compensating controls
+
+Both tasks that structurally could not stage a red ran their control, and both
+behaved as the sheet specified.
+
+**`C1` (T2, VT-1's idempotence half).** Perturbing the second submission's
+`choice` to `"C1: a perturbed value"` failed the byte-equality assertion with the
+difference **confined to the `[facet]` table's `choice` row** — `choice = "C1: a
+perturbed value"` against `choice = "the leaf-local wire type"`, `alternatives`
+and every other span byte-identical. Restored. One refactor was kept from it: the
+comparison now reads the document as a `String` (TOML is UTF-8, so still
+byte-for-byte) so a failure prints two documents rather than two ~700-element
+byte vectors.
+
+**`C2` (T3, VT-3).** Replacing `skip_serializing_if` with `skip_serializing` made
+`VT-3` fail:
+
+```
+assertion `left != right` failed: two payloads differing only in the facet digest differently
+  left:  Some(Fingerprint("16ffbeca58e6fbd0ecb00ab76937de434b45641909ec0d034f09ea5446437101"))
+  right: Some(Fingerprint("16ffbeca58e6fbd0ecb00ab76937de434b45641909ec0d034f09ea5446437101"))
+```
+
+Blast radius, which the sheet asked for as information either way: **exactly one
+test failed** (4472 passed, 1 failed). Deserialisation is unaffected, so T1's and
+T2's tests stayed green — and no other test in the tree depends on
+`CreateRecord.facet` reaching the *serialised* form. **`VT-3` is the sole guard
+on `EX-5`.** Restored.
+
+### Divergences
+
+- **`D-A` — the design's wire snippet names a type a leaf cannot see.** Design
+  §5.2 spells the facet value `RawValue`, which lives in `knowledge`, a
+  command-tier module. `design_run` is a leaf with **crate out-degree 0**
+  (ADR-001, `.doctrine/adr/001/layering.toml:31`) — it may not name `crate::` at
+  all, and `tests/architecture_layering.rs` enforces it. So the wire carries a
+  leaf-local `WireFacetValue`, converted in one place shell-side (`raw_facet`),
+  following the same-file `WireKey` precedent. The name is `WireFacetValue` and
+  not `FacetValue` deliberately: see the `CHR-060` entry below. Implemented as
+  ruled, both halves; no layering violation baselined.
+- **The sheet's `EX-4` resume fixture cannot work, and this was established from
+  the tree rather than argued.** The sheet held that the abandoned-write hook at
+  `design.rs:2418` leaves the intent journalled so re-submitting the same
+  `submission_id` "resumes through step 5". It does not re-enter step 5 at all:
+  the mint runs in full **before** the pre-write abandon, so the intent is
+  journalled at `IntentState::Applied` and `execute_mint`'s `if intent.state() <
+  IntentState::Applied` guard (`:1115`) skips the step whole. A resume-shaped
+  fixture would have compared a file to itself with **no writer between the two
+  reads** — vacuous on any tree, including one carrying no feature at all, which
+  is a strictly worse failure than the one it was meant to guard. The fault hook
+  cannot substitute: `injected_fault` is a hard `std::process::exit(70)`
+  (`:672-690`), deliberately non-unwinding, so it is an e2e instrument only.
+  **Not treated as a STOP** — `EX-4` holds exactly as written, only the recipe
+  was wrong, and the sheet itself allowed "the same test **or a sibling**". The
+  test now pins the guard state explicitly (`assert_eq!(journal.intents[0]
+  .state(), IntentState::Applied, …)`, green — the in-tree proof that replay
+  skips the step) and drives idempotence by calling `apply_record_effects` a
+  second time directly, which is the property `EX-4` claims and is what a crash
+  between the effect and the journal write actually produces.
+- **`clippy::pedantic` refused the sheet's literal green step.** The sheet
+  suggested `let _validated = plan_facet_edits(…)?;`; `[workspace.lints.clippy]
+  pedantic = "deny"` makes `no_effect_underscore_binding` a hard error, so the
+  call is a bare expression statement with `?`.
+- **`VT-1`'s `test_file` points at `src/design_run/submission.rs`, but the test
+  lives in `src/commands/design.rs`** — and this is correct, not a miss. The
+  behaviour under test is an end-to-end mint, which only the command tier can
+  drive; `design_run` is a leaf and cannot reach a fixture. Same residency
+  split PHASE-01 took. Recorded so an audit reading the criterion literally does
+  not score it as a gap.
+
+### Carried to reconcile
+
+Neither is a task; neither was acted on here.
+
+- **Design §5.2's wire snippet.** It spells the facet value `RawValue`, a
+  command-tier type a leaf module cannot name. `D-A` sites a leaf-local
+  `WireFacetValue` instead. Reconcile settles the design's wording.
+- **`CHR-060`'s title names a now-contested target.** The chore is *"Rename
+  `facet_write::FacetField` to `FacetValue`"*. `D-A` declines to take
+  `FacetValue` here precisely so `CHR-060` keeps its target free — but in
+  reasoning about that, an argument against the chore's own premise surfaced and
+  should not have to be rediscovered when someone picks it up:
+  **`facet_write::FacetField` is `Str { key, value }` / `Arr { key, values }`, a
+  key-plus-value pair, so it really *is* a field; the type with the better claim
+  to `FacetValue` is an unkeyed value type — of which the crate now has two
+  (`knowledge::RawValue` and `design_run::WireFacetValue`).** So `CHR-060` may
+  want **re-aiming rather than executing**: either at a different name for the
+  writer enum, or at consolidating the two value types. That is a ruling for
+  `CHR-060`, with the user, not for this phase — recorded here only so the
+  argument survives. `CHR-060` was **not** edited.
+
+### Harvested
+
+- `mem.pattern.testing.anyhow-alternate-display-for-the-cause-chain`
+  (`mem_019fe1f55fc771f197bf58546e59aeb6`) — `anyhow::Error`'s `Display` renders
+  only the outermost context, so `err.to_string().contains(<cause>)` fails; or,
+  where the context line shares a substring, passes **vacuously**, which is the
+  worse case. `format!("{err:#}")` renders the chain. Cost one cycle here.
+- `mem.pattern.testing.replay-cannot-prove-idempotence-behind-a-state-guard`
+  (`mem_019fe1fce9567f33b87263b85c049cd9`) — wherever recorded progress gates a
+  step, a replay test exercises the guard, not the writer.
+- `mem.pattern.testing.serde-skip-serializing-is-the-control-for-a-by-construction-digest`
+  (`mem_019fe2010c2f7c01afc77905a79e9518`) — the reusable shape of `C2`, plus
+  counting the blast radius, and excluding doc comments when grepping call sites.
+- A `friction` observation (`019fe1fd-1633-7291-b969-421e8fd933e1`) on the
+  `/phase-plan` beat that would have caught the `EX-4` recipe: when a sheet
+  prescribes a resume/retry fixture, it must name the guard that decides whether
+  the step re-runs, and require the worker to pin it.
