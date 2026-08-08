@@ -723,6 +723,55 @@ Options as the planner put them, cheapest first:
 Either way this edits two files `PHASE-05` does not own, one of them a
 workspace-level safety posture — which is why it is not a planner's call.
 
+## Traps — what already bit this slice
+
+Tracked here rather than in `handover.md`, which is gitignored and does not
+survive an `rm -rf` of state (`LOOP.md` § *Notes, sharded*: never put anything
+load-bearing only there). The handover points at this section.
+
+- **This clone mints no entities.** `DEC-`/`ISS-`/`RV-`/`REQ-` ids collide with
+  the parent's. Findings go in the sheet and here as prose; mint at merge.
+  Memories and observations are exempt (UUID/key-named) — record freely.
+- **Run the gate yourself before flipping a phase.** `check`/`gate` build before
+  validating, which is what gives the corpus check a fresh binary. A worker's
+  report is a claim; the gate is the evidence.
+- **Do not reap a slow worker.** Sheet mtime alone is not liveness — it goes
+  quiet exactly when the work is slowest and dearest to lose. `LOOP.md`'s guard
+  has four legs and a 90-minute floor; any one fresh means alive. Waiting is
+  cheap, reaping is not.
+- **Expect to need `record-delta`.** The auto-boundary spans every commit
+  between phases, so any firing that commits driver or notes changes around a
+  worker's commit inherits them. `PHASE-05` picked up seven that way and was
+  tightened to `ab06b2fa7^..ab06b2fa7`. Read the boundary warning after every
+  status flip.
+- **`verify-vt` takes the slice id only** — `verify-vt 248`, not
+  `verify-vt 248 PHASE-05`. It prints every phase; later ones FAIL on
+  not-yet-existing files, which is expected.
+- **A literal grep for `#[expect(…)]` under-counts** — rustfmt splits the
+  attribute across lines. Normalise whitespace before counting.
+- **A green mandated test is not evidence its rule is reachable** (item 23), and
+  **a mutation that reds nothing may mean the fixture cannot discriminate**, not
+  that the rule is untested (item 32). Only the battery tells them apart.
+- **Lint, all `deny`:** `as_conversions` + `cast_possible_truncation`,
+  `integer_division`, `indexing_slicing`, `unwrap_used` / `expect_used` /
+  `panic`, `allow_attributes` (`#[expect(…, reason)]` only), `unreachable_pub`
+  and `module_name_repetitions` (hence `pub(crate)`), `disallowed_types` bans
+  `HashMap`/`HashSet`. `unsafe_code = "deny"` with a **hard budget of two**
+  `#[expect]` sites, both spent in `bubblewrap.rs`; a third is a finding and a
+  stop.
+- **`unfulfilled_lint_expectations` is denied** via `-D warnings`. A staged
+  `dead_code` header whose consumer has landed is a hard **error**, not a
+  warning — `PHASE-06`'s named debt, measured at five files.
+- **`cargo clippy --tests` / `--all-targets` is a trap** — enables `unwrap_used`
+  in test code, reds ~100 pre-existing errors. Use `doctrine check gate`.
+- **Path-limit every commit.** `git status --porcelain` first,
+  `git commit <paths> -F -`, never pathless, never `git add -A`. A live worker's
+  in-flight edits sit in the shared index — this already nearly swept a
+  half-finished phase into a doc commit.
+- **MSRV 1.85**, and `clippy::incompatible_msrv` is in the denied `all` group —
+  post-1.85 std APIs are unavailable (`std::io::pipe`, 1.87, item 39).
+- Dev binary `./target/debug/doctrine`, never `~/.cargo/bin`.
+
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
 fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green

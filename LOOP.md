@@ -228,7 +228,10 @@ load-bearing only there.
      This never moves into a shard;
   3. cross-phase invariants and decisions;
   4. Open — questions, blockers, deferrals;
-  5. Learned — memories minted, pointers only.
+  5. Learned — memories minted, pointers only;
+  6. **Traps** — what already bit this slice. This is the one section that grows
+     monotonically, so it is also the one that blows the handover's ~50-line
+     budget if kept there. It lives here, tracked; the handover points at it.
 
 Extra files in a slice directory are fine; `doctrine validate` scans entity kinds
 and ignores them (`spike-credentials.sh` is the precedent).
@@ -243,10 +246,13 @@ lines, no narrative history — history is the shard.
 ## Last firing       what changed, and the sha
 ## Next              the single next action, verbatim enough to execute
 ## Live              open decisions, blockers, awaiting-human
-## Traps             what already bit this slice — do not rediscover
+## Traps             a pointer to `notes.md` § Traps, not a second copy
 ```
 
-If it exceeds ~50 lines, something belongs in `notes.md` instead.
+If it exceeds ~50 lines, something belongs in `notes.md` instead. The trap list
+is the usual culprit and has already been moved there once — it only grows, and
+a gitignored file is the wrong home for the one section nobody can afford to
+rediscover.
 
 ## Writer map
 
