@@ -708,7 +708,12 @@ pub(crate) fn run_risk_set(args: &RiskSetArgs) -> anyhow::Result<()> {
         });
     }
 
-    let changed = crate::facet_write::apply_set_mixed(&path, "facet", &fields)?;
+    let changed = crate::facet_write::apply_set_mixed(
+        &path,
+        "facet",
+        &fields,
+        crate::facet_write::KeyPosture::Create,
+    )?;
 
     // Build echo parts (Vec<String> + join — house style).
     if changed {
