@@ -75,23 +75,11 @@ pub(crate) fn parse_entity_toml<T: serde::de::DeserializeOwned>(
     toml::from_str(text).with_context(|| format!("{prefix}-{id:03}: TOML parse failed"))
 }
 
-/// The project config filename — lives under `.doctrine/`, the single
-/// canonical home for project-local config (ISS-055).
-pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
-
-/// Read the raw `doctrine.toml` body at `root` (IMPURE shell seam) — `None` when
-/// the file is absent (a genuine read error still surfaces). The single file-read
-/// seam shared by [`load_doctrine_toml`] and any consumer that projects its own
-/// section out-of-band of [`DoctrineToml`] (SL-148 `reserve`: keeps `[reservation]`
-/// parsing inside the engine-tier consumer so no `leaf → engine` import is forced).
-pub(crate) fn read_doctrine_toml_text(root: &Path) -> anyhow::Result<Option<String>> {
-    let path = root.join(DOCTRINE_TOML);
-    match std::fs::read_to_string(&path) {
-        Ok(text) => Ok(Some(text)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e).with_context(|| format!("Failed to read {}", path.display())),
-    }
-}
+/// The config file's location and raw read live in [`crate::config_file`], an
+/// out-edge-free leaf that `src/lib.rs` exports (SL-248 `sec-6`); `dtoml` cannot
+/// be exported because [`DoctrineToml`] projects six engine-reaching tables.
+/// Re-exported here under their existing names so no call site moves.
+pub(crate) use crate::config_file::{DOCTRINE_TOML, read_doctrine_toml_text};
 
 /// Read + parse the project `doctrine.toml` (IMPURE shell seam, ADR-001).
 /// Absent file -> `DoctrineToml::default()`; present -> tolerant [`parse`];

@@ -471,7 +471,7 @@ const CONFIG_PREFERRED_REMOTE: &str = "doctrine.repo.preferredremote";
 /// `record` layer (PHASE-04, constraint 4). Spawn/UTF-8/non-zero-exit all fold
 /// into [`CaptureError::Git`].
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum CaptureError {
+pub enum CaptureError {
     /// More than one root commit reachable from HEAD — unstable to anchor.
     #[error("unsupported: multi-root repository ({0} root commits)")]
     MultiRoot(usize),
@@ -787,11 +787,12 @@ pub(crate) fn tree_with_file(
 /// free — reads the object db, so the sync verb sources the run ledger from the
 /// `dispatch/<slice>` tip identically in stage-1 (worktree present) and stage-2
 /// (worktree removed, no checkout — design §4.1).
-pub(crate) fn read_path_at(
-    root: &Path,
-    refish: &str,
-    path: &str,
-) -> Result<Option<String>, CaptureError> {
+///
+/// # Errors
+///
+/// [`CaptureError::Git`] when `git cat-file` fails for any reason other than the
+/// path being absent from that tree, which is `Ok(None)`.
+pub fn read_path_at(root: &Path, refish: &str, path: &str) -> Result<Option<String>, CaptureError> {
     git_opt(root, &["cat-file", "-p", &format!("{refish}:{path}")])
 }
 

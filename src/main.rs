@@ -1,4 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
+//
+// `clock`, `config_file` and `git` are declared `pub mod` rather than `mod`, and
+// that is the whole of the `DEC-181` remedy. `src/lib.rs` exports five items out
+// of those three modules, so each is authored `pub`; this binary keeps its own
+// module tree (SL-248 `sec-6`), so in the *bin* target a `pub` inside a private
+// module has no path out of the crate and `unreachable_pub = "deny"` rejects it,
+// while the *lib* target is green. Declaring the three modules public at the
+// crate root gives those items the reachable path the lint asks for, and costs
+// no suppression: the alternatives are all denied here — bare `pub` fails
+// `unreachable_pub`, `#[expect]` fails the lib target as
+// `unfulfilled_lint_expectations`, `#[allow]` fails `clippy::allow_attributes`,
+// and a `pub use` shim fails `clippy::pub_use` (with a per-item `#[expect]` on
+// it failing `clippy::useless_attribute` in turn).
+//
+// `sec-9` `R6` bounds the arrangement: those three modules now compile twice,
+// once per target, and the two copies stay interchangeable only while nothing
+// under `src/` names a `doctrine::` path. Nothing does — that rule is the
+// mitigation, not a test (`EX-13`, `VA-3`).
 mod adr;
 mod asset_source;
 mod backlog;
@@ -6,11 +24,12 @@ mod backlog_order;
 mod boot;
 mod boundary;
 mod catalog;
-mod clock;
+pub mod clock;
 mod commands;
 mod comparison;
 mod concept_map;
 mod conduct;
+pub mod config_file;
 mod conformance;
 mod contentset;
 mod corpus;
@@ -33,7 +52,7 @@ mod facet_write;
 mod finding;
 mod fsutil;
 mod funnel_machine;
-mod git;
+pub mod git;
 mod globmatch;
 mod governance;
 mod hymns;

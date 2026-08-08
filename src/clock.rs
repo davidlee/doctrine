@@ -14,7 +14,7 @@ fn fmt_date(d: time::Date) -> String {
 }
 
 /// Today as `YYYY-MM-DD` (UTC) — the scaffold date stamp.
-pub(crate) fn today() -> String {
+pub fn today() -> String {
     fmt_date(time::OffsetDateTime::now_utc().date())
 }
 
