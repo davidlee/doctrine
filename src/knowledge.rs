@@ -1020,6 +1020,189 @@ pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow] {
 }
 
 // ---------------------------------------------------------------------------
+// Pure: plan a facet edit (SL-249 PHASE-04)
+//
+// The kind-aware half of the WRITE path, and the mirror of `validate_facet` on
+// the read path. Every decision an edit needs — does this kind own the field,
+// is the value's shape the row's shape, is a closed token one the enum knows —
+// is made here, against `facet_fields`'s row, with no filesystem in sight.
+//
+// `plan_facet_edits` is the SOLE constructor of a `FacetEdit`: its fields are
+// private to this module, so "a validated edit" is a property of the type and
+// not a convention a caller may forget (I4's facet half).
+// ---------------------------------------------------------------------------
+
+/// One caller-supplied edit, before it has been checked against any row — the
+/// CLI's `--rationale x` or PHASE-06's `facet` map entry, verbatim.
+pub(crate) struct RawEdit<'a> {
+    pub(crate) field: &'a str,
+    pub(crate) value: RawValue,
+}
+
+/// The two value shapes a caller can supply. `Text("")` is the clear for a
+/// `Text` or `Closed` field; `List(vec![])` is the clear for a `List` one.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production constructor"
+    )
+)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RawValue {
+    Text(String),
+    List(Vec<String>),
+}
+
+/// A validated edit: a row this kind really owns, paired with a value of that
+/// row's shape. Constructible only by [`plan_facet_edits`] — the fields stay
+/// private to the module so the guarantee cannot be bypassed.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-249 PHASE-04 T3 wires apply_facet_edits, the first reader of these fields"
+    )
+)]
+#[derive(Debug, Clone)]
+pub(crate) struct FacetEdit {
+    field: &'static FacetFieldRow,
+    value: RawValue,
+}
+
+const EXPECTED_LIST: &str = "a list of values";
+const EXPECTED_SINGLE: &str = "a single value";
+
+/// Why [`plan_facet_edits`] refused. Typed rather than stringly so PHASE-06's
+/// `CreateRecord.facet` map — which validates through this same function — can
+/// discriminate without matching on prose (design D5). Converted to `anyhow` at
+/// the shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FacetEditRefusal {
+    /// The kind owns no such field. Reachable from a map-shaped caller; the CLI
+    /// surface catches it earlier, in clap.
+    UnknownField { field: String, kind: RecordKind },
+    /// A `Closed` field was given a token its own enum does not know.
+    BadToken {
+        field: String,
+        value: String,
+        known: &'static [&'static str],
+    },
+    /// A list where the row wants a single value, or the reverse. Unreachable
+    /// from clap (a `Text` flag cannot receive a list) but reachable from the
+    /// map-shaped caller.
+    ShapeMismatch {
+        field: String,
+        expected: &'static str,
+    },
+}
+
+impl std::fmt::Display for FacetEditRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FacetEditRefusal::UnknownField { ref field, kind } => {
+                let known = facet_fields(kind)
+                    .iter()
+                    .map(|row| row.name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "`{field}` is not a facet field of a {} record",
+                    kind.as_str()
+                )?;
+                if known.is_empty() {
+                    write!(f, " — it carries none")
+                } else {
+                    write!(f, " — known fields: {known}")
+                }
+            }
+            FacetEditRefusal::BadToken {
+                ref field,
+                ref value,
+                known,
+            } => write!(
+                f,
+                "`{field}`: `{value}` is not a known token — expected one of: {}",
+                known.join(", ")
+            ),
+            FacetEditRefusal::ShapeMismatch {
+                ref field,
+                expected,
+            } => write!(f, "`{field}` takes {expected}"),
+        }
+    }
+}
+
+/// Resolve each caller-supplied edit against `kind`'s row, in the caller's
+/// order. The sole constructor of [`FacetEdit`].
+///
+/// An empty value is ALWAYS the clear and bypasses `Closed` token validation
+/// (D6): `optional_enum` maps `""` to `None` before parsing it, so `""` is the
+/// read model's own cleared form for a closed field. Validating it against
+/// `KNOWN` would leave closed fields the one kind of field that cannot be
+/// cleared.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production caller"
+    )
+)]
+pub(crate) fn plan_facet_edits(
+    kind: RecordKind,
+    given: &[RawEdit<'_>],
+) -> Result<Vec<FacetEdit>, FacetEditRefusal> {
+    given
+        .iter()
+        .map(|edit| {
+            let field = facet_fields(kind)
+                .iter()
+                .find(|row| row.name == edit.field)
+                .ok_or_else(|| FacetEditRefusal::UnknownField {
+                    field: edit.field.to_string(),
+                    kind,
+                })?;
+            check_shape(field, &edit.value)?;
+            Ok(FacetEdit {
+                field,
+                value: edit.value.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The row's shape is the authority: a `List` row takes only a list, a `Text` or
+/// `Closed` row only a single value, and a `Closed` row's token is checked
+/// against that row's OWN `KNOWN` slice (never a retyped literal — STD-001).
+fn check_shape(field: &FacetFieldRow, value: &RawValue) -> Result<(), FacetEditRefusal> {
+    match (field.shape, value) {
+        (FieldShape::List, RawValue::List(_)) | (FieldShape::Text, RawValue::Text(_)) => Ok(()),
+        (FieldShape::Closed(known), RawValue::Text(token)) => {
+            if token.is_empty() || known.contains(&token.as_str()) {
+                Ok(())
+            } else {
+                Err(FacetEditRefusal::BadToken {
+                    field: field.name.to_string(),
+                    value: token.clone(),
+                    known,
+                })
+            }
+        }
+        (FieldShape::List, RawValue::Text(_)) => Err(FacetEditRefusal::ShapeMismatch {
+            field: field.name.to_string(),
+            expected: EXPECTED_LIST,
+        }),
+        (FieldShape::Text | FieldShape::Closed(_), RawValue::List(_)) => {
+            Err(FacetEditRefusal::ShapeMismatch {
+                field: field.name.to_string(),
+                expected: EXPECTED_SINGLE,
+            })
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Pure: render (the byte-stable round-trip seam, the rec.rs hand-emit precedent)
 //
 // Test-only (`#[cfg(test)]`): this hand-emit backs VT-1's byte-stable round-trip
@@ -3874,5 +4057,139 @@ target = \"SL-249\"
                 kind.as_str()
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // `plan_facet_edits` — the pure seam (SL-249 PHASE-04 T2)
+    //
+    // Every decision lives here and none of it touches a filesystem. The row it
+    // resolves against is `facet_fields`'s, and a `Closed` token is checked
+    // against that row's OWN `KNOWN` slice — no token is retyped (STD-001).
+    // -----------------------------------------------------------------------
+
+    fn text<'a>(field: &'a str, value: &str) -> RawEdit<'a> {
+        RawEdit {
+            field,
+            value: RawValue::Text(value.to_string()),
+        }
+    }
+
+    fn list<'a>(field: &'a str, values: &[&str]) -> RawEdit<'a> {
+        RawEdit {
+            field,
+            value: RawValue::List(values.iter().map(|s| (*s).to_string()).collect()),
+        }
+    }
+
+    #[test]
+    fn plan_refuses_a_field_no_kind_owns() {
+        let err = plan_facet_edits(RecordKind::Question, &[text("nonesuch", "v")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::UnknownField { ref field, kind }
+                if field == "nonesuch" && kind == RecordKind::Question),
+            "expected UnknownField, got {err:?}"
+        );
+        let rendered = err.to_string();
+        assert!(rendered.contains("nonesuch"), "names the field: {rendered}");
+        assert!(rendered.contains("question"), "names the kind: {rendered}");
+    }
+
+    /// The cross-kind case the design's equality argument turns on: `choice` is a
+    /// real facet field, but a *decision's*. A question must refuse it.
+    #[test]
+    fn plan_refuses_another_kinds_field() {
+        assert!(plan_facet_edits(RecordKind::Decision, &[text("choice", "x")]).is_ok());
+        let err = plan_facet_edits(RecordKind::Question, &[text("choice", "x")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::UnknownField { ref field, .. } if field == "choice"),
+            "expected UnknownField, got {err:?}"
+        );
+    }
+
+    /// The token is checked against the row's own `KNOWN` slice, so this test
+    /// names no token of its own — it asks the table for one it does not hold.
+    #[test]
+    fn plan_refuses_an_unknown_closed_token() {
+        let err =
+            plan_facet_edits(RecordKind::Assumption, &[text("confidence", "banana")]).unwrap_err();
+        let FacetEditRefusal::BadToken {
+            ref field,
+            ref value,
+            known,
+        } = err
+        else {
+            panic!("expected BadToken, got {err:?}");
+        };
+        assert_eq!(field, "confidence");
+        assert_eq!(value, "banana");
+        assert_eq!(known, Confidence::KNOWN);
+        let rendered = err.to_string();
+        for token in Confidence::KNOWN {
+            assert!(rendered.contains(token), "names {token}: {rendered}");
+        }
+    }
+
+    #[test]
+    fn plan_refuses_a_list_value_on_a_text_field() {
+        let err =
+            plan_facet_edits(RecordKind::Decision, &[list("rationale", &["a", "b"])]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::ShapeMismatch { ref field, .. } if field == "rationale"),
+            "expected ShapeMismatch, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn plan_refuses_a_text_value_on_a_list_field() {
+        let err = plan_facet_edits(RecordKind::Decision, &[text("alternatives", "a")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::ShapeMismatch { ref field, .. } if field == "alternatives"),
+            "expected ShapeMismatch, got {err:?}"
+        );
+    }
+
+    /// D6 — `""` is always the clear, and bypasses `Closed` token validation.
+    /// `optional_enum` maps `""` to `None` *before* parsing, so `""` is the read
+    /// model's own cleared form; validating it against `KNOWN` would make closed
+    /// fields the one uncleanable kind of field.
+    #[test]
+    fn plan_accepts_the_empty_clear_on_a_closed_field() {
+        let planned = plan_facet_edits(RecordKind::Assumption, &[text("confidence", "")]).unwrap();
+        assert_eq!(planned.len(), 1);
+        assert_eq!(planned[0].field.name, "confidence");
+        assert_eq!(planned[0].value, RawValue::Text(String::new()));
+    }
+
+    #[test]
+    fn plan_accepts_the_empty_clear_on_a_text_field() {
+        let planned = plan_facet_edits(RecordKind::Decision, &[text("rationale", "")]).unwrap();
+        assert_eq!(planned[0].value, RawValue::Text(String::new()));
+    }
+
+    /// An empty list is the list-shaped clear — `--applies-to` with no values.
+    #[test]
+    fn plan_accepts_the_empty_list_clear() {
+        let planned = plan_facet_edits(RecordKind::Constraint, &[list("applies_to", &[])]).unwrap();
+        assert_eq!(planned[0].value, RawValue::List(Vec::new()));
+    }
+
+    #[test]
+    fn plan_preserves_the_callers_order() {
+        let given = [
+            text("decided_by", "david"),
+            list("alternatives", &["a", "b"]),
+            text("context", "why"),
+        ];
+        let planned = plan_facet_edits(RecordKind::Decision, &given).unwrap();
+        let names: Vec<&str> = planned.iter().map(|e| e.field.name).collect();
+        assert_eq!(names, vec!["decided_by", "alternatives", "context"]);
+    }
+
+    /// Concept owns no facet field, so every field is unknown to it (D10 gives
+    /// the CLI its own refusal; this is the seam's).
+    #[test]
+    fn plan_refuses_every_field_for_a_concept() {
+        let err = plan_facet_edits(RecordKind::Concept, &[text("claim", "x")]).unwrap_err();
+        assert!(matches!(err, FacetEditRefusal::UnknownField { .. }));
     }
 }
