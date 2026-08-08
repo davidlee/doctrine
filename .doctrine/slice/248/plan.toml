@@ -8,12 +8,12 @@ schema  = "doctrine.plan.overview"
 version = 1
 slice   = "SL-248"
 
-# STAGE 2 IN PROGRESS. The spine (stage 1) is complete: every phase carries its
-# id, name and objective. Criteria are expanded per phase — PHASE-02 is done;
-# the rest still carry empty `entrance_criteria` / `exit_criteria` /
-# `verification` and are the remaining stage-2 work (plan.md § Authoring stages).
-# The phase list itself is settled, because PHASE-NN ids are immutable and edits
-# append rather than renumber.
+# AUTHORING COMPLETE — all three stages (plan.md § Authoring stages). Stage 1
+# settled the spine, stage 2 expanded EN/EX/VT per phase, and stage 3 worked the
+# four integration checks and discharged the per-phase notes below. What survives
+# under `# Stage-3 record` is the cross-phase fact an executing agent needs, not
+# the worklist that produced it. PHASE-NN and criterion ids are immutable; edits
+# amend text or append, never renumber.
 
 [specs]                          # empty in v1 — no spec/requirement registry yet
 primary       = []
@@ -48,7 +48,7 @@ entrance_criteria = [
 
 exit_criteria = [
   { id = "EX-1", text = "`src/lib.rs` exists as the root package's lib target and is the whole public surface of the doctrine library: `clock`, `config_file`, `git` and `kinds` declared privately, and `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `CaptureError` and `read_path_at` re-exported from them. `kinds` is a path target that exports nothing — it is declared because `git.rs`'s `#[cfg(test)]` module reaches `crate::kinds` and the lib target compiles that module under `cargo test`. This is the trap in the arrangement: `cargo build` is green while `kinds` is missing, and `E0432` surfaces only when the library's tests first compile." },
-  { id = "EX-2", text = "The export-set constant carries the five items this phase exports — `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `read_path_at`, `CaptureError` — and PHASE-02 appends `interpretation`, taking it to six. `today` is present against `sec-6`'s literal constant, which omits it: the same section's prose calls `clock::today` the third export and explains that taking it is what avoids a `time` edge, and `sec-8`'s touch-set counts five items behind three private modules, which is true only with `today` among them (`ISS-323`; plan.md § Two corrections owed at execution)." },
+  { id = "EX-2", text = "The export-set constant carries the five items this phase exports — `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `read_path_at`, `CaptureError` — and PHASE-02 appends `interpretation`, taking it to six. `today` is present against `sec-6`'s literal constant, which omits it: the same section's prose calls `clock::today` the third export and explains that taking it is what avoids a `time` edge, and `sec-8`'s touch-set counts five items behind three private modules, which is true only with `today` among them (`ISS-323`; plan.md § Corrections owed, item 1)." },
   { id = "EX-3", text = "`src/config_file.rs` exists, out-edge-free and leaf, holding `DOCTRINE_TOML` and `read_doctrine_toml_text`; `src/dtoml.rs` re-exports both under their existing names via `pub(crate) use crate::config_file::{…}`; and `src/main.rs` gains exactly one new declaration, `mod config_file;`. All 35 call sites across the other 32 files are unedited — the relocation's whole point is that `STD-001`'s single source moves without a call-site diff." },
   { id = "EX-4", text = "`read_path_at` and `CaptureError` are `pub` in `src/git.rs`, and no other item anywhere in the root package changes visibility. This is compiler-required rather than stylistic: `pub use` of a `pub(crate)` item is `E0364`." },
   { id = "EX-5", text = "`crates/doctrine-control/` exists as a bin-only workspace member — a `Cargo.toml` declaring the `doctrine` path dependency and `publish = false`, and a `src/main.rs` skeleton carrying no verb yet (`provision` lands in PHASE-06, `backend verify` in PHASE-10). The crate has **no** lib target and acquires none: a `tests/` file cannot link a bin-only package (`E0433`), and a lib target would force `sec-7`'s weakening vocabulary public (`E0603`). Every test in this crate is therefore a `#[cfg(test)]` module inside the unit it tests." },
@@ -62,24 +62,21 @@ exit_criteria = [
   { id = "EX-13", text = "The root binary imports nothing through `doctrine::` — no path under `src/` outside `src/lib.rs` names one. `git`, `config_file` and `kinds` now compile twice, once per target, and the two copies never meet only while this holds; the day the binary names a `doctrine::` path, `doctrine::git::CaptureError` and `crate::git::CaptureError` become distinct types with identical names. `sec-9` `R6` is explicit that the mitigation is this rule and not a test, and that the alternative — `main.rs` as a thin binary over the library — was rejected because it publishes most of the product as library API." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
-# 1. `src/lib.rs` and `tests/architecture_layering.rs` are shared append-only
-#    between PHASE-01 and PHASE-02, not exclusively owned by PHASE-01 as
-#    plan.md § File ownership records. PHASE-02 `EX-8` appends `pub mod
-#    interpretation;` and the sixth export-set entry; PHASE-02 `VT-10` re-runs
-#    two of this phase's assertions with `interpretation` added. Stage 3 should
-#    move both files to the shared table rather than leave the tables
-#    disagreeing with the criteria.
-# 2. `src/main.rs` (root package) appears in neither ownership table. PHASE-01
-#    is its only toucher — one `mod config_file;` declaration — because PHASE-02
-#    `EX-9` deliberately declines to declare `mod interpretation;` there. It
-#    belongs in PHASE-01's exclusive row.
-# 3. `the_root_library_exports_exactly_the_named_set` and
-#    `every_exported_item_belongs_to_a_leaf_tier_module` are keyworded by both
-#    this phase's VT-1 and PHASE-02's VT-10. That is the same test observed at
-#    two different export-set sizes, not a duplicated obligation — but stage 3
-#    owns the ruling on whether the no-duplication rule tolerates it.
+# 1. `src/lib.rs` and `tests/architecture_layering.rs` are **shared append-only**
+#    with PHASE-02, not exclusively this phase's: PHASE-02 `EX-8` appends `pub
+#    mod interpretation;` and the sixth export-set entry. plan.md § File
+#    ownership now records them in the shared table.
+# 2. **Duplication ruling (check 2).** `the_root_library_exports_exactly_the_
+#    named_set` and `every_exported_item_belongs_to_a_leaf_tier_module` are
+#    keyworded by both this phase's `VT-1` and PHASE-02's `VT-10`. Permitted:
+#    the no-duplication rule forbids two phases claiming one *obligation*, and
+#    this is one test re-run at a second export-set size — five items here, six
+#    after PHASE-02 appends `interpretation`. PHASE-02's mandate carries
+#    `interpretation` as a third keyword, so the two mandates cannot be
+#    satisfied by the same file state and neither is inert. Every other
+#    same-file cross-phase mandate pair in this plan is keyword-disjoint.
 verification = [
   { id = "VT-1", expects = "The export set is exactly the named list and every contributing module is leaf-tier — the cross-crate enforcement ruling, which bounds every edge from `doctrine-control` into the root package without any graph analysis.", test_file = "tests/architecture_layering.rs", keywords = ["EXPORTED", "the_root_library_exports_exactly_the_named_set", "every_exported_item_belongs_to_a_leaf_tier_module"], waived = false },
   { id = "VT-2", expects = "The gate runs over both source trees, and parameterising it moves no existing classification — the behaviour-preservation obligation for a change to shared machinery, and the reason a parameter is added rather than the extractor generalised.", test_file = "tests/architecture_layering.rs", keywords = ["the_layering_gate_runs_over_both_source_trees", "the_existing_layering_gate_is_unchanged_in_verdict_over_the_root_tree"], waived = false },
@@ -118,7 +115,7 @@ exit_criteria = [
   { id = "EX-9", text = "`src/main.rs` does **not** declare `mod interpretation;` — nothing in the agent-facing binary consumes the policy in this slice, and declaring it in both targets would compile it twice for nothing. The module is still discovered and classified by the layering gate, which walks the file tree rather than `mod` declarations." },
 ]
 
-# NOTE for the integration pass: `REQ-449` criterion 3 (read-once) is NOT
+# Stage-3 record: `REQ-449` criterion 3 (read-once) is NOT
 # verified here. `sec-4` routes it to an executed test in `sec-7`'s environment
 # — `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy`
 # — which is table C and lands in PHASE-08. This phase proves the parser, not
@@ -173,7 +170,7 @@ exit_criteria = [
   { id = "EX-20", text = "`REQ-461`'s negative half is structurally true rather than merely unimplemented: `CapacityPolicy` holds no reserved figure and nothing is written or claimed at `Low` (no pre-reservation); `assess_capacity` is a function of one probe and one policy and does not know how many capsules exist (no backpressure); the phase's files contain no delete capability at all (no eviction); and nothing is copied or compressed on any refusal path (no rescue archive). The whole-tree disk figure is observed and not capped — the enforced bound is the per-file `file_size_cap`." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. `sec-5` § Verification alignment lists two capsule-root titles this phase
 #    CANNOT write:
@@ -187,10 +184,17 @@ exit_criteria = [
 #    row and land in PHASE-08 — the unconditional `SystemHost` statvfs-agreement
 #    claim and the conditional cross-filesystem one. `REQ-461`'s executed closure
 #    rests on the first, which cannot skip (`RV-346` `F-24`).
-# 3. `unknown_key_refuses_naming_the_key` is also PHASE-02's title, in
-#    `src/interpretation.rs`. Two `#[cfg(test)]` modules in different files, so
-#    Rust-legal and each mandate is file-scoped — but a grep for the title finds
-#    two tests. Stage 3 may want one of them qualified.
+# 3. **Name-collision ruling (check 2).** `unknown_key_refuses_naming_the_key`
+#    is also PHASE-02's title, in `src/interpretation.rs`. **Not qualified, and
+#    that is the ruling.** Both spellings are the design's own — `sec-4` § and
+#    `sec-5` § Verification alignment each carry the plain form — and a
+#    plan-side rename would put the plan out of step with the locked design's
+#    title authority for a grep convenience. The two `#[cfg(test)]` modules are
+#    in different files, so this is Rust-legal and each `VT` mandate is
+#    file-scoped: `verify-vt` reads `config.rs` for this one and
+#    `src/interpretation.rs` for PHASE-02's, and neither can be satisfied by the
+#    other's file. A reader greping the bare title finds two tests and must
+#    disambiguate by module; that cost is accepted.
 verification = [
   { id = "VT-1", expects = "The tier boundaries either side, so no comparison is off by one, and the threshold saturates rather than overflowing on a large multiplier.", test_file = "crates/doctrine-control/src/capacity.rs", keywords = ["available_at_the_threshold_is_ample_and_one_byte_below_it_is_low", "available_at_expected_is_low_and_one_byte_below_it_is_insufficient", "threshold_saturates_rather_than_overflowing_on_a_large_multiplier"], waived = false },
   { id = "VT-2", expects = "What each verdict does: Insufficient refuses naming the root and the key, Low warns with named fields and continues, and Low reserves nothing — the whole of `REQ-461` criterion 2's no-reservation story, asserted by a second assessment seeing the same figure.", test_file = "crates/doctrine-control/src/capacity.rs", keywords = ["insufficient_refuses_and_names_the_capsule_root_and_the_config_key", "low_warns_with_named_fields_and_provisioning_continues", "low_reserves_nothing_so_a_second_assessment_sees_the_same_figure"], waived = false },
@@ -238,7 +242,7 @@ exit_criteria = [
   { id = "EX-16", text = "The five executed-only invariants get **no pure test standing in for them here**, and the reason is recorded rather than left implicit: read-only attachment (11), descriptor closure above 2 (12), a computed environment (13), parent-owned standard streams (14) and established process credentials (15) are properties of the running capsule rather than of the argv. The sharpest case is 15, where the pure test that *looks* sufficient is an argv assertion over `--unshare-all` — a flag from one backend standing in for a property every backend owes, which a second backend satisfies vacuously by having no argv to check. Their homes are `sec-7` rows 9, 10, 11, 12, and 13–14 respectively." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. Three titles claimed here sit in the pure-hermetic block that PHASE-05's
 #    provenance row names — `empty_mount_vector_refuses_rather_than_running_
@@ -251,11 +255,17 @@ exit_criteria = [
 #    not write — `the_resolved_root_is_the_forbidden_scope_a_placement_is_
 #    validated_against` and `a_sibling_transaction_under_the_resolved_root_is_
 #    refused_by_the_placement`. Both exercise `try_new`.
-# 3. Spelling collision: `sec-2` says `both_declared_lists_empty_refuses` and
-#    `sec-5` says `both_readable_lists_empty_refuses` for what is one refusal
-#    (`NoReadableInputs`, PHASE-03 `VT-4`). Likewise `closure_roots_without_a_
-#    resolver_refuses_naming_both_keys` appears in both alignments. Stage 3 owns
-#    picking one spelling; the test lives in `config.rs` either way.
+# 3. **Spelling ruling (check 2).** `sec-2` § Verification alignment says
+#    `both_declared_lists_empty_refuses`; `sec-5` § says
+#    `both_readable_lists_empty_refuses`. One refusal (`NoReadableInputs`), one
+#    test. **`sec-5`'s spelling wins** — it is the section that owns the reader,
+#    the refusal type and the file, and it is the spelling PHASE-03 `VT-4`
+#    already carries, so no mandate moves. `sec-2`'s listing is a
+#    cross-reference to `sec-5`'s test, not a second obligation.
+#    `closure_roots_without_a_resolver_refuses_naming_both_keys` appears in both
+#    alignments **identically spelled** — one test, likewise PHASE-03 `VT-4`,
+#    likewise a cross-reference. Both design-text divergences are recorded in
+#    plan.md § Corrections owed, for the reconciliation brief.
 verification = [
   { id = "VT-1", expects = "Placement validation, one per refusal variant, with the `RV-346` `F-1` class first because it was found by execution rather than by reading: a declared root resolving into each forbidden scope, and one resolving to the filesystem root.", test_file = "crates/doctrine-control/src/backend.rs", keywords = ["declared_root_that_resolves_into_the_canonical_repository_refuses", "declared_root_that_resolves_into_the_credential_scope_refuses", "declared_root_that_resolves_into_the_capsule_root_refuses", "declared_root_that_resolves_to_the_filesystem_root_refuses", "the_resolved_root_is_the_forbidden_scope_a_placement_is_validated_against"], waived = false },
   { id = "VT-2", expects = "Descendant mutants, one per forbidden scope — the `F-10` class an equal-or-ancestor test admits — with the transaction-root carve-out asserted positively so a fix that refuses everything under the capsule root cannot pass, and asserted as writable-only.", test_file = "crates/doctrine-control/src/backend.rs", keywords = ["a_file_inside_the_canonical_repository_refuses", "a_file_inside_the_control_plane_state_refuses", "a_file_inside_a_credential_location_refuses", "a_sibling_transaction_root_under_the_capsule_root_refuses", "a_sibling_transaction_under_the_resolved_root_is_refused_by_the_placement", "a_writable_entry_under_this_placements_own_transaction_root_is_admitted", "a_readable_entry_under_this_placements_own_transaction_root_refuses"], waived = false },
@@ -304,7 +314,7 @@ exit_criteria = [
   { id = "EX-19", text = "`backend/bubblewrap.rs` adds **no** row to `.doctrine/adr/001/layering.toml`: the gate maps submodule files to their parent unit, so this file is part of the `backend` unit PHASE-04 classified. Confirmed against the gate rather than assumed (VA-4)." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. `resolver_whose_basename_is_forbidden_by_the_policy_refuses` sits in the
 #    closure group this phase's provenance row names, but the design states the
@@ -363,7 +373,7 @@ exit_criteria = [
   { id = "EX-19", text = "`REQ-450` is reported as **partial**, not quietly claimed: criteria 2 and 3 need candidate identity and harvest from later slices. This slice records a contributing `--change` against criterion 1 and says so in the reconciliation brief." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. The five `REQ-450` axis titles and their two controls are handed to the
 #    harness by this phase's provenance row and land in PHASE-09 as table B:
@@ -388,9 +398,10 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "The export's adoption rules, each refusal against the artefact class it excludes. `export_that_is_a_symlink_refuses` is the `sec-2` `F-1` escape arriving by another route; the alternates case is the one that binds host object state the export was supposed to replace.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["export_is_adopted_across_transactions_on_the_same_base", "export_holds_the_contracted_history_and_no_other_ref", "export_with_an_alternates_file_refuses_rather_than_being_adopted", "export_that_is_a_symlink_refuses"], waived = false },
   { id = "VT-2", expects = "The publish-or-adopt protocol under concurrency converges on one export with neither builder repairing or replacing anything, and a base paired with another base's export refuses before the clone rather than producing a capsule whose contracted base is a fiction.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["concurrent_publication_converges_on_one_export_and_the_loser_adopts_it", "placement_pairing_a_base_with_another_bases_export_refuses", "failed_provision_leaves_an_existing_export_intact"], waived = false },
-  { id = "VT-3", expects = "Exclusive ownership at both keyed directories, reached deterministically by handing the same `TransactionId` twice, plus the separator refusal at construction. These are the tests `EX-7`'s signature change exists to make writable.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["provision_onto_an_existing_transaction_root_refuses_and_removes_nothing", "provision_onto_an_existing_temporary_export_directory_refuses_and_removes_nothing", "a_transaction_id_carrying_a_path_separator_refuses_at_construction", "failed_provision_removes_only_the_root_it_created"], waived = false },
+  { id = "VT-3", expects = "Exclusive ownership at both keyed directories, reached deterministically by handing the same `TransactionId` twice. These are the tests `EX-7`'s signature change exists to make writable. The separator refusal is `VT-6`, in the file that defines the type.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["provision_onto_an_existing_transaction_root_refuses_and_removes_nothing", "provision_onto_an_existing_temporary_export_directory_refuses_and_removes_nothing", "failed_provision_removes_only_the_root_it_created"], waived = false },
   { id = "VT-4", expects = "The three-execution clone: no working tree is materialised trusted-side, the pinned identity actually persisted into the clone's config, and a failing execution refuses **at that step** rather than as one aggregate status.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["clone_inside_leaves_no_working_tree_trusted_side", "capsule_identity_persists_into_the_clone_config", "a_failing_execution_in_the_three_step_clone_refuses_at_that_step"], waived = false },
   { id = "VT-5", expects = "Step 6's ordering made observable: a refinement that adds the resolver's basename to `trusted_side_forbidden_executables` refuses **this** provisioning, which a check against the base policy alone would not.", test_file = "crates/doctrine-control/src/provision.rs", keywords = ["resolver_whose_basename_is_forbidden_by_the_policy_refuses"], waived = false },
+  { id = "VT-6", expects = "`TransactionId` refuses a value that is not a single path component, so an id can never carry a separator into the layout (`EX-7`). Appended at stage 3: the assertion is about the type's constructor, and the type is defined in `transaction.rs`, which `sec-8`'s evidence table names as a home for `sec-3`'s tests and which no other mandate anchored — a `VT` whose `test_file` is `provision.rs` carries no keyword floor over this file at all. The keywords also pin `DEC-159`'s field set and `PhaseIdentity`, so the unit's other types are not invisible to the gate.", test_file = "crates/doctrine-control/src/transaction.rs", keywords = ["a_transaction_id_carrying_a_path_separator_refuses_at_construction", "CapsuleTransaction", "TransactionId", "AcceptedBase", "PhaseIdentity"], waived = false },
   { id = "VA-1", expects = "Invariant 6 holds on every refusal path, not only the tested ones: walk each `ProvisionRefusal` construction site and confirm either that no directory was created before it or that the creation token guards the removal. A test proves the paths it takes; this is the sweep for the ones it does not." },
   { id = "VA-2", expects = "No delete capability leaks out of the module (`EX-16`). Confirm rollback is private to `provision`, that no public function removes anything, and that nothing in `main.rs`'s `provision` verb exposes one — `DEC-156`'s hazard is a tidiness primitive a later slice reaches for." },
   { id = "VA-3", expects = "Steps 1, 4, 5 and 6 are pure given `HostFacts` (`EX-6`): confirm no clock, rng, git or disk access outside the thin outer part, per the project's pure/imperative split, and that `HostFacts` is still clock-free at the call site." },
@@ -429,7 +440,7 @@ exit_criteria = [
   { id = "EX-17", text = "The sealing assumption is **recorded in the module, not silently relied on**: `PropertyRemoval` and `ConformanceBackend` are `pub(crate)` because every backend lives in this crate and the only callers are `main.rs` and this module's own tests. That is an assumption, not a law — if a backend ever ships from outside the crate this vocabulary becomes public API and needs sealing behind a newtype over a private enum, so nothing but the suite can ask a backend to weaken itself (`sec-9`)." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. This phase defines the vocabulary; it constructs no `Row`. Tables A and B
 #    are populated in PHASE-09 and PHASE-10 and the executing harness in
@@ -488,7 +499,7 @@ exit_criteria = [
   { id = "EX-18", text = "The measured-versus-reasoned split is recorded beside `execute_weakened`, not smoothed over: **three** deltas are measured — `Teardown` by `EVD-013`, `MappedIdentity` and `Granted(AllCapabilities)` by `EVD-014` — and **every other delta in the table is reasoned**, with no measurement cited by this design. `EVD-013`'s adjacent fact that bubblewrap has no `--share-pid` tells us how `ProcessVisibility`'s delta must be *expressed*, which is not the same as having seen it produce its row's control failure. PHASE-09 and PHASE-10 inherit the measuring obligation from an honest list rather than from a caption that once claimed all of them were measured." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. `the_shared_root_delta_repoints_only_the_second_placement` is claimed here
 #    rather than with table B (PHASE-09), because `Delta` application is this
@@ -518,7 +529,7 @@ objective = "Land table A rows 1–8 and table B's five freshness axes with each
 
 entrance_criteria = [
   { id = "EN-1", text = "The executing harness works end to end and is proven on table C (PHASE-08 `EX-17`) — fixture, all three arm shapes, all ten removals, the one grant, and per-row containment including the session kill. This phase adds rows to a harness already shown to run, rather than debugging both at once." },
-  { id = "EN-2", text = "The classification and verdict algebra are proven pure (PHASE-07 `VT-1`, `VT-2`, `VT-3`), so a row reading `Unproven` here means the delta did not fire, not that the algebra misread it. That separation is the whole reason `sec-7` is four phases and not one." },
+  { id = "EN-2", text = "The classification and verdict algebra exist and are proven pure — PHASE-07 `EX-10`, `EX-11` and `EX-13` are what land them, and PHASE-07 `VT-1`, `VT-2` and `VT-3` are the evidence they hold — so a row reading `Unproven` here means the delta did not fire, not that the algebra misread it. That separation is the whole reason `sec-7` is four phases and not one." },
   { id = "EN-3", text = "PHASE-08 recorded which deltas are measured and which reasoned (`EX-18`): three measured, the rest reasoned. This phase inherits that list and discharges the measuring obligation for the rows it lands, rather than re-deriving which is which." },
 ]
 
@@ -538,16 +549,13 @@ exit_criteria = [
   { id = "EX-13", text = "The two payload rules are applied to every row this phase lands, not just to the ones that forced them: **each payload is the hardest instance of the property's negation the property admits**, exercising every distinguishable negation mechanism where a property has several; and **a row observes the property, not a consequence of the property that happens to be convenient to observe.** An observation with three innocent explanations and one guilty one is not a proof, and no amount of strengthening the payload repairs it." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
-# 1. plan.md § What each phase changes about the tree attributes the flag day to
-#    PHASE-10 — "from PHASE-10 onward, `cargo test` fails on any host that
-#    cannot run the backend". The first executed capsule test actually lands in
-#    **PHASE-08** (table C provisions real capsules), so the tree reds on a
-#    bubblewrap-less host from PHASE-08 onward and every row here compounds it.
-#    `DEC-180` accepted that cost for the local host, so no decision moves — but
-#    the phase attribution in the prose is wrong and stage 3 should correct it.
-#    Stated here rather than edited in mid-stage, so the correction lands once.
+# 1. The flag day is **PHASE-08**, not this phase: table C provisions real
+#    capsules, so the tree reds on a bubblewrap-less host from PHASE-08 onward
+#    and every row here compounds it. plan.md § What each phase changes about
+#    the tree and `DEC-180` § Where it lands both now say so; the decision
+#    itself does not move.
 # 2. `Property`'s membership is eight after this phase and fourteen after
 #    PHASE-10; PHASE-07 `EX-14` declares the type and the ordering rule only.
 #    The compile-time fence (a constructible row the enum cannot name) holds at
@@ -600,7 +608,7 @@ exit_criteria = [
   { id = "EX-16", text = "`REQ-459`'s closure is reported honestly: criterion 1 is discharged by table A **over the channels the ledger names**, which is a qualifier rather than hedging — *in full* was claimed for this criterion four times against four different tables and was false the first three, and what makes this claim checkable is that it quantifies over a written enumeration that fails visibly when a channel is added without a row. Criterion 2 needs production acceptance tests this slice does not have and is recorded as a contributing `--change`, reported **partial** in the reconciliation brief. Criterion 3 is discharged structurally: there is one suite, it is parameterised by backend, and a second backend passing it edits nothing." },
 ]
 
-# NOTES for the integration pass.
+# Stage-3 record.
 #
 # 1. `sec-9` residual 5 states that the channel ledger cannot establish its own
 #    completeness, and `sec-2`'s invariant 5 restates it: every channel we have
@@ -609,11 +617,18 @@ exit_criteria = [
 #    surfaced as a blank cell, `F-30` was never listed at all). The design
 #    predicts a sixth of the same shape is more likely than not. Nothing here
 #    discharges that, and no criterion should pretend to.
-# 2. `sec-9` residual 2 tracks `PropertyRemoval` growing every round; it is nine
-#    variants in the residual's own text and ten in the vocabulary this plan
-#    lands. The residual's *trend* claim is what matters, not its count, but
-#    stage 3 should note the arithmetic so a reader does not read the residual
-#    as current.
+# 2. **`sec-9` residual 2's arithmetic (stage-3 ruling).** The residual tracks
+#    `PropertyRemoval` growing every round and states it at **nine** variants.
+#    The vocabulary this plan lands is **ten** — PHASE-07 `EX-4` enumerates
+#    them, and `AuthorityGrant::AllCapabilities` is a separate enum on top,
+#    which is why a reader counting "eleven deltas" in the removal table and
+#    nine in the residual finds neither matching the enum. The residual's
+#    *trend* claim is what carries and it is unaffected; only its count is
+#    stale. No criterion moves — PHASE-07 `EX-4` is the authority and
+#    `PropertyRemoval` is a machine-checked enum, so nothing rests on the
+#    residual's numeral. Recorded in plan.md § Corrections owed so the
+#    reconciliation brief carries it rather than a reader taking nine as
+#    current.
 verification = [
   { id = "VT-1", expects = "Table A rows 9–14, each asserting `Proven` and so running both arms. One title per row.", test_file = "crates/doctrine-control/src/conformance.rs", keywords = ["immutable_input_set_is_proven", "closed_descriptor_set_is_proven", "closed_environment_is_proven", "owned_standard_streams_is_proven", "mapped_capsule_identity_is_proven", "confined_capabilities_is_proven"], waived = false },
   { id = "VT-2", expects = "Row 9 stated per entry so a partially-writable backend cannot pass on the first, the `DEC-157` half named specifically, single-axis-ness of the delta, and the containment that the control writes only to this run's own export.", test_file = "crates/doctrine-control/src/conformance.rs", keywords = ["a_write_through_every_readable_mount_fails", "a_write_into_the_source_export_fails", "the_writable_inputs_delta_changes_no_mount_and_no_path", "the_writable_inputs_control_writes_only_to_this_runs_own_export"], waived = false },

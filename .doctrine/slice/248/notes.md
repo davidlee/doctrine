@@ -74,25 +74,47 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · plan · stage 2 complete (all ten phases carry criteria) · 721f1fa77
+fresh-as-of: 2026-08-08 · plan · **authoring complete** (all three stages)
 
 ### Produced
 
 - Stage 2 complete — `PHASE-01` and `PHASE-03`…`PHASE-10` criteria expanded
-  (`41f9abdc2`…`721f1fa77`, one commit per phase). Ten phases now carry 31 `EN`,
-  160 `EX`, 55 `VT`, 35 `VA`, 1 `VH`.
+  (`41f9abdc2`…`721f1fa77`, one commit per phase). Ten phases carry 31 `EN`,
+  160 `EX`, 56 `VT`, 35 `VA`, 1 `VH`.
 - `PHASE-07` `EX-14` amended mid-stage — `Property`'s variants arrive with their
   rows, not all at `PHASE-07`; `PropertyRemoval` is the enum that must be
   complete early, for a different reason.
-- Twelve `# NOTE for the integration pass` comments recorded in `plan.toml` —
-  stage 3's concrete worklist, in the file stage 3 reads.
 - `DEC-180` § *Where it lands* amended — the cost arrives at `PHASE-08`, not
   `PHASE-10`; the decision itself does not move.
+- **Stage 3 complete — the integration pass.** All four checks run over the
+  whole plan (plan.md § *What the four checks found*), and every
+  `# NOTE for the integration pass` discharged into either a criterion, a
+  ruling, or plan.md prose; what survives in `plan.toml` under `# Stage-3
+  record` is the cross-phase fact an executing agent needs.
+  - Check 1 (`EN` discharge) clean; `PHASE-09` `EN-2` tightened to cite
+    `PHASE-07`'s `EX` ids alongside its `VT` ids.
+  - Check 2 (`VT` duplication) — the `PHASE-01` `VT-1` / `PHASE-02` `VT-10`
+    export-set overlap ruled **permitted** (one test at two export-set sizes,
+    and `PHASE-02`'s third keyword makes the mandates non-interchangeable).
+  - Check 3 (`sec-8`'s evidence table) — one gap, closed. `transaction.rs`
+    carried no mandate: its only title sat in `PHASE-06` `VT-3` under
+    `test_file = provision.rs`. Split out as **`PHASE-06` `VT-6`** (the one new
+    criterion id this stage minted). Every title in all seven of the design's
+    `Verification alignment` sections was matched to a claiming mandate.
+  - Check 4 (section claiming) — the provenance table's out-of-scope sentence
+    widened from `sec-1` + `sec-9`'s risks/residuals to name all four groups of
+    unclaimed narrative; `sec-7`'s executed alignment blocks named on the
+    `PHASE-08`/`09`/`10` rows that own them.
+- plan.md corrections landed: `src/lib.rs` and `tests/architecture_layering.rs`
+  moved to the shared append-only table (`01, 02`); root `src/main.rs` added to
+  `PHASE-01`'s exclusive row; the flag day re-attributed to `PHASE-08`.
+- § *Two corrections owed at execution* → § *Corrections owed*, extended to five
+  — items 3–5 are stage-3 rulings on design text, owed to the reconciliation
+  brief only.
 - No code touched, so no `doctrine check gate` applies; `doctrine validate`
   clean and `verify-vt` reports **0 `UNCHECKABLE`**. All `.doctrine` changes
   committed path-limited — another agent's `SL-249`/`SL-250` and
-  `.doctrine/rfc/027/` left untouched. `flake.lock` and `.claude/settings.json`
-  were dirty on arrival and are left alone.
+  `.doctrine/rfc/027/` left untouched.
 
 ### Learned
 
@@ -110,18 +132,16 @@ fresh-as-of: 2026-08-08 · plan · stage 2 complete (all ten phases carry criter
 
 ### Open
 
-- **Next is stage 3, the integration pass** — `plan.md` § *Authoring stages*
-  carries the checklist; the twelve `# NOTE for the integration pass` comments
-  in `plan.toml` are the concrete worklist.
-- `plan.md` § *File ownership* disagrees with the criteria on three files
-  (`src/lib.rs`, `tests/architecture_layering.rs`, root `src/main.rs`) —
-  stage-3 prose correction.
-- `plan.md` § *What each phase changes about the tree* attributes the flag day
-  to `PHASE-10`; the first executed capsule test is `PHASE-08` — stage-3 prose
-  correction, `DEC-180` carries the durable version.
-- `doctrine slice phases 248` deliberately **not** run — belongs after stage 3.
+- **Next is `doctrine slice phases 248`, then `slice status 248 ready`** — plan
+  authoring is complete and the gate that held them is discharged. After that,
+  `/phase-plan` for `PHASE-01`.
 - `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
   because `sec-9`'s corrections list cannot be edited without a recovery cycle.
+  Three more of the same shape joined it at stage 3, all in plan.md
+  § *Corrections owed* items 3–5: two title divergences in the design's
+  `Verification alignment` sections (one spelling, one name shared by two
+  tests), and `sec-9` residual 2's stale `PropertyRemoval` count (nine stated,
+  ten landed). All are corrections to design *text*; no decision moves.
 - `DEC-180` — settles the local-host case only; the CI ruling stays owed by
   whichever slice first runs this suite in CI.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.

@@ -31,7 +31,44 @@ context that has forgotten what phase 3 promised.
 3. **Integration** — the seams no stage-2 session can see. Every `EN` discharged
    by an earlier `EX` or by the slice's entry state; no `VT` duplicated across
    phases; the union covering `sec-8`'s evidence table; every design section
-   claimed by the provenance table or explicitly out of scope.
+   claimed by the provenance table or explicitly out of scope. Complete; the
+   four checks are recorded below.
+
+#### What the four checks found
+
+All four were run over the whole plan, not sampled. Two produced a change to the
+plan; two produced a ruling and no change.
+
+1. **`EN` discharge — clean.** All 31 entrance criteria discharge. `PHASE-01`'s
+   four are entry-state facts about the tree as the slice found it, each
+   re-checked at the `/plan` gate (§ *The design's premises were re-checked*);
+   the other 27 each name an earlier phase's `EX`. One was tightened rather than
+   fixed: `PHASE-09` `EN-2` rested on `PHASE-07`'s `VT` ids alone, and now names
+   the `EX` ids that land the algebra alongside the `VT` ids that evidence it.
+2. **`VT` duplication — one permitted overlap, two collisions ruled.** The
+   overlap is `PHASE-01` `VT-1` and `PHASE-02` `VT-10` keywording two
+   export-set titles; permitted, because it is one test re-run at a second
+   export-set size and `PHASE-02`'s mandate carries `interpretation` as a third
+   keyword, so neither mandate is inert. The two title collisions the design
+   carries — one spelling (`both_declared_` versus `both_readable_lists_empty_
+   refuses`) and one name (`unknown_key_refuses_naming_the_key` in two files) —
+   are ruled at the phases that own them and recorded under § *Corrections
+   owed*. Every other same-file cross-phase mandate pair is keyword-disjoint.
+3. **`sec-8`'s evidence table — one gap, closed.** Every file the table names as
+   a home for the new evidence carries at least one `VT` mandate anchored in it,
+   with one exception found here: `transaction.rs`. Its only title —
+   `a_transaction_id_carrying_a_path_separator_refuses_at_construction` — sat in
+   `PHASE-06` `VT-3`, whose `test_file` is `provision.rs`, so the mandate would
+   have looked for it in the wrong file and `transaction.rs` would have carried
+   no keyword floor at all. Split out as `PHASE-06` `VT-6`. Beyond the table,
+   every title in all seven of the design's `Verification alignment` sections
+   was matched to a claiming mandate; none is orphaned.
+4. **Design-section claiming — four groups of prose named out of scope.** Every
+   section that states implementation is claimed by the provenance table. The
+   table's out-of-scope sentence was widened, because it covered `sec-1` and
+   `sec-9`'s risks and residuals and left four groups of narrative unmentioned
+   rather than out of scope. `sec-7`'s executed `Verification alignment` blocks
+   were claimed only by implication and are now named on the rows that own them.
 
 ### How the phases were sized
 
@@ -158,11 +195,15 @@ and `disk_used` are. That is the `backend → config` edge in `sec-6`'s unit tab
 
 ### File ownership
 
-Exclusively owned — one phase, no other phase touches the file:
+Exclusively owned — one phase, no other phase touches the file. The root
+package's `src/main.rs` is on this list and is easy to miss, because it takes
+exactly one line: `PHASE-01`'s `mod config_file;`. `PHASE-02` `EX-9`
+deliberately declines to declare `mod interpretation;` there, so no later phase
+touches it.
 
 | phase | files |
 |---|---|
-| PHASE-01 | `src/lib.rs`, `src/config_file.rs`, `src/dtoml.rs`, `src/git.rs`, `Cargo.lock`, `justfile`, `tests/architecture_layering.rs` |
+| PHASE-01 | `src/config_file.rs`, `src/dtoml.rs`, `src/git.rs`, `src/main.rs` (root package), `Cargo.lock`, `justfile` |
 | PHASE-02 | `src/interpretation.rs` |
 | PHASE-03 | `crates/doctrine-control/src/host.rs`, `…/config.rs`, `…/capacity.rs`, `.doctrine/doctrine.toml` |
 | PHASE-04 | `crates/doctrine-control/src/backend.rs` |
@@ -176,6 +217,8 @@ concurrently:
 
 | file | phases | what each adds |
 |---|---|---|
+| `src/lib.rs` | 01, 02 | 01 creates the lib target and its five-item export set; 02 appends `pub mod interpretation;` and the sixth entry (`EX-8`) |
+| `tests/architecture_layering.rs` | 01, 02 | 01 parameterises `check`'s module filter and adds the export-set and two-tree assertions; 02 re-runs two of them with `interpretation` added (`VT-10`) |
 | `.doctrine/adr/001/layering.toml` | 01, 02, 03, 04, 05, 06, 07 | one row per unit introduced, in the tree's own section. Self-enforcing: an unclassified unit fails the gate |
 | `crates/doctrine-control/Cargo.toml` | 01, 03 | 01 declares the `doctrine` path edge; 03 adds `rustix` (`fs` **and** `std`), `serde` (`derive`) and `toml`. Derive the list from the crate's own `use` statements, never from `sec-6`'s table |
 | `crates/doctrine-control/src/main.rs` | 01, 06, 10 | 01 the skeleton, 06 the `provision` verb, 10 the `backend verify` verb. Each verb lands with the code it calls |
@@ -197,14 +240,39 @@ phase's or out of scope.
 | PHASE-05 | `sec-2` § *The bubblewrap backend* entire; invariants 6–8, 10–12, 14; § *Verification alignment* — the argv, closure, inner-`PATH` and descriptor-sweep group |
 | PHASE-06 | `sec-3` entire, less the freshness rows its § *Verification alignment* hands to the harness; `sec-4` § *The forbidden list has a consumer in this slice*; `sec-6` § *The two verbs* (`provision`) |
 | PHASE-07 | `sec-7` § *Where it lives*, § *The removal is named by the property*, § *A control may grant*, § *Two of the four credential mechanisms cannot be rowed*, § *The arm is the unit of execution*, § *Both arms provision*, § *Liveness first, observation second*, § *The row verdict*, § *The verdict*; invariants 1–6, 9, 10; § *Verification alignment* — the two pure groups |
-| PHASE-08 | `sec-7` § *The fixture*, § *Hazard containment, per row*, § *Table C*; invariants 7, 8; `sec-5` § *Verification alignment* (the two table C capacity rows); the table C claims `sec-3` and `sec-4` owe |
-| PHASE-09 | `sec-7` § *Table A* rows 1–8 and their subsections — § *Rows 3 and 4 share a mechanism*, § *Row 7's control is `--die-with-parent`*, § *Row 6 observes a value*, § *Row 8 is five payloads*, § *The payload must be the property's strongest negation*; § *Table B* entire |
-| PHASE-10 | `sec-7` § *Table A* rows 9–14 and their subsections — § *Clause 2 is five rows*, § *Rows 13 and 14 answer no clause*, § *Row 10's observer is its own first false positive*, § *Row 12 observes readability, not delivery*; § *Table A is the inventory*; `sec-6` § *The two verbs* (`backend verify`); `sec-9` `R8`, residual 3 |
+| PHASE-08 | `sec-7` § *The fixture*, § *Hazard containment, per row*, § *Table C*; invariants 7, 8; § *Verification alignment* — the *executed, table C* block, and the three harness titles in the *claims that need naming* block; `sec-5` § *Verification alignment* (the two table C capacity rows); the table C claims `sec-3` and `sec-4` owe |
+| PHASE-09 | `sec-7` § *Table A* rows 1–8 and their subsections — § *Rows 3 and 4 share a mechanism*, § *Row 7's control is `--die-with-parent`*, § *Row 6 observes a value*, § *Row 8 is five payloads*, § *The payload must be the property's strongest negation*; § *Table B* entire; § *Verification alignment* — the first eight *executed, table A* titles, the *executed, table B* block, and the rows 2/6/7/8 and B5 entries in the *claims that need naming* block |
+| PHASE-10 | `sec-7` § *Table A* rows 9–14 and their subsections — § *Clause 2 is five rows*, § *Rows 13 and 14 answer no clause*, § *Row 10's observer is its own first false positive*, § *Row 12 observes readability, not delivery*; § *Table A is the inventory*; § *Verification alignment* — the last six *executed, table A* titles and the rows 9–14 entries in the *claims that need naming* block; `sec-6` § *The two verbs* (`backend verify`); `sec-9` `R8`, residual 3 |
 
-`sec-1` is governing context and is claimed by no phase — it cites records and
-judges applicability, and states no implementation. `sec-9`'s risks and
-residuals are distributed above where they carry a phase obligation and are
-otherwise recorded rather than built.
+**Out of scope, explicitly.** Stage 3 walked every heading in the design against
+this table. What follows is the whole of what no phase claims, and each is
+narrative that states no implementation — a phase expanding it would be
+expanding an argument, not an instruction.
+
+- **`sec-1` entire** — governing context. It cites records and judges
+  applicability.
+- **`sec-2` § *Current behaviour, and why none of it is reused*** and **§ *The
+  arithmetic, and what correspondence survives***. The first is the case for not
+  extending `bwrap_core_argv`, discharged by `DEC-155` before this plan starts;
+  the second is the rows-to-clauses accounting and its instruction is negative —
+  claim no one-to-one correspondence — which `PHASE-04` `EX-15` and `PHASE-10`
+  `EX-15` already carry as *add no second unchecked projection*.
+- **`sec-8` § *What does not change*, § *Where the new evidence lives*, and
+  § *Requirement closure***. The first names what is unedited and retires risk
+  `R4`; the second is this plan's own sizing authority (§ *How the phases were
+  sized*) rather than a phase's input; the third is the reconciliation brief's
+  material, and each phase carries its own closure claim as an `EX` — `PHASE-03`
+  `EX-20` and `PHASE-08` `EX-16` for `REQ-461`, `PHASE-06` `EX-19` for
+  `REQ-450`, `PHASE-10` `EX-16` for `REQ-459`.
+- **`sec-9` § *Assumptions*, § *Open questions*, § *Corrections owed to the
+  reconciliation brief*, § *Follow-Up at close***, and every risk and residual
+  not distributed above. The risks and residuals that carry a phase obligation
+  are on the rows that owe them (`R6`, `R7`, `R8`, `R9`, residual 3); the rest
+  are recorded rather than built. The four sections named here are addressed to
+  the audit and the close, not to an executing phase — which is why `ISS-323`
+  and the two title divergences under § *Corrections owed* below are owed
+  **again** at reconcile: `sec-9`'s own corrections list cannot be extended in
+  place without a design recovery cycle (`ISS-320`).
 
 ### Phase obligations the design defers to execution
 
@@ -230,11 +298,18 @@ worth knowing about in advance:
 - **PHASE-01** brings `crates/doctrine-control` into `lint`, `build` and `test`.
   From that point the fast inner loop compiles and tests the new crate. That is
   the intent, not a side effect.
-- **PHASE-10** completes an admission test that asserts `Admitted`
-  *unconditionally* — conditioning it on backend availability would reintroduce
-  exactly the green skip `DEC-156` forbids. So from PHASE-10 onward, `cargo test`
+- **PHASE-08 is the flag day, and PHASE-10 completes it.** Table C provisions
+  real capsules and executes them, so **from PHASE-08 onward** `cargo test`
   fails on any host that cannot run the backend, and `sec-8`'s `default-members`
-  ruling brings that failure forward into `just check`. `sec-9` residual 3 is
+  ruling brings that failure forward into `just check`. Every admission row
+  after it compounds the same cost. PHASE-10 is where it becomes
+  unconditional-by-construction rather than incidental: its admission test
+  asserts `Admitted` *unconditionally*, because conditioning it on backend
+  availability would reintroduce exactly the green skip `DEC-156` forbids. The
+  distinction is worth keeping straight — an earlier reading of this section
+  attributed the whole cost to PHASE-10, which would have let a PHASE-08 red on
+  a bubblewrap-less host look like a defect rather than the planned landing.
+  `DEC-180` § *Where it lands* carries the durable version. `sec-9` residual 3 is
   explicit that the affected set is not "macOS" but *any host, or any nesting,
   that denies what the backend needs* — a seccomp-filtered CI runner as much as
   an agent sandbox. This is the closest thing to a flag day in the slice, and it
@@ -253,12 +328,13 @@ worth knowing about in advance:
 
 ## Notes
 
-### If a phase proves oversized in stage 2
+### If a phase proves oversized
 
 `PHASE-NN` ids are immutable and edits append, so a phase that turns out too
 large cannot be split by renumbering. Two split points are pre-identified
 because appending at them keeps the list in logical order rather than leaving a
-new phase permanently out of sequence:
+new phase permanently out of sequence. Neither was needed in stage 2, so both
+stand available to execution:
 
 - **PHASE-02** divides at `parse` + `canonical_hash` versus `restrict`. They are
   separate pure functions with separate refusal vocabularies, and `sec-3` step 4
@@ -267,13 +343,17 @@ new phase permanently out of sequence:
   credential rows (13, 14), which are disjoint by field and carry the
   out-of-jail measurement between them.
 
-Neither split is taken now. They are recorded so that if stage 2 needs one, it
-appends rather than improvising.
+Neither split is taken. They are recorded so that a phase needing one appends
+rather than improvising.
 
-### Two corrections owed at execution
+### Corrections owed
 
-Both are transcription-grade, both resolve unambiguously against the design's
-own prose, and neither reopens a decision:
+All transcription-grade, all resolving unambiguously against the design's own
+prose, and none reopening a decision. Items 1 and 2 are owed at execution; items
+3 to 5 were ruled at stage 3 and are owed only to the reconciliation brief,
+because they are corrections to design text and `sec-9`'s own corrections list
+cannot be extended in place without a design recovery cycle (`ISS-320`). They
+are recorded here so the audit does not have to rediscover them.
 
 1. **`sec-6`'s `EXPORTED` constant omits `today`.** The sketch above it declares
    `pub use clock::today;`, the same section's prose calls `clock::today` "the
@@ -288,6 +368,34 @@ own prose, and neither reopens a decision:
    `web/map` with no cargo package selection in it, so the checked-set ruling is
    unaffected and the omission changes nothing. Recorded so a stage-2 session
    reading `sec-8` against the recipe does not treat the difference as drift.
+3. **One refusal is spelled two ways.** `sec-2` § *Verification alignment* lists
+   `both_declared_lists_empty_refuses`; `sec-5` § lists
+   `both_readable_lists_empty_refuses`. One refusal (`NoReadableInputs`), one
+   test, one file (`config.rs`). **`sec-5`'s spelling stands** — it is the
+   section that owns the reader, the refusal type and the file, and it is what
+   `PHASE-03` `VT-4` already carries, so no mandate moves. `sec-2`'s entry is a
+   cross-reference to `sec-5`'s test rather than a second obligation, as is its
+   identically-spelled
+   `closure_roots_without_a_resolver_refuses_naming_both_keys`. Neither is a
+   duplicated `VT`.
+4. **One title names two tests.** `unknown_key_refuses_naming_the_key` appears
+   in `sec-4` § and `sec-5` § *Verification alignment*, for the
+   `[interpretation]` walk and the `[capsule]` `deny_unknown_fields` refusal
+   respectively. **Deliberately not qualified.** The two `#[cfg(test)]` modules
+   are in different files, so this is Rust-legal, and each `VT` mandate is
+   file-scoped — `PHASE-02` `VT-1` reads `src/interpretation.rs`, `PHASE-03`
+   `VT-4` reads `config.rs`, and neither can be satisfied by the other's file.
+   Renaming one plan-side would put the plan out of step with the locked
+   design's title authority to buy a grep convenience, which is the wrong trade;
+   the cost accepted instead is that a reader greping the bare title finds two
+   tests and disambiguates by module.
+5. **`sec-9` residual 2's count is stale.** It states `PropertyRemoval` at nine
+   variants; the vocabulary this plan lands is ten (`PHASE-07` `EX-4`), with
+   `AuthorityGrant::AllCapabilities` a separate enum on top. The residual's
+   claim is about the *trend* — the vocabulary grows every round — and that is
+   unaffected and still true. Nothing rests on the numeral: `PropertyRemoval` is
+   a closed enum the compiler checks, and `PHASE-07` `EX-4` is the authority.
+   Recorded so a reader does not take nine as current.
 
 ### The design's premises were re-checked against the tree
 
