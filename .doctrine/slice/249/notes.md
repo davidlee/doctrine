@@ -88,7 +88,17 @@ fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · e
   per-file `mod tests`. The plan's `test_file` for `VT-3`/`VT-4` names
   `attestation.rs` — the module under test, which is what `verify-vt` gates on
   (keywords over that file, which pass). The tests themselves ride the existing
-  seam rather than opening a parallel one.
+  seam rather than opening a parallel one. `slice conformance` surfaces the
+  consequence as one **undeclared** file, `src/design_run/tests.rs`. Left
+  undeclared deliberately: the selector is a scope statement and settling scope
+  divergence is reconcile's, not a phase's. Visible is the correct resting state.
+- `VT-2`'s fixture can only reach the `Applied` intent state. The six-step crash
+  points are e2e-only by construction (`design.rs`'s `no_fault` doc: a crash is
+  observable only across a process boundary), so the pre-write abandon hook is
+  the only in-process way to leave an intent journalled — and it leaves it fully
+  applied. The guard sits at step 1 and fires at every state, so the assertion is
+  sound; the earlier states are covered by the unit predicate (`VT-3`/`VT-4`),
+  not by the fixture. Stated so an audit does not read `VT-2` as wider than it is.
 - A review reading `done` is **not** concluded — `done` is derived from findings
   (ADR-007 D-C8), while a design run's `conducted` disposition needs
   `review.concluded`, set only by `doctrine review conclude`. →
