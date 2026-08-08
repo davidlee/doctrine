@@ -271,3 +271,39 @@ lists it as a candidate, but it does not generalise past
 "pin a table's mapping by differencing the layer below it". D1 is that pattern's
 second application in this slice, not a new one. Minting it would be the parallel
 implementation AGENTS.md forbids, in the memory corpus.
+
+### T11 — the gate
+
+`./target/debug/doctrine check gate` — **exit 0**. Clippy clean (zero warnings),
+every suite green, corpus validation clean. `check`/`gate` build before
+validating, so the corpus check ran against a this-invocation-fresh binary.
+
+`doctrine slice verify-vt 249`, PHASE-03 rows:
+
+| criterion | verdict |
+|---|---|
+| VT-1 (`facet_fields`, `RawFacet` in `src/knowledge.rs`) | **PASS** |
+| VT-2 (`facet_fields`, `knowledge-` in `src/knowledge.rs`) | **PASS** |
+| VT-3 (`facet`, `findings` in `src/doctor_checks.rs`) | ≈ **UNATTRIBUTABLE** |
+
+VT-3's verdict is *"keyword present but `src/doctor_checks.rs` not modified by
+this slice"* — a **delta-boundary** reading, not a test failure. The keywords are
+present and the file is modified by this phase's commits; the slice's recorded
+delta has simply not been extended over PHASE-03's range yet, which is the
+orchestrator's `record-delta` beat after the status flip (LOOP.md § The
+orchestrator's turn, beat 3). Nothing for the worker to fix. The PHASE-04..07
+`FAIL` rows are unimplemented future phases and are expected.
+
+**Phase status left at `in_progress`** — the flip is the orchestrator's.
+
+### PHASE-03 commits
+
+| sha | what |
+|---|---|
+| `c1940d7c8` | T1/T2 — the table and its three pins |
+| `a2dabc853` | T1/T2 harvest — notes shard, ISS-329 |
+| `e6b180aef` | ISS-329 slug symlink |
+| `b77d0b393` | T3 — the injected-defect control, five readings |
+| `fd848e93a` | T4/T5 — the template pin, and R2 disproved |
+| `dfd51354d` | T6-T9 — the inert-facet-key tripwire, check #12 |
+| `09a396e90` | T10 harvest — one memory, two amendments, one observation |
