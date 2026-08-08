@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe12e-b94f-7182-8a58-ecc40626a676"
+recorded_at = "2026-08-08T11:42:43.535155132Z"
+kind = "friction"
+summary = "/phase-plan: plan.toml phase entries carry no Reading list field, so a brief that says 'read only the design sections its Reading list names' has no referent"
+detail = "SL-249 PHASE-04. The planner brief (and the /phase-plan skill's step 2) assume the authored plan entry scopes the design read. It does not: a [[phase]] row is id/name/objective/entrance_criteria/exit_criteria/verification/specs/requirements — no reading list, and plan.md carries narrative rationale, not per-phase section pointers. The planner must reconstruct the section set from section refs scattered through the objective and criteria prose (here: 5.1, 5.2, 5.4A, 5.5, 7 D2/D3/D10, 9), which is exactly the recall-shaped step the instruction was trying to avoid. Cost: ~4 extra grep/read round-trips before any planning, and a standing risk of reading design.md whole 'to be safe' — 1618 lines. Cheapest fix is probably a reading = [...] array on the phase row, authored at /plan time when the section set is already in hand."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
