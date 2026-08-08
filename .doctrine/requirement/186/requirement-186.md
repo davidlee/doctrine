@@ -1,4 +1,4 @@
-# REQ-186: `boot install` merges a `<exec> boot` SessionStart hook into Claude settings.local.json, refreshing a stale owned copy and preserving every foreign hook and key.
+# REQ-186: `boot install` merges doctrine's owned Claude hook set — every spec's entries, in matcher order, across every event it declares — into the selected settings file, refreshing a stale owned copy and preserving every foreign hook and key.
 
 ## Statement
 

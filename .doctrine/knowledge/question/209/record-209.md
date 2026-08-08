@@ -37,3 +37,34 @@ decision made in advance of it.
 
 Not a blocker for drafting, and recorded here so reconciliation inherits it
 instead of rediscovering it.
+
+## Answer
+
+**Split into three (user, 2026-08-08), landed as REV-049 (*reconcile SL-250*).**
+
+- `REQ-186` **modified** to the hook *set* — every spec's entries, in matcher
+  order, across every event it declares, into the *selected* settings file. It
+  keeps its identity (the owner-locked merge) and stops naming a file and a
+  command form it no longer fixes.
+- `REQ-476` (`FR-008`) **introduced** — the `[install] claude-settings-scope` key
+  selects the settings file and, through `baked ⟺ gitignored`, the command form.
+  One requirement rather than two because they are one decision: splitting them
+  would admit an implementation that honours the key and writes a host abspath
+  into a committed file, the POL-002 breach the invariant exists to prevent.
+- `REQ-477` (`FR-009`) **introduced** — the abandoned-scope sweep: the shared
+  ownership predicate, the gate on the target write landing, and the three
+  reported outcomes.
+
+**Why not the widened single requirement.** SPEC-011's other seven requirements
+are each one sentence over one verifiable behaviour, so a `REQ-186` carrying all
+four axes would have been a run-on out of line with its siblings. The
+load-bearing objection is narrower: it would have buried the sweep — doctrine's
+one destructive write in this area, with its own predicate, gate and reporting
+contract — inside a requirement about a merge. Coverage by implication reads as
+present and verifies as nothing.
+
+The `T1` half of the question above resolved in favour of the split too, and by
+the argument this record already made: behaviour arriving under governance for
+the first time is the usual trigger for new requirements rather than a widened
+one. RV-350 `F-1` then added a fourth axis the design had not counted (the
+command form), which the split absorbs without further widening.

@@ -1,0 +1,50 @@
+id      = 49
+slug    = "reconcile-sl-250"
+title   = "reconcile SL-250"
+status = "done"
+approval = "approved"
+updated = "2026-08-08"
+tags    = []
+
+# A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
+# revise-intent against authored governance/spec truth plus a staged delta payload.
+# Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
+# `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions
+# are approval-blind; the apply checkpoint (PHASE-05) consults it. The prose
+# rationale + before/after excerpts live in the sister `revision-NNN.md`.
+
+# change rows — the typed `revises` payload (the touched-entity set; the rows ARE
+# the edges, members.toml precedent). Authored by `revision change add` (PHASE-03),
+# NOT by hand and NEVER by `doctrine link`. A fresh `revision new` writes none:
+#   [[change]]
+#   target  = "ADR-006"   # durable peer id (the FK / anchor)
+#   action  = "modify"    # modify | retire | move | status | introduce | create
+#   primary = true        # display/headline hint; at most one, optional
+
+[relationships]
+needs = []
+after = []
+
+[[change]]
+target = "REQ-186"
+action = "modify"
+primary = true
+
+[[change]]
+target = "SPEC-011"
+action = "modify"
+primary = false
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-008"
+member_of = "SPEC-011"
+new_statement = "`boot install` selects the Claude settings file it writes from the `[install] claude-settings-scope` key — an absent key, table or `doctrine.toml` all yielding project `.claude/settings.json` — and renders hook commands in the form that file requires on `baked ⟺ gitignored`: portable `${DOCTRINE_BIN:-doctrine}` for the tracked project file, a baked exec path for the gitignored local one."
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-009"
+member_of = "SPEC-011"
+new_statement = "A hook set that lands in the selected scope evicts this project's doctrine-owned entries from the abandoned sibling scope by the same ownership predicate, never touching a foreign entry, and reports what it removed, could not read, or did not attempt — the sweep being gated on the target write landing, so a failed write never leaves the operator with no working copy."

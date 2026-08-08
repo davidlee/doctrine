@@ -2,8 +2,8 @@ schema = "doctrine.requirement"
 version = 1
 
 id = 186
-slug = "boot-install-merges-a-exec-boot-sessionstart-hook-into-claude-settingslocaljson-refreshing-a-stale-owned-copy-and-preserving-every-foreign-hook-and-key"
-title = "`boot install` merges a `<exec> boot` SessionStart hook into Claude settings.local.json, refreshing a stale owned copy and preserving every foreign hook and key."
+slug = "claude-hook-set-merged-into-selected-settings-file"
+title = "`boot install` merges doctrine's owned Claude hook set — every spec's entries, in matcher order, across every event it declares — into the selected settings file, refreshing a stale owned copy and preserving every foreign hook and key."
 status = "active"
 kind = "functional"
 

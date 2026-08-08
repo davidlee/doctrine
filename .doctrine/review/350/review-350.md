@@ -344,3 +344,82 @@ amendment states the rule in prose rather than rewriting the criterion.
 `slice conformance` reports `.doctrine/spec/tech/011/**` **undelivered**. That
 is the REV target above: it is reconcile's write, not a phase's. It should
 clear when the REV lands.
+
+## Reconciliation Outcome
+
+Reconciled 2026-08-08. Every brief item is resolved; nothing was escalated back
+to design, and no brief item named a surface `/reconcile` does not write.
+
+### REVs completed
+
+- **REV-049** (`reconcile-sl-250`) — **done**. Four rows, all surfaced for manual
+  landing and all landed. Covers `F-1`; rationale, before/after excerpts and the
+  reconcile narrative are in `revision-049.md`.
+
+  | row | landed as |
+  |---|---|
+  | `modify REQ-186` (primary) | statement generalised to the hook **set** — every spec's entries, in matcher order, across every event it declares, into the *selected* settings file |
+  | `introduce FR-008` | **`REQ-476`** — the `[install] claude-settings-scope` key selects the file and, via `baked ⟺ gitignored`, the command form. Status `active` |
+  | `introduce FR-009` | **`REQ-477`** — the abandoned-scope sweep: shared ownership predicate, gate on the target write landing, three reported outcomes. Status `active` |
+  | `modify SPEC-011` | responsibility 6 in `spec-011.toml`; `spec-011.md` Overview, § *Responsibilities*, § *`boot install`* and § *Concerns* — all carried the same falsehood, so the requirement edit alone would have left the spec self-contradicting |
+
+  `doctrine spec validate SPEC-011` clean; `doctrine validate` corpus clean.
+
+- **`QUE-209` settled** (user, 2026-08-08) — **split into three, not one widened
+  requirement**. SPEC-011's other seven requirements are each one sentence over
+  one verifiable behaviour, so a widened `REQ-186` would be a run-on out of line
+  with its siblings — and would bury the sweep, doctrine's one destructive write
+  here, inside a requirement about a merge. Recorded on the record itself
+  (`answered`) and mirrored in `design.md` `sec-7` *Governance*.
+
+- **SPEC-010 stayed out of the REV**, per `DEC-171` and the brief: a conformance
+  claim, discharged by `PHASE-05` `VA-1` and re-derived by reading at the audit.
+- **RFC-018 is a `/harvest` sink, not a change row** — an RFC is not authored
+  governance truth. The `strictPluginOnlyCustomization` asymmetry and the two
+  `VH-1` memories are carried to close.
+
+### Direct edits applied
+
+All to `design.md`; none to `plan.toml` — `PHASE-NN` and `EN-/EX-/VT-` ids are
+immutable-append, so where a criterion mis-cites, the amendment states the rule
+in prose rather than rewriting the criterion. Every claim was re-verified against
+shipped code before writing.
+
+| # | section | edit |
+|---|---|---|
+| 1 | `sec-2` | `command_form` sited as `boot::command_form(scope)` (`src/boot.rs:574`), not a method on `ClaudeSettingsScope` — the method would invert ADR-001's tiers *and* close a cycle. Call-site notation corrected in the wire table and the `corpus.rs` sentence (`src/corpus.rs:547`) |
+| 2 | `sec-3` | the stranded-`baseRef` message is **directional** — both renderings of `stranded_baseref_line` (`:1860`) now shown; "it still governs" holds only under scope `Project` |
+| 3 | `sec-3` | *Reporting shape*: `baseref` is `BaseRefWrite { outcome, stranded }` (`:1839`), not a bare `BaseRefOutcome`; bundling beat a separate inspector on `DEC-163`'s own reasoning |
+| 4 | `sec-3` | `parse_settings` has a **third** consumer — `plan_baseref` (`:1751`), with five `PrintedFallback` literals collapsed into `baseref_fallback` (`:1738`) |
+| 5 | `sec-3` | the scope reader is `configured_scope` (`:549`), renamed to stop colliding with `RefreshReport.claude_scope`, which means a different thing |
+| 6 | `sec-2` | `fallback_for`'s output is now a JSON **array** for N=1 as well as N>1 (`:1555`). User-visible on both install paths; asserted nowhere but `!snippet.is_empty()` |
+| 7 | `sec-3` | *The announcement* specimen updated to the reworded `skipped` rider (`F-3`); both flags are per-spec facts folded across seven specs, hence both worded partially |
+| 8 | `sec-7` | **two general rules added**, not four more list entries: a criterion's line numbers are *advisory*, its named symbols *binding*; an enumerated inventory is a *starting set*, closed by running the suite and grepping the class. Four phase data points plus the audit's own fifth (`F-6`: the `review.selectors` pass runs once at design time and cannot see surfaces later phases acquire) |
+| 9 | `sec-1` | *Code impact* `src/install.rs` row gains `install_harnesses` / `boot_harness_names` (`:271`, `:298`) — an **addition**, not an instance: `--agent` was discarded, so `doctrine install --agent claude` wired nothing in a fresh project and reported it as routine detection output. The slice's own thesis one layer up; flagged as a possible sibling for IMP-407 |
+| 10 | `sec-7` | constant-list partitioning across phases stated as the phasing rule it is (`D1`) — `warnings = "deny"` makes an unconsumed constant a hard error; net result **zero** outstanding `dead_code` allowances |
+| 11 | `sec-7` | `PHASE-02` `EX-7` enumerates tests, not assertions — three of eight sites flip command literals too, and the create-fork test has a fourth no cited line reaches |
+| 12 | `sec-7` | `VT-2`'s two-spec fold is asserted through `WorktreeCreate`, not the `SubagentStart` its example names (`HookSpec::nominate` does not exist until `PHASE-04`). The behavioural claim is asserted exactly; only the event differs |
+| 13 | `sec-3` | **new, design-silent**: `wire`'s Claude arm announces the scope even when zero specs merged (`:2631`). Honest rather than vacuous — `install_baseref` writes to the very file the line names — and `EX-7` makes the announcement a criterion. Recorded so it is not read as a leak |
+
+Also updated: `sec-1`'s `.doctrine/spec/tech/011/` row now names REV-049 and its
+full target set, and `sec-7` *Governance* records the `QUE-209` settlement.
+
+### Closed inside the audit — no reconcile action
+
+`F-2` (two distribution memories corrected in place), `F-3` / `F-4`
+(`write_scope_report` reworded and `{tag}` added, with a new test), `F-6`
+(`publication/manifest.toml` and `tests/e2e_skills_symlink.rs` added as
+`design-target` selectors; undeclared 27 → 25, conformant 12 → 14).
+
+### Routed to owned backlog — no reconcile action
+
+`F-5` → ISS-307 (with IMP-175 / IMP-282 named as the other two faces). `F-7` →
+IMP-406. `F-8` → IMP-400 `OQ-4`. `F-9` carried to close: CHR-045 (resolve or
+explicitly retain) and IMP-234 / CHR-037 (overlap assessment not yet recorded).
+
+### Withdrawn / tolerated
+
+None. All eleven findings are `verified`; remediation is recorded here rather
+than by mutating any disposition.
+
+Reconcile pass complete — handoff to `/close`.

@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 476
+slug = "claude-settings-scope-key-selects-file-and-command-form"
+title = "`boot install` selects the Claude settings file it writes from the `[install] claude-settings-scope` key — an absent key, table or `doctrine.toml` all yielding project `.claude/settings.json` — and renders hook commands in the form that file requires on `baked ⟺ gitignored`."
+status = "active"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

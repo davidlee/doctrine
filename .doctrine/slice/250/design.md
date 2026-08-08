@@ -84,11 +84,27 @@ before the skills leg starts.
 |---|---|
 | `src/boot.rs` | `HookSpec` gains an ordered matcher set and holds its args rather than a rendered command; five new specs; one shared ownership-predicate helper; scope resolution, the `CommandForm` axis threaded through `install_hook_to_file` / `plan_hook` / `annotate_fallback` / `fallback_for` to both arms, and the abandoned-scope sweep gated on the write landing; `EvictOutcome` (per spec) plus `SweepReport` (per file); `RefreshReport.hook` becomes a collection; `install_baseref` follows the scope and reports a stranded sibling override; the shared scope-announcement writer; new path/matcher/event constants |
 | `src/install_config.rs` | the `ClaudeSettingsScope` enum, its `[install]` key, and the container-level `rename_all` that key needs to bind |
-| `src/install.rs` | `reconcile_link` extracted from two byte-identical blocks; the restored direct skills channel; removal of the automated plugin steps and their transitive orphans |
+| `src/install.rs` | `reconcile_link` extracted from two byte-identical blocks; the restored direct skills channel; removal of the automated plugin steps and their transitive orphans; **and `install_harnesses` / `boot_harness_names` (`:271`, `:298`)** — added at reconciliation, `RV-350` |
 | `src/corpus.rs` | **changed** — `run_sync_install` matches `HookWrite.written` and calls the shared announcement writer, so the scope and the sweep are reported on the routine path too |
 | `plugins/doctrine/hooks/hooks.json` | none — it stays the published plugin's payload |
 | `install/` | the cutover note, the escape-hatch instructions, the new config key, the command-form note and its POSIX-shell scope boundary |
-| `.doctrine/spec/tech/011/` | `REQ-186`, via the REV at reconciliation |
+| `.doctrine/spec/tech/011/` | `REQ-186` + two new requirements + the spec's own prose and responsibility 6, via REV-049 at reconciliation |
+
+**The `install.rs` row's last entry is an addition, not an instance** (recorded
+at reconciliation, `RV-350`). `run_forward_steps` and `print_forward_summary`
+both resolved the boot leg with `resolve_harnesses(&[], root)`, discarding the
+`--agent` the operator had just typed. In a fresh project `.claude/` does not
+exist when that leg runs — the agent-def leg creates it later — so `doctrine
+install --agent claude` wired no `@`-import, no hooks and no `.mcp.json`, and
+reported it as routine detection output ("no harness directories detected —
+skipped"). `PHASE-04` fixed it by making an explicit `--agent` set a directive,
+honoured even when it implies none.
+
+That is this slice's own thesis one layer up: the charter is *activation that
+fails silently*, and the install verb was failing silently about whether it had
+activated anything. Worth carrying into IMP-407 (*the doctor leg*) as a sibling
+question — the install verb should be able to say **why** it wired nothing, not
+only the doctor.
 
 ## What this section does not settle
 
@@ -165,9 +181,16 @@ being handed a scope it does not have. The two Claude scopes map on:
 | Claude, `Local` | `.claude/settings.local.json` | no | `Baked` |
 | Codex | `.codex/hooks.json` | no | `Baked` |
 
-`ClaudeSettingsScope::command_form()` is the one-line mapping, and it lives with
-the scope in `install_config`; `CommandForm` lives in `boot.rs` with the core
-that consumes it.
+`command_form(scope)` is the one-line mapping, and it lives in `boot.rs` beside
+`settings_rel` — **not** as a method on `ClaudeSettingsScope`, as this paragraph
+first had it (amended at reconciliation, `RV-350`). `install_config` is a pure
+leaf at out=0 and `boot` is command tier, so a method there would invert the
+tiers *and* close a cycle (`boot` already reaches `install_config` through
+`dtoml`), against ADR-001. That is exactly `sec-3`'s argument for siting
+`settings_rel` in `boot.rs`, applied to the sibling mapping; `PHASE-02` `VA-2`
+made the layering gate a criterion, and the shipped doc-comment
+(`src/boot.rs:574`) carries the reasoning plus a *do not tidy this back onto the
+enum* warning. `CommandForm` lives in `boot.rs` with the core that consumes it.
 
 **The wire that carries it.** The form is decided at the top and consumed at the
 bottom, so every function between them widens by one parameter. Naming them,
@@ -181,7 +204,7 @@ reverse-deriving its input from a path:
 | `annotate_fallback` (`:1578`) | `(outcome, hook_file, spec)` | `+ form` |
 | `fallback_for` (`:1587`) | `(spec)` | `+ form` |
 | `install_codex_hook` (`:1628`) | — | passes `CommandForm::Baked` |
-| `install_claude_hook` (`:1617`) | — | passes `scope.command_form()` |
+| `install_claude_hook` (`:1617`) | — | passes `command_form(scope)` |
 
 `install_hook_to_file` is the join: it is the sole path from either arm's
 installer to `plan_hook`, and it also calls `annotate_fallback`. Deriving the
@@ -191,7 +214,8 @@ would re-couple the core to a path constant per harness.
 
 `src/corpus.rs:520` is the sixth site: its `PrintedFallback` arm calls
 `fallback_for(&spec)` and now needs the form too. It has it —
-`write.scope.command_form()` off the `HookWrite` this section introduces.
+`command_form(write.scope)` off the `HookWrite` this section introduces
+(`src/corpus.rs:547`).
 
 `is_ours` stays a bare `fn` pointer rather than becoming a closure: the four new
 predicates differ only in their argument string, and a `Box<dyn Fn>` would
@@ -227,6 +251,14 @@ fn desired_entries(spec: &HookSpec, form: CommandForm) -> Vec<Value> {
 the manual-repair snippet a malformed
 settings file prints is complete rather than one sixth of the answer — and
 prints the form that file would actually have received.
+
+**Its output shape changes, including for N=1** (recorded at reconciliation,
+`RV-350`). `EX-4` makes the snippet render the whole matcher set, so
+`fallback_for` wraps `desired_entries` in a `Value::Array` unconditionally
+(`src/boot.rs:1555`) — where it previously pretty-printed a bare object. Every
+spec's snippet is now a JSON array, one-matcher specs included. This is
+user-visible on both install paths and is asserted nowhere: the sole assertion
+over it is `!snippet.is_empty()`.
 
 ## `plan_hook`'s normalize
 
@@ -585,9 +617,9 @@ pub(crate) fn install_claude_hook(
     spec: &HookSpec,
     dry_run: bool,
 ) -> anyhow::Result<HookWrite> {
-    let scope = crate::dtoml::load_doctrine_toml(root)?.install.claude_settings_scope;
+    let scope = configured_scope(root)?;
     let written = install_hook_to_file(
-        root, settings_rel(scope), scope.command_form(), spec, dry_run,
+        root, settings_rel(scope), spec, command_form(scope), dry_run,
     )?;
     // Sweep only if the canonical set actually landed. `PrintedFallback` is an
     // `Ok` value, so the `?` above cannot see this failure — see below.
@@ -610,6 +642,12 @@ inherits the scope, the command form and the sweep without electing to.
 
 The cost is one small TOML read per spec. That is not worth a parameter whose
 omission is the defect.
+
+**The reader is named `configured_scope`, not `claude_scope`** (recorded at
+reconciliation, `RV-350`). `src/boot.rs:549` wraps the `doctrine.toml` load so
+the resolution has one home; it is named for what it reads rather than for the
+harness, because `RefreshReport.claude_scope` means a different thing — the
+scope *plus* what the sweep of its sibling found.
 
 **`corpus.rs` does change, and the earlier claim that it does not was wrong in
 the dangerous direction.** `run_sync_install` matches `install_claude_hook`'s
@@ -701,6 +739,12 @@ planners now share — absent or empty yields an empty object, malformed yields
 `plan_hook`'s prologue. An **absent** sibling parses to an empty object and
 reaches `Nothing`, not `Unreadable`; only a file that exists and cannot be
 understood is unreadable.
+
+**It ended up with three consumers, not two** (recorded at reconciliation,
+`RV-350`). `plan_baseref` (`src/boot.rs:1751`) carried a byte-identical prologue
+and now rides `parse_settings` too — and its five open-coded `PrintedFallback`
+literals collapsed into one `baseref_fallback()` constructor (`:1738`). The
+extraction pays for itself once more than this section anticipated.
 
 **Why the third state earns its keep.** The write path already invests in this:
 `plan_hook` turns the same two `None` conditions into `PrintedFallback`
@@ -802,8 +846,17 @@ then a rider — **one line per true fact, not one line total**, because
 ```
   claude: evicted 2 stale hook entries from .claude/settings.local.json
   claude: could not sweep part of .claude/settings.local.json (malformed) — stale doctrine hooks may still fire there
-  claude: did not sweep .claude/settings.local.json — .claude/settings.json could not be written, so there is nothing to replace it with
+  claude: left some doctrine hooks in .claude/settings.local.json — they could not be written to .claude/settings.json, so there is nothing to replace them with
 ```
+
+**The third line was reworded at reconciliation** (`RV-350` `F-3`), from a
+file-scoped *"did not sweep `<abandoned>`"* to the per-spec phrasing above.
+`removed > 0` and `skipped` are both per-spec facts folded across seven specs,
+so both lines are worded partially — and they co-occur whenever one event's
+array in the *target* is wrongly typed while the rest merge: those specs sweep,
+that spec does not. The old file-scoped wording then sat directly beneath
+"evicted N entries from `<abandoned>`" and contradicted it. `EX-7`'s intent is
+unchanged.
 
 The third is the `F-12` guard speaking. It reads as the warning it is: not
 "cleanup skipped" but "your activation is still in the other file, and it is the
@@ -841,6 +894,16 @@ The rider is what makes the difference visible on the path that matters most:
 `memory sync install` is the highest-frequency caller of the slice's one
 destructive write.
 
+**The announcement fires even when zero specs merge**, and that is deliberate
+rather than a leak (recorded at reconciliation, `RV-350`; this design was silent
+on it). `report.claude_scope` is `Some` for the whole Claude arm — the scope is
+resolved before the spec loop, not derived from it (`src/boot.rs:2631`) — so the
+`hooks → <target>` line prints with no hook lines beneath it. It stays honest
+because `install_baseref` writes to the very file the line names, so the line
+describes a real write in every case. It arose from the phase split: `PHASE-03`
+wired `write_scope_report`, `PHASE-04` supplied the specs, and `EX-7` makes the
+announcement a criterion in its own right.
+
 ## Reporting shape
 
 `RefreshReport.hook: RefreshOutcome` becomes a collection, since one Claude
@@ -853,7 +916,8 @@ struct RefreshReport {
     /// The scope written and what the sibling sweep found, folded across specs.
     /// `None` on the Codex arm, which has one settings file.
     claude_scope: Option<(ClaudeSettingsScope, SweepReport)>,
-    baseref: BaseRefOutcome,
+    /// The outcome AND the stranded sibling override, bundled — see below.
+    baseref: BaseRefWrite,
     mcp: RefreshOutcome,
     append_system: AppendSystemOutcome,
     extension: ExtOutcome,
@@ -865,6 +929,15 @@ struct RefreshReport {
 `wire`'s existing `match report.hook { … }` becomes the same match inside a
 `for` — the four `RefreshOutcome` arms and their message strings are unchanged,
 which keeps the Codex arm's output byte-identical.
+
+**`baseref` carries two facts, not one** (amended at reconciliation, `RV-350`;
+this block first showed a bare `BaseRefOutcome`). `install_baseref`
+(`src/boot.rs:1805`) returns `BaseRefWrite { outcome, stranded }` (`:1839`) and
+the field takes it whole. Bundling beat a separate sibling-inspector for the
+reason `DEC-163` used to resolve the scope inside the installer: a second fact
+reachable only through a second call is a fact a caller can forget, and the
+stranded override is precisely the signal the scope flip would otherwise
+silence.
 
 ## `install_baseref` follows the scope
 
@@ -917,10 +990,21 @@ is a standing signpost in the boot snapshot.
 inspects the sibling for a `worktree.baseRef` and the report carries what it
 found:
 
+**The message is directional, and this section's first draft was not** (amended
+at reconciliation, `RV-350`). "Local settings override project settings, so it
+still governs" is true only when the abandoned file is the *local* one — i.e.
+under scope `Project`, the case walked through above. Under scope `Local` the
+precedence runs the other way and the stranded value is the inert one. Saying
+"it still governs" in both directions would overclaim by exactly one degree, so
+`stranded_baseref_line` (`src/boot.rs:1860`) renders a pair:
+
 ```
-  claude: worktree.baseRef in .claude/settings.local.json is "main", not "head" —
-    local settings override project settings, so it still governs; remove it there
-    or set [install] claude-settings-scope = "local"
+  claude: worktree.baseRef in .claude/settings.local.json is 'main', not 'head' — local
+    settings override project settings, so it still governs where the claude dispatch
+    arm forks from; remove it there or set [install] claude-settings-scope = "local"
+
+  claude: worktree.baseRef in .claude/settings.json is 'main', not 'head' — left as-is;
+    the 'head' doctrine just wrote to .claude/settings.local.json overrides it
 ```
 
 This keeps no-clobber intact — a deliberate override is still never deleted by
@@ -1650,6 +1734,51 @@ built thing against text written before it.
 The evidence must be re-derivable at audit, so it belongs in the reconciliation
 brief with file/line citations — not in a runtime artefact that disappears.
 
+## What implementation taught the criteria
+
+Added at reconciliation (`RV-350`). Four phases each found an authored criterion
+enumerating less than it meant to, and the fix is two rules rather than four more
+list entries:
+
+- **A criterion's line numbers are advisory; its named symbols are binding.**
+  Every `src/boot.rs` line citation in `PHASE-03`'s authored criteria was stale
+  after `PHASE-01`'s renames — while every cited *fact* re-verified and held. Read
+  criteria by symbol; treat a line number as a hint that has already drifted.
+- **An enumerated inventory is a starting set, never a totality.** Close it by
+  running the full suite and grepping the *class* of assertion, never by walking
+  the cited paths. `PHASE-04` `F1`: `wire_adds_import_and_hook_then_is_idempotent`
+  carried the `EX-5` assertion twice, one unenumerated. `PHASE-05` `F1`:
+  `tests/e2e_claude_install.rs` carried the same now-false assertion as
+  `e2e_skills_symlink.rs` and was named in neither `sec-5` nor `EX-8`. `PHASE-06`
+  `F1`: `EX-4` was over-broad by three and short by one — the `install_config.rs`
+  `repo` **field** doc, distinct from the module doc.
+
+The audit itself supplies a fifth data point in the same direction, at a
+different altitude: `F-6`'s two undeclared design surfaces
+(`publication/manifest.toml`, `tests/e2e_skills_symlink.rs`) are *named by
+criteria in the last phase* and were still missed, because the `review.selectors`
+pass runs once at design time and cannot see the surfaces later phases acquire.
+The enumeration problem is not confined to test inventories.
+
+Two narrower instances of the same shape, recorded so they are not re-derived:
+
+- **`PHASE-02` `EX-7` enumerates tests, not assertions.** At three of its eight
+  sites the *command literals* flip too, and the create-fork test carries a fourth
+  such assertion no cited line reaches. The criterion held only because it was
+  read by name.
+- **`VT-2`'s two-spec fold is asserted through `WorktreeCreate`,** not the
+  `SubagentStart` its example names — `HookSpec::nominate` does not exist until
+  `PHASE-04`. The behavioural claim is asserted exactly; only the event differs.
+
+**Constant-list partitioning is the phasing rule, not an accident** (`D1`).
+`Cargo.toml:175` sets `warnings = "deny"`, so a constant or field with no
+consumer is a hard error, and a phase may therefore introduce only what the same
+phase consumes. `PHASE-01` `EX-8`, `PHASE-02` `EX-2` and `PHASE-04` `EX-1`
+partition the constant list on exactly that line, and `PHASE-02` → `PHASE-03`
+partitions `ClaudeSettingsScope::sibling()` and `RefreshReport.claude_scope` the
+same way. The net result is the test of the rule: the slice carries **zero**
+outstanding `dead_code` allowances.
+
 ## Governance
 
 The REV amends **SPEC-011 / `REQ-186`** alone. It reads:
@@ -1665,9 +1794,24 @@ default), not `<exec>` (the committed scope writes the portable
 nothing about (the abandoned-scope sweep).
 
 `QUE-209` — whether the REV widens `REQ-186` or adds new requirements for the
-newly-governed hook set and the scope key — is **deferred to reconciliation**,
-where the REV is authored and requirement granularity is the natural call. The
-draft does not settle it.
+newly-governed hook set and the scope key — was **deferred to reconciliation**,
+where the REV is authored and requirement granularity is the natural call.
+
+**Settled there (2026-08-08, user): split into three.** REV-049 modifies
+`REQ-186` to the hook *set* generalised over matcher order and event, and
+introduces `REQ-476` (`FR-008` — the scope key selects the file *and*, via
+`baked ⟺ gitignored`, the command form) and `REQ-477` (`FR-009` — the
+abandoned-scope sweep, its ownership predicate, its landing gate and its three
+reported outcomes). SPEC-011's other seven requirements are each one sentence
+over one verifiable behaviour, so a widened `REQ-186` would have been a run-on
+out of line with its siblings — and, load-bearing, would have buried the sweep
+inside a requirement about a merge. The sweep is doctrine's one destructive write
+here; governing it only by implication is coverage that reads as present and
+verifies as nothing.
+
+The REV also amends SPEC-011's own prose and its structured responsibility 6,
+which carried the identical falsehood — the requirement edit alone would have
+left the spec self-contradicting.
 
 RFC-018 (*Claude harness field notes*) takes anything empirical the slice
 learns, including the `strictPluginOnlyCustomization` asymmetry.

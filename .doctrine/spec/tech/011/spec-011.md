@@ -15,7 +15,7 @@ governance kinds (ADR, policy, standard, memory) and the install/listing
 substrate for their row data; this spec restates none of that and owns only what
 is specific to *the projection and its wiring*: the pure assembly seam, the
 content-diff cache key, the section source-kind taxonomy and its marker
-fallback, the `@`-import + `SessionStart` hook installer, and the `--check` disk
+fallback, the `@`-import + Claude hook-set installer, and the `--check` disk
 sentry.
 
 ## Responsibilities
@@ -24,8 +24,9 @@ Mirrors the structured `responsibilities` list: assemble the snapshot as a pure
 deterministic projection; order the build-volatile exec-path section last;
 project each governance kind through one status-filtered arm; fall back to a
 fixed marker on any miss; write only on content change; wire the `@`-import and
-`SessionStart` hook through `boot install`; and run `boot --check` as a
-disk-scoped sentry.
+the Claude hook set through `boot install`, into the scope-selected settings file
+and sweeping the abandoned sibling; and run `boot --check` as a disk-scoped
+sentry.
 
 ### The pure assembly seam
 
@@ -89,13 +90,33 @@ codex `AGENTS.md`, one file per harness so the snapshot never inlines twice —
 canonicalising each target so a `CLAUDE.md → AGENTS.md` symlink is updated
 through to its single inode and same-inode targets dedup to one write. The
 prepend is idempotent: a file already carrying the ref line plans no write.
-Second, for Claude it merges a `<exec> boot` `SessionStart` hook (matcher
-`startup|clear`) into `.claude/settings.local.json`, recognising and refreshing
-a prior doctrine-owned copy via an ownership predicate, preserving every foreign
-hook and unrelated key by mutating the JSON at the narrow path, and failing soft
-— a malformed settings file is left untouched and the snippet is printed for
-manual paste. Codex is import-only (no hook). A single harness's refresh failure
-is isolated and printed; the others still run.
+Second, for Claude it merges doctrine's owned **hook set** — every spec's entries,
+in matcher order, across every event it declares — into the settings file the
+`[install] claude-settings-scope` key selects. Entry identity is the set, so a
+hand-edit that deletes one entry of a multi-matcher spec is healed on the next
+install. Each spec is recognised and refreshed via an ownership predicate over its
+`command`, preserving every foreign hook and unrelated key by mutating the JSON at
+the narrow path, and failing soft — a malformed settings file is left untouched and
+a manual-paste snippet covering the whole matcher set is printed instead.
+
+The scope key is the only selector (no flag): absent key, absent `[install]` table
+and absent `doctrine.toml` all yield project `.claude/settings.json`, and the
+alternative is `.claude/settings.local.json`. The file's tracked-ness fixes the
+command form on `baked ⟺ gitignored` — the committed project file gets the portable
+`${DOCTRINE_BIN:-doctrine}` literal, the gitignored local file a baked exec path —
+and `worktree.baseRef` follows the same scope, so doctrine writes exactly one of
+the two files.
+
+Writing one scope then **evicts** this project's owned entries from the other, by
+the same ownership predicate and gated on the target write having landed, so a
+failed write never strands the operator with no working copy. The installer
+announces its target file and the key that changes it before any hook line, and
+riders report what the sweep removed, could not read, or did not attempt. A
+`worktree.baseRef` stranded in the abandoned file is reported rather than swept,
+with the message stating which of the two values actually governs.
+
+Codex is import-only (no hook set — one hook, baked form). A single harness's
+refresh failure is isolated and printed; the others still run.
 
 ### `boot --check` — the disk sentry
 
@@ -118,8 +139,13 @@ edit lags until `/clear` or restart. Closing that lag is the freshen-now ritual
   session; the marker fallback and trailing-newline trim exist to keep
   `render_boot` byte-stable.
 - **Settings-merge safety.** The hook merge writes into a hand-editable JSON
-  file it does not own; a malformed or oddly-typed `hooks`/`SessionStart`
-  structure must fail soft (print-and-skip), never clobber foreign content.
+  file it does not own; a malformed or oddly-typed `hooks`/`<event>` structure
+  must fail soft (print-and-skip), never clobber foreign content.
+- **The sweep is the one destructive write.** Evicting the abandoned scope is
+  what keeps a scope flip from leaving two live copies of every hook — a failure
+  that presents as mild slowness and nothing else. It is bounded by the same
+  ownership predicate as the merge and gated on the target write landing, so its
+  blast radius is doctrine's own entries and never the only working copy.
 
 ## Hypotheses
 
