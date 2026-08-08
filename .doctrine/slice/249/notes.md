@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 347c8e91c
-· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` `PHASE-05` completed, `PHASE-06` next
+fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · f993df8e4
+· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` `PHASE-05` `PHASE-06` completed, `PHASE-07` next
 
 ### Produced
 
@@ -40,6 +40,23 @@ fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
 - `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
   mapping without the table deciding its own verdict.
+- `PHASE-06` (db93e4bd5 … f993df8e4, nine commits) — the filled mint. The wire
+  slot (`WireFacetValue`, leaf-local per `D-A`), admission validation through
+  the same `plan_facet_edits` the CLI runs, the five-case refusal catalogue, the
+  step-5 facet write with its idempotence, and `EX-5`'s digest-by-construction.
+  `VT-1`–`VT-3` PASS; gate exit 0 (orchestrator-verified), 4473 tests — +5
+  `#[test]` against `PHASE-05`'s 4468, reconciling with the diff. `+585/−7` over
+  two files, all seven deletions the worker's own; no existing test body edited;
+  `src/knowledge.rs` and `src/commands/facet.rs` both end with an **empty
+  diff**. Layering: 25 passed with no `ACCEPTED_VIOLATIONS` entry added.
+  Execution record: shard `notes_04-06.md`. Three memories and one friction
+  observation, all harvested **at their task boundaries** — the first phase run
+  under `LOOP.md`'s commit-per-task rule, and it worked.
+- `ISS-331` — `cordage`'s `scale_cliffs` asserts a wall-clock ratio and
+  false-redded `PHASE-06`'s close gate (3.2x against an expected ~2x). The
+  phase's diff cannot reach `cordage`; three idle re-runs passed, and the full
+  gate then returned exit 0 over 119 binaries. Load-sensitive by construction in
+  a repo whose conventions assume concurrent agents.
 - `PHASE-05` (582ac7ba8, one commit; execution record 347c8e91c) — `settle`, in
   one write. `ensure_status_token` extracted from `set_record_status` (`EN-2`)
   and called from both pre-existing sites; the `Settlement` table with
@@ -324,6 +341,19 @@ fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   rather than merely blocked. That belongs at `CHR-060`, argued openly, not
   settled by a phase taking the name first. **Nobody reopens `CHR-060` until
   pickup, so this note is the only thing that will carry it there.**
+- **`PHASE-06` substituted `EX-4`'s verification recipe, and the substitution is
+  the interesting part.** The sheet's resume fixture cannot work on any tree:
+  the mint completes *before* the abandon hook, so the intent journals at
+  `IntentState::Applied` and `execute_mint`'s `state() < Applied` guard skips
+  step 5 — a resume-shaped test would compare a file to itself with no writer
+  between the reads, vacuously green. Replaced with an explicit green pin of the
+  guard state plus a direct second `apply_record_effects` call. Judged not a
+  STOP: `EX-4` holds as written and only the recipe was wrong, which the sheet
+  permitted. Worth a line at reconcile as a planner-recipe error, no id.
+- **`VT-3` is the sole guard on `EX-5`.** `C2`'s blast radius was measured, not
+  assumed: swapping `skip_serializing_if` for `skip_serializing` failed exactly
+  one test. So if `VT-3` is ever waived or deleted, the digest silently stops
+  covering the facet and nothing else notices.
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
