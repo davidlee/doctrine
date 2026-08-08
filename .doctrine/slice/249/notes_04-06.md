@@ -212,3 +212,51 @@ field flags and on the two positional/`--path` args, so the shipped `--help` is
 not a column of bare flag names. The `concept` variant's doc comment was also
 rewritten — its first draft leaked `D10 / DEC-173` into user-facing help; the
 rationale moved to a `//` comment beside it.
+
+### T7 — VT-1, the generated round-trip, and its sensitivity control
+
+Generated over `facet_fields`, one argv drive per field per kind, no field list
+written anywhere in the test. Three helpers carry it:
+
+- `seed_from_template(root, kind, id)` — seeds through the **shipped**
+  `render_record_toml_seed`, not a hand-built fixture, so the `RequirePresent`
+  posture meets the seeded keys it was designed against (A2).
+- `round_trip_case(row)` — derives *both* the argv value and the `[facet]` line
+  the read model must render back, from the row's own shape. A `Closed` row's
+  token is its own `KNOWN`'s first (STD-001; no token is retyped).
+- `drive_subverb(argv)` — `Cli::try_parse_from` → `Command::Knowledge` →
+  `KnowledgeCommand::Edit { facet: Some(sub), .. }` → `sub.raw_edits()` →
+  `run_facet_edit`, i.e. exactly what `dispatch` does.
+
+The read-back oracle is the **typed** one: `read_record` runs `validate_facet`,
+then `render_facet` re-emits the `RecordFacet`, so the assertion is on the read
+model's view of the value rather than on the bytes just written.
+
+**It went green on first run**, which is what the sheet predicted and why the
+control is mandatory rather than optional.
+
+**The sensitivity control, watched failing.** The first injection — deleting
+`text_flag("rationale", rationale.as_ref())` and leaving the binding in place —
+did not even compile: `error: unused variable: rationale`, `-D unused-variables
+implied by -D unused`. That is a *finding*, not a nuisance: `raw_edits`
+destructures every variant exhaustively (no `..`), so **addition** drift is a
+compile error and an unused binding is too.
+
+To reach the shape R2 actually warns about, the injection was made realistic —
+`ref rationale` dropped from the pattern and `..` added, which is precisely how
+the drift would appear in a real edit. That compiles, and the asymmetry is
+exactly as D5 predicted:
+
+```
+test knowledge::tests::every_subverbs_flags_are_exactly_its_kinds_facet_row ... ok
+test knowledge::tests::every_facet_field_round_trips_from_argv_through_its_subverb ... FAILED
+  `decision --rationale` should write:
+  `knowledge edit decision` requires at least one field flag
+```
+
+`VT-4` — the name oracle — cannot see it, because the flag is still *declared*.
+`VT-1` sees it because it drives argv end to end. Reverted from a pre-injection
+snapshot; `git diff --stat src/knowledge.rs` after revert shows insertions only
+(the new test), zero deletions.
+
+Harvested as `mem.pattern.rust.exhaustive-destructure-pins-hand-written-mappings`.

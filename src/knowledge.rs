@@ -4876,4 +4876,115 @@ target = \"SL-249\"
             );
         }
     }
+
+    // -----------------------------------------------------------------------
+    // VT-1 / EX-1 — the generated round-trip, driven from ARGV (SL-249 T7)
+    //
+    // GENERATED over `facet_fields`: no field list is written here, so a new
+    // row joins the coverage without a test edit. Driven through
+    // `Cli::try_parse_from` rather than a hand-built args struct (D5) — that is
+    // what lets it see the one thing VT-4 structurally cannot: a flag that is
+    // DECLARED but never MAPPED to a `RawEdit`, which satisfies the name oracle
+    // and silently writes nothing. R2 names this the phase's likeliest defect.
+    // -----------------------------------------------------------------------
+
+    /// A shipped-template record on disk — the real scaffold, not a hand-built
+    /// fixture, so the F-1 `RequirePresent` posture meets the seeded keys it was
+    /// designed against (A2).
+    fn seed_from_template(root: &Path, kind: RecordKind, id: u32) {
+        let seeded = render_record_toml_seed(kind, id, "slug", "title", "2026-01-01")
+            .expect("the shipped template renders");
+        seed_record(root, kind, id, &seeded);
+    }
+
+    /// The argv value for a row, and the `[facet]` line the read model must
+    /// render back for it. Both derive from the row's own shape — a `Closed`
+    /// row's token is its own `KNOWN`'s first, never a retyped literal
+    /// (STD-001).
+    fn round_trip_case(row: &FacetFieldRow) -> (String, String) {
+        match row.shape {
+            FieldShape::List => (
+                "a,b".to_string(),
+                list_line(row.name, &["a".to_string(), "b".to_string()]),
+            ),
+            FieldShape::Closed(known) => {
+                let token = *known.first().expect("a closed row knows a token");
+                (token.to_string(), opt_text_line(row.name, Some(token)))
+            }
+            FieldShape::Text => {
+                let value = format!("v-{}", row.name);
+                let line = opt_text_line(row.name, Some(&value));
+                (value, line)
+            }
+        }
+    }
+
+    /// Parse an argv line to its facet subverb and run it, exactly as `dispatch`
+    /// does — the seam under test is `raw_edits()`, so the test must reach it
+    /// the way production does.
+    fn drive_subverb(argv: &[&str]) -> anyhow::Result<String> {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from(argv)
+            .unwrap_or_else(|err| panic!("{argv:?} should parse: {err}"));
+        let crate::commands::cli::Command::Knowledge { command } = cli.command else {
+            panic!("{argv:?} is a knowledge command");
+        };
+        let KnowledgeCommand::Edit {
+            facet: Some(sub), ..
+        } = command
+        else {
+            panic!("{argv:?} dispatches to a facet subverb, not the kind-blind verb");
+        };
+        let (kind, target, raws) = sub.raw_edits();
+        let mut out = Vec::new();
+        run_facet_edit(target.path.clone(), kind, &target.id, &raws, &mut out)?;
+        Ok(String::from_utf8(out).expect("the post-state print is utf8"))
+    }
+
+    #[test]
+    fn every_facet_field_round_trips_from_argv_through_its_subverb() {
+        for kind in RecordKind::ALL {
+            for row in facet_fields(kind) {
+                let root = edit_root(&format!("vt1-{}-{}", kind.as_str(), row.name));
+                seed_from_template(&root, kind, 3);
+                let canonical = kind.canonical_id(3);
+                let (value, expected_line) = round_trip_case(row);
+                let flag = format!("--{}", kebab(row.name));
+                let root_arg = root.to_str().expect("a utf8 scratch root");
+
+                let printed = drive_subverb(&[
+                    "doctrine",
+                    "knowledge",
+                    "edit",
+                    kind.as_str(),
+                    &canonical,
+                    "-p",
+                    root_arg,
+                    &flag,
+                    &value,
+                ])
+                .unwrap_or_else(|err| panic!("`{} {flag}` should write: {err}", kind.as_str()));
+
+                // `read_record` runs `validate_facet` — the oracle for "written,
+                // read back" (EX-1). `render_facet` then re-emits the TYPED
+                // facet, so the assertion is on the read model's own view of the
+                // value and not on the bytes we just wrote.
+                let record = read_record(&root, kind, 3).unwrap_or_else(|err| {
+                    panic!("`{} {flag}` should read back: {err}", kind.as_str())
+                });
+                let rendered = render_facet(&record.facet);
+                assert!(
+                    rendered.contains(&expected_line),
+                    "`knowledge edit {} {flag}` should leave `{}`:\n{rendered}",
+                    kind.as_str(),
+                    expected_line.trim_end()
+                );
+                assert!(
+                    printed.contains(&canonical) && printed.contains(row.name),
+                    "the post-state print names the record and the field: {printed}"
+                );
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+    }
 }
