@@ -792,6 +792,23 @@ is the strongest evidence this slice has that the battery earns its cost.
     because it is a corpus-quality failure mode rather than a slice one: a memory
     that generalises past its measurement is worse than no memory, since it is
     retrieved precisely when it is being relied on.
+57. **Item 54 answered, and the answer is structural: a worker can never see its
+    own phase's `VT`s attribute.** `verify-vt` resolves attribution against the
+    phase's *recorded delta boundary*, and that boundary is recorded by the
+    orchestrator at close — after the worker has exited. Run at close with
+    `PHASE-07`'s boundary in place, the same command reports `PHASE-07` 3/3 PASS,
+    0 `UNATTRIBUTABLE`; the four phases beyond it read as keyword misses, which is
+    correct, because their tests do not exist. So `F-7` was not a defect in
+    attribution but a diagnostic read from a position where it cannot yet be true.
+    Two things for the brief, both cheap: the `UNATTRIBUTABLE` message should say
+    *which* boundary it resolved against (naming the absent one would have closed
+    this in a line), and phase sheets should tell workers that `verify-vt` is an
+    orchestrator-close instrument, not a worker self-check — this cost a finding,
+    an observation and a chase, and it will cost them again every phase until
+    someone says so. Related: the CLI **refused** to narrow `PHASE-07`'s delta to
+    the source commit alone, and the refusal was right — dropping the harvest
+    commit would have manufactured the exact `UNATTRIBUTABLE` symptom `F-7`
+    reported. Good error; it explained the consequence rather than the rule.
 
 ## Open
 
