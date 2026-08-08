@@ -1,0 +1,345 @@
+---
+
+Five preconditions, and they're stated as preconditions so the run is reproducible rather than recounted — capture them alongside the output:
+
+1. a scratch project (not this repo — this repo already has a tracked .claude/settings.json and prior state)
+2. no enabledPlugins entry for doctrine
+3. no marketplace registration
+4. the scope key absent — that's deliberate, it exercises the Project default rather than a value you set
+5. a binary built from this slice — cargo build here, then run ./target/debug/doctrine install from the scratch dir; the PATH copy is stale
+
+Yep.
+❯ claude
+
+─────────────────────────────────────────────────────────────────────
+  New MCP server found in this project: doctrine
+
+  MCP servers may execute code or access system resources. All tool
+  calls require approval. Learn more in the MCP documentation.
+
+  ❯ 1. Use this MCP server ✔
+
+/hooks :
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Hooks
+   16 hooks configured
+
+   ℹ This menu is read-only. To add or modify hooks, edit settings.json directly or ask Claude. Learn more
+
+   ❯ 1.  PreToolUse (6)        Before tool execution
+     2.  PostToolUse           After tool execution
+     3.  PostToolUseFailure    After tool execution fails
+     4.  PostToolBatch         After a batch of tool calls resolves
+   ↓ 5.  PermissionDenied      After auto mode classifier denies a tool call
+   ↑ 6.  Notification (1)      When notifications are sent
+     7.  UserPromptSubmit (1)  When the user submits a prompt
+     8.  UserPromptExpansion   When a user-typed slash command expands into a prompt
+     9.  SessionStart (3)      When a new session is started
+   ❯ 10. Stop (2)              Right before Claude concludes its response
+   ↑ 11. StopFailure           When the turn ends due to an API error
+     12. SubagentStart (1)     When a subagent (Agent tool call) is started
+     13. SubagentStop (1)      Right before a subagent (Agent tool call) concludes its response
+     14. PreCompact            Before conversation compaction
+   ❯ 15. PostCompact           After conversation compaction
+   ↑ 16. SessionEnd            When a session is ending
+     17. PermissionRequest     When a permission dialog is displayed
+     18. Setup                 Repo setup hooks for init and maintenance
+     19. TeammateIdle          When a teammate is about to go idle
+   ❯ 20. TaskCreated           When a task is being created
+   ↑ 21. TaskCompleted         When a task is being marked as completed
+     22. Elicitation           When an MCP server requests user input (elicitation)
+     23. ElicitationResult     After a user responds to an MCP elicitation
+     24. ConfigChange          When configuration files change during a session
+   ❯ 25. InstructionsLoaded    When an instruction file (CLAUDE.md or rule) is loaded
+   ↑ 26. WorktreeCreate (1)    Create an isolated worktree for VCS-agnostic isolation
+     27. WorktreeRemove        Remove a previously created worktree
+     28. CwdChanged            After the working directory changes
+     29. FileChanged           When a watched file changes
+   ❯ 30. DirectoryAdded        After a working directory is added mid-session
+   ❯ 31. MessageDisplay        While assistant message text is displayed
+
+   PreToolUse - Matchers
+   Input to command is JSON of tool call arguments.
+   Exit code 0 - stdout/stderr not shown
+   Exit code 2 - show stderr to model and block tool call
+   Other exit codes - show stderr to user only but continue with tool call
+
+   ❯ 1. [Project] Agent            1 hook
+     2. [Project] Bash             2 hooks
+     3. [Project] Edit|Write       1 hook
+     4. [Project] Read|Edit|Write  1 hook
+   ❯ 5. [Project] Workflow         1 hook
+
+   SessionStart - Matchers
+   Input to command is JSON with session start source.
+   Exit code 0 - stdout shown to Claude
+   Exit code 2 - show stderr to user only
+   Other exit codes - show stderr to user only
+
+   ❯ 1. [Project] startup|clear  2 hooks
+
+   SubagentStart - Matchers
+   Input to command is JSON with agent_id and agent_type.
+   Exit code 0 - JSON additionalContext shown to subagent
+   Exit code 2 - show stderr to user only
+   Other exit codes - show stderr to user only
+
+   ❯ 1. [Project] dispatch-orchestrator  1 hook
+
+   SubagentStop - Matchers
+   Input to command is JSON with agent_id, agent_type, and agent_transcript_path.
+   Exit code 0 - stdout/stderr not shown
+   Exit code 2 - show stderr to subagent and continue having it run
+   Other exit codes - show stderr to user only
+
+   ❯ 1. [Project] dispatch-orchestrator  1 hook
+
+   WorktreeCreate
+   Input to command is JSON with name (suggested worktree slug).
+   Stdout should contain the absolute path to the created worktree directory.
+   Exit code 0 - worktree created successfully
+   Other exit codes - worktree creation failed
+
+   ❯ 1. [command] ${DOCTRINE_BIN:-doctrin…  Project Settings
+
+---
+.claude
+├── agents
+│   ├── dispatch-probe.md -> ../../.doctrine/agents/dispatch-probe.md
+│   └── dispatch-worker.md -> ../../.doctrine/agents/dispatch-worker.md
+├── settings.json
+├── settings.local.json
+├── skills
+│   ├── audit -> ../../.doctrine/skills/audit
+│   ├── backlog -> ../../.doctrine/skills/backlog
+│   ├── canon -> ../../.doctrine/skills/canon
+│   ├── close -> ../../.doctrine/skills/close
+│   ├── code-review -> ../../.doctrine/skills/code-review
+│   ├── consult -> ../../.doctrine/skills/consult
+│   ├── design -> ../../.doctrine/skills/design
+│   ├── dispatch -> ../../.doctrine/skills/dispatch
+│   ├── dispatch-agent -> ../../.doctrine/skills/dispatch-agent
+│   ├── dispatch-subprocess -> ../../.doctrine/skills/dispatch-subprocess
+│   ├── dreaming -> ../../.doctrine/skills/dreaming
+│   ├── elicit -> ../../.doctrine/skills/elicit
+│   ├── execute -> ../../.doctrine/skills/execute
+│   ├── feedback -> ../../.doctrine/skills/feedback
+│   ├── handover -> ../../.doctrine/skills/handover
+│   ├── harvest -> ../../.doctrine/skills/harvest
+│   ├── inquisition -> ../../.doctrine/skills/inquisition
+│   ├── knowledge -> ../../.doctrine/skills/knowledge
+│   ├── pair -> ../../.doctrine/skills/pair
+│   ├── phase-plan -> ../../.doctrine/skills/phase-plan
+│   ├── plan -> ../../.doctrine/skills/plan
+│   ├── preflight -> ../../.doctrine/skills/preflight
+│   ├── reconcile -> ../../.doctrine/skills/reconcile
+│   ├── record-memory -> ../../.doctrine/skills/record-memory
+│   ├── research -> ../../.doctrine/skills/research
+│   ├── retrieve-memory -> ../../.doctrine/skills/retrieve-memory
+│   ├── reviewing-memory -> ../../.doctrine/skills/reviewing-memory
+│   ├── rigour -> ../../.doctrine/skills/rigour
+│   ├── route -> ../../.doctrine/skills/route
+│   ├── slice -> ../../.doctrine/skills/slice
+│   ├── spec-coverage-assessment -> ../../.doctrine/skills/spec-coverage-assessment
+│   ├── spec-product -> ../../.doctrine/skills/spec-product
+│   ├── spec-tech -> ../../.doctrine/skills/spec-tech
+│   ├── walkthrough -> ../../.doctrine/skills/walkthrough
+│   └── worktree -> ../../.doctrine/skills/worktree
+└── workflows
+    └── drive-slice.js -> ../../.doctrine/workflows/drive-slice.js
+.doctrine
+├── agents
+│   ├── dispatch-probe.md
+│   └── dispatch-worker.md
+├── doctrine.toml
+├── hymns
+│   ├── harness
+│   │   ├── claude.md
+│   │   ├── claude.toml
+│   │   ├── cursor.md
+│   │   └── cursor.toml
+│   ├── model
+│   │   ├── anthropic
+│   │   │   ├── claude-sonnet-4.md
+│   │   │   └── claude-sonnet-4.toml
+│   │   └── deepseek
+│   │       ├── _default.md
+│   │       └── _default.toml
+│   └── role
+│       ├── orchestrator.md
+│       ├── orchestrator.toml
+│       ├── worker.md
+│       └── worker.toml
+├── memory
+│   └── shipped
+│       ├── mem_019e9a11b3797af3a8833c67acfa69bf
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a11cda27db19c0c75bafa453d5d
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a11e8337613bdf8e96f75a9e6b2
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a12b09472b3a99ac6cb071a6756
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a12c5a97d00b6da9ad9686c9945
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a128a0674c3aa59b5ec6b13196d
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a129d497012bfad47d4de27c0f8
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a1200b6796094f9e31ff1666390
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a1234ff7e619d865592b0042cb9
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a1244d37f72a9b7246d2c976ef7
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a12560d7972b29124e09f4de704
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a12789f7ac39c0841f4d976503b
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019e9a1266537c738a007fa6a10a6399
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b0ffc79d294a49559db9aa12a
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b0fff76e1935b222348938d7f
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b300a7df2b9773f7ff936a755
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b300d7530998d79682ad0c134
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b300f7d43b4dd911e0a27af1f
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b10007cf3b62bd5d02bce083c
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b30127db0aac7eb7badb1cbf2
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b30177c40bfb6e8f2322e1277
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b100472b3bb470abbc1a9a9aa
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b301176d0809153784f35cba5
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b301478e0ab67f4e4eb534fb9
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b1006784282dd0ae4833f9c5c
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ec92b10037850817507044f0f99ef
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ed2791edc70e2a2a1caeb2521aad0
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019ed279444273b093816ccbb8e5da64
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019f2b93f5e178009191711f607caff6
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       ├── mem_019f176f71537d12b1b09826a003a602
+│       │   ├── memory.md
+│       │   └── memory.toml
+│       └── mem_88193c2859d72f043ef83a97a5952a96
+│           ├── memory.md
+│           └── memory.toml
+├── project-orientation.md
+├── skills
+│   ├── audit
+│   │   └── SKILL.md
+│   ├── backlog
+│   │   └── SKILL.md
+│   ├── canon
+│   │   └── SKILL.md
+│   ├── close
+│   │   └── SKILL.md
+│   ├── code-review
+│   │   └── SKILL.md
+│   ├── consult
+│   │   └── SKILL.md
+│   ├── design
+│   │   └── SKILL.md
+│   ├── dispatch
+│   │   └── SKILL.md
+│   ├── dispatch-agent
+│   │   └── SKILL.md
+│   ├── dispatch-subprocess
+│   │   └── SKILL.md
+│   ├── dreaming
+│   │   └── SKILL.md
+│   ├── elicit
+│   │   └── SKILL.md
+│   ├── execute
+│   │   └── SKILL.md
+│   ├── feedback
+│   │   └── SKILL.md
+│   ├── handover
+│   │   └── SKILL.md
+│   ├── harvest
+│   │   └── SKILL.md
+│   ├── inquisition
+│   │   └── SKILL.md
+│   ├── knowledge
+│   │   └── SKILL.md
+│   ├── pair
+│   │   └── SKILL.md
+│   ├── phase-plan
+│   │   └── SKILL.md
+│   ├── plan
+│   │   └── SKILL.md
+│   ├── preflight
+│   │   └── SKILL.md
+│   ├── reconcile
+│   │   └── SKILL.md
+│   ├── record-memory
+│   │   └── SKILL.md
+│   ├── research
+│   │   └── SKILL.md
+│   ├── retrieve-memory
+│   │   └── SKILL.md
+│   ├── reviewing-memory
+│   │   └── SKILL.md
+│   ├── rigour
+│   │   ├── reference.md
+│   │   └── SKILL.md
+│   ├── route
+│   │   └── SKILL.md
+│   ├── slice
+│   │   └── SKILL.md
+│   ├── spec-coverage-assessment
+│   │   └── SKILL.md
+│   ├── spec-product
+│   │   └── SKILL.md
+│   ├── spec-tech
+│   │   └── SKILL.md
+│   ├── walkthrough
+│   │   └── SKILL.md
+│   └── worktree
+│       ├── NOTICE.md
+│       └── SKILL.md
+├── state
+│   └── boot.md
+└── workflows
+    └── drive-slice.js
