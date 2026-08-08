@@ -773,14 +773,25 @@ operator approved the MCP server. So: the `Project` default put every entry in
 stranded there, which is PHASE-02 `EX-4`'s one-file-per-install claim; and
 PHASE-03's sweep correctly found nothing to evict rather than failing.
 
-**Not evidenced, and the criterion's own second half:** that the entries
-*fire*. `VH-1` asks for one observed effect per event class — a session boot
-emitting, a `WorktreeCreate` fork, a `PreToolUse` surfacing — and the capture
-shows registration only. This distinction is in the criterion because
-`mem.fact.claude.reload-plugins-registers-pretooluse` records a case where
-`/hooks` reported hooks live and the `PreToolUse` wall did not fire, twice, with
-a logging shim confirming zero interception. A count is not a firing. This is
-now the sole gap; everything else `VH-1` asks for is captured.
+**Observed effects — 1 of 3.** `VH-1` asks for one per event class, because
+registration is not firing: `mem.fact.claude.reload-plugins-registers-pretooluse`
+records a case where `/hooks` reported hooks live and the `PreToolUse` wall did
+not fire, twice, with a shim confirming zero interception.
+
+`SessionStart` is **confirmed behaviourally**. A fresh session in the scratch
+project met a request for a React component by declining to build it, naming the
+repo doctrine-governed and reciting the routing chain — content that lives only
+in `.doctrine/state/boot.md`. Two independent facts isolate the hook as the
+channel: doctrine's other boot channel, the `AGENTS.md` @-import, is the **codex**
+arm's mechanism and not claude's (`src/install.rs:268` says so outright), and the
+operator watched the session and saw no import read. That is better than a log
+line — the agent did not merely receive the snapshot, it *acted* on it. A
+registered-but-inert hook yields an agent that writes the component.
+
+`WorktreeCreate` and `PreToolUse` remain. `WorktreeCreate` is the one worth
+observing rather than inferring: `isolation: worktree` teardown is conditional on
+it firing (`mem_019f1a5ce1f472219da91d0724bb766b`), which is the design's
+strongest argument for leaving the plugin at all.
 
 ### Owed at close
 

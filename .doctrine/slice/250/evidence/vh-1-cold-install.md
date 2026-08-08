@@ -144,19 +144,58 @@ Fact 3 is weak evidence of never-clobber on its own (an empty sweep clobbers
 nothing by construction). It is listed because its *absence* would have been
 strong evidence against.
 
-## What this does not evidence
+## Observed effects — 1 of 3
 
-Named here so the audit does not read the capture as covering more than it does.
+`VH-1` asks for one observed effect per event class, because registration is not
+firing. `mem.fact.claude.reload-plugins-registers-pretooluse` is why the
+distinction is in the criterion: it records a case where `/hooks` reported hooks
+live and the `PreToolUse` wall did not fire, twice, with a logging shim
+confirming zero interception.
 
-**The three observed effects per event class.** `VH-1` asks for a session boot
-emitting, a `WorktreeCreate` fork, and a `PreToolUse` surfacing — i.e. that the
-entries *fire*, not merely that they are registered. The capture shows
-registration only.
+### `SessionStart` — CONFIRMED, behaviourally
 
-This is the criterion's explicit second half and the one real gap.
-`mem.fact.claude.reload-plugins-registers-pretooluse` is why the distinction is
-in `VH-1` at all: it records a case where `/hooks` reported hooks live and the
-`PreToolUse` wall did not fire, twice, with a logging shim confirming zero
-interception. A count is not a firing.
+In a fresh session in the scratch project (2026-08-08), the operator asked for a
+React component. The agent declined to build it directly and answered:
 
-Everything else `VH-1` asks for is captured above.
+> Repo is doctrine-governed. Fart button = code-changing intent → doctrine says
+> /route → /slice → design → plan → execute. Heavy for one component. Your call.
+
+then offered a ceremony choice whose "skip doctrine" option was labelled
+*"Violates repo CLAUDE.md routing gate — but you're authorising the bypass"*.
+
+That content — the routing gate, the ordered lifecycle chain, the injunction
+against code without an approved plan — exists only in the boot snapshot
+(`.doctrine/state/boot.md`), which the capture's tree confirms present.
+
+**Why this isolates the hook.** Doctrine has two channels for the boot sector,
+and only one of them serves Claude. The `AGENTS.md` @-import is the **codex**
+arm's mechanism — `src/install.rs:268` says so in terms: *"`pi` rides the codex
+arm (the `AGENTS.md` @-import and the `.pi/` extensions are installed there)"*.
+The claude arm's boot surface is the `SessionStart` hook and nothing else. So in
+a claude-installed scratch project there is no import path, and the snapshot
+reached that session's context through the hook.
+
+**And the operator watched it happen.** An @-import resolving would have
+surfaced as a visible read in the session; none did. That closes the one hole
+the code argument leaves — a hand-placed `CLAUDE.md` at the scratch project root
+would be outside doctrine's knowledge, but not outside the operator's. Direct
+observation of the session, not inference from the installer.
+
+This is stronger than a log line. The payload did not merely arrive — the agent
+*acted* on it, refusing a bypass it would otherwise have had no reason to
+refuse. A hook that registered but did not fire produces an agent that cheerfully
+writes the component.
+
+### `WorktreeCreate` — outstanding
+
+The load-bearing one. `isolation: worktree` teardown is *conditional* on this
+hook firing (`mem_019f1a5ce1f472219da91d0724bb766b`), so an inert entry here
+changes dispatch's semantics silently. It is the strongest single argument the
+design makes for moving activation off the plugin, and the one effect most worth
+observing rather than inferring. Spawn an `isolation: worktree` subagent in the
+scratch project and confirm the fork lands.
+
+### `PreToolUse` — outstanding
+
+Six entries across five matchers, the largest block. Trip any matched tool and
+confirm the memory-surface or worktree wall reports.
