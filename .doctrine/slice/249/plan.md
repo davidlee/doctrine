@@ -138,37 +138,34 @@ claim; passing unedited is.
 
 ## Notes
 
-### The open question: where objective 4 lands
+### Where objective 4 lands — settled
 
-`PHASE-07` is authored provisionally and its entrance criterion `EN-2` says so.
+**The REV lands in `PHASE-07`**, not at reconcile. Settled by the user on
+2026-08-08; `PHASE-07/EN-2` no longer holds the phase.
 
-`ADR-013` routes a governance amendment through a REV **landing at reconcile**,
-and the design says so in three places. Planning probed `revision apply` and
-resolved §6's stated unknown — it auto-lands only `status` rows and *surfaces*
-introduce/create/modify/move/prose rows for manual handling — so a prose-heavy
-amendment is manual work at whichever stage owns it.
+The design says the amendment lands at reconcile, in §3 and §5.3. Planning
+probed `revision apply` and resolved §6's stated unknown — it auto-lands only
+`status` rows and *surfaces* introduce/create/modify/move/prose rows for manual
+handling — so a prose-heavy amendment is hand-authored at whichever stage owns
+it, and the choice is about *which stage*, not about how much work it is.
 
-The tension is that the canary is **code**, and code lands in a phase. A canary
-authored in a phase while the prose lands at reconcile is red for the whole
-interval, and no phase may end red. Three readings:
+The deciding argument is that `D9`'s canary is **code**. Authored in a phase
+while the prose lands at reconcile, it is red for the whole interval, and no
+phase may end red. The canary is `R4`'s *control*; `R4` is the risk this slice
+has already recurred on once via `SL-159`; and a control left red across a
+reconcile cycle is one somebody disables — which is `D9`'s own stated failure
+mode. Shipping the control red would be `R4` recurring through the very
+mechanism built to catch it.
 
-1. **The phase lands both** (as authored). The REV is created, populated,
-   approved and applied within `PHASE-07`, the prose is hand-edited there, and
-   the canary ships green. Reconcile records a REV already done. This is the
-   recommendation: the canary is `R4`'s *control*, `R4` is the risk this slice
-   has already recurred on once, and a control that sits red across a reconcile
-   cycle is one somebody disables — which is `D9`'s own stated failure mode.
-2. **Objective 4 moves wholly to reconcile**, canary included. Honours
-   `ADR-013` literally; puts code authorship in a stage that does not otherwise
-   write code.
-3. **Split** — the counting machinery and its fixture tests ship in a phase
-   (green immediately, since `PHASE-07/VT-2` runs on fixtures), and only the
-   thin live-corpus assertion lands at reconcile. Defensible, at the cost of
-   splitting a small test across two stages.
+The two rejected readings, recorded so they are not re-derived: moving objective
+4 wholly to reconcile honours `ADR-013` literally but puts code authorship in a
+stage that does not otherwise write code; splitting — fixture tests in the
+phase, the live-corpus assertion at reconcile — is defensible but cuts a small
+test across two stages for no gain now that the whole amendment moves.
 
-This is a design-level question, not a planning preference: reading 1
-contradicts a locked design's stated timing. It is settled with the user before
-`PHASE-07` is executed, and `PHASE-01`…`PHASE-06` are unaffected either way.
+**A plan does not outrank its design.** The departure is therefore carried into
+reconcile as a wording item (`PHASE-07/EX-11`) rather than absorbed silently.
+Reconcile settles design.md's §3 and §5.3 to say what actually happened.
 
 ### Resolved during planning, worth not re-deriving
 

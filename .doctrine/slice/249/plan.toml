@@ -379,18 +379,23 @@ enumerating what would have to be true. So the canary is specified by an
 arithmetic identity a reader can evaluate, not by a claim a reader must trust —
 see EX-3.
 
-NOTE — the objective-4 landing point is the one open plan question. ADR-013
-routes the amendment through a REV landing at RECONCILE, and `revision apply`
-auto-lands only `status` rows while surfacing prose rows for manual handling
-(probed during planning; this resolves §6's stated unknown). A canary authored in
-a phase is therefore RED until the prose lands at reconcile, which no phase may
-end on. This phase is authored on the reading that it stages AND lands the
-amendment so the canary ships green; if the amendment is instead held to
-reconcile, this phase's criteria move there with it and the phase is withdrawn.
+LANDING POINT — settled by the user, 2026-08-08: the REV is created, populated,
+approved and APPLIED in this phase, the prose is authored here, and the canary
+ships green. Reconcile records a REV already done rather than performing it.
+
+This departs from design §3 and §5.3, which say the amendment lands at
+reconcile. The reason it is not left there: `revision apply` auto-lands only
+`status` rows and surfaces prose rows for manual handling (probed during
+planning — this also resolves §6's stated unknown), so a canary authored in a
+phase would be RED until reconcile, and no phase may end red. D9's canary is
+R4's CONTROL, R4 is the risk this slice has already recurred on once via SL-159,
+and a control left red across a reconcile cycle is one somebody disables — D9's
+own stated failure mode. A plan does not overrule a design silently, so the
+departure is recorded for reconcile to settle in design.md's wording (EX-11).
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-06 complete: the verb set objective 4 must register is the set that actually shipped, so the registration describes fact rather than intent." },
-  { id = "EN-2", text = "The landing-point question in the objective is settled with the user before the prose is touched." },
+  { id = "EN-2", text = "Settled: the REV lands in this phase, not at reconcile (see the objective). No further approval is owed before the prose is touched." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "A REV over SPEC-019 and PRD-010 carries the typed change rows, is approved, and its prose amendment has landed in both entities' authored tiers." },
@@ -403,6 +408,7 @@ exit_criteria = [
   { id = "EX-8", text = "It is a project-local test, never a `validate` rule (POL-002) — no host-project convention leaks into engine rules." },
   { id = "EX-9", text = "The REV records, as stated consequences of the F-1 posture: that the scaffold templates are load-bearing for the write posture (a future template edit dropping a seeded field silently converts every record of that kind into one the writer refuses), and that adding a facet field to an existing kind is a corpus MIGRATION rather than an edit (R7)." },
   { id = "EX-10", text = "D8a's correction to DEC-168's recorded rationale rides this REV, and inq-7 / inq-9 are dispositioned at authorship against §6's recorded recommendations rather than re-derived." },
+  { id = "EX-11", text = "The landing-point departure is carried into reconcile as a design-wording item: design §3 and §5.3 say the amendment lands at reconcile, and it landed here. Reconcile settles the wording. A plan that quietly outranks its design is the failure this criterion exists to prevent — the plan is not higher authority than the design, so the divergence is recorded rather than absorbed." },
 ]
 verification = [
   { id = "VT-1", expects = "The canary: paired-form presence for every kinds::RECORD kind across both tiers of both entities, plus the four-identity with its allowlist. Driven by iterating kinds::RECORD, so a new record kind joins the assertion with no test edit — the same totality argument the wire-key and facet tables make.", test_file = "tests/governance_kind_coverage.rs", keywords = ["kinds", "four", "spec-019"], waived = false },
