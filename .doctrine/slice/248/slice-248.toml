@@ -23,10 +23,6 @@ selector = "src/commands/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "tests/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = ".doctrine/doctrine.toml"
 intent = "design-target"
 
@@ -81,6 +77,11 @@ intent = "design-target"
 [[selector]]
 selector = "justfile"
 intent = "design-target"
+
+[[selector]]
+selector = "src/clock.rs"
+intent = "design-target"
+note = "PHASE-01 promotes today to pub (E0364); added at the /plan critical pass"
 
 [[relation]]
 label = "governed_by"

@@ -115,7 +115,11 @@ reading of the production graph:
   (`src/git.rs:2896`, confirmed against the current tree). `cargo build` is green
   while this is wrong; it surfaces only when the library's tests first compile.
 - **`pub use` of a `pub(crate)` item is `E0364`**, so `read_path_at`,
-  `CaptureError`, `DOCTRINE_TOML` and `read_doctrine_toml_text` become `pub`.
+  `CaptureError`, `DOCTRINE_TOML`, `read_doctrine_toml_text` **and `today`**
+  become `pub`. `today` was added at the critical pass — it is `pub(crate)` at
+  `src/clock.rs:17` and `EX-1` re-exports it, so the same rule reaches it. This
+  paragraph previously carried `sec-6`'s four-item list, which is the same slip
+  as the `EXPORTED` constant (§ *What the critical pass found* `C-2`).
 - **`default-members` is a package-selection default, not a build-command one**,
   so it also selects the new crate for `cargo package` and `cargo publish`. Both
   halves of `sec-6` § *Nothing ships* are therefore in this phase — `publish =
@@ -413,3 +417,96 @@ shape, and the `publish` and `pkg-check` recipes. The tolerant top-level parse
 that lets `[capsule]` be added without disturbing the 35 incumbent call sites
 was confirmed at `DoctrineToml`. No premise was found stale, so no design
 back-edge was required.
+
+**Amended at the critical pass: this check had one hole, and it was in the
+premise that mattered.** The sweep verified that `fetch_refspec` *exists* at the
+cited location. It did not check that it is *reachable* — two items earlier in
+the same sentence it had verified `pub(crate)` visibility for `read_path_at` and
+`CaptureError` precisely because visibility is what the export set turns on. The
+symbol is `pub(crate)` and is absent from the export set, so PHASE-06 cannot call
+it. See § *What the critical pass found* `C-1`. The lesson generalises past this
+slice: for a symbol the plan intends to call **across a crate boundary**,
+existence is not the premise — visibility is, and the two greps look identical.
+
+### What the critical pass found
+
+`/plan` steps 7–9, run after authoring stages 1–3. Stages 1–3 established that
+the plan is self-consistent and covers the design; this pass asked whether it is
+sound as a thing to execute. Research was chunked across five `pi-scout` /
+`pi-research` threads (phase sizing, `sec-9` obligations, `VA` negative paths,
+load-bearing API premises, measured-versus-reasoned ordering); every lead was
+confirmed against the tree or the design before it moved a criterion, and two
+scout conclusions were narrowed on confirmation.
+
+Five findings. Four are landed here; one is a design defect and is not.
+
+1. **`C-1` — `fetch_refspec` is unreachable from `doctrine-control`. Design
+   defect; open.** `src/git.rs:2718` is `pub(crate)`. `design.md:1222` — its only
+   mention anywhere in 5088 lines — says the per-base export build "rides
+   `git init --bare` plus the existing `fetch_refspec`", while `design.md:2597`
+   enumerates the four items that become `pub` and says *nothing else does*, and
+   `sec-6` makes the export list "the export contract". Both cannot hold across a
+   crate boundary. The sharp edge is that PHASE-06 `EN-3` says `read_path_at` is
+   "`pub` on the root library" but `fetch_refspec` merely "exists" — so the
+   **entrance criterion passes while the exit criterion is unbuildable**, and the
+   phase gate cannot catch it. The two resolutions are not equivalent: widening
+   the export set touches PHASE-01 `EX-1`/`EX-2`/`EX-4`, PHASE-02 `EX-8`, the
+   `PHASE-01 VT-1` / `PHASE-02 VT-10` mandates, `sec-8`'s five-item touch count
+   and `sec-9` `R7`'s minimal-surface argument; driving `git` as a subprocess in
+   `provision.rs` changes no export set and matches `EX-14`'s standing posture,
+   but contradicts `design.md:1222`. **Expensive downstream** — it surfaces at
+   PHASE-06 and the first resolution must be executed at PHASE-01. Carried to the
+   design reopen as `D1`; recorded in `plan.toml` at PHASE-06 as critical-pass
+   note 5.
+2. **`C-2` — PHASE-01 `EX-1` and `EX-4` were mutually unsatisfiable. Fixed.**
+   `today` is `pub(crate) fn today()` at `src/clock.rs:17`; `EX-1` re-exports it,
+   so `E0364` forces the promotion; `EX-4` said no other item changes visibility.
+   This is `ISS-323`'s root cause in a second instance — Corrections owed item 1
+   covers only the `EXPORTED` constant, not the visibility half. `EX-4` amended
+   to name `today` and the two `config_file` items. The failure mode worth
+   naming: the compiler catches this in minute one, but an implementer who
+   resolves it by dropping `today` from the export set rather than promoting it
+   breaks PHASE-07 `EN-3` five phases later and re-opens the `time` edge
+   `RV-346` `F-29` closed. `EX-4` now says so.
+3. **`C-3` — sixteen `VT` mandates pin one file path. Fenced.** PHASE-07/08/09/10
+   all mandate `test_file = crates/doctrine-control/src/conformance.rs`. Splitting
+   that file into submodules is legal (PHASE-05 `EX-19`; `backend/bubblewrap.rs`
+   is precedent) and would strand every already-landed mandate — and `verify-vt`
+   reports a moved file as `test_file not found`, byte-identical to the `ISS-271`
+   noise this plan tells its reader to ignore at plan time. The gate would go
+   inert across the four phases holding the slice's only executed evidence,
+   silently. PHASE-07 `EX-18` appended to fix one file as the default and require
+   a split to re-point the mandates in the same edit.
+4. **`C-4` — PHASE-10 `VA-1` stated no negative path. Fixed.** It is a falsifying
+   measurement (credential re-run off-jail) at the last phase, and its siblings
+   `VA-2`, `VA-3` and the analogous PHASE-09 `VA-1` all state one. Amended: a
+   non-reproducing measurement means rows 13 and 14 are wrong — the retired
+   `CredentialsConfined` defect — and routes to `/consult`.
+5. **`C-5` — selectors tuned.** `src/clock.rs` was absent from the selector list
+   despite PHASE-01 having to edit it (`C-2`); added as `design-target`. The broad
+   `tests/**` was subsuming the `design-target` intent of
+   `tests/architecture_layering.rs` (flagged `redundant` by `selector doctor`) and
+   is removed — its behaviour-preservation purpose is already carried by PHASE-01
+   `VA-4`. `doctor` is now clean but for four `unmatched` entries, which are the
+   files this slice creates.
+
+**Checked and found sound — no change.** `sec-9`'s risks and residuals: every
+uncovered item is a deliberate deferral (`R5` to a release slice per the design's
+own Follow-Up; residuals 1, 2 and 5 recorded-not-solved; residual 3 ruled by
+`DEC-180`). Delta ordering: no reasoned delta is depended on by a phase earlier
+than the one that measures it, and rows 1–5's non-removal deltas, which fall
+outside PHASE-09 `VA-3`'s enumeration, are caught by `VA-4`'s per-row
+control-seen-to-fail sweep. Phase sizing: PHASE-02 (≈42 tests, 2.0× the median)
+is the only large unshared phase and § *If a phase proves oversized* already
+pre-identifies its split point. `verify-vt` reports **0 `UNCHECKABLE`** across all
+56 mandates, which is the trustworthy plan-time signal (`ISS-271`, `ISS-226`).
+
+**`rustix` premises verified against the vendored crate source** rather than
+recalled — `rustix` 1.1.4, the second of the two leads carried into this pass, and
+it resolves green. `statvfs` and `renameat_with(.., RenameFlags::NOREPLACE)` are
+both available under `fs` + `std` on Linux, `fs` pulls in no dependency and `std`
+adds only `bitflags/std`, so the zero-new-compiled-crates posture holds and the
+publish-or-adopt protocol's atomicity is safe as specified. One correction: rustix
+has **no symbol named `renameat2`** — that is the syscall name and a `#[doc(alias)]`
+— so PHASE-06 `EX-12` and `design.md:1399` both named a symbol that does not
+exist. The plan is corrected; the design half is `D4`.
