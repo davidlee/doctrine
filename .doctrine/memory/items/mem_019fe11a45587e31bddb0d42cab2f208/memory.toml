@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe11a45587e31bddb0d42cab2f208"
+memory_key = "mem.pattern.lint.staged-module-unused-deny-collapses-tdd"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Staged module: unused=deny collapses per-task red/green into one compile"
+summary = "A module staged ahead of its consumer cannot compile under cargo test until every item has a test reader, so per-task red/green cycles collapse into one"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = ["crates/**/*.rs", "src/**/*.rs"]
+commands = ["cargo test"]
+tags = ["rust", "lint", "dead_code", "tdd", "phasing", "footgun"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d3bebfb74c3433a124900ed546ba0dc13834273f"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "3274efdd36bb89b058ea9934fde19cb4a112ae44489a4f65895bf58abf9d64ea"
+base_commit = "3b36b60ed19d25190db48cc7e93adac0cbce9d45"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

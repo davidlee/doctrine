@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe11a-ca9e-7c50-b33a-bd9e8a8de57c"
+recorded_at = "2026-08-08T11:20:57.246131115Z"
+kind = "friction"
+summary = "/execute PHASE-04: staged module cannot compile until the last test lands, so the sheet's per-task red/green sequencing is unavailable"
+detail = 'SL-248 PHASE-04 sheet sequences T2-T10 as red/green/refactor cycles over crates/doctrine-control/src/backend.rs. The module carries the house `#![cfg_attr(not(test), expect(dead_code, ...))]` header, which cfg(test) strips; with `unused = "deny"` every item without a test reader is a hard error. After the task that landed the type vocabulary, `cargo test -p doctrine-control` produced 69 errors, none of them signal. There is no partial-green state between the first task and the last: ~700 lines had to be written before the first successful compile, and then all 30 tests passed at once. Cost: the intermediate compile cycles were pure waste (three runs, ~0 information), and the red phase had to be reconstructed afterwards as a seven-mutation battery. A phase sheet that sequences tasks as red/green cycles over a single staged module is describing a workflow the lint configuration forbids; the planner could instead prescribe write-all-then-mutate, which is what actually happened.'
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
