@@ -1,0 +1,46 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 181
+slug = "bin-target-pub-use-shim-carries-the-lib-export-set"
+title = "Bin-target pub-use shim carries the lib export set"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = ["lints", "cargo", "workspace", "visibility", "sl-248"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-248 PHASE-01 EX-4 promotes five items to `pub` so src/lib.rs can re-export them. sec-6 keeps main.rs on its own module tree, so those items are unreachable `pub`s in the bin target, which the workspace lint policy denies (unreachable_pub = deny under warnings = deny). Both obvious suppressions are also denied: #[expect] fails the lib target as unfulfilled, #[allow] fails clippy::allow_attributes."
+choice       = "src/main.rs carries a `pub use` shim mirroring the lib target's export set, making the promoted items reachable from the bin crate root. Measured clean under both cargo build and cargo clippy."
+alternatives = [
+  "Relax unreachable_pub for the root package only — rejected: a permanent repo-wide loosening for three lines saved, and VT-1's export-set assertion already bounds the surface more tightly.",
+  "Reopen the locked design to amend sec-6 — rejected: six section attestations plus two user acts for a correction the reconciliation brief can carry.",
+  "main.rs as a thin binary over the library — already rejected in sec-6: forces 110 pub(crate) items in git.rs alone to become pub.",
+]
+rationale    = "Keeps the blast radius inside the slice, changes no repo-wide lint policy, and leaves the unreachable_pub gate intact for crates/doctrine-control, which PHASE-01 is about to create."
+consequences = [
+  "PHASE-01 EX-3's 'exactly one new declaration' is amended: main.rs gains mod config_file; AND the re-export shim.",
+  "sec-6's claim that the visibility promotions are the whole change to existing code — and invariant 2's enumeration — are incomplete as written. Owed to the reconciliation brief, not fixed by reopening the design.",
+  "The bin crate acquires a nominally public surface that is inert: a binary has no external consumers.",
+]
+decided_by   = "user"
+decided_on   = "2026-08-08"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = [
+  "Executed probe, four combinations under the repo's lint config: bare pub fails the bin target; #[expect] fails the lib target (unfulfilled_lint_expectations); #[allow] fails clippy::allow_attributes; the pub use shim passes both.",
+  "Cargo.toml:90 opts the root package into [workspace.lints]; :189 unreachable_pub = deny; :213-214 clippy allow_attributes deny.",
+  "A pub use is a re-export, not an import — the `unused` deny does not fire when the re-export path is never referenced (measured).",
+]
+contradicts = [
+  "design.md sec-6: 'The exported items change visibility... Nothing else does' — incomplete under the workspace lint policy.",
+  "SL-248 PHASE-01 EX-3: 'src/main.rs gains exactly one new declaration' — amended.",
+]
+notes       = [
+  "sec-6's 'confirmed by execution' was true but scoped to a minimal package that did not inherit the repo's lint config. Friction recorded under RFC-011.",
+]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)

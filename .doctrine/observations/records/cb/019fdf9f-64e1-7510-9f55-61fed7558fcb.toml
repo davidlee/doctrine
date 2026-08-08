@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf9f-64e1-7510-9f55-61fed7558fcb"
+recorded_at = "2026-08-08T04:26:33.057269296Z"
+kind = "friction"
+summary = "phase-plan: design claim verified on a minimal package missed the repo's own lint policy"
+detail = "SL-248 sec-6 verified the pub(crate)->pub promotions 'by execution' on a minimal package, but that package did not carry the workspace lint policy ([workspace.lints] warnings=deny, unreachable_pub=deny, clippy::allow_attributes=deny). Under the real policy the promotion breaks the bin target, and both obvious suppressions are also denied. Cost: four probe builds at phase-plan time to establish what the design asserted as settled. Minimal-package verification should inherit the repo's lint config, or the claim should be scoped to 'compiles in isolation'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
