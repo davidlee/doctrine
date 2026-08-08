@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe258162d7051b061cc868c9aca59"
+memory_key = "mem.fact.bubblewrap.die-with-parent-is-what-reaps-the-orphan"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "bwrap 0.11.2: --die-with-parent, not the pid namespace, is what reaps a detached grandchild"
+summary = "Measured on bwrap 0.11.2: dropping --die-with-parent leaves a detached grandchild alive in a foreign session even under --unshare-all; --cap-add ALL and the enumerated non-pid unshare set both work."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["crates/doctrine-control/src/backend/bubblewrap.rs", "crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["bubblewrap", "process-groups", "sessions", "measurement", "sl-248"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7d90afd99ca23664e9cc289dbc479de303f3cb9d"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "71f50998fd6267738a09092759f86441ab4c9f5b86c66ca7c56a23144dcde306"
+base_commit = "3a1e85dbad979340bb2e5afbf56c39f5dbf309b0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

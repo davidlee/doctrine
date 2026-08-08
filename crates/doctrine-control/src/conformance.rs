@@ -48,10 +48,20 @@
     )
 )]
 
-use std::path::Path;
+use std::fs::File;
+use std::io::Write as _;
+use std::net::TcpListener;
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::{Component, Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use doctrine::DOCTRINE_TOML;
+use rustix::fs::FsWord;
 
 use crate::backend::{
-    Availability, BackendError, BackendId, CapsuleBackend, CapsulePlacement, Execution,
+    AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnvVar,
+    CapsulePlacement, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT, ForbiddenScopes,
     MountedPath, Observation, Termination,
 };
 use crate::config::Argv;
@@ -398,19 +408,686 @@ pub(crate) enum Which {
 }
 
 // ---------------------------------------------------------------------------
-// The delta and row vocabulary (`EX-8`, `EX-14`)
+// The fixture's root: real disk, never tmpfs (`EX-2`, `D1`)
 // ---------------------------------------------------------------------------
 
-/// The suite's self-contained control plane.
+/// `statfs.f_type` for tmpfs, from `linux/magic.h`.
 ///
-/// Forward-declared here because [`Delta::Widened`] names it. **PHASE-08 `EX-1`
-/// owns it** and fills it with the run's root, its own git repository, the
-/// synthesized `[capsule]` table, the scopes and every row's decoy. Nothing at
-/// this phase constructs one, and nothing at this phase should give it fields, a
-/// constructor or a `Drop` — that would be PHASE-08's work done early, in the
-/// file PHASE-08 will land it in.
+/// Spelled here rather than imported: `rustix` exposes `StatFs::f_type` but no
+/// filesystem-magic constants, and `libc` is not a dependency of this crate
+/// (adding one is `S4`). [`rustix::fs::FsWord`] is the field's own type, so the
+/// comparison needs no cast — `as_conversions` is denied.
+const TMPFS_MAGIC: FsWord = 0x0102_1994;
+
+/// The candidate roots, in `D1`'s order.
+const XDG_DATA_HOME_VARIABLE: &str = "XDG_DATA_HOME";
+const HOME_VARIABLE: &str = "HOME";
+/// `$HOME`-relative tail of the second candidate.
+const USER_DATA_TAIL: &str = ".local/share";
+/// The third candidate's marker: scratch inside the enclosing repository's git
+/// directory, which is the precedent
+/// `mem.pattern.tooling.tempfile-dev-only-use-git-dir-scratch-index` sets.
+const GIT_DIRECTORY_LEAF: &str = ".git";
+/// The directory every run's root is created beneath, so one uninstrumented
+/// `rm -rf` reclaims a machine that crashed mid-suite.
+const SCRATCH_DIRECTORY_LEAF: &str = "doctrine-conformance";
+
+/// Why the fixture could not be built.
+///
+/// A refusal rather than a panic: [`verify`] is a production path
+/// (`backend verify`, PHASE-10), and a host that cannot supply a real-disk
+/// scratch root, a Git, or a loopback socket is a fact about the host,
+/// reported the way `NotAdmitted::Unavailable` reports a missing shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FixtureFault {
+    /// Every candidate root was unwritable, absent, or on tmpfs. Carries the
+    /// candidates in the order they were tried, so the operator can see which
+    /// of `D1`'s three was reached.
+    NoRealDiskRoot { rejected: Vec<PathBuf> },
+    /// A filesystem operation the fixture performs on its **own** root failed.
+    Io { path: PathBuf, detail: String },
+    /// A trusted-side Git invocation building the fixture repository failed.
+    Git { argv: Vec<String>, detail: String },
+    /// The host named no directory the fixture could declare readable, so every
+    /// payload would be `NotExecutable` and the whole run indeterminate for a
+    /// reason it never states (`EX-3`).
+    NoReadableRoots,
+}
+
+/// The next root's discriminator within this process.
+///
+/// Pid **plus** a counter, and no clock: `HostFacts` carries none by design
+/// (`sec-5`), two fixtures built in the same millisecond would collide on one,
+/// and a monotonic counter is the honest source for *the next one* anyway.
+static ROOT_NONCE: AtomicU32 = AtomicU32::new(0);
+
+/// A directory on real disk, created for one run, removed when it drops.
+///
+/// **`EX-2` is a claim, so it is checked and not commented.** `DEC-156`
+/// requires the fixture root to be on real disk: `sec-5`'s capacity probe must
+/// read real available space, and on tmpfs every figure is the mount's, both
+/// capacity claims still agree with their own `statvfs`, and `REQ-461`'s only
+/// executed evidence quietly becomes a measurement of a RAM disk — with nothing
+/// red. So the constructor runs `statfs` on the chosen base and refuses
+/// [`TMPFS_MAGIC`]. `std::env::temp_dir()` is `/tmp` and `/tmp` is tmpfs on the
+/// host this was built against, which is why the obvious route is the wrong one.
+///
+/// **`Drop` is the whole of cleanup** (invariant 8). Nothing public on this type
+/// removes anything, and this phase introduces no capsule-delete capability
+/// anywhere: `DEC-133`/`DEC-137` hold that a harvested capsule is live work, and
+/// a delete primitive added here for tidiness is what a later slice would reach
+/// for.
 #[derive(Debug)]
-pub(crate) struct Fixture;
+pub(crate) struct TempRoot {
+    path: PathBuf,
+}
+
+impl TempRoot {
+    /// The first writable, non-tmpfs candidate of `D1`'s three, with a fresh
+    /// pid-and-nonce-named directory created inside it.
+    ///
+    /// The environment is read through [`HostFacts::env_var`] — `std::env::var`
+    /// is banned by `clippy.toml`'s `disallowed-methods`, and routing through
+    /// the trait is what lets a test drive the selection without mutating the
+    /// process environment.
+    pub(crate) fn new(host: &dyn HostFacts) -> Result<Self, FixtureFault> {
+        let candidates = candidate_bases(host);
+        for base in &candidates {
+            if let Some(root) = prepare_root(base) {
+                return Ok(Self { path: root });
+            }
+        }
+        Err(FixtureFault::NoRealDiskRoot {
+            rejected: candidates,
+        })
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempRoot {
+    /// Best effort, and deliberately silent: a `Drop` that could fail loudly
+    /// would have to panic, and `panic` is denied. The failure mode this guards
+    /// is a developer's machine filling with abandoned roots, which `VA-1`
+    /// checks once rather than trusting to a red test.
+    fn drop(&mut self) {
+        drop(std::fs::remove_dir_all(&self.path));
+    }
+}
+
+/// `D1`'s ordered candidate list, filtered to what this host actually names.
+///
+/// `$XDG_DATA_HOME`, then `$HOME/.local/share`, then the enclosing repository's
+/// git directory. A candidate whose variable is unset is absent from the list
+/// rather than present and failing, so [`FixtureFault::NoRealDiskRoot`] reports
+/// what was *tried*.
+fn candidate_bases(host: &dyn HostFacts) -> Vec<PathBuf> {
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Some(data_home) = host.env_var(XDG_DATA_HOME_VARIABLE) {
+        bases.push(PathBuf::from(data_home));
+    }
+    if let Some(home) = host.env_var(HOME_VARIABLE) {
+        bases.push(PathBuf::from(home).join(USER_DATA_TAIL));
+    }
+    if let Some(git_directory) = enclosing_git_directory() {
+        bases.push(git_directory);
+    }
+    bases
+        .into_iter()
+        .map(|base| base.join(SCRATCH_DIRECTORY_LEAF))
+        .collect()
+}
+
+/// The `.git` of the first ancestor of the working directory that has one.
+///
+/// The working directory is read directly: `HostFacts` has four methods and no
+/// cwd (`sec-5`), and widening it for the third fallback of a test-scaffolding
+/// root would move a production trait for a scratch path.
+fn enclosing_git_directory() -> Option<PathBuf> {
+    let start = std::env::current_dir().ok()?;
+    start
+        .ancestors()
+        .map(|ancestor| ancestor.join(GIT_DIRECTORY_LEAF))
+        .find(|candidate| candidate.is_dir())
+}
+
+/// Create a run root beneath `base`, or `None` if `base` will not serve.
+///
+/// Three ways to fail and they are deliberately not distinguished: the base
+/// cannot be created, the base is on tmpfs, or the run root cannot be created
+/// inside it. All three mean *try the next candidate*, and the last is also the
+/// writability check — `create_dir_all` on an existing unwritable directory
+/// succeeds, so only creating something proves the base is usable.
+fn prepare_root(base: &Path) -> Option<PathBuf> {
+    std::fs::create_dir_all(base).ok()?;
+    if !on_real_disk(base) {
+        return None;
+    }
+    let root = base.join(format!(
+        "{}-{}",
+        std::process::id(),
+        ROOT_NONCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir(&root).ok()?;
+    Some(root)
+}
+
+/// Whether `path` is on a filesystem that is not tmpfs.
+///
+/// A failed `statfs` reads as *not* real disk: the check exists to refuse
+/// anything it cannot positively establish is backed by a disk, and answering
+/// "fine" to an unanswerable probe is the failure `M20` is aimed at.
+fn on_real_disk(path: &Path) -> bool {
+    matches!(rustix::fs::statfs(path), Ok(stat) if stat.f_type != TMPFS_MAGIC)
+}
+
+// ---------------------------------------------------------------------------
+// The fixture: a self-contained control plane (`EX-1`, `EX-3`, `EX-4`, `EX-5`)
+// ---------------------------------------------------------------------------
+
+/// The layout beneath the run root. Every one of these is created by
+/// [`Fixture::new`] and removed by [`TempRoot`]'s `Drop`.
+const PROJECT_LEAF: &str = "project";
+const CAPSULES_LEAF: &str = "capsules";
+const DECOYS_LEAF: &str = "decoys";
+const DECOY_CREDENTIAL_LEAF: &str = "credential";
+const DECOY_REPOSITORY_LEAF: &str = "repository";
+const DECOY_READABLE_INPUT_LEAF: &str = "readable-input";
+const DECOY_UNDECLARED_LEAF: &str = "undeclared";
+const DECOY_EXECUTABLE_LEAF: &str = "executable";
+
+/// The fixture repository's second branch, which is what gives it an object the
+/// contracted base cannot reach.
+const UNREACHABLE_BRANCH: &str = "unreachable-from-base";
+const UNREACHABLE_LEAF: &str = "unreachable.txt";
+
+/// The identity the fixture repository's commits are made under. Pinned rather
+/// than guessed, for the reason `provision` pins the capsule's: an unset
+/// identity makes Git resolve the hostname, and inside an unshared UTS
+/// namespace that is a multi-second DNS stall
+/// (`mem.pattern.sandbox.git-ident-unset-dns-stall`).
+const FIXTURE_IDENTITY_NAME: &str = "Conformance Fixture";
+const FIXTURE_IDENTITY_EMAIL: &str = "conformance@example.invalid";
+
+/// The trusted-side Git the fixture repository is built with. Spelled here
+/// because `provision`'s own constant is private to that module, and
+/// `provision.rs` is not a file this phase owns (`S1`).
+const GIT: &str = "git";
+
+/// Row 5's target: a listener the trusted side owns, on loopback, on a
+/// kernel-assigned port. Never the internet (`EX-11`).
+const LOOPBACK_ANY_PORT: &str = "127.0.0.1:0";
+
+/// Where the host's mount table is read from for the second-filesystem
+/// selection. Parsed, never guessed — hardcoding `/tmp` is what `M18` exists to
+/// catch (`T2` step 8).
+const MOUNT_TABLE: &str = "/proc/self/mountinfo";
+/// `mountinfo`'s mount-point field, zero-indexed.
+const MOUNT_POINT_FIELD: usize = 4;
+
+/// The synthesized `[capsule]` table's two required bounds. Small, because
+/// every payload the suite runs is a shell one-liner and the wall bound is a
+/// containment mechanism rather than a budget (`EX-11`).
+const FIXTURE_TIMEOUT_SECONDS: u64 = 120;
+const FIXTURE_FILE_SIZE_CAP_MIB: u64 = 64;
+
+/// The suite's self-contained control plane, built once trusted-side before any
+/// row runs.
+///
+/// **Everything it names lives under [`Fixture::root`]** (invariant 7,
+/// `VA-2`): the operator's repository, `.doctrine/`, credentials and any export
+/// a real transaction could adopt are named by no arm and bound under none.
+/// `provision` reads `[capsule]` from `project_root`'s working tree, so a
+/// fixture with its own repository is what keeps the suite from testing the
+/// operator's configuration instead of the backend's enforcement (`EX-3`).
+#[derive(Debug)]
+pub(crate) struct Fixture {
+    /// Real disk, never tmpfs (`DEC-156`): `sec-5`'s probe must read real
+    /// available space, and a resource observation on tmpfs would measure the
+    /// mount's size rather than the disk's. `Drop` removes it.
+    root: TempRoot,
+    /// A self-contained control-plane root: a git repository that supplies the
+    /// contracted base, and a `.doctrine/doctrine.toml` carrying the
+    /// synthesized `[capsule]` table. `provision` reads this, never the
+    /// operator's project.
+    project_root: PathBuf,
+    base: AcceptedBase,
+    /// The host regions this fixture's placements may never reach. Names
+    /// `project_root`, its `.doctrine/`, and `capsule_root` — so the fixture's
+    /// own canonical repository stands in for the real one, which is never
+    /// referenced by any arm.
+    scopes: ForbiddenScopes,
+    capsule_root: PathBuf,
+    /// Row 3's targets. Deliberately **not** members of `scopes`, so the row's
+    /// control is a lawful widening.
+    decoy_credential: PathBuf,
+    decoy_repository: PathBuf,
+    /// Row 9's targets: a readable decoy the row writes through, and this
+    /// fixture's **own** export — built for this run, adopted by nothing else,
+    /// so the control arm's writes cannot reach an export a real transaction
+    /// shares.
+    decoy_readable_input: PathBuf,
+    own_export: PathBuf,
+    /// Table C's second capacity row: a path on a filesystem other than the
+    /// one `capsule_root` is on, chosen from the host's mounts at build time.
+    /// `None` where the host offers no second filesystem, which makes that row
+    /// report *skipped* naming the reason rather than passing quietly.
+    second_filesystem: Option<PathBuf>,
+    /// Row 4's target, and row 2's.
+    decoy_undeclared: PathBuf,
+    decoy_executable: PathBuf,
+    /// Trusted-side, row 5's target.
+    listener: TcpListener,
+}
+
+impl Fixture {
+    /// Build the whole control plane, in `T2`'s order.
+    pub(crate) fn new(host: &dyn HostFacts) -> Result<Self, FixtureFault> {
+        let root = TempRoot::new(host)?;
+
+        let project_root = root.path().join(PROJECT_LEAF);
+        let capsule_root = root.path().join(CAPSULES_LEAF);
+        let decoys = root.path().join(DECOYS_LEAF);
+        for directory in [&project_root, &capsule_root, &decoys] {
+            make_directory(directory)?;
+        }
+
+        // The decoys, before the repository: the synthesized table declares the
+        // readable one, and `provision` probes every declared entry for
+        // existence at step 2.
+        let decoy_credential = decoys.join(DECOY_CREDENTIAL_LEAF);
+        let decoy_repository = decoys.join(DECOY_REPOSITORY_LEAF);
+        let decoy_readable_input = decoys.join(DECOY_READABLE_INPUT_LEAF);
+        let decoy_undeclared = decoys.join(DECOY_UNDECLARED_LEAF);
+        let decoy_executable = decoys.join(DECOY_EXECUTABLE_LEAF);
+        make_directory(&decoy_readable_input)?;
+        make_directory(&decoy_repository)?;
+        git(&decoy_repository, &["init", "--quiet"])?;
+        write_file(&decoy_credential, DECOY_CREDENTIAL_BODY)?;
+        write_file(&decoy_undeclared, DECOY_UNDECLARED_BODY)?;
+        write_file(&decoy_executable, DECOY_EXECUTABLE_BODY)?;
+        make_executable(&decoy_executable)?;
+
+        let readable_roots = system_readable_roots(host, root.path());
+        if readable_roots.is_empty() {
+            return Err(FixtureFault::NoReadableRoots);
+        }
+
+        let base = initialise_project(
+            &project_root,
+            &capsule_config_document(&capsule_root, &readable_roots),
+        )?;
+
+        Ok(Self {
+            own_export: capsule_root.join(EXPORT_DIRECTORY_LEAF),
+            second_filesystem: std::fs::read_to_string(MOUNT_TABLE)
+                .ok()
+                .and_then(|table| second_filesystem(&capsule_root, root.path(), &table)),
+            scopes: ForbiddenScopes::new(
+                project_root.clone(),
+                project_root.join(CONTROL_PLANE_STATE_LEAF),
+                capsule_root.clone(),
+                Vec::new(),
+            ),
+            listener: TcpListener::bind(LOOPBACK_ANY_PORT).map_err(|error| FixtureFault::Io {
+                path: PathBuf::from(LOOPBACK_ANY_PORT),
+                detail: error.to_string(),
+            })?,
+            root,
+            project_root,
+            base,
+            capsule_root,
+            decoy_credential,
+            decoy_repository,
+            decoy_readable_input,
+            decoy_undeclared,
+            decoy_executable,
+        })
+    }
+
+    pub(crate) fn root(&self) -> &Path {
+        self.root.path()
+    }
+    pub(crate) fn project_root(&self) -> &Path {
+        &self.project_root
+    }
+    pub(crate) const fn base(&self) -> &AcceptedBase {
+        &self.base
+    }
+    pub(crate) const fn scopes(&self) -> &ForbiddenScopes {
+        &self.scopes
+    }
+    pub(crate) fn capsule_root(&self) -> &Path {
+        &self.capsule_root
+    }
+    pub(crate) fn decoy_credential(&self) -> &Path {
+        &self.decoy_credential
+    }
+    pub(crate) fn decoy_repository(&self) -> &Path {
+        &self.decoy_repository
+    }
+    pub(crate) fn decoy_readable_input(&self) -> &Path {
+        &self.decoy_readable_input
+    }
+    pub(crate) fn own_export(&self) -> &Path {
+        &self.own_export
+    }
+    pub(crate) fn second_filesystem(&self) -> Option<&Path> {
+        self.second_filesystem.as_deref()
+    }
+    pub(crate) fn decoy_undeclared(&self) -> &Path {
+        &self.decoy_undeclared
+    }
+    pub(crate) fn decoy_executable(&self) -> &Path {
+        &self.decoy_executable
+    }
+    pub(crate) const fn listener(&self) -> &TcpListener {
+        &self.listener
+    }
+}
+
+/// `.doctrine`, spelled here because `provision`'s constant is private to that
+/// module. `doctrine::DOCTRINE_TOML` supplies the document's own path, so only
+/// the directory leaf is duplicated.
+const CONTROL_PLANE_STATE_LEAF: &str = ".doctrine";
+
+const DECOY_CREDENTIAL_BODY: &str = "decoy-token: not-a-real-credential\n";
+const DECOY_UNDECLARED_BODY: &str = "declared to no placement\n";
+const DECOY_EXECUTABLE_BODY: &str = "#!/bin/sh\necho decoy\n";
+const EXECUTABLE_MODE: u32 = 0o755;
+
+/// The synthesized control-plane document: a `[capsule]` table over the
+/// fixture's own paths, and the `[interpretation]` policy `provision` reads
+/// back from the contracted base.
+///
+/// `readable-roots` **must** include a shell, or every payload is
+/// `NotExecutable` and the run is indeterminate for a reason it never names
+/// (`EX-3`, and `verify`'s own shell precheck says the same thing one level up).
+/// No `closure-roots`: declaring them would require a closure resolver, and the
+/// resolver is admitted against the policy (`sec-3` step 6) — a second moving
+/// part in a fixture whose job is to be boring.
+fn capsule_config_document(capsule_root: &Path, readable_roots: &[PathBuf]) -> String {
+    let readable = readable_roots
+        .iter()
+        .map(|root| format!("\"{}\"", root.display()))
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    format!(
+        "[capsule]\n\
+         root = \"{root}\"\n\
+         readable-roots = [{readable}]\n\
+         execution-timeout-seconds = {FIXTURE_TIMEOUT_SECONDS}\n\
+         file-size-cap-mib = {FIXTURE_FILE_SIZE_CAP_MIB}\n\
+         \n\
+         [interpretation]\n\
+         schema = 1\n\
+         trusted_side_forbidden_executables = []\n\
+         interpreted_paths = []\n\
+         \n\
+         [[interpretation.verification]]\n\
+         argv = [\"true\"]\n",
+        root = capsule_root.display(),
+    )
+}
+
+/// The fixture's own repository, and the base it contracts.
+///
+/// **One object unreachable from the base, deliberately** (`T2` step 2): the
+/// second commit lands on its own branch and the working tree is left detached
+/// at the base. Without it the repository's object set *equals* the export's,
+/// and `the_clones_object_set_is_exactly_the_exports` passes under a clone that
+/// copied everything — which is the defect the claim exists to catch.
+fn initialise_project(project_root: &Path, document: &str) -> Result<AcceptedBase, FixtureFault> {
+    git(project_root, &["init", "--quiet"])?;
+    git(
+        project_root,
+        &["config", "user.name", FIXTURE_IDENTITY_NAME],
+    )?;
+    git(
+        project_root,
+        &["config", "user.email", FIXTURE_IDENTITY_EMAIL],
+    )?;
+
+    write_file(&project_root.join(DOCTRINE_TOML), document)?;
+    git(project_root, &["add", "."])?;
+    git(project_root, &["commit", "--quiet", "-m", "base"])?;
+    let base = AcceptedBase::new(git(project_root, &["rev-parse", "HEAD"])?);
+
+    git(
+        project_root,
+        &["switch", "--quiet", "-c", UNREACHABLE_BRANCH],
+    )?;
+    write_file(&project_root.join(UNREACHABLE_LEAF), DECOY_UNDECLARED_BODY)?;
+    git(project_root, &["add", "."])?;
+    git(project_root, &["commit", "--quiet", "-m", "unreachable"])?;
+    git(
+        project_root,
+        &["switch", "--quiet", "--detach", base.as_str()],
+    )?;
+
+    Ok(base)
+}
+
+/// One trusted-side Git invocation, returning its trimmed stdout.
+fn git(directory: &Path, arguments: &[&str]) -> Result<String, FixtureFault> {
+    let argv = || {
+        std::iter::once(GIT.to_owned())
+            .chain(arguments.iter().map(|word| (*word).to_owned()))
+            .collect::<Vec<String>>()
+    };
+    let output = Command::new(GIT)
+        .arg("-C")
+        .arg(directory)
+        .args(arguments)
+        .output()
+        .map_err(|error| FixtureFault::Git {
+            argv: argv(),
+            detail: error.to_string(),
+        })?;
+    if !output.status.success() {
+        return Err(FixtureFault::Git {
+            argv: argv(),
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn make_directory(path: &Path) -> Result<(), FixtureFault> {
+    std::fs::create_dir_all(path).map_err(|error| FixtureFault::Io {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    })
+}
+
+/// `File::create` plus `write_all`, because `std::fs::write` is banned
+/// crate-wide by `clippy.toml`'s `disallowed-methods`.
+fn write_file(path: &Path, contents: &str) -> Result<(), FixtureFault> {
+    if let Some(parent) = path.parent() {
+        make_directory(parent)?;
+    }
+    let io = |error: std::io::Error| FixtureFault::Io {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    };
+    let mut file = File::create(path).map_err(io)?;
+    file.write_all(contents.as_bytes()).map_err(io)
+}
+
+fn make_executable(path: &Path) -> Result<(), FixtureFault> {
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(EXECUTABLE_MODE)).map_err(
+        |error| FixtureFault::Io {
+            path: path.to_path_buf(),
+            detail: error.to_string(),
+        },
+    )
+}
+
+/// The readable roots the fixture declares, **derived from the host** rather
+/// than hardcoded.
+///
+/// One rule: the *top-level* ancestor of the resolved shell and of every
+/// resolved host `PATH` entry — `/nix/store/…/bin` yields `/nix`, `/usr/bin`
+/// yields `/usr`. The top-level ancestor and not the entry itself, because a
+/// dynamically linked executable needs its loader and libraries, which on a
+/// store-based host live under sibling directories of the same top level; a
+/// measurement on this host showed `git` runs under `--ro-bind /nix/store` and
+/// cannot under its own `bin` directory alone.
+///
+/// **Any candidate containing operator state is dropped** (invariant 7): the
+/// fixture root, `$HOME`, and the working directory. That is what keeps `/home`
+/// — which is the top-level ancestor of a `PATH` entry on most hosts — from
+/// binding the operator's credentials into a capsule.
+///
+/// Top-level ancestors are also pairwise non-overlapping by construction, which
+/// is what keeps `CapsulePlacement::try_new`'s inner-path collision rule
+/// satisfied without a second deduplication pass.
+fn system_readable_roots(host: &dyn HostFacts, fixture_root: &Path) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(shell) = host.resolve(Path::new(SHELL)) {
+        candidates.push(shell);
+    }
+    if let Some(raw) = host.env_var(CapsuleEnvVar::Path.name()) {
+        for entry in std::env::split_paths(&raw) {
+            if let Ok(resolved) = host.resolve(&entry) {
+                candidates.push(resolved);
+            }
+        }
+    }
+
+    let operator = operator_regions(host, fixture_root);
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for candidate in candidates {
+        let Some(top) = top_level_ancestor(&candidate) else {
+            continue;
+        };
+        if operator.iter().any(|region| region.starts_with(&top)) {
+            continue;
+        }
+        if !roots.contains(&top) {
+            roots.push(top);
+        }
+    }
+    roots
+}
+
+/// The regions no readable root may contain: the fixture's own state, the
+/// operator's home, and wherever the suite was invoked from.
+fn operator_regions(host: &dyn HostFacts, fixture_root: &Path) -> Vec<PathBuf> {
+    let mut regions = vec![fixture_root.to_path_buf()];
+    if let Some(home) = host.env_var(HOME_VARIABLE) {
+        regions.push(PathBuf::from(home));
+    }
+    if let Ok(working_directory) = std::env::current_dir() {
+        regions.push(working_directory);
+    }
+    regions
+}
+
+/// `/nix/store/x/bin` → `/nix`. `None` for a relative path or for `/` itself.
+fn top_level_ancestor(path: &Path) -> Option<PathBuf> {
+    let mut components = path.components();
+    if components.next() != Some(Component::RootDir) {
+        return None;
+    }
+    match components.next() {
+        Some(Component::Normal(first)) => Some(Path::new(FILESYSTEM_ROOT).join(first)),
+        _ => None,
+    }
+}
+
+/// A path on a filesystem other than the one `capsule_root` is on, or `None`.
+///
+/// Selected from the host's **own mount table** rather than by naming `/tmp`:
+/// hardcoding a mount is `M18`'s mutation, and a fixture that picks a path on
+/// the same filesystem makes `the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on`
+/// pass with two identical figures.
+///
+/// The three conditions, and each rules out a different way of picking wrong:
+/// a different `st_dev` (a genuinely different filesystem), a non-zero
+/// available figure (`/proc`, `/sys` and friends report nothing), and a figure
+/// that differs from the capsule root's (so *the two figures differ* is
+/// established at selection, not asserted hopefully at read time). Every probe
+/// here is a raw `statvfs`, never `HostFacts::available_bytes` — the selection
+/// must not depend on the function the row exists to test.
+///
+/// **tmpfs is not excluded here**, and that is deliberate rather than an
+/// oversight of `DEC-156`. That decision bans tmpfs for the *fixture root*,
+/// where a resource observation would measure the mount rather than the disk.
+/// This row's claim is only that two paths on two filesystems yield two
+/// figures, for which a tmpfs mount is a perfectly good second filesystem —
+/// and excluding it was measured to flip this jail to the `None` branch, which
+/// would skip the conditional capacity row on the very host the suite is
+/// developed against.
+///
+/// The mount table is a **parameter**, not a read: on every host this suite is
+/// developed against the answer is `Some`, so the `None` branch — the one that
+/// makes Table C's conditional row report *skipped* — would ship untested if
+/// the only way to reach it were to find a host with one filesystem (`A2`).
+fn second_filesystem(capsule_root: &Path, fixture_root: &Path, table: &str) -> Option<PathBuf> {
+    let here = rustix::fs::stat(capsule_root).ok()?;
+    let here_available = available_bytes_of(capsule_root)?;
+
+    mount_points(table).into_iter().find(|point| {
+        !point.starts_with(fixture_root)
+            && rustix::fs::stat(point).is_ok_and(|there| there.st_dev != here.st_dev)
+            && available_bytes_of(point)
+                .is_some_and(|available| available != 0 && available != here_available)
+    })
+}
+
+/// `f_bavail × f_frsize`, the same quantity `SystemHost` reports — computed
+/// independently here so the selection does not route through the function
+/// under test.
+fn available_bytes_of(path: &Path) -> Option<u64> {
+    let stat = rustix::fs::statvfs(path).ok()?;
+    stat.f_bavail.checked_mul(stat.f_frsize)
+}
+
+/// The mount points named by `/proc/self/mountinfo`, in the kernel's order.
+///
+/// Pure over the file's text so it can be asserted against a hand-built table.
+/// Field 4 is the mount point and its whitespace is octal-escaped, so a mount
+/// under a directory with a space in its name is decoded rather than truncated.
+fn mount_points(table: &str) -> Vec<PathBuf> {
+    table
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(MOUNT_POINT_FIELD))
+        .map(|field| PathBuf::from(decode_mount_field(field)))
+        .collect()
+}
+
+/// `mountinfo`'s octal escapes: space, tab, newline and backslash.
+fn decode_mount_field(field: &str) -> String {
+    let mut decoded = String::with_capacity(field.len());
+    let mut rest = field;
+    while let Some(at) = rest.find('\\') {
+        let (before, escaped) = rest.split_at(at);
+        decoded.push_str(before);
+        if let Some(character) = escaped.get(..4).and_then(decode_octal_escape) {
+            decoded.push(character);
+            rest = escaped.get(4..).unwrap_or_default();
+        } else {
+            decoded.push('\\');
+            rest = escaped.get(1..).unwrap_or_default();
+        }
+    }
+    decoded.push_str(rest);
+    decoded
+}
+
+fn decode_octal_escape(escape: &str) -> Option<char> {
+    let digits = escape.strip_prefix('\\')?;
+    let value = u32::from_str_radix(digits, 8).ok()?;
+    char::from_u32(value)
+}
+
+// ---------------------------------------------------------------------------
+// The delta and row vocabulary (`EX-8`, `EX-14`)
+// ---------------------------------------------------------------------------
 
 /// How a control arm's placement differs from the probe arm's.
 ///
@@ -976,15 +1653,18 @@ fn verify_over(
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
-    use std::path::PathBuf;
+    use std::io::Write as _;
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
 
     use super::{
         Admission, AdmissionVerdict, ArmResult, ArmShape, AuthorityGrant, AuxOutcome, Axis, Bound,
-        Claim, ConcurrentWitness, ConformanceBackend, Delta, Fixture, HostPid, Indeterminacy,
-        LIVENESS_MARKER, NotAdmitted, Observed, PidProbe, Probe, PropertyRemoval, Row, RowId,
-        RowVerdict, SHELL, Which, admission, classify, classify_concurrent,
-        row_ids_in_more_than_one_table, row_verdict, verify, verify_over,
+        Claim, ConcurrentWitness, ConformanceBackend, Delta, Fixture, HOME_VARIABLE, HostPid,
+        Indeterminacy, LIVENESS_MARKER, NotAdmitted, Observed, PidProbe, Probe, PropertyRemoval,
+        Row, RowId, RowVerdict, SHELL, TMPFS_MAGIC, TempRoot, Which, admission, available_bytes_of,
+        capsule_config_document, classify, classify_concurrent, decode_mount_field, git,
+        mount_points, on_real_disk, prepare_root, row_ids_in_more_than_one_table, row_verdict,
+        second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
     };
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
@@ -994,6 +1674,7 @@ mod tests {
     };
     use crate::config::{Argv, ByteCount};
     use crate::host::HostFacts;
+    use crate::host::SystemHost;
     use crate::host::fixture::FixtureHost;
 
     // ── Payload tokens, test-local ─────────────────────────────────────────
@@ -1960,6 +2641,318 @@ mod tests {
             Delta::NetworkPermitted,
         )];
         assert!(row_ids_in_more_than_one_table(&[&disjoint_a, &disjoint_b]).is_empty());
+    }
+
+    // ── The fixture root (`EX-2`, `D1`, `T1`) ──────────────────────────────
+
+    /// `EX-2`: the run's root is on real disk, never tmpfs.
+    ///
+    /// Asserted against an independent `statfs` on the chosen root rather than
+    /// against the constructor's own opinion of it, and against
+    /// `std::env::temp_dir()` — the route `D1` rejects — where this host makes
+    /// that route a tmpfs. `M20` is the sole evidence for this criterion and
+    /// nothing else in the suite would notice its damage: on tmpfs both capacity
+    /// claims still agree with their own `statvfs`.
+    #[test]
+    fn the_fixture_root_is_on_a_non_tmpfs_filesystem() {
+        let root = TempRoot::new(&SystemHost).expect("this host offers a real-disk scratch root");
+        assert!(root.path().is_dir());
+
+        let stat = rustix::fs::statfs(root.path()).expect("the chosen root can be probed");
+        assert_ne!(
+            stat.f_type,
+            TMPFS_MAGIC,
+            "the fixture root at {} is on tmpfs",
+            root.path().display()
+        );
+
+        // The refusal itself, exercised where the host can supply a tmpfs.
+        // `std::env::temp_dir()` is `/tmp` and `/tmp` is tmpfs on the host this
+        // was built against (`A3`); guarded rather than asserted flat, so a host
+        // whose `/tmp` is real disk does not red a working mechanism.
+        let temporary = std::env::temp_dir();
+        if !on_real_disk(&temporary) {
+            assert!(
+                prepare_root(&temporary).is_none(),
+                "a tmpfs base was accepted as a fixture root"
+            );
+        }
+
+        // Two roots in one process do not collide — the nonce, not the clock.
+        let second = TempRoot::new(&SystemHost).expect("a second root is available");
+        assert_ne!(root.path(), second.path());
+    }
+
+    /// `Drop` is the whole of cleanup (invariant 8), and it is recursive.
+    ///
+    /// The root is populated with a nested directory and a file before it drops,
+    /// so a non-recursive removal fails here rather than succeeding on an empty
+    /// directory. `M21` is its mutation.
+    #[test]
+    fn the_fixture_root_is_removed_when_the_fixture_is_dropped() {
+        let path = {
+            let root = TempRoot::new(&SystemHost).expect("this host offers a real-disk root");
+            let nested = root.path().join("nested");
+            std::fs::create_dir(&nested).expect("the root is writable");
+            let mut file = std::fs::File::create(nested.join("payload"))
+                .expect("a file can be created beneath the root");
+            file.write_all(b"payload").expect("the payload is written");
+            assert!(nested.is_dir());
+            root.path().to_path_buf()
+        };
+
+        assert!(
+            !path.exists(),
+            "the fixture root at {} survived its Drop",
+            path.display()
+        );
+    }
+
+    // ── The fixture (`T2`, `EX-1`, `EX-3`, `EX-4`, `EX-5`) ─────────────────
+
+    /// `mountinfo` escapes whitespace in the mount-point field, and a mount
+    /// under a directory with a space in its name is the discriminating case:
+    /// splitting on whitespace without decoding truncates it to a *prefix* that
+    /// still `stat`s, so the wrong filesystem is selected silently.
+    #[test]
+    fn a_mount_point_is_decoded_rather_than_truncated() {
+        let table = "\
+36 25 0:32 / /run/media/my\\040disk rw,relatime shared:18 - ext4 /dev/sdb1 rw\n\
+37 25 0:33 / /tab\\011here rw - tmpfs tmpfs rw\n\
+38 25 0:34 / /plain rw - ext4 /dev/sdc1 rw\n";
+
+        assert_eq!(
+            mount_points(table),
+            vec![
+                PathBuf::from("/run/media/my disk"),
+                PathBuf::from("/tab\there"),
+                PathBuf::from("/plain"),
+            ]
+        );
+    }
+
+    /// A trailing lone backslash, and an escape that is not three octal digits,
+    /// are passed through rather than swallowing the rest of the field.
+    #[test]
+    fn a_malformed_mount_escape_is_passed_through() {
+        assert_eq!(decode_mount_field("/a\\zz9b"), "/a\\zz9b");
+        assert_eq!(decode_mount_field("/trailing\\"), "/trailing\\");
+    }
+
+    /// The *top-level* ancestor, not the entry: a dynamically linked executable
+    /// needs its loader and libraries, which on a store-based host live under
+    /// sibling directories of the same top level.
+    #[test]
+    fn a_readable_root_is_the_top_level_ancestor_of_an_entry() {
+        assert_eq!(
+            top_level_ancestor(Path::new("/nix/store/abc-git/bin")),
+            Some(PathBuf::from("/nix"))
+        );
+        assert_eq!(
+            top_level_ancestor(Path::new("/usr")),
+            Some(PathBuf::from("/usr"))
+        );
+        assert_eq!(top_level_ancestor(Path::new("/")), None);
+        assert_eq!(top_level_ancestor(Path::new("relative/bin")), None);
+    }
+
+    /// Invariant 7 / `VA-2`: no readable root may contain the operator's home,
+    /// even when a `PATH` entry lives there.
+    ///
+    /// The discriminating fixture is a `PATH` whose entries span **both** a
+    /// lawful top level and the operator's — a `PATH` of store paths alone
+    /// passes under an implementation with no exclusion at all.
+    #[test]
+    fn no_readable_root_contains_the_operators_home() {
+        let host = FixtureHost::default()
+            .with_env(HOME_VARIABLE, "/home/operator")
+            .with_env("PATH", "/nix/store/abc-git/bin:/home/operator/.local/bin")
+            .with_resolution(SHELL, "/nix/store/abc-bash/bin/sh")
+            .with_resolution("/nix/store/abc-git/bin", "/nix/store/abc-git/bin")
+            .with_resolution("/home/operator/.local/bin", "/home/operator/.local/bin");
+
+        let roots = system_readable_roots(&host, Path::new("/tmp/fixture-root"));
+
+        assert_eq!(roots, vec![PathBuf::from("/nix")]);
+    }
+
+    /// A fixture root that is itself a candidate's top level is excluded too —
+    /// otherwise the suite binds its own control plane in as a readable input.
+    #[test]
+    fn no_readable_root_contains_the_fixture_root() {
+        let host = FixtureHost::default()
+            .with_env("PATH", "/scratch/bin")
+            .with_resolution(SHELL, "/scratch/bin/sh")
+            .with_resolution("/scratch/bin", "/scratch/bin");
+
+        assert!(system_readable_roots(&host, Path::new("/scratch/run-1")).is_empty());
+    }
+
+    /// The synthesized document is the one `provision` parses — asserted by
+    /// parsing it with the same function, not by eyeballing the format string.
+    /// `EX-3`: its `readable-roots` must carry a shell, or every payload is
+    /// `NotExecutable` and the run is indeterminate for a reason it never names.
+    #[test]
+    fn the_synthesized_table_is_the_one_provision_parses() {
+        let capsule_root = PathBuf::from("/scratch/run-1/capsules");
+        let document = capsule_config_document(
+            &capsule_root,
+            &[PathBuf::from("/nix"), PathBuf::from("/bin")],
+        );
+
+        let parsed = crate::config::parse_capsule_config(&document)
+            .expect("the synthesized table is the shape provision parses");
+
+        assert_eq!(
+            parsed.readable_roots(),
+            [PathBuf::from("/nix"), PathBuf::from("/bin")]
+        );
+        assert!(
+            document.contains("[interpretation]"),
+            "provision reads the policy from the same document: {document}"
+        );
+    }
+
+    /// `EX-4` and `VA-2` in one assertion: every artefact the fixture builds
+    /// lies beneath its own root, so no arm can name the operator's repository,
+    /// `.doctrine/`, credentials or export.
+    ///
+    /// The decoys are the discriminating part — a fixture that pointed
+    /// `decoy_credential` at the operator's real `~/.gitconfig` would satisfy
+    /// every *other* claim in this suite.
+    #[test]
+    fn every_artefact_the_fixture_builds_lies_beneath_its_own_root() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let root = fixture.root().to_path_buf();
+
+        let beneath: Vec<&Path> = vec![
+            fixture.project_root(),
+            fixture.capsule_root(),
+            fixture.decoy_credential(),
+            fixture.decoy_repository(),
+            fixture.decoy_readable_input(),
+            fixture.own_export(),
+            fixture.decoy_undeclared(),
+            fixture.decoy_executable(),
+        ];
+        for path in beneath {
+            assert!(
+                path.starts_with(&root),
+                "{} escapes the fixture root {}",
+                path.display(),
+                root.display()
+            );
+        }
+
+        for scope in fixture.scopes().members() {
+            assert!(
+                scope.starts_with(&root),
+                "the forbidden scope {} names a region outside the fixture",
+                scope.display()
+            );
+        }
+
+        // Row 3's decoys are lawfully widenable precisely because they are not
+        // scopes; a fixture that named them would make row 3 unrunnable.
+        let scoped: Vec<&Path> = fixture.scopes().members().collect();
+        assert!(!scoped.contains(&fixture.decoy_credential()));
+        assert!(!scoped.contains(&fixture.decoy_repository()));
+
+        let address = fixture
+            .listener()
+            .local_addr()
+            .expect("the listener is bound");
+        assert!(
+            address.ip().is_loopback(),
+            "row 5's target is not the internet"
+        );
+        assert_ne!(address.port(), 0);
+    }
+
+    /// The second-filesystem selection is only informative if the path it names
+    /// is genuinely on another device — otherwise Table C's conditional row
+    /// compares a figure with itself and passes for free. `M17`, `M18`.
+    #[test]
+    fn the_second_filesystem_is_on_another_device_or_absent() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+
+        let Some(other) = fixture.second_filesystem() else {
+            // Not an assertion: `None` is a lawful answer about the host, and
+            // it is exactly what makes Table C's conditional row *skip*. Said
+            // out loud so a vacuous pass is visible in the run's output rather
+            // than indistinguishable from a real one.
+            eprintln!("this host offers no second filesystem; the check is vacuous here");
+            return;
+        };
+        eprintln!("second filesystem: {}", other.display());
+        let here = rustix::fs::stat(fixture.capsule_root()).expect("the capsule root stats");
+        let there = rustix::fs::stat(other).expect("the selected mount stats");
+
+        assert_ne!(
+            here.st_dev,
+            there.st_dev,
+            "{} is on the same device as the capsule root",
+            other.display()
+        );
+        assert_ne!(available_bytes_of(other), Some(0));
+        assert_ne!(
+            available_bytes_of(other),
+            available_bytes_of(fixture.capsule_root())
+        );
+    }
+
+    /// `A2`: on every host this suite is developed against the selection
+    /// answers `Some`, so the `None` branch — the one that makes Table C's
+    /// conditional capacity row report *skipped* rather than pass quietly —
+    /// would ship untested. The mount table is a parameter precisely so it can
+    /// be forced here.
+    ///
+    /// Two tables, and each forces `None` for a different reason: a host with
+    /// one filesystem, and a host whose only other mounts are pseudo-
+    /// filesystems reporting no space at all.
+    #[test]
+    fn a_host_with_no_second_filesystem_selects_none() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let root = fixture.root();
+
+        assert_eq!(second_filesystem(fixture.capsule_root(), root, ""), None);
+        assert_eq!(
+            second_filesystem(
+                fixture.capsule_root(),
+                root,
+                "36 25 0:32 / /proc rw - proc proc rw\n\
+                 37 25 0:33 / /sys rw - sysfs sysfs rw\n",
+            ),
+            None,
+            "a pseudo-filesystem reporting no space is not a second filesystem"
+        );
+    }
+
+    /// `T2` step 2: the fixture repository must hold an object the contracted
+    /// base cannot reach, or `the_clones_object_set_is_exactly_the_exports` is
+    /// vacuous — it would pass under a clone that copied the whole repository.
+    #[test]
+    fn the_fixture_repository_holds_an_object_unreachable_from_the_base() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+
+        let reachable = git(
+            fixture.project_root(),
+            &["rev-list", "--objects", fixture.base().as_str()],
+        )
+        .expect("the base is a commit");
+        let all = git(fixture.project_root(), &["rev-list", "--objects", "--all"])
+            .expect("the repository has refs");
+
+        assert!(
+            all.len() > reachable.len(),
+            "the fixture repository holds nothing the base cannot reach"
+        );
+        // And the working tree matches the base, so `provision`'s working-tree
+        // read of `[capsule]` sees the same document the base commits.
+        assert_eq!(
+            git(fixture.project_root(), &["rev-parse", "HEAD"]).expect("a detached HEAD"),
+            fixture.base().as_str()
+        );
     }
 
     /// `Bound` carries the two removals `PropertyRemoval::ResourceBound` stands

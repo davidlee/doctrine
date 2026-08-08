@@ -217,3 +217,171 @@ a tidier battery table.
   no suppression to be given a body.
 - The battery driver at `/tmp/sl248-battery/battery.py` is session-local and will
   not survive; the mutation texts are in the table above.
+
+---
+
+## PHASE-08 — the executed harness (execution record)
+
+Written as the phase runs, per the sheet's *harvest as you go*. Each entry is
+finished work; a task with no entry here is not ticked.
+
+### Measurements taken before any code (`R7`, `S7`)
+
+`bwrap` 0.11.2 on this host. Both untried argv shapes hold, so `S7` does not
+fire — the detail is in the sheet's § *Findings (execution)* `F-7`.
+
+| shape | measured |
+|---|---|
+| `--cap-add ALL` | accepted **and** effective: `CapEff` `0000000000000000` → `000001ffffffffff` |
+| `--unshare-user-try --unshare-ipc --unshare-net --unshare-uts --unshare-cgroup-try` | accepted; `/proc` entry count 20 against 4 under `--unshare-all` |
+| the enumerated set **plus** `--share-net` | accepted, and the payload sees the host's interface count — so `D5`'s "combines only with `--unshare-all`" is not what 0.11.2 enforces (`F-8`). `D5`'s omit-`--unshare-net` route is still the one taken |
+| `--die-with-parent` vs the pid namespace | `--die-with-parent` is what reaps an escaping detached grandchild; removing `ProcessVisibility` alone does not let one escape (`F-9`) |
+
+PHASE-09 inherits these rather than re-running them.
+
+### `T1` — `TempRoot`, and `EX-2` made checkable
+
+`conformance.rs`, new section *The fixture's root: real disk, never tmpfs*.
+
+- `TempRoot::new(&dyn HostFacts)` walks `D1`'s three candidates —
+  `$XDG_DATA_HOME`, `$HOME/.local/share`, then the enclosing repository's `.git`
+  — each suffixed `doctrine-conformance/`, and creates a `<pid>-<nonce>`
+  directory in the first that serves. `FixtureFault::NoRealDiskRoot` carries the
+  candidates actually tried.
+- **`EX-2` is a check, not a comment**: `prepare_root` refuses a base whose
+  `rustix::fs::statfs` `f_type` is `TMPFS_MAGIC` (`0x0102_1994`), spelled locally
+  because `rustix` exports `StatFs::f_type` but no magic constants and `libc` is
+  not a dependency (`S4`). `FsWord` is the field's own type, so no cast — the
+  `as_conversions` deny is untouched.
+- A failed `statfs` reads as **not** real disk. Answering "fine" to an
+  unanswerable probe is precisely the `M20` failure.
+- Three rejection reasons are deliberately not distinguished (base uncreatable,
+  base on tmpfs, run root uncreatable). All three mean *next candidate*, and the
+  third doubles as the writability check — `create_dir_all` on an existing
+  unwritable directory succeeds, so only creating something proves usability.
+- Nonce is `std::process::id()` plus a process-static `AtomicU32`. **No clock**:
+  `HostFacts` carries none by design, and two fixtures built in the same
+  millisecond would collide on one.
+- `enclosing_git_directory()` reads `std::env::current_dir()` directly rather
+  than widening `HostFacts` — four methods is the contract (`sec-5`), and moving
+  a production trait for a scratch-path fallback is the wrong trade.
+- `Drop` is `remove_dir_all`, best-effort and silent (a failing `Drop` would have
+  to `panic`, which is denied). Nothing public on the type removes anything —
+  invariant 8 holds and this phase mints no capsule-delete capability.
+- Tests: `the_fixture_root_is_on_a_non_tmpfs_filesystem` (independent `statfs` on
+  the chosen root; plus, guarded on this host's `/tmp` actually being tmpfs, that
+  `prepare_root` **refuses** `std::env::temp_dir()`; plus two roots in one
+  process differ) and `the_fixture_root_is_removed_when_the_fixture_is_dropped`
+  (root populated with a nested directory **and** a file first, so a
+  non-recursive removal reds here instead of passing on an empty directory).
+
+### `T2` — the fixture: a self-contained control plane
+
+Thirteen fields minus one: exactly the twelve `design.md:4056-4093` names, in
+that order, with the design's doc comments carried over verbatim. A
+`readable_roots` cache was written and then removed — the sheet says *exactly*
+those fields, and a delta that wants the declared roots can re-read the
+document the fixture already wrote.
+
+- **Layout.** `root/{project,capsules,decoys}`. `own_export` is
+  `capsule_root/export` via `backend::EXPORT_DIRECTORY_LEAF`, so the fixture and
+  `CapsulePlacement::check_source_export` agree on the leaf by construction
+  rather than by a matching literal.
+- **`scopes` names `project_root`, its `.doctrine/`, and `capsule_root`** — the
+  fixture's own repository stands in for the operator's, which is named by no
+  arm. `decoy_credential` and `decoy_repository` are deliberately *not* members,
+  and a test asserts that: if they were, row 3's control arm would be an
+  unlawful widening and the row unrunnable.
+- **`readable-roots` are derived from the host, never hardcoded.** One rule: the
+  **top-level** ancestor of the resolved `/bin/sh` and of every resolved `PATH`
+  entry — `/nix/store/…/bin` yields `/nix`. The top level and not the entry,
+  because a dynamically linked executable needs its loader and libraries, which
+  on a store-based host live under sibling directories of the same top level; a
+  measurement (pre-`T2`) showed `git` runs under `--ro-bind /nix/store` and
+  cannot under its own `bin` alone.
+- Any candidate whose top level **contains operator state** is dropped: the
+  fixture root, `$HOME`, and the cwd. That is what keeps `/home` — the top level
+  of a `PATH` entry on most hosts — from binding the operator's credentials into
+  a capsule (invariant 7, `VA-2`). The discriminating fixture is a `PATH`
+  spanning *both* a lawful top level and the operator's; a `PATH` of store paths
+  alone passes under an implementation with no exclusion at all.
+- Top-level ancestors are pairwise non-overlapping by construction, which
+  satisfies `check_inner_destinations`' collision rule with no deduplication
+  pass beyond `contains`.
+- **The synthesized document is proved by parsing it with
+  `config::parse_capsule_config`**, not by eyeballing the format string. Shape
+  copied from `provision.rs`'s own test `document()` helper, including the
+  `[interpretation]` block `resolved_policy` reads back from the base blob. No
+  `closure-roots`: declaring them would need a resolver, and the resolver is
+  itself admitted against the policy — a second moving part in a fixture whose
+  job is to be boring.
+- **The repository holds an object the base cannot reach, deliberately.** Commit
+  `base` on the initial branch; `switch -c unreachable-from-base`; a second
+  commit; `switch --detach <base oid>`. Without it
+  `the_clones_object_set_is_exactly_the_exports` is vacuous — it would pass
+  under a clone that copied everything. Asserted by comparing
+  `rev-list --objects <base>` against `rev-list --objects --all`, and by
+  checking `HEAD == base` so `provision`'s working-tree read of `[capsule]` sees
+  the document the base commits.
+- Git identity is pinned via `git config`, for the reason `provision` pins the
+  capsule's: an unset identity makes Git resolve the hostname, and inside an
+  unshared UTS namespace that is a multi-second DNS stall.
+- `GIT` is spelled locally: `provision.rs`'s constant is private to that module
+  and `provision.rs` is not this phase's file (`S1`).
+- `std::fs::write` is banned by `clippy.toml`, so `write_file` is
+  `File::create` + `write_all`.
+
+**`second_filesystem` — three conditions, and the mount table is a parameter.**
+
+- Selected by parsing `/proc/self/mountinfo` (field 4, octal-escaped), never by
+  naming `/tmp` — hardcoding a mount is `M18`'s mutation.
+- Three conditions, each ruling out a different way of picking wrong: a
+  different `st_dev`; a non-zero available figure (`/proc`, `/sys` report
+  nothing); and a figure that **differs from the capsule root's**, so *the two
+  figures differ* is established at selection rather than asserted hopefully at
+  read time.
+- Every probe is a raw `rustix::fs::statvfs`, never `HostFacts::available_bytes`
+  — the selection must not route through the function `M16`/`M17` mutate.
+- The escape decoder is its own tested function. A mount under a directory with
+  a space is the discriminating case: splitting on whitespace without decoding
+  truncates it to a **prefix that still `stat`s**, so the wrong filesystem is
+  selected silently.
+- **The mount table is an argument, not a read.** `A2` says this host always
+  takes the `Some` branch, so the `None` branch — the one that makes Table C's
+  conditional row report *skipped* — would ship untested. Two forced tables now
+  cover it: empty (one filesystem) and pseudo-filesystems only.
+
+**tmpfs is deliberately not excluded from the second-filesystem selection.**
+Excluding it was written, measured, and reverted: inside this jail it flips the
+answer from `Some("/")` to `None`, which would skip the conditional capacity row
+on the very host the suite is developed against. `DEC-156` bans tmpfs for the
+*fixture root*, where a resource observation would measure the mount instead of
+the disk; this row's claim is only that two paths on two filesystems yield two
+figures, for which a tmpfs mount is a perfectly good second filesystem. Recorded
+because it reads like an oversight and is not.
+
+- On this host the selection answers `/`. The test says so out loud
+  (`eprintln`) on both branches, so a vacuous pass is visible in the run output
+  rather than indistinguishable from a real one.
+
+**`FixtureFault` widened** from `T1`'s single `NoRealDiskRoot` to add `Io`,
+`Git` and `NoReadableRoots` — a refusal rather than a panic throughout, because
+`verify` is a production path (`backend verify`, PHASE-10) and a host that
+cannot supply a Git or a loopback socket is a fact about the host, reported the
+way `NotAdmitted::Unavailable` reports a missing shell.
+
+**Owed to `T9`.** `EX-5`'s skip branch is now reachable in the *selection*; the
+row-level skip (Table C reporting `AuxOutcome::Skipped` naming the reason) still
+needs its own forcing at `T9` — build the row over an explicit `None` rather
+than over whatever this host happens to mount.
+
+Tests (10): `a_mount_point_is_decoded_rather_than_truncated`,
+`a_malformed_mount_escape_is_passed_through`,
+`a_readable_root_is_the_top_level_ancestor_of_an_entry`,
+`no_readable_root_contains_the_operators_home`,
+`no_readable_root_contains_the_fixture_root`,
+`the_synthesized_table_is_the_one_provision_parses`,
+`every_artefact_the_fixture_builds_lies_beneath_its_own_root`,
+`the_second_filesystem_is_on_another_device_or_absent`,
+`a_host_with_no_second_filesystem_selects_none`,
+`the_fixture_repository_holds_an_object_unreachable_from_the_base`.

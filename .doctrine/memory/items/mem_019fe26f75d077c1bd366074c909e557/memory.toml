@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe26f75d077c1bd366074c909e557"
+memory_key = "mem.pattern.sandbox.readable-roots-are-top-level-ancestors"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Readable roots from PATH: take the top-level ancestor, minus operator regions"
+summary = "Binding a PATH entry's own bin directory is not enough for a dynamically linked executable; bind its top-level ancestor and drop any that contains operator state"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["sandbox", "bwrap", "confinement", "security", "path", "nix"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7d90afd99ca23664e9cc289dbc479de303f3cb9d"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "99d592dede5d607db75964a020e785d46c261530ea7b0b9c72fe3504e2aa6886"
+base_commit = "3a1e85dbad979340bb2e5afbf56c39f5dbf309b0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
