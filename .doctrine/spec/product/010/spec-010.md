@@ -37,8 +37,8 @@ In scope:
 - A common record schema (identity, summary, tags) plus a typed, kind-specific facet
   block for each kind — except concept (`CPT`), whose facet block is empty by design,
   its content being its prose. Confidence is owned by the assumption and evidence rows
-  and is not a common field; a
-  record's scope over other artefacts is expressed through typed relations, not a field.
+  and is not a common field; a record's scope over other artefacts is expressed
+  through typed relations, not a field.
 - A distinct lifecycle vocabulary per kind — truth lifecycles, not the work-intake
   lifecycle.
 - A minimal evidence support structure (`supports`, `contradicts`, `notes` of
@@ -147,13 +147,14 @@ Constraints:
   no implementation may introduce parallel per-kind schemas or directories. (Mirrors
   the backlog's single-entity discipline and `entity-model.md`'s "fewer entity kinds,
   more facets" direction.)
-- The kind set is exactly seven — assumption (`ASM`), decision
-  (`DEC`), question (`QUE`), constraint (`CON`), evidence (`EVD`), hypothesis (`HYP`),
-  concept (`CPT`), three-character per-kind prefixes —
-  and may not be extended without a reserved id. `finding` is excluded (§3, §8).
+- The kind set is exactly seven — assumption (`ASM`), decision (`DEC`), question
+  (`QUE`), constraint (`CON`), evidence (`EVD`), hypothesis (`HYP`), concept
+  (`CPT`), three-character per-kind prefixes — and may not be extended without a
+  reserved id. `finding` is excluded (§3, §8).
 
-  The enumeration was refreshed by `REV-050`, which added the last three. The extension rule
-  above is **unchanged**, and deliberately so: `EVD` and `HYP` (SL-159) and `CPT`
+  The enumeration was refreshed by `REV-050`, which added the last three. The
+  extension rule above is **unchanged**, and deliberately so: `EVD` and `HYP`
+  (SL-159) and `CPT`
   (SL-197) each reserved an id before extending, so the rule was **complied with**, not
   waived. A future kind owes the same.
 - No `knowledge_record` kind may be admitted as a `backlog_item.item_kind`, and no
