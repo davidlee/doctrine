@@ -1711,46 +1711,6 @@ pub(crate) struct RecordArgs<'a> {
     pub(crate) body_mode: Option<&'a str>,
 }
 
-/// Resolve `--body`'s raw value: `-` reads `stdin` in full (a literal one-hyphen
-/// body has no way to spell itself through the flag — SL-230 PHASE-02 EX-5 — it
-/// must come via stdin instead); anything else is used verbatim. Takes
-/// `&mut impl Read` (not `io::stdin()` directly) so the stdin path is testable
-/// without driving a real pipe (mirrors `run_surface`'s in-file idiom, `:9787`,
-/// but propagates the read error rather than swallowing it — a `--body -` that
-/// fails to read is a real error, not an advisory that degrades to silence).
-fn resolve_body(raw: &str, stdin: &mut impl Read) -> Result<String> {
-    if raw == "-" {
-        let mut s = String::new();
-        stdin
-            .read_to_string(&mut s)
-            .context("Failed to read --body from stdin")?;
-        Ok(s)
-    } else {
-        Ok(raw.to_owned())
-    }
-}
-
-/// The ONE wording for "a body mode with nothing to apply it to" (SL-230
-/// PHASE-05 D-P5-3, STD-001). Raised in exactly one place — [`run_edit`] — so
-/// the CLI and the MCP `memory_edit` adapter, which delegates to it, carry the
-/// identical message *by construction* rather than by two assertions happening
-/// to agree. It names both spellings because one message serves both surfaces.
-pub(crate) const BODY_MODE_REQUIRES_BODY: &str = "body_mode requires body — a mode with no body to \
-     apply it to is never an edit (CLI: --body-mode requires --body)";
-
-/// Resolve `--body-mode`'s raw value to the engine's [`BodyMode`]. Lives here,
-/// not in `entity`: `entity` is clap-free and knows nothing of flag spellings
-/// (ADR-001 — the command layer depends downward, never the reverse). Normalizes
-/// like `--trust`/`--severity` (trim + lowercase) and refuses anything else with
-/// a worded error rather than silently defaulting. SL-230 PHASE-03.
-fn parse_body_mode(raw: &str) -> Result<BodyMode> {
-    match raw.trim().to_lowercase().as_str() {
-        "replace" => Ok(BodyMode::Replace),
-        "append" => Ok(BodyMode::Append),
-        other => bail!("unknown body mode {other:?} (known: replace, append)"),
-    }
-}
-
 /// `doctrine memory record` — capture the born frame + scope, mint a uid, scaffold
 /// `items/<uid>/`, and (iff a key) create the transactional `<key> -> <uid>` alias.
 /// Non-idempotent by design (design § 5.5): each call mints a fresh uid.
@@ -1778,7 +1738,7 @@ pub(crate) fn run_record(
     // transactional `materialise_named` write below, never a second write.
     let body = args
         .body
-        .map(|raw| resolve_body(raw, &mut io::stdin()))
+        .map(|raw| crate::input::resolve_body(raw, &mut io::stdin()))
         .transpose()?;
 
     // ADR-006 amendment (SL-032 PHASE-04): recording on a linked worktree risks a
@@ -4244,7 +4204,7 @@ pub(crate) fn run_edit(
     // function, so both surfaces carry `BODY_MODE_REQUIRES_BODY` by
     // construction and cannot drift apart.
     if fields.body_mode.is_some() && fields.body.is_none() {
-        anyhow::bail!("{BODY_MODE_REQUIRES_BODY}");
+        anyhow::bail!("{}", crate::input::BODY_MODE_REQUIRES_BODY);
     }
     if !fields.has_any() {
         anyhow::bail!("`memory edit` requires at least one flag");
@@ -4261,13 +4221,13 @@ pub(crate) fn run_edit(
     let mode = fields
         .body_mode
         .as_deref()
-        .map(parse_body_mode)
+        .map(crate::input::parse_body_mode)
         .transpose()?
         .unwrap_or(BodyMode::Replace);
     let body = fields
         .body
         .as_deref()
-        .map(|raw| resolve_body(raw, &mut io::stdin()))
+        .map(|raw| crate::input::resolve_body(raw, &mut io::stdin()))
         .transpose()?;
 
     let text = fs::read_to_string(&toml_path)
@@ -5995,13 +5955,13 @@ to = "mem_018e000000000000000000000000000b"
     fn record_body_from_stdin() {
         let md = "# Title\n\nPara one.\n\nPara two, with a  double space.\n";
         let mut cursor = std::io::Cursor::new(md.as_bytes());
-        let resolved = resolve_body("-", &mut cursor).unwrap();
+        let resolved = crate::input::resolve_body("-", &mut cursor).unwrap();
         assert_eq!(resolved, md, "stdin body must survive unaltered");
 
         // A literal, non-`-` value is used verbatim — stdin is never touched.
         let mut untouched = std::io::Cursor::new(b"should not be read".as_slice());
         assert_eq!(
-            resolve_body("literal text", &mut untouched).unwrap(),
+            crate::input::resolve_body("literal text", &mut untouched).unwrap(),
             "literal text"
         );
     }
@@ -8827,7 +8787,9 @@ weight = 0
             ..Default::default()
         });
         assert!(
-            alongside.to_string().contains(BODY_MODE_REQUIRES_BODY),
+            alongside
+                .to_string()
+                .contains(crate::input::BODY_MODE_REQUIRES_BODY),
             "{alongside}"
         );
 
@@ -8836,7 +8798,9 @@ weight = 0
             ..Default::default()
         });
         assert!(
-            alone.to_string().contains(BODY_MODE_REQUIRES_BODY),
+            alone
+                .to_string()
+                .contains(crate::input::BODY_MODE_REQUIRES_BODY),
             "a lone body_mode must hit the totality guard, not the generic \
              at-least-one-flag gate: {alone}"
         );

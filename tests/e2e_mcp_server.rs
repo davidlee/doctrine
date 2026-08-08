@@ -1064,7 +1064,8 @@ fn e2e_memory_edit_roundtrip() {
 
 /// The one refusal wording for `body_mode` with no `body`, asserted as a
 /// literal because this integration crate cannot see the `pub(crate)` const it
-/// mirrors (`memory::BODY_MODE_REQUIRES_BODY`). That duplication is the point:
+/// mirrors (`input::BODY_MODE_REQUIRES_BODY`, moved there by SL-249 PHASE-08
+/// D1 so `knowledge edit` shares it). That duplication is the point:
 /// the rule is implemented once, in `run_edit`, and this is the drift detector
 /// on the MCP surface that inherits it (SL-230 PHASE-05 D-P5-3).
 const BODY_MODE_REQUIRES_BODY: &str = "body_mode requires body — a mode with no body to apply it \
