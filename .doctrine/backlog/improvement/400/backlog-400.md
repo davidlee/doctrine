@@ -185,3 +185,49 @@ POL-002 bounds how much host-harness knowledge may enter the engine.
   activation model this settles on.
 - RFC-018: Claude harness field notes.
 - SPEC-010 / PRD-003: the governing spec pair.
+
+## SL-250 closed 2026-08-08 — what it discharged, what stays open
+
+**Discharged.** SL-250 (*Retire the Claude plugin delivery channel*) shipped this
+item's whole **activation** half:
+
+- All nine plugin hook entries — collapsing onto six `HookSpec`s plus the existing
+  `create_fork`, emitting **eleven entries across five events** — now merge
+  directly into a scope-selected `.claude/settings*.json` through the existing
+  owner-locked merge core. No parallel merge path was built.
+- The scope is a sticky `[install] claude-settings-scope` key defaulting to
+  project `.claude/settings.json`, with no `--scope` flag (`DEC-163`), and writing
+  one scope evicts doctrine-owned entries from the other and reports it
+  (`DEC-164`).
+- The Claude skills channel was restored to the direct `.doctrine/skills/<id>` +
+  relative-symlink route SPEC-010 already specified, and the automated plugin
+  steps were removed from `doctrine install`.
+- Governed by REV-049: `REQ-186` amended, `REQ-476` (`FR-008`) and `REQ-477`
+  (`FR-009`) introduced on SPEC-011.
+
+**`OQ-1` held.** Only the marketplace/plugin *delivery path* retired.
+`plugins/` stays the canonical skill source for every channel and
+`.claude-plugin/marketplace.json` stays published — which is load-bearing, not
+courtesy: `strictPluginOnlyCustomization` is a managed-settings policy
+direct-write cannot satisfy at all, so the plugin remains the only working path
+in such an environment. Written up in RFC-018 §1h.
+
+**Still open, on two independent counts:**
+
+1. **`OQ-4` — migration.** This repo has not cut over: `.claude/settings.json`
+   still carries `enabledPlugins` and no `hooks` key (RV-350 `F-8`). Pre-existing
+   per-user state was explicitly left untouched. This is the two-act operator
+   action in the `DEC-167` order.
+2. **The doctor leg is IMP-407's**, carved out by the user 2026-08-06 — this slice
+   shipped activation, IMP-407 ships the *diagnosis* of activation. RV-350 found a
+   sibling for it worth carrying: `doctrine install --agent claude` in a fresh
+   project used to wire nothing and report it as routine detection output
+   (`install_harnesses` discarded `--agent`; fixed in `PHASE-04`). The install verb
+   should be able to say *why* it wired nothing, not only the doctor.
+
+**Related-list corrections from the close:** CHR-045 is **not** moot (the published
+marketplace survives, so a stale plugin is still a real defect) — reassessed and
+explicitly retained. IMP-234 is **reduced** — its marketplace-source axis is moot
+with the removed plugin steps, its abspath census survives. CHR-037 keeps leg 1
+only; legs 2–3 observe the registration SL-250 removed. Assessments are on those
+cards.
