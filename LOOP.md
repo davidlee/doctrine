@@ -216,19 +216,34 @@ Call `ScheduleWakeup(stop: true)` and report, on any of:
   ask; do not spawn again.
 - **No progress.** Three firings with no phase-status change and no new commit,
   or three revives of one phase.
-- **Budget — and check the window before you invoke this.** Stop only when the
-  session is genuinely near the end of *its* context window, not at a number
-  copied from this file. On a 1M-context model that is ~800k, not 250k; stopping
-  at a quarter of the window turns an autonomous loop back into a babysat one,
-  which is the failure this file exists to prevent. When you do stop: write
-  `handover.md`, stop, and say a fresh session should resume from it.
+**Budget is NOT a stop condition.** It is a hand-over condition, and it is the
+one beat where getting the distinction wrong converts an autonomous loop back
+into a babysat one. It has its own section below.
 
-  A summarization is **survivable by construction** — disk is truth, and
-  `handover.md` is rewritten every firing precisely so a firing can begin knowing
-  nothing. Prefer to avoid it; do not treat it as a catastrophe worth ending a
-  healthy loop to dodge.
+## Budget — come up fresh, do not stop
 
-## Budget
+At **~250k** the orchestrator is done, but **the loop is not**. Hand the role to
+a fresh context and keep driving; do not halt and ask the human to restart you.
+Halting here is not caution, it is the failure this file exists to prevent —
+the human set a loop up precisely so they would not be the thing that resumes it.
+
+The beat, in order:
+
+1. finish the firing you are in — never hand over mid-phase with an unverified
+   claim outstanding;
+2. rewrite `handover.md` so a context that knows *nothing* can continue (it is
+   already written that way every firing — this is a check, not new work);
+3. **spawn a successor orchestrator sub-agent**, briefed with `LOOP.md`, the
+   slice id, and `handover.md`, to carry the next phases and hand back ≤15 lines;
+4. re-arm the loop and keep going, now paying only the successor's hand-back.
+
+The human is told what happened, not asked to do it. The only conditions that
+stop the loop are in § Stop conditions, and running low on context is not one of
+them.
+
+A summarization is **survivable by construction** — disk is truth, `handover.md`
+is rewritten every firing precisely so a firing can begin knowing nothing. Prefer
+to come up fresh before one; do not treat one as a catastrophe.
 
 Delegation is what keeps the orchestrator alive: planning a phase is a
 session-sized job, and doing it in-context burns the loop down in three or four
