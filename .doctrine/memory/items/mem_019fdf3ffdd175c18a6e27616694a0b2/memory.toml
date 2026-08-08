@@ -1,0 +1,43 @@
+memory_uid = "mem_019fdf3ffdd175c18a6e27616694a0b2"
+memory_key = "mem.pattern.doctrine.assign-vt-by-code-owner-not-provenance-block"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Assign a VT mandate to the phase that owns the file, not the phase whose provenance lists the title"
+summary = "A design's Verification alignment groups titles by section, not by phase; a VT whose test_file another phase writes is an inert gate."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = [".doctrine/slice/*/plan.toml"]
+globs = []
+commands = []
+tags = ["plan", "criteria", "verify-vt", "phases"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b42d4fd364baed60b2b643acf2fecb77d33fed3d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5b99582955c0bf15c158942ffbdb6207a07e297acb0132e06f5f9bb6a86370e7"
+base_commit = "721f1fa774f09ee2414ce0085de4b0e165dee2ed"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

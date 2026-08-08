@@ -74,49 +74,52 @@ resolution needs. To be verified at point of use, not assumed from the code map.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · plan · stage 2 (spine done, PHASE-02 criteria done) · bb3b7819a
+fresh-as-of: 2026-08-08 · plan · stage 2 complete (all ten phases carry criteria) · 721f1fa77
 
 ### Produced
 
-- Lifecycle `design` → `plan`. `plan.toml` + `plan.md` authored — the ten-phase
-  spine, objectives and provenance only, no criteria (`cb957d8a1`).
-- `PHASE-02` criteria expanded — 2 EN, 9 EX, 10 VT + 1 VA (`560959e05`). Nine
-  phases of criteria remain, then the stage-3 integration pass.
-- Minted `ISS-323` — `sec-6`'s `EXPORTED` constant omits `clock::today`.
-- Minted `DEC-180` — the `PHASE-10` admission test may red the tree on a host
-  without bubblewrap.
-- Design premises re-grepped against the tree at the `/plan` gate; none stale,
-  so no design back-edge was taken.
+- Stage 2 complete — `PHASE-01` and `PHASE-03`…`PHASE-10` criteria expanded
+  (`41f9abdc2`…`721f1fa77`, one commit per phase). Ten phases now carry 31 `EN`,
+  160 `EX`, 55 `VT`, 35 `VA`, 1 `VH`.
+- `PHASE-07` `EX-14` amended mid-stage — `Property`'s variants arrive with their
+  rows, not all at `PHASE-07`; `PropertyRemoval` is the enum that must be
+  complete early, for a different reason.
+- Twelve `# NOTE for the integration pass` comments recorded in `plan.toml` —
+  stage 3's concrete worklist, in the file stage 3 reads.
+- `DEC-180` § *Where it lands* amended — the cost arrives at `PHASE-08`, not
+  `PHASE-10`; the decision itself does not move.
 - No code touched, so no `doctrine check gate` applies; `doctrine validate`
-  clean. All `.doctrine` changes committed path-limited — another agent's
-  `SL-249`/`SL-250` and `.doctrine/rfc/027/` left untouched. `flake.lock` and
-  `.claude/settings.json` were dirty on arrival and are left alone.
-- Friction: `observations/records/37/` — the research staleness advisory fires
-  on normal lifecycle progression.
+  clean and `verify-vt` reports **0 `UNCHECKABLE`**. All `.doctrine` changes
+  committed path-limited — another agent's `SL-249`/`SL-250` and
+  `.doctrine/rfc/027/` left untouched. `flake.lock` and `.claude/settings.json`
+  were dirty on arrival and are left alone.
 
 ### Learned
 
-- `mem.pattern.doctrine.size-phases-on-evidence-not-lines` — why ten phases came
-  off `sec-8`'s evidence table rather than off the scope's line band.
-- `mem.pattern.review.bind-scope-bar-and-never-self-rule` — routes two `RV-346`
-  lessons the previous pass left as unhomed prose.
+- `mem.pattern.doctrine.assign-vt-by-code-owner-not-provenance-block` — a design's
+  `Verification alignment` groups titles by section, not by phase; five titles
+  moved phase this session.
 - `mem.fact.bubblewrap.unshare-user-is-a-no-op-unprivileged`.
 - `EVD-014` — the measured arms carry table A rows 13 and 14.
-- `ISS-322` — a design run mints its own pass `RV`, so an externally conducted
-  review can never be named by `Conducted`.
 - `ISS-320` — no verb emits the `adopt_authored` section map; validate the
   recomputation against the unedited document before relying on it.
 - `ISS-271` / `ISS-226` — at plan time `verify-vt` FAILs a `test_file` that is
   the phase's own output and mis-words `UNATTRIBUTABLE`; expected tooling
-  behaviour, not a defect in `PHASE-02`'s mandates.
+  behaviour. The signal that *is* trustworthy at plan time is the
+  `UNCHECKABLE` count.
 
 ### Open
 
-- **Next is stage-2 criteria for the remaining nine phases, `PHASE-01` first** —
-  `plan.md` § *Authoring stages* carries the recipe and § *Design-section
-  provenance* the per-phase reading list. Stage 3 is the integration pass.
-- `doctrine slice phases 248` deliberately **not** run — it would materialise
-  hollow sheets while criteria are still empty.
+- **Next is stage 3, the integration pass** — `plan.md` § *Authoring stages*
+  carries the checklist; the twelve `# NOTE for the integration pass` comments
+  in `plan.toml` are the concrete worklist.
+- `plan.md` § *File ownership* disagrees with the criteria on three files
+  (`src/lib.rs`, `tests/architecture_layering.rs`, root `src/main.rs`) —
+  stage-3 prose correction.
+- `plan.md` § *What each phase changes about the tree* attributes the flag day
+  to `PHASE-10`; the first executed capsule test is `PHASE-08` — stage-3 prose
+  correction, `DEC-180` carries the durable version.
+- `doctrine slice phases 248` deliberately **not** run — belongs after stage 3.
 - `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
   because `sec-9`'s corrections list cannot be edited without a recovery cycle.
 - `DEC-180` — settles the local-host case only; the CI ruling stays owed by

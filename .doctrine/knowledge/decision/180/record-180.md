@@ -50,3 +50,11 @@ suite in CI. This decision does not pre-empt that one.
 
 `SL-248` `plan.md` § *What each phase changes about the tree* records this
 against PHASE-10, which is the phase whose landing makes the assertion complete.
+
+**The cost arrives earlier than that, and the prose does not yet say so.**
+PHASE-08 provisions real capsules for table C, so from PHASE-08 onward the tree
+reds on a host that cannot run the backend; PHASE-09 and PHASE-10 compound it
+rather than introduce it. `plan.md`'s "from PHASE-10 onward" is wrong on timing
+and right on everything else. Found while authoring PHASE-09's criteria; the
+prose correction is stage-3 work and the decision itself does not move — the
+accepted cost is the same cost, two phases sooner.
