@@ -5,10 +5,11 @@
 //! proves the Claude-surface install (design §9):
 //!   * VT-1: `install --agent claude --skill code-review` wires skills + agent def.
 //!   * VT-2: the dispatch-worker agent def resolves at `.claude/agents/`.
-//!   * SL-250 PHASE-04: Claude hooks are settings-wired again, by direct write —
-//!     eleven entries across five events, from the `claude_hook_specs` registry
-//!     into the scope-selected settings file (project by default, `DEC-163`).
-//!     The plugin channel still carries them too until PHASE-06 retires it.
+//!   * SL-250 PHASE-04: Claude hooks are settings-wired by direct write — eleven
+//!     entries across five events, from the `claude_hook_specs` registry into
+//!     the scope-selected settings file (project by default, `DEC-163`).
+//!   * SL-250 PHASE-06: the plugin/marketplace channel is retired — install
+//!     never invokes Claude plugin machinery.
 
 #![allow(
     clippy::expect_used,
@@ -208,15 +209,13 @@ fn install_wires_skills_agent_and_hooks_directly() {
     let dir = tmp.path();
 
     let out = install(dir);
-    // IMP-223: skills + hooks now via claude plugin commands. The outcome
-    // depends on whether `claude` is on PATH; assert only invariants that
-    // hold regardless.
+    // SL-250 PHASE-06 (D2): the plugin-summary claim goes; a positive
+    // assertion on its direct-write replacement keeps a golden on the
+    // forward summary.
     assert!(
-        out.contains("register marketplace + install plugin + agent def for claude"),
-        "forward summary mentions plugin path: {out}"
+        out.contains("install skills + agent def for claude"),
+        "forward summary: {out}"
     );
-    // Either the reminder (claude absent/skipped) or the commands ran.
-    // We don't assert on specific plugin output — environment-dependent.
     // Agent def still installed manually.
     assert!(
         out.contains("linked    dispatch-worker.md"),
@@ -234,6 +233,44 @@ fn install_wires_skills_agent_and_hooks_directly() {
         "the direct skills channel links on a fresh install: {out}"
     );
     assert_installed(dir);
+}
+
+/// SL-250 PHASE-06 VT-2. A real install never invokes Claude plugin machinery —
+/// no marketplace registration, no plugin install/update, no "requires the
+/// doctrine plugin" reminder — now that hooks and skills are both
+/// direct-written (PHASE-04, PHASE-05).
+#[test]
+fn install_never_invokes_claude_plugin_machinery() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path();
+
+    let out = install(dir);
+
+    assert!(
+        !out.contains("marketplace"),
+        "no marketplace registration/refresh: {out}"
+    );
+    assert!(
+        !out.contains("plugin install") && !out.contains("plugin update"),
+        "no plugin install/update: {out}"
+    );
+    assert!(
+        !out.contains("requires the doctrine plugin"),
+        "no plugin reminder: {out}"
+    );
+
+    // POSITIVE CONTROL (STOP-2): a line that DOES still print — the agents
+    // leg's agent-def link, already asserted live by
+    // `install_wires_skills_agent_and_hooks_directly` above. If a broken
+    // capture silently emptied `out`, every absence assertion above would
+    // pass vacuously; this fails it loudly instead.
+    assert!(
+        out.contains("linked    dispatch-worker.md"),
+        "positive control: agent def install still prints: {out}"
+    );
 }
 
 /// SL-250 PHASE-04 VT-3 / `EX-4`. A real install wires **eleven** entries across

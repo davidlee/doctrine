@@ -41,8 +41,8 @@ pub(crate) struct DoctrineToml {
     /// the spawn arm (SL-108 design D3 / IMP-101).
     #[serde(default)]
     pub(crate) dispatch: crate::dispatch_config::DispatchConfig,
-    /// The `[install]` table — parameterises the printed post-install plugin /
-    /// npx-skills instructions (SL-152 PHASE-06).
+    /// The `[install]` table — the npx-skills delegation slug and the Claude
+    /// settings activation scope (SL-152 PHASE-06; SL-250).
     #[serde(default)]
     pub(crate) install: crate::install_config::InstallConfig,
 }

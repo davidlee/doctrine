@@ -1,10 +1,9 @@
 //! IMP-223 — `doctrine install --agent claude --skill code-review`
 //! end-to-end over the built binary.
 //!
-//! Hooks still register via `claude plugin` commands (`claude` is absent in
-//! test, so we verify the graceful-failure + reminder paths there), but skills
-//! are direct-written (SL-250 PHASE-05): a canonical tree under
-//! `.doctrine/skills/` plus a proven-ownership symlink under `.claude/skills/`.
+//! SL-250 PHASE-06: the Claude plugin/marketplace path is retired. Hooks and
+//! skills are both direct-written: a canonical tree under `.doctrine/skills/`
+//! plus a proven-ownership symlink under `.claude/skills/` (PHASE-05).
 
 #![allow(
     clippy::expect_used,
@@ -49,11 +48,11 @@ fn install_links_then_refreshes_and_keeps_an_override() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
-    // IMP-223: skills + hooks are now handled by `claude plugin install`.
-    // Plugin command outcomes are environment-dependent; assert invariants only.
+    // SL-250 PHASE-06: skills + hooks are both direct-written now — no
+    // marketplace registration, no plugin install.
     let out = install(dir);
     assert!(
-        out.contains("register marketplace + install plugin + agent def for claude"),
+        out.contains("install skills + agent def for claude"),
         "forward summary: {out}"
     );
     // Skills are direct-written (SL-250 PHASE-05): a fresh install links.

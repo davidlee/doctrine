@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `install_config` — the `[install]` section of `doctrine.toml` (SL-152 PHASE-06).
 //!
-//! Parameterises the printed post-install delegation instructions: the git repo
-//! slug the Claude plugin marketplace (`/plugin marketplace add <repo>`) and the
-//! universal npx skills command (`npx skills add <repo> …`) resolve against.
-//! A pure leaf (ADR-001): serde defaults only, no IO and no domain knowledge —
-//! mirrors the `dispatch_config` precedent.
+//! Parameterises two install-time choices: the git repo slug the universal npx
+//! skills delegation (`npx skills add <repo> …`) resolves against, and — since
+//! SL-250 — which Claude settings file `boot install` / `memory sync install`
+//! writes its direct-written hooks into (`claude_settings_scope`). A pure leaf
+//! (ADR-001): serde defaults only, no IO and no domain knowledge — mirrors the
+//! `dispatch_config` precedent.
 
 use serde::Deserialize;
 
@@ -69,7 +70,7 @@ impl ClaudeSettingsScope {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub(crate) struct InstallConfig {
-    /// The git repo slug for the plugin marketplace / npx skills commands.
+    /// The git repo slug the universal npx skills delegation resolves against.
     /// Defaults to `davidlee/doctrine`.
     #[serde(default = "default_repo")]
     pub(crate) repo: String,
