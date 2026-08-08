@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 86536bdfa
-· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` completed, `PHASE-05` next
+fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · 347c8e91c
+· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` `PHASE-05` completed, `PHASE-06` next
 
 ### Produced
 
@@ -40,6 +40,25 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   `mem.pattern.serde.flatten-forbids-deny-unknown-fields` (both amended in place).
 - `mem.pattern.testing.mapping-oracle-lives-below-the-check` — how `I10` pins a
   mapping without the table deciding its own verdict.
+- `PHASE-05` (582ac7ba8, one commit; execution record 347c8e91c) — `settle`, in
+  one write. `ensure_status_token` extracted from `set_record_status` (`EN-2`)
+  and called from both pre-existing sites; the `Settlement` table with
+  `derived_settleable`; `apply_settlement` composing `PHASE-04`'s planned-edit
+  seam so the captured field, actor, date and status land in ONE write of one
+  document; `knowledge settle` wired through the enum, the dispatch and
+  `guard.rs:216`. `VT-1`–`VT-3` PASS; gate exit 0, **4468** tests (4447 at
+  `PHASE-04` close, +21 matching the diff's `#[test]` count);
+  `commands::facet::` held at 33 with an empty diff. `VA-1` adjudicated
+  **confirm** — see *Open*. Execution record: shard `notes_04-06.md`. Memory
+  `mem.pattern.doctrine.compose-two-write-cores-bind-both-legs`.
+  **Recovered from a worker killed by a session limit at T7** with the phase
+  green but uncommitted: the orchestrator re-ran the gate, committed the source
+  and the memory, and a second worker reconstructed the execution record from
+  the diff. `R-clippy` did not fire — the `Settle(SettleArgs)` tuple variant
+  sidesteps `large_enum_variant` without a `Box`.
+- `f033e11b8` — `LOOP.md`: commit per task, harvest at that boundary. The
+  session-limit loss was of *reasoning*, not code; the driver had said "harvest
+  as you go" but bound it to no boundary. Friction observation `637a48b53`.
 - `PHASE-04` (1683a5703 … 86536bdfa, two movements) — the facet write seam and
   its surface. Movement 1: `KeyPosture` threaded through
   `facet_write::set_facet_mixed` / `apply_set_mixed`; `plan_facet_edits` (pure,
@@ -243,6 +262,52 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   to trip the lint, and the gate is zero-warnings. `D4`'s substance is intact
   (one optional facet-edit payload on the edit command); only the indirection
   differs from the design's literal spelling. A one-line reconcile note, no id.
+- **Design §10 press item 2 should be STRUCK, and `VA-1` says why.** The press
+  item attributes to `DEC-178` the argument that the resolving transition is a
+  coupled multi-write — but `DEC-178`'s recorded rationale is entirely about
+  *reach* (which states are settleable, derived from facet-name correspondence).
+  The ordering argument was the design's own drafted `D6`, so `F-2` struck a
+  drafting artefact, not a plank of the decision. Verified against
+  `knowledge inspect DEC-178`. The verb also survives on its own merits: "one
+  write of one document" is true of the mechanism but false of the *reach* —
+  `knowledge edit` writes `[facet]` only, while `run_settle` puts `status` and
+  `updated` in the same `apply_settlement` call, so reaching `answered` with its
+  answer via existing verbs still takes two commands. And `settle` rests on
+  refusals `edit` cannot host: `edit` must keep `""` as a legitimate clear,
+  whereas `settle` must refuse it, so the two need opposite readings of the same
+  empty string. **Owed at reconcile**; rides the `PHASE-07` REV.
+- **`D-A` — design §5.2's "mechanical over `facet_fields`" is under-stated.**
+  Taken literally over `facet_fields` alone the derivation yields **five**
+  settleable states, not four: `DECISION_FACET_FIELDS` carries `decided_by` /
+  `decided_on` while `decided` is not a decision status. The shipped derivation
+  is *status-seeded ∩ facet row*, which is what `DEC-178`'s rationale already
+  argues ("laying the status vocabularies against the facet field names gives an
+  exact correspondence" — a correspondence is an intersection). `I5` then holds
+  from both sides: `accepted` excluded by the facet leg, `decided` by the status
+  leg. **Wording correction owed at reconcile** — under-stated, not wrong.
+- **`D-C` — `apply_settlement` takes `canonical` and `hint`** beyond the
+  design's illustrative signature. Mechanically forced by the two cores it
+  composes. A divergence of signature, not of design. No id.
+- **`R-withdrawn-overlap` is a product fact, not an accident.** `waived` and
+  `invalidated` sit in both a settleable set and `WITHDRAWN_STATUSES`, so a
+  settled CON or ASM can be neither re-settled nor settled to its sibling state:
+  **`settle` is a one-way door per record.** Intended (`D7` plus the withdrawn
+  refusal, reusing one predicate) but surprising enough to state at reconcile.
+- **An evidence gap that could not be closed: `T1`'s `C2` control.** No
+  characterization test of `set_record_status`'s foreign-state refusal exists in
+  the tree — none pre-existing, none added — so the `EN-2` extraction's
+  equivalence rests on inspection (one call site, identical format string)
+  rather than on a control that would have gone red. Whether worker 1 ran a
+  green-first one is unrecoverable, because it died before writing Findings.
+  Ticked as work-complete, flagged **control-incomplete**. This is the concrete
+  cost of the deferred harvest, and the reason `LOOP.md` now commits per task.
+- **`R-inventory`, third occurrence.** `VT-3` shipped **9** refusal cases
+  against the sheet's 6. Prior two: a new `Finding` category's touch sites were
+  6 not 5, and `PHASE-04` staged 5 `expect(dead_code)` not 3. Every counted
+  inventory on this slice has been short. Also: a small `STD-001` residual on
+  `kebab_flag`, and one existing test body took a one-line rename-through
+  (`built_edit_command` → `built_knowledge_verb("edit")`) — declared by the
+  worker, not a behaviour-preservation `S1`.
 - `R1` — the amendment is authorship across two entities.
 - `R2a` — ordering: SL-249's REV lands before `SL-246` derives its field lists.
 - `IMP-403` leads 3–5 — owed as backlog items at close, not by any phase.
