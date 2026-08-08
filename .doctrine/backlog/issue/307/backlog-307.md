@@ -63,3 +63,39 @@ endpoints.
   makes the width warning read as benign.
 - F-P04-6 — the shared-tree hazard record this joins.
 - ISS-306 — the other tooling gap found in the same phase.
+
+## Second sighting — SL-250 audit (RV-350 `F-5`, 2026-08-08)
+
+The same defect, at a scale that made the conformance report unusable as a
+scope-creep signal rather than merely inaccurate.
+
+`doctrine slice conformance 250` reported **27 undeclared** paths. Attributing
+them commit-by-commit, **20 were foreign** — committed by other agents on the
+shared `edge` branch during SL-250's execution window:
+
+- `src/plan.rs` — SPEC-031 / IMP-382 / ISS-321
+- `.doctrine/rfc/027/**`, `.doctrine/rfc/029/**`
+- `.doctrine/slice/248/{notes.md,plan.md,plan.toml,slice-248.toml}`
+- `.doctrine/backlog/improvement/411/**`, `.doctrine/backlog/issue/321/**`
+- `.doctrine/knowledge/decision/181/**`
+- two `.doctrine/observations/records/**`, one `.doctrine/memory/items/**`
+
+Also absorbed: a `.claude-plugin/marketplace.json` edit from the `chore: v0.37.0`
+release bump (`88d6ecfc9`). SL-250 `PHASE-06` `EX-5` requires that file to be
+**untouched** — it *is* untouched by the slice, but the report cannot say so, so
+a criterion's own evidence is inverted by the capture.
+
+**Why this is worse than a wide range.** The audit skill designates the
+undeclared cell as the *highest-signal* lead and instructs that each entry be
+treated as a finding candidate. At 20/27 foreign the cell inverts: the auditor
+must clear it by hand before any entry can be read as a lead, and an auditor who
+does not will raise findings against other slices' work. The existing width
+warning does not help — it describes span, and every entry here sits inside a
+legitimately wide span.
+
+Ranges here come from `code_start_oid` per phase
+(`.doctrine/state/slice/250/phases/phase-0N.toml`), so the same root cause
+applies to the *start* boundary as to `code_end_oid` — every concurrent commit
+between two phase starts lands in the earlier phase's delta. Worth settling
+alongside `IMP-175` (stale `code_start_oid`) and `IMP-282` (exclude slice-own
+process artifacts), which together cover three faces of one problem.

@@ -2187,13 +2187,21 @@ pub(crate) fn write_scope_report(
     if swept.unreadable {
         writeln!(
             out,
-            "  claude: could not sweep part of {abandoned} (malformed) — stale doctrine hooks may still fire there"
+            "  {tag}claude: could not sweep part of {abandoned} (malformed) — stale doctrine hooks may still fire there"
         )?;
     }
+    // Both flags are PER-SPEC facts folded across seven specs, so both lines are
+    // worded partially (RV-350 `F-3`). `removed > 0` and `skipped` co-occur
+    // whenever one event's array in the TARGET is wrongly typed while the rest
+    // merge: those specs sweep, that spec does not. A file-scoped "did not sweep
+    // <abandoned>" would then sit directly beneath "evicted N entries from
+    // <abandoned>" and contradict it. `EX-7`'s intent is unchanged — the line
+    // still reads as "the activation is still in the other file and it is the
+    // only copy", not as "cleanup skipped".
     if swept.skipped {
         writeln!(
             out,
-            "  claude: did not sweep {abandoned} — {target} could not be written, so there is nothing to replace it with"
+            "  {tag}claude: left some doctrine hooks in {abandoned} — they could not be written to {target}, so there is nothing to replace them with"
         )?;
     }
     Ok(())
@@ -5799,9 +5807,66 @@ mod tests {
         assert!(rendered.contains(SETTINGS_LOCAL_REL), "{rendered}");
         assert!(rendered.contains(SETTINGS_PROJECT_REL), "{rendered}");
         assert!(
-            rendered.contains("nothing to replace it with"),
+            rendered.contains("nothing to replace them with"),
             "{rendered}"
         );
+    }
+
+    // RV-350 F-3. `removed` and `skipped` are both PER-SPEC facts folded across
+    // seven specs, so they co-occur: one wrongly-typed event array in the TARGET
+    // makes that spec `PrintedFallback` -> `NotAttempted` while the others merge
+    // and sweep. The rider then prints both lines about the SAME abandoned file,
+    // and a file-scoped "did not sweep <abandoned>" would contradict the
+    // "evicted N entries from <abandoned>" directly above it. Every line must
+    // stay true when read beside the others — the reporting obligation `sec-3`
+    // engineers the non-absorbing fold for, pointed the other way.
+    #[test]
+    fn a_skipped_sweep_does_not_contradict_a_successful_eviction() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let exec = Path::new("/abs/doctrine");
+        seed_scope(root, "project");
+        fs::create_dir_all(root.join(".claude")).unwrap();
+
+        // TARGET: valid JSON, but `hooks.WorktreeCreate` is hand-edited to a
+        // string — so `create_fork` cannot merge while `sync` can.
+        fs::write(
+            root.join(SETTINGS_PROJECT_REL),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "hooks": { EVENT_WORKTREE_CREATE: "hand-edited to nonsense" }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        // ABANDONED: a sweepable owned entry for the spec that DOES merge.
+        fs::write(
+            root.join(SETTINGS_LOCAL_REL),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "hooks": {
+                    EVENT_SESSION_START: [entry("startup", &format!("/abs/doctrine {SYNC_ARGS}"))],
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut swept = SweepReport::default();
+        for spec in [HookSpec::sync(exec), HookSpec::create_fork(exec)] {
+            swept.absorb(install_claude_hook(root, &spec, false).unwrap().evicted);
+        }
+        assert_eq!(swept.removed, 1, "the spec that merged also swept");
+        assert!(swept.skipped, "the spec that could not merge did not sweep");
+
+        let rendered = scope_report(ClaudeSettingsScope::Project, &swept);
+        assert!(rendered.contains("evicted 1"), "{rendered}");
+        // The claim is partial ("left SOME doctrine hooks"), never a file-scoped
+        // denial that the sweep happened at all.
+        assert!(rendered.contains("left some doctrine hooks"), "{rendered}");
+        assert!(
+            !rendered.contains(&format!("did not sweep {SETTINGS_LOCAL_REL}")),
+            "a file-scoped denial contradicts the eviction line above it: {rendered}"
+        );
+        assert_eq!(rendered.lines().count(), 3, "announcement + both facts");
     }
 
     // VT-4, EX-8: the scope flip must not silence the operator's override.

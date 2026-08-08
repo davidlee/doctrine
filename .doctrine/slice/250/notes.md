@@ -854,3 +854,71 @@ this slice's notes.
 that the harness-visible copy refreshes only via a plugin update. PHASE-05 and
 PHASE-06 falsify both halves. It is high-trust and scoped to `src/install.rs`,
 so it will be retrieved by the next agent to touch the installer.
+
+## Audit harvest — RV-350 (2026-08-08)
+
+The reconciliation ledger. Eleven findings, all terminal, none contested, no
+blocker. `doctrine check gate` exit 0 after the audit's own code change. The
+`## Synthesis` and `## Reconciliation Brief` in `review-350.md` carry the detail;
+ids only here.
+
+### Fixed inside the audit — nothing owed at reconcile
+
+- **`F-2`** — two memories corrected in place, not one.
+  `mem.pattern.distribution.skill-refresh-command` (the one *Owed at close*
+  above named) **and** its sibling
+  `mem.pattern.distribution.skills-source-vs-installed`
+  (`mem_019eacd4b2af7a7099792cc3e1671cc5`), found by following the first's own
+  link. The sibling held the stronger claim — a 2026-07-25 SL-229/RV-306
+  correction declaring the `.doctrine/skills/` mechanism *dead* and the
+  directory nonexistent — and reads as authoritative precisely because it had
+  been corrected once already. Both now record that the route flipped **twice**
+  and split verification advice by channel. The *Owed at close* bullet above is
+  discharged.
+- **`F-3` / `F-4`** — `write_scope_report`'s `skipped` rider was file-scoped in
+  wording while `skipped` is a per-spec fact, so `removed > 0 && skipped`
+  printed *"evicted N entries from X"* directly above *"did not sweep X"*.
+  Reworded to *"left some doctrine hooks in X …"*, mirroring the `unreadable`
+  line's existing partial wording; `{tag}` added to the two lines that dropped
+  it under `--dry-run`. New test
+  `a_skipped_sweep_does_not_contradict_a_successful_eviction`.
+  **This closes RV-348 round 2's probe 1**, the last of its five to survive
+  implementation — the pattern that round named (*the mechanism is right and the
+  sentence overclaims by one degree*) reaching the one place neither review
+  round could see.
+- **`F-6`** — `publication/manifest.toml` (`PHASE-06` `EX-7`) and
+  `tests/e2e_skills_symlink.rs` (`PHASE-05` `D1`, `PHASE-06` `EX-8`) added as
+  `design-target` selectors. Second instance of the *Selector gap* recorded
+  above, and the durable lesson is sharper than the first: a `review.selectors`
+  pass that runs once at design time cannot see the surfaces later phases
+  acquire, and here it missed two named by criteria in the **last** phase.
+
+### Routed to owned backlog
+
+- **`F-5` → ISS-307** (+ IMP-175, IMP-282 as the other two faces). `slice
+  conformance`'s undeclared cell was **20/27 foreign** — concurrent agents'
+  commits on shared `edge` landing inside this slice's phase deltas, including a
+  release-bump edit to `.claude-plugin/marketplace.json` absorbed into a range
+  `PHASE-06` `EX-5` requires untouched. At that ratio the cell **inverts**
+  rather than widens: an auditor following the skill raises findings against
+  other slices' work.
+- **`F-7` → IMP-406.** `install_skills_direct` prints `agent claude (direct):`
+  from a body `EX-3` argues is not Claude-specific — a defect `design.md`
+  `sec-5`'s own code block shares, latent at one link dir.
+- **`F-8` → IMP-400 `OQ-4`.** This repo has not cut over: `.claude/settings.json`
+  still carries `enabledPlugins` and no `hooks` key. `VH-1` is discharged (it
+  demands a *scratch* project); `sec-6`'s separate host-repo claim is not.
+
+### Owed at reconcile
+
+- **REV → SPEC-011 `REQ-186` alone**, false on four axes. `QUE-209` (widen vs
+  add) still deferred to the REV author. SPEC-010 does **not** join —
+  `DEC-171`, `VA-1` discharged and re-derived at audit.
+- **`design.md` direct edits — thirteen items**, enumerated in the brief. The
+  eight this file already listed under *At reconcile*, plus: the `sec-1` *Code
+  impact* row for `src/install.rs` is short the `install_harnesses` fix; the
+  `F-3` rider rewording; and two **general rules** replacing four more list
+  entries — *a criterion's line numbers are advisory, its named symbols
+  binding*, and *an enumerated inventory is a starting set*.
+- **At close:** CHR-045 (resolve or explicitly retain), IMP-234 / CHR-037
+  (assessed for overlap — no assessment recorded).

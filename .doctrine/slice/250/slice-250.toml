@@ -75,6 +75,16 @@ selector = "tests/e2e_claude_install.rs"
 intent = "design-target"
 note = "design.md sec-7 enumerates knowingly-rewritten assertions in both: PHASE-02 EX-10 (the .expect that panics once run_sync_install inherits the project scope) and PHASE-04 EX-6 (the three 'ships via plugin' assertions invert). Omitted at the design-time selector review, which reached only src/."
 
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+note = "RV-350 F-6: both are named by phase criteria — PHASE-06 EX-7 registers the new reference doc in publication/manifest.toml, PHASE-05 D1 and PHASE-06 EX-8 invert the skills-symlink goldens — and both had been landing in the undeclared cell. Second instance of the gap PHASE-03 half-closed for tests/e2e_*."
+
+[[selector]]
+selector = "tests/e2e_skills_symlink.rs"
+intent = "design-target"
+note = "RV-350 F-6: both are named by phase criteria — PHASE-06 EX-7 registers the new reference doc in publication/manifest.toml, PHASE-05 D1 and PHASE-06 EX-8 invert the skills-symlink goldens — and both had been landing in the undeclared cell. Second instance of the gap PHASE-03 half-closed for tests/e2e_*."
+
 [[relation]]
 label = "fulfils"
 target = "IMP-400"

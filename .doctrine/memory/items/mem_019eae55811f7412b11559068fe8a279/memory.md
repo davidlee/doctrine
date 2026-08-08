@@ -32,17 +32,25 @@ cargo build                                   # now re-embeds the edited plugins
 grep -a -c "<string you added>" target/debug/doctrine   # prove the re-embed took (-a!)
 ```
 
-**Where the refreshed copy lands changed at SL-227** (minimal projection,
-ADR-019). `install` no longer projects a local skills mirror: for claude it
-registers the marketplace and installs the plugin (so the harness-visible copy
-is `~/.claude/plugins/cache/doctrine/doctrine/<version>/skills/`, refreshed by a
-release tag + `claude plugin update` — *not* by `install -s`); other harnesses
-delegate to `npx skills add`. There is no `.doctrine/skills/` and nothing
-relinks `.claude/skills/<id>`. Consequence: after editing a master, the re-embed
-makes the *binary* current, but the slash-invocable skill in your session only
-moves on a plugin update.
+**Where the refreshed copy lands changed twice — SL-227, then back at SL-250.**
+SL-227 (minimal projection, ADR-019) stopped `install` projecting a local skills
+mirror for claude, leaving the plugin cache
+(`~/.claude/plugins/cache/doctrine/doctrine/<version>/skills/`) as the
+harness-visible copy, refreshed only by a release tag + `claude plugin update`.
+
+**SL-250 retired that channel and restored the direct write.** For claude,
+`install` now materialises a canonical `.doctrine/skills/<id>` tree
+(`skills_canonical_dir`, `src/install.rs`) and reconciles a relative
+`.claude/skills/<id>` symlink into it by proven ownership
+(`install_skills_direct` → `reconcile_link`) — SPEC-010 responsibilities 3–6.
+So `install -s <id>` **does** move the slash-invocable skill again, and no
+plugin update is involved. Other harnesses still delegate to `npx skills add`.
+The `plugins/` tree remains the canonical source for every channel, and the
+published plugin manifest survives only as the managed-policy escape hatch.
+
+Consequence for the loop above: after editing a master, the re-embed makes the
+*binary* current and the `install -s` that follows makes the session current.
 
 Sibling files (e.g. `NOTICE.md`) still ride the dir grouping — `discover()`
 collects every file under a skill dir. Author under `plugins/`, never a derived
-installed copy ([[mem.pattern.distribution.skills-source-vs-installed]] — whose
-`.doctrine/skills/` mechanism prose is itself stale post-SL-227).
+installed copy ([[mem.pattern.distribution.skills-source-vs-installed]]).

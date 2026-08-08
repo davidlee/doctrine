@@ -76,3 +76,28 @@ The steps:
 - SPEC-010 / PRD-003 — the governing spec pair; `D2` is the clause this changes.
 - IMP-245 — Cursor as a doctrine harness; a likely first beneficiary.
 - IMP-400 — the parent intent SL-250 carries.
+
+## Carried in from the SL-250 audit (RV-350 `F-7`, 2026-08-08)
+
+`install_skills_direct` (`src/install.rs`) opens with a hardcoded header before
+the `link_dirs` loop:
+
+```rust
+writeln!(out, "agent claude (direct):")?;
+```
+
+SL-250 `PHASE-05` `EX-3` argues the opposite — *"once `link_dirs` is a parameter
+nothing in the body is Claude-specific, and a Claude-named function would mislead
+IMP-406's author"* — and the design's own code block in `design.md` `sec-5`
+carries the same line, so this is a defect the design and the code share rather
+than a departure from it. It is latent while `run()`'s Claude branch passes
+exactly **one** link dir.
+
+It becomes wrong the moment this item passes `.agents/skills` as a second target:
+one header reading `agent claude (direct):` will front links written into a
+non-Claude directory, on the install path whose whole point is that the
+mechanism is harness-neutral.
+
+Cheapest fix is call-site scope and therefore this item's: either pass the label
+in, or move the header inside the `link_dirs` loop and name each target. No
+mechanism change.
