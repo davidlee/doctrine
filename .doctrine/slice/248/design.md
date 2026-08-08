@@ -708,7 +708,7 @@ are stated rather than assumed. It is not the only external command out here:
 `sec-3`'s export build drives `git` trusted-side too. The distinction is
 `SPEC-030`'s own — *"Doctrine-owned Git/object operations are separately
 constrained by the ingestion contract; wrappers and interpreters the project
-uses must be named"* (`spec-030.md:79`) — and it is why the forbidden-list check
+uses must be named"* (`spec-030.md:80`) — and it is why the forbidden-list check
 below applies to the resolver and not to that `git`.
 
 1. **It is given an already-realised path, never a flake reference or a
@@ -724,7 +724,8 @@ below applies to the resolver and not to that `git`.
    forbidden list.** After `sec-4` resolves the policy, provisioning refuses when
    the normalized basename of `closure-resolver[0]` appears in
    `trusted_side_forbidden_executables`. This is `SPEC-030`'s rule applied to
-   this slice's only external-command step — *"the trusted transaction plan …
+   this slice's only *project-supplied* external-command step — *"the trusted
+   transaction plan …
    refuses any external-command step whose normalized executable matches the
    list"* — and it makes `REQ-449`'s forbidden list a live constraint in this
    slice rather than a field with no consumer until launch exists. A project that
@@ -909,10 +910,13 @@ are the ones a shell hands a process by default.
    path or a member of a declared closure. There is no configuration — and no
    fallback taken on missing configuration — under which `/nix/store` or an
    equivalent host-wide artefact store becomes readable in its entirety.
-7. **Provisioning realises nothing.** The only external command it runs outside
-   a capsule is `closure-resolver`, on an already-realised path, and its
-   executable is checked against the transaction's own
-   `trusted_side_forbidden_executables`.
+7. **Provisioning realises nothing.** The only *project-supplied* external
+   command it runs outside a capsule is `closure-resolver`, on an
+   already-realised path, and its executable is checked against the
+   transaction's own `trusted_side_forbidden_executables`. `sec-3`'s export
+   build also drives Doctrine's own `git` trusted-side; `SPEC-030` constrains
+   that through the ingestion contract rather than the forbidden list
+   (`spec-030.md:80`), and neither realises anything.
 8. **Every termination fact is the parent's observation.** No `Termination`
    variant is derivable from capsule-written state.
 9. **The default is refusal.** Empty argv, empty mounts, both declared lists
@@ -1238,14 +1242,15 @@ two claims were not jointly satisfiable, and the sharper half of the problem was
 that `PHASE-06`'s entrance criterion asked only that `fetch_refspec` *exist* — so
 the phase would have entered clean and failed to build.
 
-Of the two resolutions the cheaper one is right. `fetch_refspec` is eight lines
-— one `git fetch` with an explicit per-command refspec, plus error formatting —
+Of the two resolutions the cheaper one is right. `fetch_refspec` is eleven lines
+(`src/git.rs:2718-2728`) — one `git fetch` with an explicit per-command refspec,
+plus error formatting —
 so widening a **published** crate's permanent public API to reuse it pays
 `sec-9` `R7`'s minimal-surface cost for almost nothing, and pays it at
 `PHASE-01`, five phases before the need appears. Wrapping locally costs a second
 git-invocation seam and nothing else. `SPEC-030` is what makes this safe rather
 than merely cheap: *"Doctrine-owned Git/object operations are separately
-constrained by the ingestion contract"* (`spec-030.md:79`), so a trusted-side
+constrained by the ingestion contract"* (`spec-030.md:80`), so a trusted-side
 `git` here is governed and needs no `trusted_side_forbidden_executables` check —
 unlike `closure-resolver`, which is project-supplied and does.
 
@@ -1398,8 +1403,10 @@ so an id can never carry a separator into the layout.
 
 Steps 1, 4, 5 and 6 are pure given `HostFacts`; steps 2, 3, 7–12 are the impure
 part, in the thin outer part of the module per the project's pure/imperative
-split. Step 7 is the one place provisioning executes an external command outside
-a capsule, and step 6 is the check that governs it.
+split. Step 7 is the one place provisioning executes a *project-supplied*
+external command outside a capsule, and step 6 is the check that governs it.
+Step 8's export build runs `git` trusted-side as well, governed by the ingestion
+contract rather than by step 6's forbidden-list check.
 
 #### Publishing the export atomically (step 8)
 
@@ -1857,7 +1864,9 @@ getting right for that reason alone rather than for a security one.
 reads until the launch slice builds a transaction plan. It is not: `sec-2`'s
 closure resolver is an external-command step the trusted side runs outside a
 capsule, and `sec-3` step 6 refuses when its normalized basename appears in the
-list — `SPEC-030`'s rule, applied to this slice's only such step.
+list — `SPEC-030`'s rule, applied to this slice's only *project-supplied* such
+step. (`sec-3`'s export build runs `git` trusted-side too, under the ingestion
+contract rather than this list.)
 
 The ordering matters and is stated in `sec-3`: the check runs **after** the
 refinement is applied, so a phase contract that adds a forbidden entry binds the
@@ -2725,7 +2734,7 @@ exactly this set, and that every module contributing one is classified `leaf` in
 permit `doctrine-control` to reach any exported engine-tier item, and this
 refuses the export in the first place — and it doubles as protection against
 the published crate's API widening by accident. `interpretation` is exported as
-a whole module because it is purpose-built and out-edge-free; the other four are
+a whole module because it is purpose-built and out-edge-free; the other five are
 individual items behind private modules.
 
 **For the intra-crate direction: run the existing gate a second time.**

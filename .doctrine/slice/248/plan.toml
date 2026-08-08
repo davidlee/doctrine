@@ -48,9 +48,9 @@ entrance_criteria = [
 
 exit_criteria = [
   { id = "EX-1", text = "`src/lib.rs` exists as the root package's lib target and is the whole public surface of the doctrine library: `clock`, `config_file`, `git` and `kinds` declared privately, and `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `CaptureError` and `read_path_at` re-exported from them. `kinds` is a path target that exports nothing — it is declared because `git.rs`'s `#[cfg(test)]` module reaches `crate::kinds` and the lib target compiles that module under `cargo test`. This is the trap in the arrangement: `cargo build` is green while `kinds` is missing, and `E0432` surfaces only when the library's tests first compile." },
-  { id = "EX-2", text = "The export-set constant carries the five items this phase exports — `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `read_path_at`, `CaptureError` — and PHASE-02 appends `interpretation`, taking it to six. `today` is present against `sec-6`'s literal constant, which omits it: the same section's prose calls `clock::today` the third export and explains that taking it is what avoids a `time` edge, and `sec-8`'s touch-set counts five items behind three private modules, which is true only with `today` among them (`ISS-323`; plan.md § Corrections owed, item 1)." },
+  { id = "EX-2", text = "The export-set constant carries the five items this phase exports — `today`, `DOCTRINE_TOML`, `read_doctrine_toml_text`, `read_path_at`, `CaptureError` — and PHASE-02 appends `interpretation`, taking it to six. `today` is present, and `sec-6`'s `EXPORTED` constant now carries it too — it did not when this criterion was written, which is what `ISS-323` and plan.md § Corrections owed item 1 were about, and the design reopen fixed it. The supporting reading stands either way: the same section's prose calls `clock::today` the third export and explains that taking it is what avoids a `time` edge, and `sec-8`'s touch-set counts five items behind three private modules, which is true only with `today` among them." },
   { id = "EX-3", text = "`src/config_file.rs` exists, out-edge-free and leaf, holding `DOCTRINE_TOML` and `read_doctrine_toml_text`; `src/dtoml.rs` re-exports both under their existing names via `pub(crate) use crate::config_file::{…}`; and `src/main.rs` gains exactly one new declaration, `mod config_file;`. All 35 call sites across the other 32 files are unedited — the relocation's whole point is that `STD-001`'s single source moves without a call-site diff." },
-  { id = "EX-4", text = "`read_path_at` and `CaptureError` are `pub` in `src/git.rs`, **`today` is `pub` in `src/clock.rs`**, and `DOCTRINE_TOML` / `read_doctrine_toml_text` are authored `pub` in the new `src/config_file.rs` (EX-3). No other item anywhere in the root package changes visibility. This is compiler-required rather than stylistic: `pub use` of a `pub(crate)` item is `E0364`. **`today` was added at the critical pass**: it is `pub(crate) fn today()` at `src/clock.rs:17`, EX-1 re-exports it, and so E0364 forces the promotion — but `sec-6`'s prose (`design.md:2597`) enumerates only the other four and says *nothing else does*, which read literally makes EX-1 and this criterion mutually unsatisfiable. This is `ISS-323`'s root cause — `sec-6` treating `today` inconsistently — in a second instance, and the resolution is the same one plan.md § Corrections owed item 1 already rules: implementation follows the prose, which calls `clock::today` the third export. Do **not** resolve it the other way by dropping `today` from the export set: that breaks PHASE-07 `EN-3`, whose `verify(..., today: String)` signature exists precisely to avoid the `time` edge `RV-346` `F-29` closed." },
+  { id = "EX-4", text = "`read_path_at` and `CaptureError` are `pub` in `src/git.rs`, **`today` is `pub` in `src/clock.rs`**, and `DOCTRINE_TOML` / `read_doctrine_toml_text` are authored `pub` in the new `src/config_file.rs` (EX-3). No other item anywhere in the root package changes visibility. This is compiler-required rather than stylistic: `pub use` of a `pub(crate)` item is `E0364`. **`today` was added at the critical pass**: it is `pub(crate) fn today()` at `src/clock.rs:17`, EX-1 re-exports it, and so E0364 forces the promotion — but `sec-6`'s prose enumerated only the other four and said *nothing else does*, which read literally made EX-1 and this criterion mutually unsatisfiable. That was `ISS-323`'s root cause — `sec-6` treating `today` inconsistently — in a second instance. **The design reopen fixed it at the source**: `sec-6` now names `today` among the items that become `pub`, so prose and constant agree and this criterion no longer depends on a reading. Do **not** resolve it the other way by dropping `today` from the export set: that breaks PHASE-07 `EN-3`, whose `verify(..., today: String)` signature exists precisely to avoid the `time` edge `RV-346` `F-29` closed." },
   { id = "EX-5", text = "`crates/doctrine-control/` exists as a bin-only workspace member — a `Cargo.toml` declaring the `doctrine` path dependency and `publish = false`, and a `src/main.rs` skeleton carrying no verb yet (`provision` lands in PHASE-06, `backend verify` in PHASE-10). The crate has **no** lib target and acquires none: a `tests/` file cannot link a bin-only package (`E0433`), and a lib target would force `sec-7`'s weakening vocabulary public (`E0603`). Every test in this crate is therefore a `#[cfg(test)]` module inside the unit it tests." },
   { id = "EX-6", text = "The new manifest's dependency list is derived from the crate's own `use` statements and not copied from `sec-6`'s table. At this phase that list is the `doctrine` path edge alone; `rustix` (`fs` **and** `std`), `serde` (`derive`) and `toml` arrive in PHASE-03 with the code that calls them. Any disagreement with the design's table is the table being stale (`RV-346` `F-29`)." },
   { id = "EX-7", text = "The workspace `Cargo.toml` gains `crates/doctrine-control` in `members`, the key `default-members = [\".\", \"crates/doctrine-control\"]`, and `\"!/src/lib.rs\"` in the published `include` allow-list. `cordage` stays outside the default set exactly as today, and `test-all`'s `--workspace` is unchanged and still covers all three packages." },
@@ -418,14 +418,16 @@ exit_criteria = [
 #    passing while the exit criterion was unbuildable, which no phase gate
 #    catches. **Ruled by the slice owner: wrap `git` locally in
 #    `doctrine-control`**, rather than widening the root library's export set.
-#    `fetch_refspec` is eight lines (one `git fetch` with an explicit refspec,
+#    `fetch_refspec` is eleven lines, `src/git.rs:2718-2728` (one `git fetch`
+#    with an explicit refspec,
 #    plus error formatting), so exporting it would pay `sec-9` `R7`'s
 #    minimal-surface cost — on a crate that ships — for almost nothing, and pay
 #    it at PHASE-01, five phases before the need appears. `SPEC-030`
-#    (`spec-030.md:79`) puts Doctrine-owned Git operations under the ingestion
+#    (`spec-030.md:80`) puts Doctrine-owned Git operations under the ingestion
 #    contract rather than the `trusted_side_forbidden_executables` check, so a
 #    trusted-side `git` here is governed and not a new hazard. `EN-3` and `EX-11`
-#    are both rewritten above; `design.md:1222` now says the same thing. **This
+#    are both rewritten above, and `sec-3` § Why the wrapper is local says the
+#    same thing in the design. **This
 #    phase is no longer blocked** — the export set PHASE-01 lands is unchanged by
 #    the ruling, so PHASE-01 is unaffected.
 verification = [
@@ -651,18 +653,22 @@ exit_criteria = [
 #    surfaced as a blank cell, `F-30` was never listed at all). The design
 #    predicts a sixth of the same shape is more likely than not. Nothing here
 #    discharges that, and no criterion should pretend to.
-# 2. **`sec-9` residual 2's arithmetic (stage-3 ruling).** The residual tracks
-#    `PropertyRemoval` growing every round and states it at **nine** variants.
-#    The vocabulary this plan lands is **ten** — PHASE-07 `EX-4` enumerates
-#    them, and `AuthorityGrant::AllCapabilities` is a separate enum on top,
-#    which is why a reader counting "eleven deltas" in the removal table and
-#    nine in the residual finds neither matching the enum. The residual's
-#    *trend* claim is what carries and it is unaffected; only its count is
-#    stale. No criterion moves — PHASE-07 `EX-4` is the authority and
-#    `PropertyRemoval` is a machine-checked enum, so nothing rests on the
-#    residual's numeral. Recorded in plan.md § Corrections owed so the
-#    reconciliation brief carries it rather than a reader taking nine as
-#    current.
+# 2. **`sec-9` residual 2's arithmetic — THIS RULING WAS WRONG. Corrected at the
+#    design reopen.** It said the residual's **nine** `PropertyRemoval` variants
+#    were stale and the vocabulary this plan lands is **ten**. Checked against
+#    the design's own enum: nine is right. `SharedRoot` — the obvious tenth to a
+#    fast reader, and probably the source of the error — is a `Delta` variant,
+#    not a `PropertyRemoval` one (PHASE-07 `EX-8` says so explicitly).
+#    PHASE-07 `EX-4` was the actual defect, saying *all ten variants* above a
+#    list of nine; PHASE-09 `EN-1` repeated it. Both are fixed.
+#    **Nine variants, ten removals**, and the two are not interchangeable:
+#    `ResourceBound(Bound)` is one variant carrying two removals (`FileSize`,
+#    `Wall`), so PHASE-09 `EN-1`'s *ten removals land together* was right all
+#    along. The design was not left untouched — residual 2 named
+#    `CredentialsConfined`, a variant replaced by `MappedIdentity` after
+#    `RV-346` `F-32`, and now names the replacement and states this distinction.
+#    The residual's *trend* claim carries and is strengthened, since
+#    `AuthorityGrant` is a second enum the seal would expose.
 verification = [
   { id = "VT-1", expects = "Table A rows 9–14, each asserting `Proven` and so running both arms. One title per row.", test_file = "crates/doctrine-control/src/conformance.rs", keywords = ["immutable_input_set_is_proven", "closed_descriptor_set_is_proven", "closed_environment_is_proven", "owned_standard_streams_is_proven", "mapped_capsule_identity_is_proven", "confined_capabilities_is_proven"], waived = false },
   { id = "VT-2", expects = "Row 9 stated per entry so a partially-writable backend cannot pass on the first, the `DEC-157` half named specifically, single-axis-ness of the delta, and the containment that the control writes only to this run's own export.", test_file = "crates/doctrine-control/src/conformance.rs", keywords = ["a_write_through_every_readable_mount_fails", "a_write_into_the_source_export_fails", "the_writable_inputs_delta_changes_no_mount_and_no_path", "the_writable_inputs_control_writes_only_to_this_runs_own_export"], waived = false },

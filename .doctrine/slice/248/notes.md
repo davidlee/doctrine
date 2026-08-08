@@ -146,30 +146,39 @@ is owing** · 18121962d
 
 ### Open
 
-- **The design reopen is OWING, and the user has authorised it.** The critical
-  pass found `C-1`: `fetch_refspec` is `pub(crate)` (`src/git.rs:2718`) and
-  absent from the export set, while `design.md:1222` says the per-base export
-  build rides it and `:2597` says nothing else becomes `pub` — so `PHASE-06`
-  `EN-3` reads as met while `EX-11` cannot compile. It is a design-text defect
-  and the design is locked (`ISS-320`), so it cannot be settled plan-side.
-  **Six further design corrections are to be folded into the same reopen**
-  rather than left owed to the reconciliation brief — `handover.md` § *The
-  design worklist* carries all seven as `D1`…`D7` with line numbers.
-- **`PHASE-06` must not start until `C-1` is settled.** `plan.toml` records this
-  at `PHASE-06` critical-pass note 5. `PHASE-01` is also exposed: if `C-1`
-  resolves by widening the export set, `EX-1`/`EX-2`/`EX-4`, `PHASE-02` `EX-8`
-  and two `VT` mandates all move, so the decision wants making before any phase
-  lands.
-- After the reopen: clear the design gates, then an **informal `codex` sanity
-  pass over the diff** — the user's call, explicitly *not* a new `RV` round.
+- **The design reopen is DONE.** `C-1` is settled and `PHASE-06` is unblocked.
+  The critical pass had found that `fetch_refspec` is `pub(crate)`
+  (`src/git.rs:2718`) and absent from the export set, while `sec-3` said the
+  per-base export build rides it and `sec-6` said nothing else becomes `pub` —
+  so `PHASE-06` `EN-3` read as met while `EX-11` could not compile. **Ruled by
+  the user: wrap `git` locally in `doctrine-control`**, with a comment at the
+  seam naming the alternative. The export set is unchanged, so `PHASE-01`,
+  `PHASE-02` and the two `VT` mandates are untouched — the exposure noted here
+  before the ruling did not materialise. `sec-3` § *Why the wrapper is local*
+  and `PHASE-06` `EN-3`/`EX-11` carry it.
+- **Seven further corrections landed in the same reopen**, so they are owed to
+  nobody: `sec-6`'s `today` omission in both prose and the `EXPORTED` constant
+  (`ISS-323`), the `renameat2` → `renameat_with` symbol, the
+  `both_declared_`/`both_readable_` spelling, `just check`'s six legs, a stale
+  `CredentialsConfined` in `sec-9` residual 2, and — found during the reopen
+  rather than handed to it — `sec-4`'s claim that `closure-resolver` is the only
+  trusted-side external command, which was false in four places once the export
+  build drives `git`. plan.md § *Corrections owed* records what happened to each.
+- The **informal `codex` sanity pass** over the reopen diff was run — the user's
+  call, explicitly *not* an `RV` round, and no ledger was opened. It found four
+  real classes of residue (stale present-tense narrative, a stale count ruling,
+  an off-by-one `SPEC-030` citation, and a wrong line count for
+  `fetch_refspec`), all now fixed.
 - `/phase-plan` for `PHASE-01` is the step after that, not instead of it.
-- `ISS-323` — design-text correction owed at `PHASE-01` and again at reconcile,
-  because `sec-9`'s corrections list cannot be edited without a recovery cycle.
-  Three more of the same shape joined it at stage 3, all in plan.md
-  § *Corrections owed* items 3–5: two title divergences in the design's
-  `Verification alignment` sections (one spelling, one name shared by two
-  tests), and `sec-9` residual 2's stale `PropertyRemoval` count (nine stated,
-  ten landed). All are corrections to design *text*; no decision moves.
+- `ISS-323` — **no longer owed at reconcile.** It and the three stage-3
+  corrections that joined it were all applied in the design at the reopen, so
+  plan.md § *Corrections owed* items 1, 2, 3 and 5 are closed rather than
+  carried. Item 4 — one test name shared by two files — stands as a deliberate
+  ruling. One of the four turned out to be an error in the *plan* rather than
+  the design: `sec-9` residual 2's `PropertyRemoval` count of nine was correct
+  all along (`SharedRoot` is a `Delta` variant), and it is `PHASE-07` `EX-4`'s
+  "ten variants" over a list of nine that was wrong. **Nine variants, ten
+  removals** — `ResourceBound(Bound)` carries two.
 - `DEC-180` — settles the local-host case only; the CI ruling stays owed by
   whichever slice first runs this suite in CI.
 - `QUE-208` — capsule-side entity id allocation; parked, does not block.

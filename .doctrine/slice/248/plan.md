@@ -473,37 +473,45 @@ load-bearing API premises, measured-versus-reasoned ordering); every lead was
 confirmed against the tree or the design before it moved a criterion, and two
 scout conclusions were narrowed on confirmation.
 
-Five findings. Four are landed here; one is a design defect and is not.
+Five findings. Four were landed here at the critical pass; the fifth was a
+design defect and was settled afterwards, at the user-authorised design reopen.
+
+**The rest of this item describes the design as the critical pass found it.**
+The defect is fixed — `sec-3` § *Why the wrapper is local rather than reaching
+for `src/git.rs`* is the current text — and the account is kept because the
+ruling below is only legible against what it ruled on.
 
 1. **`C-1` — `fetch_refspec` is unreachable from `doctrine-control`. Design
-   defect; SETTLED at the design reopen.** `src/git.rs:2718` is `pub(crate)`. `design.md:1222` — its only
-   mention anywhere in 5088 lines — says the per-base export build "rides
-   `git init --bare` plus the existing `fetch_refspec`", while `design.md:2597`
-   enumerates the four items that become `pub` and says *nothing else does*, and
-   `sec-6` makes the export list "the export contract". Both cannot hold across a
-   crate boundary. The sharp edge is that PHASE-06 `EN-3` says `read_path_at` is
+   defect; SETTLED at the design reopen.** `src/git.rs:2718` is `pub(crate)`.
+   `sec-3`'s export-build paragraph — then its only
+   mention anywhere in the design — said the per-base export build "rides
+   `git init --bare` plus the existing `fetch_refspec`", while `sec-6`
+   enumerated the four items that become `pub` and said *nothing else does*, and
+   `sec-6` makes the export list "the export contract". Both could not hold across a
+   crate boundary. The sharp edge was that PHASE-06 `EN-3` said `read_path_at` is
    "`pub` on the root library" but `fetch_refspec` merely "exists" — so the
-   **entrance criterion passes while the exit criterion is unbuildable**, and the
-   phase gate cannot catch it. The two resolutions are not equivalent: widening
+   **entrance criterion passed while the exit criterion was unbuildable**, and the
+   phase gate could not catch it. The two resolutions are not equivalent: widening
    the export set touches PHASE-01 `EX-1`/`EX-2`/`EX-4`, PHASE-02 `EX-8`, the
    `PHASE-01 VT-1` / `PHASE-02 VT-10` mandates, `sec-8`'s five-item touch count
    and `sec-9` `R7`'s minimal-surface argument; driving `git` as a subprocess in
    `provision.rs` changes no export set and matches `EX-14`'s standing posture,
-   but contradicts `design.md:1222`. **Expensive downstream** — it surfaces at
-   PHASE-06 and the first resolution must be executed at PHASE-01.
+   but contradicted the export-build paragraph as it then stood. **Expensive
+   downstream** — it surfaces at PHASE-06 and the first resolution would have had
+   to be executed at PHASE-01.
 
    **Ruled by the slice owner: wrap `git` locally in `doctrine-control`**, with
    a comment at the seam naming the alternative. Two facts found at the reopen
-   decided it. `fetch_refspec` is eight lines — `run_git(root, &["fetch",
+   decided it. `fetch_refspec` is eleven lines (`src/git.rs:2718-2728`) — `run_git(root, &["fetch",
    remote, refspec])` plus error formatting — so widening a **published**
    crate's permanent public API to reuse it pays `sec-9` `R7`'s minimal-surface
    cost for almost nothing, and pays it at PHASE-01, five phases before the need
-   appears. And `SPEC-030` (`spec-030.md:79`) puts Doctrine-owned Git operations
+   appears. And `SPEC-030` (`spec-030.md:80`) puts Doctrine-owned Git operations
    under the ingestion contract rather than the
    `trusted_side_forbidden_executables` check, so a trusted-side `git` in
-   `provision.rs` is governed rather than a new hazard. `design.md:1222`,
-   PHASE-06 `EN-3`/`EX-11` and `plan.toml`'s critical-pass note 5 all now say
-   this; the export set PHASE-01 lands is **unchanged**, so PHASE-01 and
+   `provision.rs` is governed rather than a new hazard. `sec-3` § *Why the
+   wrapper is local*, PHASE-06 `EN-3`/`EX-11` and `plan.toml`'s critical-pass
+   note 5 all now say this; the export set PHASE-01 lands is **unchanged**, so PHASE-01 and
    PHASE-02 are untouched by the ruling and the two `VT` mandates do not move.
 2. **`C-2` — PHASE-01 `EX-1` and `EX-4` were mutually unsatisfiable. Fixed.**
    `today` is `pub(crate) fn today()` at `src/clock.rs:17`; `EX-1` re-exports it,
@@ -555,5 +563,6 @@ both available under `fs` + `std` on Linux, `fs` pulls in no dependency and `std
 adds only `bitflags/std`, so the zero-new-compiled-crates posture holds and the
 publish-or-adopt protocol's atomicity is safe as specified. One correction: rustix
 has **no symbol named `renameat2`** — that is the syscall name and a `#[doc(alias)]`
-— so PHASE-06 `EX-12` and `design.md:1399` both named a symbol that does not
-exist. The plan is corrected; the design half is `D4`.
+— so PHASE-06 `EX-12` and the design's publish-by-no-replace-rename step both
+named a symbol that does not exist. Both are now corrected — the plan at the
+critical pass, the design at the reopen that followed it.
