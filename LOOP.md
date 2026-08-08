@@ -169,6 +169,11 @@ Every brief carries, and carries nothing else:
 - "in-tree on branch `sl-248`, no isolation; another agent shares this index, so
   `git status --porcelain` first and path-limit every commit";
 - "end green: `doctrine check gate`. Do not flip your own phase status."
+- "**`slice verify-vt` is not a worker self-check.** It attributes against the
+  phase's recorded delta boundary, which the orchestrator records *after* you
+  exit — so your own phase reads `UNATTRIBUTABLE` however good your tests are.
+  The gate is your evidence; `verify-vt` is the orchestrator's." Omitting this
+  cost `PHASE-07` a finding, an observation and a chase (`notes.md` item 57).
 
 **Planner** — Opus, always. Runs `/phase-plan` for one phase: reads that phase's
 `plan.toml` entry, and of `design.md` **only what that phase's row in `plan.md`
