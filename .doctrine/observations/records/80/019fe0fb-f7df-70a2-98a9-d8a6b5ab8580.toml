@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0fb-f7df-70a2-98a9-d8a6b5ab8580"
+recorded_at = "2026-08-08T10:47:17.215443808Z"
+kind = "friction"
+summary = "/phase-plan: mem_019e98a783ea7471ac4bfcefdc04ae5e (rust-embed re-embed footgun) is stale on both of its actionable instructions"
+detail = "The memory tells a reader to 'touch src/install.rs && cargo build' to force a re-embed, and warns that ./target is a stale copy because cargo target_directory is redirected to ~/.cargo/doctrine-target-jail. Both are now wrong: the install/ RustEmbed root moved to src/asset_source.rs:19-22 (SL-223), and the CARGO_TARGET_DIR redirect was removed in SL-156 (AGENTS.md: each worktree builds into its own in-tree target/). The core claim -- debug-embed is on (Cargo.toml:155), so a lone install/ template edit can leave the binary carrying the old asset -- still holds and is load-bearing for SL-249 PHASE-03's R5 control. A worker following the memory verbatim would touch the wrong file, see the control fail to go red, and conclude the pin is vacuous. Needs a /reviewing-memory amendment."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
