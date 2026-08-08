@@ -293,7 +293,29 @@ started** · design reopen DONE and the run **locked at revision 93** · 6b5036c
      occurrences across 21 files**. Load-bearing claim unaffected (the relocation
      is behind re-exports, so no call site is edited); the untouched set is the
      20 files listed in the `PHASE-01` sheet under `VA-4`.
-- **`RV-350` unresolved and odd** — a zero-finding stub with an unfilled template
-  brief, untracked in git while 973 other review files are committed, and it is
-  what the design run points at as its pass. Predates the reopen. The real
-  adversarial findings are in `RV-346`, concluded and committed.
+- **`RV-350` RESOLVED — deleted, and the design run repointed at `RV-346`.**
+  It was a zero-finding stub with an unfilled template brief, untracked in git
+  while 973 other review files were committed, and the design run cited it as its
+  review pass. Deleted at the slice owner's instruction 2026-08-08.
+  - **The substance was never in the entity.** The run's `[review.pass]` carries
+    its own `covered` fingerprint map; the RV entity was an empty shell
+    throughout. So the run asserted a pass that the ledger showed no evidence of
+    having run.
+  - Deleting it broke `doctrine design show 248` outright — the run held a hard
+    reference in two structural fields. **Repointed to `RV-346`** (`design`,
+    `done`, `reviews SL-248`, 38 findings, raiser codex / responder claude — the
+    pass that actually ran): `[review.pass] review` and
+    `[acts.act.disposition] pass`. The run reads again; the acceptance act's
+    `digest` is not verified over that field.
+  - The reader now reports **`review_pass STALE — it no longer covers current
+    content`**, which is the correct verdict and was invisible while the
+    reference dangled: the coverage map pins pre-reopen fingerprints and the
+    reopen changed six sections after `RV-346`'s rounds.
+  - **Three prose fields still name `RV-350`** — deliberately left. One is
+    `[acts.act.acceptance] basis` under `authority = "user"`, the slice owner's
+    recorded waiver rationale; rewriting it would launder the record. An auditor
+    reading the run will see prose citing `RV-350` and a pointer to `RV-346`;
+    this note is the explanation.
+  - Run state is gitignored runtime state, so none of this is committed. Backups
+    of the deleted entity and the pre-edit run state are session-local only and
+    will not survive.
