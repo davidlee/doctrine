@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fdf8e-21e0-7413-a97d-d65013bc5cd8"
+recorded_at = "2026-08-08T04:07:41.792729394Z"
+kind = "friction"
+summary = "/spec-tech: spec req add cannot carry the statement or acceptance criteria, so every requirement lands title-only"
+detail = "Authoring SPEC-031 (14 requirements) meant 14 'doctrine spec req add' calls that set only title/kind/label/slug, then a separate bulk hand-patch of each requirement-NNN.toml to insert 'description' and 'acceptance_criteria'. The scaffolded TOML even ships a comment instructing the author to add description by hand. Two costs: the token overhead of a second write pass over every requirement, and — more seriously — the default outcome of a partly-finished authoring session is a title-only requirement that asserts nothing. That is exactly the defect CHR-058 exists to repair (SPEC-002 REQ-254..257 are title-only), so the tooling gap reproduces the corpus defect it is adjacent to. A --description / --ac flag pair, or an editor-open on add, would make the complete requirement the path of least resistance."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
