@@ -58,25 +58,42 @@ else:
 ./target/debug/doctrine slice status <N>
 find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
 find target/debug/.fingerprint target/debug/deps -maxdepth 0 -mmin -30
+git status --porcelain | cut -c4- | tr '\n' '\0' | xargs -0 -r find -maxdepth 0 -mmin -30
+git log -1 --format=%cr
 ```
 
-The third leg is the **build-activity** probe, and it is the one that decides
-whether a silent worker is alive. Two directory stats, no tree walk: cargo
-restamps both on every compile, so a hit means "built within 30 minutes".
+**A worker is alive if *any* of the four says so.** They watch different
+activities and each is blind where another sees:
 
-Prefer it to `pgrep`. A process check is an *instantaneous sample* — a worker
-between builds, reading a file or writing a test, shows no `cargo` at all and
-reads dead while it is plainly working. Artifact mtime is cumulative: it answers
-"has this tree been built recently", which is the question actually being asked.
-(And if you do reach for `pgrep`, never `-f` — this jail's own `bwrap` argv
-carries `--setenv PATH …/.cargo/bin…`, so `-f` matches pid 1 and reports
-"building" unconditionally.)
+| leg | catches | blind while |
+|---|---|---|
+| sheet mtime | ticking a task | mid-task, however long that takes |
+| build artifacts | compiling, testing | reading or writing source |
+| dirty-path mtime | writing source | building, or just after a commit |
+| last commit | landing a task | mid-task |
+
+That last blindness is not hypothetical: a worker that has *just committed*
+leaves a clean tree, so the churn leg reads dead at the exact moment the worker
+was most productive. Hence the commit leg. Only silence on all four is death.
+
+Cost is a handful of stats. The churn leg rides `git status`, which respects
+`.gitignore` — do **not** substitute a `find` over the worktree, which walks
+`target/` and its 1,200-odd fingerprint entries.
+
+Prefer artifact mtime to `pgrep`. A process check is an *instantaneous sample* —
+a worker between builds shows no `cargo` at all and reads dead while plainly
+working (measured, not supposed). Mtimes are cumulative: they answer "did this
+happen recently", which is the question actually being asked. Comparing two
+`git diff`s a minute apart answers the same question and costs a minute of wall
+clock; mtime already has the answer. (If you do reach for `pgrep`, never `-f` —
+this jail's own `bwrap` argv carries `--setenv PATH …/.cargo/bin…`, so `-f`
+matches pid 1 and reports "building" unconditionally.)
 
 | what you see | what you do |
 |---|---|
 | phase `in_progress`, sheet touched < 25 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
-| phase `in_progress`, sheet cold, **but the tree was built < 30 min ago** | **exit.** Still alive, just slow. Same as above. |
-| phase `in_progress`, sheet cold > 90 min **and** no build in 30 min | it died. Re-spawn, resuming at the first unticked task. |
+| phase `in_progress`, sheet cold, **but any other leg is fresh** | **exit.** Still alive, just slow. Same as above. |
+| phase `in_progress`, sheet cold > 90 min **and all four legs silent** | it died. Re-spawn, resuming at the first unticked task. |
 | phase `completed`, a next phase exists | beat 4 — spawn the planner. |
 | phase `planned`, sheet > 100 lines (filled) | beat 5 — spawn the worker. |
 | phase `planned`, sheet ~27 lines (bare template) | beat 4 — spawn the planner. |
@@ -91,8 +108,8 @@ worker.** Workers tick as they go (§ *Sub-agent discipline*), so the mtime is a
 to lose. A ten-mutation battery is ten build-and-test cycles with nothing
 tickable between them; so is a cold `cargo build` after a manifest edit. The
 proxy inverts under load: the more expensive the phase, the deader it looks.
-Hence the build-activity leg and the 90-minute floor — **a recent build always
-wins over a cold sheet.** When the two disagree, believe the artifacts.
+Hence the other three legs and the 90-minute floor — **any sign of life beats a
+cold sheet.** When the legs disagree, believe the one saying alive.
 
 Re-spawning is not free and not idempotent: a revived worker re-does everything
 since the last tick, and a worker reaped mid-write can leave a half-edited file
