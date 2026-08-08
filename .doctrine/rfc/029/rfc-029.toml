@@ -1,0 +1,92 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 29
+slug = "proof-binding-and-the-plan-surface"
+title = "Proof binding and the plan surface"
+status = "open"
+created = "2026-08-08"
+updated = "2026-08-08"
+tags = ["area:coverage", "area:slice", "area:spec", "cluster:proof-binding", "planning"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-027"
+
+[[relation]]
+label = "related"
+target = "RFC-026"
+
+[[relation]]
+label = "related"
+target = "RFC-003"
+
+[[relation]]
+label = "related"
+target = "ADR-014"
+
+[[relation]]
+label = "related"
+target = "ADR-017"
+
+[[relation]]
+label = "related"
+target = "DEC-101"
+
+[[relation]]
+label = "related"
+target = "PRD-013"
+
+[[relation]]
+label = "related"
+target = "SPEC-002"
+
+[[relation]]
+label = "related"
+target = "PRD-001"
+
+[[relation]]
+label = "related"
+target = "SPEC-014"
+
+[[relation]]
+label = "related"
+target = "IMP-381"
+
+[[relation]]
+label = "related"
+target = "IMP-382"
+
+[[relation]]
+label = "related"
+target = "CHR-058"
+
+[[relation]]
+label = "related"
+target = "ISS-325"
+
+[[relation]]
+label = "related"
+target = "IMP-408"
+
+[[relation]]
+label = "related"
+target = "IMP-409"
+
+[[relation]]
+label = "related"
+target = "ISS-321"
+
+[[relation]]
+label = "related"
+target = "ISS-324"
+
+[[relation]]
+label = "related"
+target = "EVD-005"
+
