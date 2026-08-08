@@ -57,8 +57,13 @@ else:
 ```bash
 ./target/debug/doctrine slice status <N>
 find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
-pgrep -af 'cargo|rustc' | head        # is it building right now?
+pgrep -a 'cargo|rustc' | head         # is it building right now?
 ```
+
+**Not `pgrep -af`.** `-f` matches the whole command line, and this jail's own
+`bwrap` argv carries a `--setenv PATH …/.cargo/bin…`, so `-f` matches pid 1 and
+reports "building" forever — a liveness probe that can never say no. Match the
+process *name* only.
 
 | what you see | what you do |
 |---|---|
