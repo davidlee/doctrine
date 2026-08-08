@@ -86,11 +86,40 @@ fresh-as-of: 2026-08-07 · design run `dr-019fd692` @ stage `locked` rev 51 · e
   was for the marker alone; the marker landed and the edge cannot be retracted.
   The correction lives in prose on IMP-392 until a verb exists. `after` has the
   same gap.
-- **Next: `/plan`.** The design is locked; there is no plan yet.
+- **Next: `/execute`.** The plan is authored and the six phase sheets are
+  materialised; the slice is `ready`. `/phase-plan PHASE-01` expands the runtime
+  sheet just before execution.
 - **At reconcile:** `QUE-209` — does the REV widen `REQ-186` or add new
   requirements for the newly-governed hook set and the scope key? The REV target
   is SPEC-011 (`REQ-186`) **alone**; SPEC-010 is a conformance-verification
   target under `DEC-171`. RFC-018 takes the harness field notes.
+- **At reconcile — one design patch, deliberately deferred (user, 2026-08-08).**
+  `design.md` `sec-2` places `ClaudeSettingsScope::command_form()` in
+  `src/install_config.rs`. ADR-001 forbids it: `.doctrine/adr/001/layering.toml`
+  classifies `install_config = "leaf"` at **out=0** (`:34`) and `boot =
+  "command"` (`:90`), so the method would be a tier inversion *and* a cycle —
+  `boot` already reaches `install_config` through `dtoml`.
+  `tests/architecture_layering.rs` enforces this, so the design as written does
+  not compile past the gate.
+
+  The correction is forced and is the design's own rule: `sec-3` already sites
+  `settings_rel(scope)` in `boot.rs` on the ground that "putting the path in
+  `install_config` would give a pure leaf domain knowledge it does not otherwise
+  have (ADR-001, and the module's own doc)". The identical argument covers the
+  form mapping. **Nothing else in `sec-2` moves** — `CommandForm` still lives in
+  `boot.rs`, is still deliberately *not* `ClaudeSettingsScope`, and the Codex arm
+  still answers `Baked` on its own file's gitignored status without ever seeing a
+  Claude-settings type. `ClaudeSettingsScope` keeps `sibling()`, which is pure
+  vocabulary.
+
+  Not patched at design time because the run is locked and the gates are
+  unforgiving for a one-sentence correction. **Where it must land during
+  implementation:** `PHASE-02` `EX-2` (the placement) and `PHASE-02` `VA-2` (the
+  layering gate as a criterion, not an accident) — both authored in `plan.toml`,
+  argued in `plan.md` § *The one departure from design `sec-2`*. **What
+  reconciliation owes:** amend `sec-2`'s sentence to match what shipped. This is
+  a per-slice artefact edit, so it is a direct edit at reconciliation, not a REV
+  — it changes no governance and does not join the SPEC-011 amendment.
 - **At close:** IMP-400 does *not* close with this slice — its `OQ-4` (migrating
   existing `enabledPlugins` / marketplace registrations) is out of scope and
   keeps the item open. Mirrored in `slice-250.md` § Follow-Ups.

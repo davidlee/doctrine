@@ -1,9 +1,9 @@
 id = 250
 slug = "retire-the-claude-plugin-delivery-channel"
 title = "Retire the Claude plugin delivery channel"
-status = "design"
+status = "ready"
 created = "2026-08-06"
-updated = "2026-08-06"
+updated = "2026-08-08"
 tags = ["area:cli", "area:install", "harness:claude", "hooks", "plugins"]
 
 [relationships]
