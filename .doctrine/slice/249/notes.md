@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · e76a95e6e
-· `PHASE-01` completed
+fresh-as-of: 2026-08-08 · stage `ready`, run `dr-019fd6b6` rev 89 `locked` · 22d73b193
+· `PHASE-01` completed, `PHASE-02` next
 
 ### Produced
 
