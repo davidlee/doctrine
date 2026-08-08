@@ -520,12 +520,18 @@ supplementary groups", so `--uid`/`--gid` are not later read as discharging it.
 
 ## Open
 
-**Awaiting the slice owner — `PHASE-05` `T9`/`T10` are gated on it (sheet `S1`).**
+**RULED 2026-08-08 — option 1. Nothing open here.** The slice owner took the
+planner's recommendation; the ruling is written into the `PHASE-05` sheet as
+`F-1/R`, which governs, and `S1` is discharged. `unsafe_code` goes `forbid` →
+`deny` with exactly two `#[expect]` sites plus a `VA` check holding the count at
+two, and `rustix` gains its `process` feature. Kept below for the auditor: the
+question as put, and the two options not taken.
+
 The workspace forbids `unsafe`; `EX-15` and `EX-16` require it (item 26). The
-loop is stopped here per `LOOP.md` § *Stop conditions* — a ruling is owed, so no
-worker is spawned. `T3`–`T8` and `T11`–`T14` are unaffected and could proceed,
-but splitting one phase's sheet across two worker contexts costs more than it
-saves unless the ruling is slow.
+loop stopped here per `LOOP.md` § *Stop conditions* rather than spawning a
+worker — the second time this slice has stopped on a real question and the
+second time the stop was cheaper than the improvisation (`DEC-181`, then the
+`[capsule]` figures, now this).
 
 Options as the planner put them, cheapest first:
 
