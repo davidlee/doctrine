@@ -107,6 +107,8 @@ fn coverage_record_vt_lands_planned_with_check_byte_exact() {
             "VT",
             "--command",
             "true",
+            "--matcher-pattern",
+            "ok",
         ],
     );
     assert!(out.status.success(), "stderr: {}", stderr(&out));
@@ -124,7 +126,11 @@ fn coverage_record_vt_lands_planned_with_check_byte_exact() {
          git_anchor = \"\"\n\
          \n\
          [entry.check]\n\
-         command = [\"true\"]\n"
+         command = [\"true\"]\n\
+         \n\
+         [entry.check.matcher]\n\
+         pattern = \"ok\"\n\
+         regex = false\n"
     );
 }
 
@@ -199,6 +205,42 @@ fn coverage_record_rejects_empty_matcher_on_shared_base() {
             "VT",
             "--alias",
             "unit",
+        ],
+    );
+    assert!(!out.status.success());
+    assert_eq!(stderr(&out), "Error: invalid VT-check: MatcherRequired\n");
+    assert!(
+        !root.join(".doctrine/slice/057/coverage.toml").exists(),
+        "a blocked record writes nothing"
+    );
+}
+
+/// A LITERAL COMMAND with no matcher is rejected too (`MatcherRequired`) — ISS-324
+/// removed its exemption. This is the live authoring path the issue closes: a
+/// command that exits 0 having selected zero tests is indistinguishable from one
+/// that ran and passed, so it used to land `Verified` on the exit code alone.
+#[test]
+fn coverage_record_rejects_empty_matcher_on_literal_command() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let dir = tmp();
+    let root = dir.path();
+    let out = run(
+        root,
+        &[
+            "coverage",
+            "record",
+            "--slice",
+            "57",
+            "--requirement",
+            "REQ-001",
+            "--change",
+            "57",
+            "--mode",
+            "VT",
+            "--command",
+            "true",
         ],
     );
     assert!(!out.status.success());
@@ -323,6 +365,13 @@ fn coverage_record_rejects_both_alias_and_command() {
 /// `coverage verify <slice>` re-derives each VT entry and prints the Report: an
 /// exit-code-only transition line, the loud backfill count, and the audit line.
 /// Here one VT (literal `true`, no matcher) goes Planned→Verified, exit-code-only.
+///
+/// The cell is HAND-SEEDED, not recorded: ISS-324 made the matcher unconditional,
+/// so `coverage record --command true` with no `--matcher-pattern` is now refused
+/// at the write seam. Hand-authoring `coverage.toml` is precisely the route by
+/// which such an entry still reaches the verifier — `verify` does not re-validate
+/// what it reads — which is why the `[exit-code-only]` flag and its audit line
+/// survive the exemption's removal rather than dying with it.
 #[test]
 fn coverage_verify_prints_transition_and_audit_lines() {
     if common::under_worker_marker() {
@@ -330,25 +379,22 @@ fn coverage_verify_prints_transition_and_audit_lines() {
     } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
-    // Seed a recordable VT cell, then re-derive it.
-    let rec = run(
-        root,
-        &[
-            "coverage",
-            "record",
-            "--slice",
-            "57",
-            "--requirement",
-            "REQ-001",
-            "--change",
-            "57",
-            "--mode",
-            "VT",
-            "--command",
-            "true",
-        ],
-    );
-    assert!(rec.status.success(), "stderr: {}", stderr(&rec));
+    let sdir = root.join(".doctrine/slice/057");
+    fs::create_dir_all(&sdir).unwrap();
+    fs::write(
+        sdir.join("coverage.toml"),
+        "[[entry]]\n\
+         slice = \"SL-057\"\n\
+         requirement = \"REQ-001\"\n\
+         contributing_change = \"SL-057\"\n\
+         mode = \"VT\"\n\
+         status = \"planned\"\n\
+         git_anchor = \"\"\n\
+         \n\
+         [entry.check]\n\
+         command = [\"true\"]\n",
+    )
+    .unwrap();
 
     let out = run(root, &["coverage", "verify", "SL-057"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
@@ -356,7 +402,49 @@ fn coverage_verify_prints_transition_and_audit_lines() {
         stdout(&out),
         "SL-057/REQ-001/SL-057/VT: planned\u{2192}verified [exit-code-only]\n\
          0 VT entries lack a check \u{2014} backfill\n\
-         1 exit-code-only cells (no matcher) \u{2014} audit\n"
+         1 exit-code-only cells (no effective matcher) \u{2014} audit\n"
+    );
+}
+
+/// The ISS-324 sibling, end to end: a hand-authored cell whose matcher is present
+/// but BLANK. An empty pattern matches any output, so the cell is exit-code-only in
+/// substance — it must be flagged, not pass silently on the strength of the exit
+/// code. Before ISS-324 the flag tested `matcher.is_none()` and missed this shape.
+#[test]
+fn coverage_verify_flags_blank_pattern_matcher_as_exit_code_only() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
+    let dir = tmp();
+    let root = dir.path();
+    let sdir = root.join(".doctrine/slice/057");
+    fs::create_dir_all(&sdir).unwrap();
+    fs::write(
+        sdir.join("coverage.toml"),
+        "[[entry]]\n\
+         slice = \"SL-057\"\n\
+         requirement = \"REQ-001\"\n\
+         contributing_change = \"SL-057\"\n\
+         mode = \"VT\"\n\
+         status = \"planned\"\n\
+         git_anchor = \"\"\n\
+         \n\
+         [entry.check]\n\
+         command = [\"true\"]\n\
+         \n\
+         [entry.check.matcher]\n\
+         pattern = \"\"\n\
+         regex = false\n",
+    )
+    .unwrap();
+
+    let out = run(root, &["coverage", "verify", "SL-057"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "SL-057/REQ-001/SL-057/VT: planned\u{2192}verified [exit-code-only]\n\
+         0 VT entries lack a check \u{2014} backfill\n\
+         1 exit-code-only cells (no effective matcher) \u{2014} audit\n"
     );
 }
 
@@ -441,6 +529,8 @@ fn coverage_forget_prints_withdrawal_then_not_found() {
             "VT",
             "--command",
             "true",
+            "--matcher-pattern",
+            "ok",
         ],
     );
     assert!(rec.status.success(), "stderr: {}", stderr(&rec));
@@ -539,6 +629,8 @@ fn coverage_record_canonicalizes_requirement_ref() {
             "VT",
             "--command",
             "true",
+            "--matcher-pattern",
+            "ok",
         ],
     );
     assert!(rec.status.success(), "stderr: {}", stderr(&rec));

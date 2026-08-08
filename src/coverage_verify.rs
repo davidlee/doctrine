@@ -50,8 +50,11 @@ use crate::verify::{self, Resolved, VerificationConfig};
 
 /// The per-entry verification line in the [`Report`]: the cited key, the status the
 /// cell carried BEFORE this invocation, and the re-derived status AFTER. `exit_code_only`
-/// flags a cell whose check is a literal `command` with NO matcher (D3/A) — its
-/// verdict rides the exit code alone, so it is surfaced for audit.
+/// flags a cell whose check is a literal `command` whose matcher says nothing —
+/// absent, or blank, which matches any output alike (D3/A). Its verdict rides the
+/// exit code alone, so it is surfaced for audit. `coverage::valid` refuses the
+/// shape at the write seam (ISS-324); this flag catches what arrives by another
+/// route, since `run` does not re-validate entries read from disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EntryReport {
     pub(crate) key: CoverageKey,
@@ -87,8 +90,8 @@ impl Report {
         self.backfill.len()
     }
 
-    /// The count of exit-code-only cells (literal command, no matcher) — flagged
-    /// for audit (D3/A).
+    /// The count of exit-code-only cells (literal command, no effective matcher)
+    /// — flagged for audit (D3/A).
     pub(crate) fn exit_code_only_count(&self) -> usize {
         self.verified.iter().filter(|e| e.exit_code_only).count()
     }
@@ -180,8 +183,13 @@ pub(crate) fn run(root: &Path, slice_ids: &[u32]) -> Result<Report> {
             entry.status = new_status;
             changed = true;
 
-            // Exit-code-only = a literal command with no matcher (D3/A).
-            let exit_code_only = check.command.is_some() && check.matcher.is_none();
+            // Exit-code-only = a literal command whose matcher says nothing —
+            // absent, or blank (which matches any output). `coverage::valid` now
+            // refuses this shape at the write seam (ISS-324), but `verify` never
+            // re-validates entries read from disk, so a hand-authored
+            // `coverage.toml` still reaches here and this flag is the only tell.
+            let exit_code_only =
+                check.command.is_some() && coverage::matcher_is_empty(check.matcher.as_ref());
             report.verified.push(EntryReport {
                 key: entry.key.clone(),
                 old_status,
@@ -296,7 +304,7 @@ fn print_report(report: &Report) -> Result<()> {
     if report.exit_code_only_count() > 0 {
         writeln!(
             out,
-            "{} exit-code-only cells (no matcher) — audit",
+            "{} exit-code-only cells (no effective matcher) — audit",
             report.exit_code_only_count(),
         )?;
     }
@@ -1007,6 +1015,17 @@ mod tests {
                     CoverageStatus::Planned,
                     Some(cmd_check(vec!["true"], None)),
                 ),
+                // ISS-324 sibling: a literal command with an EMPTY-PATTERN matcher.
+                // It matches everything, so it is exit-code-only in substance and
+                // must be flagged as such. `valid` rejects this shape at the write
+                // seam, but `verify` never re-validates what it reads from disk —
+                // a hand-authored `coverage.toml` reaches here, and the flag is the
+                // only tell.
+                entry(
+                    key("SL-057", "REQ-202", "SL-057", "VT"),
+                    CoverageStatus::Planned,
+                    Some(cmd_check(vec!["true"], Some(matcher(None, "", false)))),
+                ),
                 // A check-less VT entry: reported in backfill, left untouched.
                 entry(
                     key("SL-057", "REQ-201", "SL-057", "VT"),
@@ -1019,8 +1038,8 @@ mod tests {
 
         assert_eq!(
             report.exit_code_only_count(),
-            1,
-            "the literal-command cell is flagged"
+            2,
+            "both the absent-matcher and empty-pattern cells are flagged"
         );
         let flagged = report
             .verified
@@ -1030,6 +1049,19 @@ mod tests {
         assert!(flagged.exit_code_only);
         assert_eq!(flagged.old_status, CoverageStatus::Planned);
         assert_eq!(flagged.new_status, CoverageStatus::Verified);
+
+        // The sibling: an empty pattern always matches, so this cell lands
+        // `Verified` on the strength of the exit code alone — flagged, not silent.
+        let blank = report
+            .verified
+            .iter()
+            .find(|e| e.key.requirement == "REQ-202")
+            .unwrap();
+        assert!(
+            blank.exit_code_only,
+            "an empty-pattern matcher is exit-code-only in substance (ISS-324)"
+        );
+        assert_eq!(blank.new_status, CoverageStatus::Verified);
 
         assert_eq!(
             report.backfill_count(),

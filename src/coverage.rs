@@ -509,15 +509,30 @@ pub(crate) fn evaluate_matcher(pattern: &str, regex: bool, haystack: &str) -> Op
     }
 }
 
+/// Is a check's matcher empty — absent, or present with a blank pattern (PURE)?
+///
+/// The two cases are one case: [`evaluate_matcher`] returns `Some(true)` for an
+/// empty pattern against ANY haystack, so a blank pattern states nothing about
+/// success that an absent matcher did not. Both seams that care read this ONE
+/// definition — [`valid`] to refuse the shape at the write seam, and
+/// `coverage_verify`'s exit-code-only flag to tell a human about the entries that
+/// reach the run seam by another route (a hand-authored `coverage.toml`; `verify`
+/// does not re-validate what it reads). Two copies of this predicate drifting
+/// apart was the ISS-324 sibling defect.
+pub(crate) fn matcher_is_empty(matcher: Option<&Matcher>) -> bool {
+    matcher.is_none_or(|m| m.pattern.is_empty())
+}
+
 /// Why [`valid`] rejected a [`VtCheck`] — one variant per reject reason so callers
 /// assert the REASON, not merely `is_err()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ValidError {
     /// (a) Both `alias` and `command` are set — they are mutually exclusive.
     AliasCommandConflict,
-    /// (b) A non-empty matcher is mandatory unless a literal `command` is set: an
-    /// empty-or-absent matcher on an alias, or on the project-default base
-    /// (neither alias nor command), is rejected (the D3/A matcher rule).
+    /// (b) A non-empty matcher is mandatory on every base — alias, literal
+    /// `command`, or the project default. An empty-or-absent matcher is rejected
+    /// (the D3/A matcher rule; the literal-command exemption was removed by
+    /// ISS-324).
     MatcherRequired,
     /// (c) A `File` glob escaped the repo tree — an absolute path or a `..` ascent
     /// component (the F-III glob-confinement rule; pure string inspection).
@@ -538,13 +553,13 @@ pub(crate) fn valid(check: &VtCheck) -> Result<(), ValidError> {
         return Err(ValidError::AliasCommandConflict);
     }
 
-    // (b) D3/A: a non-empty matcher is mandatory UNLESS a literal command is set.
-    // An empty matcher = matcher is None, or its pattern is "".
-    let matcher_empty = match &check.matcher {
-        None => true,
-        Some(m) => m.pattern.is_empty(),
-    };
-    if matcher_empty && check.command.is_none() {
+    // (b) D3/A: a non-empty matcher is mandatory on EVERY base. ISS-324 removed
+    // the literal-command exemption: a command that exits 0 having selected zero
+    // tests is indistinguishable from one that ran and passed, so the exemption
+    // was a false-green path. Telling those apart the other way means parsing
+    // runner output, which is language-bound and belongs in project-authored
+    // config (REQ-257), not in core (RFC-027 P8/H13).
+    if matcher_is_empty(check.matcher.as_ref()) {
         return Err(ValidError::MatcherRequired);
     }
 
@@ -1302,17 +1317,47 @@ git_anchor = "anchor-abc123"
     }
 
     #[test]
-    fn valid_accepts_empty_matcher_with_literal_command() {
-        // An empty/absent matcher is legal ONLY alongside a literal command.
-        assert_eq!(valid(&vtcheck(None, Some(vec!["true"]), None)), Ok(()));
+    fn valid_rejects_empty_matcher_with_literal_command() {
+        // ISS-324: the matcher is unconditional. A literal command carries no
+        // exemption — a clean exit having selected ZERO tests is indistinguishable
+        // from a pass without a matcher over the runner's output.
+        assert_eq!(
+            valid(&vtcheck(None, Some(vec!["true"]), None)),
+            Err(ValidError::MatcherRequired),
+            "an absent matcher on a literal command is rejected"
+        );
         assert_eq!(
             valid(&vtcheck(
                 None,
                 Some(vec!["true"]),
                 Some(matcher(None, "", false))
             )),
-            Ok(())
+            Err(ValidError::MatcherRequired),
+            "an empty-pattern matcher matches everything — rejected like an absent one"
         );
+    }
+
+    #[test]
+    fn valid_accepts_a_non_empty_matcher_on_every_base() {
+        // The positive control for the rule above: each of the three bases is
+        // legal once a non-empty matcher states what success looks like.
+        for check in [
+            vtcheck(None, Some(vec!["true"]), Some(matcher(None, "ok", false))),
+            vtcheck(Some("test"), None, Some(matcher(None, "ok", false))),
+            vtcheck(None, None, Some(matcher(None, "ok", false))),
+        ] {
+            assert_eq!(valid(&check), Ok(()), "{check:?}");
+        }
+    }
+
+    #[test]
+    fn matcher_is_empty_treats_absent_and_blank_pattern_alike() {
+        // The single definition of "empty" both the write seam (`valid`) and the
+        // report seam (`coverage_verify`'s exit-code-only flag) read. Two copies
+        // of this predicate drifting apart WAS the ISS-324 sibling defect.
+        assert!(matcher_is_empty(None));
+        assert!(matcher_is_empty(Some(&matcher(None, "", false))));
+        assert!(!matcher_is_empty(Some(&matcher(None, "ok", false))));
     }
 
     #[test]
