@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe139-5b95-7222-8a6c-f6a12bec900b"
+recorded_at = "2026-08-08T11:54:20.437997201Z"
+kind = "friction"
+summary = "phase-plan: two PHASE-05 exit criteria specify mechanisms the workspace lint config forbids"
+detail = """SL-248 PHASE-05's EX-15 (setrlimit(RLIMIT_FSIZE) on the child) and EX-16 (fcntl_setfd over /proc/self/fd) both require an unsafe expression. Cargo.toml:200 sets unsafe_code = "forbid" workspace-wide, and forbid cannot be excepted. This survived six design rounds and a full /plan critical pass; the PHASE-03 manifest comment even names the adjacent fact (rustix::process is feature-gated, RV-346 F-29) without anyone asking how setrlimit would then be called. Cost: ~40k of planner context spent proving the blocker by execution (scratch rustc probes, rustix source read, bwrap measurements) rather than planning, plus a loop stop for a human ruling before PHASE-05 can start. The cheap check that would have caught it: when a design names a syscall or a raw-fd operation, grep the lint config for unsafe_code before the criterion is approved."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
