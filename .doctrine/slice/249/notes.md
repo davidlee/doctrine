@@ -185,11 +185,16 @@ fresh-as-of: 2026-08-08 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   reason: the selector is a scope statement, and settling scope divergence is
   reconcile's to do, not a phase's. Both new entries are one-line widenings
   (`IdKind::declarable`; `declare` and `Pending` to `pub(super)`).
-- **`ISS-329` — two `FacetField` types in one crate.** `facet_write`'s
-  write-payload enum and `PHASE-03`'s declaration struct, named verbatim from
-  design § 5.1. `PHASE-04`'s `plan_facet_edits` imports both under one name.
-  **A ruling is owed before `PHASE-04`**, and whichever way it goes it wants a
-  design amendment or a reconciliation note, because the design named the type.
+- **`ISS-329` — two `FacetField` types in one crate. Ruled: option 1 + a
+  backlog item for option 2.** The user ruled the new declaration struct is
+  renamed (`FacetFieldRow`) and `facet_write::FacetField` is left alone;
+  `CHR-060` costs the honest rename of the older enum to `FacetValue`
+  separately, since its call sites (`risk set` / `value set` / `estimate set`)
+  are outside this slice's scope. `Row` was chosen over `Spec` (a loaded word —
+  it names an entity kind) and `Decl` (an abbreviation with no precedent); the
+  tree has ~20 `…Row` table-row types. **Owed at reconcile: a design amendment
+  to § 5.1**, which names the type `FacetField` verbatim — the same shape as
+  `D8a` and the `I10` wording item, and it rides the `PHASE-07` REV with them.
 - **A `PHASE-03` sheet expectation did not hold, and the code is right.** T3(b)
   expected a field deleted from *every* row to fail both `I3` and `I2`; only
   `I2` failed. `I3`'s input is built from the table's own rows, so a field

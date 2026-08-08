@@ -39,3 +39,20 @@ things well is VERY important" standard both bite here.
 
 Recommendation is (2) on the merits and (1) on cost. Ruling owed before PHASE-04
 lands its write seam.
+
+## Ruling (user, 2026-08-08): option 1, plus a backlog item for option 2
+
+The new declaration type is renamed and `facet_write::FacetField` is left
+untouched. The honest rename of the older enum is costed separately as
+`CHR-060`, rather than smuggling three unrelated command surfaces (`risk set`,
+`value set`, `estimate set`) into a slice scoped to the facet write seam.
+
+**The new name is `FacetFieldRow`.** `Row` is this tree's dominant suffix for a
+table row type (~20 precedents — `ListRow`, `PhaseRow`, `SpecRow`, `SliceRow`),
+and the type is literally the row type of `facet_fields`. `Spec` was rejected as
+a loaded word — it names an entity kind in doctrine — and `Decl` as an
+abbreviation with essentially no precedent in the crate.
+
+Consequence, recorded in `SL-249`'s notes under *Open*: design § 5.1 names the
+type `FacetField` verbatim, so **a design amendment is owed at reconcile**. It
+rides the `PHASE-07` REV alongside the `D8a` and `I10` wording corrections.

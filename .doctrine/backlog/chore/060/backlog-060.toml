@@ -1,12 +1,12 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 329
-slug = "two-facetfield-types-in-one-crate"
-title = "Two FacetField types in one crate"
-kind = "issue"
-status = "resolved"
-resolution = "fixed"
+id = 60
+slug = "rename-facet-writefacetfield-to-facetvalue"
+title = "Rename facet_write::FacetField to FacetValue"
+kind = "chore"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-08-08"
 updated = "2026-08-08"
 tags = []
@@ -20,3 +20,8 @@ tags = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-329"
