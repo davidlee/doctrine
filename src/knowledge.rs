@@ -1041,13 +1041,6 @@ pub(crate) struct RawEdit<'a> {
 
 /// The two value shapes a caller can supply. `Text("")` is the clear for a
 /// `Text` or `Closed` field; `List(vec![])` is the clear for a `List` one.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production constructor"
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RawValue {
     Text(String),
@@ -1057,13 +1050,6 @@ pub(crate) enum RawValue {
 /// A validated edit: a row this kind really owns, paired with a value of that
 /// row's shape. Constructible only by [`plan_facet_edits`] — the fields stay
 /// private to the module so the guarantee cannot be bypassed.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs; apply_facet_edits reads these fields but is itself staged, so the whole chain goes live at once"
-    )
-)]
 #[derive(Debug, Clone)]
 pub(crate) struct FacetEdit {
     field: &'static FacetFieldRow,
@@ -1142,13 +1128,6 @@ impl std::fmt::Display for FacetEditRefusal {
 /// read model's own cleared form for a closed field. Validating it against
 /// `KNOWN` would leave closed fields the one kind of field that cannot be
 /// cleared.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production caller"
-    )
-)]
 pub(crate) fn plan_facet_edits(
     kind: RecordKind,
     given: &[RawEdit<'_>],
@@ -1220,13 +1199,6 @@ const FACET_TABLE: &str = "facet";
 ///
 /// No `updated` stamp (D9): I4 reserves that to `dep_seq::apply_status`, and a
 /// facet-only edit does not reach it.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production caller"
-    )
-)]
 pub(crate) fn apply_facet_edits(
     path: &Path,
     canonical: &str,
@@ -2297,6 +2269,61 @@ pub(crate) fn run_edit(
     Ok(())
 }
 
+/// `doctrine knowledge edit <kind> <ID> [--<field> V]…` — the KIND-DISPATCHED
+/// tier of the record edit surface (SL-249 PHASE-04), and the production caller
+/// [`plan_facet_edits`] / [`apply_facet_edits`] were built for.
+///
+/// Every fallible step precedes every write (I7), and the order is load-bearing:
+/// the concept refusal, the at-least-one-flag guard, the id↔subverb kind check
+/// and the whole plan are all settled before the document is opened, so each of
+/// `VT-5`'s four refusals leaves the record byte-identical.
+///
+/// No `updated` stamp (D9) — `I4` reserves that to `dep_seq::apply_status`, which
+/// a facet-only edit does not reach.
+pub(crate) fn run_facet_edit(
+    path: Option<PathBuf>,
+    kind: RecordKind,
+    reference: &str,
+    given: &[RawEdit<'_>],
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // D10 — a concept's `[facet]` is empty by design (DEC-173), so this subverb
+    // exists only to name the remedy. Ahead of the flag guard because a concept
+    // subverb declares no field flags at all: `given` is always empty here, and
+    // the generic "requires at least one field flag" would say nothing useful.
+    if kind == RecordKind::Concept {
+        anyhow::bail!("concept records carry no facet fields; use `knowledge edit {reference}`");
+    }
+    if given.is_empty() {
+        anyhow::bail!(
+            "`knowledge edit {}` requires at least one field flag",
+            kind.as_str()
+        );
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (actual, id) = resolve_ref(reference)?;
+    let canonical = actual.canonical_id(id);
+    // The subverb names a kind; the id carries one. A disagreement is the
+    // caller's, and the refusal names the subverb that would have worked.
+    if actual != kind {
+        anyhow::bail!(
+            "`{canonical}` is a {} record; use `knowledge edit {}`",
+            actual.as_str(),
+            actual.as_str()
+        );
+    }
+
+    let edits = plan_facet_edits(kind, given)
+        .map_err(|refusal| anyhow::anyhow!("{canonical}: {refusal}"))?;
+    apply_facet_edits(&record_toml_path(&root, kind, id), &canonical, &edits)?;
+
+    // Post-state in `run_edit`'s shape: the canonical id, then what now stands.
+    let set: Vec<&str> = edits.iter().map(|edit| edit.field.name).collect();
+    writeln!(writer, "{canonical}: {}", set.join(", "))?;
+    Ok(())
+}
+
 /// The per-record directory — `root/<kind-dir>/<id:03>` — the layout every path
 /// into one record's authored/prose files walks. Shared by `record_toml_path`,
 /// `read_record`'s two paths, and `write_record_body` (STD-001).
@@ -2434,7 +2461,15 @@ pub(crate) enum KnowledgeCommand {
     /// Edit a knowledge record's title, tags, and prose body.
     Edit {
         /// Knowledge record reference — `ASM-007`, `DEC-012`, `CPT-001`.
-        id: String,
+        /// Optional only so the kind-dispatched subverbs can occupy the slot
+        /// (D4); absent with no subverb is its own refusal.
+        id: Option<String>,
+        /// The kind-dispatched `[facet]` tier — `knowledge edit decision DEC-007
+        /// --rationale …`. Neither `args_conflicts_with_subcommands` nor
+        /// `subcommand_negates_reqs` is set: making `id` optional removes the
+        /// requirement outright, so there is nothing left to negate (D4).
+        #[command(subcommand)]
+        facet: Option<Box<KnowledgeFacetEdit>>,
         /// Replace the title.
         #[arg(long)]
         title: Option<String>,
@@ -2482,6 +2517,326 @@ pub(crate) enum KnowledgeCommand {
     },
 }
 
+/// The reference + root every facet subverb takes. Flattened so the seven
+/// variants declare it once (STD-001) and `id` stays the first positional.
+#[derive(clap::Args)]
+pub(crate) struct FacetEditTarget {
+    /// Knowledge record reference — must be of the kind the subverb names.
+    id: String,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
+/// `doctrine knowledge edit <kind> <ID> [--<field> V]…` — one subverb per record
+/// kind, whose flags are that kind's `[facet]` fields, kebab-cased.
+///
+/// The args stay clap-derive-declared, as the rest of this CLI is, and
+/// `facet_fields` is their ORACLE rather than their source (D3): `VT-4` asserts
+/// each subverb's arg names equal its kind's row, so the two cannot drift.
+/// Generating them would mean the builder API for six commands alone — a second
+/// idiom for the benefit of not typing thirty flag names once.
+///
+/// `List`-shaped fields are `Option<Vec<String>>` with `num_args = 0..` (D7): a
+/// bare `Vec` cannot tell "flag absent" from "flag present, cleared", and `[]`
+/// must be spellable. The cost is that `--applies-to` is greedy, so the id goes
+/// first — as it does in every documented invocation.
+#[derive(Subcommand)]
+pub(crate) enum KnowledgeFacetEdit {
+    /// Edit an assumption's facet fields.
+    Assumption {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What is being assumed.
+        #[arg(long)]
+        claim: Option<String>,
+        /// How sure — one of the confidence vocabulary; `""` clears.
+        #[arg(long)]
+        confidence: Option<String>,
+        /// What the assumption rests on; `""` clears.
+        #[arg(long)]
+        basis: Option<String>,
+        /// How the assumption would be validated.
+        #[arg(long)]
+        validation_plan: Option<String>,
+        /// Who validated it.
+        #[arg(long)]
+        validated_by: Option<String>,
+        /// When it was validated (YYYY-MM-DD).
+        #[arg(long)]
+        validated_on: Option<String>,
+        /// Who invalidated it.
+        #[arg(long)]
+        invalidated_by: Option<String>,
+        /// When it was invalidated (YYYY-MM-DD).
+        #[arg(long)]
+        invalidated_on: Option<String>,
+    },
+    /// Edit a decision's facet fields.
+    Decision {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The situation the decision was taken in.
+        #[arg(long)]
+        context: Option<String>,
+        /// What was chosen.
+        #[arg(long)]
+        choice: Option<String>,
+        /// What else was considered (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        alternatives: Option<Vec<String>>,
+        /// Why this choice over the alternatives.
+        #[arg(long)]
+        rationale: Option<String>,
+        /// What the choice commits us to (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        consequences: Option<Vec<String>>,
+        /// Who decided.
+        #[arg(long)]
+        decided_by: Option<String>,
+        /// When it was decided (YYYY-MM-DD).
+        #[arg(long)]
+        decided_on: Option<String>,
+    },
+    /// Edit a question's facet fields.
+    Question {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The question itself.
+        #[arg(long)]
+        question: Option<String>,
+        /// What turns on the answer.
+        #[arg(long)]
+        why_matters: Option<String>,
+        /// The answer, once there is one.
+        #[arg(long)]
+        answer: Option<String>,
+        /// Who answered it.
+        #[arg(long)]
+        answered_by: Option<String>,
+        /// When it was answered (YYYY-MM-DD).
+        #[arg(long)]
+        answered_on: Option<String>,
+    },
+    /// Edit a constraint's facet fields.
+    Constraint {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What the constraint requires or forbids.
+        #[arg(long)]
+        statement: Option<String>,
+        /// Where the constraint comes from — one of the source vocabulary; `""` clears.
+        #[arg(long)]
+        source: Option<String>,
+        /// What it binds (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        applies_to: Option<Vec<String>>,
+        /// Why it was waived.
+        #[arg(long)]
+        waiver_reason: Option<String>,
+        /// Who waived it.
+        #[arg(long)]
+        waived_by: Option<String>,
+        /// When it was waived (YYYY-MM-DD).
+        #[arg(long)]
+        waived_on: Option<String>,
+    },
+    /// Edit an evidence record's facet fields.
+    Evidence {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What was observed.
+        #[arg(long)]
+        datum: Option<String>,
+        /// Where the datum came from — one of the provenance vocabulary; `""` clears.
+        #[arg(long)]
+        provenance: Option<String>,
+        /// How sure — one of the confidence vocabulary; `""` clears.
+        #[arg(long)]
+        confidence: Option<String>,
+    },
+    /// Edit a hypothesis's facet fields.
+    Hypothesis {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The proposition under test.
+        #[arg(long)]
+        proposition: Option<String>,
+        /// What it predicts we would observe.
+        #[arg(long)]
+        predicts: Option<String>,
+    },
+    /// Refuse: concept records carry no facet fields.
+    // The subverb exists only so the refusal can name the remedy, rather than
+    // dying in `resolve_ref` with "`concept` is not a canonical record ref"
+    // (D10 / DEC-173).
+    Concept {
+        #[command(flatten)]
+        target: FacetEditTarget,
+    },
+}
+
+/// One raw text assignment when the flag was given, nothing when it was absent.
+/// `Some(String::new())` is the CLEAR, never "unset" — `DEC-170` forbids
+/// clearing by omission, and `RawEdit` has no way to express it.
+fn text_flag<'a>(field: &'a str, given: Option<&String>) -> Option<RawEdit<'a>> {
+    given.map(|value| RawEdit {
+        field,
+        value: RawValue::Text(value.clone()),
+    })
+}
+
+/// The list-shaped counterpart. `Some(vec![])` is the list clear, written `[]`.
+fn list_flag<'a>(field: &'a str, given: Option<&Vec<String>>) -> Option<RawEdit<'a>> {
+    given.map(|values| RawEdit {
+        field,
+        value: RawValue::List(values.clone()),
+    })
+}
+
+impl KnowledgeFacetEdit {
+    /// The kind the subverb names, the record it targets, and the raw field
+    /// assignments it carries — the ONE argv→[`RawEdit`] mapping (D5).
+    ///
+    /// This is the phase's drift surface: a flag declared above but never mapped
+    /// here satisfies `VT-4`'s name oracle and silently writes nothing. Only
+    /// `VT-1`, which drives argv end to end and reads the record back, sees it.
+    fn raw_edits(&self) -> (RecordKind, &FacetEditTarget, Vec<RawEdit<'static>>) {
+        match *self {
+            KnowledgeFacetEdit::Assumption {
+                ref target,
+                ref claim,
+                ref confidence,
+                ref basis,
+                ref validation_plan,
+                ref validated_by,
+                ref validated_on,
+                ref invalidated_by,
+                ref invalidated_on,
+            } => (
+                RecordKind::Assumption,
+                target,
+                [
+                    text_flag("claim", claim.as_ref()),
+                    text_flag("confidence", confidence.as_ref()),
+                    text_flag("basis", basis.as_ref()),
+                    text_flag("validation_plan", validation_plan.as_ref()),
+                    text_flag("validated_by", validated_by.as_ref()),
+                    text_flag("validated_on", validated_on.as_ref()),
+                    text_flag("invalidated_by", invalidated_by.as_ref()),
+                    text_flag("invalidated_on", invalidated_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Decision {
+                ref target,
+                ref context,
+                ref choice,
+                ref alternatives,
+                ref rationale,
+                ref consequences,
+                ref decided_by,
+                ref decided_on,
+            } => (
+                RecordKind::Decision,
+                target,
+                [
+                    text_flag("context", context.as_ref()),
+                    text_flag("choice", choice.as_ref()),
+                    list_flag("alternatives", alternatives.as_ref()),
+                    text_flag("rationale", rationale.as_ref()),
+                    list_flag("consequences", consequences.as_ref()),
+                    text_flag("decided_by", decided_by.as_ref()),
+                    text_flag("decided_on", decided_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Question {
+                ref target,
+                ref question,
+                ref why_matters,
+                ref answer,
+                ref answered_by,
+                ref answered_on,
+            } => (
+                RecordKind::Question,
+                target,
+                [
+                    text_flag("question", question.as_ref()),
+                    text_flag("why_matters", why_matters.as_ref()),
+                    text_flag("answer", answer.as_ref()),
+                    text_flag("answered_by", answered_by.as_ref()),
+                    text_flag("answered_on", answered_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Constraint {
+                ref target,
+                ref statement,
+                ref source,
+                ref applies_to,
+                ref waiver_reason,
+                ref waived_by,
+                ref waived_on,
+            } => (
+                RecordKind::Constraint,
+                target,
+                [
+                    text_flag("statement", statement.as_ref()),
+                    text_flag("source", source.as_ref()),
+                    list_flag("applies_to", applies_to.as_ref()),
+                    text_flag("waiver_reason", waiver_reason.as_ref()),
+                    text_flag("waived_by", waived_by.as_ref()),
+                    text_flag("waived_on", waived_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Evidence {
+                ref target,
+                ref datum,
+                ref provenance,
+                ref confidence,
+            } => (
+                RecordKind::Evidence,
+                target,
+                [
+                    text_flag("datum", datum.as_ref()),
+                    text_flag("provenance", provenance.as_ref()),
+                    text_flag("confidence", confidence.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Hypothesis {
+                ref target,
+                ref proposition,
+                ref predicts,
+            } => (
+                RecordKind::Hypothesis,
+                target,
+                [
+                    text_flag("proposition", proposition.as_ref()),
+                    text_flag("predicts", predicts.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            // No field flags to map: the run shell refuses on the kind alone.
+            KnowledgeFacetEdit::Concept { ref target } => (RecordKind::Concept, target, Vec::new()),
+        }
+    }
+}
+
 pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()> {
     match cmd {
         KnowledgeCommand::New {
@@ -2507,6 +2862,20 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             };
             run_inspect(common.path, &common.id, format)
         }
+        // The kind-dispatched tier first: a subverb in the slot means the
+        // positional `id` was never filled (D4).
+        KnowledgeCommand::Edit {
+            facet: Some(sub), ..
+        } => {
+            let (kind, target, raws) = sub.raw_edits();
+            run_facet_edit(
+                target.path.clone(),
+                kind,
+                &target.id,
+                &raws,
+                &mut io::stdout(),
+            )
+        }
         KnowledgeCommand::Edit {
             id,
             title,
@@ -2514,9 +2883,10 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             body,
             body_mode,
             path,
+            ..
         } => run_edit(
             path,
-            &id,
+            &id.ok_or_else(|| anyhow::anyhow!("`knowledge edit` requires a record reference"))?,
             &EditFields {
                 title: title.as_deref(),
                 tags: &tags,
@@ -4433,5 +4803,77 @@ target = \"SL-249\"
             std::fs::read_to_string(&path).unwrap(),
             "a no-op leaves the file byte-identical"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-4 / EX-8 — the subverb surface, with `facet_fields` as its ORACLE
+    // (SL-249 PHASE-04 T6)
+    //
+    // The args are hand-declared, as the rest of this CLI is (D3); the table is
+    // their oracle, not their source. `find_subcommand` IS the subverb-name pin
+    // — it fails for free when a subverb is missing or misnamed.
+    // -----------------------------------------------------------------------
+
+    /// A facet field's flag spelling — `_` → `-`. One derivation, shared by the
+    /// oracle here and the round-trip generator below (STD-001).
+    fn kebab(name: &str) -> String {
+        name.replace('_', "-")
+    }
+
+    /// `knowledge edit`'s built subcommand, with clap's generated args in place.
+    ///
+    /// Only the `knowledge` subtree is built, never the whole `Cli`:
+    /// `Command::build` recurses every sibling, and `config set`'s
+    /// `required` + `required_unless_present` positional trips clap's debug
+    /// assert on the way past (ISS-330). Drop the narrowing once that is fixed.
+    fn built_edit_command() -> clap::Command {
+        use clap::CommandFactory;
+        let mut knowledge = <crate::Cli as CommandFactory>::command()
+            .find_subcommand("knowledge")
+            .expect("`knowledge` is a top-level command")
+            .clone();
+        knowledge.build();
+        knowledge
+            .find_subcommand("edit")
+            .expect("`edit` is a knowledge verb")
+            .clone()
+    }
+
+    #[test]
+    fn every_subverbs_flags_are_exactly_its_kinds_facet_row() {
+        let edit = built_edit_command();
+        for kind in RecordKind::ALL {
+            let sub = edit
+                .find_subcommand(kind.as_str())
+                .unwrap_or_else(|| panic!("`knowledge edit {}` is a subverb", kind.as_str()));
+            let longs: BTreeSet<&str> = sub
+                .get_arguments()
+                .filter_map(clap::Arg::get_long)
+                .collect();
+            // Excluded below — asserted present FIRST, so a rename can never
+            // turn the filter vacuous and pass an empty comparison.
+            for common in ["help", "path"] {
+                assert!(
+                    longs.contains(common),
+                    "`knowledge edit {}` declares --{common}: {longs:?}",
+                    kind.as_str()
+                );
+            }
+            let declared: BTreeSet<String> = longs
+                .iter()
+                .filter(|long| !matches!(**long, "help" | "path"))
+                .map(|long| (*long).to_string())
+                .collect();
+            let expected: BTreeSet<String> = facet_fields(kind)
+                .iter()
+                .map(|row| kebab(row.name))
+                .collect();
+            assert_eq!(
+                declared,
+                expected,
+                "`knowledge edit {}`'s flags must equal its facet row",
+                kind.as_str()
+            );
+        }
     }
 }

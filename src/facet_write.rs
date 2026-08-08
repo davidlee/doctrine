@@ -189,13 +189,6 @@ pub(crate) enum KeyPosture<'a> {
     /// Absent table or absent key is a *damage report*, not a normal path: the
     /// keys are scaffold-seeded, so a missing one means a malformed record.
     /// Refuse, naming `record`, and leave the document untouched (DEC-170 F-1).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs; knowledge::apply_facet_edits constructs this but is itself staged, so the chain goes live at once"
-        )
-    )]
     RequirePresent { record: &'a str },
 }
 

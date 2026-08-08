@@ -146,3 +146,69 @@ The named exit state: three items staged behind
 at T6 when the CLI dispatch arm gives the chain a production caller. They are
 listed by name in the sheet's Findings. `expect` rather than `allow` throughout,
 so the retirement is enforced by the build rather than remembered.
+
+## Movement 2 — the surface (T6–T10)
+
+### T6 — the seven subverbs, and the staging retired
+
+`KnowledgeFacetEdit` is a seven-variant `Subcommand` in `src/knowledge.rs`, one
+variant per `RecordKind`, plus `FacetEditTarget` — a `#[derive(Args)]` bundle
+carrying `id` and `-p/--path`, flattened into every variant so the pair is
+declared once (STD-001) and `id` stays the first positional. `raw_edits()` is
+the single argv→`RawEdit` mapping; `run_facet_edit` (beside `run_edit`) is the
+run shell, ordering its four refusals ahead of every write.
+
+**Red observed**, and it was a runtime panic rather than a compile failure —
+worth noting, because the sheet predicted the latter. `VT-4` names no Rust type
+of this phase's (it reaches the surface through clap's introspection API), so it
+compiled against the tree as it stood and failed on the assertion:
+
+```
+panicked at src/knowledge.rs:4478: `knowledge edit assumption` is a subverb
+```
+
+That is a *better* red than the predicted one — a compile failure proves only
+that a symbol is missing, whereas this proves the oracle actually interrogates
+the shipped command tree.
+
+**All five `expect(dead_code)` attributes retired in one edit**, exactly as
+`mem.fact.rust.dead-code-staging-does-not-cascade` predicted: the chain went
+live together the moment the dispatch arm reached it. `cargo build` clean, so
+none of the five was still warranted.
+
+**Two clap findings, one of them somebody else's bug.**
+
+1. `ISS-330` — **pre-existing, live, not this phase's.** The first spelling of
+   `VT-4` did `<Cli as CommandFactory>::command()` then `Command::build()`.
+   `build()` recurses *every* sibling subtree and runs each one's
+   `debug_asserts`, so `doctrine config set`'s
+   `required` + `required_unless_present` positional
+   (`src/commands/config.rs:34`, and the same shape at `:52`/`:75`) panicked the
+   test. It panics on a real invocation too — `./target/debug/doctrine config
+   set --help` dies in any `debug_assertions` build. Nothing in the suite had
+   ever built the whole tree, and no test invokes `config set`, so it had gone
+   unnoticed. **Worked around, not fixed:** `built_edit_command()` clones and
+   builds only the `knowledge` subtree, with a comment naming ISS-330 and the
+   condition for removing the narrowing.
+2. `clippy::large_enum_variant`. Nesting `KnowledgeFacetEdit` directly in
+   `KnowledgeCommand::Edit` inlines the widest facet variant into the parent:
+   384 bytes against a 152-byte second-largest, and `warnings = "deny"` makes
+   that a build failure. `Option<Box<KnowledgeFacetEdit>>` fixes it at no
+   derive cost — clap implements `Subcommand for Box<T>`
+   (`clap_builder/src/derive.rs:375`). Call sites are unchanged by auto-deref.
+
+Both are in `mem.fact.clap.introspect-subtree-and-box-wide-subcommand`.
+
+**D4 confirmed against the running binary, not only the parser source.**
+`doctrine knowledge edit --help` renders `[ID] [COMMAND]` side by side and all
+seven subverbs; `S3` did not fire.
+
+`src/commands/guard.rs:214` needed no change, as the sheet predicted — the arm
+is `KnowledgeCommand::Edit { .. }`, so the new field does not break
+exhaustiveness and the subverbs inherit the `knowledge edit` write label.
+
+**One addition beyond the sheet:** a one-line doc comment on each of the thirty
+field flags and on the two positional/`--path` args, so the shipped `--help` is
+not a column of bare flag names. The `concept` variant's doc comment was also
+rewritten — its first draft leaked `D10 / DEC-173` into user-facing help; the
+rationale moved to a `//` comment beside it.
