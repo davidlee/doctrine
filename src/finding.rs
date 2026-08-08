@@ -29,6 +29,7 @@ const CATEGORY_NAME_PROSE_CITE: &str = "Prose Citation";
 const CATEGORY_NAME_AGENT_CONFORMANCE: &str = "Agent Conformance";
 const CATEGORY_NAME_SPAWN_SEAM_SYMMETRY: &str = "Spawn Seam Symmetry";
 const CATEGORY_NAME_COORD_HOOK: &str = "Coord Hook";
+const CATEGORY_NAME_INERT_FACET_KEY: &str = "Inert Facet Key";
 
 const SEVERITY_ERROR: &str = "error";
 const SEVERITY_WARNING: &str = "warning";
@@ -80,6 +81,7 @@ pub(crate) enum Category {
     AgentConformance,
     SpawnSeamSymmetry,
     CoordHook,
+    InertFacetKey,
 }
 
 impl Category {
@@ -87,7 +89,7 @@ impl Category {
     /// `AgentConformance` (SL-198 RSK-225: worker tool-surface is a jail wall), and
     /// `SpawnSeamSymmetry` (SL-206 design §5.6 I1: unjail nomination/gate drift is a
     /// security boundary, not a style nit) are errors; Lifecycle/RawLabel/TomlParse/
-    /// `ProseCite` are warnings.
+    /// `ProseCite`/`CoordHook`/`InertFacetKey` are warnings.
     #[must_use]
     pub(crate) const fn severity(self) -> Severity {
         match self {
@@ -101,7 +103,8 @@ impl Category {
             | Self::RawLabel
             | Self::TomlParse
             | Self::ProseCite
-            | Self::CoordHook => Severity::Warning,
+            | Self::CoordHook
+            | Self::InertFacetKey => Severity::Warning,
         }
     }
 
@@ -119,6 +122,7 @@ impl Category {
             Self::AgentConformance => 8,
             Self::SpawnSeamSymmetry => 9,
             Self::CoordHook => 10,
+            Self::InertFacetKey => 11,
         }
     }
 
@@ -136,6 +140,7 @@ impl Category {
             Self::AgentConformance => CATEGORY_NAME_AGENT_CONFORMANCE,
             Self::SpawnSeamSymmetry => CATEGORY_NAME_SPAWN_SEAM_SYMMETRY,
             Self::CoordHook => CATEGORY_NAME_COORD_HOOK,
+            Self::InertFacetKey => CATEGORY_NAME_INERT_FACET_KEY,
         }
     }
 }
@@ -156,7 +161,7 @@ impl Serialize for Category {
 }
 
 /// All categories in ordinal order.
-const CATEGORIES_BY_ORDINAL: [Category; 11] = [
+const CATEGORIES_BY_ORDINAL: [Category; 12] = [
     Category::IdIntegrity,
     Category::RelationIntegrity,
     Category::SpecFk,
@@ -168,6 +173,7 @@ const CATEGORIES_BY_ORDINAL: [Category; 11] = [
     Category::AgentConformance,
     Category::SpawnSeamSymmetry,
     Category::CoordHook,
+    Category::InertFacetKey,
 ];
 
 #[derive(Debug, Clone)]
@@ -217,19 +223,13 @@ impl Finding {
 /// When `verbose` is false, `RawLabel` findings are aggregated into a single
 /// informational count line rather than rendered per-item.
 pub(crate) fn render_findings(findings: &[Finding], verbose: bool) -> String {
-    let mut by_category: [Vec<&Finding>; 11] = [
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    ];
+    // Sized from `CATEGORIES_BY_ORDINAL`, not restated: a hand-written length
+    // that fell behind the enum made `by_category.get_mut` return `None` for the
+    // new category, which SILENTLY DROPPED its findings and left them out of the
+    // total (found by `test_render_all_categories` when `InertFacetKey` landed,
+    // SL-249 PHASE-03).
+    let mut by_category: [Vec<&Finding>; CATEGORIES_BY_ORDINAL.len()] =
+        [const { Vec::new() }; CATEGORIES_BY_ORDINAL.len()];
 
     for f in findings {
         let idx = usize::from(f.category.ordinal());
@@ -301,6 +301,7 @@ mod tests {
         assert_eq!(Category::AgentConformance.severity(), Severity::Error);
         assert_eq!(Category::SpawnSeamSymmetry.severity(), Severity::Error);
         assert_eq!(Category::CoordHook.severity(), Severity::Warning);
+        assert_eq!(Category::InertFacetKey.severity(), Severity::Warning);
     }
 
     #[test]

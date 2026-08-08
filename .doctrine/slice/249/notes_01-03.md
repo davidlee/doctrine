@@ -138,3 +138,97 @@ and body now carry the re-probe, keep the still-live residue (never trust
 a *separate* and still-real trap), and bound the claim to the roots actually
 probed. The planner had already flagged two of its three stale claims; the third
 — the core one — needed the probe.
+
+### T6 / T7 — the tripwire, and a sixth site the sheet did not name
+
+**Red observed:** `inert_facet_key_findings` and `Category::InertFacetKey`
+absent. Four VT-3 cases: a populated inert `confidence` on a decision reported
+once naming `DEC-001` and **both** honouring kinds (D7 — `confidence` chosen
+deliberately, it is the one field two kinds own); a `frobnicate` key no kind
+honours reported as *"no record kind honours it"* (D6); a clean corpus plus a
+seeded-but-**empty** inert key reporting nothing (D5); and
+`knowledge::run_list` returning `Ok` on the damaged corpus (EX-7).
+
+**R5's double-report probe, run before wiring #12.** `doctrine doctor --json` on
+this corpus returns `{Raw Label: 952, Prose Citation: 82, Lifecycle: 5, Coord
+Hook: 1}` — **zero `TOML Parse` rows**. No knowledge record produces a `TomlParse`
+finding today, so D8's skip rule is sufficient and there is no #7/#12 overlap to
+report. R5 discharged.
+
+**The new `Finding` category cost SIX sites, not five.** The sheet named the
+enum, `severity`, `ordinal`, `display_name` + its const, and
+`CATEGORIES_BY_ORDINAL`, plus the hand-enumerated `test_severity_mapping`. There
+is a sixth, and it is the dangerous one: `render_findings`
+(`src/finding.rs:225`) carried its own `let mut by_category: [Vec<&Finding>; 11]`
+bucket array. Its bucketing is `by_category.get_mut(idx)` — so a category whose
+ordinal exceeds the hand-written length is **silently dropped from the render and
+from the total**, with no panic and no lint. A doctor check that reports nothing
+looks exactly like a clean corpus.
+
+`test_render_all_categories` (`:343`) caught it, as R6 said it would — it is the
+canary, and it earned its keep. Fixed by **deriving** the length rather than
+bumping it:
+
+    let mut by_category: [Vec<&Finding>; CATEGORIES_BY_ORDINAL.len()] =
+        [const { Vec::new() }; CATEGORIES_BY_ORDINAL.len()];
+
+which retires the site permanently instead of leaving a seventh trap for
+category #13. Same STD-001 argument as D4's.
+
+### T8 — the staged expects retire, all fourteen
+
+`cargo build` after T7 reported **`this lint expectation is unfulfilled` for
+every one of the 14** staged `cfg_attr(not(test), expect(dead_code, …))`. All
+removed; build and suite green.
+
+**R1's prediction was wrong in the other direction too.** It predicted
+`FacetField::shape` and `FieldShape` would *stay* dead until PHASE-04's shape
+dispatch, since no production code reads the shape column. They did not:
+`#[derive(Debug, Clone, Copy, PartialEq, Eq)]` generates code that reads every
+field, so a derive alone satisfies `dead_code` for a field its production callers
+never touch. Combined with the T2 finding (a never-constructed struct subsumes
+its fields' deadness), the rule is sharper than
+`mem.pattern.lint.dead-code-staged-ahead-cfg-test` states: **deadness is a
+property of the item's whole reachable graph including derive-generated code, so
+never predict which items need staging — build, read rustc, and iterate.** Two
+predictions, two misses, in opposite directions.
+
+### T8 — VA-1
+
+Read over the whole phase range (`c1940d7c8^..` + working tree). Every quoted
+facet field name in an added line is a `name: "…"` row inside `facet_fields`'
+seven per-kind consts — **31 of them, one table**. The only other hit is
+`finding.message.contains("confidence")`, a substring assertion on a message.
+Both consumers added here call `crate::knowledge::facet_fields`
+(`doctor_checks.rs:168` for the owned set, `:222` in `honouring_kinds`); neither
+carries a field list. Positive control: the same grep returns 5 hits for
+`"(claim|confidence|basis)"` over the diff, so "no consumer restates it" is a
+reading and not a broken command.
+
+### T9 — EX-9 / I1, and the A1 canaries
+
+Per **item**, not per file (`src/knowledge.rs` necessarily changed). Each item
+extracted from `c1940d7c8^` and from the working tree by brace-matching and
+compared byte-for-byte:
+
+| item | bytes | verdict |
+|---|---|---|
+| `populated_fixture` | 2167 | unmodified |
+| `populated_record_round_trips_byte_stable_per_kind` | 778 | unmodified |
+| `populated_record_round_trips_into_shared_meta` | 509 | unmodified |
+| `render_escapes_hostile_facet_values` | 927 | unmodified |
+| `render_record_toml` | 728 | unmodified |
+| `opt_text_line` / `list_line` / `render_facet` / `render_evidence` | 124 / 104 / 3305 / 244 | unmodified |
+| `validate_facet` (A1) | 2459 | unmodified |
+| `RecordFacet` + all six variant structs (A1) | — | unmodified |
+
+**EX-9 holds on the criterion as written — passing *unedited*, not passing.**
+A1 holds too, so STOP-1 and STOP-5 did not fire. Positive control: the same
+extractor *does* find this phase's own additions in the same file (they are
+absent at base and present at head), so "unmodified" is a reading.
+
+The phase's whole production delta is: the table + `Serialize` on `RawFacet` +
+the four `KNOWN` visibility promotions (`src/knowledge.rs`), the tripwire
+(`src/doctor_checks.rs`), the category and the derived bucket array
+(`src/finding.rs`), and check #12's wiring (`src/commands/doctor.rs`).
+`git diff --stat c1940d7c8^ -- src/` = 4 files, 693 insertions, 27 deletions.

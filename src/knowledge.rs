@@ -358,13 +358,6 @@ impl Confidence {
     /// variants (`confidence_known_set_matches_variants`); read by that canary and
     /// by `facet_fields`, which takes its `Closed` tokens from here rather than
     /// retyping them (STD-001, SL-249 D4).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
-        )
-    )]
     pub(crate) const KNOWN: &'static [&'static str] = &["low", "medium", "high"];
 }
 
@@ -391,13 +384,6 @@ impl Provenance {
 
     /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
     /// `Closed` token source (STD-001, SL-249 D4).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
-        )
-    )]
     pub(crate) const KNOWN: &'static [&'static str] =
         &["inspection", "experiment", "reproduction", "citation"];
 }
@@ -428,13 +414,6 @@ impl Basis {
 
     /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
     /// `Closed` token source (STD-001, SL-249 D4).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
-        )
-    )]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "observation",
         "prior-art",
@@ -474,13 +453,6 @@ impl ConstraintSource {
 
     /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
     /// `Closed` token source (STD-001, SL-249 D4).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "staged ahead of its production consumer: `facet_fields`'s `Closed` rows (SL-249 D4) plus the lockstep canary"
-        )
-    )]
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "canon",
         "adr",
@@ -867,13 +839,6 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
 
 /// One facet field: its key, and the shape a writer must emit for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 pub(crate) struct FacetField {
     pub(crate) name: &'static str,
     /// Read by the pins (which derive each field's test value from it) and by
@@ -885,26 +850,12 @@ pub(crate) struct FacetField {
 /// from a closed set. `Closed` carries the enum's own `KNOWN` set rather than a
 /// retyped literal (STD-001).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the shape column's production reader is SL-249 PHASE-04's write dispatch; until then only the pins read it"
-    )
-)]
 pub(crate) enum FieldShape {
     Text,
     List,
     Closed(&'static [&'static str]),
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const ASSUMPTION_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "claim",
@@ -940,13 +891,6 @@ const ASSUMPTION_FACET_FIELDS: &[FacetField] = &[
     },
 ];
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const DECISION_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "context",
@@ -978,13 +922,6 @@ const DECISION_FACET_FIELDS: &[FacetField] = &[
     },
 ];
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const QUESTION_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "question",
@@ -1008,13 +945,6 @@ const QUESTION_FACET_FIELDS: &[FacetField] = &[
     },
 ];
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const CONSTRAINT_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "statement",
@@ -1042,13 +972,6 @@ const CONSTRAINT_FACET_FIELDS: &[FacetField] = &[
     },
 ];
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const EVIDENCE_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "datum",
@@ -1066,13 +989,6 @@ const EVIDENCE_FACET_FIELDS: &[FacetField] = &[
     },
 ];
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const HYPOTHESIS_FACET_FIELDS: &[FacetField] = &[
     FacetField {
         name: "proposition",
@@ -1087,24 +1003,10 @@ const HYPOTHESIS_FACET_FIELDS: &[FacetField] = &[
 /// Concept's `[facet]` is empty by design (DEC-172/DEC-173) — its content is its
 /// prose. The empty row is a case, not an exception: `I3` confirms it retains
 /// nothing, and `VT-2` confirms the template's bare `[facet]` header matches.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 const CONCEPT_FACET_FIELDS: &[FacetField] = &[];
 
 /// Every field one record kind owns, in template order — the single authored
 /// derivation of the per-kind field sets (STD-001).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "staged ahead of its production consumer: SL-249 PHASE-03's doctor tripwire (T7) is the first; until then only the pins read it"
-    )
-)]
 pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetField] {
     match kind {
         RecordKind::Assumption => ASSUMPTION_FACET_FIELDS,
