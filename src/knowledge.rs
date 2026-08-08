@@ -1061,7 +1061,7 @@ pub(crate) enum RawValue {
     not(test),
     expect(
         dead_code,
-        reason = "SL-249 PHASE-04 T3 wires apply_facet_edits, the first reader of these fields"
+        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs; apply_facet_edits reads these fields but is itself staged, so the whole chain goes live at once"
     )
 )]
 #[derive(Debug, Clone)]
@@ -1200,6 +1200,58 @@ fn check_shape(field: &FacetFieldRow, value: &RawValue) -> Result<(), FacetEditR
             })
         }
     }
+}
+
+/// The facet table's name on disk — one derivation for the writer's table
+/// argument (STD-001).
+const FACET_TABLE: &str = "facet";
+
+/// Write a planned facet edit set to one record's `record-NNN.toml` — the thin
+/// imperative shell over [`plan_facet_edits`]'s pure decisions (D3).
+///
+/// Rides `facet_write::apply_set_mixed` rather than opening a second envelope:
+/// `edit_in_place` already gives read → parse → mutate → write-once-if-changed,
+/// which is I11's idempotence and I7's inertness for free. A second envelope
+/// would be the parallel implementation `AGENTS.md` forbids.
+///
+/// The posture is `RequirePresent` (F-1, DEC-170): all seven scaffolds seed
+/// every facet key, so an absent one is damage and the refusal names `canonical`
+/// rather than tail-inserting into the trailing `[relationships]`.
+///
+/// No `updated` stamp (D9): I4 reserves that to `dep_seq::apply_status`, and a
+/// facet-only edit does not reach it.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs, the first production caller"
+    )
+)]
+pub(crate) fn apply_facet_edits(
+    path: &Path,
+    canonical: &str,
+    edits: &[FacetEdit],
+) -> anyhow::Result<bool> {
+    let fields: Vec<crate::facet_write::FacetField> = edits
+        .iter()
+        .map(|edit| match edit.value {
+            RawValue::Text(ref value) => crate::facet_write::FacetField::Str {
+                key: edit.field.name,
+                value: value.clone(),
+            },
+            RawValue::List(ref values) => crate::facet_write::FacetField::Arr {
+                key: edit.field.name,
+                values: values.clone(),
+            },
+        })
+        .collect();
+
+    crate::facet_write::apply_set_mixed(
+        path,
+        FACET_TABLE,
+        &fields,
+        crate::facet_write::KeyPosture::RequirePresent { record: canonical },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -4191,5 +4243,67 @@ target = \"SL-249\"
     fn plan_refuses_every_field_for_a_concept() {
         let err = plan_facet_edits(RecordKind::Concept, &[text("claim", "x")]).unwrap_err();
         assert!(matches!(err, FacetEditRefusal::UnknownField { .. }));
+    }
+
+    // -----------------------------------------------------------------------
+    // `apply_facet_edits` — the thin shell (SL-249 PHASE-04 T3)
+    // -----------------------------------------------------------------------
+
+    /// EX-1 — one field of each shape written through the seam and read back
+    /// through `validate_facet`, which is the oracle for "written, read back".
+    #[test]
+    fn apply_writes_each_shape_and_reads_back_through_validate_facet() {
+        let root = edit_root("apply-shapes");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+
+        let edits = plan_facet_edits(
+            RecordKind::Decision,
+            &[
+                text("rationale", "a fresh reason"),
+                list("alternatives", &["x", "y", "z"]),
+                text("decided_by", "someone else"),
+            ],
+        )
+        .unwrap();
+        let changed = apply_facet_edits(&path, "DEC-007", &edits).unwrap();
+        assert!(changed, "a real value change writes");
+
+        let record = read_record(&root, RecordKind::Decision, 7).unwrap();
+        let RecordFacet::Decision(ref facet) = record.facet else {
+            panic!("a decision reads back a decision facet");
+        };
+        assert_eq!(facet.rationale.as_deref(), Some("a fresh reason"));
+        assert_eq!(facet.alternatives, vec!["x", "y", "z"]);
+        assert_eq!(facet.decided_by.as_deref(), Some("someone else"));
+        // Untouched siblings survive.
+        assert_eq!(facet.context.as_deref(), Some("the context"));
+        assert_eq!(facet.choice.as_deref(), Some("the choice"));
+    }
+
+    /// I6 / EX-4 / EX-7 — a managed key absent from `[facet]` is damage, not a
+    /// normal path. The refusal names the record AND the key, and the assertion
+    /// is on the file's BYTES, never on the error text.
+    #[test]
+    fn apply_refuses_an_absent_key_and_leaves_the_file_byte_identical() {
+        let root = edit_root("apply-absent-key");
+        let damaged = facet_bearing_decision().replace("choice       = \"the choice\"\n", "");
+        assert!(!damaged.contains("choice"), "the key really is gone");
+        seed_record(&root, RecordKind::Decision, 7, &damaged);
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+        let before = std::fs::read(&path).unwrap();
+
+        let edits =
+            plan_facet_edits(RecordKind::Decision, &[text("choice", "a new choice")]).unwrap();
+        let err = apply_facet_edits(&path, "DEC-007", &edits).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("DEC-007"), "names the record: {msg}");
+        assert!(msg.contains("choice"), "names the key: {msg}");
+
+        assert_eq!(
+            before,
+            std::fs::read(&path).unwrap(),
+            "a refusal writes nothing at all"
+        );
     }
 }

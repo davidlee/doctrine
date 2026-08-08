@@ -193,7 +193,7 @@ pub(crate) enum KeyPosture<'a> {
         not(test),
         expect(
             dead_code,
-            reason = "SL-249 PHASE-04 T3 wires apply_facet_edits, the first production RequirePresent caller"
+            reason = "SL-249 PHASE-04 T6 wires the kind-dispatched CLI subverbs; knowledge::apply_facet_edits constructs this but is itself staged, so the chain goes live at once"
         )
     )]
     RequirePresent { record: &'a str },
