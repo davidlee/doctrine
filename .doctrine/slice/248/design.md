@@ -703,8 +703,13 @@ facet 3, and the same shape `jail.rs:302-393` already uses for jail policy.
 #### The resolver is a query, never a build — and the contract enforces it
 
 `closure-resolver` runs **trusted-side**, which is the one place this design
-executes an external command outside a capsule, so its limits are stated rather
-than assumed.
+executes a *project-supplied* external command outside a capsule, so its limits
+are stated rather than assumed. It is not the only external command out here:
+`sec-3`'s export build drives `git` trusted-side too. The distinction is
+`SPEC-030`'s own — *"Doctrine-owned Git/object operations are separately
+constrained by the ingestion contract; wrappers and interpreters the project
+uses must be named"* (`spec-030.md:79`) — and it is why the forbidden-list check
+below applies to the resolver and not to that `git`.
 
 1. **It is given an already-realised path, never a flake reference or a
    repository path.** `nix-store --query --requisites <store-path>` reads the Nix
@@ -1000,7 +1005,7 @@ this section owes both kinds. Pure, hermetic:
 - `inner_path_draws_from_every_bound_path_in_host_path_order`
 - `a_file_readable_root_contributes_no_inner_path_entry`
 - `absent_readable_root_refuses_naming_the_entry_and_the_config_key`
-- `both_declared_lists_empty_refuses`
+- `both_readable_lists_empty_refuses`
 - `closure_roots_without_a_resolver_refuses_naming_both_keys`
 - `unrealised_closure_root_refuses_and_provisioning_never_realises_it`
 - `resolver_whose_basename_is_forbidden_by_the_policy_refuses`
@@ -1219,9 +1224,36 @@ as a read-only bind, a container backend as a volume, a virtual machine as a
 share. A future backend inherits the export and the clone-inside posture
 unchanged.
 
-Building it rides `git init --bare` plus the existing `fetch_refspec`
-(`src/git.rs:2718`). There is no clone or bundle helper in `src/git.rs` to
-reuse — verified — so this half is net-new whatever input form is chosen.
+Building it drives `git` as a subprocess from `provision.rs` — `git init --bare`
+followed by a fetch of the base — behind a small wrapper local to
+`doctrine-control`. There is no clone or bundle helper in `src/git.rs` to reuse
+— verified — so this half is net-new whatever input form is chosen.
+
+**Why the wrapper is local rather than reaching for `src/git.rs`.** The root
+package already has `fetch_refspec` (`src/git.rs:2718`), and an earlier draft of
+this section said the export build rides it. It cannot: `fetch_refspec` is
+`pub(crate)`, `provision.rs` is in the other crate, and `sec-6` fixes the root
+library's export set and states that nothing beyond it changes visibility. The
+two claims were not jointly satisfiable, and the sharper half of the problem was
+that `PHASE-06`'s entrance criterion asked only that `fetch_refspec` *exist* — so
+the phase would have entered clean and failed to build.
+
+Of the two resolutions the cheaper one is right. `fetch_refspec` is eight lines
+— one `git fetch` with an explicit per-command refspec, plus error formatting —
+so widening a **published** crate's permanent public API to reuse it pays
+`sec-9` `R7`'s minimal-surface cost for almost nothing, and pays it at
+`PHASE-01`, five phases before the need appears. Wrapping locally costs a second
+git-invocation seam and nothing else. `SPEC-030` is what makes this safe rather
+than merely cheap: *"Doctrine-owned Git/object operations are separately
+constrained by the ingestion contract"* (`spec-030.md:79`), so a trusted-side
+`git` here is governed and needs no `trusted_side_forbidden_executables` check —
+unlike `closure-resolver`, which is project-supplied and does.
+
+The local wrapper **carries a comment naming the alternative** — widen the root
+library's export set to re-use `src/git.rs:2718` — so the next reader finds the
+road not taken at the seam itself rather than in this document. It inherits
+`fetch_refspec`'s one real discipline: an explicit per-command refspec, never a
+`git remote add` or a `git config` write.
 
 ### Layout
 
@@ -1396,7 +1428,8 @@ a capsule, and step 6 is the check that governs it.
    rather than one silently building into the other's directory.
 3. **Validate the temporary export** by the same rules as step 1, so what is
    published and what is adopted are checked by one function.
-4. **Publish by no-replace rename.** `renameat2(RENAME_NOREPLACE)` — the loser of
+4. **Publish by no-replace rename.** `rustix::fs::renameat_with(..,
+   RenameFlags::NOREPLACE)` — the loser of
    a concurrent race gets `EEXIST` rather than replacing a live export that other
    capsules already have bound.
 5. **The loser adopts the winner**, re-running step 1 against the published path,
@@ -2593,11 +2626,16 @@ applied to a build-level claim, because each of these would otherwise be
 discovered by whoever implements the phase.
 
 - **The exported items change visibility, and the compiler requires it.**
-  `read_path_at`, `CaptureError`, `DOCTRINE_TOML` and `read_doctrine_toml_text`
-  are `pub(crate)` today and become `pub`. Nothing else does. This is not a
-  stylistic choice: `pub use` of a `pub(crate)` item is `E0364` — *"only public
-  within the crate, and cannot be re-exported outside"* — confirmed by
-  execution. The list *is* the export contract, and the gate below asserts it.
+  `read_path_at`, `CaptureError`, `DOCTRINE_TOML`, `read_doctrine_toml_text`
+  **and `today`** are `pub(crate)` today and become `pub`. Nothing else does.
+  This is not a stylistic choice: `pub use` of a `pub(crate)` item is `E0364` —
+  *"only public within the crate, and cannot be re-exported outside"* —
+  confirmed by execution. `today` is on this list for exactly that reason and no
+  other: it is `pub(crate) fn today()` at `src/clock.rs:17` and the sketch above
+  re-exports it, so the compiler reaches it the same way it reaches the other
+  four. An earlier draft named only four here while exporting five, which made
+  the two halves of this section mutually unsatisfiable (`ISS-323`). The list
+  *is* the export contract, and the gate below asserts it.
 - **`main.rs` keeps its own module tree.** It continues to declare
   `mod git;` rather than importing `doctrine::git`, so the modules the lib
   target names compile twice. A package declaring the same module in both its
@@ -2677,7 +2715,7 @@ with no graph analysis at all:
 /// The root library's entire public export set (STD-001).
 const EXPORTED: &[&str] = &[
     "interpretation", "DOCTRINE_TOML", "read_doctrine_toml_text",
-    "read_path_at", "CaptureError",
+    "read_path_at", "CaptureError", "today",
 ];
 ```
 
@@ -4485,7 +4523,8 @@ contract.
 
 `sec-7` left one obligation on this section: the new crate's tests are green by
 never running unless something brings it into the checked set. `just check` runs
-`fmt`, `lint`, `build`, `validate`, `test`. Three of those — `lint`, `build`,
+`fmt`, `lint`, `lint-js`, `build`, `validate`, `test`. Three of those — `lint`,
+`build`,
 `test` — resolve to a bare `cargo` invocation that, with a package at the
 workspace root and no `default-members`, selects the root package alone.
 `crates/cordage` is outside the fast loop today for exactly this reason, and a
@@ -4911,11 +4950,18 @@ not exist is how the first one gets designed wrong.
 
 What has changed is the size of what would be exposed. `ConformanceBackend`
 carries two methods, and `PropertyRemoval` now carries nine variants — two added
-in round 4, two more in round 5 (`StdioOwned`, `CredentialsConfined`). The trend
-is the point: every count correction widens this residual, so the cost of
-deferring the seal rises with each round rather than staying fixed. Two rounds
-have now added two variants each, which is the closest thing to a rate this
-design has. It is still the right deferral — the sealing shape is
+in round 4, two more in round 5 (`StdioOwned`, and `MappedIdentity` for the
+`CredentialsConfined` it replaced). `AuthorityGrant` is a **second** enum in the
+same vocabulary and would go public beside it, so nine understates the exposure
+by one type. The trend is the point: every count correction widens this
+residual, so the cost of deferring the seal rises with each round rather than
+staying fixed. Two rounds have now added two variants each, which is the closest
+thing to a rate this design has.
+
+**Nine variants, ten removals**, and the two numbers are not interchangeable:
+`ResourceBound(Bound)` is one variant carrying two removals (`FileSize`,
+`Wall`). Anything counting the vocabulary says nine; anything counting what
+`execute_weakened` must handle says ten. It is still the right deferral — the sealing shape is
 decided by the second backend's needs and there is no second backend — but a
 later slice inheriting this should expect a larger vocabulary than this one
 described, not the same one.
