@@ -610,3 +610,45 @@ design's constants block was right; the proposed improvement was not.
   foreign and appends at tail. Asserted by the re-install leg of
   `install_wires_eleven_hook_entries_across_five_events` rather than reasoned
   about.
+
+## PHASE-05 harvest — the Claude skills channel restored
+
+### VA-1: SPEC-010 responsibilities 3–6, confirmed against the restored code
+
+`DEC-171` makes this a conformance claim, not a REV amendment — SPEC-010 does
+not enter the REV. Four responsibilities, one citation each, re-derived by
+reading (not assumed from the design's line numbers, which had drifted — see
+PHASE-05's `R1`):
+
+1. **Derived canonical `.doctrine/skills/<id>` tree.** `skills_canonical_dir`
+   (`src/install.rs:2360`) resolves it under `install_base`;
+   `install_skills_direct` (`:2430`) materialises one per selected entry via
+   `materialise_canonical` (`:2379`).
+2. **Relative agent symlink reconciled by proven ownership.**
+   `claude_skills_dir` (`src/install.rs:2365`) is the sole Claude-specific
+   element; `install_skills_direct`'s link-dir loop (`:2450`) calls
+   `reconcile_link` — the extracted trichotomy (`EX-1`) shared with the agents
+   and workflows legs — which classifies by `classify_link` (value equality,
+   not resolvability) before writing.
+3. **`.tmp-<id>` staging with remove-then-rename.** `materialise_canonical`
+   (`src/install.rs:2379-2402`) stages into `staging_path`'s `.tmp-<id>`
+   sibling via `copy_skill` (`:2407`), clears a crashed leftover by
+   `symlink_metadata` (not `exists`), then removes the prior canonical and
+   `fs::rename`s the temp over it — recovered verbatim from
+   `git show 347197e8^:src/skills.rs` per `EX-4`.
+4. **Self-enforced `.doctrine/skills/*` gitignore.** `install/manifest.toml:46`
+   lists the entry; no `ensure_gitignored` call exists in the skills leg
+   (`STOP-5`/`EX-7`) — its doc-comment (`src/install.rs:1538`) now names the
+   manifest instead of claiming a call site that must not exist.
+
+### D1 confirmed: the e2e golden inverted exactly as predicted
+
+`tests/e2e_skills_symlink.rs`'s `:59` assertion (`!out.contains("linked
+code-review")`) inverted in this phase, not PHASE-06 — the direct channel's
+`run()` call site (`src/install.rs`, Claude branch, step 3d) means a fresh
+install now links. The other two assertions (`:63`, `:67`) were repointed onto
+positive claims rather than left as vacuous absence assertions: the `skill
+code-review → …/.doctrine/skills/code-review` materialise line, and a real
+`.claude/skills/code-review` symlink on disk (checked via
+`fs::symlink_metadata(..).is_symlink()`). The plugin-summary assertion (`:53`)
+was left untouched, as PHASE-06's `EX-8` owns it.

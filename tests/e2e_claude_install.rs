@@ -222,14 +222,16 @@ fn install_wires_skills_agent_and_hooks_directly() {
         out.contains("linked    dispatch-worker.md"),
         "agents leg: {out}"
     );
-    // Old-style hooks/skills copypasta gone.
+    // Old-style hooks copypasta gone.
     assert!(
         !out.contains("hooks (skills-dir plugin):"),
         "no old-style hooks header: {out}"
     );
+    // SL-250 PHASE-05: skills are direct-written now, same D1 reasoning as
+    // `tests/e2e_skills_symlink.rs` — a fresh install links.
     assert!(
-        !out.contains("linked    code-review"),
-        "no old-style skills symlink: {out}"
+        out.contains("linked    code-review"),
+        "the direct skills channel links on a fresh install: {out}"
     );
     assert_installed(dir);
 }

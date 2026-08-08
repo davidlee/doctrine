@@ -586,6 +586,18 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             if let Err(e) = install_workflows_for(root, args.global, false, &mut out) {
                 writeln!(io::stdout(), "  claude workflows install failed: {e:#}")?;
             }
+            // 3d. Skills leg (SL-250 PHASE-05) — canonical tree + proven-ownership
+            // symlinks, direct-written rather than shipped via the plugin.
+            if let Err(e) = install_skills_direct(
+                root,
+                &selected,
+                &[claude_skills_dir(root, args.global)?],
+                args.global,
+                false,
+                &mut out,
+            ) {
+                writeln!(io::stdout(), "  claude skills install failed: {e:#}")?;
+            }
         } else {
             non_claude_agents.push(agent.clone());
             // Agent-def install per non-Claude agent.
@@ -1523,7 +1535,8 @@ fn read_gitignore_lines(path: &Path) -> BTreeSet<String> {
 /// Append `entry` to the project `.gitignore` when absent (idempotent, additive;
 /// creates the file if missing). Shared seam so each command can self-enforce its
 /// own derived-tree ignore invariant rather than depend on a prior `doctrine
-/// install` (SL-010 F4): `skills install` reuses this for `.doctrine/skills/*`.
+/// install` (SL-010 F4). The skills leg does NOT call this — `.doctrine/skills/*`
+/// is already listed in `install/manifest.toml`, which lands the entry.
 pub(crate) fn ensure_gitignored(root: &Path, entry: &str) -> anyhow::Result<()> {
     let path = root.join(".gitignore");
     if read_gitignore_lines(&path).contains(entry) {
@@ -2030,6 +2043,30 @@ fn foreign_reason(reason: &ForeignReason) -> String {
     }
 }
 
+/// Reconcile one managed link by proven ownership, reporting the action.
+/// The single trichotomy: agents, workflows and skills all call this.
+fn reconcile_link(
+    name: &str,
+    dest: &Path,
+    target: &Path,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    match classify_link(name, dest, target) {
+        Link::Create { .. } => {
+            write_link(dest, target)?;
+            writeln!(out, "  linked    {name}")?;
+        }
+        Link::Relink { .. } => {
+            write_link(dest, target)?;
+            writeln!(out, "  relinked  {name}")?;
+        }
+        Link::KeepForeign { reason, .. } => {
+            writeln!(out, "  kept      {name} ({})", foreign_reason(&reason))?;
+        }
+    }
+    Ok(())
+}
+
 /// Assemble the `npx skills add …` argv (program `npx`/`bunx` excluded).
 fn delegate_argv(
     agents: &[&str],
@@ -2221,19 +2258,7 @@ pub(crate) fn install_agent_def(
 
     // 2. Reconcile the agent link by proven ownership (re-classify at mutation
     //    time, like `execute`'s skill links).
-    match classify_link(file_name, &dest, &target) {
-        Link::Create { .. } => {
-            write_link(&dest, &target)?;
-            writeln!(out, "  linked    {file_name}")?;
-        }
-        Link::Relink { .. } => {
-            write_link(&dest, &target)?;
-            writeln!(out, "  relinked  {file_name}")?;
-        }
-        Link::KeepForeign { reason, .. } => {
-            writeln!(out, "  kept      {file_name} ({})", foreign_reason(&reason))?;
-        }
-    }
+    reconcile_link(file_name, &dest, &target, out)?;
     Ok(())
 }
 
@@ -2321,18 +2346,113 @@ fn install_workflow_assets(
             .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
         crate::fsutil::write_atomic(&canon, data)?;
 
-        match classify_link(file_name, &dest, &target) {
-            Link::Create { .. } => {
-                write_link(&dest, &target)?;
-                writeln!(out, "  linked    {file_name}")?;
-            }
-            Link::Relink { .. } => {
-                write_link(&dest, &target)?;
-                writeln!(out, "  relinked  {file_name}")?;
-            }
-            Link::KeepForeign { reason, .. } => {
-                writeln!(out, "  kept      {file_name} ({})", foreign_reason(&reason))?;
-            }
+        reconcile_link(file_name, &dest, &target, out)?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Skills leg (SL-250 PHASE-05) — restore the binary-sourced canonical skills
+// tree plus proven-ownership symlinks the plugin channel had shadowed.
+// Recovered near-verbatim from `git show 347197e8^:src/skills.rs`
+// (`materialise_canonical`/`copy_skill` are byte-identical); the orchestration
+// around them is new — parameterised over `link_dirs` (`OQ-9`/`DEC-166`) so a
+// second target (`.agents/skills`, IMP-406) is a call-site change, not a
+// mechanism change.
+// ---------------------------------------------------------------------------
+
+/// The canonical skills tree (project-local, or under `$HOME` with `global`).
+fn skills_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".doctrine/skills"))
+}
+
+/// The Claude skills link dir. The only Claude-specific element in the leg.
+fn claude_skills_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/skills"))
+}
+
+/// Materialise the canonical copy of `entry` at `dest` (`.doctrine/skills/<id>`),
+/// staged via a `.tmp-<id>` sibling then swapped in with a minimal-window
+/// remove+rename. Always overwrites — the canonical tree is derived (owns no
+/// authored data).
+///
+/// Unix reality (design §5.1/§10 pass-2 F4): `rename` cannot replace a non-empty
+/// directory and std has no `renameat2(RENAME_EXCHANGE)`, so the swap is
+/// remove-then-rename — a one-syscall window where a crash leaves the agent link
+/// dangling, healed by the next idempotent install. A partial stage lives only
+/// under `.tmp-<id>`, never under `<id>`, so a live link never sees a half-tree.
+fn materialise_canonical(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
+    let tmp = staging_path(dest)?;
+
+    // Clear any crashed leftover from a prior interrupted stage. Use lexists
+    // (symlink_metadata, not exists()): a leftover is normally a partial dir, but
+    // an odd dangling symlink must also be cleared — exists() follows it and would
+    // miss it, then `copy_skill`'s create_dir_all would fail on the stale link.
+    match fs::symlink_metadata(&tmp) {
+        Ok(m) if m.file_type().is_dir() => fs::remove_dir_all(&tmp)
+            .with_context(|| format!("Failed to clear stale {}", tmp.display()))?,
+        Ok(_) => {
+            fs::remove_file(&tmp)
+                .with_context(|| format!("Failed to clear stale {}", tmp.display()))?;
+        }
+        Err(_) => {}
+    }
+    // Stage the embed into the temp (same filesystem → the rename below is valid).
+    copy_skill(entry, &tmp)?;
+    // Minimal-window swap: drop the prior canonical, then rename the temp in.
+    if dest.exists() {
+        fs::remove_dir_all(dest).with_context(|| format!("Failed to remove {}", dest.display()))?;
+    }
+    fs::rename(&tmp, dest)
+        .with_context(|| format!("Failed to swap {} → {}", tmp.display(), dest.display()))?;
+    Ok(())
+}
+
+/// Copy an embedded skill's files into `dest`, stripping the source prefix.
+fn copy_skill(entry: &Entry, dest: &Path) -> anyhow::Result<()> {
+    let prefix = format!("{}/skills/{}/", entry.domain, entry.id);
+    for file in &entry.files {
+        let rel = file
+            .strip_prefix(prefix.as_str())
+            .with_context(|| format!("'{file}' is not under '{prefix}'"))?;
+        let target = dest.join(rel);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        let asset =
+            PluginAssets::get(file).with_context(|| format!("Embedded file '{file}' not found"))?;
+        #[expect(clippy::disallowed_methods, reason = "derived asset unpack")]
+        fs::write(&target, &asset.data)
+            .with_context(|| format!("Failed to write {}", target.display()))?;
+    }
+    Ok(())
+}
+
+/// Refresh the canonical tree once, then reconcile links into it from every
+/// target directory. Parameterised over `link_dirs` per `OQ-9`/`DEC-166`:
+/// materialise runs ONCE, the link phase loops.
+pub(crate) fn install_skills_direct(
+    root: &Path,
+    selected: &[&Entry],
+    link_dirs: &[PathBuf],
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let canon_dir = skills_canonical_dir(root, global)?;
+    writeln!(out, "agent claude (direct):")?;
+    for entry in selected {
+        let canon = canon_dir.join(&entry.id);
+        writeln!(out, "  skill     {} → {}", entry.id, canon.display())?;
+        if dry_run {
+            continue;
+        }
+        materialise_canonical(entry, &canon)?;
+        for link_dir in link_dirs {
+            let dest = link_dir.join(&entry.id);
+            let target = relative_target(link_dir, &canon_dir, &entry.id);
+            reconcile_link(&entry.id, &dest, &target, out)?;
         }
     }
     Ok(())
@@ -3034,6 +3154,195 @@ mod tests_skills {
     }
 
     // --- plan ---
+
+    // --- install_skills_direct (SL-250 PHASE-05) ---
+
+    /// A REAL embedded skill (not a synthetic `Entry`) — `copy_skill` resolves
+    /// `entry.files` through `PluginAssets::get`, so a hand-built entry with
+    /// invented paths would error rather than exercise the leg (A3).
+    fn real_skill_entry() -> Entry {
+        discover()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.id == "code-review" && e.domain == "doctrine")
+            .expect("code-review ships in the doctrine domain")
+    }
+
+    #[test]
+    fn install_skills_direct_materialises_and_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let cr = real_skill_entry();
+        let link_dir = dir.path().join(".claude/skills");
+        let mut out = Vec::new();
+
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[link_dir.clone()],
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+
+        let canon = dir.path().join(".doctrine/skills/code-review");
+        assert!(canon.join("SKILL.md").exists());
+
+        let link = link_dir.join("code-review");
+        assert_eq!(
+            fs::read_link(&link).unwrap(),
+            PathBuf::from("../../.doctrine/skills/code-review"),
+            "the link value IS the criterion, not mere resolvability"
+        );
+    }
+
+    #[test]
+    fn install_skills_direct_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let cr = real_skill_entry();
+        let link_dir = dir.path().join(".claude/skills");
+
+        let mut first = Vec::new();
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[link_dir.clone()],
+            false,
+            false,
+            &mut first,
+        )
+        .unwrap();
+
+        let mut second = Vec::new();
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[link_dir.clone()],
+            false,
+            false,
+            &mut second,
+        )
+        .unwrap();
+        let second = String::from_utf8(second).unwrap();
+
+        assert!(
+            second.contains("  relinked  code-review"),
+            "expected a relink line, got {second}"
+        );
+        assert!(!second.contains("  kept"), "no churn expected: {second}");
+        assert!(
+            dir.path()
+                .join(".doctrine/skills/code-review/SKILL.md")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn install_skills_direct_keeps_a_foreign_skill_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let cr = real_skill_entry();
+        let link_dir = dir.path().join(".claude/skills");
+        fs::create_dir_all(link_dir.join("code-review")).unwrap();
+        fs::write(link_dir.join("code-review/mine.txt"), b"user-owned").unwrap();
+
+        let mut out = Vec::new();
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[link_dir.clone()],
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+        let out = String::from_utf8(out).unwrap();
+
+        assert!(
+            out.contains("  kept      code-review (real dir)"),
+            "expected a kept line, got {out}"
+        );
+        assert!(link_dir.join("code-review/mine.txt").exists());
+        assert!(
+            !fs::symlink_metadata(link_dir.join("code-review"))
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the foreign dir must survive as a real dir, never replaced"
+        );
+    }
+
+    #[test]
+    fn install_skills_direct_heals_a_dangling_owned_link() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let cr = real_skill_entry();
+        let link_dir = dir.path().join(".claude/skills");
+        fs::create_dir_all(&link_dir).unwrap();
+        let canon_dir = dir.path().join(".doctrine/skills");
+        let target = relative_target(&link_dir, &canon_dir, "code-review");
+        let dest = link_dir.join("code-review");
+        symlink(&target, &dest).unwrap();
+        // Proven ours by value, but dangling: canonical does not exist yet.
+        assert!(!dest.exists(), "sanity: the link must not resolve yet");
+
+        let mut out = Vec::new();
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[link_dir.clone()],
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+        let out = String::from_utf8(out).unwrap();
+
+        assert!(
+            out.contains("  relinked  code-review"),
+            "a dangling-but-ours link is healed, not kept-foreign: {out}"
+        );
+        assert!(
+            dest.exists(),
+            "the link now resolves through the fresh canonical"
+        );
+    }
+
+    #[test]
+    fn install_skills_direct_links_every_target_dir() {
+        // VT-3: a real loop over TWO link dirs sitting at different depths — an
+        // untested N=1 loop is indistinguishable from a hard-coded target.
+        let dir = tempfile::tempdir().unwrap();
+        let cr = real_skill_entry();
+        let shallow = dir.path().join(".claude/skills");
+        let deep = dir.path().join("agents/pi/skills");
+        let mut out = Vec::new();
+
+        install_skills_direct(
+            dir.path(),
+            &[&cr],
+            &[shallow.clone(), deep.clone()],
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_link(shallow.join("code-review")).unwrap(),
+            PathBuf::from("../../.doctrine/skills/code-review")
+        );
+        assert_eq!(
+            fs::read_link(deep.join("code-review")).unwrap(),
+            PathBuf::from("../../../.doctrine/skills/code-review"),
+            "a deeper link dir must carry a deeper relative target — proves the loop, not a hard-coded value"
+        );
+        assert!(
+            dir.path()
+                .join(".doctrine/skills/code-review/SKILL.md")
+                .exists()
+        );
+    }
 }
 
 // Tests

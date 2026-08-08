@@ -1,8 +1,10 @@
 //! IMP-223 — `doctrine install --agent claude --skill code-review`
 //! end-to-end over the built binary.
 //!
-//! Skills + hooks are now driven via `claude plugin` commands; `claude` is
-//! absent in test, so we verify the graceful-failure + reminder paths.
+//! Hooks still register via `claude plugin` commands (`claude` is absent in
+//! test, so we verify the graceful-failure + reminder paths there), but skills
+//! are direct-written (SL-250 PHASE-05): a canonical tree under
+//! `.doctrine/skills/` plus a proven-ownership symlink under `.claude/skills/`.
 
 #![allow(
     clippy::expect_used,
@@ -54,18 +56,25 @@ fn install_links_then_refreshes_and_keeps_an_override() {
         out.contains("register marketplace + install plugin + agent def for claude"),
         "forward summary: {out}"
     );
-    // No old-style manual symlink/canonical output.
+    // Skills are direct-written (SL-250 PHASE-05): a fresh install links.
     assert!(
-        !out.contains("linked    code-review"),
-        "no manual skills symlink: {out}"
+        out.contains("linked    code-review"),
+        "the direct skills channel links on a fresh install: {out}"
     );
+    // The canonical materialise line, and the real symlink it feeds.
+    let canon = dir.join(".doctrine/skills/code-review");
     assert!(
-        !out.contains("refreshed code-review"),
-        "no manual canonical refresh: {out}"
+        out.contains(&format!("skill     code-review → {}", canon.display())),
+        "canonical materialise line: {out}"
     );
+    let link = dir.join(".claude/skills/code-review");
     assert!(
-        !out.contains("kept      code-review"),
-        "no manual override tracking: {out}"
+        std::fs::symlink_metadata(&link)
+            .expect("skill link on disk")
+            .file_type()
+            .is_symlink(),
+        "a real symlink lands at {}",
+        link.display()
     );
     // Agent-def still installed.
     assert!(
