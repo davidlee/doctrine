@@ -71,6 +71,8 @@ adding a case.
   audit line 299, test 997) becomes unreachable. Decide deliberately whether it
   is deleted or kept as a defence-in-depth reporting leg for pre-existing
   entries — with zero such entries, deletion is the honest option.
+  **Superseded at implementation — see § Resolution: it is NOT unreachable, and
+  it was kept.**
 - `src/coverage_store.rs:710` — a test comment states the alias case; extend to
   the command case.
 
@@ -81,3 +83,39 @@ conformance home afterwards.
 
 Evidence: `.doctrine/rfc/027/proof-binding-study/conclusion.md` § R2; RFC-027
 Stage 4.
+
+## Resolution — fixed 2026-08-08
+
+Branch `fix/iss-324-matcher`. Both holes closed by one predicate.
+
+1. **The matcher is unconditional.** `coverage::valid` (b) dropped its
+   `&& check.command.is_none()` guard — every base (alias, literal command,
+   project default) must state what success looks like in the runner's output.
+   `MatcherRequired` already did the work; no schema change, no new outcome
+   variant, no language knowledge in core.
+2. **The report flag now tests emptiness, not absence.** Both seams read one
+   `coverage::matcher_is_empty(Option<&Matcher>)`, so the write seam and the
+   report seam cannot disagree again. Two copies of that predicate drifting
+   apart *was* the sibling defect.
+
+**The `exit_code_only` apparatus was kept, and the blast-radius note above was
+wrong to call it unreachable.** `coverage_verify::run` does **not** re-validate
+entries it reads from disk — it resolves and runs straight off the parsed entry.
+`valid` guards only the *write* seam, and `coverage.toml` is authored and
+hand-editable by design, so a hand-authored entry still reaches the run seam
+where the `[exit-code-only]` flag is its only tell. Deleting the apparatus would
+have removed the sole defence on the one path that survives the fix. Kept and
+corrected instead.
+
+**Tests.** `valid_accepts_empty_matcher_with_literal_command` inverted to
+`valid_rejects_empty_matcher_with_literal_command`, plus a positive control
+across all three bases and a unit test on the shared predicate;
+`valid_failure_blocks_the_write` extended to the command shape (the live
+`doctrine coverage record --command …` path); two e2e goldens added — a CLI
+reject for the literal command, and a blank-pattern cell flagged end to end.
+`coverage_verify_prints_transition_and_audit_lines` now hand-seeds its fixture,
+since the CLI correctly refuses the shape it exercises — which is the
+defence-in-depth point made executable.
+
+Gate green, zero warnings, 4363 tests + goldens pass. Corpus unchanged, as the
+query predicted: no authored entry needed migration.
