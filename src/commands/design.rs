@@ -2632,6 +2632,66 @@ mod tests {
             .to_owned()
     }
 
+    /// The payload digest `plan_checkpoints` derives for a `create` disposition
+    /// carrying this facet, verbatim. Reads `MintPlan::payload_digest` — the one
+    /// digest domain (`EX-5`, `D8`).
+    fn digest_of(root: &Path, slice: u32, facet: &str) -> Option<Fingerprint> {
+        let payload = facet_create(root, slice, "sub-cp", "decision", facet);
+        let prior = read_snapshot(root, slice).unwrap();
+        let request: ApplyRequest = serde_json::from_str(&payload).unwrap();
+        plan_checkpoints(root, &prior, &request).unwrap()[0]
+            .payload_digest
+            .clone()
+    }
+
+    /// `VT-3` / `EX-5` (SL-249) — the payload digest covers the facet BY
+    /// CONSTRUCTION, and covers it by *value* rather than by key order.
+    ///
+    /// The digest is `sha256(serde_json::to_string(declaration))` over the whole
+    /// `Declaration`, so `CreateRecord.facet` joined the binding the moment the
+    /// field existed — no enumeration was extended anywhere in this phase, which
+    /// is the other half of `EX-5`. This test therefore could not stage a natural
+    /// red: it passes on first run. Control `C2` is what gives it force —
+    /// replacing `skip_serializing_if` with `skip_serializing` drops the field
+    /// from the serde form, leaving the digest material, and this test is the
+    /// thing that notices.
+    ///
+    /// The converse arm is `§5.3`'s second property: `facet` is a `BTreeMap`, so
+    /// its serde form is key-ordered and a caller's key order cannot move the
+    /// digest — the same guarantee
+    /// [`a_retry_rebuilt_with_reordered_keys_still_resumes`] relies on one level up.
+    #[test]
+    fn the_payload_digest_covers_the_facet_by_value_not_by_key_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let slice = fixture_with_node(root);
+
+        let one = digest_of(root, slice, "{\"choice\":\"take it\"}");
+        assert!(one.is_some(), "a create disposition is digested");
+
+        // Differing only in the facet's VALUE moves the digest.
+        assert_ne!(
+            one,
+            digest_of(root, slice, "{\"choice\":\"leave it\"}"),
+            "two payloads differing only in the facet digest differently"
+        );
+
+        // Differing only in the facet's KEY ORDER does not.
+        assert_eq!(
+            digest_of(
+                root,
+                slice,
+                "{\"choice\":\"take it\",\"alternatives\":[\"a\",\"b\"]}"
+            ),
+            digest_of(
+                root,
+                slice,
+                "{\"alternatives\":[\"a\",\"b\"],\"choice\":\"take it\"}"
+            ),
+            "the same facet in another key order digests identically"
+        );
+    }
+
     /// The prose and facet a filled `create` disposition carries below — named
     /// once so the payload and the assertions cannot drift apart (STD-001).
     const FILLED_BODY: &str = "# Checkpointed decision\n\nProse and facet, in one act.\n";
