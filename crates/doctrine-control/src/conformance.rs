@@ -151,6 +151,40 @@ const MOUNT_READ_ONLY: &str = "MOUNT-READ-ONLY-";
 /// reports separately from them.
 const SOURCE_WRITABLE: &str = "SOURCE-WRITABLE";
 const SOURCE_READ_ONLY: &str = "SOURCE-READ-ONLY";
+
+/// The capsule's own descriptor table, as the kernel presents it.
+const PROC_SELF_FD: &str = "/proc/self/fd";
+
+/// What `ls -l` puts between a symlink's name and what it resolves to. The
+/// payload's whole parse, so it is named once rather than spelled four times.
+const LS_LINK_ARROW: &str = " -> ";
+
+/// What the enumeration's **own** directory handle resolves to, and the one
+/// descriptor row 10 excludes.
+///
+/// Excluded by **identity, not by number**. `ls -1 /proc/self/fd` in a capsule
+/// that inherited nothing reports `0 1 2 3`, where `3` is the handle the
+/// enumeration opened to read the directory — so *no descriptor above 2* is
+/// unsatisfiable read literally, and the round-4 row failed before any decoy was
+/// inherited (`RV-346` `F-36`). Excluding the number would make the row depend
+/// on which number the shell happened to hand the enumeration; excluding what it
+/// **resolves to** does not. Relaxing instead to *none of the nominated decoys
+/// appears* would be row 11's denylist defect one level down.
+const ENUMERATION_HANDLE_TARGET: &str = "/proc/*/fd";
+
+/// Row 10's two tokens: nothing above the standard streams crossed the `exec`,
+/// or something did.
+const NO_DESCRIPTOR_ABOVE_TWO: &str = "NO-DESCRIPTOR-ABOVE-TWO";
+const DESCRIPTOR_INHERITED: &str = "DESCRIPTOR-INHERITED";
+
+/// One diagnostic line per descriptor above 2 the capsule resolved, carrying
+/// what it resolved *to* — a fixture path, `#NNNN (deleted)` for the unlinked
+/// write-only decoy, or `socket:[…]`.
+///
+/// [`Observed::Token`] matches whole lines, so these are never the token. They
+/// are what makes a failure say *which* descriptor crossed and of what kind,
+/// and what the two row-10 mutants are spelled in.
+const FD_RESOLVED: &str = "FD-RESOLVED-";
 /// Row B2's ref. A full refname, because `update-ref` and `show-ref --verify`
 /// both take one.
 const SENTINEL_REF: &str = "refs/heads/sentinel";
@@ -2229,6 +2263,10 @@ pub(crate) enum Property {
     /// source export are attached read-only, and the capsule can write through
     /// none of them.
     ImmutableInputSet,
+    /// Row 10. No descriptor the trusted side held crosses the `exec`: the
+    /// capsule's own enumeration resolves to nothing above the standard streams
+    /// but the handle the enumeration itself opened.
+    ClosedDescriptorSet,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -3093,6 +3131,64 @@ fn writes_nothing_through(channels: &str) -> Probe {
     }
 }
 
+/// The enumeration every descriptor payload is built on: **resolve** each entry
+/// of the capsule's own descriptor table, and run `per_descriptor` for each one
+/// above 2 that is not the enumeration's own handle.
+///
+/// `$number` and `$target` are bound for `per_descriptor`, and `extra` counts
+/// the descriptors it saw.
+///
+/// **Resolution, not counting, and one process rather than two.** `ls -l` reads
+/// the directory and resolves its entries in the same process, so every
+/// `$target` belongs to the table being enumerated. A `readlink` per entry would
+/// resolve `/proc/self/fd/N` in *`readlink`'s* process, and a glob would list a
+/// handle that is closed by the time the loop body runs — both name a different
+/// table from the one under test, which is `F-13`'s trap one level up: make sure
+/// what you read is the inherited descriptor and not a fresh one.
+///
+/// **The enumeration's own handle is excluded by identity and required to be
+/// present exactly once** ([`ENUMERATION_HANDLE_TARGET`]). A payload that found
+/// no such handle enumerated something other than its own table, so it prints no
+/// token at all and the arm reads [`Indeterminacy::NoObservation`] — an
+/// anomalous enumeration establishes nothing rather than holding.
+fn descriptors_above_two_resolved(per_descriptor: &str) -> String {
+    format!(
+        "listing=$(ls -l {PROC_SELF_FD} 2>/dev/null); own=0; extra=0; IFS='\n'; \
+         for line in $listing; do \
+         case \"$line\" in *\"{LS_LINK_ARROW}\"*) ;; *) continue;; esac; \
+         target=${{line#*{LS_LINK_ARROW}}}; \
+         number=${{line%{LS_LINK_ARROW}*}}; number=${{number##* }}; \
+         case \"$number\" in 0|1|2) continue;; esac; \
+         case \"$target\" in {ENUMERATION_HANDLE_TARGET}) own=$((own+1)); continue;; esac; \
+         extra=$((extra+1)); {per_descriptor}\
+         done; unset IFS; \
+         [ \"$own\" -eq 1 ] || exit 0; "
+    )
+}
+
+/// Row 10's payload: nothing above descriptor 2 crossed the `exec`.
+///
+/// **Presence, never readability.** A capsule that inherits a write-only
+/// descriptor reads zero bytes through it — exactly what a *closed* descriptor
+/// yields — while a write through the same descriptor mutates the trusted side's
+/// file (`F-31`). So the row reads the descriptor's presence in the table, and
+/// the diagnostic lines carry what each one resolved to rather than what it
+/// would give up.
+fn no_descriptor_above_two_is_inherited() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; {}\
+             if [ \"$extra\" -eq 0 ]; then echo {NO_DESCRIPTOR_ABOVE_TWO}; \
+             else echo {DESCRIPTOR_INHERITED}; fi",
+            descriptors_above_two_resolved(&format!("echo \"{FD_RESOLVED}$target\"; "))
+        )),
+        observed: Observed::Token {
+            held: NO_DESCRIPTOR_ABOVE_TWO,
+            failed: DESCRIPTOR_INHERITED,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3231,6 +3327,11 @@ fn table_a() -> Vec<Row> {
                 the_source_export_written_through()
             ))),
             delta: Delta::Removed(PropertyRemoval::InputsWritable),
+        },
+        Row {
+            id: RowId::Property(Property::ClosedDescriptorSet),
+            shape: ArmShape::Single(no_descriptor_above_two_is_inherited()),
+            delta: Delta::Removed(PropertyRemoval::DescriptorsClosed),
         },
     ]
 }
@@ -4146,6 +4247,7 @@ mod tests {
         run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
         writes_past_the_file_size_cap,
     };
+    use super::{ENUMERATION_HANDLE_TARGET, FD_RESOLVED, LS_LINK_ARROW, PROC_SELF_FD};
     use super::{
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
         every_declared_mount_tested_for_writability, the_source_export_written_through,
@@ -8458,27 +8560,70 @@ mod tests {
     /// A row verdict cannot carry this. `RowVerdict::Proven` is `probe Held`
     /// *and* `control Failed`, so reading verdicts would prove it circularly;
     /// this reads the control arms themselves.
+    /// The `--exact` name of [`every_shipped_rows_control_measured_in_a_process_of_its_own`],
+    /// and the prefix each of its per-row lines carries.
+    const WALK_HELPER: &str =
+        "conformance::tests::every_shipped_rows_control_measured_in_a_process_of_its_own";
+    const WALK_ARM: &str = "WALK-ARM=";
+
+    /// The child half of [`every_shipped_rows_control_is_seen_to_fail`] — **an
+    /// instrument, not a claim**, which is why it is ignored by default and why
+    /// it asserts nothing.
+    ///
+    /// It reports one line per walked row: the row's id and what its control arm
+    /// was seen to do. The parent holds the assertion, because a child that
+    /// asserted would put the walk behind an exit status indistinguishable from
+    /// *no test was selected*.
     #[test]
-    fn every_shipped_rows_control_is_seen_to_fail() {
+    #[ignore = "instrument: re-executed alone by every_shipped_rows_control_is_seen_to_fail"]
+    fn every_shipped_rows_control_measured_in_a_process_of_its_own() {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let backend = BubblewrapBackend::new(&SystemHost);
-        let walked: Vec<Row> = tables()
+        for row in tables().into_iter().filter(|row| row.id != UNWALKED) {
+            let result = run_control_arm(&backend, &SystemHost, &fixture, &row);
+            println!("{WALK_ARM}{:?} {result:?}", row.id);
+            let _swept = fixture.sweep_observed_sessions();
+        }
+    }
+
+    /// **Measured in a process of its own from PHASE-10 `T4`, and the walk is
+    /// otherwise unchanged.**
+    ///
+    /// Row 10's control arm can only fail if the decoy set `trusted_side_setup`
+    /// opened is still inheritable when that arm forks, and in this
+    /// multi-threaded binary any other thread's capsule run sweeps it in the
+    /// interval — `1 in 3` under `doctrine check gate` (`F-18`). The walk runs
+    /// that arm, so from the moment row 10 joins the shipped tables the walk
+    /// carries the same window. Moving it to a child **removes** the interfering
+    /// agent rather than tolerating it; the rows walked, the arms run and the
+    /// result required of each are what they were.
+    #[test]
+    fn every_shipped_rows_control_is_seen_to_fail() {
+        let walked: Vec<RowId> = tables()
             .into_iter()
-            .filter(|row| row.id != UNWALKED)
+            .map(|row| row.id)
+            .filter(|id| *id != UNWALKED)
             .collect();
         assert_eq!(
             walked.len(),
             tables().len().saturating_sub(1),
             "the excluded row is not in the shipped tables"
         );
-        for row in &walked {
+
+        let reported = reported_by_a_child(WALK_HELPER, WALK_ARM);
+        assert_eq!(
+            reported.len(),
+            walked.len(),
+            "the walk reported {} rows and the shipped tables hold {}",
+            reported.len(),
+            walked.len()
+        );
+        for (id, line) in walked.iter().zip(&reported) {
             assert_eq!(
-                run_control_arm(&backend, &SystemHost, &fixture, row),
-                ArmResult::Failed,
-                "{:?}'s control was not seen to fail",
-                row.id
+                *line,
+                format!("{id:?} {:?}", ArmResult::Failed),
+                "{id:?}'s control was not seen to fail"
             );
-            let _swept = fixture.sweep_observed_sessions();
         }
     }
 
@@ -8489,11 +8634,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — fourteen rows, each
+    /// shipped tables are what the design says they are — fifteen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_fourteen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_fifteen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -8503,7 +8648,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 14);
+        assert_eq!(rows.len(), 15);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -8617,33 +8762,67 @@ mod tests {
     /// same window, which shipped row 10 will (`T4`, `F-18`).
     #[test]
     fn a_descriptor_deltas_control_arm_inherits_a_set_the_probe_arm_did_not_leave() {
-        let executable = std::env::current_exe().expect("the test binary's own path");
-        let output = Command::new(executable)
-            .args([
-                "--exact",
-                DESCRIPTOR_SEAM_HELPER,
-                "--ignored",
-                "--nocapture",
-            ])
-            .output()
-            .expect("the test binary re-executes");
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let reported = stdout
-            .lines()
-            .find_map(|line| line.strip_prefix(DESCRIPTOR_SEAM_VERDICT))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no `{DESCRIPTOR_SEAM_VERDICT}` line from the child — the helper's \
-                     `--exact` selector matched nothing, or it failed before reporting\
-                     \n--- stdout\n{stdout}--- stderr\n{}",
-                    String::from_utf8_lossy(&output.stderr)
-                )
-            });
         assert_eq!(
-            reported,
+            one_line_from_a_child(DESCRIPTOR_SEAM_HELPER, DESCRIPTOR_SEAM_VERDICT),
             format!("{:?}", RowVerdict::Proven),
             "the control arm inherited no decoy, so removing the sweep changed nothing"
         );
+    }
+
+    /// Re-execute this test binary for one `#[ignore]`d instrument, and hand
+    /// back every line it reported under `prefix`.
+    ///
+    /// **The one route a descriptor-sensitive claim is measured by** (`T4`,
+    /// generalised from `T2`'s repair). Descriptor inheritability is
+    /// process-wide: `trusted_side_setup` opens the decoys under the production
+    /// window and must release it before the arm forks, and in that interval any
+    /// other test thread's capsule run sweeps this process and marks them
+    /// close-on-exec — so the control arm inherits nothing and the row reads
+    /// `Unproven` for a reason about the runner rather than about the backend.
+    /// `--exact` selects a single test, so the child holds no second capsule run
+    /// to sweep it: the interfering agent is **absent, not out-waited**. Nothing
+    /// is relaxed, conditioned or retried — only the process the assertion is
+    /// made in changes.
+    ///
+    /// **Selection by name fails open.** A selector matching nothing exits 0
+    /// having run nothing, so the marker line is required *positively* and the
+    /// child's exit status is never read. A rename is then a loud parse failure
+    /// carrying the child's own output, not a quietly green measurement of
+    /// nothing (`D3`).
+    fn reported_by_a_child(helper: &str, prefix: &str) -> Vec<String> {
+        let executable = std::env::current_exe().expect("the test binary's own path");
+        let output = Command::new(executable)
+            .args(["--exact", helper, "--ignored", "--nocapture"])
+            .output()
+            .expect("the test binary re-executes");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let reported: Vec<String> = stdout
+            .lines()
+            .filter_map(|line| line.strip_prefix(prefix))
+            .map(str::to_owned)
+            .collect();
+        assert!(
+            !reported.is_empty(),
+            "no `{prefix}` line from `{helper}` — the `--exact` selector matched nothing, \
+             or the instrument failed before reporting\n--- stdout\n{stdout}--- stderr\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        reported
+    }
+
+    /// [`reported_by_a_child`] for an instrument reporting a single value.
+    ///
+    /// More than one line under the prefix is a defect in the instrument, not a
+    /// value to pick from: a caller reading the first would be choosing silently.
+    fn one_line_from_a_child(helper: &str, prefix: &str) -> String {
+        let mut reported = reported_by_a_child(helper, prefix);
+        assert_eq!(
+            reported.len(),
+            1,
+            "`{helper}` reported {} `{prefix}` lines and this claim reads one",
+            reported.len()
+        );
+        reported.remove(0)
     }
 
     /// Why the seam cannot open its state before the arm's capsule does
@@ -8890,5 +9069,90 @@ mod tests {
                 mark.display()
             );
         }
+    }
+
+    // ── PHASE-10 `T4`: row 10 — `ClosedDescriptorSet` / `DescriptorsClosed` ─
+    //
+    // **Every executed claim below is measured in a process of its own**, for
+    // the reason [`reported_by_a_child`] gives: row 10 is the descriptor-delta
+    // row, so it inherits verbatim the setup→fork window `F-18` measured at 1 in
+    // 3 under `doctrine check gate`. `T2` closed that window for the seam's own
+    // discriminator and recorded (`F-19`) that it stays open for any shipped row
+    // that carries the delta. This is that row, and it takes the same route.
+    //
+    // **The window is the multi-threaded *test binary*'s, not `verify`'s.**
+    // `verify` runs the rows sequentially in one thread, so no capsule run of
+    // its own can land between this row's setup and its fork. Nothing here
+    // conditions, relaxes or `#[ignore]`s a shipped claim.
+
+    const ROW_TEN_HELPER: &str = "conformance::tests::row_ten_measured_in_a_process_of_its_own";
+    const ROW_TEN_VERDICT: &str = "ROW10-VERDICT=";
+
+    /// The child half of row 10's two verdict claims — **an instrument, not a
+    /// claim**, which is why it is ignored by default and asserts nothing.
+    #[test]
+    #[ignore = "instrument: re-executed alone by closed_descriptor_set_is_proven and no_descriptor_above_two_appears_in_the_capsules_enumeration"]
+    fn row_ten_measured_in_a_process_of_its_own() {
+        let verdict = shipped_verdict(&RowId::Property(Property::ClosedDescriptorSet));
+        println!("{ROW_TEN_VERDICT}{verdict:?}");
+    }
+
+    /// Row 10's shipped payload, for the claims stated over its text.
+    fn row_ten_script() -> String {
+        let row = shipped_row(&RowId::Property(Property::ClosedDescriptorSet));
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 10 is a one-capsule row");
+        };
+        probe.argv.as_slice().join(" ")
+    }
+
+    /// `VT-1`, row 10.
+    #[test]
+    fn closed_descriptor_set_is_proven() {
+        assert_eq!(
+            one_line_from_a_child(ROW_TEN_HELPER, ROW_TEN_VERDICT),
+            format!("{:?}", RowVerdict::Proven),
+            "the probe saw a descriptor it should not have, or the control inherited none"
+        );
+    }
+
+    /// `VT-3`, row 10's headline claim — and the two things about *how* it is
+    /// stated that the round-4 row got wrong.
+    ///
+    /// The verdict is the executed half: nothing above descriptor 2 appeared
+    /// under the probe, and removing the sweep is what changed it. The text is
+    /// the half a verdict cannot carry.
+    ///
+    /// - **Resolution, not counting.** The payload resolves every entry, so a
+    ///   failure names what crossed the `exec` rather than that the table was
+    ///   one entry longer than someone expected.
+    /// - **Exclusion by identity, not by number.** Exactly one descriptor is
+    ///   excluded — the handle the enumeration itself opened, recognised by what
+    ///   it resolves to. The round-4 row asserted *no descriptor above 2*
+    ///   literally and failed before any decoy was inherited, because that
+    ///   handle is always there.
+    #[test]
+    fn no_descriptor_above_two_appears_in_the_capsules_enumeration() {
+        assert_eq!(
+            one_line_from_a_child(ROW_TEN_HELPER, ROW_TEN_VERDICT),
+            format!("{:?}", RowVerdict::Proven),
+            "the probe saw a descriptor it should not have, or the control inherited none"
+        );
+
+        let script = row_ten_script();
+        assert!(
+            script.contains(PROC_SELF_FD) && script.contains(LS_LINK_ARROW),
+            "row 10 does not resolve the entries it enumerates, so a failure cannot \
+             say what crossed the exec"
+        );
+        assert!(
+            script.contains(ENUMERATION_HANDLE_TARGET),
+            "row 10 does not exclude the enumeration's own handle by identity, so it \
+             is excluding a descriptor number or none at all"
+        );
+        assert!(
+            script.contains(FD_RESOLVED),
+            "row 10 reports no resolved descriptor, so a failure names nothing"
+        );
     }
 }
