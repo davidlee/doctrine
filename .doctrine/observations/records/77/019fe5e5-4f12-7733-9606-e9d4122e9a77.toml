@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe5e5-4f12-7733-9606-e9d4122e9a77"
+recorded_at = "2026-08-09T09:40:38.290168445Z"
+kind = "friction"
+summary = "/execute PHASE-10 T4-residual: a supplied diagnosis named the wrong agent, and the prescribed repair would not have closed the hole"
+detail = "The worker brief carried a diagnosis (interference from 'another test inside its own hold_descriptor_window()') that is impossible on inspection: the victim takes that same process-wide mutex across its open, sweep and fork, so a window-holder is excluded by construction. The real agents were the three callers that took no window. The brief also prescribed moving the victim into a child; measured, an inheritable fd survives two exec levels, so a re-executed child inherits whatever was inheritable at spawn - a narrowing, not a closure, and the exact trade F-19 had already refused. Cost: the brief's own evidence bar (5+ green gate runs) was chased first and produced 27 green runs with zero reds before the approach was abandoned; the flake only yielded to a constructed two-arm experiment, which redded on the first run. Two generalisable items: (1) a tally of greens is not a reproduction and should not be accepted as one in a brief's evidence bar - T4's own honest 5/5 preceded this red; (2) 'run it in a process of its own' is a closure when applied to the aggressor and only a narrowing when applied to the victim, and the shipped guidance does not make that distinction."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

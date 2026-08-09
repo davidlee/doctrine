@@ -203,6 +203,51 @@ and when you brief a tally, name the channel the hazard runs on — fds, pids,
 mounts, the clock — and require load on *that*. This has now cost three
 firings, each time as a worker's honest tally that measured the wrong axis.
 
+**Where a test's correctness depends on process-wide state, the answer is
+isolation, and a tally is not the instrument.** The fd table, cwd, environment
+and signal dispositions are shared by every thread in the test binary, so the
+interfering agent is *another test in the same process* — and it appears only
+when the scheduler interleaves the two windows. `PHASE-10` `T4` isolated the
+assertions needing row 10's decoys **present**, tallied a true 5/5 through the
+gate, and still red on the orchestrator's first run: the mirror case, the leg
+needing those decoys **absent**, was still forking in the shared process and
+inherited a concurrent fixture's set. Five green runs were not weak evidence
+badly gathered; they were the wrong *kind* of evidence. A window this narrow is
+closed by removing the interfering agent, never by failing to observe it.
+
+So when a brief touches process-wide state: require the **structural**
+argument — name the interfering agent, show it can no longer reach the fork —
+and treat the tally as corroboration of a fix already argued, never as the
+argument. Fix the class, not the instance: sweep every site sharing the hazard,
+and make any deliberate exclusion visible, as `UNWALKED` does.
+
+**The orchestrator's own verification run is what convicts, not the worker's
+self-tally.** Both times a worker's honest tally has been contradicted, it was
+contradicted by the first run taken outside the worker's own process and
+sitting. Never skip it because the hand-back tally looks strong; a strong tally
+is exactly when it is worth taking.
+
+**For a race, the instrument is a two-arm causality experiment, not repetition.**
+The `T4` residual was never reproduced by running it more: **27** unaggravated
+runs — 21 filtered, 6 full-suite — were all green. What convicted was aggravating
+the hypothesised aggressor and toggling one variable: arm A un-windowed a single
+suspect call site and held its descriptor set open for 20 s beside the victim →
+**red on the first run**, with the reported panic's exact shape; arm B, identical
+sleep with the window restored → **green**. That is proof of mechanism. A tally
+can only ever fail to observe. So brief it this way: *name your suspected
+aggressor, make it worse, and show the failure appears and disappears with it* —
+and require both arms be recorded before the fix reverts them.
+
+**Brief the evidence and the constraints; label the diagnosis a hypothesis.**
+The same firing's brief carried an orchestrator diagnosis that was wrong in its
+specifics and prescribed a repair route that measurement rejected. Both were
+caught only because the brief said *verify it, don't take it on trust* and the
+worker did. Keep that phrasing on every diagnosis you hand down, and never
+prescribe a route as settled — give the constraints it must satisfy (here: don't
+weaken an assertion, don't reopen a settled decision, don't launder a flake into
+a smaller flake) and let the worker choose against them. A worker that can
+overturn the brief on evidence is the point of the split.
+
 ## The orchestrator's turn
 
 Opus, and **thin** — it routes, it does not read source and it does not read

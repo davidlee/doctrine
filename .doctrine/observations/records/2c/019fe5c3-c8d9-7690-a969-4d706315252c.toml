@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe5c3-c8d9-7690-a969-4d706315252c"
+recorded_at = "2026-08-09T09:04:01.241723602Z"
+kind = "friction"
+summary = "loop orchestrator: a worker's honest 5/5 gate tally missed a process-wide-state hazard that the orchestrator's first verification run caught"
+detail = "SL-248 PHASE-10 T4. The worker isolated the row-10 assertions needing the decoy fds present (closing F-16/F-18) and tallied 5/5 through doctrine check gate. The mirror leg — a_descriptor_leaking_backend_fails_row_ten's discriminating 'leaks nothing' path — still forked from the shared multi-threaded test process via payload_output_leaking, and inherited a concurrent test fixture's inheritable decoys. Red on the orchestrator's first gate run. Cost: a full extra worker firing. Root cause is a briefing defect, not worker error: the brief asked for a tally where the hazard is shared process state, for which the only evidence is structural isolation. LOOP.md amended at source with two rules — isolate rather than tally for process-wide state, and the orchestrator's verification run convicts, not the worker's self-tally."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
