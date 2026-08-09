@@ -957,3 +957,80 @@ test — provision included — runs against `WitnessBackend`. The two executed
 claims drive `BubblewrapBackend` over `SystemHost` and assert
 `availability() == Available` first, so a host without `bwrap` fails with the
 precondition named rather than with a confusing claim failure.
+
+## T10 — the three harness invariants (`VT-2`)
+
+**`F-29` — `Delta::SharedRoot` is a rebase, not a field swap.** Re-pointing the
+second placement's `root` and leaving its entries where they were does not
+produce a lawful placement: `check_declared_entry` licenses a writable entry
+only when it sits under *this placement's own* transaction root, so the second
+capsule's own `capsule/tmp` becomes a `ForbiddenScopeOverlap` the instant the
+root moves out from under it. The delta therefore moves the entries with the
+root — `rebase_onto` re-writes every writable and readable host path that was
+under the old root to the same relative path under the shared one, and leaves
+anything outside it alone. That is also what the row is *about*: two capsules
+sharing a root means the second capsule's writable state lands in the first's
+tree, which is exactly what the rebased entries express and a bare field swap
+never did. The first placement of a `SharedRoot` arm passes through untouched —
+it is the one whose root is shared — which the test pins alongside the rebase so
+"only the second placement moves" is asserted rather than assumed.
+
+**The widened control cannot use the project root.** `widens_the_undeclared_decoy`
+mounts the fixture's *undeclared decoy*, not `project_root()`: the latter is the
+canonical-repository scope, and widening onto it is refused by placement
+validation before the control can exist. A control that cannot be built is not a
+control.
+
+**`F-30` — the escape is the visibility control's, not the teardown control's.**
+`F-9` is right that `--die-with-parent` is what reaps a detached descendant, and
+under a `Teardown` arm the grandchild does outlive its parents. It outlives them
+*inside the pid namespace*, whose init process holds the harness's captured
+descriptors until the namespace empties — so the arm cannot return while the
+escapee is alive, and (a) has nothing to observe. Measured both ways on this
+host: with the namespace, end-of-file waits out the escapee (a `sleep 120`
+payload took the arm to the 120s wall bound, where `timeout` killed the whole
+tree and left nothing to sweep); with `ProcessVisibility` removed, the namespace
+is gone, the grandchild is an ordinary host process, and end-of-file arrives in
+25ms with the escapee still there. The test's own title admits either control;
+the visibility one is the one that can be observed.
+
+**A payload that echoes and exits is gone before the descent can see it.** The
+trusted side's descent to the capsule's own top-level process polls `/proc` for
+half a second, and it is looking for a *session leader* — once the leader exits,
+its surviving orphan keeps the session id but leads nothing, and the descent
+correctly answers `None`. So the payload lingers a second after spawning the
+escapee. Without the linger the arm reports no liveness, which is the honest
+answer to a question asked too late, and the test reds for a reason that has
+nothing to do with containment.
+
+**`SIGKILL` is asynchronous; the `/proc` entry is not the process.** Re-reading
+the table immediately after the sweep finds the survivor it just killed, still
+listed until whoever inherited it waits on it. `drained_of` polls the same half
+second the descent uses. A session that has not emptied by then was not swept —
+which is the failure the assertion is for, and the poll does not weaken it.
+
+**`F-31` — the parent-side descriptor window is not thread-safe.** This is the
+phase's most consequential finding and it is *not* about the tests.
+`BubblewrapBackend::run` mutates **process-wide** descriptor flags either side of
+its spawn — `mark_inherited_descriptors_close_on_exec` marks every inherited
+descriptor `CLOEXEC`, then `clear_close_on_exec` un-marks the status file — and
+what reads those flags is `fork`. Two runs in flight at once corrupt each
+other's handover. Measured, not theorised: a capsule was spawned with
+`--json-status-fd 4` holding **no descriptor 4** (a concurrent run's sweep had
+re-marked it `CLOEXEC` before this one forked) and a *different* transaction's
+`bwrap-status.json` at descriptor 6 (this one forked inside that run's cleared
+window). That capsule then blocked at bubblewrap's user-namespace handshake for
+ever — its outer process gone, `read` on the sync eventfd never satisfied —
+while holding the harness's capture pipe, so the arm reading that pipe to
+end-of-file never returned. Observed as a suite that hung for 14 minutes with a
+different test stuck each run.
+
+The hazard belongs to the mechanism, not to `cargo test`: any caller that runs
+two capsules at once meets it, and `ArmShape::Concurrent` (row B5) is exactly
+that caller. The fix is to narrow the window to the fork itself, in production,
+and it is deliberately **not** made here — a phase's evidence should be about the
+phase. What is here is a `#[cfg(test)]` mutex around that window in `run`, which
+keeps today's only multi-threaded caller off a defect it did not introduce. Held
+for the whole of `run` rather than just the fork, so a future real concurrent arm
+would serialise rather than deadlock; narrowing it is part of the production fix.
+The suite went from a 14-minute hang to 197 tests in 1.58s.

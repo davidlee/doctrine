@@ -307,6 +307,38 @@ pub(crate) trait ConformanceBackend: CapsuleBackend {
         execution: &Execution,
         observer: &dyn Fn(HostPid),
     ) -> Result<Observation, BackendError>;
+
+    /// Run under `under`, reporting the capsule's top-level pid to `noticed`
+    /// the moment it exists — for **every** shape of arm (`EX-12`, `D3`).
+    ///
+    /// Containment cannot be tied to a row shape. The arm whose containment
+    /// matters most is row 7's, a `Single` under
+    /// [`PropertyRemoval::Teardown`] — the one removal measured to let a
+    /// descendant escape (`F-9`) — and the three methods above give a `Single`
+    /// arm no way to learn what session that descendant landed in. This is the
+    /// seam that does, and [`Arm::observation`] is its only caller: every
+    /// capsule the suite starts is noticed, or the sweep on the way out of the
+    /// row has nothing to reach.
+    ///
+    /// **Defaulted to the un-noticing route** — the parameter is `_noticed`
+    /// there because the default never calls it — so a backend with no pid seam
+    /// is still admissible: it runs exactly as before and its orphans are its
+    /// own wall bound's problem. A backend that *can* supply the seam overrides
+    /// this, and `BubblewrapBackend` implements the other three in terms of it
+    /// rather than beside it — one profile assembly, not two.
+    fn execute_noticing(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        under: Under,
+        _noticed: &dyn Fn(HostPid),
+    ) -> Result<Observation, BackendError> {
+        match under {
+            Under::Confining => self.as_capsule_backend().execute(placement, execution),
+            Under::Removing(removal) => self.execute_weakened(placement, execution, removal),
+            Under::Granting(grant) => self.execute_granted(placement, execution, grant),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1529,8 +1561,53 @@ impl ConformanceBackend for BubblewrapBackend<'_> {
         execution: &Execution,
         removal: PropertyRemoval,
     ) -> Result<Observation, BackendError> {
-        let owned = match removal {
-            PropertyRemoval::StdioOwned => Some(OwnedStdio::opened()?),
+        self.execute_noticing(
+            placement,
+            execution,
+            Under::Removing(removal),
+            &noticing_nobody,
+        )
+    }
+
+    fn execute_granted(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        grant: AuthorityGrant,
+    ) -> Result<Observation, BackendError> {
+        self.execute_noticing(
+            placement,
+            execution,
+            Under::Granting(grant),
+            &noticing_nobody,
+        )
+    }
+
+    fn execute_observed(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        observer: &dyn Fn(HostPid),
+    ) -> Result<Observation, BackendError> {
+        self.execute_noticing(placement, execution, Under::Confining, observer)
+    }
+
+    /// The one assembly, and the other three are it under a fixed [`Under`].
+    ///
+    /// The pid relay is attached to **every** profile rather than to the
+    /// confining one alone: row 7's control arm is a `Single` under
+    /// [`PropertyRemoval::Teardown`], which is the removal that lets a
+    /// descendant escape (`F-9`), so it is exactly the arm whose session the
+    /// sweep must learn.
+    fn execute_noticing(
+        &self,
+        placement: &CapsulePlacement,
+        execution: &Execution,
+        under: Under,
+        noticed: &dyn Fn(HostPid),
+    ) -> Result<Observation, BackendError> {
+        let owned = match under {
+            Under::Removing(PropertyRemoval::StdioOwned) => Some(OwnedStdio::opened()?),
             _ => None,
         };
         let (stdio, capture) = match owned {
@@ -1538,7 +1615,26 @@ impl ConformanceBackend for BubblewrapBackend<'_> {
             None => (None, None),
         };
 
-        let profile = WeakenedProfile::weakened(weakening_for(removal, stdio));
+        // The backend's seam hands over the **immediate child**, which under the
+        // wall bound is `timeout(1)` and never the subject. The descent to the
+        // capsule's own top-level process happens here, trusted-side, inside the
+        // window where the child is spawned and not yet waited on.
+        //
+        // A descent that finds nothing does **not** call back, and
+        // `classify_concurrent` reads that as `Indeterminacy::NoLiveness`. That
+        // is the honest outcome: a pid we could not establish is not evidence,
+        // and calling back with the wrapper's pid would be worse than silence.
+        let relay = |pid: i32| {
+            if let Some(capsule) = observed_capsule_process(HostPid(pid)) {
+                noticed(capsule);
+            }
+        };
+        let profile = match under {
+            Under::Confining => WeakenedProfile::confining(),
+            Under::Removing(removal) => WeakenedProfile::weakened(weakening_for(removal, stdio)),
+            Under::Granting(grant) => WeakenedProfile::weakened(weakening_granting(grant)),
+        }
+        .observed_by(&relay);
         let mut observation = self.run(placement, execution, &profile)?;
 
         // The capsule's output went to descriptors this side owns, so `run` saw
@@ -1555,47 +1651,14 @@ impl ConformanceBackend for BubblewrapBackend<'_> {
         }
         Ok(observation)
     }
-
-    fn execute_granted(
-        &self,
-        placement: &CapsulePlacement,
-        execution: &Execution,
-        grant: AuthorityGrant,
-    ) -> Result<Observation, BackendError> {
-        self.run(
-            placement,
-            execution,
-            &WeakenedProfile::weakened(weakening_granting(grant)),
-        )
-    }
-
-    fn execute_observed(
-        &self,
-        placement: &CapsulePlacement,
-        execution: &Execution,
-        observer: &dyn Fn(HostPid),
-    ) -> Result<Observation, BackendError> {
-        // The backend's seam hands over the **immediate child**, which under the
-        // wall bound is `timeout(1)` and never the subject. The descent to the
-        // capsule's own top-level process happens here, trusted-side, inside the
-        // window where the child is spawned and not yet waited on.
-        //
-        // A descent that finds nothing does **not** call back, and
-        // `classify_concurrent` reads that as `Indeterminacy::NoLiveness`. That
-        // is the honest outcome: a pid we could not establish is not evidence,
-        // and calling back with the wrapper's pid would be worse than silence.
-        let relay = |pid: i32| {
-            if let Some(capsule) = observed_capsule_process(HostPid(pid)) {
-                observer(capsule);
-            }
-        };
-        self.run(
-            placement,
-            execution,
-            &WeakenedProfile::confining().observed_by(&relay),
-        )
-    }
 }
+
+/// The observer a run has when nobody is listening.
+///
+/// A named function rather than a closure at each site: `execute_weakened` and
+/// `execute_granted` are the *production-shaped* entry points, kept for the
+/// callers and mutations that name them, and what they do not have is a sink.
+fn noticing_nobody(_capsule: HostPid) {}
 
 // ---------------------------------------------------------------------------
 // The pid seam and the session it names (`T5`, `EX-7`, `EX-12`, `D3`)
@@ -2215,14 +2278,11 @@ impl Arm<'_> {
         let placement = (self.capsule)()
             .map_err(|detail| indeterminate(Indeterminacy::BackendError(detail), None))?;
         let execution = (self.execution)(argv);
-        let outcome = match under {
-            Under::Confining => self.backend.execute(&placement, &execution),
-            Under::Removing(removal) => self
-                .backend
-                .execute_weakened(&placement, &execution, removal),
-            Under::Granting(grant) => self.backend.execute_granted(&placement, &execution, grant),
-        };
-        outcome
+        // Through the noticing seam whatever the shape: containment is not a
+        // property of a row's shape, and row 7's `Single` control arm is the one
+        // that leaves an orphan (`EX-12`, `F-9`).
+        self.backend
+            .execute_noticing(&placement, &execution, under, self.noticed)
             .map_err(|error| indeterminate(Indeterminacy::BackendError(format!("{error:?}")), None))
     }
 
@@ -2816,7 +2876,12 @@ fn placed_under(
             // The first capsule of a `SharedRoot` arm is the one whose root is
             // shared, so it is itself unchanged.
             None => return Ok(placement),
-            Some(first) => parts.root = first.clone(),
+            Some(first) => {
+                let own = parts.root.path().to_path_buf();
+                parts.root = first.clone();
+                rebase_onto(&mut parts.writable, &own, first.path());
+                rebase_onto(&mut parts.readable, &own, first.path());
+            }
         },
         Delta::Widened(entries) => parts.readable.extend(entries(fixture)),
         Delta::NetworkPermitted => parts.network = NetworkPosture::Permitted,
@@ -2825,6 +2890,27 @@ fn placed_under(
         Delta::Removed(_) | Delta::Granted(_) => return Ok(placement),
     }
     CapsulePlacement::try_new(parts, fixture.scopes()).map_err(|refusal| format!("{refusal:?}"))
+}
+
+/// Move every entry that lived under `own` to the same place under `shared`.
+///
+/// **The whole of what `Delta::SharedRoot` shares** (`F-29`). Swapping the root
+/// field alone builds a placement `CapsulePlacement::try_new` refuses: the
+/// writable carve-out is licensed by *this placement's own* transaction root
+/// (`backend.rs` `check_declared_entry`), so a second capsule keeping its own
+/// writable paths while claiming the first's root has entries licensed by
+/// neither root and overlapping the forbidden capsule-root scope. Rebasing is
+/// also what the row is *about*: the second capsule's writable state landing on
+/// the first capsule's, which is the freshness defect the control demonstrates.
+///
+/// Inner destinations are untouched, so the capsule sees the same layout at the
+/// same paths and the two arms still differ by one thing.
+fn rebase_onto(entries: &mut [MountedPath], own: &Path, shared: &Path) {
+    for entry in entries {
+        if let Ok(relative) = entry.host().strip_prefix(own) {
+            *entry = MountedPath::new(shared.join(relative), entry.inner().clone());
+        }
+    }
 }
 
 /// The backend-side control a delta implies. Only two of the five are
@@ -3110,8 +3196,8 @@ mod tests {
     };
     use super::{
         Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
-        capsule_still_running, harness_execution, next_transaction_id, run_arm, still_running,
-        under_for,
+        capsule_still_running, harness_execution, next_transaction_id, placed_under,
+        provision_capsule, run_arm, still_running, under_for,
     };
     use super::{
         CAPACITY_CLAIM, CAPACITY_FILESYSTEM_CLAIM, DOCTRINE_TOML, EMPTY_FORBIDDEN_EXECUTABLES,
@@ -3119,11 +3205,12 @@ mod tests {
         capacity_filesystem_claim, claims_skipped, object_set_claim, object_sets_agree,
         read_once_claim,
     };
-    use super::{OwnedStdio, weakening_for, weakening_granting};
     use super::{
-        ProcessFacts, STAT_LEAF, SessionId, StatFacts, capsule_session_leader, depth_from,
-        own_session, process_table, session_of, stat_of,
+        CAPSULE_DISCOVERY_ATTEMPTS, CAPSULE_DISCOVERY_INTERVAL, ProcessFacts, STAT_LEAF, SessionId,
+        StatFacts, capsule_session_leader, depth_from, own_session, process_table, session_of,
+        stat_of,
     };
+    use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{BubblewrapBackend, SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
@@ -3147,6 +3234,21 @@ mod tests {
     const ANOTHER_VALUE: &str = "0";
 
     const TODAY: &str = "2026-08-09";
+
+    /// How long a deliberately escaping descendant outlives the arm that spawned
+    /// it. Well under `FIXTURE_TIMEOUT_SECONDS`, or the wall bound reaps the
+    /// whole tree and there is nothing left for the sweep to prove anything
+    /// about; well over the arm's own runtime, or it exits on its own and the
+    /// sweep is credited with a kill it did not make.
+    const ESCAPE_SECONDS: u64 = 23;
+
+    /// How long the capsule's own top-level process lingers after spawning the
+    /// escapee. The trusted side's descent to that process polls `/proc` for
+    /// half a second (`CAPSULE_DISCOVERY_ATTEMPTS`), and a payload that echoes
+    /// and exits is gone inside a tenth of that — so without the linger the
+    /// descent races the payload and reports no liveness, which is the honest
+    /// answer to a question asked too late rather than a defect in the seam.
+    const LINGER_SECONDS: u64 = 1;
 
     // ── Placement geometry (`D6`) ──────────────────────────────────────────
     //
@@ -3260,6 +3362,11 @@ mod tests {
         /// Which entry point each call came through, in order — the evidence
         /// that a weakening reached the capsule it was meant for and no other.
         reached: RefCell<Vec<Under>>,
+        /// Every placement that reached the backend boundary, in order.
+        /// `WitnessBackend` records executions and not placements, and
+        /// `backend.rs` is not this phase's file (`S1`) — so invariant 4's
+        /// evidence is collected here.
+        placements: RefCell<Vec<CapsulePlacement>>,
     }
 
     impl Stub {
@@ -3269,6 +3376,7 @@ mod tests {
                 weakening,
                 seam,
                 reached: RefCell::new(Vec::new()),
+                placements: RefCell::new(Vec::new()),
             }
         }
 
@@ -3327,6 +3435,14 @@ mod tests {
         fn reached(&self) -> Vec<Under> {
             self.reached.borrow().clone()
         }
+
+        fn placements(&self) -> Vec<CapsulePlacement> {
+            self.placements.borrow().clone()
+        }
+
+        fn seen(&self, placement: &CapsulePlacement) {
+            self.placements.borrow_mut().push(placement.clone());
+        }
     }
 
     impl CapsuleBackend for Stub {
@@ -3344,6 +3460,7 @@ mod tests {
             execution: &Execution,
         ) -> Result<Observation, BackendError> {
             self.reached.borrow_mut().push(Under::Confining);
+            self.seen(placement);
             self.inner.execute(placement, execution)
         }
     }
@@ -3363,6 +3480,7 @@ mod tests {
                 Weakening::DelegatesToExecute => self.execute(placement, execution),
                 Weakening::Answers(answer) => {
                     self.reached.borrow_mut().push(Under::Removing(removal));
+                    self.seen(placement);
                     answer.clone()
                 }
             }
@@ -3378,6 +3496,7 @@ mod tests {
                 Weakening::DelegatesToExecute => self.execute(placement, execution),
                 Weakening::Answers(answer) => {
                     self.reached.borrow_mut().push(Under::Granting(grant));
+                    self.seen(placement);
                     answer.clone()
                 }
             }
@@ -4825,6 +4944,264 @@ mod tests {
             ),
             "a skip that does not carry the fault is a silent pass: {skipped:?}"
         );
+    }
+
+    // ── The three harness invariants (`VT-2`) ──────────────────────────────
+
+    /// A widening that names something, which `widens_nothing` deliberately does
+    /// not. A `Widened` control whose entry list is empty rebuilds a placement
+    /// equal to the one it started from, and a test that used it would report
+    /// "the control differs" as false.
+    fn widens_the_undeclared_decoy(fixture: &Fixture) -> Vec<MountedPath> {
+        vec![MountedPath::new(
+            fixture.decoy_undeclared().to_path_buf(),
+            InnerPath::try_new(PathBuf::from("/widened")).expect("an absolute inner path"),
+        )]
+    }
+
+    /// Every pid the host currently shows in `session`.
+    fn processes_in(session: SessionId) -> Vec<HostPid> {
+        process_table()
+            .into_iter()
+            .filter(|facts| facts.session == session)
+            .map(|facts| facts.pid)
+            .collect()
+    }
+
+    /// What is left of `session` once the sweep's signals have landed.
+    ///
+    /// `SIGKILL` is asynchronous, and the `/proc` entry outlives the process
+    /// until whoever inherited it waits on it — so an immediate re-read of the
+    /// table after [`Fixture::sweep_observed_sessions`] sees the survivor it
+    /// just killed. Bounded by the same half-second the pid descent uses: a
+    /// session that has not emptied by then was not swept, which is the failure
+    /// the assertion is for.
+    fn drained_of(session: SessionId) -> Vec<HostPid> {
+        for _ in 0..CAPSULE_DISCOVERY_ATTEMPTS {
+            if processes_in(session).is_empty() {
+                break;
+            }
+            std::thread::sleep(CAPSULE_DISCOVERY_INTERVAL);
+        }
+        processes_in(session)
+    }
+
+    /// Invariant 4: the probe arm hands the backend exactly what `provision`
+    /// returned — no rebuild, no clone-and-edit, no delta. The design says
+    /// nothing else would catch a harness that "helpfully" normalised it.
+    ///
+    /// The control half is not decoration: without an arm in the same test whose
+    /// placement genuinely *is* modified, this passes under a harness that
+    /// never modifies any placement — which is every harness that has not yet
+    /// implemented deltas.
+    #[test]
+    fn a_probe_arm_placement_is_byte_identical_to_what_provision_returned() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        // Provisioned by the real mechanism and run against the recording stub:
+        // the placement must be observed *at the backend boundary*, which is the
+        // only place a harness-side rewrite would show.
+        let provisioner = BubblewrapBackend::new(&SystemHost);
+        let transaction =
+            provision_capsule(&fixture, &SystemHost, &provisioner).expect("the fixture provisions");
+        let returned = transaction.placement.clone();
+        let stub = Stub::ignoring_its_removal(&[LIVENESS_MARKER, HELD]);
+
+        let untouched = || Ok(returned.clone());
+        let arm = |capsule: &dyn Fn() -> Result<CapsulePlacement, String>| {
+            run_arm(
+                &Arm {
+                    backend: &stub,
+                    capsule,
+                    execution: &harness_execution,
+                    live: &|_| false,
+                    noticed: &|_| {},
+                    under: Under::Confining,
+                },
+                &ArmShape::Single(a_probe()),
+            );
+        };
+        arm(&untouched);
+
+        let widened = placed_under(
+            &Delta::Widened(widens_the_undeclared_decoy),
+            &fixture,
+            returned.clone(),
+            None,
+        )
+        .expect("a widened control is a lawful placement");
+        arm(&|| Ok(widened.clone()));
+
+        let seen = stub.placements();
+        assert_eq!(
+            seen.first(),
+            Some(&returned),
+            "the probe arm's placement was rewritten on the way to the backend"
+        );
+        assert_eq!(seen.get(1), Some(&widened));
+        assert_ne!(
+            seen.get(1),
+            Some(&returned),
+            "the control's placement is not modified either, so the first \
+             assertion holds for no reason"
+        );
+    }
+
+    /// `Delta::SharedRoot` re-points **one field of one placement**. Without the
+    /// every-other-field clause this passes under a delta that rebuilt the whole
+    /// placement from scratch and happened to land on the right root, which is
+    /// only what the title forbids.
+    #[test]
+    fn the_shared_root_delta_repoints_only_the_second_placement() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let first = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+        let second = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("a second transaction provisions")
+            .placement;
+        assert_ne!(
+            first.root(),
+            second.root(),
+            "two transactions on one capsule root have roots of their own"
+        );
+
+        // The first capsule of a `SharedRoot` arm is the one whose root is
+        // shared, so it is itself untouched.
+        let unshared = placed_under(&Delta::SharedRoot, &fixture, first.clone(), None)
+            .expect("the first placement passes through");
+        assert_eq!(unshared, first);
+
+        let repointed = placed_under(
+            &Delta::SharedRoot,
+            &fixture,
+            second.clone(),
+            Some(first.root()),
+        )
+        .expect("the re-pointed control is a lawful placement");
+
+        assert_eq!(repointed.root(), first.root(), "the root did not move");
+        assert_eq!(repointed.source(), second.source());
+        assert_eq!(repointed.working_directory(), second.working_directory());
+        assert_eq!(repointed.network(), second.network());
+        // The entries are the second placement's own, at the same inner
+        // destinations, moved to the shared root and nowhere else (`F-29`).
+        for (moved, provisioned) in repointed
+            .writable()
+            .iter()
+            .zip(second.writable())
+            .chain(repointed.readable().iter().zip(second.readable()))
+        {
+            assert_eq!(moved.inner(), provisioned.inner());
+            let expected = provisioned
+                .host()
+                .strip_prefix(second.root().path())
+                .map_or_else(
+                    |_| provisioned.host().to_path_buf(),
+                    |relative| first.root().path().join(relative),
+                );
+            assert_eq!(moved.host(), expected);
+        }
+        assert!(
+            repointed
+                .writable()
+                .iter()
+                .all(|entry| entry.host().starts_with(first.root().path())),
+            "a shared-root control writes into the root it shares"
+        );
+    }
+
+    /// `EX-12`, both halves. Without (a) this passes when the payload never
+    /// escaped — the exact regression `RV-346` `F-27` closed one level up, and
+    /// it passes silently.
+    ///
+    /// The escape is the **visibility** control's, not the teardown control's
+    /// (`F-30`). `--die-with-parent` is indeed what reaps a detached descendant
+    /// (`F-9`), so a `Teardown` arm's grandchild does outlive its parents — but
+    /// it outlives them *inside the pid namespace*, whose init process holds the
+    /// harness's captured descriptors until the namespace empties. The arm then
+    /// cannot return while the escapee lives, which is the one thing (a) has to
+    /// observe. Removing `ProcessVisibility` removes the namespace, so the
+    /// grandchild is an ordinary host process, the arm returns in milliseconds,
+    /// and the escapee is still there to be found. Measured both ways on this
+    /// host: with the namespace, end-of-file waits out the escapee; without it,
+    /// end-of-file arrives in 25ms.
+    ///
+    /// The detached grandchild must still redirect all three standard streams,
+    /// or it holds the pipe itself and no removal helps.
+    #[test]
+    fn the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(backend.availability(), Availability::Available);
+        let placement = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+
+        let noticed_sessions: RefCell<Vec<SessionId>> = RefCell::new(Vec::new());
+        let noticed = |capsule: HostPid| {
+            if let Some(session) = session_of(capsule) {
+                noticed_sessions.borrow_mut().push(session);
+            }
+            fixture.note_capsule_session(capsule);
+        };
+        run_arm(
+            &Arm {
+                backend: &backend,
+                capsule: &|| Ok(placement.clone()),
+                execution: &harness_execution,
+                live: &|_| false,
+                noticed: &noticed,
+                under: Under::Removing(PropertyRemoval::ProcessVisibility),
+            },
+            &ArmShape::Single(Probe {
+                argv: argv(&[
+                    SHELL,
+                    "-c",
+                    &format!(
+                        "(sleep {ESCAPE_SECONDS} </dev/null >/dev/null 2>&1 &); \
+                         echo {LIVENESS_MARKER}; echo {HELD}; sleep {LINGER_SECONDS}"
+                    ),
+                ]),
+                observed: token(),
+            }),
+        );
+
+        // (a) The descendant existed, and in a session that is not ours.
+        let own = own_session().expect("the harness has a session");
+        let noticed_sessions = noticed_sessions.into_inner();
+        assert!(
+            !noticed_sessions.is_empty(),
+            "the arm noticed no capsule session, so the sweep has nothing to reach"
+        );
+        let escaped: Vec<SessionId> = noticed_sessions
+            .into_iter()
+            .filter(|session| !processes_in(*session).is_empty())
+            .collect();
+        assert!(
+            !escaped.is_empty(),
+            "no process survived the arm, so the payload never escaped and (b) proves nothing"
+        );
+        for session in &escaped {
+            assert_ne!(
+                *session, own,
+                "the survivor is in the harness's own session"
+            );
+        }
+
+        // (b) After the harness's teardown, nothing in those sessions is alive.
+        let swept = fixture.sweep_observed_sessions();
+        for session in &escaped {
+            assert!(
+                swept.contains(session),
+                "{session:?} escaped the arm and was not swept"
+            );
+            assert_eq!(
+                drained_of(*session),
+                Vec::new(),
+                "{session:?} survived the sweep"
+            );
+        }
     }
 
     /// `Bound` carries the two removals `PropertyRemoval::ResourceBound` stands

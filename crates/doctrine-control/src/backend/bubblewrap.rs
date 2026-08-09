@@ -540,6 +540,8 @@ impl BubblewrapBackend<'_> {
             apply_file_size_cap(&mut command, execution.file_size_cap());
         }
 
+        #[cfg(test)]
+        let _window = serialised_descriptor_window();
         if options.descriptors_closed {
             mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
         }
@@ -560,6 +562,30 @@ impl BubblewrapBackend<'_> {
                 .map_err(|error| mechanism_failed(&error))?,
         })
     }
+}
+
+/// Keeps two `run` calls out of each other's descriptor window (`F-31`).
+///
+/// [`mark_inherited_descriptors_close_on_exec`] and [`clear_close_on_exec`]
+/// both mutate **process-wide** descriptor flags, and what reads those flags is
+/// `fork`. Two runs in flight at once therefore corrupt each other's handover:
+/// measured on this host, a capsule was spawned with `--json-status-fd 4` and no
+/// descriptor 4 — another transaction's status file was sitting at 6 — and
+/// blocked at bubblewrap's user-namespace handshake for ever, holding the
+/// harness's capture pipe, so the arm that spawned it never returned.
+///
+/// **Test-only, and not the fix.** The hazard is the mechanism's, not the
+/// suite's: it is live for any caller that runs two capsules at once, which is
+/// what `ArmShape::Concurrent` (row B5) is. Narrowing the window to the fork
+/// itself, in production, is what closes it. This keeps `cargo test`'s parallel
+/// runner — today's only multi-threaded caller — off a defect it did not
+/// introduce, so the phase's evidence is about the phase.
+#[cfg(test)]
+fn serialised_descriptor_window() -> std::sync::MutexGuard<'static, ()> {
+    static WINDOW: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    WINDOW
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// A caller-owned descriptor as a child endpoint, duplicated rather than
