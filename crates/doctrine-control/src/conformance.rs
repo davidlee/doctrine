@@ -68,8 +68,8 @@ use rustix::fs::{FsWord, OFlags};
 use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 
 use crate::backend::bubblewrap::{
-    BubblewrapBackend, WeakenedProfile, Weakening, hold_descriptor_window, mechanism_failed,
-    profile_owned_host_path,
+    BubblewrapBackend, CAPSULE_GID, CAPSULE_UID, WeakenedProfile, Weakening,
+    hold_descriptor_window, mechanism_failed, profile_owned_host_path,
 };
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
@@ -154,6 +154,23 @@ const SOURCE_READ_ONLY: &str = "SOURCE-READ-ONLY";
 
 /// The capsule's own descriptor table, as the kernel presents it.
 const PROC_SELF_FD: &str = "/proc/self/fd";
+
+/// The capsule's own credentials, as the kernel presents them: the process's
+/// uid and gid, and the two user-namespace maps behind them.
+///
+/// Read from `/proc` rather than through `id(1)`: the payload runs under a
+/// profile whose only bound executables are the ones the placement declared, so
+/// a row resting on an external utility reports that utility's absence as a
+/// property failure (`F-31`). Every path here is a regular `/proc` file the
+/// kernel always presents, and a read of one cannot block.
+const PROC_SELF_STATUS: &str = "/proc/self/status";
+const PROC_SELF_UID_MAP: &str = "/proc/self/uid_map";
+const PROC_SELF_GID_MAP: &str = "/proc/self/gid_map";
+
+/// The `/proc/self/status` keys carrying the process's uid and gid, trailing
+/// colon included because that is the whole first field of the line.
+const STATUS_UID_KEY: &str = "Uid:";
+const STATUS_GID_KEY: &str = "Gid:";
 
 /// What `ls -l` puts between a symlink's name and what it resolves to. The
 /// payload's whole parse, so it is named once rather than spelled four times.
@@ -271,6 +288,32 @@ const STANDARD_STREAMS_SHARED: &str = "STANDARD-STREAMS-SHARED";
 /// [`STDIO_DECOY_INPUT`], which this file writes.
 const STDIN_DELIVERED: &str = "STDIN-DELIVERED-";
 const INBOUND_READABLE: &str = "INBOUND-READABLE-";
+
+/// Row 13's verdict tokens: every declared credential field equals the
+/// profile's declared identity, or at least one of them does not.
+const IDENTITY_MAPPED: &str = "IDENTITY-MAPPED";
+const IDENTITY_NOT_MAPPED: &str = "IDENTITY-NOT-MAPPED";
+
+/// Row 13's diagnostic lines, one prefix per **side of the comparison** rather
+/// than one per field: a field that equals the declared identity, and a field
+/// that does not. Each line is `FIELD=VALUE`, so the two lists partition the
+/// declared fields and [`separated_by`] compares both whole (`F-33`).
+///
+/// Two prefixes, not four, because the row's legs are not independent the way
+/// row 12's are — every field is the same claim (`this equals what the
+/// placement declared`) read through a different kernel surface, and a reader
+/// needs to know *which* surface disagreed, which the `FIELD=` half carries.
+const IDENTITY_DECLARED: &str = "IDENTITY-DECLARED-";
+const IDENTITY_OTHER: &str = "IDENTITY-OTHER-";
+
+/// The four credential surfaces row 13 reads, named where the payload, the
+/// mutant and the finding can all cite the same list.
+///
+/// `EX-9` specifies three — uid, gid and `uid_map`. `gid_map` is the fourth and
+/// is this task's `D2` ruling: see [`the_capsule_reports_the_declared_identity`]
+/// for why adding it is not narrowing, and § *Findings* `F-40` for which of the
+/// four are measured to discriminate on which host.
+const IDENTITY_FIELDS: [&str; 4] = ["uid", "gid", "uid_map", "gid_map"];
 
 /// [`WORKING_DIRECTORY_VAR`] as the payload compares it: a whole `NAME=VALUE`
 /// entry, because the name alone is the hole.
@@ -2436,6 +2479,10 @@ pub(crate) enum Property {
     /// carry no inbound channel: `stdin` yields no bytes, and neither descriptor
     /// 1 nor descriptor 2 can be **read** by the capsule.
     OwnedStandardStreams,
+    /// Row 13. The capsule runs as the identity the placement declared: the uid
+    /// and gid it reports, and the user-namespace maps behind them, all name
+    /// that one id and nothing else.
+    MappedCapsuleIdentity,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -3491,6 +3538,85 @@ fn the_standard_streams_carry_nothing_inbound() -> Probe {
     }
 }
 
+/// What the payload puts after each mapping line, so a map of several ranges
+/// reports as one diagnostic value rather than several lines.
+const MAP_ENTRY_END: &str = "|";
+
+/// Row 13's payload: every credential surface the capsule can read names the
+/// identity the placement declared, and the maps behind them map that one id
+/// and nothing else.
+///
+/// `uid` and `gid` are **parameters** for the reason
+/// [`the_environment_is_exactly`]'s set is: the identity the payload expects
+/// must be the identity the arm is *given*, which is
+/// [`CAPSULE_UID`]/[`CAPSULE_GID`] at the one place the profile declares them.
+/// A literal here would agree with the profile today and drift silently.
+///
+/// ## The four fields, and why none of them may be dropped
+///
+/// `EX-9` names three — uid, gid and `uid_map`. The fourth, `gid_map`, is this
+/// task's `D2`, ruled **in**: `EX-11` forbids *narrowing* a row to the field
+/// that discriminates, and adding a field is not narrowing. It earns its place
+/// on measurement. On a host whose operator uid is already [`CAPSULE_UID`],
+/// uid and `uid_map` read identically under both arms and discriminate nothing
+/// (`F-4`, confirmed by `F-40`). Without `gid_map`, the *mapping* half of the
+/// claim — "maps exactly that one id" — would then be controlled by nothing at
+/// all, and `gid` alone would carry the whole row while the mechanism the row
+/// is about went untested. The cost is one more `/proc` read in the same
+/// payload.
+///
+/// The three non-discriminating-on-this-host fields stay because the row states
+/// the property, not the property minus whatever this host cannot see. A row
+/// narrowed to what works is precisely `RV-346` `F-27`.
+///
+/// ## What each field is compared against
+///
+/// - **uid and gid**: the *real* id, `/proc/self/status`'s first column. The
+///   saved-set ids are not read — a setuid regain is unprobed by `EX-11`'s
+///   deliberate choice, and reading them here would half-answer a row that
+///   belongs to another phase.
+/// - **the maps**: not the raw text, which carries an *outside* id belonging to
+///   the trusted side and shifting with namespace nesting depth (measured
+///   `1000 0 1` one level up and `1000 1000 1` two levels down, same capsule
+///   property). What is asserted is the shape doctrine controls: exactly one
+///   range, starting at the declared id, of length one. The raw map is what
+///   gets **reported**, so a reader sees the whole of what was read.
+///
+/// A surface the payload could not read leaves its variable empty, which cannot
+/// equal a declared id and so lands in [`IDENTITY_OTHER`]: an unreadable
+/// credential is a failure to demonstrate the property, never a silent pass.
+fn the_identity_is_exactly(uid: u32, gid: u32) -> Probe {
+    let [uid_field, gid_field, uid_map_field, gid_map_field] = IDENTITY_FIELDS;
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; uid=; gid=; differs=0; \
+             while read -r key value rest; do \
+             case \"$key\" in \
+             {STATUS_UID_KEY}) uid=$value ;; \
+             {STATUS_GID_KEY}) gid=$value ;; \
+             esac; done < {PROC_SELF_STATUS}; \
+             report() {{ if [ \"$2\" = \"$3\" ]; \
+             then echo \"{IDENTITY_DECLARED}$1=$4\"; \
+             else echo \"{IDENTITY_OTHER}$1=$4\"; differs=$((differs+1)); fi; }}; \
+             mapping() {{ lines=0; raw=; inside=; length=; \
+             while read -r first outside last; do lines=$((lines+1)); \
+             raw=\"$raw$first $outside $last{MAP_ENTRY_END}\"; \
+             inside=$first; length=$last; done < \"$1\"; \
+             report \"$2\" \"$lines $inside $length\" \"1 $3 1\" \"$raw\"; }}; \
+             report {uid_field} \"$uid\" \"{uid}\" \"$uid\"; \
+             report {gid_field} \"$gid\" \"{gid}\" \"$gid\"; \
+             mapping {PROC_SELF_UID_MAP} {uid_map_field} {uid}; \
+             mapping {PROC_SELF_GID_MAP} {gid_map_field} {gid}; \
+             if [ \"$differs\" -eq 0 ]; \
+             then echo {IDENTITY_MAPPED}; else echo {IDENTITY_NOT_MAPPED}; fi"
+        )),
+        observed: Observed::Token {
+            held: IDENTITY_MAPPED,
+            failed: IDENTITY_NOT_MAPPED,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3651,6 +3777,13 @@ fn table_a() -> Vec<Row> {
             id: RowId::Property(Property::OwnedStandardStreams),
             shape: ArmShape::Single(the_standard_streams_carry_nothing_inbound()),
             delta: Delta::Removed(PropertyRemoval::StdioOwned),
+        },
+        Row {
+            id: RowId::Property(Property::MappedCapsuleIdentity),
+            // The profile's own declared identity, not a literal that matches
+            // it: the payload asserts what the arm was configured with.
+            shape: ArmShape::Single(the_identity_is_exactly(CAPSULE_UID, CAPSULE_GID)),
+            delta: Delta::Removed(PropertyRemoval::MappedIdentity),
         },
     ]
 }
@@ -4569,6 +4702,11 @@ mod tests {
         CAPSULE_DISCOVERY_ATTEMPTS, CAPSULE_DISCOVERY_INTERVAL, ProcessFacts, STAT_LEAF, SessionId,
         StatFacts, capsule_session_leader, depth_from, own_session, process_table, session_of,
         stat_of,
+    };
+    use super::{
+        CAPSULE_GID, CAPSULE_UID, IDENTITY_DECLARED, IDENTITY_FIELDS, IDENTITY_MAPPED,
+        IDENTITY_NOT_MAPPED, IDENTITY_OTHER, PROC_SELF_GID_MAP, PROC_SELF_STATUS,
+        PROC_SELF_UID_MAP,
     };
     use super::{
         CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, DENIED, ESCAPE_SECONDS, INNER_AGENT,
@@ -9069,11 +9207,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — seventeen rows, each
+    /// shipped tables are what the design says they are — eighteen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_seventeen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_eighteen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -9083,7 +9221,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 17);
+        assert_eq!(rows.len(), 18);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -10980,6 +11118,371 @@ mod tests {
             row_twelve_against(&leaking_on_every_arm(&clean)),
             RowVerdict::Violated,
             "row 12 reads Violated against a backend that shares nothing"
+        );
+    }
+
+    // ── PHASE-10 `T7`: row 13 — `MappedCapsuleIdentity` / `MappedIdentity` ───
+    //
+    // **Nothing here runs in a child, and that is a structural claim rather
+    // than an omission** (`C14` step 1). The channel is process credentials —
+    // the real uid and gid, and the user-namespace maps behind them. Every one
+    // of them is fixed at `clone`/`execve` time by `bwrap`'s own argv in a user
+    // namespace created fresh per arm, and none is readable or writable across
+    // processes. An interfering agent would have to be in-process code calling
+    // `setuid`/`setgid`/`setresuid`, or writing this process's own map files
+    // after they were sealed. No such code exists in this crate and none can be
+    // written into it: those calls need `unsafe`, `unsafe_code` is denied, and
+    // the `#[expect]` budget is two sites, both already spent in
+    // `bubblewrap.rs` (`C8`, `S7`). So the agent **cannot exist** rather than
+    // merely not having been observed, and the isolation `T6` argued about for
+    // its own channel is not needed here.
+    //
+    // **Nothing here is timing-sensitive either**, so no tally is the
+    // instrument (`LOOP.md`): every read is of a regular `/proc` file that the
+    // kernel always presents and that cannot block, and no arm waits on a peer.
+    // The two-arm toggle this row *did* need was aimed at vacuity, not at a
+    // race — narrow the payload, watch the row stop discriminating, widen it,
+    // watch it discriminate again — and both arms are recorded in the sheet
+    // (`F-40`).
+
+    /// Row 13's shipped payload — see [`shipped_script`].
+    fn row_thirteen_script() -> String {
+        shipped_script(&RowId::Property(Property::MappedCapsuleIdentity))
+    }
+
+    /// Row 13's two diagnostic lists, as `(declared, otherwise)`.
+    ///
+    /// **Both, always, and each compared whole** (`F-33`). The lists partition
+    /// the surfaces the payload read, so a claim asserting only that *its* list
+    /// appeared would pass a payload that reported a surface on both sides, or
+    /// one that silently read none.
+    fn identity_reported_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
+        separated_by(reported, IDENTITY_DECLARED, IDENTITY_OTHER)
+    }
+
+    /// The credential surfaces a reading names, whichever side they fell on,
+    /// sorted.
+    ///
+    /// This is what lets the mutant be **host-independent**. Which surfaces
+    /// agree with the declared identity is a fact about the host's operator
+    /// (`F-4`), so a claim naming them would pass here and fail on the design
+    /// host. That the payload read *all four and lost none* is a fact about the
+    /// payload, and is the same on every host.
+    fn surfaces_named(reported: &[String]) -> Vec<String> {
+        let (declared, otherwise) = identity_reported_on(reported);
+        let mut named: Vec<String> = declared
+            .iter()
+            .chain(&otherwise)
+            .filter_map(|line| {
+                line.strip_prefix(IDENTITY_DECLARED)
+                    .or_else(|| line.strip_prefix(IDENTITY_OTHER))
+            })
+            .map(|rest| {
+                rest.split_once('=')
+                    .map_or(rest, |(field, _)| field)
+                    .to_owned()
+            })
+            .collect();
+        named.sort();
+        named
+    }
+
+    /// [`IDENTITY_FIELDS`] as [`surfaces_named`] reports them.
+    fn every_surface() -> Vec<String> {
+        let mut all: Vec<String> = IDENTITY_FIELDS
+            .iter()
+            .map(|&field| field.to_owned())
+            .collect();
+        all.sort();
+        all
+    }
+
+    /// The `bwrap` words the mapped-capsule instrument is built from.
+    ///
+    /// Spelled here rather than imported from the backend for [`MOUNT_WORDS`]'
+    /// reason: these are the words `bwrap` itself reads, and a test restating
+    /// the production constant would *follow* a rename instead of catching it.
+    /// The two ids are the exception and are imported, because they are what
+    /// the row compares against and a second spelling of them would be the
+    /// drift [`the_identity_is_exactly`] exists to prevent.
+    const SANDBOX_EXECUTABLE: &str = "bwrap";
+    const SANDBOX_UNSHARE_ALL: &str = "--unshare-all";
+    const SANDBOX_UID: &str = "--uid";
+    const SANDBOX_GID: &str = "--gid";
+    const SANDBOX_ROOT: [&str; 3] = ["--ro-bind", FILESYSTEM_ROOT, FILESYSTEM_ROOT];
+    const SANDBOX_PROC: [&str; 2] = ["--proc", INNER_PROC];
+
+    /// Row 13's **conforming** reading: the shipped payload in a user namespace
+    /// that really does map the declared identity.
+    ///
+    /// *Observed rather than predicted*, for the reason [`payload_output_over`]
+    /// gives: writing out the lines a correctly-mapped capsule would print
+    /// would make the mutant a test of my guess about the payload rather than a
+    /// test of the payload.
+    ///
+    /// This is the one place in the suite where a test builds a sandbox, and it
+    /// is forced rather than chosen: a [`Stub`] is handed *lines*, and the real
+    /// probe arm's stdout is not reachable — an [`ArmResult`] carries a verdict,
+    /// not the bytes behind it. What is built here is the identity mapping and
+    /// nothing else; the payload, the row and the verdict are all the shipped
+    /// ones. It duplicates no production assembly — the confining profile's own
+    /// argv is `confinement_argv`'s, and
+    /// [`the_identity_control_changes_no_mount_no_env_and_no_descriptor`] is
+    /// what holds that assembly to these two flags.
+    fn payload_output_in_a_mapped_capsule() -> Vec<String> {
+        let mut words = vec![
+            SANDBOX_UNSHARE_ALL.to_owned(),
+            SANDBOX_UID.to_owned(),
+            CAPSULE_UID.to_string(),
+            SANDBOX_GID.to_owned(),
+            CAPSULE_GID.to_string(),
+        ];
+        words.extend(
+            SANDBOX_ROOT
+                .iter()
+                .chain(&SANDBOX_PROC)
+                .map(|&word| word.to_owned()),
+        );
+        words.extend([
+            SHELL.to_owned(),
+            SHELL_COMMAND.to_owned(),
+            row_thirteen_script(),
+        ]);
+
+        let finished = Command::new(SANDBOX_EXECUTABLE)
+            .args(&words)
+            .output()
+            .expect("this host runs `bwrap`, which the shipping backend requires");
+        assert!(
+            finished.status.success(),
+            "the mapped-capsule instrument did not run: {}",
+            String::from_utf8_lossy(&finished.stderr)
+        );
+        printed_lines(&finished.stdout)
+    }
+
+    /// Row 13's **mutant** reading: the shipped payload run with no identity
+    /// applied at all, which is what the capsule is left holding when the
+    /// backend omits the two flags — the trusted side's own credentials.
+    fn payload_output_as_the_trusted_side() -> Vec<String> {
+        payload_output_over(
+            &row_thirteen_script(),
+            Stdio::null(),
+            Stdio::piped(),
+            Stdio::piped(),
+            None,
+        )
+    }
+
+    /// Row 13's verdict against a stub — see [`row_against`].
+    fn row_thirteen_against(backend: &Stub) -> RowVerdict {
+        row_against(backend, &RowId::Property(Property::MappedCapsuleIdentity))
+    }
+
+    /// [`payload_output_as_the_trusted_side`], with everything a caller needs
+    /// of it established here rather than restated by each: all four surfaces
+    /// read, at least one of them holding some *other* identity, and the
+    /// payload saying so.
+    ///
+    /// The middle one is the `S4` guard, and it lives with the reading because
+    /// it is what a caller would drop quietly. On a host whose operator
+    /// identity is the declared identity on all four surfaces this reading is
+    /// **conforming**, every claim resting on it goes vacuous at once, and the
+    /// row needs a consult rather than a narrowing.
+    fn the_trusted_sides_reading() -> Vec<String> {
+        let host = payload_output_as_the_trusted_side();
+        assert_eq!(
+            surfaces_named(&host),
+            every_surface(),
+            "the payload did not read every declared credential surface: {host:?}"
+        );
+        assert!(
+            !identity_reported_on(&host).1.is_empty(),
+            "this host's own identity is the capsule's declared identity on every \
+             surface, so row 13 discriminates nothing here and `S4` applies — stop and \
+             consult rather than narrowing the row: {host:?}"
+        );
+        assert!(
+            host.iter().any(|line| line == IDENTITY_NOT_MAPPED),
+            "the payload ran as the trusted side and did not say so: {host:?}"
+        );
+        host
+    }
+
+    /// [`payload_output_in_a_mapped_capsule`], likewise: all four surfaces
+    /// read, **none** of them holding any other identity, and the payload
+    /// saying so.
+    fn a_mapped_capsules_reading() -> Vec<String> {
+        let mapped = payload_output_in_a_mapped_capsule();
+        assert_eq!(
+            surfaces_named(&mapped),
+            every_surface(),
+            "the payload did not read every declared credential surface: {mapped:?}"
+        );
+        assert_eq!(
+            identity_reported_on(&mapped).1,
+            Vec::<String>::new(),
+            "a capsule mapped to the declared identity reported a surface holding some \
+             other one: {mapped:?}"
+        );
+        assert!(
+            mapped.iter().any(|line| line == IDENTITY_MAPPED),
+            "every surface named the declared identity and the payload did not say so: \
+             {mapped:?}"
+        );
+        mapped
+    }
+
+    /// `VT-1`, table A row 13 — the whole row, both arms, through the shipping
+    /// backend.
+    #[test]
+    fn mapped_capsule_identity_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::MappedCapsuleIdentity)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-6`, `EX-8`, `EX-9` — the payload itself, read on both sides of the
+    /// property.
+    ///
+    /// [`mapped_capsule_identity_is_proven`] says the row separates the arms;
+    /// this says *what* separated them, which is the claim `EX-9` makes: all
+    /// four declared surfaces are read, every one of them is required to name
+    /// the declared identity, and a capsule holding the trusted side's identity
+    /// instead is reported as holding some other one.
+    ///
+    /// **Which** of the four discriminate is deliberately not asserted, and the
+    /// reason is `F-4`: on a host whose operator uid is already [`CAPSULE_UID`]
+    /// — this jail, and the design host — uid and `uid_map` read identically
+    /// under both arms and separate nothing. The row still states all four,
+    /// because narrowing it to the surfaces that happen to work on the host in
+    /// front of me is what `EX-11` forbids and what `RV-346` `F-27` was.
+    #[test]
+    fn the_capsule_reports_the_declared_identity() {
+        let mapped = a_mapped_capsules_reading();
+        let host = the_trusted_sides_reading();
+
+        // Non-vacuity: the two readings really are different readings, so the
+        // pair above is not one observation made twice.
+        assert_ne!(
+            identity_reported_on(&mapped),
+            identity_reported_on(&host),
+            "a mapped capsule and the trusted side separated the same way, so the \
+             payload is reading something other than the identity: {mapped:?} / {host:?}"
+        );
+    }
+
+    /// `VT-6`, `EX-8` — single-axis-ness: the identity delta moves the two
+    /// credential flags and nothing else a neighbouring row is about.
+    ///
+    /// *No mount and no env* is read off the argv, because a mount and an
+    /// environment **are** argv words to `bwrap`: the words that moved are
+    /// exactly the credential ones, so no mount or environment word is among
+    /// them. Non-vacuity first — unchanged says nothing about a word that was
+    /// never in the baseline.
+    ///
+    /// *No descriptor* is the other half and cannot be read off the argv at
+    /// all: rows 10 and 12 live in parent-side [`SpawnOptions`], so the claim
+    /// there is that the identity delta leaves those options exactly as the
+    /// confining profile has them.
+    ///
+    /// The payloads are disjoint too, and it is measured on the shipped scripts
+    /// rather than asserted about them: row 13's never names the descriptor
+    /// table, and rows 10 and 12's never name a credential surface.
+    #[test]
+    fn the_identity_control_changes_no_mount_no_env_and_no_descriptor() {
+        let weakening = weakening_for(PropertyRemoval::MappedIdentity, None);
+        let probe = assembled(None);
+        let control = assembled(Some(&weakening));
+
+        for word in MOUNT_WORDS.iter().chain(&ENVIRONMENT_WORDS) {
+            assert!(
+                probe.iter().any(|assembled| assembled == word),
+                "the baseline argv has no `{word}`, so leaving it unchanged says nothing"
+            );
+        }
+
+        let (removed, added) = word_delta(&probe, &control);
+        assert_eq!(
+            (removed.clone(), added),
+            (
+                vec![
+                    SANDBOX_GID.to_owned(),
+                    SANDBOX_UID.to_owned(),
+                    CAPSULE_GID.to_string(),
+                    CAPSULE_UID.to_string(),
+                ],
+                Vec::new()
+            ),
+            "the identity delta moved an argv word that is not a credential flag"
+        );
+        for word in MOUNT_WORDS.iter().chain(&ENVIRONMENT_WORDS) {
+            assert!(
+                !removed.iter().any(|moved| moved == word),
+                "the identity delta moved `{word}`, which belongs to another row"
+            );
+        }
+
+        assert_eq!(
+            SpawnOptions::under(Some(&weakening)),
+            CONFINING_OPTIONS,
+            "the identity delta moved a parent-side descriptor option, which is rows 10 \
+             and 12's axis"
+        );
+
+        let credentials = row_thirteen_script();
+        assert!(
+            !credentials.contains(PROC_SELF_FD),
+            "row 13's payload enumerates the descriptor table, which is row 10's claim: \
+             {credentials}"
+        );
+        for surface in [PROC_SELF_STATUS, PROC_SELF_UID_MAP, PROC_SELF_GID_MAP] {
+            assert!(
+                credentials.contains(surface),
+                "row 13's payload does not read `{surface}`, so the disjointness below \
+                 reads nothing: {credentials}"
+            );
+            for neighbour in [row_ten_script(), row_twelve_script()] {
+                assert!(
+                    !neighbour.contains(surface),
+                    "a descriptor row's payload reads `{surface}`, which is row 13's \
+                     claim: {neighbour}"
+                );
+            }
+        }
+    }
+
+    /// `VT-6`, `EX-4`, `EX-8` — the mutant: a backend that never applies the
+    /// declared identity, so the capsule runs as whatever the user namespace
+    /// maps by default, which is the trusted side.
+    ///
+    /// `Violated`, not `Unproven`: a probe arm that *fails* is the harness
+    /// saying the property does not hold of this backend, and that reading does
+    /// not depend on what the control arm did.
+    ///
+    /// The assertions are **host-independent** by construction — see
+    /// [`surfaces_named`]. The one thing this cannot survive is a host whose
+    /// operator identity *is* the declared identity on all four surfaces, and
+    /// on such a host it fails loudly naming `S4` rather than passing
+    /// vacuously.
+    #[test]
+    fn a_host_identity_backend_fails_row_thirteen() {
+        let host = the_trusted_sides_reading();
+        assert_eq!(
+            row_thirteen_against(&leaking_on_every_arm(&host)),
+            RowVerdict::Violated,
+            "a backend leaving the capsule the trusted side's identity passed row 13"
+        );
+
+        // Discriminating: the same pipeline over a reading from a capsule that
+        // *is* mapped reaches a verdict that is not `Violated`, so the verdict
+        // above came from the identity and not from the shape of the stub.
+        let mapped = a_mapped_capsules_reading();
+        assert_ne!(
+            row_thirteen_against(&leaking_on_every_arm(&mapped)),
+            RowVerdict::Violated,
+            "row 13 reads Violated against a backend that maps the declared identity"
         );
     }
 }

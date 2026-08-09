@@ -96,9 +96,13 @@ const KILL_GRACE_FLAG: &str = "-k";
 /// project's own jail (`F-5`): `uid=1000 gid=1000`. The supplementary group
 /// that survives is `sec-7` rows 13/14's, not this phase's — do not read these
 /// two flags as having discharged invariant 15.
-const CAPSULE_UID: u32 = 1000;
+/// Crate-visible because table A row 13's payload must compare what the capsule
+/// *reports* against what the profile *declared*, and a second spelling of the
+/// number would agree today and drift silently (`STD-001`). The row asserts the
+/// profile's own constant, not a literal that resembles it.
+pub(crate) const CAPSULE_UID: u32 = 1000;
 /// The capsule's declared group; see [`CAPSULE_UID`].
-const CAPSULE_GID: u32 = 1000;
+pub(crate) const CAPSULE_GID: u32 = 1000;
 
 /// The grace `timeout -k` waits before escalating to `SIGKILL`, when the
 /// caller supplies none.
