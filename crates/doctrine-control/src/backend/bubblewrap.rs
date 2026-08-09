@@ -53,7 +53,8 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use rustix::fs::Dir;
@@ -540,14 +541,12 @@ impl BubblewrapBackend<'_> {
             apply_file_size_cap(&mut command, execution.file_size_cap());
         }
 
-        #[cfg(test)]
-        let _window = serialised_descriptor_window();
-        if options.descriptors_closed {
-            mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
-        }
-        clear_close_on_exec(&status_file).map_err(|error| mechanism_failed(&error))?;
-
-        let observed = spawn_and_wait(command, profile.observer)?;
+        let child = fork_within_the_descriptor_window(
+            &mut command,
+            options.descriptors_closed,
+            &status_file,
+        )?;
+        let observed = observe_and_wait(child, profile.observer)?;
         drop(status_file);
 
         let status_text = std::fs::read_to_string(&status_path).unwrap_or_default();
@@ -564,28 +563,67 @@ impl BubblewrapBackend<'_> {
     }
 }
 
-/// Keeps two `run` calls out of each other's descriptor window (`F-31`).
+/// The one interval in which this process's descriptor flags are not what they
+/// were (`RV-346` `F-31`).
 ///
-/// [`mark_inherited_descriptors_close_on_exec`] and [`clear_close_on_exec`]
-/// both mutate **process-wide** descriptor flags, and what reads those flags is
+/// [`mark_inherited_descriptors_close_on_exec`] and [`clear_close_on_exec`] both
+/// mutate **process-wide** descriptor flags, and what reads those flags is
 /// `fork`. Two runs in flight at once therefore corrupt each other's handover:
 /// measured on this host, a capsule was spawned with `--json-status-fd 4` and no
 /// descriptor 4 — another transaction's status file was sitting at 6 — and
 /// blocked at bubblewrap's user-namespace handshake for ever, holding the
 /// harness's capture pipe, so the arm that spawned it never returned.
+static DESCRIPTOR_WINDOW: Mutex<()> = Mutex::new(());
+
+/// Mark, clear, fork — and **nothing else** (`F-31`, `D2`).
 ///
-/// **Test-only, and not the fix.** The hazard is the mechanism's, not the
-/// suite's: it is live for any caller that runs two capsules at once, which is
-/// what `ArmShape::Concurrent` (row B5) is. Narrowing the window to the fork
-/// itself, in production, is what closes it. This keeps `cargo test`'s parallel
-/// runner — today's only multi-threaded caller — off a defect it did not
-/// introduce, so the phase's evidence is about the phase.
-#[cfg(test)]
-fn serialised_descriptor_window() -> std::sync::MutexGuard<'static, ()> {
-    static WINDOW: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    WINDOW
+/// The invariant is about the instant of `fork` alone, so the guard covers
+/// exactly the three operations that establish it and is released the moment the
+/// child exists. That bound is not a tuning choice, it is what makes the guard
+/// **re-entrant-safe by construction**: `execute_observed`'s observer callback
+/// fires between the spawn and the wait, on this same thread, and re-enters
+/// `run` for a second capsule (row B5's choreography). A guard held across the
+/// callback deadlocks on the second entry — measured at PHASE-09 plan time as
+/// `F-1`, and the reason the PHASE-08 `#[cfg(test)]` stopgap this replaces could
+/// not simply be promoted to production.
+///
+/// A reentrant lock would be the wrong repair for the same reason: it would let
+/// the nested run fork inside the outer run's window, which is precisely the
+/// corruption the guard exists to prevent.
+///
+/// **The status descriptor is re-marked before the guard is released** (`D2`).
+/// Restoring it costs one `fcntl` and buys a stronger invariant than *no two
+/// forks overlap*: outside this function no descriptor of this process is
+/// missing `CLOEXEC` because a capsule run cleared it. Without the restore, a
+/// subsequent run whose own sweep is disabled — the `DescriptorsClosed` control
+/// arm, which never calls the sweep that would re-mark it — leaks the previous
+/// run's status file into its capsule. The window is narrow, the leak is
+/// silent, and one `fcntl` closes it.
+///
+/// Post-fork marking inside `pre_exec` is rejected at [`PROC_SELF_FD`]:
+/// allocation is unsafe in that window and enumerating a directory is exactly
+/// the allocation to avoid.
+fn fork_within_the_descriptor_window(
+    command: &mut Command,
+    sweep_descriptors: bool,
+    status_file: &File,
+) -> Result<Child, BackendError> {
+    let _window = DESCRIPTOR_WINDOW
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner);
+
+    if sweep_descriptors {
+        mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
+    }
+    clear_close_on_exec(status_file).map_err(|error| mechanism_failed(&error))?;
+
+    // Both run before either is reported: a spawn that failed must not leave the
+    // status descriptor inheritable, and a restore that failed must not hide the
+    // spawn's own error, which is the one the caller can act on.
+    let spawned = command.spawn().map_err(|error| mechanism_failed(&error));
+    let restored = set_close_on_exec(status_file).map_err(|error| mechanism_failed(&error));
+    let child = spawned?;
+    restored.map(|()| child)
 }
 
 /// A caller-owned descriptor as a child endpoint, duplicated rather than
@@ -598,29 +636,28 @@ fn owned_stdio(descriptor: &OwnedFd) -> Result<Stdio, BackendError> {
         .map_err(|error| mechanism_failed(&error))
 }
 
-/// Run to completion, giving `observer` the child's host-side pid while it is
-/// alive.
+/// Run an already-forked child to completion, giving `observer` its host-side
+/// pid while it is alive.
 ///
-/// Without an observer this is exactly `Command::output()`. With one it is
-/// `spawn` + `wait_with_output`, which is what `output()` does internally — the
-/// callback goes in the window between them, and `wait_with_output` is what
+/// `spawn` + `wait_with_output` is what `Command::output()` does internally —
+/// the callback goes in the window between them, and `wait_with_output` is what
 /// keeps the piped stdout drained rather than deadlocked against a capsule
-/// filling the pipe.
+/// filling the pipe. The fork itself is [`fork_within_the_descriptor_window`]'s,
+/// which is why this takes a [`Child`] rather than a [`Command`]: the guarded
+/// interval ends at the fork and **must not** extend across this call, which is
+/// where a re-entering observer runs (`F-31`, `F-1`).
 ///
 /// **The pid handed over is the immediate child's**, which under the wall bound
-/// is `timeout(1)`, not the capsule's top-level process. `T5` replaces this
-/// with the capsule's own — `REQ-448` criterion 3 wants the trusted parent's
-/// observation of the *subject*. The seam is here; the descent is not.
-fn spawn_and_wait(
-    mut command: Command,
+/// is `timeout(1)`, not the capsule's top-level process. `conformance.rs`'s
+/// descent finds the capsule's own — `REQ-448` criterion 3 wants the trusted
+/// parent's observation of the *subject*. The seam is here; the descent is not.
+fn observe_and_wait(
+    child: Child,
     observer: Option<&dyn Fn(i32)>,
 ) -> Result<std::process::Output, BackendError> {
-    let Some(observer) = observer else {
-        return command.output().map_err(|error| mechanism_failed(&error));
-    };
-
-    let child = command.spawn().map_err(|error| mechanism_failed(&error))?;
-    observer(host_pid(&child));
+    if let Some(observer) = observer {
+        observer(host_pid(&child));
+    }
     child
         .wait_with_output()
         .map_err(|error| mechanism_failed(&error))
@@ -1381,6 +1418,18 @@ fn mark_inherited_descriptors_close_on_exec() -> io::Result<usize> {
 fn clear_close_on_exec<Fd: AsFd>(fd: Fd) -> io::Result<()> {
     let flags = fcntl_getfd(&fd)?;
     fcntl_setfd(&fd, flags.difference(FdFlags::CLOEXEC))?;
+    Ok(())
+}
+
+/// Put close-on-exec back, before the descriptor window closes (`F-31`, `D2`).
+///
+/// The inverse of [`clear_close_on_exec`], and the reason it exists is that the
+/// clear is the *only* reason a descriptor of this process is ever inheritable:
+/// restoring it inside the guarded interval makes that a bounded window rather
+/// than a state the process is left in.
+fn set_close_on_exec<Fd: AsFd>(fd: Fd) -> io::Result<()> {
+    let flags = fcntl_getfd(&fd)?;
+    fcntl_setfd(&fd, flags | FdFlags::CLOEXEC)?;
     Ok(())
 }
 
@@ -2352,6 +2401,120 @@ mod tests {
                 .expect("still live")
                 .contains(FdFlags::CLOEXEC)
         );
+    }
+
+    /// `D2`: the status descriptor is inheritable **inside** the window and
+    /// close-on-exec again the instant it closes (`F-31`).
+    ///
+    /// Discriminating by construction: `File::create` opens `O_CLOEXEC`, and
+    /// [`fork_within_the_descriptor_window`] unconditionally clears the flag on
+    /// the way to the fork. So the post-condition can only hold because the
+    /// restore ran — there is no state in which it passes vacuously.
+    #[test]
+    fn the_status_descriptor_is_close_on_exec_again_when_the_window_closes() {
+        let path = std::env::temp_dir().join(format!("doctrine-window-{}", std::process::id()));
+        let status = File::create(&path).expect("a temporary status file");
+        assert!(
+            fcntl_getfd(&status)
+                .expect("the status file is live")
+                .contains(FdFlags::CLOEXEC),
+            "precondition: Rust opens its own files O_CLOEXEC"
+        );
+
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", ":"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let child = fork_within_the_descriptor_window(&mut command, true, &status)
+            .expect("the fork succeeds");
+
+        assert!(
+            fcntl_getfd(&status)
+                .expect("the status file is still live")
+                .contains(FdFlags::CLOEXEC),
+            "the status descriptor was left inheritable outside its own window (`D2`)"
+        );
+
+        let _reaped = child.wait_with_output().expect("the child is reaped");
+        let _removed = std::fs::remove_file(&path);
+    }
+
+    /// How many threads and rounds the window is stressed with (`F-31`).
+    ///
+    /// **Chosen by measurement, not by taste.** The window is the interval
+    /// between `clear_close_on_exec` and the fork, which is a few hundred
+    /// microseconds; a stress built from *whole capsule runs* has a period of
+    /// ~70ms and meets that window with a probability too small to red an
+    /// unguarded build — measured, and the reason this test exists at the
+    /// mechanism's own altitude rather than only at the row's. Spawning
+    /// `/bin/sh -c :` drops the period to ~2ms, which meets it within a round or
+    /// two.
+    const WINDOW_STRESS_THREADS: usize = 4;
+    const WINDOW_STRESS_ROUNDS: usize = 60;
+
+    /// The one byte a child writes back through the descriptor the window
+    /// handed it.
+    const HANDOVER_BYTE: &str = "ok";
+
+    /// `F-31`, at the mechanism: concurrent forks each hand over **only their
+    /// own** status descriptor.
+    ///
+    /// The child writes to its status descriptor by number, exactly as
+    /// `bwrap --json-status-fd N` does. Two failures are possible against an
+    /// unguarded window and this catches both: another thread's sweep re-marks
+    /// this thread's descriptor between the clear and the fork, so the number
+    /// names nothing in the child and the file stays empty; or this thread's
+    /// sweep runs after another thread's clear, and that thread's descriptor
+    /// crosses into this child.
+    #[test]
+    fn concurrent_forks_each_hand_over_only_their_own_status_descriptor() {
+        let directory =
+            std::env::temp_dir().join(format!("doctrine-window-stress-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("a scratch directory");
+
+        std::thread::scope(|scope| {
+            let threads: Vec<_> = (0..WINDOW_STRESS_THREADS)
+                .map(|thread| {
+                    let directory = directory.clone();
+                    scope.spawn(move || {
+                        for round in 0..WINDOW_STRESS_ROUNDS {
+                            let path = directory.join(format!("{thread}-{round}"));
+                            let status = File::create(&path).expect("a status file");
+                            let descriptor = status.as_raw_fd();
+
+                            let mut command = Command::new("/bin/sh");
+                            command
+                                .args(["-c", &format!("echo {HANDOVER_BYTE} >&{descriptor}")])
+                                .stdin(Stdio::null())
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null());
+                            let child =
+                                fork_within_the_descriptor_window(&mut command, true, &status)
+                                    .expect("the fork succeeds");
+                            let _reaped = child.wait_with_output().expect("the child is reaped");
+                            drop(status);
+
+                            let written = std::fs::read_to_string(&path)
+                                .expect("the status file is readable");
+                            assert_eq!(
+                                written.trim(),
+                                HANDOVER_BYTE,
+                                "thread {thread} round {round}: the child did not receive its \
+                                 own status descriptor — a concurrent fork's sweep re-marked it \
+                                 close-on-exec inside this fork's window (`F-31`)"
+                            );
+                        }
+                    })
+                })
+                .collect();
+            for thread in threads {
+                thread.join().expect("no thread panicked");
+            }
+        });
+
+        let _removed = std::fs::remove_dir_all(&directory);
     }
 
     // ── T10: the per-file size cap, and the unsafe budget ──────────────────

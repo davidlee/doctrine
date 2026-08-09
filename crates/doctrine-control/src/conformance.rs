@@ -5467,6 +5467,135 @@ mod tests {
         }
     }
 
+    // ── T1: the descriptor window, narrowed to the fork (`F-31`) ───────────
+    //
+    // The production change is `bubblewrap.rs`'s; its evidence is here, because
+    // running two real capsules at once needs the fixture and `provision`, which
+    // are this unit's. Both tests fail *by hanging* against the mechanism as it
+    // stood, which is why each was run alone under a shell `timeout` before it
+    // joined the suite (`R1`).
+
+    /// Exit codes chosen below `TIMEOUT_EXIT_CODE` and away from `128 + N`, so
+    /// `classify_termination` reads them back as themselves (`R5`).
+    const CONCURRENT_EXIT_CODES: [i32; 2] = [3, 5];
+    const NESTED_EXIT_CODE: i32 = 11;
+    /// Enough repetitions that the unguarded window is met rather than missed,
+    /// cheap enough that the pair costs a couple of seconds.
+    const CONCURRENT_ROUNDS: usize = 4;
+
+    /// A payload whose *exit code* is the observation, reported through the
+    /// status channel the window hands over.
+    fn exiting_with(code: i32) -> Argv {
+        argv(&[SHELL, "-c", &format!("echo {LIVENESS_MARKER}; exit {code}")])
+    }
+
+    /// `F-31` reproduced directly: two `run` calls in flight on two threads,
+    /// each observing a status handover that is **its own**.
+    ///
+    /// The discriminator is `classify_termination`'s `child_ran`. The status
+    /// descriptor is handed to `bwrap` by number (`--json-status-fd`), and a
+    /// concurrent run's sweep re-marks it close-on-exec between this run's clear
+    /// and its fork — so the capsule either never reports (`NotExecutable`,
+    /// where an exit code was expected) or blocks for ever at bubblewrap's
+    /// user-namespace handshake holding this side's capture pipe. Both were
+    /// measured at PHASE-08; neither is reachable with the window narrowed.
+    #[test]
+    fn two_concurrent_runs_each_observe_their_own_status_handover() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(backend.availability(), Availability::Available);
+
+        let running: Vec<std::thread::JoinHandle<Vec<Termination>>> = CONCURRENT_EXIT_CODES
+            .iter()
+            .map(|code| {
+                let code = *code;
+                let placement = provision_capsule(&fixture, &SystemHost, &backend)
+                    .expect("the fixture provisions")
+                    .placement;
+                std::thread::spawn(move || {
+                    // A backend per thread: `BubblewrapBackend` borrows a
+                    // `&dyn HostFacts`, and `SystemHost` is a unit struct, so
+                    // each thread names the same host without sharing a borrow.
+                    let backend = BubblewrapBackend::new(&SystemHost);
+                    (0..CONCURRENT_ROUNDS)
+                        .map(|_| {
+                            backend
+                                .execute(&placement, &harness_execution(&exiting_with(code)))
+                                .expect("the mechanism runs")
+                                .termination
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+
+        for (code, thread) in CONCURRENT_EXIT_CODES.iter().zip(running) {
+            let seen = thread.join().expect("the thread did not panic");
+            assert_eq!(seen.len(), CONCURRENT_ROUNDS);
+            for termination in seen {
+                assert_eq!(
+                    termination,
+                    Termination::Exited { code: *code },
+                    "a run did not read its own status handover (`F-31`)"
+                );
+            }
+        }
+    }
+
+    /// The deadlock discriminator (`F-1`), and the reason the PHASE-08 stopgap
+    /// could not simply be promoted to production.
+    ///
+    /// `execute_observed`'s observer callback fires **inside** `spawn_and_wait`,
+    /// inside `run`, on the same thread — and row B5's choreography runs a whole
+    /// second capsule there. A guard held across the callback re-enters a
+    /// non-reentrant lock and hangs; one released at the fork does not. Nothing
+    /// about this test is concurrent: it is nested, which is the harder case.
+    #[test]
+    fn a_capsule_run_inside_the_observer_callback_returns() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(backend.availability(), Availability::Available);
+
+        let subject = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+        let nested = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions a second transaction")
+            .placement;
+
+        let inner: RefCell<Option<Termination>> = RefCell::new(None);
+        let observer = |capsule: HostPid| {
+            fixture.note_capsule_session(capsule);
+            let observation = backend
+                .execute(&nested, &harness_execution(&exiting_with(NESTED_EXIT_CODE)))
+                .expect("the nested capsule runs to completion");
+            *inner.borrow_mut() = Some(observation.termination);
+        };
+
+        // The subject lingers, or the trusted side's descent to its top-level
+        // process finds no session leader and never calls back (`F-30`).
+        let outer = backend
+            .execute_observed(
+                &subject,
+                &harness_execution(&argv(&[
+                    SHELL,
+                    "-c",
+                    &format!("echo {LIVENESS_MARKER}; sleep {LINGER_SECONDS}"),
+                ])),
+                &observer,
+            )
+            .expect("the subject runs to completion");
+
+        assert_eq!(outer.termination, Termination::Exited { code: 0 });
+        assert_eq!(
+            inner.into_inner(),
+            Some(Termination::Exited {
+                code: NESTED_EXIT_CODE
+            }),
+            "the observer callback never ran, so the nesting was not exercised"
+        );
+    }
+
     /// `Bound` carries the two removals `PropertyRemoval::ResourceBound` stands
     /// for — nine variants, ten removals.
     #[test]

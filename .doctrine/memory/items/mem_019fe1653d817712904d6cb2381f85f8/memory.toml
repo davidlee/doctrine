@@ -6,7 +6,7 @@ status = "active"
 title = "Mutation battery: a mutation that reds nothing is usually a non-discriminating fixture"
 summary = "Pick fixture values where the wrong rule gives a different answer; assert the discriminating property itself"
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-09"
 
 [scope]
 paths = ["crates/doctrine-control"]

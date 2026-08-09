@@ -1274,3 +1274,94 @@ committed. An instrument whose failure mode is killing processes it did not
 start needs its floor in its first commit, ahead of every row that exercises it.
 The rule the next phase should carry: **a destructive test instrument is
 floored before it is aimed, never after.**
+
+## PHASE-09 — the measured rows (execution record)
+
+### `T1` — the descriptor window, narrowed to the fork (`F-31`)
+
+`BubblewrapBackend::run` mutated **process-wide** descriptor flags —
+`mark_inherited_descriptors_close_on_exec` over everything above 2, then
+`clear_close_on_exec` on the status file so the child inherits it — and held
+that mutated state across the whole spawn-and-wait. `fork` reads those flags at
+the instant it runs, so two concurrent runs interleave: the measured symptom is
+a capsule told `--json-status-fd 4` finding fd 4 absent, or fd 6 holding
+*another* transaction's status file. PHASE-08 shipped a `#[cfg(test)]` mutex
+around the whole of `run` as a stopgap and owed the production fix upward.
+
+**The fix.** A production `static DESCRIPTOR_WINDOW: Mutex<()>` and one new
+private function, `fork_within_the_descriptor_window(command,
+sweep_descriptors, status_file)`, holding the guard across *mark, clear, spawn,
+re-mark* and nothing else. `spawn_and_wait` becomes `observe_and_wait(child,
+observer)` and runs outside the guard. No type, trait or signature above
+`bubblewrap.rs` moved, so `S1` did not fire; the change is `run`'s body, one new
+function, one rename, one new helper (`set_close_on_exec`) and two import lines.
+
+Dropping `Command::output()`'s fast path was checked, not assumed: `output()` is
+`spawn` + `wait_with_output` internally, and all three stdio endpoints are set
+explicitly upstream, so the two paths are equivalent here.
+
+**`D2` resolved — the window includes the restore.** The narrow reading would
+end the guard at `spawn`. It ends one `fcntl` later, after `CLOEXEC` is put back
+on the status file. The cost is a syscall; what it buys is the stronger and much
+more checkable invariant that *outside the window, no descriptor of this process
+lacks `CLOEXEC` because of a capsule run*. Without it the status descriptor
+stays inheritable until the next run's sweep, and a subsequent `DescriptorsClosed`
+control arm — whose whole point is that the sweep already happened — would
+inherit it. Spawn and restore are both attempted before either is reported: a
+failed spawn must not leave the descriptor inheritable, and a failed restore must
+not mask the spawn error, which is the one the caller can act on.
+
+Post-fork marking inside `pre_exec` was rejected: it would spend the third
+`unsafe` `#[expect]` site (`S7`) to buy nothing the guard does not already give.
+
+**Re-entrancy is by construction, and now measured.** The guard is released at
+the fork, before `observe_and_wait` calls the observer — which is the callback
+that re-enters `run` for `execute_observed`'s descent. A reentrant lock would
+have been the wrong repair: it would make the deadlock disappear without making
+the interleaving safe.
+
+### Two mutants, and why the first one redded nothing at first
+
+`M-T1a` — delete the `DESCRIPTOR_WINDOW.lock()` line. It would not compile:
+`-D unused` reds the now-dead `static` and the `PoisonError` import, so the
+mutant needs an `#[expect(dead_code)]` and a narrowed import to even build.
+Same class as PHASE-08's `F-32` — a deny list can make a plausible mutation
+uncompilable as worded.
+
+Built, it passed `two_concurrent_runs_each_observe_their_own_status_handover`
+(two threads, four rounds of real capsules). That is a fixture that cannot
+discriminate, not an untested rule (`R7`): the clear→fork window is a few
+hundred microseconds against a **~70 ms** per-capsule period, so the threads
+essentially never overlap inside it.
+
+The repair was a denser test at mechanism altitude, not row altitude:
+`concurrent_forks_each_hand_over_only_their_own_status_descriptor` — 4 threads ×
+60 rounds of `/bin/sh -c 'echo ok >&N'` straight through
+`fork_within_the_descriptor_window`, each round asserting its own status file
+reads back `ok`. Period drops to ~2 ms. Against `M-T1a` it reds at **thread 3
+round 1** with `left: "" right: "ok"` — the handover went to the wrong
+descriptor. The constants are chosen by measurement and the doc comment says so,
+because a later reader will otherwise trim them.
+
+`M-T1b` — move the guard back up to `run`, i.e. the PHASE-08 stopgap's shape.
+It **hangs** `a_capsule_run_inside_the_observer_callback_returns`; killed under
+`timeout 90`. This converts the plan-time finding `F-1` (that the stopgap
+deadlocks row B5 rather than serialising it) from a traced reading into a
+measurement, and it is the reason `T11` can now be written at all.
+
+Both mutants reversed textually against `/tmp/sl248-t1/bubblewrap.rs.orig` and
+verified by `diff` (0 deletions) plus `grep -c MUTANT` = 0, never by
+`git checkout` (`C11`).
+
+**`F-35` bit again.** The `M-T1b` kill left `~/.local/share/doctrine-conformance/63730-0`
+behind — `Drop` does not run for a killed process. Hand-swept with `rm -rf` per
+`C12`/`R8`; no delete primitive was added to the harness. Process table checked
+first: only pid 1 `bwrap`, the jail itself.
+
+**Where the evidence lives.** Two tests sit in `bubblewrap.rs` (the mechanism —
+the restore invariant and the fork stress). Two sit in `conformance.rs`, because
+running real capsules concurrently needs the fixture and `provision`, which are
+that unit's. Both of the latter fail *by hanging* against the old mechanism,
+so each was run alone under a shell `timeout` before joining the suite (`R1`).
+
+Suite 201 → 205, 1.38 s, all pre-existing tests green unchanged (`C10`).

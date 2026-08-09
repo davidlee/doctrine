@@ -76,3 +76,36 @@ rules share one output value. If two rules can be deleted independently and the
 verdict cannot say which one fired, the verdict is under-specified — widen what
 it carries rather than settling for a coarser assertion. A shared verdict with
 no discriminating payload is a fixture problem you cannot fix in the fixture.
+
+## The fixture can also fail to discriminate in *time*
+
+SL-248 PHASE-09 `T1` narrowed a process-wide descriptor window in
+`BubblewrapBackend::run` to the fork alone, guarded by a mutex. The mutation —
+delete the guard — redded **nothing** against the obvious test: two threads,
+four rounds each, running real capsules concurrently and asserting each observed
+its own status handover.
+
+Nothing was wrong with the inputs. The unguarded window is a few hundred
+microseconds wide; a whole-capsule round has a **~70 ms** period. The threads
+essentially never overlapped inside the window, so the racy build won every
+time.
+
+The repair was **altitude**, not values: a second test one layer down, calling
+the guarded function directly with `/bin/sh -c 'echo ok >&N'` — 4 threads × 60
+rounds, ~2 ms period. Against the same mutant it reds on the first round.
+
+So the checklist has a fourth entry beside order, containment and close-on-exec:
+
+- **race window:** the stress's period must be comparable to the window's width.
+  A test built out of expensive end-to-end operations cannot discriminate a
+  sub-millisecond interleaving however many rounds it runs — it is the period,
+  not the round count, that has to come down.
+
+Two corollaries worth carrying:
+
+- Derive the constants by measurement and **say so where they are written**, or
+  the next reader trims the round count as flake-padding and the test goes
+  quietly vacuous.
+- A guard whose absence you cannot red at row altitude is not thereby unproven;
+  it is measured one layer down. Put the evidence beside the mechanism, and note
+  in the row-level test why it is not the discriminating one.
