@@ -8437,6 +8437,38 @@ mod tests {
         }
     }
 
+    /// The `--exact` name of
+    /// [`the_descriptor_seam_measured_in_a_process_of_its_own`], and the marker
+    /// its child must print.
+    ///
+    /// Selection by name fails **open**: a rename that forgets this constant
+    /// matches zero tests, and `cargo test` then exits 0 having run nothing. So
+    /// the parent requires the marker line positively rather than reading the
+    /// child's exit status, and drift is a loud parse failure instead of a
+    /// quietly green measurement of nothing (`D3`, and the trap
+    /// `mem.pattern.testing.reexec-the-test-binary-to-vary-process-wide-state`
+    /// records).
+    const DESCRIPTOR_SEAM_HELPER: &str =
+        "conformance::tests::the_descriptor_seam_measured_in_a_process_of_its_own";
+    const DESCRIPTOR_SEAM_VERDICT: &str = "DESCRIPTOR-SEAM-VERDICT=";
+
+    /// The child half of
+    /// [`a_descriptor_deltas_control_arm_inherits_a_set_the_probe_arm_did_not_leave`]
+    /// — **an instrument, not a claim**, which is why it is ignored by default.
+    ///
+    /// It runs the discriminator row and reports the verdict. It asserts
+    /// nothing: the assertion belongs to the parent, because a child that
+    /// asserted would put the claim behind an exit status the parent cannot
+    /// distinguish from *no test was selected*.
+    #[test]
+    #[ignore = "instrument: re-executed alone by a_descriptor_deltas_control_arm_inherits_a_set_the_probe_arm_did_not_leave"]
+    fn the_descriptor_seam_measured_in_a_process_of_its_own() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let verdict = run_row(&backend, &SystemHost, &fixture, &descriptor_shaped_row());
+        println!("{DESCRIPTOR_SEAM_VERDICT}{verdict:?}");
+    }
+
     /// `T2`, and the discriminator the seam exists to satisfy: a row whose
     /// control removes the sweep reaches `Proven`, which it can only do if the
     /// control arm found a decoy set that was still inheritable when it spawned.
@@ -8447,13 +8479,56 @@ mod tests {
     /// it close-on-exec permanently, and the control that follows reads the same
     /// `Unproven` for a different reason (`F-26`,
     /// [`a_decoy_set_opened_before_provisioning_is_already_closed_by_it`]).
+    ///
+    /// **Measured in a child process of its own, and that is the whole of
+    /// `F-16`'s repair** (`R3`). Descriptor inheritability is process-wide
+    /// state. `trusted_side_setup` opens the decoys under the production
+    /// descriptor window and must release it before the arm forks — because
+    /// `fork_within_the_descriptor_window` takes the same lock and a re-entrant
+    /// window is the corruption that guard exists to prevent. In the interval
+    /// between, **another test thread's capsule run sweeps this process** and
+    /// marks the decoys close-on-exec, so the control arm inherits nothing and
+    /// the row reads `Unproven` for a third reason that is about the runner and
+    /// not about the seam. Measured on this host: 1 red in 8 whole-suite passes
+    /// at `--test-threads=32`, and 1 in 3 under `doctrine check gate`.
+    ///
+    /// Re-executing the binary for this one test **removes** that interference
+    /// rather than tolerating it: `--exact … --ignored` selects a single test,
+    /// so the child has no second capsule run to sweep it. It is not a retry and
+    /// not a relaxation — the row, the arms and the asserted verdict are
+    /// unchanged, and the assertion is simply made where the runner cannot
+    /// falsify it.
+    ///
+    /// What this does **not** close is the seam's own residual: any
+    /// descriptor-delta row run inside this multi-threaded binary carries the
+    /// same window, which shipped row 10 will (`T4`, `F-18`).
     #[test]
     fn a_descriptor_deltas_control_arm_inherits_a_set_the_probe_arm_did_not_leave() {
-        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
-        let backend = BubblewrapBackend::new(&SystemHost);
+        let executable = std::env::current_exe().expect("the test binary's own path");
+        let output = Command::new(executable)
+            .args([
+                "--exact",
+                DESCRIPTOR_SEAM_HELPER,
+                "--ignored",
+                "--nocapture",
+            ])
+            .output()
+            .expect("the test binary re-executes");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let reported = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix(DESCRIPTOR_SEAM_VERDICT))
+            .unwrap_or_else(|| {
+                panic!(
+                    "no `{DESCRIPTOR_SEAM_VERDICT}` line from the child — the helper's \
+                     `--exact` selector matched nothing, or it failed before reporting\
+                     \n--- stdout\n{stdout}--- stderr\n{}",
+                    String::from_utf8_lossy(&output.stderr)
+                )
+            });
         assert_eq!(
-            run_row(&backend, &SystemHost, &fixture, &descriptor_shaped_row()),
-            RowVerdict::Proven,
+            reported,
+            format!("{:?}", RowVerdict::Proven),
             "the control arm inherited no decoy, so removing the sweep changed nothing"
         );
     }

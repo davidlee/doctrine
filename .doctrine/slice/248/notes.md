@@ -1262,6 +1262,35 @@ under the sheet's own fallback.
     `the_sweep_reaches_what_row_b5s_control_leaks` — nothing else failed in any
     run. Not chased, per the sheet's `A7`. Recorded so the next worker
     recognises its first red in seconds instead of bisecting for it.
+116. **Item 114's residual was active, not narrow, and the tally that called it
+    narrow measured the wrong channel** (`F-18`). `F-16` reported the
+    setup→fork window as *narrowed rather than closed* on 5/5 alone and 8/8
+    in-suite under 32 CPU spinners; under `doctrine check gate` the same test
+    failed **1 in 3**, and reproduced here at **1 red in 8** runs of the
+    conformance subset at `--test-threads=32`. The spinners were structurally
+    incapable of finding it: the hazard is a **descriptor** race and a busy-loop
+    opens no descriptors, whereas `cargo`'s build opens thousands. The durable
+    rule — **name the channel the hazard runs on, then load that channel**, and
+    prefer real gate runs to hand-rolled contention — is recorded in
+    `mem_019fe5142dbf76119787f4c6cc1d7c26`. Item 114 should be read as
+    superseded on its measurement, not on its mechanism.
+117. **`F-16` is closed by process isolation, and the seam's residual survives
+    for shipped row 10** (`F-19`). The discriminator now re-executes the test
+    binary for one `#[ignore]`d helper (`--exact … --ignored`) and requires a
+    positive marker line back; with no second capsule run in that process there
+    is no sweep to race, so the interference is **removed rather than
+    out-waited**. The row, both arms and the asserted verdict are unchanged —
+    nothing relaxed, conditioned or retried. Rejected: a re-entrant window (the
+    production guard's own doc forbids it); an already-held path into the fork
+    (correct, but a `CapsuleBackend` signature change, i.e. `S6`); a
+    `#[cfg(test)]` serialising mutex (the sweep comes from any capsule test, so
+    it serialises ~118 tests, regresses to the shape PHASE-09 `T1` removed, and
+    deadlocks row B5's concurrent arms); an idempotent re-check-and-reopen
+    (still outside the fork's window — a smaller flake, not a closure). **Owed
+    to `T4`:** shipped row 10 runs in-process and carries the same window, so it
+    must take the same isolation or carry the residual knowingly, and it must be
+    tallied under `doctrine check gate` rather than spinners. Owed as an `ISS-`
+    at merge if the residual is to be tracked past this slice.
 
 
 ## Open

@@ -47,3 +47,32 @@ assertion.
 Deleting the late read is the cheap alternative and is usually wrong: it drops
 a claim (this pid is *real*, not merely *different from the decoy*) that the
 assertion existed to make.
+
+## Correction — the load model must match the hazard's channel
+
+Point 2 above ("spin N background CPU loops") is **necessary and not
+sufficient, and taken alone it is misleading.** `SL-248` `PHASE-10` `T2` was
+tallied 5/5 alone and 8/8 in-suite under **32 spinners on 32 cores**, reported
+green in good faith, and then failed **1 in 3** on the orchestrator's
+`doctrine check gate`.
+
+The spinners were structurally incapable of finding it. The hazard was a
+**descriptor** race — a decoy fd set swept by another thread's capsule run
+between a guard window's release and the arm's fork — and a busy-loop
+saturates CPU while opening **no file descriptors**. `cargo`'s own build opens
+thousands, which is precisely why the gate reproduces what the synthetic load
+cannot.
+
+So, before tallying, **name the channel the hazard runs on** — descriptors,
+pids, mounts, signals, the clock — and load *that*. A CPU spinner is the right
+instrument for a scheduler race and the wrong one for every other kind.
+
+**And prefer the real gate to hand-rolled contention.** `doctrine check gate`
+builds before it tests, so it loads CPU, memory, fds and the page cache at
+once, in proportions no hand-written loop reproduces. If you can only afford
+one form of evidence, make it three gate runs.
+
+In this slice the failure mode has now cost three separate firings, each time
+arriving as a worker's *honest* tally that measured the wrong axis. The
+practice that survives: the tally is the claim, the channel is what makes it
+evidence.
