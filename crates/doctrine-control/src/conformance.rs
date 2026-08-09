@@ -4254,6 +4254,7 @@ mod tests {
     use std::os::fd::AsRawFd as _;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::MutexGuard;
     use std::time::Duration;
 
     use tempfile::TempDir;
@@ -5694,6 +5695,38 @@ mod tests {
         );
     }
 
+    /// Row 10's decoy set **and the descriptor window that must outlive it** —
+    /// the one route a test in this process opens an inheritable descriptor by.
+    ///
+    /// **Holding a set outside the window is not a risk this test runs, it is a
+    /// hazard this test creates for every other one.** Inheritability is
+    /// process-wide, and an inheritable descriptor is inherited by *any* thread's
+    /// `Command` spawn and survives every `exec` after it until something marks
+    /// it close-on-exec — so a set left open here turns up inside another test's
+    /// child, and inside that child's own children. That is what
+    /// [`payload_output_leaking`]'s nothing-leaked leg reads as a descriptor it
+    /// never opened (`F-28`).
+    ///
+    /// The window is the process's one arbiter of that state, and it is already
+    /// the party `fork_within_the_descriptor_window` and `trusted_side_setup`
+    /// contract with. Handing the guard back *with* the set is what makes the
+    /// pairing structural rather than remembered: there is no way to bind the
+    /// decoys through this function without also binding the window that keeps
+    /// them private, and no fork in this process can happen while it is held.
+    ///
+    /// Two sites cannot ride it, and both are named where they sit: a second set
+    /// opened under a guard already held (`std::sync::Mutex` is not re-entrant),
+    /// and a set that must survive a `provision` — which forks through the same
+    /// window and would deadlock on it, so it is held in a process of its own
+    /// instead.
+    fn decoys_under_the_window(fixture: &Fixture) -> (MutexGuard<'static, ()>, InheritableDecoys) {
+        let window = hold_descriptor_window();
+        let decoys = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+        (window, decoys)
+    }
+
     /// `EX-13`'s two halves in one assertion: row 10's three decoys survive an
     /// `exec`, and every descriptor the trusted side holds *for real* does not.
     ///
@@ -5703,14 +5736,8 @@ mod tests {
     /// the removal would change nothing while the row still passed.
     #[test]
     fn the_row_ten_decoys_are_the_only_inheritable_descriptors() {
-        // Inheritability is process-wide state, and every capsule run in this
-        // suite sweeps it. Held across the open and the reading, or another
-        // test's spawn re-marks these decoys between them (`F-12`).
-        let _window = hold_descriptor_window();
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
-        let decoys = fixture
-            .inheritable_decoys()
-            .expect("the fixture can open row 10's decoys");
+        let (_window, decoys) = decoys_under_the_window(&fixture);
 
         for descriptor in decoys.descriptors() {
             assert!(
@@ -5747,9 +5774,7 @@ mod tests {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let before = entry_names(fixture.root());
 
-        let decoys = fixture
-            .inheritable_decoys()
-            .expect("the fixture can open row 10's decoys");
+        let (_window, decoys) = decoys_under_the_window(&fixture);
         let [_readable, writable, _socket] = decoys.descriptors();
 
         let written = rustix::io::write(writable, b"the control arm's mutation\n")
@@ -5785,13 +5810,8 @@ mod tests {
     /// leave the control arm nothing to leak — a row passing for no reason.
     #[test]
     fn a_decoy_set_opened_after_a_sweep_is_inheritable_again() {
-        // As above: the sweep this test performs by hand is the one a concurrent
-        // capsule run performs for real (`F-12`).
-        let _window = hold_descriptor_window();
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
-        let swept = fixture
-            .inheritable_decoys()
-            .expect("the fixture can open row 10's decoys");
+        let (_window, swept) = decoys_under_the_window(&fixture);
 
         // What `mark_inherited_descriptors_close_on_exec` does to the parent,
         // applied here to this set alone rather than to the whole process.
@@ -5801,6 +5821,9 @@ mod tests {
             assert!(!is_inheritable(descriptor));
         }
 
+        // Not [`decoys_under_the_window`]: the guard above is still held and
+        // `std::sync::Mutex` is not re-entrant. The second set is opened under
+        // the *same* window by lexical scope, which is the property that matters.
         let fresh = fixture
             .inheritable_decoys()
             .expect("a second decoy set opens");
@@ -5816,9 +5839,7 @@ mod tests {
     #[test]
     fn a_decoy_set_is_three_descriptors_of_three_kinds() {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
-        let decoys = fixture
-            .inheritable_decoys()
-            .expect("the fixture can open row 10's decoys");
+        let (_window, decoys) = decoys_under_the_window(&fixture);
 
         assert_eq!(decoys.descriptors().len(), InheritableDecoys::COUNT);
         let numbers: BTreeSet<i32> = decoys
@@ -8885,29 +8906,64 @@ mod tests {
     /// each forking through the sweep, so a set opened before `provision_capsule`
     /// is already close-on-exec on *both* arms — the vacuous pass `EX-3` forbids.
     /// A hook that is merely per-arm, placed before the capsule, still reads it.
+    ///
+    /// **Measured in a process of its own** (`F-28`), and the claim is otherwise
+    /// unchanged — the same set, the same provision, the same two readings of
+    /// each descriptor, required positively. This is the one decoy set in the
+    /// suite that [`decoys_under_the_window`] cannot cover: the claim *is* that
+    /// the set outlives a provision, and `provision` forks through
+    /// `fork_within_the_descriptor_window`, so holding the window across it
+    /// would deadlock. Left in the shared process the set is inheritable and
+    /// unguarded for as long as a provision takes, and every concurrent
+    /// `Command` spawn inherits it — the contamination
+    /// [`payload_output_leaking`]'s nothing-leaked leg reds on. A child holds it
+    /// where no other test can reach it.
     #[test]
     fn a_decoy_set_opened_before_provisioning_is_already_closed_by_it() {
+        assert_eq!(
+            reported_by_a_child(PRE_PROVISION_HELPER, PRE_PROVISION_REPORT),
+            vec![String::from("true false"); InheritableDecoys::COUNT],
+            "a decoy set was close-on-exec before anything swept it, or provisioning did \
+             not sweep a pre-existing set — `F-9` no longer holds and the seam's placement \
+             is free again"
+        );
+    }
+
+    const PRE_PROVISION_HELPER: &str =
+        "conformance::tests::a_decoy_set_before_provisioning_measured_in_a_process_of_its_own";
+    const PRE_PROVISION_REPORT: &str = "PRE-PROVISION=";
+
+    /// The child half of
+    /// [`a_decoy_set_opened_before_provisioning_is_already_closed_by_it`] — **an
+    /// instrument, not a claim**, which is why it is ignored by default and
+    /// asserts nothing.
+    ///
+    /// It reports one line per descriptor: inheritable before the provision, and
+    /// inheritable after it. The parent holds the assertion and requires one
+    /// line per descriptor, because a selector matching nothing exits 0 having
+    /// run nothing.
+    #[test]
+    #[ignore = "instrument: re-executed alone by a_decoy_set_opened_before_provisioning_is_already_closed_by_it"]
+    fn a_decoy_set_before_provisioning_measured_in_a_process_of_its_own() {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let backend = BubblewrapBackend::new(&SystemHost);
         let early = fixture
             .inheritable_decoys()
             .expect("the fixture can open row 10's decoys");
-        for descriptor in early.descriptors() {
-            assert!(
-                is_inheritable(descriptor),
-                "the decoy set was close-on-exec before anything swept it"
-            );
-        }
+        let before: Vec<bool> = early
+            .descriptors()
+            .into_iter()
+            .map(is_inheritable)
+            .collect();
 
         let _transaction = provision_capsule(&fixture, &SystemHost, backend.as_capsule_backend())
             .expect("this host can provision a capsule");
 
-        for descriptor in early.descriptors() {
-            assert!(
-                !is_inheritable(descriptor),
-                "provisioning did not sweep a pre-existing decoy set — `F-9` no longer holds \
-                 and the seam's placement is free again"
-            );
+        for (before, after) in before
+            .into_iter()
+            .zip(early.descriptors().into_iter().map(is_inheritable))
+        {
+            println!("{PRE_PROVISION_REPORT}{before} {after}");
         }
     }
 
@@ -9511,15 +9567,26 @@ mod tests {
     /// nothing but its own `/proc/self/fd` — the thing the leak changes.
     ///
     /// **The descriptor window is held across the open, the selective sweep and
-    /// the spawn** (`F-12`). Inheritability is process-wide, every capsule run
-    /// in this suite sweeps it, and this is code that needs its descriptors to
-    /// stay inheritable until the child has them.
+    /// the spawn** (`F-12`), and that is load-bearing in *both* directions
+    /// (`F-28`).
+    ///
+    /// Outward, it is what it always was: inheritability is process-wide, every
+    /// capsule run in this suite sweeps it, and the kept decoy has to stay
+    /// inheritable until the shell has it.
+    ///
+    /// Inward — and this is the leg that was missing — it is also what keeps
+    /// *other* descriptors out of this fork. The `kept: None` leg asserts that
+    /// the payload found **nothing** above the standard streams, and that is a
+    /// claim about the whole process's descriptor table, not about this
+    /// function's three. Any set another thread holds inheritable at this moment
+    /// crosses the same `exec` and the leg reads it. Since
+    /// [`decoys_under_the_window`] is the only route a test in this process
+    /// opens such a set by, and it takes the guard held here, no other thread
+    /// can be holding one while this forks: the interfering agent is excluded by
+    /// the mutex, not out-waited.
     fn payload_output_leaking(kept: Option<usize>) -> Vec<String> {
-        let _window = hold_descriptor_window();
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
-        let decoys = fixture
-            .inheritable_decoys()
-            .expect("the fixture can open row 10's decoys");
+        let (_window, decoys) = decoys_under_the_window(&fixture);
 
         // What the backend's parent-side sweep does to the whole process,
         // applied here to the decoys this leak does *not* include.
