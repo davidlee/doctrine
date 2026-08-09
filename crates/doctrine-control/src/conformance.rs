@@ -8503,8 +8503,30 @@ mod tests {
 
     impl ProcessGroupReaper {
         fn new() -> Self {
+            Self::with_own(own_process_group())
+        }
+
+        /// The constructor every test that reaches the **signalling** path
+        /// drives, with a synthetic own-group.
+        ///
+        /// Not a convenience. Measured (`F-39`): an earlier shape of the tests
+        /// below handed the instrument this process's *real* group, and with
+        /// the own-group refusal mutated out, `reap_observed_groups` enumerated
+        /// its own group and `SIGKILL`ed the `cargo test` process tree running
+        /// it — twice, on two separate invocations, each reported only as a
+        /// bare `Killed` with the buffered output lost. That is `R2`'s PHASE-08
+        /// failure reproduced exactly, and it is the wrong way for a mutation
+        /// to be convicted: the battery must red a *test*, not the runner, or
+        /// the next person to weaken a refusal learns about it from an empty
+        /// log.
+        ///
+        /// So the refusals are proven on values that cannot hurt anything —
+        /// a synthetic own-group and a memberless target — and the real
+        /// own-group is wired in exactly one place, asserted by exactly one
+        /// test that never signals.
+        const fn with_own(own: Option<ProcessGroupId>) -> Self {
             Self {
-                own: own_process_group(),
+                own,
                 observed: RefCell::new(Vec::new()),
             }
         }
@@ -8569,6 +8591,27 @@ mod tests {
                 .unwrap_or(0)
                 .saturating_add(1),
         )
+    }
+
+    /// A synthetic own-group: above the floor, above every live pid, and
+    /// distinct from [`memberless_group`], so an instrument built with it can
+    /// run its whole real path and still reach nothing.
+    fn synthetic_own_group() -> ProcessGroupId {
+        ProcessGroupId(memberless_group().0.saturating_add(1))
+    }
+
+    /// The one place the *real* own-group is asserted, and it never signals.
+    #[test]
+    fn the_reaper_takes_its_own_group_from_this_process() {
+        assert_eq!(
+            ProcessGroupReaper::new().own,
+            own_process_group(),
+            "the instrument's own-group refusal is armed against some other process"
+        );
+        assert!(
+            own_process_group().is_some(),
+            "this host answers /proc for this process, so the instrument is armed at all"
+        );
     }
 
     /// Refusal 1 — group 0, the one whose harm has its own mechanism.
@@ -8662,14 +8705,14 @@ mod tests {
     fn the_group_reaper_signals_only_a_group_it_observed() {
         let memberless = memberless_group();
 
-        let never_told = ProcessGroupReaper::new();
+        let never_told = ProcessGroupReaper::with_own(Some(synthetic_own_group()));
         assert_eq!(
             never_told.reap_observed_groups(),
             Vec::new(),
             "a reaper that observed nothing signalled something"
         );
 
-        let reaper = ProcessGroupReaper::new();
+        let reaper = ProcessGroupReaper::with_own(Some(synthetic_own_group()));
         reaper.note_group(memberless);
         reaper.note_group(memberless);
         assert_eq!(
@@ -8689,14 +8732,13 @@ mod tests {
     /// signalling site.
     #[test]
     fn a_machine_group_is_refused_by_the_reapers_recorder() {
-        let reaper = ProcessGroupReaper::new();
+        let own = synthetic_own_group();
+        let reaper = ProcessGroupReaper::with_own(Some(own));
         let memberless = memberless_group();
 
         reaper.note_group(ProcessGroupId(0));
         reaper.note_group(ProcessGroupId(1));
-        if let Some(own) = reaper.own {
-            reaper.note_group(own);
-        }
+        reaper.note_group(own);
         reaper.note_group(memberless);
 
         assert_eq!(
@@ -8711,7 +8753,7 @@ mod tests {
     /// and for the same recycled-pid reason.
     #[test]
     fn a_vanished_capsule_records_no_group() {
-        let reaper = ProcessGroupReaper::new();
+        let reaper = ProcessGroupReaper::with_own(Some(synthetic_own_group()));
 
         reaper.note_capsule_group(HostPid(-1));
 
