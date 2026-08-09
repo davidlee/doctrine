@@ -49,6 +49,7 @@
 )]
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -61,15 +62,18 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use doctrine::DOCTRINE_TOML;
+use doctrine::interpretation::PolicyHash;
 use rustix::fs::{FsWord, OFlags};
 use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 
-use crate::backend::bubblewrap::{BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed};
+use crate::backend::bubblewrap::{
+    BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed, profile_owned_host_path,
+};
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
     CapsulePlacement, CapsuleStdio, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT,
-    ForbiddenScopes, MountedPath, NetworkPosture, Observation, PlacementParts, Termination,
-    TransactionRoot,
+    ForbiddenScopes, INNER_CAPSULE, MountedPath, NetworkPosture, Observation, PlacementParts,
+    Termination, TransactionRoot,
 };
 use crate::config::{Argv, ByteCount};
 use crate::host::HostFacts;
@@ -1109,7 +1113,7 @@ fn capsule_config_document(capsule_root: &Path, readable_roots: &[PathBuf]) -> S
          \n\
          [interpretation]\n\
          schema = 1\n\
-         trusted_side_forbidden_executables = []\n\
+         {EMPTY_FORBIDDEN_EXECUTABLES}\n\
          interpreted_paths = []\n\
          \n\
          [[interpretation.verification]]\n\
@@ -1318,8 +1322,22 @@ fn second_filesystem(capsule_root: &Path, fixture_root: &Path, table: &str) -> O
 /// independently here so the selection does not route through the function
 /// under test.
 fn available_bytes_of(path: &Path) -> Option<u64> {
-    let stat = rustix::fs::statvfs(path).ok()?;
-    stat.f_bavail.checked_mul(stat.f_frsize)
+    independent_capacity(path).ok().map(|(bytes, _unit)| bytes)
+}
+
+/// One independent reading of `path`'s available space, and the allocation unit
+/// a tolerance over it is expressed in.
+///
+/// The crate's **only** independent statvfs arithmetic: the mount-table
+/// selection and [`agreed_capacity`] both read through here, so a mutation of
+/// the probe cannot be agreed with by either.
+fn independent_capacity(path: &Path) -> Result<(u64, u64), String> {
+    let stat = rustix::fs::statvfs(path).map_err(|errno| format!("{}: {errno}", path.display()))?;
+    let bytes = stat
+        .f_bavail
+        .checked_mul(stat.f_frsize)
+        .ok_or_else(|| format!("{}: the independent figure overflows", path.display()))?;
+    Ok((bytes, stat.f_frsize))
 }
 
 /// The mount points named by `/proc/self/mountinfo`, in the kernel's order.
@@ -2377,9 +2395,333 @@ fn tables() -> Vec<Row> {
     rows
 }
 
-/// Table C's claims. Empty until PHASE-08 lands them.
-fn auxiliary_claims() -> Vec<(Claim, AuxOutcome)> {
-    Vec::new()
+// ---------------------------------------------------------------------------
+// Table C: the four auxiliary claims (`EX-14`, `EX-15`, `EX-16`)
+// ---------------------------------------------------------------------------
+
+/// The four claims, named once so the report and the tests cannot drift apart.
+const READ_ONCE_CLAIM: Claim = Claim {
+    section: "sec-4",
+    name: "rewriting the policy inside a capsule does not change the bound policy",
+};
+const OBJECT_SET_CLAIM: Claim = Claim {
+    section: "sec-3",
+    name: "the clone's object set is exactly the export's",
+};
+const CAPACITY_CLAIM: Claim = Claim {
+    section: "sec-5",
+    name: "the capacity probe reads real space at the path it is given",
+};
+const CAPACITY_FILESYSTEM_CLAIM: Claim = Claim {
+    section: "sec-5",
+    name: "the capacity probe reads the filesystem the capsule root is on",
+};
+
+/// The clone's working tree beneath [`INNER_CAPSULE`]. Spelled here because
+/// `provision`'s own constant is private to that module and `provision.rs` is
+/// not a file this phase owns (`S1`) — the same reason [`GIT`] is spelled here.
+const CAPSULE_REPOSITORY_LEAF: &str = "repo";
+
+/// The interpretation field the read-once claim rewrites, and what it rewrites
+/// it to.
+///
+/// A **policy** field, not a comment: the replacement must be one that *would*
+/// change the canonical hash if the hash were re-read, or the claim passes for
+/// the wrong reason. Shared with [`capsule_config_document`], which emits the
+/// empty form, so the substitution cannot miss.
+const EMPTY_FORBIDDEN_EXECUTABLES: &str = "trusted_side_forbidden_executables = []";
+const REWRITTEN_FORBIDDEN_EXECUTABLES: &str =
+    "trusted_side_forbidden_executables = [\"rewritten-by-the-capsule\"]";
+
+/// `EX-15`'s query. `--batch-check` is **not** optional: bare
+/// `--batch-all-objects` is a fatal error (`'--batch-all-objects' requires a
+/// batch mode`), verified by execution.
+const OBJECT_NAME_QUERY: [&str; 3] = [
+    "cat-file",
+    "--batch-all-objects",
+    "--batch-check=%(objectname)",
+];
+
+/// Why the conditional capacity claim skips. It names the absence — a skip with
+/// an empty reason is a silent pass wearing a label.
+const NO_SECOND_FILESYSTEM: &str = "this host named no filesystem other than the capsule root's";
+
+/// Table C's four claims (`EX-14`, `EX-15`, `EX-16`).
+///
+/// **Reported, never admitted on.** [`admission`] takes the row list alone, so
+/// widening happened here and not there: a table C claim has no path to the
+/// verdict in either direction, which is what makes a skip lawful here where
+/// `DEC-156` forbids one in an admission.
+fn auxiliary_claims(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+) -> Vec<(Claim, AuxOutcome)> {
+    vec![
+        (READ_ONCE_CLAIM, read_once_claim(backend, host, fixture)),
+        (OBJECT_SET_CLAIM, object_set_claim(backend, host, fixture)),
+        (CAPACITY_CLAIM, capacity_claim(host, fixture.capsule_root())),
+        (
+            CAPACITY_FILESYSTEM_CLAIM,
+            capacity_filesystem_claim(host, fixture.capsule_root(), fixture.second_filesystem()),
+        ),
+    ]
+}
+
+/// Every claim skipped for one reason — the fixture they all need could not be
+/// built. Reported rather than omitted, so the report's shape does not change
+/// with the host's luck.
+fn claims_skipped(reason: &str) -> Vec<(Claim, AuxOutcome)> {
+    [
+        READ_ONCE_CLAIM,
+        OBJECT_SET_CLAIM,
+        CAPACITY_CLAIM,
+        CAPACITY_FILESYSTEM_CLAIM,
+    ]
+    .into_iter()
+    .map(|claim| (claim, AuxOutcome::Skipped(reason.to_owned())))
+    .collect()
+}
+
+/// `sec-4`'s read-once claim, made physical.
+///
+/// **Two positive assertions, and the claim is vacuous without the first**: the
+/// in-capsule rewrite actually landed — read back trusted-side from the
+/// capsule's host path — and the policy in force is still the one captured at
+/// provision. A capsule that could not write is the default outcome of a dozen
+/// ways to get the mount wrong, and without the read-back this claim passes
+/// against one.
+fn read_once_claim(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+) -> AuxOutcome {
+    let transaction = match provision_capsule(fixture, host, backend.as_capsule_backend()) {
+        Ok(transaction) => transaction,
+        Err(refusal) => return AuxOutcome::Failed(refusal),
+    };
+    let bound = policy_in_force(&transaction);
+
+    match rewrite_policy_inside(backend, fixture, &transaction) {
+        Ok(()) => {}
+        Err(why) => return AuxOutcome::Failed(why),
+    }
+
+    if policy_in_force(&transaction) == bound {
+        AuxOutcome::Passed
+    } else {
+        AuxOutcome::Failed(
+            "the bound policy changed after a capsule rewrote its own copy".to_owned(),
+        )
+    }
+}
+
+/// Overwrite the capsule's copy of the policy document from **inside** it, and
+/// establish trusted-side that the write landed.
+fn rewrite_policy_inside(
+    backend: &dyn ConformanceBackend,
+    fixture: &Fixture,
+    transaction: &CapsuleTransaction,
+) -> Result<(), String> {
+    let document = std::fs::read_to_string(fixture.project_root().join(DOCTRINE_TOML))
+        .map_err(|error| error.to_string())?
+        .replace(EMPTY_FORBIDDEN_EXECUTABLES, REWRITTEN_FORBIDDEN_EXECUTABLES);
+    let inner = format!("{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}/{DOCTRINE_TOML}");
+    let argv = shell_argv(&format!("printf '%s' '{document}' > {inner}"))?;
+    ran_cleanly(backend.execute(&transaction.placement, &harness_execution(&argv)))?;
+
+    let written = profile_owned_host_path(transaction.root(), INNER_CAPSULE)
+        .join(CAPSULE_REPOSITORY_LEAF)
+        .join(DOCTRINE_TOML);
+    let after = std::fs::read_to_string(&written)
+        .map_err(|error| format!("{}: {error}", written.display()))?;
+    if after.contains(REWRITTEN_FORBIDDEN_EXECUTABLES) {
+        Ok(())
+    } else {
+        Err(format!(
+            "the in-capsule rewrite never landed at {}",
+            written.display()
+        ))
+    }
+}
+
+/// The policy in force after a run: the hash captured at provision, and **not**
+/// a re-read of the capsule's copy.
+///
+/// `sec-4`'s whole claim is that this function has no reason to touch the
+/// filesystem. `M14` is the mutation that gives it one.
+const fn policy_in_force(transaction: &CapsuleTransaction) -> PolicyHash {
+    transaction.policy_hash
+}
+
+/// `sec-3`'s claim: the clone holds the export's objects and no others.
+///
+/// The comparison is **trusted-side** (`EX-15`) — the capsule prints its own
+/// object names, which is evidence, and the trusted side runs the same query on
+/// the export and decides, which is authority.
+fn object_set_claim(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+) -> AuxOutcome {
+    let transaction = match provision_capsule(fixture, host, backend.as_capsule_backend()) {
+        Ok(transaction) => transaction,
+        Err(refusal) => return AuxOutcome::Failed(refusal),
+    };
+    match compare_object_sets(backend, &transaction) {
+        Ok(()) => AuxOutcome::Passed,
+        Err(why) => AuxOutcome::Failed(why),
+    }
+}
+
+fn compare_object_sets(
+    backend: &dyn ConformanceBackend,
+    transaction: &CapsuleTransaction,
+) -> Result<(), String> {
+    let quoted = OBJECT_NAME_QUERY.map(|word| format!("'{word}'")).join(" ");
+    let argv = shell_argv(&format!(
+        "{GIT} -C {INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF} {quoted}"
+    ))?;
+    let observation =
+        ran_cleanly(backend.execute(&transaction.placement, &harness_execution(&argv)))?;
+    let inside = object_names(&String::from_utf8_lossy(&observation.stdout));
+
+    let export = transaction.placement.source().host();
+    let listed = git(export, &OBJECT_NAME_QUERY).map_err(|fault| format!("{fault:?}"))?;
+    object_sets_agree(&inside, &object_names(&listed))
+}
+
+/// Set equality, **in both directions**, over a non-empty set.
+///
+/// ⊇ alone passes a clone that dragged extra objects in, and that is the whole
+/// claim (`M15`). The emptiness guard is the second way this could pass for
+/// nothing: two empty sets are equal, and a capsule whose `git` never ran prints
+/// nothing.
+fn object_sets_agree(inside: &BTreeSet<String>, export: &BTreeSet<String>) -> Result<(), String> {
+    if inside.is_empty() {
+        return Err("the capsule named no objects at all".to_owned());
+    }
+    if inside == export {
+        return Ok(());
+    }
+    let extra: Vec<&String> = inside.difference(export).collect();
+    let missing: Vec<&String> = export.difference(inside).collect();
+    Err(format!(
+        "the clone's object set is not the export's: {extra:?} extra, {missing:?} missing"
+    ))
+}
+
+fn object_names(listing: &str) -> BTreeSet<String> {
+    listing
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+/// `sec-5`'s probe, at the path it was given (`EX-16`).
+///
+/// **Never skips.** `REQ-461`'s only executed closure rests on this row, so a
+/// host that cannot answer is a *failure* here rather than an absence.
+fn capacity_claim(host: &dyn HostFacts, path: &Path) -> AuxOutcome {
+    match agreed_capacity(host, path) {
+        Ok(_bytes) => AuxOutcome::Passed,
+        Err(why) => AuxOutcome::Failed(why),
+    }
+}
+
+/// The discriminator (`EX-16`): the probe answers about the filesystem the path
+/// is on, not about some fixed one.
+///
+/// Both figures must agree with their **own** independent `statvfs` and differ
+/// from each other. The difference alone is not enough — two wrong figures also
+/// differ.
+fn capacity_filesystem_claim(
+    host: &dyn HostFacts,
+    capsule_root: &Path,
+    elsewhere: Option<&Path>,
+) -> AuxOutcome {
+    let Some(elsewhere) = elsewhere else {
+        return AuxOutcome::Skipped(format!(
+            "{NO_SECOND_FILESYSTEM}, so the probe has nothing to be told apart from ({})",
+            capsule_root.display()
+        ));
+    };
+    let here = match agreed_capacity(host, capsule_root) {
+        Ok(bytes) => bytes,
+        Err(why) => return AuxOutcome::Failed(why),
+    };
+    let there = match agreed_capacity(host, elsewhere) {
+        Ok(bytes) => bytes,
+        Err(why) => return AuxOutcome::Failed(why),
+    };
+    if here == there {
+        return AuxOutcome::Failed(format!(
+            "the probe reported {here} for both {} and {}",
+            capsule_root.display(),
+            elsewhere.display()
+        ));
+    }
+    AuxOutcome::Passed
+}
+
+/// The probe's figure at `path`, checked against a `statvfs` this function
+/// performs itself and returned.
+///
+/// **Bracketed, not compared against a single reading** (`F-28`). Free space is
+/// a live quantity: this suite's own parallel fixtures move it by tens of
+/// allocation units between two adjacent syscalls, so a single independent
+/// reading taken *after* the probe is not a reading of the same instant. Two
+/// readings, one either side, bound what the truth can have been while the probe
+/// ran, and the figure must land within one allocation unit of that interval.
+/// That is the same one-unit tolerance with the measurement's own noise removed,
+/// not a widened one — `M16`'s wrong quantity (`f_bfree × f_bsize`, which counts
+/// the reserved blocks) is ~92 GiB out on this host, four orders of magnitude
+/// beyond any interval two adjacent readings can span.
+///
+/// Non-zero is asserted separately because an implementation returning 0 agrees
+/// with nothing and would otherwise need a coincidence to be caught.
+fn agreed_capacity(host: &dyn HostFacts, path: &Path) -> Result<u64, String> {
+    let at = |detail: String| format!("{}: {detail}", path.display());
+    let (before, unit) = independent_capacity(path)?;
+    let reported = host
+        .available_bytes(path)
+        .map_err(|unknown| at(format!("{unknown:?}")))?;
+    let (after, _) = independent_capacity(path)?;
+
+    if reported == 0 {
+        return Err(at("the probe reported no available space".to_owned()));
+    }
+    let low = before.min(after).saturating_sub(unit);
+    let high = before.max(after).saturating_add(unit);
+    if reported < low || reported > high {
+        return Err(at(format!(
+            "the probe reported {reported}, outside the {low}..={high} statvfs bracketed it in"
+        )));
+    }
+    Ok(reported)
+}
+
+/// A payload under [`SHELL`], which is what every claim's capsule runs.
+fn shell_argv(script: &str) -> Result<Argv, String> {
+    Argv::try_new(vec![SHELL.to_owned(), "-c".to_owned(), script.to_owned()])
+        .ok_or_else(|| "an empty argv".to_owned())
+}
+
+/// An observation of a capsule that was expected to succeed, or why not.
+///
+/// A backend failure and a nonzero exit are different things and both are
+/// disqualifying here: a claim reads what a *working* capsule produced.
+fn ran_cleanly(observed: Result<Observation, BackendError>) -> Result<Observation, String> {
+    let observation = observed.map_err(|error| format!("{error:?}"))?;
+    match observation.termination {
+        Termination::Exited { code: 0 } => Ok(observation),
+        ref other => Err(format!(
+            "the claim's payload did not run cleanly: {other:?}, stderr {}",
+            String::from_utf8_lossy(&observation.stderr)
+        )),
+    }
 }
 
 /// The slice and phase every harness transaction records as its purpose.
@@ -2666,7 +3008,12 @@ pub(crate) fn verify(
         },
     };
 
-    verify_over(backend, host, today, &tables(), auxiliary_claims(), &run)
+    let claims = || match fixture.get_or_init(|| Fixture::new(host)) {
+        Ok(fixture) => auxiliary_claims(backend, host, fixture),
+        Err(fault) => claims_skipped(&format!("{fault:?}")),
+    };
+
+    verify_over(backend, host, today, &tables(), &claims, &run)
 }
 
 /// [`verify`] over an injected row set and row runner.
@@ -2683,7 +3030,7 @@ fn verify_over(
     host: &dyn HostFacts,
     today: String,
     rows: &[Row],
-    auxiliary: Vec<(Claim, AuxOutcome)>,
+    auxiliary: &dyn Fn() -> Vec<(Claim, AuxOutcome)>,
     run_row: &dyn Fn(&dyn ConformanceBackend, &Row) -> RowVerdict,
 ) -> AdmissionVerdict {
     let backend_id = backend.id();
@@ -2698,7 +3045,7 @@ fn verify_over(
                 reason: NotAdmitted::Unavailable { missing, remedy },
             },
             rows: Vec::new(),
-            auxiliary,
+            auxiliary: Vec::new(),
         };
     }
 
@@ -2716,9 +3063,11 @@ fn verify_over(
                 },
             },
             rows: Vec::new(),
-            auxiliary,
+            auxiliary: Vec::new(),
         };
     }
+
+    let auxiliary = auxiliary();
 
     let verdicts: Vec<(RowId, RowVerdict)> = rows
         .iter()
@@ -2764,12 +3113,18 @@ mod tests {
         capsule_still_running, harness_execution, next_transaction_id, run_arm, still_running,
         under_for,
     };
+    use super::{
+        CAPACITY_CLAIM, CAPACITY_FILESYSTEM_CLAIM, DOCTRINE_TOML, EMPTY_FORBIDDEN_EXECUTABLES,
+        NO_SECOND_FILESYSTEM, OBJECT_SET_CLAIM, READ_ONCE_CLAIM, capacity_claim,
+        capacity_filesystem_claim, claims_skipped, object_set_claim, object_sets_agree,
+        read_once_claim,
+    };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use super::{
         ProcessFacts, STAT_LEAF, SessionId, StatFacts, capsule_session_leader, depth_from,
         own_session, process_table, session_of, stat_of,
     };
-    use crate::backend::bubblewrap::{SpawnOptions, confinement_argv};
+    use crate::backend::bubblewrap::{BubblewrapBackend, SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
@@ -3164,7 +3519,7 @@ mod tests {
             host,
             TODAY.to_owned(),
             rows,
-            auxiliary,
+            &|| auxiliary.clone(),
             &|backend, row| runner.run(backend, row),
         )
     }
@@ -4295,6 +4650,180 @@ mod tests {
         assert_eq!(
             git(fixture.project_root(), &["rev-parse", "HEAD"]).expect("a detached HEAD"),
             fixture.base().as_str()
+        );
+    }
+
+    // ── Table C: the four auxiliary claims (`EX-14`…`EX-16`) ───────────────
+
+    /// `EX-14` executed: a capsule overwrites its own copy of the policy
+    /// document and the policy in force is unmoved. `M14` is the mutation that
+    /// makes [`policy_in_force`] re-read the capsule's copy.
+    ///
+    /// The vacuity guard is not decoration — the claim's rewrite is a textual
+    /// substitution, and a document that never held the empty form would be
+    /// "rewritten" to itself and pass against nothing.
+    #[test]
+    fn rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            backend.availability(),
+            Availability::Available,
+            "table C's executed claims need a real mechanism"
+        );
+
+        let document = std::fs::read_to_string(fixture.project_root().join(DOCTRINE_TOML))
+            .expect("the fixture writes a policy document");
+        assert!(
+            document.contains(EMPTY_FORBIDDEN_EXECUTABLES),
+            "the rewrite has nothing to replace, so the claim would be vacuous"
+        );
+
+        assert_eq!(
+            read_once_claim(&backend, &SystemHost, &fixture),
+            AuxOutcome::Passed
+        );
+    }
+
+    /// `EX-15` executed: the clone holds the export's objects and no others,
+    /// decided trusted-side.
+    ///
+    /// The three direct drives are what make the comparison's *shape* the thing
+    /// under test rather than this host's luck: ⊇ alone (`M15`) passes a clone
+    /// that dragged extra objects in, and two empty sets are equal.
+    #[test]
+    fn the_clones_object_set_is_exactly_the_exports() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(backend.availability(), Availability::Available);
+
+        assert_eq!(
+            object_set_claim(&backend, &SystemHost, &fixture),
+            AuxOutcome::Passed
+        );
+
+        let names = |names: &[&str]| -> BTreeSet<String> {
+            names.iter().map(|name| (*name).to_owned()).collect()
+        };
+        let export = names(&["a", "b"]);
+        assert_eq!(object_sets_agree(&export, &export), Ok(()));
+        assert!(
+            object_sets_agree(&names(&["a", "b", "c"]), &export).is_err(),
+            "a superset is not the export's object set"
+        );
+        assert!(
+            object_sets_agree(&names(&["a"]), &export).is_err(),
+            "a subset is not the export's object set"
+        );
+        assert!(
+            object_sets_agree(&BTreeSet::new(), &BTreeSet::new()).is_err(),
+            "a capsule whose git never ran names nothing, and nothing is not evidence"
+        );
+    }
+
+    /// `EX-16` executed, unconditional half: the probe reads real space at the
+    /// path it is given. `REQ-461`'s executed closure rests on this row, so it
+    /// never skips. `M16`.
+    #[test]
+    fn the_capacity_probe_reads_real_space_at_the_path_it_is_given() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let root = fixture.capsule_root();
+
+        assert_eq!(capacity_claim(&SystemHost, root), AuxOutcome::Passed);
+
+        // Re-derived here rather than trusted from the claim: a claim that
+        // checked the probe against itself would pass under any implementation.
+        // Bracketed for the reason `agreed_capacity` documents — sibling tests
+        // in this very suite are writing to this filesystem as it is read.
+        let unit = |path: &Path| {
+            rustix::fs::statvfs(path)
+                .expect("the capsule root stats")
+                .f_frsize
+        };
+        let before = available_bytes_of(root).expect("the capsule root stats");
+        let reported = SystemHost
+            .available_bytes(root)
+            .expect("this host answers about its own scratch root");
+        let after = available_bytes_of(root).expect("the capsule root stats");
+
+        assert_ne!(before, 0, "the fixture root reports no space at all");
+        assert!(
+            reported >= before.min(after) - unit(root)
+                && reported <= before.max(after) + unit(root),
+            "{reported} is outside the bracket two independent readings put it in \
+             ({before}, {after})"
+        );
+    }
+
+    /// `EX-16` executed, conditional half: the probe answers about the
+    /// filesystem the path is on, not about some fixed one. `M17`, `M18` red
+    /// this row and leave the unconditional one green — that separation is the
+    /// signal.
+    #[test]
+    fn the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+
+        let Some(elsewhere) = fixture.second_filesystem() else {
+            eprintln!("this host offers no second filesystem; the claim skips here");
+            return;
+        };
+
+        assert_eq!(
+            capacity_filesystem_claim(&SystemHost, fixture.capsule_root(), Some(elsewhere)),
+            AuxOutcome::Passed
+        );
+    }
+
+    /// `A2`: this host always takes the `Some` branch, so the skip ships
+    /// untested unless the absence is forced. The reason must **name** the
+    /// absence — a skip with an empty reason is a silent pass wearing a label.
+    /// `M19`.
+    #[test]
+    fn a_missing_second_filesystem_reports_skipped_naming_the_reason() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+
+        let outcome = capacity_filesystem_claim(&SystemHost, fixture.capsule_root(), None);
+
+        let AuxOutcome::Skipped(reason) = outcome else {
+            panic!("a missing second filesystem is a skip, not {outcome:?}");
+        };
+        assert!(
+            reason.contains(NO_SECOND_FILESYSTEM),
+            "the reason does not name the absence: {reason}"
+        );
+        assert!(
+            reason.contains(&fixture.capsule_root().display().to_string()),
+            "the reason does not name what there was nothing to tell apart from: {reason}"
+        );
+    }
+
+    /// The fixture is what all four claims need, so a fixture that cannot be
+    /// built skips all four — reported rather than omitted, so the report's
+    /// shape does not change with the host's luck.
+    #[test]
+    fn a_fixture_that_cannot_be_built_skips_every_claim_naming_the_fault() {
+        let fault = "the fixture root could not be made";
+
+        let skipped = claims_skipped(fault);
+
+        assert_eq!(
+            skipped
+                .iter()
+                .map(|(claim, _)| *claim)
+                .collect::<Vec<Claim>>(),
+            vec![
+                READ_ONCE_CLAIM,
+                OBJECT_SET_CLAIM,
+                CAPACITY_CLAIM,
+                CAPACITY_FILESYSTEM_CLAIM
+            ],
+            "the report carries all four claims however the host behaved"
+        );
+        assert!(
+            skipped.iter().all(
+                |(_, outcome)| matches!(outcome, AuxOutcome::Skipped(reason) if reason == fault)
+            ),
+            "a skip that does not carry the fault is a silent pass: {skipped:?}"
         );
     }
 

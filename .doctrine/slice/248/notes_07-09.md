@@ -885,3 +885,75 @@ an assertion, not a comment: the socket pair's retained far end *and* row 5's
 listener are both checked to be close-on-exec in the same test that checks the
 three decoys are not. The three decoys are invariant 12's only exception, and
 that is the shape that says so.
+
+## T9 — table C's four claims (`EX-14`, `EX-15`, `EX-16`)
+
+**The claims are lazy, and that is what keeps the two early returns honest.**
+`verify_over` takes `&dyn Fn() -> Vec<(Claim, AuxOutcome)>` rather than the
+vector. Table C's claims provision real capsules; an unavailable backend and a
+missing shell both return before any row runs, and an eagerly-built claim list
+would have run two capsules to populate a report that says the mechanism is
+absent. The two early returns carry `Vec::new()`; the closure is called once,
+after the shell check, and a fixture fault inside it degrades to
+`claims_skipped(...)` rather than to a lost report.
+
+**Widening happened at `auxiliary_claims`, never at `admission`.** `admission`
+still takes the row list alone. That is the structural reason a table C claim
+may skip where `DEC-156` forbids one in an admission: a claim has no path to the
+verdict in either direction — a failed one cannot block it and a skipped one
+cannot grant it.
+
+**The read-once claim is vacuous without its read-back.** `sec-4`'s claim is
+that a capsule rewriting its own `doctrine.toml` does not move the bound policy.
+A capsule that could not write at all satisfies that trivially, and "could not
+write" is the default outcome of a dozen ways to get the mount wrong. So
+`rewrite_policy_inside` reads the rewritten document back **trusted-side**,
+through `profile_owned_host_path`, and fails the claim if the write never
+landed. The substitution target is a shared constant with
+`capsule_config_document` (`EMPTY_FORBIDDEN_EXECUTABLES`), so the textual
+replacement cannot silently miss, and the test asserts the fixture's document
+actually contains it — a rewrite with nothing to replace would "pass" against
+itself.
+
+**Set equality in both directions, over a non-empty set.** ⊇ alone (`M15`)
+passes a clone that dragged extra objects in, which is the whole of `sec-3`'s
+claim; and two empty sets are equal, which is what a capsule whose `git` never
+ran produces. `object_sets_agree` is driven directly by the test with a strict
+superset, a strict subset and two empty sets, so the comparison's *shape* is
+under test rather than this host's luck. `--batch-check` is not optional: bare
+`--batch-all-objects` is a fatal error.
+
+**`F-28` — a single independent `statvfs` cannot check a live filesystem.** The
+sheet prescribes the probe agreeing with an independent reading "within one
+allocation unit (`f_frsize`)". Written that way the row passes in isolation and
+reds under `cargo test`'s parallel harness: sibling tests in this same suite
+build git fixtures on that filesystem, and the free-space figure moved 38
+allocation units (152 KiB) *between two adjacent syscalls*. The fix is not a
+widened tolerance — it is a **bracket**. Two independent readings, one either
+side of the probe, bound what the truth can have been while the probe ran, and
+the figure must land within one allocation unit of that interval. The tolerance
+is unchanged; the measurement's own noise is removed. Discrimination is
+untouched and was measured, not assumed: `M16`'s wrong quantity
+(`f_bfree × f_bsize`, counting the reserved blocks) is ~92 GiB out on this host,
+four orders of magnitude beyond any interval two adjacent readings can span —
+run as a hand mutation of `host.rs`, and it redded both capacity rows.
+
+**One statvfs arithmetic site in the crate.** `available_bytes_of` (the
+mount-table selection) and `agreed_capacity` (the claim) both read through
+`independent_capacity`, which is the only place `f_bavail × f_frsize` is
+computed outside the probe under test. Two independent sites would have been two
+places for the *independent* side to drift toward the thing it is checking.
+
+**The skip carries the absence, and the absence is forced.** `A2` says this host
+always takes the `Some` branch, so `capacity_filesystem_claim`'s `None` branch
+ships untested unless a test drives it with `None` directly.
+`a_missing_second_filesystem_reports_skipped_naming_the_reason` asserts the
+reason names both the absence (`NO_SECOND_FILESYSTEM`) and the capsule root
+there was nothing to tell it apart from. A skip with an empty reason is a silent
+pass wearing a label.
+
+**These are the crate's first tests that run a real capsule.** Every earlier
+test — provision included — runs against `WitnessBackend`. The two executed
+claims drive `BubblewrapBackend` over `SystemHost` and assert
+`availability() == Available` first, so a host without `bwrap` fails with the
+precondition named rather than with a confusing claim failure.
