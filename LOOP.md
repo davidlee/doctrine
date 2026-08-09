@@ -189,6 +189,20 @@ the teardown happened during the task carrying the guard, before it was
 committed. If a phase builds something that signals, deletes, or unmounts, its
 first commit carries the refusal that bounds it.
 
+**A tally is only evidence if its load model matches the hazard's channel, and
+the gate is the load that counts.** The rule from the earlier flake — for a test
+that reads a live process, a `/proc` entry, a window or a clock, the unit of
+evidence is a tally under load, not an exit code — is necessary and it is not
+sufficient. `PHASE-10` `T2` was tallied 5/5 alone and 8/8 in-suite under **32 CPU
+spinners** and still failed 1 in 3 on the orchestrator's gate. The spinners could
+not have found it: the hazard is a **descriptor** race, and a spinner saturates
+CPU while opening no file descriptors. `cargo`'s own build opens thousands, which
+is why the gate reproduces what the synthetic load cannot. So: tally **through
+`doctrine check gate`**, not through `cargo test` under hand-rolled contention,
+and when you brief a tally, name the channel the hazard runs on — fds, pids,
+mounts, the clock — and require load on *that*. This has now cost three
+firings, each time as a worker's honest tally that measured the wrong axis.
+
 ## The orchestrator's turn
 
 Opus, and **thin** — it routes, it does not read source and it does not read
@@ -204,7 +218,10 @@ Opus, and **thin** — it routes, it does not read source and it does not read
    the report. Then read the boundary warning; if it names foreign commits,
    tighten: `doctrine slice record-delta <N> <PP> --start <first own>^ --end <own tip>`.
 4. **Plan** — spawn the **planner** (§ Sub-agent briefs). It fills the runtime
-   sheet; you do not.
+   sheet; you do not. **Spawn it as `claude`, never as the `Plan` agent type** —
+   `Plan` is read-only, so it cannot write the sheet and instead returns its
+   whole body as text, which you then pay to receive *and* to write yourself.
+   `PHASE-10`'s sheet came back as a 69 KB round-trip for this reason.
 5. **Spawn** — one **worker**, one phase. Flip to `in_progress` *before*
    spawning, so a clock wake's guard sees it.
 6. **Close the firing** — rewrite `handover.md` (§ Handover), `ScheduleWakeup`

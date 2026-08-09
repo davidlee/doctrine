@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe533-b6e0-7a91-8ca0-5c58b46e2f32"
+recorded_at = "2026-08-09T06:26:39.456171589Z"
+kind = "friction"
+summary = "/loop orchestrator: the Plan agent type is read-only, so a planner briefed to write a phase sheet cannot"
+detail = "Spawned the phase planner for SL-248 PHASE-10 with subagent_type Plan (chosen for its architect framing). It has no Write/Edit tools, so it returned the entire 1050-line sheet as text — a 69 KB tool result the orchestrator paid to receive, then paid again to extract and write itself. The brief was fine; the agent type was wrong. Fixed at source in LOOP.md beat 4: spawn the planner as 'claude', never as 'Plan'. Generalises past this loop — any brief whose deliverable is a file must check the agent type's tool set before it is spawned, because the failure presents as success (the work is done, just in the wrong place, at several times the cost)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
