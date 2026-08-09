@@ -1,0 +1,26 @@
+### host
+Linux 7.1.6 x86_64
+bwrap: /nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin/bwrap bubblewrap 0.11.2
+own pid: 110399
+
+=== WorkingDirectory (confining: --chdir /capsule; weakened: omitted) ===
+  confining                          exit=0    /capsule
+  weakened (no --chdir)              exit=0    /
+  (run from cwd=/workspace/doctrine-SL-248, which does not exist inside the sandbox)
+
+=== FileSizeBound (confining: RLIMIT_FSIZE 1MiB; weakened: unset) ===
+  confining                          exit=0    wrote 1048576 bytes
+  weakened (no cap)                  exit=0    wrote 2097152 bytes
+  confining, write is the payload    exit=153  <no output>
+  weakened, write is the payload     exit=0    <no output>
+  (a write past RLIMIT_FSIZE raises SIGXFSZ; 128+25=153)
+
+=== WallBound (confining: timeout -k 5 2; weakened: no wrapper) ===
+  confining                          exit=124  2s <no output>
+  weakened (no timeout)              exit=0    6s LIVE
+  (GNU timeout reports 124 when it fires)
+
+=== ProcessVisibility (confining: --unshare-all; weakened: enumerated set) ===
+  confining                          exit=0    own-pid=4 host-pid-110399-visible=no numeric-proc-entries=5
+  weakened (pid ns shared)           exit=0    own-pid=110464 host-pid-110399-visible=yes numeric-proc-entries=30
+  (the row fails when the capsule can see host pid 110399)

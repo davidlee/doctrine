@@ -1426,3 +1426,40 @@ which is not.
 `S4` does **not** fire on this: the delta plainly produces its row's control
 failure — C1b shows the escaped descendant alive and host-visible. What is in
 question is the *observation*, and that is `T9`'s to solve. See `F-6`.
+
+### `T3` — `VA-3`: the four unmeasured deltas, each shown to fire
+
+Instrument `.doctrine/slice/248/spike-deltas.sh`, output
+`spike-deltas-output.txt`. Confining form and weakened form for each axis, one
+observable difference apiece. `Teardown` is `T2`'s and is not repeated.
+
+| axis | confining | weakened | observable difference |
+|---|---|---|---|
+| `WorkingDirectory` | `--chdir /capsule` | omitted | `pwd` = `/capsule` → `/` |
+| `FileSizeBound` | `RLIMIT_FSIZE` 1 MiB | unset | 2 MiB write truncated to 1 MiB; as the top-level payload, **exit 153** (128+SIGXFSZ) → exit 0 |
+| `WallBound` | `timeout -k 5 2` outside `bwrap` | no wrapper | **exit 124** at 2 s → exit 0 at 6 s with the payload's output |
+| `ProcessVisibility` | `--unshare-all` | `NON_PID_UNSHARE_SET` | capsule sees own pid 4, host pid **not** visible, 5 `/proc` entries → own pid = the host pid, the harness's pid **visible**, 31 entries |
+
+**No `S4`.** Every one of the four produces its row's control failure, cleanly
+and at the altitude the row reads at.
+
+Three things worth carrying forward:
+
+- **`ProcessVisibility` is now row-shaped, not mechanism-shaped.** `F-7`
+  measured the `/proc` entry count — 20 vs 4 there, 31 vs 5 here, the number
+  moves with what else is running and is not a claim about anything. The row's
+  question is whether the capsule can see a *named* host process, so the probe
+  asks for the harness's own pid by path. Under confinement: absent. Under the
+  weakened set: present, and the capsule reads its own pid as the **host** pid.
+  That is the row's control failing, and it is the reading `T3` owed.
+- **`FileSizeBound` needs the write to *be* the payload.** With the write inside
+  a shell (`dd …; echo …`), `dd` dies of `SIGXFSZ` and the shell carries on, so
+  the arm exits 0 and only the truncated byte count betrays the cap. `exec`ing
+  the write makes the capsule's top-level process the one that dies, and the arm
+  exits 153 — the reading `classify_termination` turns into
+  `Termination::FileSizeExceeded`. Both are recorded; row 8's payload must be
+  the second shape or the row reads a successful run.
+- **Bash's `ulimit -f` is in 1024-byte units, not the POSIX 512.** The first run
+  was labelled 512 KiB and wrote 1 MiB. Harmless here because the difference is
+  what is measured, but it is the sort of unit error that makes a cap look
+  ineffective.
