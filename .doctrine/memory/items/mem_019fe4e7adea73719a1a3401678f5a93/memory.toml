@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe4e7adea73719a1a3401678f5a93"
+memory_key = "mem.pattern.verification.guard-blind-to-its-own-residue"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A test-mode guard is blind to the defect class it was written against"
+summary = "A VT canary measures one shape; the amendment that motivated it can leave residue in a shape the canary structurally cannot see — which is why a VA read is not redundant."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["verification", "review", "governance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "49161ddcd12f97f3fb4be1799061b95b90d7b367"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0252c5886670e6abcf0305ab86012e4638f75508dc747f4980cfe0eadef91bea"
+base_commit = "8db126b9c8339dcaa26aa641c8c9482b4b6ab29a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

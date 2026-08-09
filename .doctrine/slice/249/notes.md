@@ -221,6 +221,35 @@ fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` ·
   (ADR-007 D-C8), while a design run's `conducted` disposition needs
   `review.concluded`, set only by `doctrine review conclude`. →
   `mem.pattern.review.done-is-not-concluded`.
+- **A guard is blind to its own author's residue.** `PHASE-07` shipped
+  `tests/governance_kind_coverage.rs` — a standing canary over record-kind
+  coverage — and the same amendment that motivated it introduced `ISS-332`, a
+  stale *facet-enum* enumeration the canary is **structurally** unable to see: a
+  closed-enum list carries no kind name, no prefix and no numeral, so nothing the
+  checker measures moves. `VA-1`, a different reader with a different question,
+  found it. The lesson is not "widen the canary" — it is why an agent-mode check
+  is not redundant with a test-mode one over the same artefact.
+- **`R-inventory` fired five times on this slice**, always the same shape: a
+  hand-maintained count or list, believed from a prior reading, wrong when
+  re-derived. A Finding category's touch sites 6 not 5; `PHASE-04` staged 5
+  `expect(dead_code)` not 3; `VT-3` shipped 9 refusal cases against 6; the
+  paired-form census 8/28 where co-presence said 12; `ISS-332`'s closed-enum list
+  said three where four ship. Five is not bad luck. Re-derive every inventory at
+  the moment you rely on it — including one you derived yourself an hour ago.
+- **Whitespace is part of the amendment.** Replacing `four` with a seven-item
+  enumeration pushed seven lines past both files' wrap and left orphan fragments.
+  Fixed before the human gate, not after (`17e718c1d`, `8db126b9c`) — ragged
+  wrapping reads as carelessness in exactly the artefact whose care is under
+  review. Related: `EX-4`'s whitespace collapse is load-bearing in the checker
+  for the same underlying reason — a mid-phrase wrap makes a literal match find
+  a legitimate phrase **zero** times.
+- **The writer map has a hole under a worker that finds a real defect.**
+  `LOOP.md` reserves authored `.doctrine/` to the orchestrator, so the `T8`
+  worker minting `ISS-332` was a breach — but the alternative on offer,
+  "report it in the hand-back", loses the finding outright when the hand-back is
+  what runs out of tokens (which is how this slice lost a worker once already).
+  Kept rather than reverted; recorded as a pressure point for the map's next
+  revision.
 
 ### Open
 
