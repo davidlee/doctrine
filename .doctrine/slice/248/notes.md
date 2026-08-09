@@ -1219,6 +1219,49 @@ under the sheet's own fallback.
     side holds open across the run, so an unbounded read blocks until the wall
     bound rather than returning (`R1`). The stdin leg is unaffected and measured
     clean.
+112. **`D1` is settled: the per-arm trusted-side setup seam rides the capsule
+    closure, keyed on the delta.** `arm_over` composes
+    `trusted_side_setup(&row.delta, fixture)` onto the closure it hands `Arm`,
+    holding the result for the frame. `Arm`, `run_arm`, `Row`, `Delta` and
+    `PropertyRemoval` are untouched and `run_row` is still the only route to a
+    backend. Rejected: a sixth `Arm` field (identical ordering, but widens a
+    struct four hand-built test arms construct, so `C10` would be paid in edits
+    to tests `A4` says establish nothing — this is the migration if a later
+    phase wants the hook visible at `Arm`); a hook keyed off `RowId` (wrong key
+    — what a control arm needs to be *able* to fail belongs to the delta, and
+    keying on the row would make the probe's non-vacuity a convention rather
+    than a consequence); a `SetUp`/`TearDown` pair (converts a guarantee scope
+    already gives into a call that can be forgotten).
+113. **`T2`'s `EBADF` floor is met by construction, and the floor as the sheet
+    words it cannot be built inside the `unsafe_code` budget** (`F-15`). The
+    cited rule governs a `/proc/self/fd` **walk** — flag mutation over
+    descriptors the caller does not own — and `BorrowedFd::borrow_raw` is the
+    only route from a raw number to an `AsFd`, is `unsafe`, and both budgeted
+    sites are spent. Every descriptor the seam touches is owned, so teardown is
+    `close(2)` and no `fcntl` exists for `EBADF` to race; a `BADF`-tolerant
+    restore would be a guard that cannot fire. The live floor, landed in the
+    same commit ahead of `T4`, is that `trusted_side_setup` holds
+    `hold_descriptor_window()` across the open and releases before returning —
+    holding it across the spawn deadlocks the arm at its own fork. **Owed as an
+    `ISS-` at merge** only if the reconciler wants the sheet's wording
+    corrected; the obligation is discharged.
+114. **One residual race remains and is measured, not reasoned** (`F-16`).
+    Between the descriptor window's release and the arm's own fork, another
+    thread's capsule run can sweep the decoys and leave the control arm nothing
+    to inherit. Closing it would need a re-entrant window, which the production
+    guard rejects for a stronger reason than this one, so it is narrowed rather
+    than closed. Tallied **5/5** alone under 32 spinners on 32 cores and
+    **8/8** inside the whole conformance suite at `--test-threads=16` under the
+    same load. Not a 4/5, so not a finding against the row — `T4` re-tallies it
+    when row 10 carries it for real.
+115. **PHASE-09 `F-35` is confirmed still open, and its members named** (`F-17`).
+    Three of five whole-suite multi-threaded runs under load were red, and every
+    red was one of `concurrent_capsules_cannot_see_each_others_processes`,
+    `concurrent_capsules_cannot_signal_each_others_processes`,
+    `control_with_the_pid_namespace_shared_both_become_possible`,
+    `the_sweep_reaches_what_row_b5s_control_leaks` — nothing else failed in any
+    run. Not chased, per the sheet's `A7`. Recorded so the next worker
+    recognises its first red in seconds instead of bisecting for it.
 
 
 ## Open

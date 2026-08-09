@@ -68,7 +68,8 @@ use rustix::fs::{FsWord, OFlags};
 use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 
 use crate::backend::bubblewrap::{
-    BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed, profile_owned_host_path,
+    BubblewrapBackend, WeakenedProfile, Weakening, hold_descriptor_window, mechanism_failed,
+    profile_owned_host_path,
 };
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
@@ -3703,11 +3704,61 @@ fn run_row(
     row_verdict(probe, control)
 }
 
+/// The trusted-side state a row's delta needs alive across the spawn (`D1`).
+///
+/// **Keyed on the delta, not on the row and not on which arm is running.** What
+/// a control arm needs in order to be *able* to fail is a property of the thing
+/// being removed, and both arms must have it: a probe that held because there
+/// was nothing to leak is the vacuous pass `EX-3` forbids, so the probe gets the
+/// same set and closes it with its own sweep.
+///
+/// One delta needs anything today. Every other returns `None` rather than being
+/// listed, and the day a second needs state this becomes a struct — a
+/// vocabulary invented for one case would be a shape guessed rather than
+/// learned.
+///
+/// **The descriptor window is held across the open** (`F-12`,
+/// `mem.pattern.tests.process-wide-state-needs-the-production-guard`).
+/// Inheritability is process-wide, every capsule run in this process sweeps it,
+/// and this is code that opens an inheritable descriptor and needs it to *stay*
+/// inheritable — which the window's own contract names as a party to it. It is
+/// released before returning and is **never** held across the spawn:
+/// `fork_within_the_descriptor_window` takes the same lock, and holding it here
+/// would deadlock the arm at its own fork (`F-1`).
+fn trusted_side_setup(
+    delta: &Delta,
+    fixture: &Fixture,
+) -> Result<Option<InheritableDecoys>, String> {
+    match delta {
+        Delta::Removed(PropertyRemoval::DescriptorsClosed) => {
+            let _window = hold_descriptor_window();
+            fixture
+                .inheritable_decoys()
+                .map(Some)
+                .map_err(|fault| format!("{fault:?}"))
+        }
+        _ => Ok(None),
+    }
+}
+
 /// One arm over a capsule source, with the fixture's two pid seams attached.
 ///
 /// The seams are the same on both arms and on every row shape, which is the
 /// whole reason they are here rather than spelled twice: containment is not a
 /// property of which arm is running (`EX-12`).
+///
+/// **`D1` — the per-arm trusted-side setup seam.** It rides the capsule closure
+/// rather than becoming a sixth field on [`Arm`]: the state's one hard
+/// constraint is that it is opened *after* the capsule exists, because
+/// provisioning itself runs capsules and every one of them sweeps this
+/// process's descriptors close-on-exec (`F-9`). Composing it onto the closure
+/// puts the ordering in the type rather than in a comment, and leaves [`Arm`],
+/// [`run_arm`] and the four hand-built arms in the tests untouched (`C10`).
+///
+/// The lifetime is exactly right by scope and needs no teardown call. The state
+/// is replaced on each capsule a shape runs — dropping the previous set after
+/// that capsule's spawn and before the next one's — and the last set drops when
+/// this function returns, which is before the next arm begins.
 fn arm_over(
     backend: &dyn ConformanceBackend,
     fixture: &Fixture,
@@ -3717,10 +3768,16 @@ fn arm_over(
 ) -> ArmResult {
     let live = |pid: HostPid| capsule_still_running(pid);
     let noticed = |pid: HostPid| fixture.note_capsule_session(pid);
+    let trusted_side: RefCell<Option<InheritableDecoys>> = RefCell::new(None);
+    let provisioned_and_set_up = || {
+        let placement = capsule()?;
+        *trusted_side.borrow_mut() = trusted_side_setup(&row.delta, fixture)?;
+        Ok(placement)
+    };
     run_arm(
         &Arm {
             backend,
-            capsule,
+            capsule: &provisioned_and_set_up,
             execution: &harness_execution,
             live: &live,
             noticed: &noticed,
@@ -8334,5 +8391,105 @@ mod tests {
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
         assert_eq!(rows.len(), 13);
+    }
+
+    // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
+
+    /// The two tokens the descriptor-shaped harness row below is read for.
+    const DECOYS_INHERITED: &str = "DECOYS-INHERITED";
+    const NO_DECOYS: &str = "NO-DECOYS";
+
+    /// What `ls -1 /proc/self/fd` reports in a capsule that inherited nothing:
+    /// the three standard streams plus the enumeration's own directory handle.
+    ///
+    /// Named rather than spelled `4` in the payload because it is the whole
+    /// discriminator — the count above which something crossed the `exec`
+    /// (`STD-001`).
+    const CLEAN_ENUMERATION_ENTRIES: usize = 4;
+
+    /// A row whose control removes the parent-side descriptor sweep, read for
+    /// whether anything above the enumeration's own handle crossed the `exec`.
+    ///
+    /// **Not row 10.** Row 10 is `T4`'s and its claim is resolution by identity,
+    /// never a count. This is the *seam's* discriminator: the only thing that
+    /// can put a descriptor above 2 into a capsule is trusted-side state still
+    /// inheritable when that arm spawned, so a count is enough to separate a
+    /// per-arm decoy set from every other arrangement — and is the cheapest
+    /// thing that does.
+    ///
+    /// The id is borrowed, as [`wall_bounded_row`]'s is: this row is built here
+    /// rather than shipped, so it identifies nothing in the design's tables.
+    fn descriptor_shaped_row() -> Row {
+        Row {
+            id: RowId::Property(Property::TrustedTerminationObservation),
+            shape: ArmShape::Single(Probe {
+                argv: shell_argv(&format!(
+                    "echo {LIVENESS_MARKER}; \
+                     if [ \"$(ls -1 /proc/self/fd | wc -l)\" -gt {CLEAN_ENUMERATION_ENTRIES} ]; \
+                     then echo {DECOYS_INHERITED}; else echo {NO_DECOYS}; fi"
+                )),
+                observed: Observed::Token {
+                    held: NO_DECOYS,
+                    failed: DECOYS_INHERITED,
+                },
+            }),
+            delta: Delta::Removed(PropertyRemoval::DescriptorsClosed),
+        }
+    }
+
+    /// `T2`, and the discriminator the seam exists to satisfy: a row whose
+    /// control removes the sweep reaches `Proven`, which it can only do if the
+    /// control arm found a decoy set that was still inheritable when it spawned.
+    ///
+    /// Both readings this excludes are silent. With no seam at all the control
+    /// inherits nothing, holds, and the row reads `Unproven` — a removal that
+    /// removed nothing. With one set per fixture the probe arm's own sweep marks
+    /// it close-on-exec permanently, and the control that follows reads the same
+    /// `Unproven` for a different reason (`F-26`,
+    /// [`a_decoy_set_opened_before_provisioning_is_already_closed_by_it`]).
+    #[test]
+    fn a_descriptor_deltas_control_arm_inherits_a_set_the_probe_arm_did_not_leave() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            run_row(&backend, &SystemHost, &fixture, &descriptor_shaped_row()),
+            RowVerdict::Proven,
+            "the control arm inherited no decoy, so removing the sweep changed nothing"
+        );
+    }
+
+    /// Why the seam cannot open its state before the arm's capsule does
+    /// (`F-9`, PHASE-10).
+    ///
+    /// `a_decoy_set_opened_after_a_sweep_is_inheritable_again` establishes that
+    /// the *backend's* sweep closes a long-lived set. This is the wider fact
+    /// that fixes where the hook goes: **provisioning itself runs capsules**,
+    /// each forking through the sweep, so a set opened before `provision_capsule`
+    /// is already close-on-exec on *both* arms — the vacuous pass `EX-3` forbids.
+    /// A hook that is merely per-arm, placed before the capsule, still reads it.
+    #[test]
+    fn a_decoy_set_opened_before_provisioning_is_already_closed_by_it() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let early = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+        for descriptor in early.descriptors() {
+            assert!(
+                is_inheritable(descriptor),
+                "the decoy set was close-on-exec before anything swept it"
+            );
+        }
+
+        let _transaction = provision_capsule(&fixture, &SystemHost, backend.as_capsule_backend())
+            .expect("this host can provision a capsule");
+
+        for descriptor in early.descriptors() {
+            assert!(
+                !is_inheritable(descriptor),
+                "provisioning did not sweep a pre-existing decoy set — `F-9` no longer holds \
+                 and the seam's placement is free again"
+            );
+        }
     }
 }

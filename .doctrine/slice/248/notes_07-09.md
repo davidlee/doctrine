@@ -2243,3 +2243,70 @@ inherited descriptor, so `T6` must read descriptor 1 *itself* (`<&1`), never
 socket whose peer the trusted side holds open across the run, so an unbounded
 read blocks until the wall bound rather than returning (`R1`). The stdin leg is
 unaffected and was measured clean; this bears only on the descriptor-1 leg.
+
+## PHASE-10 `T2` — the per-arm trusted-side setup seam (`D1`)
+
+*Same shard-fallback note as `T1`: `notes_10-12.md` does not exist and the sheet
+forbids minting one silently, so `T2`'s record lands here.*
+
+### `D1`, settled — the setup rides the capsule closure, keyed on the delta
+
+`arm_over` composes `trusted_side_setup(&row.delta, fixture)` onto the capsule
+closure it hands to `Arm`, holding the result in a `RefCell<Option<
+InheritableDecoys>>` scoped to its own frame. `Arm`, `run_arm`, `Row`, `Delta`
+and `PropertyRemoval` are all untouched; `run_row` is still the only route to a
+backend.
+
+Three things decided it, and the first is the one that matters:
+
+1. **Placement is the load-bearing constraint, not per-arm-ness** (`F-9`).
+   Provisioning runs capsules, and every capsule fork sweeps this process's
+   descriptors close-on-exec — so the state has to open *after* the arm's
+   capsule closure returns. Composing onto that closure puts the ordering in the
+   structure rather than in a comment above it.
+2. **The delta is the right key.** What a control arm needs in order to be able
+   to fail belongs to the thing being removed, not to the row carrying it. Both
+   arms therefore get a set from the same call, and the probe's non-vacuity
+   (`EX-3`) is a consequence rather than a convention.
+3. **Scope gives the lifetime, so there is no teardown call to forget.**
+   Replaced per capsule; the last set drops when `arm_over` returns.
+
+Rejected: a sixth field on `Arm` — identical ordering, reads more explicitly,
+but widens a struct four hand-built test arms construct, so `C10` would be paid
+in edits to tests `A4` says establish nothing (this is the migration if a later
+phase wants the hook visible). A row-side hook keyed off `RowId` — wrong key per
+(2), and no live key today. A `SetUp`/`TearDown` pair — converts a guarantee
+scope already gives into a call that can be forgotten or mis-ordered.
+
+### `F-15` — the `EBADF` floor is met by construction, and the floor as written cannot be built
+
+The rule the sheet cites governs a `/proc/self/fd` **walk** — flag mutation over
+descriptors the caller does not own. The seam has none and cannot have one:
+`BorrowedFd::borrow_raw` is the only route from a raw number to an `AsFd`, it is
+`unsafe`, and both budgeted sites are spent (`S7`). Every descriptor the seam
+touches is owned, so teardown is `close(2)` and there is no `fcntl` for `EBADF`
+to race. A `BADF`-tolerant restore here would be a guard that cannot fire.
+
+The floor that *is* live, and landed in the same commit ahead of `T4`:
+`trusted_side_setup` holds `hold_descriptor_window()` across the open, because
+inheritability is process-wide state and this is code that opens an inheritable
+descriptor and needs it to stay inheritable. It releases before returning —
+`fork_within_the_descriptor_window` takes the same lock, so holding it across
+the spawn deadlocks the arm at its own fork.
+
+### `F-16` — the one residual race, measured rather than reasoned
+
+Between the window's release and the arm's own fork, another thread's capsule
+run can sweep the decoys and leave the control arm nothing to inherit. Closing
+it needs a re-entrant window, which production rejects for a better reason than
+this one. Narrowed, not closed, and tallied: **5/5** alone under 32 spinners on
+32 cores, **8/8** inside the whole conformance suite at `--test-threads=16`
+under the same load. `T4` should re-tally when row 10 carries it for real.
+
+### `F-17` — `A7`'s inherited `F-35` set confirmed and named
+
+Three of five whole-suite multi-threaded runs were red, and every red was one of
+PHASE-09 `F-35`'s four row-B5 tests — nothing else failed in any run. The seam
+cannot be the cause: `trusted_side_setup` returns `None` for every delta a
+shipped row carries, so no shipped row's behaviour changed, and the
+single-threaded suite is 236/236 green unchanged.
