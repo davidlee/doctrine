@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe46386c270038e71b87af1481990"
+memory_key = "mem.fact.doctrine.jail-harness-shares-session-zero"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Jail harness shares session 0 with pid 1, so session-scoped kills can destroy the sandbox"
+summary = "Measured in the doctrine bubblewrap jail: bwrap is pid 1 in session 0 and the agent process is pid 2 also in session 0, while a test suite runs in its own session — so a sweep that refuses only its own session can SIGKILL the sandbox and the agent with no error."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["jail", "signals", "test-harness"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "182e551108a795e795250b8bc63c136413597a6a"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "036b9bacc67c49b9e2e09f59b943717c8d44f496d540485e56660c16956fea7a"
+base_commit = "57b38f732b764d09fb8f12c101d2ece3d0698da7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
