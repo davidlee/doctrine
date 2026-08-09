@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe60f-b47b-7cc2-a7ad-86c6246a9130"
+recorded_at = "2026-08-09T10:26:56.763076575Z"
+kind = "friction"
+summary = "/execute PHASE-10 T5: the phase sheet still prescribes a tally instrument LOOP.md now rejects, and I followed the sheet first"
+detail = "T5's card says 'Tally, not an exit code: 5x under load, record n/5'. LOOP.md was rewritten to require the opposite shape — name the hazard's channel, argue the closure structurally, tally through 'doctrine check gate' rather than hand-rolled contention, because CPU spinners measured the wrong axis on T2 and that error has cost three firings. Both documents are in the worker's reading list and they disagree; the sheet is the more specific and more proximate one, and I reached for 96 spinners under cargo test before rereading LOOP.md and redoing the tally through the gate. Cost: one wasted aggravation run plus a rewritten finding. Superseding a rule in LOOP.md does not reach the task cards already written against the old rule — either the cards need sweeping when LOOP.md changes, or a card that prescribes an evidence shape should cite LOOP.md instead of restating it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
