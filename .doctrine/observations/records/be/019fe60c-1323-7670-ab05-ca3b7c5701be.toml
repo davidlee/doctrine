@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe60c-1323-7670-ab05-ca3b7c5701be"
+recorded_at = "2026-08-09T10:22:58.851953004Z"
+kind = "friction"
+summary = "/execute PHASE-10 T5: cargo test --bin doctrine silently ran 0 of the intended tests (wrong crate)"
+detail = "conformance.rs lives in crates/doctrine-control, not the root doctrine bin. 'cargo test --bin doctrine conformance::tests::...' reports 'ok. 0 passed; 4406 filtered out' — a green exit code for a run that executed nothing of what was asked. The correct invocation is 'cargo test -p doctrine-control --bin doctrine-control -- <filter>'. Same fails-open shape as the row-6 selector trap this very task had to close: a name-based selector that matches nothing exits 0. Worth a line in the project's test-running guidance, since the boot snapshot's 'cargo --bin doctrine memory' example points the other way."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe60c-132a-7e21-8ce8-d0896acf3bbc"
+recorded_at = "2026-08-09T10:22:58.858649809Z"
+kind = "friction"
+summary = "/execute PHASE-10 T5: reading a redirection into an execed utility silently returns an empty /proc/self/environ"
+detail = '''tr '\0' '\n' < /proc/self/environ yields zero bytes: the shell opens the file, then execs tr, and the kernel binds the environ file to the mm captured at open — which that exec destroys. A set-comparison payload reads the empty block as 'every declared variable is missing', i.e. a fixture fault wearing the shape of a backend fault. Cost here: one misdiagnosed red plus three hand measurements to separate the read from the thing read. The correct spelling is /proc/$$/environ. Durable enough to deserve a memory (procfs environ is exec-time state bound at open); recorded as friction because a worker fork cannot mint one usefully.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

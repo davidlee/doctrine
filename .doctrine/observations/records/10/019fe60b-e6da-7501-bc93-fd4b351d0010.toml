@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe60b-e6da-7501-bc93-fd4b351d0010"
+recorded_at = "2026-08-09T10:22:47.514074135Z"
+kind = "friction"
+summary = "/execute PHASE-10 T5: sheet's prescribed claim was falsified by the shipping backend, costing a full diagnostic detour"
+detail = "The T5 task card prescribed set equality against CapsuleEnv and a red test named the_capsule_environment_equals_capsule_env_exactly. Written exactly as briefed the row read Violated against the real bubblewrap backend, because bwrap writes PWD into the child exec block itself after --clearenv/--setenv. Recovering cost: one scratch instrument to dump the probe arm's stdout, two hand-run bwrap invocations to isolate the cause to --chdir, then a redesign of the payload's admission rule and a renamed test. The sheet author could not have known, so this is not a defect in the sheet — but it is the cost of a task card that states a claim rather than a question. A card phrased 'establish what the capsule's environment actually is, then state the equality over it' would have led to the same code without the false red."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
