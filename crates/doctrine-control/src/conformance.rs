@@ -2413,10 +2413,27 @@ struct StatFacts {
     session: SessionId,
 }
 
-fn stat_of(path: &Path) -> Option<StatFacts> {
+/// One `/proc/<pid>/stat` line's text past its parenthesised `comm`.
+///
+/// The splitting rule is the subtle part and is worth exactly one home: `comm`
+/// may itself contain spaces and parentheses — `sh (deleted)` is a real process
+/// name — so the split is on the **last** `)` in the line and never on
+/// whitespace from the left.
+///
+/// Two readers share it. [`stat_of`] takes the three fields the descent needs;
+/// the process-group-only reaper instrument (`T9`'s `F-37`) takes a **fourth**
+/// field that [`StatFacts`] deliberately does not carry, because no shipped
+/// caller reads a process group and a field carried for a test alone is a field
+/// the next reader has to be told to ignore.
+fn stat_text_past_comm(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
-    let after_comm = text.rsplit_once(')')?.1;
-    let fields: Vec<&str> = after_comm.split_whitespace().collect();
+    text.rsplit_once(')')
+        .map(|(_, past_comm)| past_comm.to_owned())
+}
+
+fn stat_of(path: &Path) -> Option<StatFacts> {
+    let past_comm = stat_text_past_comm(path)?;
+    let fields: Vec<&str> = past_comm.split_whitespace().collect();
     Some(StatFacts {
         reaped: fields.get(STAT_STATE_FIELD).copied() == Some(ZOMBIE_STATE),
         parent: HostPid(fields.get(STAT_PARENT_FIELD)?.parse().ok()?),
@@ -5210,6 +5227,7 @@ mod tests {
         every_declared_mount_tested_for_writability, the_source_export_written_through,
         writes_nothing_through,
     };
+    use super::{LOWEST_SIGNALLABLE, stat_path, stat_text_past_comm};
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
         BubblewrapBackend, SpawnOptions, confinement_argv, hold_descriptor_window,
@@ -8330,6 +8348,426 @@ mod tests {
             fixture.sweep_observed_sessions(),
             Vec::new(),
             "sweeping drains, so the second sweep cannot signal a recycled pid"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // The process-group reaper's signalling floor (`T9`, `R2`, `F-37`)
+    // -----------------------------------------------------------------------
+    //
+    // `T9`'s mutant backend reaps *the original process group and nothing else*,
+    // so that a row 7 whose payload really escapes its group convicts it. That
+    // mutant is the one new signalling path this phase adds, and `R2` is the
+    // rule it lands under: **the refusal is committed before the instrument is
+    // aimed.** PHASE-08 scheduled the session sweep's floor last and the sandbox
+    // was torn down twice, hours apart, while the guard was uncommitted
+    // (`F-36`) — with no error, because a mass-`SIGKILL` that reaches the
+    // operator's own tree does not get to report anything.
+    //
+    // The refusals are asserted on the **predicates**, exactly as `F-36` did,
+    // because the only honest test of "would have signalled" is one that
+    // signals. Every refusal test therefore also permits an ordinary value: a
+    // guard that refuses everything is indistinguishable from a guard that
+    // works, and the whole battery would pass against a `const fn` returning
+    // `false`.
+
+    /// A process group as the host sees it.
+    ///
+    /// A newtype for the same reason [`SessionId`] is one, and for a sharper
+    /// one here: the two are *adjacent fields of the same `/proc` line*, both
+    /// are pid-shaped `i32`s, and the entire point of row 7 is that reaping the
+    /// wrong one of them is a conformance defect. `M13` mutates one field index
+    /// into the other; two distinct types are what leave that mutation
+    /// something to red against on this side of the file too.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct ProcessGroupId(i32);
+
+    /// `/proc/<pid>/stat`'s process-group field, counted after the `comm` —
+    /// the field immediately *before* [`super::STAT_SESSION_FIELD`].
+    ///
+    /// Declared here rather than beside the production field indices because no
+    /// shipped caller reads a process group, and an unused `const` there is a
+    /// `dead_code` error rather than a tidy piece of foreshadowing.
+    const STAT_GROUP_FIELD: usize = 2;
+
+    /// The highest pid this instrument refuses outright, whatever group it
+    /// reports.
+    ///
+    /// pid 1 is init. pid 2 is `kthreadd`, the parent of every kernel thread —
+    /// and kernel threads report **process group 0**, which is precisely the
+    /// group a field-index slip lands on. So this floor is one bolt behind
+    /// [`signallable_group`]'s, aimed at the same accident from the other end.
+    ///
+    /// Strictly stricter than the session sweep's [`super::signallable_pid`],
+    /// which admits pid 2: that sweep matches on *session*, and nothing in
+    /// session ≥ 2 is a kernel thread, so it never meets `kthreadd` at all.
+    /// This one matches on a group, and group 0 is where they all live.
+    const KERNEL_THREAD_PARENT_PID: i32 = 2;
+
+    /// Whether the reaper may signal `group` at all.
+    ///
+    /// Same two refusals as [`super::signallable`] and in the same order, for
+    /// the same reasons: the floor is unconditional blast-radius control and
+    /// comes first; the own-group refusal is second and is the one with a
+    /// mechanism behind it. `own` is `Option` so a host that cannot answer
+    /// `/proc` for this process **disarms the instrument entirely** — with
+    /// nothing to compare against, nothing may be signalled.
+    ///
+    /// Group 0 is refused by the floor and is worth naming separately from the
+    /// rest of it, because it is the one value whose harm has a *different*
+    /// mechanism: `killpg(0)` means *my own group* to the kernel, so a group-0
+    /// signal is the one that reaches the test runner rather than the machine.
+    const fn signallable_group(group: ProcessGroupId, own: Option<ProcessGroupId>) -> bool {
+        if group.0 < LOWEST_SIGNALLABLE {
+            return false;
+        }
+        match own {
+            Some(own) => group.0 != own.0,
+            None => false,
+        }
+    }
+
+    /// Whether a *member* of an admissible group may be signalled.
+    const fn signallable_group_member(pid: HostPid) -> bool {
+        pid.0 > KERNEL_THREAD_PARENT_PID
+    }
+
+    /// One process's group, read the same way every other member's is read.
+    fn group_at(path: &std::path::Path) -> Option<ProcessGroupId> {
+        let past_comm = stat_text_past_comm(path)?;
+        let fields: Vec<&str> = past_comm.split_whitespace().collect();
+        Some(ProcessGroupId(fields.get(STAT_GROUP_FIELD)?.parse().ok()?))
+    }
+
+    fn group_of(pid: HostPid) -> Option<ProcessGroupId> {
+        group_at(&stat_path(pid))
+    }
+
+    /// This process's own group — read through `group_of`, not through a second
+    /// path shape, so the value the refusal compares against is produced by the
+    /// same reader as the values it compares.
+    fn own_process_group() -> Option<ProcessGroupId> {
+        let pid = i32::try_from(std::process::id()).ok()?;
+        group_of(HostPid(pid))
+    }
+
+    fn process_group_members(group: ProcessGroupId) -> Vec<HostPid> {
+        process_table()
+            .into_iter()
+            .filter(|facts| group_of(facts.pid) == Some(group))
+            .map(|facts| facts.pid)
+            .collect()
+    }
+
+    /// Signal every live member of `group`.
+    ///
+    /// **Enumerate-and-signal, never `killpg`**, and that is a floor rather
+    /// than a style: `killpg` takes the group as an argument the kernel
+    /// reinterprets — 0 means *the caller's own group* and -1 means *every
+    /// process on the machine* — so a defect that produced a 0 would be handed
+    /// to a syscall that reads it as an instruction rather than as a mistake.
+    /// Enumerating first means an out-of-range group simply matches nothing,
+    /// and [`signallable_group`] never has to be the only thing standing
+    /// between a bad `i32` and the operator's session. It also mirrors
+    /// [`super::kill_session`], which is the shape this file already trusts.
+    ///
+    /// A pid that vanishes between the enumeration and the signal is the normal
+    /// case, not an error, so a failed signal is discarded.
+    fn kill_process_group(group: ProcessGroupId, own: ProcessGroupId) {
+        if !signallable_group(group, Some(own)) {
+            return;
+        }
+        for pid in process_group_members(group) {
+            if !signallable_group_member(pid) {
+                continue;
+            }
+            let Some(raw) = rustix::process::Pid::from_raw(pid.0) else {
+                continue;
+            };
+            let _signalled = rustix::process::kill_process(raw, rustix::process::Signal::KILL);
+        }
+    }
+
+    /// The instrument: a reaper that knows about process groups and nothing
+    /// else.
+    ///
+    /// It may signal **only a group it created and observed** — one recorded
+    /// through [`Self::note_capsule_group`] from a live capsule process this
+    /// harness itself started. There is no route that signals a group named
+    /// from anywhere else, which is what makes "the original process group" a
+    /// bounded claim rather than an aspiration.
+    struct ProcessGroupReaper {
+        own: Option<ProcessGroupId>,
+        observed: RefCell<Vec<ProcessGroupId>>,
+    }
+
+    impl ProcessGroupReaper {
+        fn new() -> Self {
+            Self {
+                own: own_process_group(),
+                observed: RefCell::new(Vec::new()),
+            }
+        }
+
+        /// Record the group of a capsule process seen alive.
+        ///
+        /// A pid with no `/proc` entry records nothing: that process has
+        /// already gone, which is this instrument's success case, and recording
+        /// it would arm the reaper against a **recycled** pid's group.
+        fn note_capsule_group(&self, capsule: HostPid) {
+            if let Some(group) = group_of(capsule) {
+                self.note_group(group);
+            }
+        }
+
+        /// The recording rule alone, over a group already read.
+        ///
+        /// Split from [`Self::note_capsule_group`] for the reason `F-36` split
+        /// the session recorder: the pid→group read needs a live process, and
+        /// the refusal-and-dedup rule needs a group id with no members at all.
+        /// Refusing at *record* time is also what makes the refusal observable
+        /// — a reaper that signalled nothing and a reaper that recorded nothing
+        /// look identical from outside.
+        fn note_group(&self, group: ProcessGroupId) {
+            if !signallable_group(group, self.own) {
+                return;
+            }
+            let mut observed = self.observed.borrow_mut();
+            if !observed.contains(&group) {
+                observed.push(group);
+            }
+        }
+
+        /// Signal every live member of every group this instrument observed.
+        ///
+        /// Drains, so a second call cannot signal a pid the kernel has since
+        /// recycled into some other group.
+        fn reap_observed_groups(&self) -> Vec<ProcessGroupId> {
+            let Some(own) = self.own else {
+                return Vec::new();
+            };
+            let reaped: Vec<ProcessGroupId> = self.observed.borrow_mut().drain(..).collect();
+            for group in &reaped {
+                kill_process_group(*group, own);
+            }
+            reaped
+        }
+    }
+
+    /// A group id above every live pid, and therefore above every live *group*
+    /// — a process group id is a pid, so no member can exist.
+    ///
+    /// Every test below that exercises the real signalling path drives it with
+    /// this. A test that named a group with members would be a test that sends
+    /// `SIGKILL` to this machine.
+    fn memberless_group() -> ProcessGroupId {
+        ProcessGroupId(
+            process_table()
+                .iter()
+                .map(|facts| facts.pid.0)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1),
+        )
+    }
+
+    /// Refusal 1 — group 0, the one whose harm has its own mechanism.
+    #[test]
+    fn the_group_reaper_never_signals_process_group_zero() {
+        let own = Some(ProcessGroupId(4242));
+
+        assert!(
+            !signallable_group(ProcessGroupId(0), own),
+            "group 0 is `killpg`'s own-group wildcard and every kernel thread's group"
+        );
+        assert!(
+            signallable_group(ProcessGroupId(4243), own),
+            "an ordinary group is still reaped, or the refusal proves nothing"
+        );
+    }
+
+    /// Refusal 2 — the floor itself, which also refuses group 1 and every
+    /// negative (`killpg(-1)` is *every process on the machine*).
+    #[test]
+    fn the_group_reaper_never_signals_below_the_floor() {
+        let own = Some(ProcessGroupId(4242));
+
+        assert!(
+            !signallable_group(ProcessGroupId(1), own),
+            "group 1 is init's"
+        );
+        assert!(
+            !signallable_group(ProcessGroupId(-1), own),
+            "a negative group is `killpg`'s broadcast"
+        );
+        assert!(
+            signallable_group(ProcessGroupId(LOWEST_SIGNALLABLE), own),
+            "the floor admits its own value, or it is a different floor"
+        );
+    }
+
+    /// Refusal 3 — its own group. The mechanism this one guards: a defect that
+    /// fed the recorder the trusted side's pid rather than a capsule's would
+    /// otherwise arm the reaper against the suite's own process tree, and the
+    /// observable failure would be the test runner dying.
+    #[test]
+    fn the_group_reaper_never_signals_its_own_group() {
+        assert!(
+            !signallable_group(ProcessGroupId(4242), Some(ProcessGroupId(4242))),
+            "the instrument's own group reached the signalling side"
+        );
+        assert!(
+            signallable_group(ProcessGroupId(4243), Some(ProcessGroupId(4242))),
+            "a foreign group is still reaped, or the refusal proves nothing"
+        );
+    }
+
+    /// Refusal 4 — fail closed. A host that cannot name this process's own
+    /// group has nothing to compare against, so nothing may be signalled. The
+    /// value refused here is one the *same* predicate admits when `own` is
+    /// known, which is the whole discrimination.
+    #[test]
+    fn the_group_reaper_signals_nothing_when_its_own_group_is_unknown() {
+        assert!(
+            !signallable_group(ProcessGroupId(4243), None),
+            "an unknown own-group must disarm the instrument, not open it"
+        );
+        assert!(signallable_group(
+            ProcessGroupId(4243),
+            Some(ProcessGroupId(4242))
+        ));
+    }
+
+    /// Refusal 5 — pid 1 and pid 2, whatever group they report.
+    #[test]
+    fn the_group_reaper_never_signals_init_or_the_kernel_thread_parent() {
+        assert!(!signallable_group_member(HostPid(1)), "pid 1 is init");
+        assert!(
+            !signallable_group_member(HostPid(KERNEL_THREAD_PARENT_PID)),
+            "pid 2 is kthreadd, and every kernel thread is in group 0"
+        );
+        assert!(!signallable_group_member(HostPid(0)));
+        assert!(
+            signallable_group_member(HostPid(KERNEL_THREAD_PARENT_PID.saturating_add(1))),
+            "an ordinary pid is still signalled, or the refusal proves nothing"
+        );
+    }
+
+    /// Refusal 6 — only a group it created and observed, and only once.
+    ///
+    /// Driven through the instrument's whole real path — record, enumerate,
+    /// match, signal — against a group with no members. The drain is the second
+    /// half: reaping twice must be lawful and the second a no-op.
+    #[test]
+    fn the_group_reaper_signals_only_a_group_it_observed() {
+        let memberless = memberless_group();
+
+        let never_told = ProcessGroupReaper::new();
+        assert_eq!(
+            never_told.reap_observed_groups(),
+            Vec::new(),
+            "a reaper that observed nothing signalled something"
+        );
+
+        let reaper = ProcessGroupReaper::new();
+        reaper.note_group(memberless);
+        reaper.note_group(memberless);
+        assert_eq!(
+            reaper.reap_observed_groups(),
+            vec![memberless],
+            "the observed group is held once and reached the signalling path"
+        );
+        assert_eq!(
+            reaper.reap_observed_groups(),
+            Vec::new(),
+            "reaping drains, so a second reap cannot signal a recycled pid"
+        );
+    }
+
+    /// The recorder's own refusals, asserted through the swept set rather than
+    /// through the predicate — a group at the floor must never even reach the
+    /// signalling site.
+    #[test]
+    fn a_machine_group_is_refused_by_the_reapers_recorder() {
+        let reaper = ProcessGroupReaper::new();
+        let memberless = memberless_group();
+
+        reaper.note_group(ProcessGroupId(0));
+        reaper.note_group(ProcessGroupId(1));
+        if let Some(own) = reaper.own {
+            reaper.note_group(own);
+        }
+        reaper.note_group(memberless);
+
+        assert_eq!(
+            reaper.reap_observed_groups(),
+            vec![memberless],
+            "a refused group reached the reaped set"
+        );
+    }
+
+    /// A pid that has already gone records no group — the same rule
+    /// `a_vanished_capsule_records_no_session` states for the session sweep,
+    /// and for the same recycled-pid reason.
+    #[test]
+    fn a_vanished_capsule_records_no_group() {
+        let reaper = ProcessGroupReaper::new();
+
+        reaper.note_capsule_group(HostPid(-1));
+
+        assert_eq!(reaper.reap_observed_groups(), Vec::new());
+    }
+
+    /// The reader is aimed at the right field, and the line is **synthetic**
+    /// because no live one can say so.
+    ///
+    /// Measured on this host (`F-38`): of 21 live processes, **zero** have a
+    /// process group differing from their session. So `M13`'s mutation — the
+    /// session field index slid one column onto the process group's — is
+    /// invisible to any reading taken off a real process here, and a reader
+    /// test written against `/proc` would pass against a reader that had
+    /// converged on the wrong field entirely. That is `R7`'s shape exactly: a
+    /// mutation reds nothing because the fixture cannot discriminate, not
+    /// because the rule is held.
+    ///
+    /// The synthetic line also carries the `comm` that
+    /// [`stat_text_past_comm`]'s splitting rule exists for — `sh (deleted)`,
+    /// spaces and parentheses and all — so one fixture convicts both the field
+    /// index and a split taken from the left.
+    #[test]
+    fn the_group_reader_reads_the_group_field_and_not_the_session_field() {
+        let root = TempRoot::new(&SystemHost).expect("this host can host a temp root");
+        let path = root.path().join(STAT_LEAF);
+        std::fs::write(&path, "4242 (sh (deleted)) S 4243 777 888 0 -1\n")
+            .expect("the synthetic stat line is writable");
+
+        assert_eq!(
+            group_at(&path),
+            Some(ProcessGroupId(777)),
+            "the group reader is not reading the process-group field"
+        );
+        assert_eq!(
+            stat_of(&path).map(|facts| facts.session),
+            Some(SessionId(888)),
+            "the two readers converged on one field"
+        );
+    }
+
+    /// And the same reader works against real `/proc`, which the synthetic
+    /// fixture above cannot show: a reader correct on a hand-written line and
+    /// broken on the live layout would pass that test and reap nothing.
+    #[test]
+    fn the_group_reader_finds_this_process_in_the_group_it_reports() {
+        let own_pid = i32::try_from(std::process::id()).expect("a pid fits in an i32");
+        let group = own_process_group().expect("this host answers /proc for this process");
+
+        assert!(
+            process_group_members(group).contains(&HostPid(own_pid)),
+            "this process is not a member of the group it reports"
+        );
+        assert!(
+            group.0 >= LOWEST_SIGNALLABLE,
+            "a process group below the floor was read off a live process"
         );
     }
 
