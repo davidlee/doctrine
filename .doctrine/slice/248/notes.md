@@ -1489,6 +1489,38 @@ under the sheet's own fallback.
     snapshot's reference-forms rule already asks for and what the sheet's prose
     stopped doing once the ids overlapped. (`F-38`, `T6`.)
 
+131. **`F-4` is confirmed, is host-dependent, and the design host is affected
+    too.** Table A row 13's payload reads four credential surfaces; measured in
+    this jail, only `gid` and `gid_map` discriminate — `uid` and `uid_map` read
+    as the declared identity under *both* arms, because `CAPSULE_UID` is 1000
+    and so is the operator's uid. The row is written with all four regardless
+    (`EX-11`), and the two that do not discriminate here are carried as stated
+    property rather than dead weight. This is not a jail artefact: it bites on
+    any host whose operator uid is 1000, the design host included. `VA-1`'s
+    off-jail re-run is what settles whether the uid half ever discriminates
+    anywhere. Owed as the `ISS-` the sheet's `F-4` already anticipates, now with
+    a measured arm table behind it. (Phase sheet `F-40`, `T7`.)
+
+132. **The declared capsule identity lives in the bubblewrap module, and
+    arguably should not.** `CAPSULE_UID`/`CAPSULE_GID` became `pub(crate)` in
+    `backend/bubblewrap.rs` so row 13's payload asserts the profile's own
+    declaration rather than a literal resembling it (`STD-001`). The durable
+    home is more plausibly `backend.rs`, beside the other placement constants —
+    the declared identity is a property of a placement, not of one backend's
+    argv assembly. Out of `T7`'s carded scope and deliberately not taken there;
+    owed as a tidy-up. (Phase sheet `F-44`, `T7`.)
+
+133. **One test in the conformance suite builds a sandbox, and the reason is a
+    seam rather than a preference.** `payload_output_in_a_mapped_capsule` spawns
+    `bwrap` directly to obtain a *conforming* reading of row 13's payload, which
+    the mutant needs for its discriminating leg. It exists because a `Stub` is
+    handed lines and the real probe arm's stdout is unreachable — an `ArmResult`
+    carries a verdict, not the bytes behind it. Every other mutant in the suite
+    gets its reading by running the shipped payload over endpoints the harness
+    can build in-process; this row's channel is the process's own credentials,
+    which cannot be arranged without a namespace. If `ArmResult` ever carries the
+    arm's output, this instrument can go. Owed as a note, not a defect. (`T7`.)
+
 
 ## Open
 
