@@ -2094,3 +2094,152 @@ entry, a window or a clock, the unit of evidence is a tally under load, not an
 exit code.** Both `F-34` and `F-35` were invisible to a single run and visible
 within minutes of running the suite repeatedly and under contention — and
 `F-35` is still open precisely because the cheap evidence never showed it.
+
+## PHASE-10 `T1` — `VA-2`: the four reasoned deltas, measured
+
+**Shard note.** `phase-10.md` nominates `notes_10-12.md` as PHASE-10's shard and
+forbids creating one silently. No such file existed at this sitting, so PHASE-10
+appends here, per the sheet's own fallback.
+
+`weakening_for` (`conformance.rs:1736`) carries `InputsWritable`,
+`DescriptorsClosed`, `EnvCleared` and `StdioOwned` as **reasoned** (`EX-18`).
+Rows 9–12 each stake a control arm on one. `VA-2` requires each shown to fire
+*before* the row depends on it, and `S3` says a delta that does not produce its
+row's control failure means the row is wrong.
+
+Measured through the shipped seam — `provision_capsule` → `harness_execution` →
+`ConformanceBackend::execute_noticing` under `Under::Confining` versus
+`Under::Removing(…)` — so the argv exercised is the one `weakening_for` actually
+emits, not a shell approximation of it. **All four discriminate.** `S3` is not
+triggered and no row is withdrawn.
+
+### The tally (`C14`, `F-36`): 5 runs per delta per arm, 32 spinners on 32 cores
+
+| delta | probe reading | control reading | *n*/5 |
+|---|---|---|---|
+| `InputsWritable` | `WROTE-NOT /source` (`Read-only file system`), `NOT-WRITABLE /bin`, `NOT-WRITABLE /nix` | `WROTE /source`, `WRITABLE /bin`, `WRITABLE /nix` | 5/5 both arms |
+| `DescriptorsClosed` | `/proc/self/fd` = `0 1 2 3` (3 is the enumeration's own handle) | `0 1 2 3` **plus** `5 → decoys/descriptor`, `6 → #NNNNNN (deleted)`, `7 → socket:[…]` | 5/5 both arms |
+| `EnvCleared` | 10 variables — exactly `CapsuleEnv` | 42 variables — the whole trusted-side environment | 5/5 both arms |
+| `StdioOwned` | `STDIN[]` | `STDIN[TRUSTED-SIDE-DECOY-INPUT]` | 5/5 both arms |
+
+Every arm exited `Exited { code: 0 }`; no run went indeterminate, and no 4/5.
+Wall clock per spike run under load: 0.85–1.86 s.
+
+### The exact argv delta each produced
+
+Measured off `confinement_argv` (`bubblewrap.rs:1106`), confining versus
+weakened, over one real placement — plus `SpawnOptions::under`, which is where
+the two parent-side axes live.
+
+| delta | argv words | change |
+|---|---|---|
+| `InputsWritable` | 40 → 40 | three `--ro-bind` → `--bind`, at positions 14, 17, 20. **No word added, none removed, no path changed.** |
+| `DescriptorsClosed` | 40 → 40 | **none — the argv is byte-identical.** `SpawnOptions.descriptors_closed` `true` → `false`. |
+| `EnvCleared` | 40 → 39 | `--clearenv` removed. The `--setenv` list is untouched. |
+| `StdioOwned` | 40 → 40 | **none — the argv is byte-identical.** `SpawnOptions.parent_owned_stdio` `true` → `false`. |
+
+Two of the four change **no argv byte at all**. That is not a weakness: it is
+what makes `the_descriptor_control_changes_no_mount_no_env_and_no_argv_byte`
+(`VT-3`) and `the_stdio_control_changes_nothing_above_descriptor_two` (`VT-5`)
+assertions about a measured fact rather than restatements of an intention. And
+`InputsWritable`'s 40→40-with-three-substitutions is
+`the_writable_inputs_delta_changes_no_mount_and_no_path` (`VT-2`) measured: the
+mount set, its count, its inner destinations and its host paths are all
+identical across the arms, and only the attachment moves.
+
+### `F-9` — the descriptor decoys must be opened **after provisioning**, not merely per arm
+
+`F-6` predicted a vacuous row 10 and named the probe arm's sweep as the cause.
+The measured cause is one layer broader and it matters for `D1`.
+
+Opening the decoy set *before* `provision_capsule` and holding it across both
+arms — which is what "per fixture" and a naive "per arm" both amount to — reads:
+
+    STALE  probe   = 0 1 2 3
+    STALE  control = 0 1 2 3
+
+The control sees **nothing**. Opening a fresh set *after* provisioning and
+before the spawn reads:
+
+    probe   = 0 1 2 3
+    control = 0 1 2 3 5 6 7
+
+Provisioning itself runs capsules, and every one of those runs goes through
+`fork_within_the_descriptor_window` with the sweep enabled, marking every
+descriptor above 2 close-on-exec process-wide. So a decoy opened before
+`(Arm.capsule)()` is already `CLOEXEC` by the time the arm forks, whichever arm
+it is. **A per-arm hook is necessary and not sufficient; the hook has to sit
+between the capsule closure and the spawn.** That is the placement `T2` adopts.
+
+### `F-10` — `bwrap` does not close inherited descriptors, so the mechanism is the parent's sweep alone
+
+Checked directly, because the alternative explanation for `F-9`'s stale reading
+was that bubblewrap closes what it inherits and the delta could never fire:
+
+    exec 9</tmp/decoy; bwrap --unshare-all … /bin/sh -c 'ls /proc/self/fd'
+    → 0 1 2 3 9=>/tmp/decoy
+
+Descriptor 9 survives into the capsule. Bubblewrap 0.11.2 passes inherited
+descriptors through untouched, so the whole of row 10's confinement is
+`mark_inherited_descriptors_close_on_exec` on the trusted side — and the whole of
+its control is skipping that call. Worth knowing before anyone reads a
+non-discriminating row 10 as a bubblewrap fact.
+
+### `F-11` — `InputsWritable`'s control arm makes the **system readable roots** writable, outside the fixture
+
+The delta is *"`--ro-bind` becomes `--bind` for `/source` **and every declared
+readable entry**"*. On this host the declared readable entries are
+`system_readable_roots`' output: `/bin` and `/nix`. Under the control arm a
+payload that writes through them writes onto the operator's filesystem, outside
+the fixture's `TempRoot`, where nothing reclaims it — `Fixture::Drop` reaches
+only its own root and this slice adds no unlink (invariant 8).
+
+Measured, not reasoned: the first run of this spike wrote through every readable
+mount and left `/nix/va2-write` and `/bin/va2-write` on the host, owned by the
+operator. **Swept by hand**, and the spike was then narrowed to write only into
+`/source` — this run's own export, inside the fixture root — and to probe the
+other entries non-mutatingly with `[ -w ]`, which discriminates just as cleanly.
+
+This is `T3`'s problem, and it is exactly what
+`the_writable_inputs_control_writes_only_to_this_runs_own_export` (`VT-2`) is
+for. Note the tension it names: a `Row` carries **one** `ArmShape`, so the probe
+and the control run the *same* payload. `a_write_through_every_readable_mount_fails`
+therefore cannot be satisfied by a payload that literally writes through every
+readable mount — that payload, on the control arm, writes into `/nix`. Row 9's
+payload has to write only into the source export and establish the other entries'
+read-onlyness by a non-mutating read. Recorded before `T3` starts so it is a
+design constraint rather than a discovery made by an operator finding files in
+their nix store.
+
+### `F-12` — `EnvCleared`'s control arm hands the capsule live operator credentials
+
+Probe: 10 variables, exactly `CapsuleEnv`'s set. Control: 42, the trusted side's
+whole environment. On this host that set includes several third-party API keys
+belonging to the operator, in full, readable by the capsule.
+
+No action is owed on the *delta* — leaking is precisely what the control exists
+to demonstrate, and it discriminates beautifully. What is owed is on the
+**payload**: row 11's probe is set equality against `CapsuleEnv`, and its
+reporting must be **names and counts, never values**. A payload that printed
+`env` verbatim on failure would put the operator's credentials into the test log
+and into CI output, which is a worse disclosure than the one the row exists to
+prevent. The spike was rewritten to print names only after the first run proved
+the point.
+
+### `F-13` — reopening `/dev/fd/1` does not test whether the capsule can read descriptor 1
+
+The first stdio spike asked `head -c 1 /dev/fd/1` and read `FD1-READABLE` under
+**both** arms, which would have looked like row 12's second leg failing to
+discriminate. It is an artefact twice over: opening `/proc/self/fd/N` on a pipe
+*reopens the pipe* rather than duplicating the descriptor, so a read end is
+obtainable even where the descriptor held is write-only; and the payload had
+already written its own output into that pipe, so the read returned the payload's
+own bytes.
+
+`F-30`'s claim — that what a socket pair confers and a capture pipe's write end
+does not is the capsule's ability to **read descriptor 1** — is a claim about the
+inherited descriptor, so `T6` must read descriptor 1 *itself* (`<&1`), never
+`/dev/fd/1`, and must bound the read: under the control arm descriptor 1 is a
+socket whose peer the trusted side holds open across the run, so an unbounded
+read blocks until the wall bound rather than returning (`R1`). The stdin leg is
+unaffected and was measured clean; this bears only on the descriptor-1 leg.

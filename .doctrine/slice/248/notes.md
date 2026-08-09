@@ -1155,6 +1155,71 @@ is the strongest evidence this slice has that the battery earns its cost.
     were invisible to one run and visible within minutes of repetition under
     contention; `F-35` is still open because the cheap evidence never showed it.
 
+### From `PHASE-10` execution (sheet `phase-10.md`, shard `notes_07-09.md`)
+
+**Shard note.** The sheet nominates `notes_10-12.md` and forbids minting one
+silently; none existed at this sitting, so PHASE-10 appends to `notes_07-09.md`
+under the sheet's own fallback.
+
+106. **`VA-2` discharged: all four reasoned deltas were measured and all four
+    discriminate** (`F-10` of `phase-10.md`). `InputsWritable`,
+    `DescriptorsClosed`, `EnvCleared` and `StdioOwned` were each run through the
+    shipped seam — `provision_capsule` → `harness_execution` →
+    `execute_noticing` under `Under::Confining` versus `Under::Removing(…)` —
+    five times per arm under 32 spinners on 32 cores. **5/5 both arms for all
+    four**, no indeterminates, no 4/5. `S3` is not triggered and no row is
+    withdrawn. Exact argv deltas: `InputsWritable` 40→40 words with three
+    `--ro-bind`→`--bind` substitutions and no path change; `EnvCleared` 40→39,
+    `--clearenv` removed, `--setenv` list untouched; `DescriptorsClosed` and
+    `StdioOwned` change **no argv byte at all** — both are parent-side
+    (`SpawnOptions.descriptors_closed`, `SpawnOptions.parent_owned_stdio`).
+107. **Row 10's decoys must be opened *after* provisioning, not merely per arm**
+    (`F-9`). `F-6` named the probe arm's sweep; the measured cause is broader.
+    Provisioning itself runs capsules, each forking through
+    `fork_within_the_descriptor_window` with the sweep on, so a decoy opened
+    before the arm's capsule closure is already `CLOEXEC` whichever arm holds
+    it. Measured: pre-provision ordering reads `0 1 2 3` under **both** arms —
+    the vacuous pass `EX-3` forbids — against `0 1 2 3 5 6 7` when the set is
+    opened between the capsule and the spawn. A per-arm hook is necessary and
+    not sufficient; the hook's *placement* is the load-bearing part.
+108. **Bubblewrap 0.11.2 does not close inherited descriptors** (`F-10`).
+    Checked directly (`exec 9<file; bwrap --unshare-all … ls /proc/self/fd` →
+    `9=>/tmp/decoy`). So row 10's confinement is the trusted side's
+    `mark_inherited_descriptors_close_on_exec` alone, and its control is
+    skipping that call. Recorded so a future non-discriminating row 10 is not
+    misread as a bubblewrap property.
+109. **`InputsWritable`'s control arm makes the declared *system* readable roots
+    writable, outside the fixture** (`F-11`). The delta converts `--ro-bind` to
+    `--bind` for `/source` *and every declared readable entry*, which on this
+    host is `system_readable_roots`' `/bin` and `/nix`. The first spike run left
+    `/nix/va2-write` and `/bin/va2-write` on the operator's filesystem, outside
+    the fixture `TempRoot` where nothing reclaims them; **swept by hand**, and
+    the spike narrowed to write only into `/source` and probe the rest with
+    `[ -w ]`. Consequence for row 9, recorded before `T3` starts: a `Row` carries
+    one `ArmShape`, so both arms run the same payload — therefore
+    `a_write_through_every_readable_mount_fails` **cannot** be satisfied by a
+    payload that literally writes through every readable mount, because that
+    payload writes into `/nix` on the control arm. Row 9 must write only into
+    this run's own export and establish the other entries' read-onlyness by a
+    non-mutating read. **Owed as an `ISS-` at merge** if the design's wording is
+    to be reconciled with it.
+110. **`EnvCleared`'s control arm hands the capsule live operator credentials**
+    (`F-12`). Probe 10 variables (exactly `CapsuleEnv`), control 42 — the whole
+    trusted-side environment, including several third-party API keys in full.
+    Nothing is owed on the delta; what is owed is on the payload: row 11 must
+    report **names and counts, never values**, or a failing assertion prints the
+    operator's credentials into the test log and into CI output — a worse
+    disclosure than the one the row exists to prevent.
+111. **Reopening `/dev/fd/1` does not test descriptor 1's readability** (`F-13`).
+    The first stdio spike read `FD1-READABLE` under **both** arms: opening
+    `/proc/self/fd/N` on a pipe *reopens* the pipe rather than duplicating the
+    descriptor, and the payload had already written its own bytes into it. Row
+    12's second leg must read descriptor 1 *itself* (`<&1`) and must bound the
+    read — under the control arm descriptor 1 is a socket whose peer the trusted
+    side holds open across the run, so an unbounded read blocks until the wall
+    bound rather than returning (`R1`). The stdin leg is unaffected and measured
+    clean.
+
 
 ## Open
 
