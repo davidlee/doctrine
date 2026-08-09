@@ -1747,6 +1747,71 @@ under the sheet's own fallback.
     `mem.fact.testing.conformance-binary-is-cargo-bound`.
 
 
+151. **A destructive test instrument is floored before it is aimed, and the
+    floor ships alone (`F-37`).** `R2`'s rule paid a third time. The
+    process-group reaper's signalling floor landed as its own first commit with
+    one discriminating test per refusal — never group 0, never its own, never
+    below `LOWEST_SIGNALLABLE`, never pid 1 or pid 2, and `own: None` fails
+    closed. Refusals asserted on the **predicates**, as the session sweep's
+    floor did, so the tests hold no live process. The member floor is *stricter*
+    than the session sweep's (`>` not `>=` pid 2): pid 2 is `kthreadd`, whose
+    children are the kernel threads. `killpg` is never called — it reinterprets
+    0 as the caller's own group and -1 as every process on the machine. Battery
+    7 of 7.
+
+152. **A `/proc` reader test cannot convict a field-index slide on a host where
+    the two fields agree (`F-38`).** `ps -eo pid,sess,pgrp | awk '$2!=$3'`
+    returns **0 of 21** here, so "read this process, assert its group" passes
+    against a reader aimed at the session field instead. `R7`'s shape: a
+    mutation that reds nothing usually means the fixture cannot discriminate.
+    Fixed with a **synthetic** stat line under `TempRoot`, which also pins the
+    `comm` splitting rule (split on the last `)`, because `sh (deleted)` is a
+    real process name). The parse rule now has one home shared by both readers;
+    `StatFacts` was deliberately not widened, since a field carried for a test
+    alone is `dead_code` under `-D warnings` and a thing the next reader must be
+    told to ignore.
+
+153. **A mutation battery on a signalling instrument must drive synthetic
+    targets, because the mutant being convicted is the one that removes the
+    containment (`F-39`).** Removing the own-group refusal made a test that had
+    been handed this process's *real* group enumerate it and `SIGKILL` the
+    `cargo test` tree — twice, each time surfacing only as a bare `Killed` with
+    the buffered output lost, and first misdiagnosed as OOM. That is `R2`'s
+    PHASE-08 teardown reproduced under control. Designed out, not filed: an
+    injectable own-group plus a memberless synthetic target, with the real
+    own-group wired in one place asserted by one never-signalling test.
+
+154. **Route (a) shipped as `Observed::Unspoken`, and additivity is asserted by
+    reading one stdout twice (`F-40`).** Held iff the stated token is present
+    and the forbidden absent; failed on the forbidden token whatever the stated
+    says; neither is `NoObservation`. The principle that makes it a variant
+    rather than a special case: under `Token` both tokens are *one payload's*,
+    so both present is self-contradiction; under `Unspoken` the forbidden token
+    is another process's — the escapee's — so both present is the whole
+    observation. The additivity test reads the same bytes as a `Token`
+    (`AmbiguousObservation`) and as an `Unspoken` (`Failed`); under route (b) —
+    a dominance flag on `Token` — one of those assertions could not exist.
+    Battery 4 of 4, and M-J had to be reformulated as a token *swap* because
+    reading the forbidden token against the stated one leaves a field unused and
+    `-D warnings` convicts it at compile time — a compiler-convicted mutant is
+    not a test-convicted one (`F-52`).
+
+155. **Row 7's shipped payload spawns nothing on this host, silently, and a
+    second blocker survives installing `util-linux` (`F-41`).** `setsid(1)` is
+    absent (`/bin` holds only `sh`, `/usr/bin` only `env`), and the payload
+    redirects the `setsid` invocation's own stderr, so it prints `LIVE`, exits
+    **0**, and spawns no descendant — the briefing's premise that the descendant
+    "still outlives the capsule" and merely stays in the process group does not
+    hold here. The second blocker is independent of the host: the descendant is
+    `sleep` with all three streams on `/dev/null`, so it never *speaks*, and
+    `Unspoken` reads a token on stdout. Wiring the variant into row 7 needs the
+    escapee to exist, inherit stdout, and speak after its parent exits — three
+    changes to what row 7 executes, i.e. the payload switch reserved to the
+    owner. Left unwired, the arm stays an honest `NoObservation`; the trap is
+    the plausible half-repair of making the payload print `DENIED`, which gives
+    probe **and** control a `Held` — `EX-3`'s vacuous pass, caught only by
+    `every_shipped_rows_control_is_seen_to_fail`.
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The

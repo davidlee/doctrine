@@ -2451,7 +2451,7 @@ struct StatFacts {
 /// whitespace from the left.
 ///
 /// Two readers share it. [`stat_of`] takes the three fields the descent needs;
-/// the process-group-only reaper instrument (`T9`'s `F-37`) takes a **fourth**
+/// the reaper instrument (PHASE-09 `F-37`, `T9`) takes a **fourth**
 /// field that [`StatFacts`] deliberately does not carry, because no shipped
 /// caller reads a process group and a field carried for a test alone is a field
 /// the next reader has to be told to ignore.
@@ -8479,7 +8479,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // The process-group reaper's signalling floor (`T9`, `R2`, `F-37`)
+    // The process-group reaper's signalling floor (`T9`, `R2`, PHASE-09 `F-37`)
     // -----------------------------------------------------------------------
     //
     // `T9`'s mutant backend reaps *the original process group and nothing else*,
@@ -8636,10 +8636,10 @@ mod tests {
         /// The constructor every test that reaches the **signalling** path
         /// drives, with a synthetic own-group.
         ///
-        /// Not a convenience. Measured (`F-39`): an earlier shape of the tests
-        /// below handed the instrument this process's *real* group, and with
-        /// the own-group refusal mutated out, `reap_observed_groups` enumerated
-        /// its own group and `SIGKILL`ed the `cargo test` process tree running
+        /// Not a convenience. Measured (PHASE-09 `F-39`): an earlier shape of
+        /// the tests below handed the instrument this process's *real* group,
+        /// and with the own-group refusal mutated out, `reap_observed_groups`
+        /// enumerated its own group and `SIGKILL`ed the `cargo test` tree
         /// it — twice, on two separate invocations, each reported only as a
         /// bare `Killed` with the buffered output lost. That is `R2`'s PHASE-08
         /// failure reproduced exactly, and it is the wrong way for a mutation
@@ -8890,9 +8890,9 @@ mod tests {
     /// The reader is aimed at the right field, and the line is **synthetic**
     /// because no live one can say so.
     ///
-    /// Measured on this host (`F-38`): of 21 live processes, **zero** have a
-    /// process group differing from their session. So `M13`'s mutation — the
-    /// session field index slid one column onto the process group's — is
+    /// Measured on this host (PHASE-09 `F-38`): of 21 live processes, **zero**
+    /// have a process group differing from their session. So `M13`'s mutation
+    /// — the session field index slid one column onto the process group's — is
     /// invisible to any reading taken off a real process here, and a reader
     /// test written against `/proc` would pass against a reader that had
     /// converged on the wrong field entirely. That is `R7`'s shape exactly: a
