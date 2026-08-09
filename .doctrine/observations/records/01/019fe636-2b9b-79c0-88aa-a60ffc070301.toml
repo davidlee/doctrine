@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe636-2b9b-79c0-88aa-a60ffc070301"
+recorded_at = "2026-08-09T11:08:57.62756576Z"
+kind = "friction"
+summary = "execute/T6: background Bash tasks report an empty output file until they exit, costing polling turns"
+detail = "cargo test runs of ~90s were launched with run_in_background. The task output file stays zero-length for the whole run (cargo's output is not line-flushed to a non-tty), so there is no interim signal at all: Read returns 'file exists but is empty' every time. I burned roughly six turns polling a file that could not have had content yet, and once mistook a still-building run for a hang. An until-loop on the file being non-empty just moves the wait without adding information. Cheapest fix on the agent side is to not poll at all and wait for the completion notification, which is only obvious after paying for it once."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

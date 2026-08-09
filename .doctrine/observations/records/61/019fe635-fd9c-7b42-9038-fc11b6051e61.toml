@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe635-fd9c-7b42-9038-fc11b6051e61"
+recorded_at = "2026-08-09T11:08:45.852351793Z"
+kind = "friction"
+summary = "execute/T6: phase-sheet F- ids collide with RV-346's F- ids, and citations are unqualified"
+detail = "The PHASE-10 sheet cites RV-346's F-36 and F-38 by bare id while its own findings series had reached F-35. Continuing the sheet series per the brief produced a sheet-local F-36 and F-38 that denote different findings from the bare-id citations already in the same document. Cost: a decision I had to reason about and then flag, plus a notes item, on top of re-reading three citation sites to work out which namespace each belonged to. Doc-local ids are correctly scoped in the reference-forms rule; the sheets stopped qualifying them once the two series overlapped."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
