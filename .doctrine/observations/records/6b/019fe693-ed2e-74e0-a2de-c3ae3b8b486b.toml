@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe693-ed2e-74e0-a2de-c3ae3b8b486b"
+recorded_at = "2026-08-09T12:51:22.030168756Z"
+kind = "friction"
+summary = "PHASE-10 T8 (/execute): the doctrine-control tally line is not locatable by position in a gate log"
+detail = "A 'doctrine check gate' log carries ~120 'test result:' lines across the workspace's suites. The known trap is the trailing 'ok. 0 passed' doc-test line, so the sheet's advice is to read the ~264-line instead. But 'grep test result: | head -1' is equally wrong and fails silently: it returned '0 passed' on one run because suite ordering shifts between runs, and on another run the three largest counts were 4404/212/190 with the doctrine-control figure nowhere near either end. A tally read that way looks like a measurement and is noise. The reliable extraction seeks forward from the binary header: awk '/doctrine_control-/{f=1} f && /^test result:/{print; exit}'. Cost: one aborted five-run tally job (~8 min) plus a relaunch writing full logs to disk so the line could be found post hoc. General shape worth carrying: when a tally is scraped out of a multi-suite log, anchor the scrape to the suite's own header, never to first/last position."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
