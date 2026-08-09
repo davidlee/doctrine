@@ -281,6 +281,16 @@ tightened out at all. Make the edit when it bites; **hold the commit** until aft
 the worker's code tip. If you do commit mid-flight — a broken guard leg earns
 it — say so at close rather than leaving the auditor to find it.
 
+**The diagnostic feed shows the worker's uncommitted intermediate states — read
+it as liveness, not as a defect.** A worker mid-refactor has helpers landed and
+call sites not yet moved, so `dead_code` and unresolved-name diagnostics are the
+*expected* shape of work in progress, not a finding. `T6` and `T7` both produced
+them and both were clean at commit; the `T6` advisory fired on one and was wrong.
+Before advising a live worker on a diagnostic, check whether the condition
+survives into a commit — `git show <tip>:<path>` — because only a committed state
+is a claim about anything. An advisory that turns out to be noise costs the
+worker a cycle and costs you the credibility of the next one, which may be real.
+
 Beats 4 and 5 may fall in the same firing — planning and execution are separated
 by living in **different sub-agent contexts**, which is the whole point of
 delegating them. What must never share a context is planning and execution, not
