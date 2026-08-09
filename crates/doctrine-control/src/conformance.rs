@@ -4588,13 +4588,13 @@ mod tests {
         WORKING_DIRECTORY_VAR, bubblewraps_working_directory, environment_names_resolved,
     };
     use super::{
+        INBOUND_READABLE, STANDARD_STREAMS_OWNED, STANDARD_STREAMS_SHARED, STDIN_DELIVERED,
+        STDIO_DECOY_INBOUND, STDIO_DECOY_INPUT,
+    };
+    use super::{
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
         every_declared_mount_tested_for_writability, the_source_export_written_through,
         writes_nothing_through,
-    };
-    use super::{
-        INBOUND_READABLE, STANDARD_STREAMS_OWNED, STANDARD_STREAMS_SHARED, STDIN_DELIVERED,
-        STDIO_DECOY_INBOUND, STDIO_DECOY_INPUT,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
@@ -8021,6 +8021,78 @@ mod tests {
             .unwrap_or_else(|| panic!("{id:?} is not in the shipped tables"))
     }
 
+    /// A shipped one-capsule row's payload — the script itself, not the `sh -c`
+    /// around it.
+    fn shipped_script(id: &RowId) -> String {
+        let row = shipped_row(id);
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("{id:?} is not a one-capsule row");
+        };
+        probe
+            .argv
+            .as_slice()
+            .last()
+            .unwrap_or_else(|| panic!("{id:?}'s payload is a shell script"))
+            .clone()
+    }
+
+    /// What a capsule printed, as lines.
+    fn printed_lines(bytes: &[u8]) -> Vec<String> {
+        String::from_utf8_lossy(bytes)
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// The two diagnostic lists a payload separated on, in the order the
+    /// prefixes are given.
+    ///
+    /// **Both, always, and each compared whole** by every caller (`F-33`): a
+    /// claim asserting only that *its* prefix appeared would pass a payload that
+    /// reported everything, or one that reported nothing it observed.
+    fn separated_by(reported: &[String], first: &str, second: &str) -> (Vec<String>, Vec<String>) {
+        let of = |prefix: &str| -> Vec<String> {
+            reported
+                .iter()
+                .filter(|line| line.starts_with(prefix))
+                .cloned()
+                .collect()
+        };
+        (of(first), of(second))
+    }
+
+    /// One shipped row, both arms, against a stub backend.
+    ///
+    /// **`run_arm` rather than `run_row`, and the reason is the stub, not the
+    /// row.** `run_row` provisions each arm through the backend under test, and
+    /// provisioning reads an identity back out of a capsule's stdout — a
+    /// backend whose every execution answers with a fixed payload therefore
+    /// never gets past `provision`, and the row reads
+    /// `Indeterminate(BackendError(IdentityNotPersisted))` before either arm's
+    /// observation is classified. That is `provision`'s own fail-closed
+    /// behaviour working correctly, and no stub in this suite reaches `run_row`
+    /// for that reason.
+    ///
+    /// What is preserved is everything a mutant is about: the **shipped** row's
+    /// shape and its `Observed`, the same `run_arm` both real arms take, the
+    /// arm's `Under` derived from the shipped row's own delta by [`under_for`],
+    /// and `row_verdict` reading the pair. Nothing about the claim is hand-built
+    /// except the placement the capsule closure hands back.
+    fn row_against(backend: &Stub, id: &RowId) -> RowVerdict {
+        let row = shipped_row(id);
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+        let confining = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &row.shape,
+        );
+        let weakened = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
+            &row.shape,
+        );
+        row_verdict(confining, weakened)
+    }
+
     /// One shipped row, both arms, through the one route a row reaches a backend
     /// by.
     fn shipped_verdict(id: &RowId) -> RowVerdict {
@@ -9521,18 +9593,9 @@ mod tests {
         println!("{ROW_TEN_VERDICT}{verdict:?}");
     }
 
-    /// Row 10's shipped payload — the script itself, not the `sh -c` around it.
+    /// Row 10's shipped payload — see [`shipped_script`].
     fn row_ten_script() -> String {
-        let row = shipped_row(&RowId::Property(Property::ClosedDescriptorSet));
-        let ArmShape::Single(probe) = &row.shape else {
-            panic!("row 10 is a one-capsule row");
-        };
-        probe
-            .argv
-            .as_slice()
-            .last()
-            .expect("row 10's payload is a shell script")
-            .clone()
+        shipped_script(&RowId::Property(Property::ClosedDescriptorSet))
     }
 
     /// `VT-1`, row 10.
@@ -9919,10 +9982,7 @@ mod tests {
             .arg(row_ten_script())
             .output()
             .expect("the payload runs under a shell");
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::to_owned)
-            .collect()
+        printed_lines(&output.stdout)
     }
 
     /// A backend that prints `lines` on **both** arms — a leak the removal does
@@ -9932,36 +9992,9 @@ mod tests {
         Stub::weakening_honestly(&borrowed, &borrowed)
     }
 
-    /// Row 10, both arms, against a stub backend.
-    ///
-    /// **`run_arm` rather than `run_row`, and the reason is the stub, not the
-    /// row.** `run_row` provisions each arm through the backend under test, and
-    /// provisioning reads an identity back out of a capsule's stdout — a
-    /// backend whose every execution answers with a fixed payload therefore
-    /// never gets past `provision`, and the row reads
-    /// `Indeterminate(BackendError(IdentityNotPersisted))` before either arm's
-    /// observation is classified. That is `provision`'s own fail-closed
-    /// behaviour working correctly, and no stub in this suite reaches `run_row`
-    /// for that reason.
-    ///
-    /// What is preserved is everything the mutant is about: the **shipped**
-    /// row's shape and its `Observed`, the same `run_arm` both real arms take,
-    /// the arm's `Under` derived from the shipped row's own delta by
-    /// [`under_for`], and `row_verdict` reading the pair. Nothing about the
-    /// claim is hand-built except the placement the capsule closure hands back.
+    /// Row 10, both arms, against a stub backend — see [`row_against`].
     fn row_ten_against(backend: &Stub) -> RowVerdict {
-        let row = shipped_row(&RowId::Property(Property::ClosedDescriptorSet));
-        let count = Cell::new(0);
-        let capsule = counting_capsules(&count);
-        let confining = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
-            &row.shape,
-        );
-        let weakened = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
-            &row.shape,
-        );
-        row_verdict(confining, weakened)
+        row_against(backend, &RowId::Property(Property::ClosedDescriptorSet))
     }
 
     /// `VT-3`, `EX-4` — `F-26`'s mutant: a backend that leaves one readable
@@ -10144,18 +10177,9 @@ mod tests {
         println!("{ROW_ELEVEN_DECOY_REPORT}VERDICT={verdict:?}");
     }
 
-    /// Row 11's shipped payload — the script itself, not the `sh -c` around it.
+    /// Row 11's shipped payload — see [`shipped_script`].
     fn row_eleven_script() -> String {
-        let row = shipped_row(&RowId::Property(Property::ClosedEnvironment));
-        let ArmShape::Single(probe) = &row.shape else {
-            panic!("row 11 is a one-capsule row");
-        };
-        probe
-            .argv
-            .as_slice()
-            .last()
-            .expect("row 11's payload is a shell script")
-            .clone()
+        shipped_script(&RowId::Property(Property::ClosedEnvironment))
     }
 
     /// `VT-1`, row 11.
@@ -10325,10 +10349,7 @@ mod tests {
             .envs(environment.iter().map(|(name, value)| (*name, value)))
             .output()
             .expect("the payload runs under a shell");
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::to_owned)
-            .collect()
+        printed_lines(&output.stdout)
     }
 
     /// The two diagnostic lists row 11's payload separated on, as
@@ -10340,33 +10361,12 @@ mod tests {
     /// row exists to close, one level further down again, and it was a live
     /// false green here before [`PROC_SHELL_ENVIRON`] was measured.
     fn separated_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
-        let of = |prefix: &str| -> Vec<String> {
-            reported
-                .iter()
-                .filter(|line| line.starts_with(prefix))
-                .cloned()
-                .collect()
-        };
-        (of(ENV_UNDECLARED), of(ENV_MISSING))
+        separated_by(reported, ENV_UNDECLARED, ENV_MISSING)
     }
 
-    /// Row 11, both arms, against a stub backend.
-    ///
-    /// `run_arm` rather than `run_row`, for the reason [`row_ten_against`]
-    /// gives: no stub in this suite gets past `provision`.
+    /// Row 11, both arms, against a stub backend — see [`row_against`].
     fn row_eleven_against(backend: &Stub) -> RowVerdict {
-        let row = shipped_row(&RowId::Property(Property::ClosedEnvironment));
-        let count = Cell::new(0);
-        let capsule = counting_capsules(&count);
-        let confining = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
-            &row.shape,
-        );
-        let weakened = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
-            &row.shape,
-        );
-        row_verdict(confining, weakened)
+        row_against(backend, &RowId::Property(Property::ClosedEnvironment))
     }
 
     /// `VT-3`, `VT-4`, `EX-4` — the passthrough mutant: a backend that omits
@@ -10532,18 +10532,9 @@ mod tests {
     // shows the failure appearing and disappearing with that constant is
     // recorded in the sheet.
 
-    /// Row 12's shipped payload — the script itself, not the `sh -c` around it.
+    /// Row 12's shipped payload — see [`shipped_script`].
     fn row_twelve_script() -> String {
-        let row = shipped_row(&RowId::Property(Property::OwnedStandardStreams));
-        let ArmShape::Single(probe) = &row.shape else {
-            panic!("row 12 is a one-capsule row");
-        };
-        probe
-            .argv
-            .as_slice()
-            .last()
-            .expect("row 12's payload is a shell script")
-            .clone()
+        shipped_script(&RowId::Property(Property::OwnedStandardStreams))
     }
 
     /// Row 12's two diagnostic lists, as `(delivered, inbound)`.
@@ -10554,14 +10545,7 @@ mod tests {
     /// substitution `EX-7` says a single whole-stdio mutant permits, one level
     /// further down.
     fn reported_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
-        let of = |prefix: &str| -> Vec<String> {
-            reported
-                .iter()
-                .filter(|line| line.starts_with(prefix))
-                .cloned()
-                .collect()
-        };
-        (of(STDIN_DELIVERED), of(INBOUND_READABLE))
+        separated_by(reported, STDIN_DELIVERED, INBOUND_READABLE)
     }
 
     /// A decoy body as the payload reports it — the trailing newline is the line
@@ -10662,10 +10646,7 @@ mod tests {
             }
         };
 
-        String::from_utf8_lossy(&printed)
-            .lines()
-            .map(str::to_owned)
-            .collect()
+        printed_lines(&printed)
     }
 
     /// Row 12's **probe** endpoints: what the shipping backend hands a capsule
@@ -10744,23 +10725,9 @@ mod tests {
         )
     }
 
-    /// Row 12, both arms, against a stub backend.
-    ///
-    /// `run_arm` rather than `run_row`, for the reason [`row_ten_against`]
-    /// gives: no stub in this suite gets past `provision`.
+    /// Row 12, both arms, against a stub backend — see [`row_against`].
     fn row_twelve_against(backend: &Stub) -> RowVerdict {
-        let row = shipped_row(&RowId::Property(Property::OwnedStandardStreams));
-        let count = Cell::new(0);
-        let capsule = counting_capsules(&count);
-        let confining = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
-            &row.shape,
-        );
-        let weakened = run_arm(
-            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
-            &row.shape,
-        );
-        row_verdict(confining, weakened)
+        row_against(backend, &RowId::Property(Property::OwnedStandardStreams))
     }
 
     /// `VT-1`, row 12.
