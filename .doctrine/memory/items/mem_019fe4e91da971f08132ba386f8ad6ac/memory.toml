@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe4e91da971f08132ba386f8ad6ac"
+memory_key = "mem.pattern.tests.name-the-exclusion-a-walk-cannot-cover"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A walk test's exclusion belongs in a named constant, not a filter predicate"
+summary = "A walk test's skipped member belongs in a named, count-asserted, mutation-checked constant"
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["tests", "coverage", "mutation"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "67a92263f0f4a680092e95f93ed8b50f2824764e"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "312718ac6d42c209c019dcc16df2fde50b11985f0363bd1cb9368460e23ef3ec"
+base_commit = "0f4b295cb0e50d1cb7e265cda850f50edd1802e3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
