@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe514-4fbd-7350-98dd-756f29199362"
+recorded_at = "2026-08-09T05:52:21.437511276Z"
+kind = "friction"
+summary = "PHASE-09 closed as 'gate exit 0' on a single green run of a race-carrying suite; the defect cost a whole extra worker dispatch to find and fix"
+detail = "SL-248 PHASE-09's conformance suite asserts on live processes, /proc entries, reaps and spawn windows. Its close-time evidence was one green 'doctrine check gate'. The orchestrator then measured 2/3 gate runs red on the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed against 3/3 green on bare cargo test — the gate builds immediately before testing, so load is the discriminator. Cost: the phase could not close, an extra worker dispatch was spent on a one-line-class defect, and pressing the suite under 24-way load then surfaced four MORE load-fragile sibling tests (F-35) that remain open. The friction is that neither /execute nor /phase-plan asks for a tally of gate runs when a phase's tests read a clock or a process — a single exit code is accepted as the phase's green. Skills involved: /execute (worker green claim) and /dispatch (orchestrator close-time gate)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

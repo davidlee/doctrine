@@ -1994,3 +1994,103 @@ property rather than a convenient consequence of it?
 Twelve rows walked, one named and excluded. The exclusion is `T9`'s, not `T12`'s:
 row 7 is unreadable through the shipped `Observed` vocabulary, and the choice of
 how to widen it is the orchestrator's (`F-25`).
+
+## PHASE-09 close-time defect — the pid-provenance test's unsound corroboration (`F-34`…`F-36`)
+
+Found by the orchestrator at close, after the phase's tasks were ticked:
+`doctrine check gate` red in **2 of 3** runs on
+`the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed`
+(`HostPid(<n>) does not resolve in this host's process table, so it is not a
+host pid`), against **3 of 3** green on bare `cargo test -p doctrine-control`.
+The gate builds immediately before testing, so the machine is loaded — that is
+the discriminator, and it is what says *race*, not *flake*.
+
+### `F-34` — the read was taken after the subject had been waited on
+
+The test asserts two things about the pid the trusted side handed the observer.
+`assert_ne!(subject, HostPid(DECOY_PID))` — the subject printed `SUBJECT-PID=1`
+and nothing believed it — is timing-independent and carried the real claim. The
+second, `session_of(subject).is_some()`, ran **after `run_arm` returned**. By
+then `execute_observed` has waited on the subject; a reaped process has no
+`/proc` entry, so the read was asking after a pid that no longer existed. It
+answered `Some` only when the reap lagged the assertion. Not a flaky test — an
+unsound one that a quiet machine kept rescuing.
+
+### The repair — resolve where liveness is *certified*, not where it is assumed
+
+Deleting the corroboration was the cheap fix and the wrong one: a pid that
+merely differs from the decoy could still be garbage, which is the failure the
+assertion exists to exclude. The resolution now rides the `Arm.live` seam:
+
+```rust
+let resolved: Cell<Option<SessionId>> = Cell::new(None);
+let live = |pid: HostPid| {
+    resolved.set(session_of(pid));
+    capsule_still_running(pid)
+};
+```
+
+and the post-arm assertion reads `resolved.get().is_some()`.
+
+**Why `live` and not `noticed`.** `noticed` fires earlier — the instant
+`observed_capsule_process` establishes the pid — and the subject is live there
+too, but only by an *argument* about `/proc` persistence before the reap; the
+test would assert nothing about it. `live` is the one point liveness is
+**certified**: `classify_concurrent` yields `Indeterminacy::NoObservation`
+unless this closure returned true, so the `assert_eq!(result, ArmResult::Held)`
+already in the test *is* the proof that the recorded resolution was taken while
+the subject ran. The seam that decides row B5's window is made to also witness
+the pid's provenance, and one assertion now backs both. Reads are ordered
+resolution-then-liveness so the weaker read is the earlier one. The claim is
+unchanged; only its footing is.
+
+**Empirical control, not just a green run.** The old assertion was temporarily
+restored beside the new one and the pair run 6× under 24-way CPU saturation:
+**5 pass / 1 fail**, the failure being the old form while the new form was green
+in the same process. That is the mutation-style evidence this slice asks for
+elsewhere (`R7`) — the repair is seen to matter, not assumed to.
+
+**Tally.** `doctrine check gate` **5 / 5 green unloaded**; green under an
+8-spinner load; the repaired test green in **every** run, including two runs
+under 24-spinner saturation that redded four of its neighbours (`F-35`).
+
+### `F-35` — four sibling row-B5 tests are load-fragile in the same class, **unfixed, owed upward as an `ISS-`**
+
+Under 24 spinning cores on a 32-core host, `doctrine check gate` failed 2 of 2 —
+never on the repaired test, always on its neighbours:
+`concurrent_capsules_cannot_signal_each_others_processes` (both runs),
+`concurrent_capsules_cannot_see_each_others_processes`,
+`control_with_the_pid_namespace_shared_both_become_possible`, and
+`the_sweep_reaches_what_row_b5s_control_leaks`. The symptom is
+`Indeterminate { arm: Probe, detail: NoObservation }`.
+
+That indeterminacy is the harness being **honest**: the subject's
+`SUBJECT_LINGER_SECONDS = 3` window closed before the observer capsule — a full
+bwrap provision and run — completed, so `subject_live_when_observer_ran` was
+false and the row correctly refused to report a verdict. The mechanism is right;
+the *fixture window* is too narrow to survive contention, and these tests assert
+a definite verdict unconditionally.
+
+Left unrepaired on purpose. The candidates are a tradeoff, not a fix: widening
+`SUBJECT_LINGER_SECONDS` taxes every concurrent row and interacts with
+`FIXTURE_TIMEOUT_SECONDS`, which `F-28` already cut 120 → 30 *because* row 8
+makes it a suite-runtime constant; a bounded retry on `NoObservation` folds
+fixture flakiness into the row algebra. Calibration for whoever takes it:
+unloaded 5/5 green, 8 spinners green, 24 spinners 0/2 — latent under today's
+gate, not active, but the gate's own build is real contention.
+
+### `F-36` — one green run is not verification of a timing-dependent suite
+
+`F-34` did not reach the orchestrator as a suspicion. It reached it as a phase
+claimed **"gate exit 0"** — a statement that was true and worthless, because one
+green run of a suite containing a race says only that the race was won once.
+This suite is unusually exposed: rows B5 and 7 assert on live processes, `/proc`
+entries, reaps and windows, so a large share of its assertions are statements
+about *when*, and `cargo test`'s parallelism plus the gate's preceding build
+make load a hidden variable in every run.
+
+The rule this phase paid for: **where a test reads a live process, a `/proc`
+entry, a window or a clock, the unit of evidence is a tally under load, not an
+exit code.** Both `F-34` and `F-35` were invisible to a single run and visible
+within minutes of running the suite repeatedly and under contention — and
+`F-35` is still open precisely because the cheap evidence never showed it.

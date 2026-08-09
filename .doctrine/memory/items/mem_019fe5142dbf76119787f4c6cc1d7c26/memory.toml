@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe5142dbf76119787f4c6cc1d7c26"
+memory_key = "mem.pattern.testing.timing-tests-need-a-load-tally"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Timing-dependent tests: tally under load, never one green run"
+summary = "A test that reads a live process, /proc, a window or a clock is verified by a tally under contention, not by a single exit code."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["testing", "flakiness", "conformance"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bf4f2e980e0206f66ca9ffb339a01e4f4463ef7e"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "8c364564a45e5587e5c38c79ca17f4849a5dd0106fee89f4fb521111a9a47371"
+base_commit = "51f73ab7cef191ebea599487a75135c8ceff1900"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

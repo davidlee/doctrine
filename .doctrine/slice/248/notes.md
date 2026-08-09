@@ -1107,6 +1107,54 @@ is the strongest evidence this slice has that the battery earns its cost.
     two-delta row cannot be spelled; the tables' count and id-distinctness are
     pinned instead. Full thirteen-row table in `notes_07-09.md` § `T12`.
 
+### From `PHASE-09` close-time defect repair (sheet `phase-09.md`, shard `notes_07-09.md`)
+
+102. **The pid-provenance test's corroborating `/proc` read was taken after the
+    harness had waited on the subject** (`F-34`). `session_of(subject)` ran after
+    `run_arm` returned, by which point `execute_observed` has reaped the subject
+    and its `/proc` entry is gone — so the read answered `Some` only while the
+    reap lagged the assertion. Measured at close: `doctrine check gate` red **2 of
+    3**, bare `cargo test` green **3 of 3**; the gate builds before it tests, and
+    the load is the discriminator. Not a flaky test — an unsound one a quiet
+    machine kept rescuing.
+103. **The repair resolves the pid where liveness is *certified*, not where it is
+    assumed** (`F-34`). Deleting the corroboration was cheaper and weaker — a pid
+    that merely differs from the decoy could still be garbage, which is the
+    failure it exists to exclude. The resolution now rides the `Arm.live` seam
+    (`resolved.set(session_of(pid))` before `capsule_still_running(pid)`) and is
+    asserted after. `live` beats the earlier `noticed` seam because
+    `classify_concurrent` makes `ArmResult::Held` unreachable unless that closure
+    returned true, so the `assert_eq!(result, Held)` already in the test **is**
+    the proof the read was taken while the subject ran. Liveness stops being an
+    argument and becomes an assertion. Empirical control: old and new assertions
+    run side by side 6× under 24-way saturation — 5 pass / 1 fail, the failure
+    the old form, the new form green in the same process.
+104. **Four *sibling* row-B5 tests are load-fragile in the same class, and this
+    one is not fixed** (`F-35`, **owed upward — wants an `ISS-`; this clone must
+    not mint ids**). Under 24 spinning cores the gate failed 2 of 2, never on the
+    repaired test: `concurrent_capsules_cannot_signal_…`,
+    `concurrent_capsules_cannot_see_…`, `control_with_the_pid_namespace_shared_…`
+    and `the_sweep_reaches_what_row_b5s_control_leaks`, all with
+    `Indeterminate { arm: Probe, detail: NoObservation }`. That is the harness
+    being **honest** — `SUBJECT_LINGER_SECONDS = 3` closed before the observer
+    capsule finished — so the mechanism is right and the *fixture window* is too
+    narrow to survive contention. Left alone deliberately: widening the linger
+    taxes every concurrent row and collides with `FIXTURE_TIMEOUT_SECONDS` (cut
+    120 → 30 by `F-28` for exactly this reason), and a retry on `NoObservation`
+    folds fixture flakiness into the row algebra. Calibration: unloaded 5/5
+    green, 8 spinners green, 24 spinners 0/2 — latent, not active.
+105. **One green run is not verification of a timing-dependent suite** (`F-36`).
+    `F-34` reached the orchestrator as a phase claimed *"gate exit 0"* — true and
+    worthless, since one green run of a suite containing a race says only that
+    the race was won once. This suite is unusually exposed: rows B5 and 7 assert
+    on live processes, `/proc` entries, reaps and windows, so much of it is
+    statements about *when*, and `cargo test`'s parallelism plus the gate's
+    preceding build make load a hidden variable in every run. **Where a test
+    reads a live process, a `/proc` entry, a window or a clock, the unit of
+    evidence is a tally under load, not an exit code.** Both `F-34` and `F-35`
+    were invisible to one run and visible within minutes of repetition under
+    contention; `F-35` is still open because the cheap evidence never showed it.
+
 
 ## Open
 

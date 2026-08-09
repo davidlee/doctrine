@@ -8172,6 +8172,16 @@ mod tests {
     /// a decoy about itself and the arm still holds, because nothing reads it;
     /// and the pid the harness did hand over resolves in the host's own process
     /// table, which a capsule-reported pid could not.
+    ///
+    /// The resolution is read **through the `live` seam**, not after the arm
+    /// returns. `/proc` only answers for the subject while the subject exists,
+    /// and by the time the arm returns the harness has waited on it — so a
+    /// post-arm read asks about a pid that is gone, and passes only when the
+    /// machine was quiet enough for the reap to lag the assertion. The seam is
+    /// the one point liveness is *certified* rather than assumed:
+    /// `classify_concurrent` makes [`ArmResult::Held`] unreachable unless this
+    /// closure returned true, so `Held` below is itself the proof that the
+    /// recorded resolution was taken while the subject was running.
     #[test]
     fn the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed() {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
@@ -8187,12 +8197,20 @@ mod tests {
             handed.borrow_mut().push(capsule);
             fixture.note_capsule_session(capsule);
         };
+        // Ordered so the recorded resolution is the weaker read of the two: if
+        // the liveness verdict that follows it is true — which `Held` requires
+        // — then the process was there for the read that came first.
+        let resolved: Cell<Option<SessionId>> = Cell::new(None);
+        let live = |pid: HostPid| {
+            resolved.set(session_of(pid));
+            capsule_still_running(pid)
+        };
         let result = run_arm(
             &Arm {
                 backend: &backend,
                 capsule: &untouched,
                 execution: &harness_execution,
-                live: &|pid| capsule_still_running(pid),
+                live: &live,
                 noticed: &noticed,
                 under: Under::Confining,
             },
@@ -8219,8 +8237,9 @@ mod tests {
             "the harness used the pid the subject printed about itself"
         );
         assert!(
-            session_of(subject).is_some(),
-            "{subject:?} does not resolve in this host's process table, so it is not a host pid"
+            resolved.get().is_some(),
+            "{subject:?} did not resolve in this host's process table while the \
+             subject was running, so it is not a host pid"
         );
         let _swept = fixture.sweep_observed_sessions();
     }
