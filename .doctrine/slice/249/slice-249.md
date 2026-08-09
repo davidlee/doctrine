@@ -226,8 +226,12 @@ Also out of scope:
   third one.
 - `src/design_run/submission.rs` — `CreateRecord`, `Declaration`, and the
   subject-kind correspondence table.
-- `src/design_run/admission.rs` — where the correspondence refusal belongs; the
-  rule/record check already lives here.
+- ~~`src/design_run/admission.rs` — where the correspondence refusal belongs; the
+  rule/record check already lives here.~~ *Corrected at reconcile (`RV-351`
+  `F-2`): the refusal landed in `Batch::validate`
+  (`src/design_run/submission.rs`), the batch's admission gate, which runs
+  before any arm touches the working snapshot. `admission.rs` was not touched
+  and is no longer a declared selector.*
 - `src/design_run/refusal.rs` — the typed fault.
 - `src/commands/design.rs` — `plan_checkpoints`, ISS-318's first instance.
   *(Amended in review: also `execute_mint` — DEC-086 step 1 journals the payload
@@ -239,6 +243,13 @@ Also out of scope:
   responsibility (objective 4), landed through a REV.
 - `.doctrine/spec/product/010/` — § 4's kind-set enumeration, the REV's second
   entity (DEC-175).
+
+*Reconcile note (`RV-351` `F-3`): the implementation also touched eleven paths
+this list never anticipated — the `KeyPosture` call site, doctor check #12's
+registry and `Finding` category, a CLI-variant guard classification,
+`PHASE-08` `T1`'s shared body-flag helpers, three design-run support files and
+the coverage canary. All eleven are now declared in the selector registry and
+enumerated with their reasons in `design.md` § 6.*
 
 ## Risks, assumptions, open questions
 

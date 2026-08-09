@@ -247,3 +247,147 @@ cell red. Name the verb; cite §6 as its mirror.
   `mem.pattern.verification.guard-blind-to-its-own-residue`, `05e0de495`).
   Explicitly **not** actioned: widening the canary to cover facet-enum lists —
   that chases one adjacent shape and leaves the class open.
+
+## Reconciliation Outcome
+
+Fourteen brief items, thirteen requiring a write. All written. **No `REV` was
+minted** — the brief's governance/spec section is empty by construction:
+`SL-249`'s amendment already landed as `REV-050` (`done` · `approved`) inside
+`PHASE-07` per `DEC-182`, and a slice's `design.md` is not a legal `revises`
+target (`ADR-013`). Every item below was a direct edit.
+
+### Selector registry — the load-bearing surface (`slice-249.toml`)
+
+Conformance reads the registry, not the prose, so these are the writes that
+actually move the cells.
+
+- **`F-2`** — `doctrine slice selector rm 249 src/catalog/scan.rs
+  src/design_run/admission.rs`. Both were candidate homes the implementation did
+  not use. The **shared `design-target` note** was rewritten in the same pass:
+  it still enumerated `admission.rs` as the refusal's home and
+  `catalog/scan.rs` as the tripwire's, so removing the rows while leaving the
+  note would have left the registry asserting the same staleness one field
+  over.
+- **`F-3`** — `doctrine slice selector add 249 … --intent design-target` for all
+  **eleven** paths the audit re-derived, superseding the `PHASE-07` ledger's
+  "one file to three": `src/commands/facet.rs`, `src/commands/doctor.rs`,
+  `src/commands/guard.rs`, `src/finding.rs`, `src/input.rs`, `src/memory.rs`,
+  `src/design_run/ids.rs`, `src/design_run/run.rs`, `src/design_run/tests.rs`,
+  `tests/e2e_mcp_server.rs`, `tests/governance_kind_coverage.rs`. Each carries
+  its reason in the batch note.
+- **Cells before → after:** `undelivered (2) → (0)`; `conformant (7) → (18)`;
+  `undeclared (91) → (80)`, the residue being `.doctrine/**` authored entities
+  plus `LOOP.md` and the five canary fixture files, which the brief judged out
+  of scope.
+
+> **A correction to the brief's mechanism, found while making the edit.** The
+> brief recorded `src/design_run/*` as "already riding the `scope-relevant`
+> selector" and therefore needing nothing. It does ride it, and that does **not**
+> discharge the undeclared cell: `conformance::compute` is handed the
+> `design-target` selectors alone (`src/slice.rs`'s conformance shell,
+> `src/conformance.rs`), which is why the design-run trio sat in the cell
+> despite `src/design_run/**` being declared — and why `undeclared_detail`'s own
+> remediation line hardcodes `--intent design-target`. Adding the eleven as
+> `scope-relevant` would have left the cell red, which is the brief's own
+> warning one level deeper. All eleven were declared `design-target`.
+> Recorded here rather than raised as a finding: it is a mechanism fact
+> validated while locating the edit point, not new issue discovery.
+
+### Direct edits — `design.md`
+
+- **`F-1`** (seven sites, all seven written) — the amendment landed in
+  `PHASE-07`, not at reconcile. § 3's `ADR-013` bullet; § 5.3's `D8a` carry;
+  § 6's *"Open, and resolving at REV authorship"* heading and lead-in (now
+  *"Open at drafting, resolved at REV authorship"*, with `inq-7` and `inq-9`
+  each carrying their `REV-050` disposition); § 6's `ADR-013`-apply-path
+  unknown (answered: `apply` auto-lands `status` rows only, `modify` rows
+  surface for manual landing — and `D8a` did not ride the REV at all); § 7's
+  `D8a`; § 10 press items 3 and 5. `DEC-182` is **not** reopened — only the
+  design's account of it is corrected.
+- **`F-4`** — § 5.1: the declaration struct is `FacetFieldRow`, with the
+  `ISS-329` ruling and the `Row`-over-`Spec`/`Decl` reasoning recorded. Three
+  spellings corrected (struct, `facet_fields` signature, § 5.2's `FacetEdit`).
+- **`F-5`** — § 5.5: `I10`'s quantifier narrowed per `DEC-183` — refused at that
+  kind, **or some** submission at that kind makes it effectful. The non-vacuity
+  argument (three positive controls, four state-inert cells named in the test
+  module) is kept, since the narrowing is what makes it load-bearing.
+- **`F-6`** — § 5.2: the derivation stated as **status-seeded ∩ facet row**, with
+  `decided_by`/`decided_on` named as the fifth state a literal facet-only read
+  admits. Aligns § 5.2 with `DEC-178`'s "exact correspondence"; does not amend
+  it. Verified against the shipped `derived_settleable` doc comment.
+- **`F-7`** (both halves) — § 5.2: (a) the wire ships `WireFacetValue`, with the
+  layering constraint that forced it (`RawValue` in `knowledge`, command tier;
+  `design_run` declared `leaf`/`out=0` at `.doctrine/adr/001/layering.toml:31`).
+  (b) **`CHR-060`'s contested premise**, in a block quote addressed to whoever
+  picks it up: `facet_write`'s type is key + value (verified —
+  `FacetField::Str { key, value }` / `Arr { key, values }`), so it really *is* a
+  field and an unkeyed value type has the better claim to `FacetValue`. This
+  brief item was its only carrier.
+- **`F-8`** — § 10 press item 2 struck, with the misattribution to `DEC-178`
+  stated and the two arguments that keep `settle` standing on its own recorded.
+  Struck in place rather than deleted, so items 3–7 keep their numbers and the
+  strike is legible.
+- **`F-11`** — § 5.2, one note: the kind-dispatched payload ships as
+  `Option<Box<KnowledgeFacetEdit>>`, forced by `clippy::large_enum_variant`
+  under a zero-warnings gate. *Sited at the CLI surface rather than at `D4`: the
+  finding cites `D4`, but this design's `D4` is "the wire's prose key is
+  `body`" and `KnowledgeFacetEdit` appears nowhere in `design.md`. The fact is
+  recorded where the reader meets the verb; no id is owed either way.*
+- **`F-12`** — § 5.2, new subsection *"`settle` is a one-way door per record"*.
+  Stated precisely rather than broadly: the door is one-way for `invalidated`
+  (`ASM`) and `waived` (`CON`), which sit in both the settleable set and
+  `WITHDRAWN_STATUSES` while `settle` refuses a withdrawn record. `validated`
+  and `answered` are not withdrawn, so `ASM` may still travel
+  `validated → invalidated` — into the same terminal place. With the
+  state-to-itself refusal every kind's settle graph is acyclic and at most one
+  step deep. The escape is `knowledge status` + `knowledge edit <kind>`
+  (verified: `set_record_status` validates the token and carries no withdrawn
+  guard), which is `I4`, not an oversight.
+- **`F-13`** — § 9, new subsection *"Sole guards — read this before waiving a
+  `VT`"*. `VT-3` is `EX-5`'s sole guard; blast radius **measured** at exactly one
+  test (`skip_serializing_if` → `skip_serializing`). Sited in § 9 because that
+  is the section read when deciding whether a criterion still earns its test —
+  `plan.toml`'s criteria are immutable-append and not a reconcile surface.
+- **`F-10`** — § 9, new subsection *"When a red cannot be staged"*. The
+  structural shape (under `warnings = "deny"` with `-D dead-code`, an enabling
+  task landing before its test task cannot stage a red and owes a positive
+  control), its three instances, and `PHASE-05`'s permanently-open control as
+  the standing example of leaving it unstated.
+- **`F-9`** (`tolerated` — stated, not fixed) — § 9, new subsection *"The
+  evidence this slice did not get"*. `PHASE-01`'s `EN-2` extraction rests on
+  inspection; the control is unrecoverable, not merely unrecorded; the two
+  mitigating facts (narrow inspectable equivalence; `LOOP.md` fixed mid-slice)
+  are recorded as grounds, and the section says plainly that every `VT` passing
+  does not make the gap smaller. **No test was written** — one now would prove
+  today's behaviour equals today's behaviour.
+
+### Direct edits — `slice-249.md`
+
+Not in the brief, and owed by the same two findings: § *Affected surface* is the
+scope card's own mirror of the registry and it carried `F-2`'s stale claim
+verbatim.
+
+- **`F-2`** — the `src/design_run/admission.rs` bullet ("where the correspondence
+  refusal belongs") struck and corrected to `Batch::validate` in
+  `src/design_run/submission.rs`.
+- **`F-3`** — a reconcile note recording that eleven paths the list never
+  anticipated were touched, pointing at `design.md` § 6 for the enumeration.
+
+### Carried to close, not written here
+
+- **`F-15`** — `IMP-403` leads 3–5 need minting; `CHR-056` and `CHR-060` stay
+  open. `CHR-060` inherits `F-7`'s contested premise, now durably carried in
+  `design.md` § 5.2 — the close checklist should point at it, since whoever
+  picks up `CHR-060` must read it before acting on the rename.
+
+### No write owed
+
+- **`F-14`**, **`F-16`** — `aligned`, carried by the memory corpus
+  (`05e0de495`). Nothing written; the closing story names them.
+
+### Escalation
+
+None. No brief item required a design-model change, and no item named a surface
+reconcile does not write (no `plan.toml` criterion edit was asked for or made).
+
+Reconcile pass complete — handoff to `/close`.
