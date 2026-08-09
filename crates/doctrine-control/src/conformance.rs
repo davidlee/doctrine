@@ -6126,8 +6126,14 @@ mod tests {
     fn the_sweep_never_signals_the_machines_own_sessions() {
         let own = Some(SessionId(4242));
 
-        assert!(!signallable(SessionId(0), own), "session 0 is the machine's");
-        assert!(!signallable(SessionId(1), own), "session 1 is the machine's");
+        assert!(
+            !signallable(SessionId(0), own),
+            "session 0 is the machine's"
+        );
+        assert!(
+            !signallable(SessionId(1), own),
+            "session 1 is the machine's"
+        );
         assert!(!signallable(SessionId(-1), own));
         assert!(
             signallable(SessionId(4243), own),
