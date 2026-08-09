@@ -1812,6 +1812,34 @@ under the sheet's own fallback.
     probe **and** control a `Held` — `EX-3`'s vacuous pass, caught only by
     `every_shipped_rows_control_is_seen_to_fail`.
 
+156. **`setsid(2)` moves an escapee out of the process group *and* the session,
+    so the harness's own sweep would not reach it either (`F-42`).** Measured:
+    the escapee leads a new session and a new process group, both equal to its
+    own pid, and reparents to `ppid 1` the moment its parent exits. The only
+    production noticer is `note_capsule_session(capsule_pid)`, which records the
+    **capsule's** session and nothing below it — `capsule_session_leader`
+    descends specifically to *exclude* the escapee. So a session sweep misses a
+    `setsid` escapee exactly as a process-group reaper does, and after the parent
+    exits no descent can find it at all. What contains row 7 today is neither
+    reaper but the **pid namespace**, whose init holds the captured descriptors
+    until it empties; the cost is paid in wall time, not leaked processes.
+    Corollary for whoever wires the row: an arm removing `ProcessVisibility`
+    alongside `Teardown` would leak a real host process for `ESCAPE_SECONDS`.
+
+157. **A guard that fires is the deliverable; landing it is a separate decision
+    (`F-43`).** The `S4` guard for row 7's host-dependent discriminating power
+    was built on the existing `HostFacts` seam, run, and *seen to fail* with a
+    stop-and-consult message that names the remedy and forbids the three wrong
+    fixes (narrow, `#[ignore]`, switch the payload). It is honest on both hosts.
+    It was deliberately **not landed**: row 7's arm still reads through `Token`
+    and reports an honest `NoObservation`, so the vacuity is not live, and it
+    becomes possible only when the arm is wired to `Unspoken` — which is blocked.
+    A permanently-red test on a shared branch teaches the next reader to ignore
+    red, so the guard belongs in the same commit as the wiring, and its source is
+    in the sheet for whoever lands it. The general point: *"a guard you have not
+    seen fire is a guard you have not got"* is about **evidence**, and evidence
+    does not require the guard to be resident.
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
