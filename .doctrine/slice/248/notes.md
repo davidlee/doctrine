@@ -908,6 +908,206 @@ is the strongest evidence this slice has that the battery earns its cost.
     battery passed; the teardown happened during `T12`, before the guard inside
     it was committed. Sheet `F-36`.
 
+### From `PHASE-09` execution (sheet `phase-09.md`, shard `notes_07-09.md`)
+
+<!-- Every `F-` from the PHASE-09 sheet, in order, so nothing lives only in
+     gitignored runtime state. Items that owe no action say so. -->
+
+69. **The PHASE-08 `#[cfg(test)]` stopgap does not serialise row B5, it
+    *deadlocks* it** (`F-1`). `Arm::observe_concurrently` runs the observer
+    capsule *inside* `execute_observed`'s callback, on the same thread, below a
+    non-reentrant mutex taken in `run`. Traced at plan time, measured at `T1`.
+70. **PHASE-08's owed-upward item is discharged in-phase, not by an issue**
+    (`F-2`). The production fix landed as `T1`; the merge owes the *record* of
+    the defect and its fix, **not** a live `ISS-`. `serialised_descriptor_window`
+    is deleted rather than kept alongside the real guard.
+71. **A doc comment attributed table B to the wrong phase** (`F-3`). `:2482` said
+    table B was "empty until PHASE-10"; `EX-11`/`VT-4`/`VT-5` land it at
+    PHASE-09. Two neighbouring comments were stale the moment `T4` landed.
+    Corrected in `T4`. Same drift class as `RV-346` `F-28`, one altitude down.
+72. **`doctrine slice research <n>` writes rather than reports** (`F-4`). It
+    mints `research/baseline.toml`; gitignored, so no authored state moved and
+    `C2` is not breached — but a staleness *advisory* whose name suggests a read
+    is one that mutates. Awareness only, no action owed.
+73. **The stopgap is retired and the fix needed no design change** (`F-5`).
+    `DESCRIPTOR_WINDOW` + `fork_within_the_descriptor_window` in
+    `bubblewrap.rs`; nothing above it moved, so `S1` did not fire and neither
+    `design.md` nor `plan.md` needs amending. Two carried facts: `T1`'s evidence
+    is split across `bubblewrap.rs` and `conformance.rs` **by necessity**, and
+    the row-altitude concurrency test does *not* discriminate the guard — only
+    the mechanism-altitude stress (4 threads × 60 rounds) reds the mutant, so
+    its constants are measured and must not be trimmed as flake-padding.
+74. **Row 7's control fires; what row 7 cannot do is *see* it through a capture
+    pipe** (`F-6`). `EVD-013`'s 2×2 is unchanged, so `S2` does not fire —
+    `--die-with-parent` is what reaps. The fifth cell is what matters: with the
+    arm's stdout on a **file** rather than a pipe, `bwrap` exits in ~0 s and the
+    escapee is plainly alive. `wait_with_output` reads the capture to EOF and
+    the namespace's init holds that descriptor, so the obvious construction is a
+    **false `Unproven` that looks exactly like a passing row**.
+75. **A deny list welds `T4` to `T5`–`T11`** (`F-7`). `dead_code` is denied and
+    only `table_a()` constructs a `Property`, so the eight variants and the
+    eight rows are one compile; `unfulfilled_lint_expectations` forces the
+    `#[expect]` deletion into the same edit. The plan's task decomposition
+    cannot be honoured as written under this crate's lints. Predicted by
+    `mem.pattern.lint.staged-module-unused-deny-collapses-tdd`; what that memory
+    does not say is that the collapse reaches **across task boundaries**.
+76. **`Argv` needed a total constructor, and it is a production change outside
+    `conformance.rs`** (`F-8`). `Argv::new(head, tail)` in `config.rs`, non-empty
+    by construction, because payload argvs are fixed and the crate denies
+    `unwrap`/`expect`/`panic`. No behaviour changed; it wants a brief line
+    because it is a production addition in another file.
+77. **`run_row` split into `run_probe_arm` + `run_control_arm`** (`F-9`). Five
+    storage rows share one `Delta::SharedRoot` and a `RowVerdict` reports only
+    that *the* control failed, so five `Proven` assertions rested on a control
+    nobody had watched fail. The split is *inside* `run_row`'s route, so
+    `A4`/invariant "a row reaches the backend only by `run_row`" is intact.
+78. **The fixture commits an ephemeral listener port** (`F-10`). Payloads are
+    constants built before the fixture exists, so the port travels through the
+    clone as a committed file. Ordering constraint: the bind must stay **above**
+    `initialise_project` or the port is committed to nothing.
+79. **Four rows landed knowingly incomplete, by the weld in item 75** (`F-11`).
+    Rows 2, 4 (→ `T6`), 5 (→ `T7`) and 7 (→ `T9`). All discharged except row 7.
+80. **A test swept process-wide descriptor flags outside the production guard**
+    (`F-12`). `check gate` redded once; the culprit test re-marked a cleared
+    status descriptor inside another test's fork window — the exact corruption
+    `T1`'s guard exists to exclude. Fixed at the test. Durable as
+    `mem.pattern.tests.process-wide-state-needs-the-production-guard`.
+81. **Three stale doc comments closed, one open** (`F-13`); `F-3`/item 71 is
+    fully discharged, no further action owed.
+82. **Row 2's "each bound path" is each *mount*, not each `PATH` entry**
+    (`F-14`). Read as `PATH` entries the row is unsatisfiable on NixOS and
+    permanently indeterminate; read as mounts it is exact, because a `PATH`
+    entry's first component *is* a readable root. Candidates are a **named**
+    list (`sh`, `cat`, `head`, `env`, `true`) — "the first executable in the
+    directory" would eventually exec `reboot`. A reading of the design's
+    wording, not a departure, but the brief should carry the reading.
+83. **The decoy repository had no secret to deny; it does now** (`F-15`). Row 3
+    reads three paths — credential, secret blob, and `.git/HEAD`.
+    `commit_everything` also replaced two open-coded config-add-commit runs; git
+    identity is per-*repository* and the decoy is the fixture's second one.
+84. **Row 4's `/` enumeration is derivable after all** (`F-16`); item 79's row 4
+    entry is discharged. The permitted set is the profile's inner destinations
+    plus the first component of each `PATH` entry. Mutation-checked.
+85. **Item 80's class recurred twice in the *other* direction and is now a named
+    seam** (`F-17`). A *reader* of process-wide state is as much a party to the
+    guard as a writer. Repair: `hold_descriptor_window()`, `pub(crate)` — a
+    guard nobody outside the module can take is a guard everyone will skip.
+    Three sightings in one phase makes it a class, not a footnote.
+86. **`S3` does not fire: row 5's abstract leg is denied by the same mechanism**
+    (`F-18`), measured. Row 5 stays one row and `sec-9` residual 2's weakening
+    vocabulary is not widened. The payload holds only if both legs were refused
+    and fails only if both connected, so a disagreement surfaces as
+    `Indeterminate` rather than being averaged into a pass.
+87. **`/dev/tcp` was a latent false `Unproven`; both legs now use `socat`**
+    (`F-19`). `/dev/tcp` is a **bash extension** and `SHELL` is contracted only
+    to be POSIX. This is a **host dependency row 5 did not previously have**:
+    without `socat` the row reads `Indeterminate` rather than silently passing.
+88. **The fixture binds a second listener with a per-run abstract name**
+    (`F-20`). Several fixtures are alive at once under the harness's threads, so
+    a fixed abstract name fails the second `bind_addr` with `EADDRINUSE`. Both
+    listeners are asserted **not** inheritable — a leaked trusted-side listener
+    would hand row 5 its answer through the descriptor table, not the network.
+89. **Row 6's second cwd is varied in a child process; `D1` route 2 does not
+    exist** (`F-21`). `Command::current_dir` on the bubblewrap spawn would
+    require `Execution`, `CapsulePlacement`, `SpawnOptions` **and**
+    `ConformanceBackend` each to carry a working directory — `S1`'s shape, a
+    production type widened on the security boundary for a test, so not taken.
+    Route 1 (mutating the process cwd) is rejected concretely: `operator_regions`
+    reads `current_dir()` when choosing a fixture's readable roots, so it would
+    change what every *other* concurrent test's capsule can see.
+90. **One cwd cannot state row 6's property** (`F-22`). From a single directory,
+    "fixed at `/capsule`" and "merely unequal to this directory" are
+    indistinguishable; the design's table separates them only by having two rows
+    without `--chdir`. Each child therefore reports two readings. The design's
+    row 6 should say which of the two it means.
+91. **The row 6 instrument is an `#[ignore]`d test selected by a named
+    constant** (`F-23`). `--exact` **fails open** — a rename that forgets the
+    constant selects zero tests and measures nothing quietly. Anyone adding a
+    second re-executing instrument should copy that shape.
+92. **`S8` fires. Row 7's two arms produce a byte-identical `Observation`, and
+    the shipped `Observed` vocabulary is one variant short** (`F-24`). `classify`
+    reads `termination` and `stdout` and nothing else; both are equal on both
+    arms. The **only** difference is elapsed wall time, which no `Observed`
+    variant sees. The `Observed::Termination(TimedOut)` route reasoned about
+    before measuring is dead: with the escaping payload the bound never fires,
+    and with a long payload both arms read `TimedOut`.
+93. **The mechanism *does* discriminate — cleanly, in ~5 s — and only the truth
+    table refuses it** (`F-25`). With the escapee's stdout inherited and made to
+    speak after its parent is gone: `Confining -> Held`,
+    `Removing(Teardown) -> Indeterminate{AmbiguousObservation}`. This also
+    settles `S2` in the negative — `--die-with-parent` **is** required, so row 7's
+    control stays `Removed(Teardown)` and is not switched to `ProcessVisibility`
+    (`EX-8`). What blocks it is one cell: `Observed::Token` maps *(held present,
+    failed present)* to `AmbiguousObservation`, but here the second token arrives
+    from a **different process after the capsule exited**, which is not the
+    ambiguity that cell guards. Three fixes exist — (a) a new `Observed` variant,
+    (b) re-reading `Token`'s both-present cell globally, (c) a trusted-side
+    observation through `Arm.live`/`noticed` — and **all three widen the
+    observation vocabulary the design fixed**. `T9` is `[blocked]` on that choice,
+    not on measurement; everything else it asks for is unblocked the moment the
+    observation is named. **This is the one item PHASE-09 owes upward as a
+    decision.**
+94. **Removing teardown also neuters the wall bound** (`F-26`). `timeout -k`
+    wraps `bwrap` from outside; killing `bwrap` no longer kills what it started,
+    so the payload keeps the capture pipe and `wait_with_output` returns only
+    when *it* finishes — 3.00 s against 10.02 s under the same 3 s bound. Two
+    consequences: any control that removes teardown pays its payload's full
+    natural runtime, and `TimedOut` on such an arm does **not** mean the arm was
+    bounded, only that the wrapper fired.
+95. **`setsid(1)` is absent from this jail; row 7's shipped payload would
+    silently never escape here** (`F-27`, `S6`-shaped). A missing `setsid` makes
+    the whole escape a no-op that still prints the liveness marker. Reproducible
+    with `python3` (`os.fork()` + `os.setsid()`); `perl` is absent too. Whoever
+    unblocks item 93 must either switch the payload's escape mechanism or accept
+    that row 7 is unmeasurable in this environment.
+96. **`FIXTURE_TIMEOUT_SECONDS` lowered 120 → 30, because row 8's wall half
+    makes it a suite-runtime constant** (`F-28`). The row costs
+    `3 × FIXTURE_TIMEOUT_SECONDS` every run, irreducibly — six minutes at 120.
+    Measured after: the whole `doctrine-control` suite is **90.73 s / 227 tests**,
+    of which 90 s is that row. That is `R4`'s number for PHASE-10 to inherit. 30
+    keeps an order of magnitude over the longest real payload (3 s).
+    `ESCAPE_SECONDS`'s doc comment claimed the wall bound would otherwise "reap
+    the whole tree"; `T9` measured that false on both arms, and it now says the
+    relation is decorative.
+97. **`NotExecutable` and `Exited { code: 127 }` are separated by `child_ran`
+    alone, and bwrap's own exec-failure code is 1, not 127** (`F-29`). The
+    design's pairing reads as though exit codes tell them apart. Mutation-proved
+    (`if true || child_ran` reds both tests with `left: Exited { code: 1 }`). An
+    argv-refusal payload must be asserted on the *outcome*, never on a code, and
+    `NotExecutable` carries no liveness marker of its own.
+98. **Three of row 8's five variants carry no control, and are read as arms
+    rather than as rows** (`F-30`). `Exited`, `Signalled` and `NotExecutable` are
+    observations of what the OS reported; no confinement property's removal
+    changes them, so there is nothing for `run_row` to apply. Not a bend in
+    `A4` — they are not row tests. Distinction is established in five runs, not
+    twenty-five: `Observed::Termination` classifies by equality, so holding
+    against your own variant *is* failing against every other.
+99. **B5's two positive readings are split into two rows** (`F-31`). `EX-12` asks
+    for two positive assertions and the shipped observer folds both into one
+    token, so a control restoring only one would still read as restoring "the"
+    reading. Same subject, same delta, same shape; only the condition differs.
+    The control is then read as an *arm* across both halves, because `Proven`
+    says *the* control failed and the claim is that **both** became possible.
+100. **The pid-provenance test needed a subject that lies and a capsule that
+    would believe it** (`F-32`). The subject prints `SUBJECT-PID=1` because `1`
+    is what `$$` reports in a fresh pid namespace and `/proc/1` **exists** inside
+    the observer's — so a harness that believed the subject would fail the arm,
+    which makes the arm holding the assertion rather than decoration. One
+    mutation (`HostPid(1)` in `observe_concurrently`) reds all three tests.
+    **A trap paid for on the way:** a concurrent arm runs two capsules, and a
+    directly-built `Arm` handing both one cloned `CapsulePlacement` fails with
+    `MechanismFailed("No such file or directory")` — the two runs race the single
+    status file in the shared transaction root.
+101. **`VA-4` walked per row, and row 7 is the only row whose control cannot be
+    seen to fail** (`T12`). `every_shipped_rows_control_is_seen_to_fail` asserts
+    `run_control_arm == Failed` for twelve of thirteen rows; the exclusion is a
+    **named** constant, and moving it reds the walk on row 7 with
+    `NoObservation`. Invariant 3 is carried by the types — a `Row` holds one
+    `shape` and one `delta`, and `run_row` hands that shape to both arms — so a
+    two-delta row cannot be spelled; the tables' count and id-distinctness are
+    pinned instead. Full thirteen-row table in `notes_07-09.md` § `T12`.
+
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The

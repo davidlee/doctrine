@@ -1943,3 +1943,54 @@ directly-built `Arm` that hands both of them one cloned `CapsulePlacement` fails
 with `MechanismFailed("No such file or directory")`: the two runs race the single
 status file in the shared transaction root. `run_probe_arm` provisions per call for
 exactly this reason, and anything assembling an `Arm` by hand has to do the same.
+
+### `T12` — `VA-4`: the thirteen-row walk, per row rather than in aggregate
+
+Two invariants, confirmed one row at a time because a verdict cannot distinguish
+them. `RowVerdict::Proven` is *probe `Held` and control `Failed`*, so reading it
+back to prove "the control was seen to fail" is circular; and a row whose arms
+differed by two things would still read `Proven`.
+
+**Invariant 2 — the control was seen to fail.** Executed, not argued:
+`every_shipped_rows_control_is_seen_to_fail` walks `tables()`, calls
+`run_control_arm` on each row, and asserts `ArmResult::Failed` per row, sweeping
+between rows. Twelve of thirteen; 7.25 s. The one exclusion is **named in the
+source** as `UNWALKED` rather than filtered silently — an exclusion nobody can
+see is how a walk starts lying. Mutation-checked by moving `UNWALKED` to another
+row: the walk then reds on row 7 with
+`Indeterminate { reason: NoObservation, termination: Exited { code: 0 }, stdout: "LIVE\n" }`,
+which is `T9`'s blockage reproduced from the walk's own side. So the test is not
+vacuous and the exclusion is not cosmetic.
+
+**Invariant 3 — one typed `Delta`, one `ArmShape`.** This one is carried by the
+types, not by discipline: a `Row` holds **one** `shape` and **one** `delta`, and
+`run_row` hands `row.shape` to both arms, so a row whose arms differ in two
+places or run different shapes cannot be spelled. What a test can still add is
+that the shipped tables are the tables the design describes —
+`the_shipped_tables_are_thirteen_distinctly_identified_rows` pins the count at 13
+and the ids as distinct, so a row silently duplicated or dropped cannot pass as
+the walk having covered it.
+
+**The walk.** `EX-13`'s two payload rules read per row: is the payload the
+*hardest* instance of the property's negation, and does the row observe the
+property rather than a convenient consequence of it?
+
+| row | shape | delta | control seen to fail | hardest negation | observes the property |
+|---|---|---|---|---|---|
+| A1 `FreshMutableState` | `Sequential` | `SharedRoot` | yes — walk + `control_second_transaction_in_the_first_root_does_share_each_storage_axis` | writes a sentinel to **every** declared writable location, then a second transaction reads them all | reads back what a *prior transaction* wrote, not merely that the dir is empty |
+| A2 `BoundedInputSet` | `Single` | `Widened(decoy executable)` | yes — walk | execs from **every mount root its own `PATH` names**, not one probe binary (`F-14`) | the decoy is reached by exec, not by `stat` — the property is what can *run* |
+| A3 `DeniedCanonical…` | `Single` | `Widened(credential + repo decoys)` | yes — walk | three paths, incl. the decoy's `.git/HEAD`: unreachable history with a readable ref tip is still canonical state handed over (`F-15`) | reads the secrets themselves; counted, not short-circuited, so a partial reach prints neither token |
+| A4 `BoundedFilesystemVisibility` | `Single` | `Widened(undeclared decoy)` | yes — walk | both halves: the undeclared decoy *and* a full `/` enumeration against a derived permitted set (`F-16`) | an unexpected leaf is named `UNEXPECTED-<leaf>`, so the row sees the host showing through, not just one path |
+| A5 `ExplicitNetworkPosture` | `Single` | `NetworkPermitted` | yes — walk | **both** legs — TCP and abstract-unix — through `socat`, to trusted-side listeners that exist (`F-18`, `F-19`) | holds only if both legs were refused, fails only if both connected; a disagreement is `Indeterminate`, never averaged into a pass |
+| A6 `DeterministicWorkingDirectory` | `Single` | `Removed(WorkingDirectory)` | yes — walk | the trusted-side cwd is *varied* across a re-executed child, so "fixed at `/capsule`" is separated from "unequal to one directory" (`F-21`, `F-22`) | `Observed::Exactly(/capsule)` — the directory itself, not a proxy for it |
+| A7 `ProcessTreeTeardown` | `Single` | `Removed(Teardown)` | **no — `UNWALKED`** | payload escapes its own session; but `setsid(1)` is absent in this jail (`F-27`) | **blocked at `T9`/`S8`**: both arms yield a byte-identical `Observation`, so `classify` cannot read this row at all (`F-24`, `F-25`) |
+| A8 `TrustedTerminationObservation` | `Single` | `Removed(ResourceBound(FileSize))` | yes — walk | writes `OVERSIZE_MULTIPLE ×` the cap; the wall half overruns its bound by `WALL_OVERRUN_MULTIPLE` (`F-28`) | the observation is the `Termination` the trusted side read; the five variants are asserted pairwise distinct, so holding against one *is* failing against the rest (`F-30`) |
+| B1 `Checkout` | `Sequential` | `SharedRoot` | yes — walk + the storage test | sentinel written into the capsule's own checkout, read by a second transaction | the axis's own path, not the transaction root |
+| B2 `Repository` | `Sequential` | `SharedRoot` | yes — walk + the storage test | writes an **object and a ref** — a repo that lost its objects but kept its refs is not fresh | reads both back; either surviving is a failure |
+| B3 `Runtime` | `Sequential` | `SharedRoot` | yes — walk + the storage test | sentinel in `INNER_AGENT` | ditto |
+| B4 `TemporaryState` | `Sequential` | `SharedRoot` | yes — walk + the storage test | sentinel in the capsule's **retained** tmp leaf, not a scratch one | ditto |
+| B5 `Process` | `Concurrent` | `Removed(ProcessVisibility)` | yes — walk + `control_with_the_pid_namespace_shared_both_become_possible` | a **live** subject observed while it lingers, whose pid comes from the trusted side and which lies about its own (`F-32`) | both readings — absent from `/proc` *and* unsignallable — split into two rows so a control restoring one cannot read as restoring both (`F-31`) |
+
+Twelve rows walked, one named and excluded. The exclusion is `T9`'s, not `T12`'s:
+row 7 is unreadable through the shipped `Observed` vocabulary, and the choice of
+how to widen it is the orchestrator's (`F-25`).

@@ -8254,4 +8254,66 @@ mod tests {
             );
         }
     }
+    // ── `T12` — `VA-4`: the per-row walk ───────────────────────────────────
+
+    /// The one row whose control cannot yet be seen to fail. `T9` is blocked on
+    /// `S8`: row 7's two arms produce a byte-identical `Observation`, so the
+    /// shipped payload prints neither token and both arms read `NoObservation`.
+    /// Named here rather than filtered silently — an exclusion nobody can see is
+    /// how a walk starts lying.
+    const UNWALKED: RowId = RowId::Property(Property::ProcessTreeTeardown);
+
+    /// `VA-4`, invariant 2, over every shipped row at once: the control was
+    /// **seen to fail**, per row, not inferred from the row's verdict.
+    ///
+    /// A row verdict cannot carry this. `RowVerdict::Proven` is `probe Held`
+    /// *and* `control Failed`, so reading verdicts would prove it circularly;
+    /// this reads the control arms themselves.
+    #[test]
+    fn every_shipped_rows_control_is_seen_to_fail() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let walked: Vec<Row> = tables()
+            .into_iter()
+            .filter(|row| row.id != UNWALKED)
+            .collect();
+        assert_eq!(
+            walked.len(),
+            tables().len().saturating_sub(1),
+            "the excluded row is not in the shipped tables"
+        );
+        for row in &walked {
+            assert_eq!(
+                run_control_arm(&backend, &SystemHost, &fixture, row),
+                ArmResult::Failed,
+                "{:?}'s control was not seen to fail",
+                row.id
+            );
+            let _swept = fixture.sweep_observed_sessions();
+        }
+    }
+
+    /// `VA-4`, invariant 3 — the arms differ by exactly one typed `Delta` and
+    /// run the same `ArmShape`.
+    ///
+    /// This is carried by the types rather than by discipline: a [`Row`] holds
+    /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
+    /// both arms, so there is no way to spell a row whose arms differ in two
+    /// places or run different shapes. What a test can still add is that the
+    /// shipped tables are what the design says they are — thirteen rows, each
+    /// identified once, so a row silently duplicated or dropped cannot pass as
+    /// the walk having covered it.
+    #[test]
+    fn the_shipped_tables_are_thirteen_distinctly_identified_rows() {
+        let rows = tables();
+        let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
+        ids.sort();
+        let unique = {
+            let mut unique = ids.clone();
+            unique.dedup();
+            unique
+        };
+        assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
+        assert_eq!(rows.len(), 13);
+    }
 }
