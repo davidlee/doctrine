@@ -251,6 +251,27 @@ const ENV_MISSING: &str = "ENV-MISSING-";
 /// host path, and the leak this admission would otherwise open — still fails.
 const WORKING_DIRECTORY_VAR: &str = "PWD";
 
+/// Row 12's two tokens: descriptors 0, 1 and 2 are endpoints the trusted side
+/// owns, or at least one of them is a channel *into* the capsule.
+const STANDARD_STREAMS_OWNED: &str = "STANDARD-STREAMS-OWNED";
+const STANDARD_STREAMS_SHARED: &str = "STANDARD-STREAMS-SHARED";
+
+/// Row 12's diagnostic lines, one per leg the row separates on: the bytes
+/// descriptor 0 delivered, and what a **read** of descriptor 1 or 2 returned.
+///
+/// **Two prefixes because the row has two independently observable legs**, and a
+/// diagnostic that could not tell them apart would let a mutant tripping one leg
+/// stand in for a mutant tripping the other (`EX-7`). [`Observed::Token`] matches
+/// whole lines, so these are never the token — they are what row 12's two
+/// mutants are spelled in, and each is compared **whole** (`F-33`).
+///
+/// The delivered bytes are reported entire rather than counted. Nothing sensitive
+/// can reach descriptor 0 here: the confining profile puts an empty source there
+/// and the only other endpoint any arm of this suite supplies is
+/// [`STDIO_DECOY_INPUT`], which this file writes.
+const STDIN_DELIVERED: &str = "STDIN-DELIVERED-";
+const INBOUND_READABLE: &str = "INBOUND-READABLE-";
+
 /// [`WORKING_DIRECTORY_VAR`] as the payload compares it: a whole `NAME=VALUE`
 /// entry, because the name alone is the hole.
 fn bubblewraps_working_directory() -> String {
@@ -1846,6 +1867,25 @@ struct OwnedStdio {
 /// under its probe arm.
 const STDIO_DECOY_INPUT: &str = "TRUSTED-SIDE-DECOY-INPUT\n";
 
+/// What a capsule can read **back** through descriptors 1 and 2 under row 12's
+/// control arm, and never under its probe arm.
+///
+/// This is the channel row 12 exists to forbid. A capture pipe's write end
+/// yields `EBADF` to a `read(2)`; a socket pair end yields whatever the trusted
+/// side put there, so the control arm's descriptor 1 is an inbound channel
+/// nothing in `CapsuleStdio` declares.
+const STDIO_DECOY_INBOUND: &str = "TRUSTED-SIDE-INBOUND-DECOY\n";
+
+/// One inbound line per descriptor the payload may read, and the count is
+/// load-bearing.
+///
+/// Descriptors 1 and 2 are the **same** socket end — [`OwnedStdio::opened`]
+/// clones one — so a line consumed through one is not there for the other.
+/// Measured: with a single line written, the payload's second read blocks until
+/// the trusted side closes its own end, which is after the run, and the arm
+/// reaches the wall bound instead of answering (`F-13`, `R1`).
+const STDIO_INBOUND_DECOY_LINES: usize = 2;
+
 impl OwnedStdio {
     /// The three endpoints, and the trusted side's capture end for descriptors 1
     /// and 2.
@@ -1854,6 +1894,13 @@ impl OwnedStdio {
     /// capsule reads it and then sees end-of-file — a capsule blocking forever
     /// on descriptor 0 would be a containment failure of this function's own
     /// making.
+    ///
+    /// The **inbound** decoy is written the other way, into the capture end that
+    /// stays open across the run, and it is what makes row 12's second leg a
+    /// bounded observation rather than a blocking one: the capsule's `read` of
+    /// descriptor 1 returns a line instead of waiting for a peer that does not
+    /// close. Both directions of the same socket pair, and neither is a
+    /// descriptor the harness holds for real.
     fn opened() -> Result<(Self, UnixStream), BackendError> {
         let (mut source, input) = UnixStream::pair().map_err(|error| mechanism_failed(&error))?;
         source
@@ -1861,7 +1908,12 @@ impl OwnedStdio {
             .map_err(|error| mechanism_failed(&error))?;
         drop(source);
 
-        let (capture, output) = UnixStream::pair().map_err(|error| mechanism_failed(&error))?;
+        let (mut capture, output) = UnixStream::pair().map_err(|error| mechanism_failed(&error))?;
+        for _ in 0..STDIO_INBOUND_DECOY_LINES {
+            capture
+                .write_all(STDIO_DECOY_INBOUND.as_bytes())
+                .map_err(|error| mechanism_failed(&error))?;
+        }
         let errors = output
             .try_clone()
             .map_err(|error| mechanism_failed(&error))?;
@@ -2380,6 +2432,10 @@ pub(crate) enum Property {
     /// [`CapsuleEnv`]: nothing the trusted side held crosses the `exec`, and
     /// every declared variable arrives.
     ClosedEnvironment,
+    /// Row 12. Descriptors 0, 1 and 2 are the trusted side's own endpoints and
+    /// carry no inbound channel: `stdin` yields no bytes, and neither descriptor
+    /// 1 nor descriptor 2 can be **read** by the capsule.
+    OwnedStandardStreams,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -3383,6 +3439,58 @@ fn the_environment_is_exactly(env: &CapsuleEnv, admitted: &str) -> Probe {
     }
 }
 
+/// Row 12's payload: the standard streams carry **nothing inbound**.
+///
+/// **Readability, never delivery** (`EX-6`). Bytes the capsule *writes* reaching
+/// the trusted side is the specified behaviour of
+/// [`CapsuleStdio::EmptyInputCapturedOutput`] — capturing output is the entire
+/// point — so a row asserting the write-back does not arrive would be asserting
+/// that capture is broken. What a socket pair confers and a capture pipe's write
+/// end does not is that the capsule can **read** descriptor 1: the undeclared
+/// inbound channel (`RV-346` `F-30`).
+///
+/// Two legs, each with its own diagnostic, and the token holds only when both
+/// hold:
+///
+/// - **Descriptor 0 delivers no bytes.** Read with the shell's own `read`
+///   builtin rather than through `cat`, so the leg needs no utility in the bound
+///   input set and cannot report *nothing arrived* because a tool was missing —
+///   `F-31`'s trap one channel across. `|| [ -n "$chunk" ]` is what makes it a
+///   read **to end-of-file** rather than to the last newline: a backend
+///   delivering bytes without a trailing newline would otherwise read as
+///   delivering none, which is this phase's characteristic vacuity.
+/// - **Descriptors 1 and 2 cannot be read.** Read from each descriptor
+///   *itself* (`<&1`), never by reopening it through `/proc/self/fd`, which
+///   reopens the underlying pipe rather than duplicating the descriptor and so
+///   returns the payload's own bytes (`F-13`). Under the confining profile these
+///   are the write ends of capture pipes and a `read(2)` on them fails
+///   immediately with `EBADF`; under the control arm they are one end of a
+///   socket pair, which is readable. One line of [`STDIO_DECOY_INBOUND`] per
+///   descriptor is what **bounds** the read: a socket with nothing waiting
+///   blocks until its peer closes, and the trusted side holds that peer for the
+///   whole run.
+fn the_standard_streams_carry_nothing_inbound() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; delivered=''; chunk=''; \
+             while read chunk || [ -n \"$chunk\" ]; do \
+             delivered=\"$delivered$chunk\"; chunk=''; done; \
+             [ -z \"$delivered\" ] || echo \"{STDIN_DELIVERED}$delivered\"; \
+             inbound=0; \
+             if read one <&1 2>/dev/null; then \
+             inbound=$((inbound+1)); echo \"{INBOUND_READABLE}1 $one\"; fi; \
+             if read two <&2 2>/dev/null; then \
+             inbound=$((inbound+1)); echo \"{INBOUND_READABLE}2 $two\"; fi; \
+             if [ -z \"$delivered\" ] && [ \"$inbound\" -eq 0 ]; \
+             then echo {STANDARD_STREAMS_OWNED}; else echo {STANDARD_STREAMS_SHARED}; fi"
+        )),
+        observed: Observed::Token {
+            held: STANDARD_STREAMS_OWNED,
+            failed: STANDARD_STREAMS_SHARED,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3538,6 +3646,11 @@ fn table_a() -> Vec<Row> {
                 &bubblewraps_working_directory(),
             )),
             delta: Delta::Removed(PropertyRemoval::EnvCleared),
+        },
+        Row {
+            id: RowId::Property(Property::OwnedStandardStreams),
+            shape: ArmShape::Single(the_standard_streams_carry_nothing_inbound()),
+            delta: Delta::Removed(PropertyRemoval::StdioOwned),
         },
     ]
 }
@@ -4419,10 +4532,11 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs::File;
-    use std::io::Write as _;
+    use std::io::{Read as _, Write as _};
     use std::os::fd::AsRawFd as _;
+    use std::os::unix::net::UnixStream;
     use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use std::process::{Command, Stdio};
     use std::sync::MutexGuard;
     use std::time::Duration;
 
@@ -4477,6 +4591,10 @@ mod tests {
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
         every_declared_mount_tested_for_writability, the_source_export_written_through,
         writes_nothing_through,
+    };
+    use super::{
+        INBOUND_READABLE, STANDARD_STREAMS_OWNED, STANDARD_STREAMS_SHARED, STDIN_DELIVERED,
+        STDIO_DECOY_INBOUND, STDIO_DECOY_INPUT,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
@@ -8879,11 +8997,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — sixteen rows, each
+    /// shipped tables are what the design says they are — seventeen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_sixteen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_seventeen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -8893,7 +9011,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 16);
+        assert_eq!(rows.len(), 17);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -10390,6 +10508,511 @@ mod tests {
             RowVerdict::Violated,
             "a backend handing the capsule the trusted side's working directory passed \
              row 11"
+        );
+    }
+
+    // ── PHASE-10 `T6`: row 12 — `OwnedStandardStreams` / `StdioOwned` ────────
+    //
+    // **Nothing here runs in a child, and that is a measured claim rather than
+    // an omission.** Rows 10 and 11 needed one because their observations turn
+    // on process-wide state — the descriptor table's inheritability flags, and
+    // the environment. Row 12's channel is descriptors 0, 1 and 2 of a *forked*
+    // process, and this process's own standard streams are never a party to it:
+    // the endpoints are socket pairs opened per arm and reach the capsule by
+    // `dup2` onto 0, 1 and 2, which clears `FD_CLOEXEC` by definition — so the
+    // one piece of shared state the suite does contend for, the descriptor-flag
+    // sweep, cannot reach them. `F-30`'s standing residual — a set left
+    // inheritable across another row's fork — is likewise out of reach: both of
+    // row 12's arms keep `descriptors_closed`, and its payload never looks above
+    // descriptor 2 at all.
+    //
+    // The one load-sensitive failure mode is the wall bound, and it is reachable
+    // only through a *blocking* read of descriptor 1 or 2 —
+    // [`STDIO_INBOUND_DECOY_LINES`] is what forecloses it, and the toggle that
+    // shows the failure appearing and disappearing with that constant is
+    // recorded in the sheet.
+
+    /// Row 12's shipped payload — the script itself, not the `sh -c` around it.
+    fn row_twelve_script() -> String {
+        let row = shipped_row(&RowId::Property(Property::OwnedStandardStreams));
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 12 is a one-capsule row");
+        };
+        probe
+            .argv
+            .as_slice()
+            .last()
+            .expect("row 12's payload is a shell script")
+            .clone()
+    }
+
+    /// Row 12's two diagnostic lists, as `(delivered, inbound)`.
+    ///
+    /// **Both, always, and compared whole** (`F-33`). The row has two
+    /// independently observable legs, so a mutant asserting only that *its* leg
+    /// reported would pass a payload that reported both — which is exactly the
+    /// substitution `EX-7` says a single whole-stdio mutant permits, one level
+    /// further down.
+    fn reported_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
+        let of = |prefix: &str| -> Vec<String> {
+            reported
+                .iter()
+                .filter(|line| line.starts_with(prefix))
+                .cloned()
+                .collect()
+        };
+        (of(STDIN_DELIVERED), of(INBOUND_READABLE))
+    }
+
+    /// A decoy body as the payload reports it — the trailing newline is the line
+    /// separator the capsule's `read` consumed, not part of what it read.
+    fn without_the_separator(decoy: &str) -> &str {
+        decoy.trim_end_matches('\n')
+    }
+
+    /// The line the payload prints for a descriptor it could read back.
+    fn inbound_line(descriptor: u8) -> String {
+        format!(
+            "{INBOUND_READABLE}{descriptor} {}",
+            without_the_separator(STDIO_DECOY_INBOUND)
+        )
+    }
+
+    /// The line the payload prints for bytes handed to it on descriptor 0.
+    fn delivered_line() -> String {
+        format!(
+            "{STDIN_DELIVERED}{}",
+            without_the_separator(STDIO_DECOY_INPUT)
+        )
+    }
+
+    /// Read the trusted side's end of a socket pair to the end of the stream,
+    /// where *the end of the stream* is end-of-file **or** a reset.
+    ///
+    /// Not defensive coding — measured, and the reset is the expected close on
+    /// exactly one of these endpoint states. The trusted side writes
+    /// [`STDIO_INBOUND_DECOY_LINES`] inbound lines, one per descriptor the
+    /// capsule may read; a capsule handed only *one* readable descriptor
+    /// consumes one and leaves the other queued, and a Unix socket whose peer
+    /// closes over unread bytes answers the next read with `ECONNRESET` rather
+    /// than `0`. Bytes already delivered are handed over first and the error
+    /// surfaces only once the queue is drained, so nothing the payload printed
+    /// is lost — which the leg-isolating assertions in
+    /// [`a_readable_descriptor_one_backend_fails_row_twelve`] are what actually
+    /// establishes.
+    fn read_until_the_peer_is_gone(mut capture: UnixStream) -> Vec<u8> {
+        let mut read_back = Vec::new();
+        let mut chunk = [0_u8; 512];
+        loop {
+            match capture.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(read) => read_back.extend_from_slice(&chunk[..read]),
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => (),
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => break,
+                Err(error) => panic!("the trusted side reads its own socket: {error}"),
+            }
+        }
+        read_back
+    }
+
+    /// Run a **shipped** payload over the three endpoints a backend would hand
+    /// it, and give back what it printed on descriptor 1.
+    ///
+    /// The endpoint states are *observed rather than predicted* — the argument
+    /// [`payload_output_leaking`] and [`payload_output_under`] each make one
+    /// channel across, taken here to the third. Writing out the lines a
+    /// stdio-sharing capsule would print would make each mutant a test of my own
+    /// guess about the payload; running the payload over endpoints that really
+    /// are the shared ones makes it a test of the payload. `/bin/sh` stands in
+    /// for the capsule, which is sound because the payload reads nothing but its
+    /// own descriptors 0, 1 and 2 — the things the sharing changes.
+    ///
+    /// `capture` is the trusted side's end when descriptor 1 is a socket, and
+    /// `None` when it is an ordinary capture pipe. It is read **before** the
+    /// child is waited on, which is the pipe-reading order and not an
+    /// optimisation: a payload that filled the socket's buffer would otherwise
+    /// block against a parent blocked in `wait`.
+    fn payload_output_over(
+        script: &str,
+        input: Stdio,
+        output: Stdio,
+        errors: Stdio,
+        capture: Option<UnixStream>,
+    ) -> Vec<String> {
+        let mut child = Command::new(SHELL)
+            .arg(SHELL_COMMAND)
+            .arg(script)
+            .stdin(input)
+            .stdout(output)
+            .stderr(errors)
+            .spawn()
+            .expect("the payload runs under a shell");
+
+        let printed = match capture {
+            Some(capture) => {
+                let read_back = read_until_the_peer_is_gone(capture);
+                child.wait().expect("the payload terminates");
+                read_back
+            }
+            None => {
+                let finished = child
+                    .wait_with_output()
+                    .expect("the payload terminates having printed");
+                finished.stdout
+            }
+        };
+
+        String::from_utf8_lossy(&printed)
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Row 12's **probe** endpoints: what the shipping backend hands a capsule
+    /// under [`CapsuleStdio::EmptyInputCapturedOutput`] — descriptor 0 an empty
+    /// source, descriptors 1 and 2 the write ends of capture pipes.
+    fn payload_output_owning() -> Vec<String> {
+        payload_output_over(
+            &row_twelve_script(),
+            Stdio::null(),
+            Stdio::piped(),
+            Stdio::piped(),
+            None,
+        )
+    }
+
+    /// Row 12's **control** endpoints: the trusted side's own socket-pair ends,
+    /// all three, exactly as [`OwnedStdio::opened`] builds them.
+    fn payload_output_sharing() -> Vec<String> {
+        let (stdio, capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+        let OwnedStdio {
+            input,
+            output,
+            errors,
+        } = stdio;
+        payload_output_over(
+            &row_twelve_script(),
+            Stdio::from(input),
+            Stdio::from(output),
+            Stdio::from(errors),
+            Some(capture),
+        )
+    }
+
+    /// The **stdin leg alone**: descriptor 0 the trusted side's socket carrying
+    /// the decoy body, descriptors 1 and 2 ordinary capture pipes.
+    fn payload_output_over_delivered_stdin() -> Vec<String> {
+        let (stdio, capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+        let OwnedStdio {
+            input,
+            output,
+            errors,
+        } = stdio;
+        drop((output, errors, capture));
+        payload_output_over(
+            &row_twelve_script(),
+            Stdio::from(input),
+            Stdio::piped(),
+            Stdio::piped(),
+            None,
+        )
+    }
+
+    /// The **inbound leg alone** (`F-38`): descriptor 0 an empty source,
+    /// descriptor 2 an ordinary capture pipe, and only descriptor 1 a socket the
+    /// capsule can read back.
+    ///
+    /// **`errors` is dropped before the spawn, and that is load-bearing.**
+    /// [`OwnedStdio::opened`] clones descriptor 1's end onto descriptor 2, so a
+    /// parent that keeps the clone keeps a write end of the socket the capsule
+    /// prints into — and [`payload_output_over`] reads `capture` to
+    /// end-of-file, which a live write end never reaches. Measured: it hangs.
+    fn payload_output_over_one_readable_descriptor() -> Vec<String> {
+        let (stdio, capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+        let OwnedStdio {
+            input,
+            output,
+            errors,
+        } = stdio;
+        drop((input, errors));
+        payload_output_over(
+            &row_twelve_script(),
+            Stdio::null(),
+            Stdio::from(output),
+            Stdio::piped(),
+            Some(capture),
+        )
+    }
+
+    /// Row 12, both arms, against a stub backend.
+    ///
+    /// `run_arm` rather than `run_row`, for the reason [`row_ten_against`]
+    /// gives: no stub in this suite gets past `provision`.
+    fn row_twelve_against(backend: &Stub) -> RowVerdict {
+        let row = shipped_row(&RowId::Property(Property::OwnedStandardStreams));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+        let confining = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &row.shape,
+        );
+        let weakened = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
+            &row.shape,
+        );
+        row_verdict(confining, weakened)
+    }
+
+    /// `VT-1`, row 12.
+    #[test]
+    fn owned_standard_streams_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::OwnedStandardStreams)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-5`, row 12's **first** leg: descriptor 0 delivers nothing.
+    ///
+    /// Isolated, not read off the fully shared control: the endpoints here are
+    /// the probe's on descriptors 1 and 2 and the control's on descriptor 0, so
+    /// the only thing that moved between the two measurements is the one
+    /// descriptor the leg is about. Both diagnostic lists are compared whole
+    /// (`F-33`) — a leg asserting only that *its* prefix appeared would pass a
+    /// payload that reported everything.
+    #[test]
+    fn the_capsules_stdin_yields_no_bytes() {
+        let owning = payload_output_owning();
+        assert_eq!(
+            reported_on(&owning),
+            (Vec::new(), Vec::new()),
+            "the capsule reported an inbound channel over the shipping backend's own \
+             endpoints: {owning:?}"
+        );
+        assert!(
+            owning.iter().any(|line| line == STANDARD_STREAMS_OWNED),
+            "the payload read nothing on any standard stream and did not say so: {owning:?}"
+        );
+
+        let delivered = payload_output_over_delivered_stdin();
+        assert_eq!(
+            reported_on(&delivered),
+            (vec![delivered_line()], Vec::new()),
+            "moving descriptor 0 alone onto the trusted side's socket reported something \
+             other than exactly the delivered body: {delivered:?}"
+        );
+        assert!(
+            delivered.iter().any(|line| line == STANDARD_STREAMS_SHARED),
+            "the payload was handed bytes on descriptor 0 and did not say so: {delivered:?}"
+        );
+
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::OwnedStandardStreams)),
+            RowVerdict::Proven,
+            "the capsule was handed bytes on descriptor 0, or the control arm was not"
+        );
+    }
+
+    /// `VT-5`, row 12's **second** leg, and the one the row exists for (`F-30`).
+    ///
+    /// **Readability, not delivery.** Bytes the capsule writes reaching the
+    /// trusted side is the *specified* behaviour under
+    /// [`CapsuleStdio::EmptyInputCapturedOutput`], so a leg asserting the
+    /// write-back does not arrive would assert that capture is broken. What a
+    /// socket pair confers and a capture pipe's write end does not is that the
+    /// capsule can **read** descriptor 1: an inbound channel nothing in
+    /// `CapsuleStdio` declares. A pipe's write end answers `read(2)` with
+    /// `EBADF` immediately, which is why the probe arm reports nothing here
+    /// rather than blocking.
+    ///
+    /// Isolated the same way as the first leg: descriptor 0 stays the probe's
+    /// empty source and only descriptor 1 moves, so the two lists separate.
+    #[test]
+    fn neither_descriptor_one_nor_two_is_readable_by_the_capsule() {
+        let owning = payload_output_owning();
+        assert_eq!(
+            reported_on(&owning),
+            (Vec::new(), Vec::new()),
+            "a capture pipe's write end was readable by the capsule: {owning:?}"
+        );
+
+        let readable = payload_output_over_one_readable_descriptor();
+        assert_eq!(
+            reported_on(&readable),
+            (Vec::new(), vec![inbound_line(1)]),
+            "moving descriptor 1 alone onto the trusted side's socket reported something \
+             other than exactly that one readable descriptor: {readable:?}"
+        );
+        assert!(
+            readable.iter().any(|line| line == STANDARD_STREAMS_SHARED),
+            "the payload read the trusted side's bytes back through descriptor 1 and did \
+             not say so: {readable:?}"
+        );
+
+        // Both descriptors, so the leg is about the pair and not about
+        // descriptor 1 alone — and each reads its own line, which is what
+        // `STDIO_INBOUND_DECOY_LINES` is for.
+        let sharing = payload_output_sharing();
+        assert_eq!(
+            reported_on(&sharing).1,
+            vec![inbound_line(1), inbound_line(2)],
+            "descriptors 1 and 2 over the control arm's endpoints did not both read back: \
+             {sharing:?}"
+        );
+    }
+
+    /// `VT-5`, `EX-6` — rows 10 and 12 are disjoint by descriptor number, in
+    /// both directions.
+    ///
+    /// `VA-4`'s axis case already holds that the stdio delta moves
+    /// `parent_owned_stdio` and no argv word. The claim here is the one that
+    /// case cannot make, because it reads one axis at a time: the stdio control
+    /// leaves row 10's sweep **on**, so the control arm still closes everything
+    /// above descriptor 2 and the two rows cannot borrow each other's evidence.
+    /// The converse holds too — row 10's control leaves the standard streams
+    /// parent-owned — and it is what stops the disjointness being a statement
+    /// about one delta's tidiness.
+    ///
+    /// The payloads are disjoint the same way and it is measured on the shipped
+    /// scripts, not asserted about them: row 10's enumerates
+    /// [`PROC_SELF_FD`] and skips 0, 1 and 2 by number; row 12's never names
+    /// [`PROC_SELF_FD`] at all.
+    #[test]
+    fn the_stdio_control_changes_nothing_above_descriptor_two() {
+        let (stdio, _capture) = OwnedStdio::opened().expect("a socket pair and a decoy body");
+        let sharing = weakening_for(PropertyRemoval::StdioOwned, Some(stdio));
+        let sweeping = weakening_for(PropertyRemoval::DescriptorsClosed, None);
+
+        assert_eq!(
+            SpawnOptions::under(Some(&sharing)),
+            SpawnOptions {
+                parent_owned_stdio: false,
+                ..CONFINING_OPTIONS
+            },
+            "the stdio control moved something other than the standard streams"
+        );
+        assert_eq!(
+            SpawnOptions::under(Some(&sweeping)),
+            SpawnOptions {
+                descriptors_closed: false,
+                ..CONFINING_OPTIONS
+            },
+            "the descriptor control moved something other than the sweep"
+        );
+
+        // Non-vacuous: the two controls really do differ, so the pair above is
+        // not two readings of one constant.
+        assert_ne!(SpawnOptions::under(Some(&sharing)), CONFINING_OPTIONS);
+        assert_ne!(
+            SpawnOptions::under(Some(&sharing)),
+            SpawnOptions::under(Some(&sweeping))
+        );
+
+        let above = row_ten_script();
+        let standard = row_twelve_script();
+        assert!(
+            above.contains(PROC_SELF_FD) && above.contains("0|1|2"),
+            "row 10's payload no longer enumerates the table skipping the standard \
+             streams, so the disjointness below reads nothing: {above}"
+        );
+        assert!(
+            !standard.contains(PROC_SELF_FD),
+            "row 12's payload enumerates the descriptor table, which is row 10's claim: \
+             {standard}"
+        );
+    }
+
+    /// `VT-5`, `EX-4`, `EX-7` — the whole-stdio mutant: a backend that hands the
+    /// capsule the trusted side's own socket-pair ends on all three standard
+    /// streams.
+    ///
+    /// `Violated`, not `Unproven`. A probe arm that *fails* is the harness
+    /// saying the property does not hold of this backend at all, and that
+    /// reading does not depend on what the control arm did — which is why a
+    /// backend sharing on both arms cannot launder the sharing into *the removal
+    /// changed nothing*.
+    ///
+    /// This mutant trips **both** legs at once, which is exactly why it is not
+    /// sufficient on its own: see
+    /// [`a_readable_descriptor_one_backend_fails_row_twelve`].
+    #[test]
+    fn a_stdin_inheriting_backend_fails_row_twelve() {
+        let shared = payload_output_sharing();
+        assert_eq!(
+            reported_on(&shared),
+            (
+                vec![delivered_line()],
+                vec![inbound_line(1), inbound_line(2)]
+            ),
+            "the payload separated on something other than exactly the shared streams: \
+             {shared:?}"
+        );
+        assert!(
+            shared.iter().any(|line| line == STANDARD_STREAMS_SHARED),
+            "the payload read the trusted side's bytes on every standard stream and did \
+             not say so: {shared:?}"
+        );
+
+        assert_eq!(
+            row_twelve_against(&leaking_on_every_arm(&shared)),
+            RowVerdict::Violated,
+            "a backend handing the capsule the trusted side's standard streams passed row 12"
+        );
+
+        // Discriminating: the same pipeline over a backend that shares nothing
+        // reaches a verdict that is not `Violated`, so the verdict above came
+        // from the sharing and not from the shape of the stub.
+        let clean = payload_output_owning();
+        assert!(
+            clean.iter().any(|line| line == STANDARD_STREAMS_OWNED),
+            "the payload read a standard stream with nothing shared: {clean:?}"
+        );
+        assert_ne!(
+            row_twelve_against(&leaking_on_every_arm(&clean)),
+            RowVerdict::Violated,
+            "row 12 reads Violated against a backend that shares nothing"
+        );
+    }
+
+    /// `VT-5`, `EX-4`, `EX-7` — `F-38`'s mutant, and the one the row needs
+    /// because it has two independently observable legs.
+    ///
+    /// Empty `stdin`, otherwise conforming, one readable socket on descriptor 1.
+    /// [`a_stdin_inheriting_backend_fails_row_twelve`] trips both legs together,
+    /// so on its own it leaves the verdict free to key on the `stdin` leg alone:
+    /// the conforming backend would pass because nothing is delivered, the
+    /// whole-stdio mutant would still report `Violated` through its `stdin`, and
+    /// the undeclared inbound channel the row exists to forbid would be
+    /// admitted. This backend delivers no bytes at all — its `delivered` list is
+    /// asserted empty below — so it fails only if the inbound leg gates.
+    #[test]
+    fn a_readable_descriptor_one_backend_fails_row_twelve() {
+        let readable = payload_output_over_one_readable_descriptor();
+        assert_eq!(
+            reported_on(&readable),
+            (Vec::new(), vec![inbound_line(1)]),
+            "this mutant is meant to deliver nothing and be readable on descriptor 1 \
+             alone: {readable:?}"
+        );
+        assert!(
+            readable.iter().any(|line| line == STANDARD_STREAMS_SHARED),
+            "the payload read an inbound channel and did not say so: {readable:?}"
+        );
+
+        assert_eq!(
+            row_twelve_against(&leaking_on_every_arm(&readable)),
+            RowVerdict::Violated,
+            "a backend whose stdin is empty but whose descriptor 1 the capsule can read \
+             passed row 12"
+        );
+
+        // Discriminating: the same pipeline over a backend that shares nothing
+        // reaches a verdict that is not `Violated`.
+        let clean = payload_output_owning();
+        assert_ne!(
+            row_twelve_against(&leaking_on_every_arm(&clean)),
+            RowVerdict::Violated,
+            "row 12 reads Violated against a backend that shares nothing"
         );
     }
 }
