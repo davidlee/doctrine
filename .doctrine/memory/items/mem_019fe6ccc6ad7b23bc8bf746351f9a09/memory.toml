@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe6ccc6ad7b23bc8bf746351f9a09"
+memory_key = "mem.pattern.tests.mutant-must-compile-to-convict"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A mutation that fails to compile is a lint conviction, not a test conviction"
+summary = "Under -D warnings a mutant often dies on an unused binding before any assertion runs; the battery must detect that and report it, not credit the guard."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "mutation-testing", "rust", "lints", "false-green"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "76531c1bde8620fb15eb9ac899da537c405e74c3"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "827977478386d7eac87ec04c58205067e3ca0ff6c6760d077d76b6760671fc0f"
+base_commit = "42937f4db5569bf314f928e59e8ffc0baf7a443d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+

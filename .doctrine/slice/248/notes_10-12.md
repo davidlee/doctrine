@@ -562,3 +562,143 @@ tip, friction record `6ed8022b6`). `cargo fmt` and `cargo clippy -p
 doctrine-control` clean. Landed as `78ee8f8b6`, path-limited to
 `conformance.rs`, +727/−7.
 
+
+---
+
+## PHASE-10 `T10` — `backend verify` in `main.rs` (`EX-13`)
+
+Landed `42937f4db`, path-limited to `crates/doctrine-control/src/main.rs`,
++450/−13. Gate exit **0**; `274 passed; 0 failed; 9 ignored` for
+`doctrine-control`, +5 over `T9`'s 269 and matching the five tests added.
+
+### The verb, and the two things it does not take
+
+`doctrine-control backend verify`. `backend` is a **noun with verbs under it**,
+not a verb: `DEC-160` spells the entry point `backend verify`, and the noun is
+what leaves room for a second mechanism's verbs without renaming this one. Bare
+`verify` stays an unknown verb rather than quietly aliasing the expensive one.
+
+It takes **no options**, and that is `EX-3` rather than an unfinished parser.
+The suite synthesizes its own `CapsuleConfig` over its own fixture root, so
+admission depends only on the backend's availability and a working shell.
+Taking `--repository` would offer the operator's `[capsule]` table as an input
+to a verdict about the *backend* — the confusion `verify`'s three-parameter
+signature exists to prevent. For the same reason the backend is built without
+`with_kill_grace`: that bound comes from the table this verb does not read.
+
+The **wall-clock read lives in the shell**, per `EX-13`: `doctrine::today()`
+(exported at `src/lib.rs:62`) is called in `run_backend_verify` and passed in.
+`verify` keeps its three parameters and owns no clock.
+
+### The exit code is a number, not a discriminant
+
+`ExitCode` is opaque — no `PartialEq`, no accessor — so a test written against
+it can only assert the `Result`'s `Ok`/`Err` and *claim* the mapping to a
+status. `EX-13` makes the exit code itself evidence, so `main` now routes
+through `exit_status(&Result) -> u8` and returns `ExitCode::from(status)`; the
+tests compare the byte. Behaviour is unchanged — `EXIT_ADMITTED = 0`,
+`EXIT_REFUSED = 1`, reported identically on both arms.
+
+That mattered: the sheet's warning is that "exits nonzero" passes equally
+against a binary that panicked or refused for an unrelated reason. Asserting the
+byte **and** the whole rendering is what separates those.
+
+### Rendered through derived `Debug`, deliberately
+
+`render_verdict` renders every row — including the proven ones — plus table C's
+claims and the two unrowed observations, one fact per line. Variants go through
+`{:?}` rather than a match arm per variant: a hand-written name table over
+`Property` would be a **second unchecked enumeration of table A**, which `EX-15`
+and `sec-9` `R9` forbid this phase from adding. `Debug` is derived from the enum
+itself, so a variant arriving without a name here is impossible rather than
+merely unlikely.
+
+The outcome line for a row refusal **names the rows that were not proven**. A
+refusal reading only `not-admitted reason=rows` would be true and useless: the
+operator's next question is always *which row*.
+
+### `clippy::use_debug` fires on `write!` and not on `format!`
+
+The first gate failed with four `use_debug` errors, all on `write!(rendered,
+"…{x:?}")`, while `render_refusal`'s `format!("provision refused: {refusal:?}")`
+three functions below has passed every gate since PHASE-06 — and so did my own
+`format!("{id:?}={row:?}")` inside the outcome line, in the same commit that
+failed. The lint is about debugging remnants reaching an **output handle**, so
+it targets the `write!`/`print!` family and leaves `format!` alone.
+
+Repaired by building a `Vec<String>` of lines and `join("\n")`-ing them, which
+is better code than the buffer-and-`write!` shape it replaced and drops four
+`let _written =` bindings. Recorded as
+`mem.fact.rust.clippy-use-debug-write-not-format` and a friction record.
+
+### The mutation battery — twelve arms, and three false convictions first
+
+All twelve applied to a pristine copy, run, and reverted by `cp` with `diff -q`
+verifying identical (`C11`). **12/12 convicted by a test.**
+
+Getting there took two passes, and the first pass is the lesson. `M3`, `M8` and
+`M9` initially reported CONVICTED — **by the compiler, not by a test**. Each
+left a binding unused (`unproven`, `remedy`) and died on `-D warnings` before
+any assertion ran. This is item 138's lesson recurring one task later, and the
+harness had to be taught to say so: the runner now checks the output for
+`error[E` / `could not compile` and reports `<did not compile>` instead of
+crediting the guard. Rebuilt in compiling shapes:
+
+- `M3` truncates the unproven list to its **first row** rather than emptying it;
+- `M8` **transposes** `missing` and `remedy` rather than dropping one;
+- `M9` truncates the remedy to its **first word**.
+
+All three then convicted on assertions, which is the evidence that was wanted.
+`M3`/`M7`/`M9` are the `T9` `F-50` part-4 shape — a *degraded* reading defeats
+an absence probe as easily as an empty one — and they are in the battery
+precisely because that defect has now bitten this slice twice.
+
+The two arms worth keeping in mind:
+
+- **`M5`**, narrowing the filter from `!Proven` to `== Violated`, convicts only
+  because the fixture carries all three non-`Proven` verdicts (`Unproven`,
+  `Violated`, `Indeterminate`). A fixture with violations alone would have
+  passed it.
+- **`M4`**, dropping the filter so the outcome line names *every* row, is what
+  `the_outcome_line_names_whichever_row_failed_rather_than_a_fixed_one` exists
+  for: it renders the same table twice with the failure in different positions,
+  so a renderer naming a fixed row and a renderer naming all of them each
+  satisfy exactly one of the two assertions.
+
+### Measured: the verb on this tree
+
+`./target/debug/doctrine-control backend verify` → **exit 1**, as the sheet
+predicted and for the predicted reason. Nineteen rows `Proven`; the single
+refusing row is
+
+```
+Property(ProcessTreeTeardown)=Indeterminate { arm: Probe, detail: NoObservation }
+```
+
+which is `F-24`/`F-25` exactly — row 7's two arms produce a byte-identical
+`Observation` and neither token is printed. Note the reading is
+**`Indeterminate`, not `Unproven`**: the sheet's `T13` entry says row 7 "is not
+`Proven`", which is what `admission()` tests, and the specific verdict it
+carries is the indeterminate one. Four table C claims `Passed`; both unrowed
+observations `Read`, `no_new_privs` carrying its `EVD-014` `A6` provenance
+caveat. Wall clock ~95 s, essentially all of it the suite.
+
+`T13` is unblocked by nothing here: this verb reports row 7's state, it does not
+resolve it.
+
+### What these tests do not cover, said rather than implied
+
+The clock read is **not** asserted. `run_backend_verify` calls
+`doctrine::today()` inline, and replacing that with a frozen constant would pass
+all five tests — the fixtures supply their own date. What holds `EX-13`'s
+clock half up is structural, not tested here: `verify` takes `today` as a
+parameter and has no clock to reach for, which `conformance.rs` owns. Injecting
+a clock into `run_backend_verify` to close this would add a seam whose only
+consumer is its own test, and the sheet's instruction is to keep `verify`'s
+signature as it is.
+
+Likewise the five tests never run the suite. That is deliberate: a dispatch
+assertion that provisioned ~50 capsules would double `T12`'s budget for no
+evidence the conformance suite does not already produce. Every dispatch case
+refuses before reaching a backend; the end-to-end reading above was taken by
+hand, once, and is recorded rather than automated.

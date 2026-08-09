@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe6cc8a6e70d1a69617b6e7daec27"
+memory_key = "mem.fact.rust.clippy-use-debug-write-not-format"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clippy::use_debug fires on write!/print!, not on format!"
+summary = '`use_debug = "deny"` rejects `{:?}` inside the write!/print! family but permits it inside format!; build lines with format! and join them.'
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/main.rs", "Cargo.toml"]
+globs = []
+commands = []
+tags = ["rust", "clippy", "lints", "formatting", "gate"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "76531c1bde8620fb15eb9ac899da537c405e74c3"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "7bd974da62bf8d2635a4f38a32f2a1bb570da07d5f714e0f049eb1c8d3c3c68e"
+base_commit = "42937f4db5569bf314f928e59e8ffc0baf7a443d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe6cc-f00b-7073-9982-73b52acd42d3"
+recorded_at = "2026-08-09T13:53:38.315681565Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-10 T10: clippy::use_debug denies {:?} in write! but allows it in format!, costing a full ~3min gate cycle to discover"
+detail = """
+Writing `backend verify`'s verdict renderer in `crates/doctrine-control/src/main.rs`, I extended the file's existing buffer-and-`write!` shape (copied from `render_refusal` three functions below, which has passed every gate since PHASE-06) with `write!(rendered, "row {id:?}={row:?}")`.
+
+`doctrine check gate` failed with four `clippy::use_debug` errors — all on the `write!` calls. The `format!("{id:?}={row:?}")` in the same commit, and `render_refusal`'s own `format!("provision refused: {refusal:?}")`, were both untouched by the lint: `use_debug` targets the write!/print! family, not `format!`.
+
+Cost: one full gate cycle (~3 min: fmt + workspace clippy) plus the re-run after the fix, on a task whose test suite runs in 0.00s. `cargo check` and `cargo test` are both silent about it, so there is no cheaper signal — the lint only appears at the gate.
+
+The asymmetry is defensible (the lint is about Debug output reaching a handle) but it is invisible from the surrounding code, which contains the permitted form and reads as the local convention. Repaired by building a Vec<String> and joining — better code than what it replaced. Captured as mem.fact.rust.clippy-use-debug-write-not-format."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
