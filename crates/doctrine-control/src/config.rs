@@ -141,6 +141,19 @@ impl Argv {
         (!words.is_empty()).then_some(Self(words))
     }
 
+    /// Non-empty **by construction**, from a head word and its tail.
+    ///
+    /// A caller assembling a fixed argv — `sh -c <script>` — knows it is
+    /// non-empty and has no refusal to report. Without this it must either
+    /// invent an error case that cannot occur or reach for `unwrap`, which the
+    /// crate denies; so the totality lives here, where the invariant does.
+    pub(crate) fn new(head: String, tail: Vec<String>) -> Self {
+        let mut words = Vec::with_capacity(tail.len().saturating_add(1));
+        words.push(head);
+        words.extend(tail);
+        Self(words)
+    }
+
     pub(crate) fn as_slice(&self) -> &[String] {
         &self.0
     }

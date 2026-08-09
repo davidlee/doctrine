@@ -1487,3 +1487,91 @@ Two things checked while working that out, so they are not re-derived:
   run real capsules — those tests inject `FixtureHost`, which has no environment
   by construction, so `Fixture::new` refuses and every row reports
   `Indeterminate`, leaving their three assertions (backend, host, date) intact.
+
+### `T4` + `T5` — the thirteen rows, and the five storage rows executed
+
+Landed as one commit, per `F-7`: denied `dead_code` welds the eight `Property`
+variants, `table_a`'s eight rows, `table_b`'s five and the retirement of
+`RowId`'s `#[expect(dead_code)]` into a single compile. There is no green
+intermediate state to land, and there was no need to fight for one.
+
+**Every payload is a constant.** `Probe.argv` is an `Argv`, and `tables()` is
+built eagerly inside `verify` *before* the fixture exists (invariant 1's
+ordering). So no payload can be parameterised by the fixture. Two consequences,
+both structural rather than stylistic:
+
+- the `Widened` deltas mount their decoys at **fixed inner destinations**
+  (`/widened/executable`, `/widened/credential`, `/widened/repository`,
+  `/widened/undeclared`), so rows 2–4's payloads can name them literally;
+- row 5's listener port is ephemeral and cannot be. `Fixture::new` now binds the
+  listener **before** `initialise_project` and writes the port to
+  `listener-port` in the project root, so `git add .` commits it and the payload
+  reads it from `/capsule/repo/listener-port`. Never `/source` — that is a bare
+  export with no working tree.
+
+**`Argv::new` (production, `config.rs`).** `shell_argv` assembles `sh -c
+<script>` and knows it is non-empty, but `try_new` returns a `Result` and the
+crate denies `unwrap`/`expect`/`panic`. The choice was an invented unreachable
+error case, a lint expectation, or putting the totality where the invariant
+already lives. The third: `Argv::new(head, tail)` is non-empty by construction,
+and `shell_argv` became total, which de-`?`d its two existing call sites.
+
+**`run_row` split into four.** `run_probe_arm` and `run_control_arm` now sit
+either side of a shared `arm_over`. This is not tidying — `VT-4`'s discriminator
+needs to *read one arm*. A row verdict cannot report it: `Proven` says only that
+*the* control failed, and all five storage rows share one `Delta::SharedRoot`,
+so without the seam the five `Proven` assertions rest on a control nobody has
+seen fail. The alternative was a hand-built copy of the arm in the tests, which
+`F-33` forbids for good reason.
+
+**`D3` settled — diagnosable, not just failed.** `reads_sentinels` prints
+`SHARED-<path>` per hit and classifies on the whole line, so the diagnostics
+cannot themselves be mistaken for the token. A control failure names *which*
+storage axis leaked, which is the difference between a red that reports and a
+red that only accuses.
+
+`VT-4`'s five titles plus `fresh_mutable_state_is_proven` are green; each was run
+alone under a shell `timeout` before joining the suite (`R1`), and the suite is
+green five runs out of five, 212 tests.
+
+#### `F-38` — a test that swept process-wide descriptor flags outside the guard
+
+`check gate` redded once, in `bubblewrap.rs`'s
+`concurrent_forks_each_hand_over_only_their_own_status_descriptor` — the child
+received an empty status file. Both that test and the suspect pass alone; only
+the whole suite reds, and only sometimes.
+
+`every_descriptor_above_two_is_marked_close_on_exec_before_the_exec` called
+`mark_inherited_descriptors_close_on_exec()` **without taking
+`DESCRIPTOR_WINDOW`**. That sweep is a process-wide mutation, so fired from one
+test thread it re-marks another thread's just-cleared status descriptor between
+its clear and its fork — the exact corruption the guard exists to exclude, and
+the exact failure `F-31`'s message predicts. The old doc comment on that test
+said the sweep was benign because "nothing in this crate's suite passes a
+descriptor to a child expecting it to survive… It stops being benign the moment
+one does." `T1` wrote the test that does.
+
+Fixed at the test, by taking the guard. The lesson generalises past this file: a
+guard whose contract is over *process-wide* state is not satisfied by every
+production caller taking it — a test that mutates the same state is the second
+writer, and calling it a test does not exempt it. Recorded as
+`mem.pattern.tests.process-wide-state-needs-the-production-guard`.
+
+#### Rows landed knowingly incomplete (each is a later task's, not a defect)
+
+| row | what is there | what the later task owes |
+|---|---|---|
+| 2 (bounded input set) | execs `/bin/sh` and `git` | `T6`: "each bound path", not two of them |
+| 4 (bounded fs visibility) | reads the undeclared decoy | `T6`: the `/`-enumeration half, whose expected set is host-dependent |
+| 5 (network posture) | the TCP leg only | `T7`: the abstract-unix leg (`VA-2`, watch `S3`) |
+| 7 (teardown) | prints **neither** token, so the row reads `NoObservation` | `T9`: the trusted-side observation — per `F-6` the capture pipe, not the namespace, is what hides the survivor |
+
+Row 8's payload carries `T3`'s measurement directly: `exec head -c <2 × cap>
+/dev/zero`, `exec`'d so the capsule's **top-level** process takes the `SIGXFSZ`
+and the arm exits 153. Bounded at twice the cap on purpose — the control arm
+removes the file-size bound, and an unbounded `cat /dev/zero` there would fill
+the operator's disk.
+
+Table B's `Repository` axis cannot carry an oid across capsules, so its reader
+recomputes the blob name with `git hash-object --stdin` (no `-w`) rather than
+having the writer's oid baked into a constant it cannot know.

@@ -2375,12 +2375,23 @@ mod tests {
     }
 
     /// Note for the next reader: this marks `CLOEXEC` on **every** descriptor
-    /// above 2 in the test binary, including the harness's. That is benign —
-    /// `CLOEXEC` takes effect only at `exec`, and nothing in this crate's suite
-    /// passes a descriptor to a child expecting it to survive. It stops being
-    /// benign the moment one does.
+    /// above 2 in the test binary, including the harness's. `CLOEXEC` takes
+    /// effect only at `exec`, so that is benign for any descriptor no child is
+    /// expecting — and the note this replaces said it *stopped* being benign the
+    /// moment one was. It has: `concurrent_forks_each_hand_over_only_their_own_status_descriptor`
+    /// hands a status descriptor to a child, and this sweep, fired from another
+    /// test thread inside that fork's window, re-marks it and empties the
+    /// handover (a whole-suite-only flake — both tests pass alone).
+    ///
+    /// So this takes [`DESCRIPTOR_WINDOW`] too. The guard's contract is about
+    /// *this process's descriptor flags*, and a sweep is a process-wide mutation
+    /// of them however it is called; a caller that skips the guard because it is
+    /// a test is still the second writer the guard exists to exclude.
     #[test]
     fn every_descriptor_above_two_is_marked_close_on_exec_before_the_exec() {
+        let _window = DESCRIPTOR_WINDOW
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         // A `std::fs::File` is opened `O_CLOEXEC` and would pass against a
         // backend that swept nothing. `dup(2)` does not set the flag, so this
         // descriptor discriminates (`mem.pattern.tests.guard-needs-a-discriminating-difference`).

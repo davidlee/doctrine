@@ -72,8 +72,8 @@ use crate::backend::bubblewrap::{
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
     CapsulePlacement, CapsuleStdio, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT,
-    ForbiddenScopes, INNER_CAPSULE, MountedPath, NetworkPosture, Observation, PlacementParts,
-    Termination, TransactionRoot,
+    ForbiddenScopes, INNER_AGENT, INNER_CAPSULE, INNER_PROC, InnerPath, MountedPath,
+    NetworkPosture, Observation, PlacementParts, Termination, TransactionRoot,
 };
 use crate::config::{Argv, ByteCount};
 use crate::host::HostFacts;
@@ -96,8 +96,94 @@ const LIVENESS_MARKER: &str = "LIVE";
 /// trusted-side-observed pid.
 const SHELL: &str = "/bin/sh";
 
+/// The flag [`SHELL`] takes its one-liner under.
+const SHELL_COMMAND: &str = "-c";
+
 /// What would satisfy a host that has no [`SHELL`] (`POL-002` facet 3).
 const SHELL_REMEDY: &str = "install a POSIX shell at /bin/sh";
+
+/// The two tokens a *reach* payload prints: the property denied it what it went
+/// for, or it reached what the property is supposed to withhold. Rows 2–5 and
+/// B5.
+const DENIED: &str = "DENIED";
+const REACHED: &str = "REACHED";
+
+/// The two tokens a *freshness reader* prints: the second capsule found no state
+/// of the first, or it found some. Row 1 and B1–B4.
+///
+/// A reader also names each location it found, one line per hit and prefixed
+/// with [`SHARED`] — `SHARED-/agent/sentinel`. [`Observed::Token`] matches whole
+/// lines, so a diagnostic line is not the token and the reading stays binary
+/// while the failure stays triageable.
+const FRESH: &str = "FRESH";
+const SHARED: &str = "SHARED";
+
+/// The two tokens a freshness *writer* prints. A writer that could not write is
+/// a broken fixture rather than a violated property, and [`run_arm`] already
+/// gives that its own reading.
+const WROTE: &str = "WROTE";
+const WROTE_NOT: &str = "WROTE-NOT";
+
+/// What a freshness writer leaves behind, and under what name.
+const SENTINEL_LEAF: &str = "sentinel";
+const SENTINEL_BODY: &str = "left by an earlier transaction";
+/// Row B2's ref. A full refname, because `update-ref` and `show-ref --verify`
+/// both take one.
+const SENTINEL_REF: &str = "refs/heads/sentinel";
+
+/// The output area and the **retained** scratch beneath [`INNER_CAPSULE`],
+/// spelled here for the reason [`CAPSULE_REPOSITORY_LEAF`] is: `provision`'s own
+/// constants are private to that module and `provision.rs` is not a file this
+/// phase owns (`S1`).
+///
+/// The retained scratch is **not** `/tmp`. `/tmp` is the profile's own `--tmpfs`
+/// — an anonymous mount made fresh on every `execute` and backed by nothing
+/// beneath the transaction root — so [`Delta::SharedRoot`], which re-points a
+/// placement, cannot reach it at all and a `/tmp`-targeted row would be
+/// `Unproven` under both arms (`EX-11`).
+const CAPSULE_OUTPUT_LEAF: &str = "out";
+const CAPSULE_RETAINED_TMP_LEAF: &str = "tmp";
+
+/// Where a [`Delta::Widened`] control mounts a decoy.
+///
+/// A **fixed** inner destination, and that is forced rather than chosen: a
+/// payload is a constant `Argv` built before any fixture exists ([`verify`]
+/// builds [`tables`] eagerly and the fixture lazily), so no payload can be told
+/// the host path of a decoy in a temporary directory. The widening chooses the
+/// inner destination instead, and the payload names that.
+const WIDENED_EXECUTABLE: &str = "/widened/executable";
+const WIDENED_CREDENTIAL: &str = "/widened/credential";
+const WIDENED_REPOSITORY: &str = "/widened/repository";
+const WIDENED_UNDECLARED: &str = "/widened/undeclared";
+
+/// Row 8's oversize write: twice the fixture's cap, so the capped arm is killed
+/// partway and the uncapped arm finishes.
+///
+/// **Bounded, never `cat /dev/zero`.** The control arm removes the file-size
+/// bound, so an unbounded writer would fill the operator's disk rather than
+/// prove anything.
+const OVERSIZE_LEAF: &str = "oversize";
+const OVERSIZE_MULTIPLE: u64 = 2;
+
+/// How long a deliberately escaping descendant outlives the arm that spawned it.
+/// Well under [`FIXTURE_TIMEOUT_SECONDS`], or the wall bound reaps the whole tree
+/// and there is nothing left for the sweep to prove anything about; well over the
+/// arm's own runtime, or it exits on its own and the sweep is credited with a
+/// kill it did not make.
+const ESCAPE_SECONDS: u64 = 23;
+
+/// How long the capsule's own top-level process lingers after spawning the
+/// escapee. The trusted side's descent to that process polls `/proc` for half a
+/// second ([`CAPSULE_DISCOVERY_ATTEMPTS`]), and a payload that echoes and exits
+/// is gone inside a tenth of that — so without the linger the descent races the
+/// payload and reports no liveness, which is the honest answer to a question
+/// asked too late rather than a defect in the seam.
+const LINGER_SECONDS: u64 = 1;
+
+/// How long row B5's subject stays alive so the observer has a window. The
+/// trusted side's descent to the capsule's own process polls `/proc` for half a
+/// second, so a subject that echoes and exits is gone before it can be observed.
+const SUBJECT_LINGER_SECONDS: u64 = 3;
 
 /// Where the kernel release is read from, for [`host_descriptor`].
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
@@ -687,7 +773,18 @@ const GIT: &str = "git";
 
 /// Row 5's target: a listener the trusted side owns, on loopback, on a
 /// kernel-assigned port. Never the internet (`EX-11`).
+const LOOPBACK_ADDRESS: &str = "127.0.0.1";
 const LOOPBACK_ANY_PORT: &str = "127.0.0.1:0";
+
+/// Where the fixture commits the port [`LOOPBACK_ANY_PORT`] was assigned, inside
+/// its own repository.
+///
+/// The port is kernel-assigned and a payload is a constant, so the two cannot
+/// meet through the argv. They meet through the clone: the fixture writes the
+/// port into its repository *before* the base commit, so every capsule finds it
+/// at `/capsule/repo/<leaf>` — the working tree, never `/source`, which is a
+/// **bare** export with no working tree to read a file out of.
+const LISTENER_PORT_LEAF: &str = "listener-port";
 
 /// Where the host's mount table is read from for the second-filesystem
 /// selection. Parsed, never guessed — hardcoding `/tmp` is what `M18` exists to
@@ -809,6 +906,16 @@ impl Fixture {
             return Err(FixtureFault::NoReadableRoots);
         }
 
+        // Bound **before** the repository is initialised, because its port has
+        // to be committed into that repository: see [`LISTENER_PORT_LEAF`].
+        let listener = TcpListener::bind(LOOPBACK_ANY_PORT)
+            .map_err(|error| fixture_io(Path::new(LOOPBACK_ANY_PORT), &error))?;
+        let port = listener
+            .local_addr()
+            .map_err(|error| fixture_io(Path::new(LOOPBACK_ANY_PORT), &error))?
+            .port();
+        write_file(&project_root.join(LISTENER_PORT_LEAF), &format!("{port}\n"))?;
+
         let base = initialise_project(
             &project_root,
             &capsule_config_document(&capsule_root, &readable_roots),
@@ -825,8 +932,7 @@ impl Fixture {
                 capsule_root.clone(),
                 Vec::new(),
             ),
-            listener: TcpListener::bind(LOOPBACK_ANY_PORT)
-                .map_err(|error| fixture_io(Path::new(LOOPBACK_ANY_PORT), &error))?,
+            listener,
             own_session: own_session(),
             observed_sessions: RefCell::new(Vec::new()),
             root,
@@ -1966,13 +2072,6 @@ pub(crate) struct Row {
 /// rather than a [`Property`] key that cannot hold half of what the verdict
 /// reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[expect(
-    dead_code,
-    reason = "SL-248: `Property` is declared empty at PHASE-07 by EX-14, so `RowId::Property` \
-              is uninhabited and cannot be constructed until PHASE-09 lands the first eight \
-              variants. At item level rather than on the variant, for the same reason as \
-              `Row` above. Self-clears then."
-)]
 pub(crate) enum RowId {
     /// An enforcement claim of `SPEC-030` § *Platform backend contract*, one per
     /// channel rather than one per clause.
@@ -1983,8 +2082,10 @@ pub(crate) enum RowId {
 
 /// One variant per table A row, **ordered as table A is**.
 ///
-/// Declared empty at this phase: `EX-14` defers membership, and the variants
-/// arrive with their rows — eight after PHASE-09, fourteen after PHASE-10.
+/// Eight members at this phase — table A rows 1–8, which PHASE-09 lands with
+/// their rows. Rows 9–14 and their six variants arrive at PHASE-10; `EX-14`
+/// defers membership precisely so a variant never exists without the row that
+/// constructs it.
 ///
 /// ## What the compiler checks here, and what it does not
 ///
@@ -1999,8 +2100,28 @@ pub(crate) enum RowId {
 /// `every_row_id_is_covered_by_exactly_one_table` in particular asserts a
 /// property of the **code's own** tables and says nothing whatever about the
 /// document's row list.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Property {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Property {
+    /// Row 1. Two transactions on one base share no writable state.
+    FreshMutableState,
+    /// Row 2. Nothing outside the bound input set is executable.
+    BoundedInputSet,
+    /// Row 3. The canonical repository and the operator's credentials are out of
+    /// reach.
+    DeniedCanonicalStateAndCredentials,
+    /// Row 4. The host filesystem is visible only where the placement says.
+    BoundedFilesystemVisibility,
+    /// Row 5. The network posture is what was asked for, and `Denied` denies.
+    ExplicitNetworkPosture,
+    /// Row 6. The capsule starts in the placement's working directory,
+    /// whatever the trusted side's own.
+    DeterministicWorkingDirectory,
+    /// Row 7. No descendant outlives the `execute` call.
+    ProcessTreeTeardown,
+    /// Row 8. The parent's reading of a resource bound and a termination is the
+    /// authority, and each variant is told apart from the others.
+    TrustedTerminationObservation,
+}
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2474,26 +2595,412 @@ fn row_verdict(probe: ArmResult, control: ArmResult) -> RowVerdict {
 // Admission (`EX-2`, `EX-3`, `EX-15`)
 // ---------------------------------------------------------------------------
 
-/// Table A. Empty until PHASE-09 — see [`tables`].
-fn table_a() -> Vec<Row> {
-    Vec::new()
+// ---------------------------------------------------------------------------
+// Payload builders (`EX-16`)
+// ---------------------------------------------------------------------------
+
+/// Single-quote each word and join them, so a path reaches [`SHELL`] as one
+/// word whatever it holds.
+fn shell_words(words: &[String]) -> String {
+    words
+        .iter()
+        .map(|word| format!("'{word}'"))
+        .collect::<Vec<String>>()
+        .join(" ")
 }
 
-/// Table B. Empty until PHASE-10 — see [`tables`].
+/// `<directory>/sentinel`.
+fn sentinel_in(directory: &str) -> String {
+    format!("{directory}/{SENTINEL_LEAF}")
+}
+
+/// Row 1's targets: **every** writable location the placement declares.
+///
+/// Not `/capsule/out` alone (`RV-346` `F-27`) — the narrower payload passes a
+/// backend that freshens the output area while sharing the agent home. And not
+/// `/tmp`: see [`CAPSULE_RETAINED_TMP_LEAF`].
+fn every_declared_writable_location() -> Vec<String> {
+    vec![
+        sentinel_in(&format!("{INNER_CAPSULE}/{CAPSULE_OUTPUT_LEAF}")),
+        sentinel_in(&format!("{INNER_CAPSULE}/{CAPSULE_RETAINED_TMP_LEAF}")),
+        sentinel_in(INNER_AGENT),
+    ]
+}
+
+/// A freshness writer: leave [`SENTINEL_BODY`] at every path, or say it could
+/// not.
+fn writes_sentinels(paths: &[String]) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             for path in {list}; do \
+             printf '%s' '{SENTINEL_BODY}' > \"$path\" || {{ echo {WROTE_NOT}; exit 0; }}; \
+             done; \
+             echo {WROTE}",
+            list = shell_words(paths)
+        )),
+        observed: Observed::Token {
+            held: WROTE,
+            failed: WROTE_NOT,
+        },
+    }
+}
+
+/// A freshness reader: hold when **none** of the paths is there, and name each
+/// one that is.
+fn reads_sentinels(paths: &[String]) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             found=; \
+             for path in {list}; do \
+             if [ -e \"$path\" ]; then found=1; echo \"{SHARED}-$path\"; fi; \
+             done; \
+             if [ -n \"$found\" ]; then echo {SHARED}; else echo {FRESH}; fi",
+            list = shell_words(paths)
+        )),
+        observed: Observed::Token {
+            held: FRESH,
+            failed: SHARED,
+        },
+    }
+}
+
+/// One storage-freshness row: A writes the sentinels, B looks for them, and the
+/// control puts B in A's root.
+fn storage_row(id: RowId, paths: &[String]) -> Row {
+    Row {
+        id,
+        shape: ArmShape::Sequential {
+            writer: writes_sentinels(paths),
+            reader: reads_sentinels(paths),
+        },
+        delta: Delta::SharedRoot,
+    }
+}
+
+/// A payload that tries to read every path and holds only when **none** of them
+/// answered.
+///
+/// Counted rather than short-circuited: a reach that landed on some paths and
+/// not others prints neither token, so the arm reads
+/// [`Indeterminacy::NoObservation`] rather than half a belief.
+fn reads_none_of(paths: &[String]) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             reached=0; \
+             for path in {list}; do \
+             if cat \"$path\" > /dev/null 2>&1; then reached=$((reached+1)); fi; \
+             done; \
+             if [ \"$reached\" -eq 0 ]; then echo {DENIED}; \
+             elif [ \"$reached\" -eq {count} ]; then echo {REACHED}; fi",
+            list = shell_words(paths),
+            count = paths.len()
+        )),
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// One [`Delta::Widened`] entry, at a fixed inner destination.
+///
+/// `None` is unreachable — `InnerPath::try_new` refuses only a relative path and
+/// every destination here is an absolute literal — and it is *dropped* rather
+/// than panicked on: a widening that produced no entry leaves the control arm
+/// identical to the probe, which the algebra reports as
+/// [`RowVerdict::Unproven`]. A visible failure, in the suite's own vocabulary.
+fn widened(host: &Path, inner: &str) -> Option<MountedPath> {
+    InnerPath::try_new(PathBuf::from(inner))
+        .map(|inner| MountedPath::new(host.to_path_buf(), inner))
+}
+
+fn widens_the_decoy_executable(fixture: &Fixture) -> Vec<MountedPath> {
+    widened(fixture.decoy_executable(), WIDENED_EXECUTABLE)
+        .into_iter()
+        .collect()
+}
+
+fn widens_the_credential_and_repository_decoys(fixture: &Fixture) -> Vec<MountedPath> {
+    [
+        widened(fixture.decoy_credential(), WIDENED_CREDENTIAL),
+        widened(fixture.decoy_repository(), WIDENED_REPOSITORY),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+fn widens_the_undeclared_decoy(fixture: &Fixture) -> Vec<MountedPath> {
+    widened(fixture.decoy_undeclared(), WIDENED_UNDECLARED)
+        .into_iter()
+        .collect()
+}
+
+/// Row 2. **Executes** rather than stats (`EX-3`).
+///
+/// The two bound executables run first, and a payload that cannot run *those*
+/// prints neither token — so a capsule with no usable input set is indeterminate
+/// rather than a hold that established nothing.
+fn execs_only_what_is_bound() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             {SHELL} {SHELL_COMMAND} 'exit 0' || exit 0; \
+             {GIT} --version > /dev/null 2>&1 || exit 0; \
+             if '{WIDENED_EXECUTABLE}' > /dev/null 2>&1; \
+             then echo {REACHED}; else echo {DENIED}; fi"
+        )),
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// Row 5's first leg: the trusted side's loopback listener, whose port the
+/// fixture committed into the repository ([`LISTENER_PORT_LEAF`]).
+fn connects_to_the_trusted_side_listener() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             port=$(cat '{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}/{LISTENER_PORT_LEAF}' \
+             2>/dev/null); \
+             [ -n \"$port\" ] || exit 0; \
+             if (exec 3<>/dev/tcp/{LOOPBACK_ADDRESS}/\"$port\") 2>/dev/null; \
+             then echo {REACHED}; else echo {DENIED}; fi"
+        )),
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// Row 7's payload: a descendant that **leaves the original session** before its
+/// parent exits (`RV-346` `F-27`), so a backend reaping by process group alone
+/// cannot pass. All three of its standard streams are redirected, or it holds
+/// the capture pipe itself and no removal helps.
+fn escapes_its_own_session() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "(setsid sleep {ESCAPE_SECONDS} < /dev/null > /dev/null 2>&1 &); \
+             echo {LIVENESS_MARKER}; \
+             sleep {LINGER_SECONDS}"
+        )),
+        // Neither token is printed, and that is the row's open work: what row 7
+        // observes is trusted-side — whether anything outlived the `execute`
+        // call — and `F-6` measured that the *capture pipe*, not the pid
+        // namespace, is what hides the survivor from a payload-side reading. The
+        // arm therefore reports `NoObservation` until `T9` builds the
+        // trusted-side observation, which is an honest indeterminate rather than
+        // a false hold.
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// Row 8 at this phase: the file-size bound, read off the termination the parent
+/// observed.
+///
+/// **`exec`'d**, measured (`T3`): without it the shell forks the writer, the
+/// child takes the `SIGXFSZ`, and the parent exits 153 — so the trusted side
+/// reads `Signalled` from a process that was never signalled. The write is also
+/// **bounded** at twice the cap, because the control arm removes the bound and
+/// an unbounded writer would fill the operator's disk.
+fn writes_past_the_file_size_cap() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             exec head -c {bytes} /dev/zero \
+             > '{INNER_CAPSULE}/{CAPSULE_RETAINED_TMP_LEAF}/{OVERSIZE_LEAF}'",
+            bytes = FIXTURE_FILE_SIZE_CAP_MIB
+                .saturating_mul(OVERSIZE_MULTIPLE)
+                .saturating_mul(BYTES_PER_MIB)
+        )),
+        observed: Observed::Termination(Termination::FileSizeExceeded),
+    }
+}
+
+/// Row B2's writer: one loose object and one ref, both inside the clone.
+fn writes_an_object_and_a_ref(repository: &str) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             printf '%s' '{SENTINEL_BODY}' \
+             | {GIT} -C '{repository}' hash-object -w --stdin > /dev/null 2>&1 \
+             || {{ echo {WROTE_NOT}; exit 0; }}; \
+             {GIT} -C '{repository}' update-ref '{SENTINEL_REF}' HEAD > /dev/null 2>&1 \
+             || {{ echo {WROTE_NOT}; exit 0; }}; \
+             echo {WROTE}"
+        )),
+        observed: Observed::Token {
+            held: WROTE,
+            failed: WROTE_NOT,
+        },
+    }
+}
+
+/// Row B2's reader.
+///
+/// The object's name is **recomputed** rather than carried across capsules:
+/// `hash-object` without `-w` names the same blob the writer stored, so the
+/// reader needs nothing from the writer but the repository itself.
+fn reads_an_object_and_a_ref(repository: &str) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             found=; \
+             oid=$(printf '%s' '{SENTINEL_BODY}' \
+             | {GIT} -C '{repository}' hash-object --stdin 2>/dev/null); \
+             if [ -n \"$oid\" ] && {GIT} -C '{repository}' cat-file -e \"$oid\" 2>/dev/null; \
+             then found=1; echo \"{SHARED}-$oid\"; fi; \
+             if {GIT} -C '{repository}' show-ref --quiet --verify '{SENTINEL_REF}' 2>/dev/null; \
+             then found=1; echo \"{SHARED}-{SENTINEL_REF}\"; fi; \
+             if [ -n \"$found\" ]; then echo {SHARED}; else echo {FRESH}; fi"
+        )),
+        observed: Observed::Token {
+            held: FRESH,
+            failed: SHARED,
+        },
+    }
+}
+
+/// Row B5's subject: alive long enough for the observer to look at it.
+fn lingers() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; sleep {SUBJECT_LINGER_SECONDS}"
+        )),
+        // Only the subject's **liveness** is read — the arm itself is read off
+        // the observer — so the tokens name the kind and neither is printed.
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// Row B5's observer, over the pid the **trusted side** saw the subject running
+/// under (`REQ-448` criterion 3). Two positive readings, not one: absent from
+/// `/proc`, and unsignallable.
+fn observes_the_subject(subject: HostPid) -> Argv {
+    shell_argv(&format!(
+        "echo {LIVENESS_MARKER}; \
+         if [ -e '{INNER_PROC}/{pid}' ] || kill -0 {pid} 2>/dev/null; \
+         then echo {REACHED}; else echo {DENIED}; fi",
+        pid = subject.0
+    ))
+}
+
+/// Table A — `SPEC-030` § *Platform backend contract*'s rows, in the design
+/// document's order, and the ordering of [`Property`] is this list's.
+///
+/// Eight rows at this phase; rows 9–14 arrive at PHASE-10.
+fn table_a() -> Vec<Row> {
+    vec![
+        storage_row(
+            RowId::Property(Property::FreshMutableState),
+            &every_declared_writable_location(),
+        ),
+        Row {
+            id: RowId::Property(Property::BoundedInputSet),
+            shape: ArmShape::Single(execs_only_what_is_bound()),
+            delta: Delta::Widened(widens_the_decoy_executable),
+        },
+        Row {
+            id: RowId::Property(Property::DeniedCanonicalStateAndCredentials),
+            shape: ArmShape::Single(reads_none_of(&[
+                WIDENED_CREDENTIAL.to_owned(),
+                format!("{WIDENED_REPOSITORY}/{GIT_DIRECTORY_LEAF}/HEAD"),
+            ])),
+            delta: Delta::Widened(widens_the_credential_and_repository_decoys),
+        },
+        Row {
+            id: RowId::Property(Property::BoundedFilesystemVisibility),
+            shape: ArmShape::Single(reads_none_of(&[WIDENED_UNDECLARED.to_owned()])),
+            delta: Delta::Widened(widens_the_undeclared_decoy),
+        },
+        Row {
+            id: RowId::Property(Property::ExplicitNetworkPosture),
+            shape: ArmShape::Single(connects_to_the_trusted_side_listener()),
+            delta: Delta::NetworkPermitted,
+        },
+        Row {
+            id: RowId::Property(Property::DeterministicWorkingDirectory),
+            shape: ArmShape::Single(Probe {
+                argv: shell_argv(&format!("echo {LIVENESS_MARKER}; pwd")),
+                observed: Observed::Exactly(INNER_CAPSULE.to_owned()),
+            }),
+            delta: Delta::Removed(PropertyRemoval::WorkingDirectory),
+        },
+        Row {
+            id: RowId::Property(Property::ProcessTreeTeardown),
+            shape: ArmShape::Single(escapes_its_own_session()),
+            delta: Delta::Removed(PropertyRemoval::Teardown),
+        },
+        Row {
+            id: RowId::Property(Property::TrustedTerminationObservation),
+            shape: ArmShape::Single(writes_past_the_file_size_cap()),
+            delta: Delta::Removed(PropertyRemoval::ResourceBound(Bound::FileSize)),
+        },
+    ]
+}
+
+/// Table B — `REQ-450` criterion 1's five freshness axes. Four storage rows
+/// share one delta; the process row has its own.
 fn table_b() -> Vec<Row> {
-    Vec::new()
+    let repository = format!("{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}");
+    vec![
+        storage_row(RowId::Axis(Axis::Checkout), &[sentinel_in(&repository)]),
+        Row {
+            id: RowId::Axis(Axis::Repository),
+            shape: ArmShape::Sequential {
+                writer: writes_an_object_and_a_ref(&repository),
+                reader: reads_an_object_and_a_ref(&repository),
+            },
+            delta: Delta::SharedRoot,
+        },
+        storage_row(RowId::Axis(Axis::Runtime), &[sentinel_in(INNER_AGENT)]),
+        storage_row(
+            RowId::Axis(Axis::TemporaryState),
+            &[sentinel_in(&format!(
+                "{INNER_CAPSULE}/{CAPSULE_RETAINED_TMP_LEAF}"
+            ))],
+        ),
+        Row {
+            id: RowId::Axis(Axis::Process),
+            shape: ArmShape::Concurrent {
+                subject: lingers(),
+                observer: PidProbe {
+                    argv: observes_the_subject,
+                    observed: Observed::Token {
+                        held: DENIED,
+                        failed: REACHED,
+                    },
+                },
+            },
+            delta: Delta::Removed(PropertyRemoval::ProcessVisibility),
+        },
+    ]
 }
 
 /// Tables A and B, which [`admission`] is computed from.
 ///
-/// **Both are empty at PHASE-07, so [`verify`] returns [`Admission::Admitted`]
-/// vacuously.** That is correct and temporary — the rows arrive in PHASE-09 and
-/// PHASE-10 — and it is exactly the thing a later reader would misread as a
-/// passing suite. It is written down here rather than asserted anywhere: no test
-/// in this phase asserts that [`verify`]'s outcome is `Admitted`, because such a
-/// test would pass under every implementation of the algebra and prove nothing.
-/// The algebra is tested through [`verify_over`] against hand-built row sets
-/// instead.
+/// Thirteen rows at this phase — table A's first eight and all five of table B
+/// — so [`Admission::Admitted`] now means what it will mean at PHASE-10: every
+/// one of them [`RowVerdict::Proven`]. It is no longer reachable vacuously.
+///
+/// Built **eagerly**, before any fixture exists (see [`verify`]'s ordering), and
+/// that is what makes every payload here a constant: a row cannot be told a
+/// fixture's host paths, so a control that needs one chooses the *inner*
+/// destination instead ([`WIDENED_EXECUTABLE`] and its neighbours) or the
+/// fixture puts the value where the capsule already looks
+/// ([`LISTENER_PORT_LEAF`]).
 fn tables() -> Vec<Row> {
     let mut rows = table_a();
     rows.extend(table_b());
@@ -2632,7 +3139,7 @@ fn rewrite_policy_inside(
         .map_err(|error| error.to_string())?
         .replace(EMPTY_FORBIDDEN_EXECUTABLES, REWRITTEN_FORBIDDEN_EXECUTABLES);
     let inner = format!("{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}/{DOCTRINE_TOML}");
-    let argv = shell_argv(&format!("printf '%s' '{document}' > {inner}"))?;
+    let argv = shell_argv(&format!("printf '%s' '{document}' > {inner}"));
     ran_cleanly(backend.execute(&transaction.placement, &harness_execution(&argv)))?;
 
     let written = profile_owned_host_path(transaction.root(), INNER_CAPSULE)
@@ -2686,7 +3193,7 @@ fn compare_object_sets(
     let quoted = OBJECT_NAME_QUERY.map(|word| format!("'{word}'")).join(" ");
     let argv = shell_argv(&format!(
         "{GIT} -C {INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF} {quoted}"
-    ))?;
+    ));
     let observation =
         ran_cleanly(backend.execute(&transaction.placement, &harness_execution(&argv)))?;
     let inside = object_names(&String::from_utf8_lossy(&observation.stdout));
@@ -2808,10 +3315,17 @@ fn agreed_capacity(host: &dyn HostFacts, path: &Path) -> Result<u64, String> {
     Ok(reported)
 }
 
-/// A payload under [`SHELL`], which is what every claim's capsule runs.
-fn shell_argv(script: &str) -> Result<Argv, String> {
-    Argv::try_new(vec![SHELL.to_owned(), "-c".to_owned(), script.to_owned()])
-        .ok_or_else(|| "an empty argv".to_owned())
+/// A payload under [`SHELL`], which is what every row and every claim runs.
+///
+/// **Total**: three words by construction, so there is no empty-argv refusal to
+/// report — [`Argv::new`] carries that invariant rather than each caller
+/// inventing an error case that cannot occur. A row's payload has nowhere to put
+/// a refusal anyway: [`Probe`] holds an `Argv`, not a `Result`.
+fn shell_argv(script: &str) -> Argv {
+    Argv::new(
+        SHELL.to_owned(),
+        vec![SHELL_COMMAND.to_owned(), script.to_owned()],
+    )
 }
 
 /// An observation of a capsule that was expected to succeed, or why not.
@@ -3002,25 +3516,70 @@ fn run_row(
     fixture: &Fixture,
     row: &Row,
 ) -> RowVerdict {
+    let probe = run_probe_arm(backend, host, fixture, row);
+    let control = run_control_arm(backend, host, fixture, row);
+
+    // On the way out of **every** row, not only the last: a survivor left by
+    // row 7's control arm would otherwise still be running while the next row's
+    // arms provision, and `EX-12`'s failure is silent — a leaked process per
+    // run, found by a developer whose machine is slowly filling with them.
+    let _swept = fixture.sweep_observed_sessions();
+
+    row_verdict(probe, control)
+}
+
+/// One arm over a capsule source, with the fixture's two pid seams attached.
+///
+/// The seams are the same on both arms and on every row shape, which is the
+/// whole reason they are here rather than spelled twice: containment is not a
+/// property of which arm is running (`EX-12`).
+fn arm_over(
+    backend: &dyn ConformanceBackend,
+    fixture: &Fixture,
+    row: &Row,
+    capsule: &dyn Fn() -> Result<CapsulePlacement, String>,
+    under: Under,
+) -> ArmResult {
     let live = |pid: HostPid| capsule_still_running(pid);
     let noticed = |pid: HostPid| fixture.note_capsule_session(pid);
+    run_arm(
+        &Arm {
+            backend,
+            capsule,
+            execution: &harness_execution,
+            live: &live,
+            noticed: &noticed,
+            under,
+        },
+        &row.shape,
+    )
+}
 
+/// The probe arm: the placement exactly as `provision` returned it.
+fn run_probe_arm(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+    row: &Row,
+) -> ArmResult {
     let untouched = || {
         provision_capsule(fixture, host, backend.as_capsule_backend())
             .map(|transaction| transaction.placement)
     };
-    let probe = run_arm(
-        &Arm {
-            backend,
-            capsule: &untouched,
-            execution: &harness_execution,
-            live: &live,
-            noticed: &noticed,
-            under: Under::Confining,
-        },
-        &row.shape,
-    );
+    arm_over(backend, fixture, row, &untouched, Under::Confining)
+}
 
+/// The control arm: the probe's, differing by exactly one delta.
+///
+/// Split from [`run_row`] because a row verdict cannot report one arm. `Proven`
+/// says *the* control failed, and five rows of table B share one delta — so a
+/// test that means to establish which control fired has to read the arm.
+fn run_control_arm(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+    row: &Row,
+) -> ArmResult {
     // Held across the control arm's capsules so `SharedRoot`'s second placement
     // can be re-pointed onto the first's root. It is the *root* that is kept and
     // not the transaction: nothing in this crate removes a transaction root, and
@@ -3041,25 +3600,7 @@ fn run_row(
         }
         Ok(placement)
     };
-    let control = run_arm(
-        &Arm {
-            backend,
-            capsule: &deltaed,
-            execution: &harness_execution,
-            live: &live,
-            noticed: &noticed,
-            under: under_for(&row.delta),
-        },
-        &row.shape,
-    );
-
-    // On the way out of **every** row, not only the last: a survivor left by
-    // row 7's control arm would otherwise still be running while the next row's
-    // arms provision, and `EX-12`'s failure is silent — a leaked process per
-    // run, found by a developer whose machine is slowly filling with them.
-    let _swept = fixture.sweep_observed_sessions();
-
-    row_verdict(probe, control)
+    arm_over(backend, fixture, row, &deltaed, under_for(&row.delta))
 }
 
 /// The outcome, **computed from the row list alone**.
@@ -3256,13 +3797,19 @@ mod tests {
         StatFacts, capsule_session_leader, depth_from, own_session, process_table, session_of,
         stat_of,
     };
+    use super::{
+        CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, ESCAPE_SECONDS, INNER_AGENT,
+        LINGER_SECONDS, Property, SENTINEL_LEAF, run_control_arm, tables,
+        widens_the_undeclared_decoy,
+    };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{BubblewrapBackend, SpawnOptions, confinement_argv};
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
-        CapsulePlacement, CapsuleStdio, Execution, ForbiddenScopes, InnerPath, MountedPath,
-        NetworkPosture, Observation, PlacementParts, SourceExport, Termination, TransactionRoot,
+        CapsulePlacement, CapsuleStdio, Execution, ForbiddenScopes, INNER_CAPSULE, INNER_TMP,
+        InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts, SourceExport,
+        Termination, TransactionRoot,
     };
     use crate::config::{Argv, ByteCount};
     use crate::host::HostFacts;
@@ -3280,21 +3827,6 @@ mod tests {
     const ANOTHER_VALUE: &str = "0";
 
     const TODAY: &str = "2026-08-09";
-
-    /// How long a deliberately escaping descendant outlives the arm that spawned
-    /// it. Well under `FIXTURE_TIMEOUT_SECONDS`, or the wall bound reaps the
-    /// whole tree and there is nothing left for the sweep to prove anything
-    /// about; well over the arm's own runtime, or it exits on its own and the
-    /// sweep is credited with a kill it did not make.
-    const ESCAPE_SECONDS: u64 = 23;
-
-    /// How long the capsule's own top-level process lingers after spawning the
-    /// escapee. The trusted side's descent to that process polls `/proc` for
-    /// half a second (`CAPSULE_DISCOVERY_ATTEMPTS`), and a payload that echoes
-    /// and exits is gone inside a tenth of that — so without the linger the
-    /// descent races the payload and reports no liveness, which is the honest
-    /// answer to a question asked too late rather than a defect in the seam.
-    const LINGER_SECONDS: u64 = 1;
 
     // ── Placement geometry (`D6`) ──────────────────────────────────────────
     //
@@ -5067,13 +5599,6 @@ mod tests {
     /// not. A `Widened` control whose entry list is empty rebuilds a placement
     /// equal to the one it started from, and a test that used it would report
     /// "the control differs" as false.
-    fn widens_the_undeclared_decoy(fixture: &Fixture) -> Vec<MountedPath> {
-        vec![MountedPath::new(
-            fixture.decoy_undeclared().to_path_buf(),
-            InnerPath::try_new(PathBuf::from("/widened")).expect("an absolute inner path"),
-        )]
-    }
-
     /// Every pid the host currently shows in `session`.
     fn processes_in(session: SessionId) -> Vec<HostPid> {
         process_table()
@@ -6642,5 +7167,164 @@ mod tests {
             table.iter().any(|entry| entry.pid == pid),
             "the sweep did not find the process running it"
         );
+    }
+
+    // ── T5: row 1 and table B's four storage axes (`VT-1`, `VT-4`) ─────────
+    //
+    // Every row below is the **shipped** row, taken from the code's own tables
+    // and run through `run_row` — never a hand-built copy (`A4`, `F-33`). A test
+    // that assembled its own row would establish something about the test rather
+    // than about the table [`admission`] is computed from. Each was run alone
+    // under a shell `timeout` before it joined the suite (`R1`).
+
+    /// The five rows whose control is [`Delta::SharedRoot`]: table A's row 1, and
+    /// all four of table B's storage axes.
+    const STORAGE_ROWS: [RowId; 5] = [
+        RowId::Property(Property::FreshMutableState),
+        RowId::Axis(Axis::Checkout),
+        RowId::Axis(Axis::Repository),
+        RowId::Axis(Axis::Runtime),
+        RowId::Axis(Axis::TemporaryState),
+    ];
+
+    fn shipped_row(id: &RowId) -> Row {
+        tables()
+            .into_iter()
+            .find(|row| row.id == *id)
+            .unwrap_or_else(|| panic!("{id:?} is not in the shipped tables"))
+    }
+
+    /// One shipped row, both arms, through the one route a row reaches a backend
+    /// by.
+    fn shipped_verdict(id: &RowId) -> RowVerdict {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(backend.availability(), Availability::Available);
+        run_row(&backend, &SystemHost, &fixture, &shipped_row(id))
+    }
+
+    /// `VT-1`, table A row 1. The payload writes to **every** declared writable
+    /// location — `/capsule/out`, `/capsule/tmp` and `/agent` — so a backend that
+    /// freshens the output area while sharing the agent home cannot pass it
+    /// (`RV-346` `F-27`).
+    #[test]
+    fn fresh_mutable_state_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::FreshMutableState)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// The three locations row 1 names, asserted against the payload it ships
+    /// with. Pure, and it is what keeps the executed row above from quietly
+    /// narrowing to `/capsule/out` alone.
+    #[test]
+    fn row_one_writes_to_every_declared_writable_location() {
+        let row = shipped_row(&RowId::Property(Property::FreshMutableState));
+        let ArmShape::Sequential { writer, reader } = &row.shape else {
+            panic!("row 1 is a two-capsule row");
+        };
+        for location in [
+            &format!("{INNER_CAPSULE}/{CAPSULE_OUTPUT_LEAF}/{SENTINEL_LEAF}"),
+            &format!("{INNER_CAPSULE}/{CAPSULE_RETAINED_TMP_LEAF}/{SENTINEL_LEAF}"),
+            &format!("{INNER_AGENT}/{SENTINEL_LEAF}"),
+        ] {
+            for probe in [writer, reader] {
+                assert!(
+                    probe
+                        .argv
+                        .as_slice()
+                        .iter()
+                        .any(|word| word.contains(location)),
+                    "row 1 names no {location}"
+                );
+            }
+        }
+        // And never the transient tmpfs, which `SharedRoot` cannot reach at all
+        // (`EX-11`).
+        assert!(
+            !writer
+                .argv
+                .as_slice()
+                .iter()
+                .any(|word| word.contains(&format!("'{INNER_TMP}/"))),
+            "row 1 writes into the profile's own tmpfs"
+        );
+    }
+
+    /// `VT-4`, axis B1.
+    #[test]
+    fn two_transactions_on_one_base_share_no_writable_checkout() {
+        assert_eq!(
+            shipped_verdict(&RowId::Axis(Axis::Checkout)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-4`, axis B2 — an object *and* a ref, both inside `/capsule/repo/.git`.
+    #[test]
+    fn two_transactions_on_one_base_share_no_repository_objects() {
+        assert_eq!(
+            shipped_verdict(&RowId::Axis(Axis::Repository)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-4`, axis B3.
+    #[test]
+    fn two_transactions_on_one_base_share_no_runtime_state_in_the_agent_home() {
+        assert_eq!(
+            shipped_verdict(&RowId::Axis(Axis::Runtime)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-4`, axis B4 — the **retained** scratch at `/capsule/tmp`, never
+    /// `/tmp`. A `/tmp`-targeted axis reads an empty tmpfs under both arms, which
+    /// is `Unproven` and would make `Admitted` unreachable forever.
+    #[test]
+    fn two_transactions_on_one_base_share_no_temporary_state() {
+        assert_eq!(
+            shipped_verdict(&RowId::Axis(Axis::TemporaryState)),
+            RowVerdict::Proven
+        );
+        let row = shipped_row(&RowId::Axis(Axis::TemporaryState));
+        let ArmShape::Sequential { writer, .. } = &row.shape else {
+            panic!("B4 is a two-capsule row");
+        };
+        assert!(
+            writer
+                .argv
+                .as_slice()
+                .iter()
+                .any(|word| word.contains(&format!(
+                    "{INNER_CAPSULE}/{CAPSULE_RETAINED_TMP_LEAF}/{SENTINEL_LEAF}"
+                ))),
+            "B4 does not target the retained scratch"
+        );
+    }
+
+    /// `VT-4`'s discriminator, and the reason the five assertions above are not
+    /// vacuous: each storage row's control arm is **seen to fail**.
+    ///
+    /// A row verdict cannot report this. `Proven` says *the* control failed, and
+    /// all five rows here share one delta — so establishing that each axis is
+    /// genuinely shared under `SharedRoot` means reading the arm.
+    #[test]
+    fn control_second_transaction_in_the_first_root_does_share_each_storage_axis() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        for id in &STORAGE_ROWS {
+            let row = shipped_row(id);
+            assert!(
+                matches!(row.delta, Delta::SharedRoot),
+                "{id:?} is not a shared-root row"
+            );
+            assert_eq!(
+                run_control_arm(&backend, &SystemHost, &fixture, &row),
+                ArmResult::Failed,
+                "{id:?}: the second transaction in the first's root saw no state of it"
+            );
+        }
     }
 }

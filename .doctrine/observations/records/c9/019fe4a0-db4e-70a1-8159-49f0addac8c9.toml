@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe4a0-db4e-70a1-8159-49f0addac8c9"
+recorded_at = "2026-08-09T03:46:14.990885924Z"
+kind = "friction"
+summary = "PHASE-09 /execute: a whole-suite-only flake cost a gate cycle to attribute — a test swept process-wide fd flags outside the production guard"
+detail = "Running `doctrine check gate` at the end of T4+T5 redded on a test I had not touched (bubblewrap.rs concurrent_forks_each_hand_over_only_their_own_status_descriptor). Both the victim and the culprit pass alone; only the full suite reds, and only sometimes. Attribution took a read of every CLOEXEC mutation site in the file. The culprit test's own doc comment had predicted the failure in words ('it stops being benign the moment one does') without the guard that would have prevented it — a stale-by-design comment where a lock was cheaper. Token cost: one full gate cycle plus ~6 diagnostic runs. Generalisable: adding executed tests to a suite that mutates process-wide state surfaces latent cross-test races at the moment an unrelated task lands, so the cost is always charged to the wrong task."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
