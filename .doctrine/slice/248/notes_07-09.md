@@ -1034,3 +1034,116 @@ keeps today's only multi-threaded caller off a defect it did not introduce. Held
 for the whole of `run` rather than just the fork, so a future real concurrent arm
 would serialise rather than deadlock; narrowing it is part of the production fix.
 The suite went from a 14-minute hang to 197 tests in 1.58s.
+
+## `T11` — the mutation battery (21 of 21)
+
+Applied to green source, restored **by copy** from a scratch snapshot before and
+after every run (`C6`); `git checkout` never used, and `git status` was clean of
+`crates/` at the end of every batch. Each mutation's anchor text was asserted
+**unique** before substitution, so a silently-missed edit cannot read as "reds
+nothing".
+
+**Method note.** The per-mutation gate is `cargo test -p doctrine-control --bin
+doctrine-control`, not `doctrine check gate`. The test leg is the only leg a
+semantic mutation can red, and it is ~1.6s against minutes — 24 runs at gate
+price is most of a phase. The gate is run once, on restored green source, as the
+phase's evidence.
+
+| id | reds | verdict |
+|---|---|---|
+| `M1` | *nothing* | predicted in advance by `F-15`; `a_backend_ignoring_its_removal_yields_unproven_for_every_row` stayed green ✓ |
+| `M2` | the chdir case | exact ✓ |
+| `M3` | the teardown case | exact ✓ (the escape half did not red — `F-30`, below) |
+| `M4` | the process-visibility case, `the_enumerated_unshare_set_expresses_a_permitted_network_by_omission`, `the_orphan…_is_reaped_by_the_harness` | must-red ✓, teardown case green ✓ |
+| `M5` | the env case, `every_axis_leaves_the_setenv_list_byte_identical` | must-red ✓, stdio case green ✓ |
+| `M6` | the stdio case | exact ✓; the descriptor case green ✓ |
+| `M7` | the descriptor case | exact ✓; the env case green ✓ |
+| `M8` | the identity case | exact ✓; the capability case green ✓ |
+| `M9` | the inputs case | exact ✓ |
+| `M10` | the capability case | exact ✓; the identity case green ✓ |
+| `M11b` | `the_shared_root_delta_repoints_only_the_second_placement` | exact ✓ (`M11` as worded does not compile) |
+| `M12` | `the_probe_arm_of_a_row_is_not_passed_through_the_delta` | redded **nothing** as worded; the fix was in the test — see below |
+| `M13` | `the_orphan…_is_reaped_by_the_harness`, `stat_is_read_past_the_last_paren_of_a_hostile_comm` | must-red ✓ |
+| `M14` | `rewriting_doctrine_toml_inside_a_capsule_does_not_change_the_bound_policy` | exact ✓; the object-set test green ✓ |
+| `M15` | `the_clones_object_set_is_exactly_the_exports` | exact ✓ |
+| `M16` | both capacity rows | must-red ✓; read-once and object-set green ✓ |
+| `M17` | `the_capacity_probe_reads_the_filesystem_the_capsule_root_is_on` **only** | the phase's key discrimination ✓ |
+| `M18` | the same row, plus `the_second_filesystem_is_on_another_device_or_absent` | must-red ✓; the unconditional capacity row green ✓ |
+| `M19` | `a_missing_second_filesystem_reports_skipped_naming_the_reason` | exact ✓ |
+| `M20a` | 21 tests — every fixture-building test | the guard refuses, so it discriminates nothing |
+| `M20b` | `the_fixture_root_is_on_a_non_tmpfs_filesystem` **only** | exact ✓ |
+| `M21b` | `the_fixture_root_is_removed_when_the_fixture_is_dropped` | exact ✓ (`M21` as worded does not compile) |
+
+### `F-32` — three of the sheet's mutations are not compilable as worded
+
+The battery is a source edit, and this crate's deny list is part of the source.
+Three rows had to be re-expressed to be *runnable at all*, and the re-expression
+is recorded here so the next reader does not read a rewritten row as a dodged
+one:
+
+- **`M11`** — "rebuild the whole second placement rather than re-point its root"
+  deletes `rebase_onto`'s only call, and `dead_code` is denied: the crate does
+  not compile, so no test can red. `M11b` is the same defect expressed so it
+  compiles — the root *is* shared and the entries beneath it are **not** moved
+  with it (`rebase_onto(&mut …, &own, &own)`). It reds the right test, and for
+  the right reason: `ForbiddenScopeOverlap`, which is `F-29`'s trap seen from the
+  other side.
+- **`M21`** — `drop(&self.path)` is refused by clippy's `drop_ref`. `M21b`
+  substitutes `drop(std::fs::metadata(&self.path))`: still touches the path,
+  still removes nothing.
+- **`M20`** — `TempRoot::new` on `std::env::temp_dir()` **keeps** the
+  `on_real_disk` guard, so the fixture refuses to build and 21 tests red on the
+  refusal, not on the property. Split: `M20a` is the sheet's mutation as worded
+  (recorded, and it discriminates nothing); `M20b` removes the guard too, and
+  reds `the_fixture_root_is_on_a_non_tmpfs_filesystem` alone. Only `M20b` is
+  evidence that the tmpfs assertion is doing work.
+
+The general shape — a deny list that makes a *plausible defect* uncompilable —
+is worth carrying: it means the lint, not the test, is that row's guard. Fine as
+long as it is named. It is not fine when it is mistaken for a green battery row.
+
+### `M12` redded nothing, and the fix was in the test
+
+Invariant 4 — the probe arm hands the backend exactly what `provision` returned
+— had one test, and that test builds its own `Arm` and calls `run_arm`. So it
+establishes that **`run_arm` does not rewrite what it is handed** and says
+nothing about `run_row`, which is the only place a delta could reach the probe.
+Passing `run_row`'s probe closure through `placed_under` therefore redded
+nothing at all: the sheet's `M12` was aimed at a seam no test was watching.
+
+Closed with `the_probe_arm_of_a_row_is_not_passed_through_the_delta`: one real
+row (`Delta::Widened`, `ArmShape::Single`), both arms provisioned and run for
+real, and the widened entry asserted present in exactly one of the two
+placements that reach the backend. `M12` now reds it and nothing else.
+
+The test needed a backend `Stub` could not be: `run_row` provisions *and*
+executes through one backend, and `WitnessBackend` cannot provision. `Recording`
+is the answer — a `ConformanceBackend` whose `as_capsule_backend` hands out the
+**real mechanism**, so the clone's executions go straight to it unrecorded, and
+whose `execute_noticing` records and delegates. What is left in `placements()` is
+exactly the two arms. Worth reaching for again whenever a seam is only reachable
+through a real provision.
+
+### The two mutations whose prediction moved
+
+- **`M1`** was predicted to red nothing *before* the battery ran (`F-15`): a
+  backend that ignores its removal is permitted by the type system and reports
+  `Unproven`, which is `EX-7`'s intent, so the property lives in
+  `a_backend_ignoring_its_removal_yields_unproven_for_every_row` and not in an
+  argv diff. The battery confirms both halves — nothing red, and that test green.
+- **`M3`** was predicted to red the orphan test's escape half. It does not, and
+  `F-30` is why: the escape is unobservable under `Teardown` (the pid namespace,
+  not `--die-with-parent`, is what reaps the descendant), so the test runs the
+  `ProcessVisibility` control instead. `M4` — which breaks exactly that control —
+  reds it in `M3`'s place. The coverage moved with the arm; it was not lost.
+
+### Extra reds, all of them the same rule under another fixture
+
+`M4` additionally reds a `bubblewrap.rs` unit test asserting the enumerated set
+*replaces* `--unshare-all` rather than joining it, and the orphan test whose
+control arm is that set. `M5` additionally reds the `--setenv`-list invariant,
+which is the same claim stated once for every axis. `M13` additionally reds the
+`/proc` stat-parsing unit test, because field 3 is the field it parses. `M16`
+and `M18` red both capacity rows because both call the one probe. None is
+entanglement between *rules*, and narrowing any of them would trade real
+coverage for a tidier table.

@@ -3197,7 +3197,7 @@ mod tests {
     use super::{
         Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
         capsule_still_running, harness_execution, next_transaction_id, placed_under,
-        provision_capsule, run_arm, still_running, under_for,
+        provision_capsule, run_arm, run_row, still_running, under_for,
     };
     use super::{
         CAPACITY_CLAIM, CAPACITY_FILESYSTEM_CLAIM, DOCTRINE_TOML, EMPTY_FORBIDDEN_EXECUTABLES,
@@ -5043,6 +5043,154 @@ mod tests {
             Some(&returned),
             "the control's placement is not modified either, so the first \
              assertion holds for no reason"
+        );
+    }
+
+    /// A `ConformanceBackend` that provisions with the real mechanism and
+    /// records the placement of every **arm** that reaches the boundary.
+    ///
+    /// `Stub`'s witness cannot provision, and `run_row` provisions and executes
+    /// through one backend — so `run_row`'s own wiring needs a recorder that
+    /// delegates provisioning to a real backend and intercepts only the arms.
+    /// `as_capsule_backend` therefore hands out the mechanism itself: the
+    /// clone's executions go straight to it, unrecorded, and what is left in
+    /// `placements` is exactly the two arms.
+    struct Recording<'m> {
+        mechanism: &'m BubblewrapBackend<'m>,
+        placements: RefCell<Vec<CapsulePlacement>>,
+    }
+
+    impl<'m> Recording<'m> {
+        const fn over(mechanism: &'m BubblewrapBackend<'m>) -> Self {
+            Self {
+                mechanism,
+                placements: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn placements(&self) -> Vec<CapsulePlacement> {
+            self.placements.borrow().clone()
+        }
+    }
+
+    impl CapsuleBackend for Recording<'_> {
+        fn id(&self) -> BackendId {
+            self.mechanism.id()
+        }
+
+        fn availability(&self) -> Availability {
+            self.mechanism.availability()
+        }
+
+        fn execute(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+        ) -> Result<Observation, BackendError> {
+            self.mechanism.execute(placement, execution)
+        }
+    }
+
+    impl ConformanceBackend for Recording<'_> {
+        fn as_capsule_backend(&self) -> &dyn CapsuleBackend {
+            self.mechanism
+        }
+
+        fn execute_weakened(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+            removal: PropertyRemoval,
+        ) -> Result<Observation, BackendError> {
+            self.mechanism
+                .execute_weakened(placement, execution, removal)
+        }
+
+        fn execute_granted(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+            grant: AuthorityGrant,
+        ) -> Result<Observation, BackendError> {
+            self.mechanism.execute_granted(placement, execution, grant)
+        }
+
+        fn execute_observed(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+            observer: &dyn Fn(HostPid),
+        ) -> Result<Observation, BackendError> {
+            self.mechanism
+                .execute_observed(placement, execution, observer)
+        }
+
+        fn execute_noticing(
+            &self,
+            placement: &CapsulePlacement,
+            execution: &Execution,
+            under: Under,
+            noticed: &dyn Fn(HostPid),
+        ) -> Result<Observation, BackendError> {
+            self.placements.borrow_mut().push(placement.clone());
+            self.mechanism
+                .execute_noticing(placement, execution, under, noticed)
+        }
+    }
+
+    /// Invariant 4 at the seam that **wires** it, rather than at the seam that
+    /// obeys it.
+    ///
+    /// `a_probe_arm_placement_is_byte_identical_to_what_provision_returned`
+    /// builds its own `Arm` and so establishes that `run_arm` does not rewrite
+    /// what it is handed. `run_row` is where a delta could reach the probe, and
+    /// it is not on that test's path — which is why `M12`, the mutation that
+    /// passes the probe arm's capsule through the delta applier, redded
+    /// nothing. One real row closes it: the widened entry must reach exactly
+    /// one of the two arms.
+    #[test]
+    fn the_probe_arm_of_a_row_is_not_passed_through_the_delta() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let mechanism = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            mechanism.availability(),
+            Availability::Available,
+            "both arms provision and run for real"
+        );
+        let recorder = Recording::over(&mechanism);
+
+        let verdict = run_row(
+            &recorder,
+            &SystemHost,
+            &fixture,
+            &row(
+                Axis::Checkout,
+                ArmShape::Single(a_probe()),
+                Delta::Widened(widens_the_undeclared_decoy),
+            ),
+        );
+        assert!(
+            !matches!(verdict, RowVerdict::Indeterminate { .. }),
+            "an indeterminate row proves nothing about what its arms carried: {verdict:?}"
+        );
+
+        let widening = widens_the_undeclared_decoy(&fixture);
+        let carries = |placement: &CapsulePlacement| {
+            widening
+                .iter()
+                .all(|entry| placement.readable().contains(entry))
+        };
+        let seen = recorder.placements();
+        let (probe, control) = (seen.first(), seen.get(1));
+        assert_eq!(seen.len(), 2, "both arms reached the backend");
+        assert!(
+            probe.is_some_and(|placement| !carries(placement)),
+            "the probe arm was handed the row's delta"
+        );
+        assert!(
+            control.is_some_and(carries),
+            "the control arm carried no delta, so the probe assertion holds for \
+             no reason"
         );
     }
 
