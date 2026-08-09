@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 318
-slug = "dispositions-on-an-inquiry-subject-are-silently-discarded"
-title = "Declaration keys inert at the subject's kind are silently ignored"
-kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-08-05"
+id = 414
+slug = "knowledge-show-conceals-an-unfilled-facet-facet-json-does-not"
+title = "knowledge show conceals an unfilled facet; facet_json does not"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-09"
 updated = "2026-08-09"
-tags = ["area:cli", "cluster:design-run", "footgun"]
+tags = ["data-quality", "knowledge", "render"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -24,19 +24,9 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "references"
 role = "originates_from"
-target = "SL-247"
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "SL-248"
+target = "SL-249"
 
 [[relation]]
 label = "references"
 role = "concerns"
-descriptor = "the inert-key refusal, authored against the same correspondence table"
-target = "SL-249"
-
-[[relation]]
-label = "related"
 target = "IMP-403"

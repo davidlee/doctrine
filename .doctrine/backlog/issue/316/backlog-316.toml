@@ -3,7 +3,7 @@ version = 1
 
 id = 316
 slug = "spec-019-governs-four-record-kinds-the-corpus-has-seven"
-title = "SPEC-019 governs four record kinds; the corpus has seven"
+title = "EVD/HYP/CPT lifecycle vocabularies and supersession rules are ungoverned"
 kind = "issue"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place

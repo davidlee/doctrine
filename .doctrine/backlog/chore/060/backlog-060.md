@@ -28,6 +28,25 @@ The call sites are the facet-setting command surfaces — `risk set`,
 `value set`, `estimate set` — all outside `SL-249`'s scope. That is the whole
 reason it was deferred, so scope it honestly rather than as a one-line rename.
 
+## Read this before acting on the rename (`SL-249` close, 2026-08-09)
+
+**The premise is contested, and `SL-249` `design.md` § 5.2 is its only carrier.**
+`ISS-329` argued the older type is *a value to write, not a field*, which is the
+entire justification for renaming it to `FacetValue`. `SL-249` found the
+opposite: `facet_write::FacetField` carries **key + value** (`Str { key, value }`
+/ `Arr { key, values }`), so it really is a *field*, and the better claim to the
+name `FacetValue` belongs to an **unkeyed** value type. `PHASE-06` then shipped
+exactly such a type — `WireFacetValue`, unkeyed, forced separate by layering
+(`RawValue` lives in `knowledge`, command tier; `design_run` is `leaf, out=0`).
+
+`RV-351` `F-7` raised this precisely because nobody reopens a chore until
+pickup: if the rename's argument is dropped and only the type name survives,
+whoever picks this up executes a rename whose premise may be wrong. Reconcile
+recorded the dispute in `design.md` § 5.2 rather than settling it.
+
+Read `doctrine slice show 249` § 5.2 before renaming. Settle the premise first;
+the rename may be the wrong move, or may want a different target name.
+
 ## Note
 
 `FacetFieldRow` was chosen for the new type over `FacetFieldSpec` and

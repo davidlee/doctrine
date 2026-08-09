@@ -245,3 +245,49 @@ recorded here.
   with every suite green.
 - SL-247: the slice whose design run surfaced observation 1 and the stale-binary
   sibling. SL-248's run surfaced observations 2 and 3.
+
+## Resolution — `SL-249`, closed 2026-08-09
+
+**The declaration axis — this item's title, and observations 1 and 2 — is
+closed. The envelope axis is not, and now has its own item.** The item resolves
+on the axis it names; nothing it raised is dropped.
+
+### What shipped (`SL-249` objective 3, `PHASE-02`)
+
+`Declaration::WIRE_KEYS` crossed with `IdKind::declarable` is now a **total**
+correspondence, not two patches for the two observed instances, and
+`Refusal::InertKey` fires at `Batch::validate` — the batch's admission gate,
+before any arm touches the working snapshot. The refusal names the subject, its
+kind, the offending key, and the kind that would honour it, which is what
+observation 2's silence cost 15k tokens of re-authored prose for want of.
+
+Totality is proved rather than asserted: `I10` generates the whole
+(key × subject-kind) matrix and requires each cell to be either refused or
+observably effectful, with three positive controls against the degenerate table
+that refuses everything, plus a replay of `SL-248`'s exact losing payload at the
+shell edge. `I9` alone would not have caught a table that mapped `body` to
+`cp-` — the key sets are identical either way — so the oracle is behaviour, not
+the table under test.
+
+`ISS-318`'s complaint that "nothing said so" about `CreateRecord` having no
+prose slot is also gone: objective 2 gave it `body` and a facet slot, so the
+refusal is a redirect rather than a dead end. That was this item's own stated
+condition for fixing observation 2.
+
+### What did **not** ship, and where it went
+
+- **The envelope axis (observation 3), top level** → **`ISS-333`**, minted at
+  this close. `ApplyRequest`'s `#[serde(flatten)]` structurally forbids
+  `deny_unknown_fields`; `SL-249`'s Non-Goals declared it out of scope by name
+  as *"same class, different mechanism, separate change"*, and it is: a serde
+  limit with no table to write. `ISS-333` carries the three probe payloads, the
+  stale-binary sibling this item folded in, and three uncosted candidate fixes.
+- **The envelope axis at the nested types** → `ISS-328`, where the serde excuse
+  does not apply and the blocker is stored-snapshot compatibility instead.
+- **The subject-*state* axis** → `ISS-327`. `I10` proves the kind axis and
+  nothing wider: four wire keys are read on only one of their honouring kind's
+  two paths, so a submission carrying one at the honouring kind in the other
+  state is neither effectful nor refused. Named in the test module rather than
+  left in a gitignored phase sheet, and ruled out of scope by `DEC-183`.
+
+None of the three is a blocker.

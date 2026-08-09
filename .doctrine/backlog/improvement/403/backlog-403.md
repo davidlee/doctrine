@@ -138,3 +138,38 @@ This item is the follow-on.
 
 Related: `SL-246`, `ISS-316` (`SPEC-019` governs four record kinds, the corpus
 has seven), `IMP-398` (knowledge record discoverability).
+
+## Resolution — `SL-249`, closed 2026-08-09
+
+**Leads 1 and 2 are closed; 3–5 are minted, not dropped.** That split is what
+this item asked for, so it resolves here rather than staying open as an
+umbrella over its own follow-ups.
+
+- **Lead 1 — no writer for the structured tier.** `doctrine knowledge edit`
+  ships, in two halves: the kind-blind card edit
+  (`--title` / `--tags` / `--body` / `--body-mode`, mirroring `memory edit`) and
+  the typed `--facet` field write. Both ride `src/facet_write.rs`'s existing
+  mixed-type writer through a new `KeyPosture` parameter — no third writer, and
+  the "annotated for deletion" marker on that module turned out to cover only
+  `SL-222`'s three retired float symbols. `knowledge settle` composes the same
+  planned-edit seam so a settled record's field, actor, date and status land in
+  **one** write of one document.
+- **Lead 2 — creation seeds every field empty at the moment the content is
+  known.** A design-run `form = "create"` disposition now carries both tiers:
+  `CreateRecord` gained `body` and a facet slot validated through the same
+  `plan_facet_edits` the CLI runs, so a checkpoint mints a *filled* record in
+  one act.
+- **The honest counter, answered.** `knowledge edit` does write prose and
+  fields in one transaction — the trade above was taken deliberately, not by
+  default. Two files stay on disk; the interface hides the split. The storage
+  question stays open and is now much cheaper to answer, since nobody
+  hand-edits either file.
+- **Leads 3–5** → `IMP-413` (advisory validation), `IMP-414` (`knowledge show`
+  conceals an unfilled facet), `IMP-415` (skills do not instruct an agent to
+  fill the facet). `SL-249` bounded itself to 1 and 2 explicitly; 3–5 turn a
+  tight slice into a facet-quality programme.
+
+**Not claimed:** the corpus is not backfilled. The 24% fill measured on
+2026-08-05 is a *stock* problem; this item was the *flow* problem, and only the
+flow is fixed. Whether the stock gets backfilled is a separate decision nobody
+has taken.

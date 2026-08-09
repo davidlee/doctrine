@@ -1,4 +1,13 @@
-# ISS-316: SPEC-019 governs four record kinds; the corpus has seven
+# ISS-316: EVD/HYP/CPT lifecycle vocabularies and supersession rules are ungoverned
+
+> **Narrowed at `SL-249`'s close, 2026-08-09 — read this first.** `REV-050`
+> landed the four→seven amendment across `SPEC-019` and `PRD-010`, in **both**
+> authored tiers, and `tests/governance_kind_coverage.rs` now fails if any kind
+> in `kinds::RECORD` goes unnamed in either entity. So the *facet contracts* and
+> the *verb set* are governed. What survives is the residue § *Narrowed scope*
+> names at the foot of this item. Everything from here to that section is the
+> **original 2026-08-05 statement, retained for provenance and now largely
+> discharged** — do not act on it without reading the foot first.
 
 ## What
 
@@ -78,3 +87,37 @@ research thread's claim that there were no revision candidates. There were.
 - `SPEC-019`: the revision target
 - `PRD-010`: likely carries the same four-kind framing — check
 - `IDE-009`, `IMP-398`: future consumers of a per-kind contract
+
+## Narrowed scope — what is still open after `SL-249`
+
+`SL-249` absorbed the facet-contract half as its objective 4, and its Non-Goals
+declared the rest out of scope by name. Three things survive.
+
+1. **The per-kind lifecycle vocabularies for `EVD`, `HYP` and `CPT`.**
+   `SPEC-019`'s *"per-kind lifecycle vocabulary"* responsibility now names seven
+   kinds, but the three added kinds' status tokens and legal transitions are
+   still unwritten. `knowledge settle` and `knowledge status` both dispatch on
+   that vocabulary, so this is not documentation debt alone.
+2. **Supersession rules for the same three kinds.**
+3. **`CPT`'s deliberately empty facet — designed property or omission?**
+   `ConceptFacet {}` carries the in-code note *"every concept rides its
+   attributed prose body"* (`SL-197` `D2`), which reads as intentional, but no
+   governance says so, so nothing stops a later change from "fixing" it.
+
+Plus the legibility note carried over from `ISS-332`: three `SPEC-019` sections
+are **knowingly** four-kind — they discuss the original four for a reason that
+survives at seven — but read as stale rather than as scoped. They need a word
+saying which they are. The kind-coverage canary cannot tell the difference; its
+one exemption (`spec-019.md`'s *"four coupled sites"*, which counts integration
+points, not kinds) is held to a count identity rather than mere presence, so a
+duplicated exempt phrase cannot inherit the exemption silently.
+
+**Provenance thinness still binds.** `HYP` has n=0 in this corpus and `CPT`
+n=1, so a lifecycle vocabulary written now is invention, not derivation — the
+same objection `SL-246` raised against inventing field lists. That argues for
+waiting for use rather than specifying ahead of it.
+
+Related, added at this close: `SL-249` (the slice that narrowed this),
+`REV-050` (the amendment), `ISS-332` (resolved `fixed` — `SPEC-019`'s
+closed-enum lists omitted `provenance`; its legibility note is the paragraph
+above).
