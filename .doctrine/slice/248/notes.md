@@ -1580,6 +1580,22 @@ under the sheet's own fallback.
     and crediting the guard with it credits evidence the guard never produced —
     re-run the arm in a compiling shape. (Phase sheet `F-50`, `T9`.)
 
+138. **`T9` added a third reporting channel — `Unrowed` + `Reading` — and
+    whether that is *design vocabulary* needs a ruling at reconciliation, not
+    from the loop.** The engineering is right and is not in question: table C's
+    `AuxOutcome` is `Passed`/`Failed`/`Skipped`, which *is* a verdict, and
+    `EX-12` with `sec-9` `R8` require no verdict at all, so a channel whose
+    types have nowhere to put an outcome makes the guarantee structural rather
+    than remembered. `T9` recorded no entity id as owed (`C2`) on the ground
+    that a verdict-less channel is the design's own requirement rather than a
+    widening of it. **The open question is whether the design enumerates its
+    reporting channels**, because `PHASE-09`'s `T9` owes an `RV-` for exactly
+    this class — a new `Observed` variant against a closed design vocabulary. If
+    the design's vocabulary is closed over channels, this is the same widening
+    and owes the same record; if it specifies only "reported without a verdict",
+    `T9` is right and nothing is owed. The orchestrator does not read `design.md`
+    (`LOOP.md` § *The orchestrator's turn*), so it is raised here rather than
+    settled. (Orchestrator, after `T9`.)
 
 ## Open
 
