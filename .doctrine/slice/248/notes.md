@@ -1691,6 +1691,61 @@ under the sheet's own fallback.
     production surface whose only consumer is its own test. Stated so a later
     reader does not mistake the silence for coverage.
 
+147. **The inner loop costs ~123 s, not the ~92 s every gate log quotes
+    (`F-60`).** Two readings per recipe, warm tree, each with its tally
+    (`277 passed; 0 failed; 9 ignored`, `EXIT=0` throughout): `just test`
+    123.32 s / 123.05 s, `just test-all` 125.18 s / 125.23 s, the conformance
+    binary self-reporting 92.29–92.44 s across all four. The gap is **not**
+    cargo — the sum of every binary's own `finished in` is 123.07 s against a
+    123.32 s wall, so warm cargo overhead is ~0.25 s and the missing ~31 s is
+    the other ~100 test binaries running serially. `test-all` is only +2.1 s
+    over `test` because `default-members` already pulls `doctrine-control` into
+    the fast loop; `--workspace` adds `crates/cordage` alone. (Reconciliation:
+    quote 123 s as the inner-loop cost wherever a figure is cited.)
+
+148. **The suite's cost is a floor, not a slope — this is the budget a later
+    slice inherits (`F-61`).** The ~92 s is dominated by fixed sleeps
+    (`FIXTURE_TIMEOUT_SECONDS = 30` × `WALL_OVERRUN_MULTIPLE = 2`,
+    `ESCAPE_SECONDS = 23`, lingers of 1 s and 3 s), not by test count. PHASE-09
+    handed over ~90 s over 227 tests (`F-28`); PHASE-10 ends at 92.3 s over 277
+    — **+50 tests for +2.3 s, ~46 ms each, against an ~85–90 s floor.** A later
+    slice adding fifty rows should budget ~2 s, not ~20 s; only a sleep constant
+    or a new wall-bound payload moves the number. Separately, `R5`'s leaked
+    roots are real but narrower than stated: the pre-baseline sweep cleared four
+    dead-PID roots totalling ~135 MB (one alone 133 MB in `capsules/tx`), yet
+    both bases were empty after each of six clean runs — `Drop` runs on normal
+    exit, so leaks are a killed-run artefact only.
+
+149. **`D4` settled by measurement: the `--skip` adjustment is refused, and no
+    file changed (`F-62`).** The candidate is genuine —
+    `cargo test -- --skip conformance::tests` is 30.75 s against 123.1 s — and
+    is still refused on three grounds. The card's bar (*actually unusable*) is
+    not met at ~123 s. It is **not expressible as specified**: `--skip
+    <executed module path>` presumes a module holding the executed rows, but
+    `conformance::tests` is flat, so the skip filters **164** tests to save the
+    ~6 slow ones. And it **reverses a decision this slice already took** —
+    `Cargo.toml:112` names `default-members` as exactly what stops
+    `doctrine-control` shipping "a suite that is green by never running"
+    (`sec-8` § The checked set), which a `--skip` on `test:` re-imposes by the
+    back door. `164 filtered out` is more visible than an `#[ignore]`, which is
+    why the form is permitted at all, but it is still the absence `EX-14`
+    forbids inviting a reader to read as a pass. (Reconciliation: `justfile` is
+    untouched; "measured, no change needed" is the recorded outcome.)
+
+150. **The conformance binary is cargo-bound; invoking it directly gives a false
+    red (`F-63`).** Running `target/debug/deps/doctrine_control-<hash>` directly
+    gives correct timing (92.32 s, matching cargo to 0.1 s) but fails
+    `no_ignored_test_in_this_crate_stands_in_for_a_claim` with *"the walk did
+    not reach this file, so it read the wrong tree: []"* — `T11`'s `EX-14` audit
+    walks the crate source from `CARGO_MANIFEST_DIR`, which cargo sets and a
+    bare invocation does not. Confirmed as a probe/control pair on the single
+    test (env set → ok, unset → FAILED). The good half is that it fails
+    **loudly on an empty walk** rather than passing over zero files — `F-47`'s
+    lesson paying off in a task that was not hunting for it. Obligation sits on
+    the measurer: shard or time this suite through `cargo`, or export
+    `CARGO_MANIFEST_DIR`. Recorded as
+    `mem.fact.testing.conformance-binary-is-cargo-bound`.
+
 
 ## Open
 

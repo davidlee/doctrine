@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe702a2a276e09478ab3bb771fad7"
+memory_key = "mem.fact.testing.conformance-binary-is-cargo-bound"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Conformance test binary is cargo-bound"
+summary = "doctrine-control's suite must run through cargo: EX-14's audit walks the crate from CARGO_MANIFEST_DIR, so a direct binary invocation false-reds."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["testing", "conformance", "cargo"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "bedd4baa4c0e849f7d198d4a69cc0a07c27d98b3"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "dd3d31edadd67eb11594ddff96cd2dfcd8f09954725f38177658d5dbcfa3f735"
+base_commit = "fe12005b11c4d7948ca3f98536a0a84e151e0f9a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

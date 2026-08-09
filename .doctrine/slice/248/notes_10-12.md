@@ -872,3 +872,135 @@ and it is refused for reasons that are the honesty pass's own.
 seeking forward to the `doctrine_control-` binary header (the line is neither
 first nor last). +3 over `T10`'s 274, matching the three tests added. Suite
 ~92 s. Code `80bedf1bf` (+231/−14, `conformance.rs` and `main.rs`).
+
+---
+
+## PHASE-10 `T12` — `VA-3`: the executed suite's wall-clock cost, measured
+
+`D4` settled: **the `--skip` adjustment is not taken, and no file changed.**
+The measurement is below, then the three reasons.
+
+### The four figures
+
+Warm tree throughout — `cargo test --no-run` returned in 133 ms before the first
+reading, so these are test-execution cost, not build cost. Tree state:
+`HEAD` = `fe12005b1`, working tree clean apart from `.claude/settings.json`.
+Both fixture bases and the process table were swept first (`R5`, below).
+
+| recipe | run | recipe wall | conformance binary self-report | tally |
+|---|---|---|---|---|
+| `just test` | 1 | **123.32 s** | 92.44 s | `277 passed; 0 failed; 9 ignored` |
+| `just test` | 2 | **123.05 s** | 92.34 s | `277 passed; 0 failed; 9 ignored` |
+| `just test-all` | 1 | **125.18 s** | 92.29 s | `277 passed; 0 failed; 9 ignored` |
+| `just test-all` | 2 | **125.23 s** | 92.36 s | `277 passed; 0 failed; 9 ignored` |
+
+All four `EXIT=0`. Arms shown rather than averaged (`C14`). The orchestrator's
+independent readings on the same tip — 92.36 s and 92.49 s, same tally — agree
+with mine to within 0.15 s, so the binary self-report is stable across
+processes and not an artefact of this session.
+
+A third figure, because it is the one a developer actually waits on: this task's
+closing **`doctrine check gate` wall clock was 139.7 s** (`EXIT=0`, same tally,
+binary 92.48 s) — build and clippy and validate on top of `test-all`'s 125 s.
+
+**`test-all` costs +2.1 s over `test`.** `--workspace` adds `crates/cordage`
+only (13 further test binaries, 117 vs 104); `default-members` already pulls
+`doctrine-control` into the fast loop. Whichever recipe you run, you pay for the
+conformance suite.
+
+### The wall clock is not the self-report, and the gap is not cargo
+
+`92 s` is the figure a reader lifts from a gate log, and it understates the
+inner loop by **~34 %**. The recipe wall is ~123 s. The gap is *not* cargo
+overhead: the sum of every binary's own `finished in` is 123.07 s against a
+123.32 s wall, so cargo's warm overhead is ~0.25 s. The missing ~31 s is the
+other ~100 test binaries, which run serially after it. **Quote 123 s as the
+inner-loop cost; 92 s is the suite's share of it.**
+
+### The budget is a floor, not a slope — the number a later slice needs
+
+`92 s` is dominated by fixed sleeps, not by test count:
+`FIXTURE_TIMEOUT_SECONDS = 30` × `WALL_OVERRUN_MULTIPLE = 2` (a payload that
+outruns the wall bound and is killed at 30 s), `ESCAPE_SECONDS = 23`,
+`LINGER_SECONDS = 1`, `SUBJECT_LINGER_SECONDS = 3`.
+
+PHASE-09 handed over ~90 s over **227** tests (`F-28`). This phase ends at
+92.3 s over **277**. That is **+50 tests for +2.3 s — ~46 ms per added test**,
+against a floor of roughly 85–90 s that no amount of *not* adding tests will
+remove.
+
+So the inheritable budget is: **a later slice adding another fifty rows should
+budget ~2 s, not ~20 s.** What moves this number is changing a sleep constant or
+adding a payload that waits on the wall bound — not row count. A slice that
+wants the suite materially cheaper must attack `FIXTURE_TIMEOUT_SECONDS` and the
+two overrun payloads; nothing else is worth measuring.
+
+### `R5`, honoured — and it was not hypothetical
+
+Before the first reading, `~/.local/share/doctrine-conformance` held **four
+leaked fixture roots** (`2777729-24`, `2777729-49`, `2777729-61`, `790475-56`),
+both owning PIDs long dead, totalling ~135 MB — one root alone at **133 MB**,
+essentially all of it in `capsules/tx`. `.git/doctrine-conformance` was empty and
+no stray `bwrap` was running. Swept by hand; no delete primitive added (`C12`).
+
+After every one of the six clean runs in this task, **both bases were empty** —
+`Drop` runs on a normal exit. So leaks are a *killed-run* artefact exactly as
+`R5` says, and the practical rule is narrow: sweep after you interrupt a run,
+not routinely.
+
+### `D4` — measured, and refused
+
+The candidate works and is worth what it claims: `cargo test -- --skip
+conformance::tests` runs in **30.75 s** (`EXIT=0`, `122 passed; 0 failed;
+0 ignored; 164 filtered out`) against 123.1 s unfiltered — a 4× inner loop.
+It is still refused, for three reasons in increasing order of force.
+
+1. **The card's bar is not met.** The adjustment is available only if the
+   unfiltered loop is *actually unusable*. ~123 s is slow, not unusable, and it
+   has barely moved: PHASE-09 handed over ~90 s of suite and this phase ends at
+   92.3 s. The surprise `VA-3` was written to catch did not happen.
+
+2. **The adjustment as specified is not expressible.** It reads `--skip
+   <executed module path>`, which presumes a module holding the executed rows.
+   There is none — `conformance::tests` is **flat**, 164 tests, the six executed
+   rows interleaved by name with the cheap pure-function tests. The tally proves
+   the cost: skipping it filters out **164** tests to save the ~6 that are slow.
+   Building the narrow version the card imagines would require reorganising the
+   module, which is outside this task's `Files:` line.
+
+3. **It contradicts a decision this slice already took, in this repo, in
+   writing.** `Cargo.toml:112`, on `default-members`: *"`doctrine-control` would
+   inherit that exclusion and every later phase would ship a suite that is green
+   by never running, so the key names it (SL-248 `sec-8` § The checked set)."*
+   `sec-8` paid to bring `doctrine-control` **into** the fast inner loop.
+   A `--skip` on `test:` re-imposes that exclusion by the back door — a slower
+   route to the same place, and one nobody reading `Cargo.toml` would expect.
+
+The honesty axis reinforces (3) rather than carrying it alone: after the skip,
+`test:` reports `164 filtered out`. That is more visible than an `#[ignore]`,
+which is why the card allows the form at all — but 164 absent rows in the
+*default* loop is precisely the absence `EX-14` says a reader must not be
+invited to read as a pass.
+
+### A trap for whoever measures this next
+
+The decomposition above was nearly wrong. Invoking the test binary directly —
+`target/debug/deps/doctrine_control-<hash> conformance::tests` — gives the right
+*timing* (92.32 s, matching cargo to 0.1 s) but a **false red**:
+`no_ignored_test_in_this_crate_stands_in_for_a_claim` fails with *"the walk did
+not reach this file, so it read the wrong tree: []"*. `T11`'s `EX-14` audit
+walks the crate source from `CARGO_MANIFEST_DIR`, which **cargo sets and a bare
+binary invocation does not**. Confirmed as a probe/control pair on the single
+test: env set → `ok`; env unset → `FAILED`.
+
+The good half: it fails **loudly on an empty walk** rather than reporting a pass
+over zero files. That is `F-47`'s lesson — *an absence probe cannot tell "held
+nothing" from "read nothing"* — already paying for itself in a task that was not
+looking for it. Anyone sharding or timing this suite must go through `cargo`, or
+export `CARGO_MANIFEST_DIR` themselves.
+
+### Tally
+
+`doctrine check gate` exit **0**, `277 passed; 0 failed; 9 ignored`, read by
+anchoring on the `doctrine_control-` binary header. **No file changed** — `D4`
+refused on evidence. Findings `F-60`–`F-63`; § *Owed* items 147–150.

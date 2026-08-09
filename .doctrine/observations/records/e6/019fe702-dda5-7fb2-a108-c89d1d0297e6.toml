@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe702-dda5-7fb2-a108-c89d1d0297e6"
+recorded_at = "2026-08-09T14:52:32.549295146Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-10 T12: decomposing a suite by invoking the test binary directly costs a 92s false red"
+detail = "To decompose the 92s conformance cost I ran target/debug/deps/doctrine_control-<hash> directly with a filter. Timing was correct to 0.1s but no_ignored_test_in_this_crate_stands_in_for_a_claim failed ('the walk did not reach this file, so it read the wrong tree: []') because EX-14's audit resolves the crate source via CARGO_MANIFEST_DIR, which cargo sets and a bare invocation does not. Cost: one 92s run plus a probe/control pair to attribute it. Recorded as mem.fact.testing.conformance-binary-is-cargo-bound. The generalisable friction: cargo-set environment is invisible ambient input to a test, and nothing in the failure message points at it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe702-dd9d-7a50-bb87-9f48db4fec1e"
+recorded_at = "2026-08-09T14:52:32.541723846Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-10 T12: the card's prescribed --skip adjustment named a module that does not exist"
+detail = "T12's card and D4 offer one lawful adjustment: 'cargo test -- --skip <executed module path>'. That phrasing presumes a module holding only the executed rows. There is none — conformance::tests is flat, 164 tests, the ~6 executed rows interleaved by name with cheap pure-function tests, so the skip filters 164 to save 6. Discovering this cost a --list enumeration plus two filtered timed runs (one of them 92s). A plan-time instruction that names a code structure should be checked against the code when the phase sheet is written, or phrased as an intent ('skip the executed rows, however they are selectable') rather than a command shape."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
