@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe4cea4e870a3bf48e5d12e2abc2c"
+memory_key = "mem.fact.doctrine-control.die-with-parent-gates-the-wall-bound"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "bwrap --die-with-parent is what makes the wall bound a bound"
+summary = "Removing --die-with-parent also neuters timeout(1): survivors keep the capture pipe, so a capsule runs to its natural end and reports TimedOut anyway."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/backend/bubblewrap.rs", "crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["doctrine-control", "bubblewrap", "conformance", "timeout", "measured"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ee8fd24ca5b6d1cc0cb502e7d4bb542c0b852990"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "e004df6ebfc020f34be118514db41c344093dec26ee63888046dad5518cac888"
+base_commit = "769dcef5bb183d56254e82594566d52cde94ad6d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

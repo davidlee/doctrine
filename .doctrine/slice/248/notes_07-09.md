@@ -1737,3 +1737,97 @@ readings move independently, which is what makes the pair worth running.
 
 Cost: two child processes, ~1.5 s each, three capsules apiece. Gate exit 0, 222
 tests (one ignored, which is the instrument).
+
+### `T9` — row 7 stops on `S8`: the mechanism discriminates, the vocabulary cannot say so
+
+`T9` is **blocked**, not abandoned, and the block is a design gap rather than a
+measurement problem. Everything below was measured in this jail, not reasoned.
+
+**The first thing measured killed the plan.** Coming into `T9` the reasoned route
+was `Observed::Termination(Termination::Exited { code: 0 })` with the suite's wall
+bound pushed below the escape, so the control arm would read `TimedOut` where the
+probe read a clean exit. A throwaway `#[ignore]`d spike running both arms of row 7
+through `run_arm` with an injected short-bound `Execution`, printing the whole
+`Observation` and the elapsed time, says otherwise:
+
+```
+payload                       arm                  termination      stdout      elapsed
+escapee(20s), streams to null Confining            Exited{code:0}   "LIVE\n"     1.03 s
+escapee(20s), streams to null Removing(Teardown)   Exited{code:0}   "LIVE\n"    20.03 s
+sleep 10 (wall bound 3 s)     Confining            TimedOut         "LIVE\n"     3.00 s
+sleep 10 (wall bound 3 s)     Removing(Teardown)   TimedOut         "LIVE\n"    10.02 s
+```
+
+`classify` reads exactly two things — `termination` and `stdout` — and row 7's two
+arms agree on both. The arms differ **only in elapsed wall time**, which nothing in
+the observation vocabulary can see. `C1b` said the capture pipe hides the survivor;
+the sharper statement is that the capture pipe hides *everything*, so row 7 is
+unreadable through `classify` as it stands.
+
+Rows 1–2 also retire the `TimedOut` idea on its own terms: with the escaping
+payload the wall bound never fires, because `timeout(1)`'s child exits 0 at ~1 s
+while the capture is held open by a process `timeout` is not waiting on.
+
+**Then the mechanism turned out to be easy.** Leave the escapee's stdout
+*inherited* rather than redirected to `/dev/null`, and have it speak only after its
+parent is gone — the payload states the held token before exiting, the survivor
+states the failed token later:
+
+```
+sh -c "python3 -c '<fork; setsid; sleep 4; print REACHED>' </dev/null 2>/dev/null;
+       echo LIVE; echo DENIED; sleep 1"
+Observed::Token { held: "DENIED", failed: "REACHED" }
+
+Confining          -> Held                       stdout "LIVE\nDENIED\n"          1.03 s
+Removing(Teardown) -> Indeterminate{Ambiguous}   stdout "LIVE\nDENIED\nREACHED\n" 4.03 s
+```
+
+Teardown kills the escapee before it can speak; removing teardown lets it speak.
+That is row 7's property, in about five seconds of wall clock, with no production
+type touched — and it settles `S2` in the negative on measured ground:
+`--die-with-parent` **is** required for the session-escaping payload, so row 7's
+control stays `Removed(Teardown)` and is not switched to `ProcessVisibility`
+(`EX-8`).
+
+**What blocks it is one cell of a truth table.** `Observed::Token` maps *(held
+present, failed present)* to `AmbiguousObservation`, so the control arm reports
+`Indeterminate` and the row reports `RowVerdict::Indeterminate` where it must
+report `Violated`. That cell guards a real defect — one payload printing both
+tokens is broken — but here the second token arrives from a **different process,
+after the capsule exited**, which is not the ambiguity it guards. And invariant 5
+(an absence is not a hold) is exactly why the held token must be *stated* by the
+payload rather than inferred from the escapee's silence, which is what puts both
+tokens on the wire in the first place.
+
+Three resolutions exist and all three widen the observation vocabulary the design
+fixed: a new `Observed` variant (held iff `stated` present and `forbidden` absent);
+re-reading `Token`'s both-present cell globally, which weakens every other row's
+guard; or a trusted-side observation through the `Arm.live` / `noticed` seam, which
+`classify` never consults for `ArmShape::Single`. That is `S3`'s "not yours to
+widen" one axis over, so the choice goes upward. The moment the observation is
+named, the rest of `T9` — payload, direct escape assertion, the process-group-only
+reaper mutant, and its signalling floor — is unblocked.
+
+### Two facts `T9` paid for that outlive it
+
+**Removing teardown also neuters the wall bound.** `timeout -k` wraps `bwrap` from
+outside (`EX-15`). Under `Removing(Teardown)` the wrapper still fires on schedule
+and still reports `TimedOut`, but killing `bwrap` no longer kills what `bwrap`
+started: the payload survives, keeps the harness's capture pipe, and
+`wait_with_output` returns only when *it* finishes. Rows 3 and 4 of the table
+above: identical bound, identical verdict, **3.00 s against 10.02 s**.
+`--die-with-parent` is what makes the wall bound an actual bound. So any row whose
+control removes teardown pays its payload's full natural runtime rather than its
+bound, and `TimedOut` on such an arm does not mean the arm was bounded — only that
+the wrapper fired.
+
+**`setsid(1)` is absent from this jail, and row 7's shipped payload uses it.**
+`escapes_its_own_session` spawns its escapee with `setsid`; `command -v setsid` is
+empty here (`perl` too; `python3` is present). A missing `setsid` makes the escape
+a no-op that still prints the liveness marker — the clean false negative `T2`
+already paid for once. Every measurement above used `python3 -c` with `os.fork()`
+plus `os.setsid()`. Whoever unblocks the row must either change the shipped
+payload's escape mechanism or accept that row 7 is unmeasurable in the jail. The
+task's own rule — assert the escape directly, so a payload that stops escaping
+fails rather than passes — is what catches this, provided the assertion is written
+before the payload is trusted.
