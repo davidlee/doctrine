@@ -842,3 +842,46 @@ row 7's, is a `Single`.
 drops follow the type's own `Drop`. It kills processes and removes nothing:
 invariant 8's no-delete rule is about capsules on disk, and cleanup there is
 still `TempRoot`'s alone.
+
+## T8b — row 10's inheritable decoys (`EX-13`)
+
+**A removal is only a removal if there is something to remove.**
+`PropertyRemoval::DescriptorsClosed` skips the backend's parent-side sweep. A
+sweep that had nothing to close is a removal that changes nothing, so the row
+needs descriptors that are *already* inheritable in the trusted process when the
+arm spawns. Rust opens its own files `O_CLOEXEC` — the trap PHASE-05 `VT-4`
+records — so `File::open` would have handed row 10 three descriptors the sweep
+never had to touch, and the row would have passed with the mechanism inert.
+Hence `rustix::fs::open` **without** `OFlags::CLOEXEC` for the two files, and
+`make_inheritable` (the inverse of the backend's sweep) for the socket end
+`UnixStream::pair` opens closed.
+
+**The decoy set is per-arm state, not fixture state** (`F-26`). The backend's
+sweep mutates the *parent's* descriptor flags, and that change is permanent. Row
+10's confining probe arm therefore closes whatever set was open when it ran; a
+set held once per fixture would leave the control arm nothing to leak. So
+`Fixture::inheritable_decoys()` returns a fresh, owned set per call and the arm
+holds it for exactly its own run. The property is a test —
+`a_decoy_set_opened_after_a_sweep_is_inheritable_again` — because nothing else
+would notice a memoising refactor until row 10 quietly stopped discriminating.
+
+**`O_TMPFILE`, not create-then-unlink.** The write-only decoy must be
+"unreachable by name and dies with the descriptor". `O_TMPFILE` names the
+*directory* the blocks live in — the fixture's own root — and hands back the
+only handle there will ever be. So invariant 7 still holds for a file with no
+name, and the phase introduces no unlink, which keeps `VA-3`'s hit list empty of
+anything outside `TempRoot::drop`. Create-then-`remove_file` would have reached
+the same state and put a delete primitive in the crate to get there.
+
+**The namelessness is asserted two ways, and the write is asserted at all.**
+`/proc/self/fd/<n>` readlinks to `<fixture root>/#<inode> (deleted)`, which
+proves both the origin and the missing link; and the fixture root's entry
+listing is identical before and after. Without the write assertion the test
+passes against a decoy that could not be written, which is the default outcome
+of a dozen ways to get the open flags wrong.
+
+**"No descriptor the trusted side holds for real is ever made inheritable"** is
+an assertion, not a comment: the socket pair's retained far end *and* row 5's
+listener are both checked to be close-on-exec in the same test that checks the
+three decoys are not. The three decoys are invariant 12's only exception, and
+that is the shape that says so.

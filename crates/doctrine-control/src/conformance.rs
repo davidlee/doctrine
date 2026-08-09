@@ -52,7 +52,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::fs::File;
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
-use std::os::fd::OwnedFd;
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::path::{Component, Path, PathBuf};
@@ -61,7 +61,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use doctrine::DOCTRINE_TOML;
-use rustix::fs::FsWord;
+use rustix::fs::{FsWord, OFlags};
+use rustix::io::{FdFlags, fcntl_getfd, fcntl_setfd};
 
 use crate::backend::bubblewrap::{BubblewrapBackend, WeakenedProfile, Weakening, mechanism_failed};
 use crate::backend::{
@@ -626,6 +627,9 @@ const DECOY_REPOSITORY_LEAF: &str = "repository";
 const DECOY_READABLE_INPUT_LEAF: &str = "readable-input";
 const DECOY_UNDECLARED_LEAF: &str = "undeclared";
 const DECOY_EXECUTABLE_LEAF: &str = "executable";
+/// Row 10's readable decoy — the only one of [`InheritableDecoys`]' three that
+/// has a name.
+const DECOY_DESCRIPTOR_LEAF: &str = "descriptor";
 
 /// The fixture repository's second branch, which is what gives it an object the
 /// contracted base cannot reach.
@@ -707,6 +711,10 @@ pub(crate) struct Fixture {
     /// Row 4's target, and row 2's.
     decoy_undeclared: PathBuf,
     decoy_executable: PathBuf,
+    /// Row 10's readable decoy, and the only named member of
+    /// [`InheritableDecoys`]. Its own file rather than a share of row 4's, so a
+    /// later edit to either row cannot silently change the other's target.
+    decoy_descriptor: PathBuf,
     /// Trusted-side, row 5's target.
     listener: TcpListener,
     /// The harness's **own** session, read at build time.
@@ -750,12 +758,14 @@ impl Fixture {
         let decoy_readable_input = decoys.join(DECOY_READABLE_INPUT_LEAF);
         let decoy_undeclared = decoys.join(DECOY_UNDECLARED_LEAF);
         let decoy_executable = decoys.join(DECOY_EXECUTABLE_LEAF);
+        let decoy_descriptor = decoys.join(DECOY_DESCRIPTOR_LEAF);
         make_directory(&decoy_readable_input)?;
         make_directory(&decoy_repository)?;
         git(&decoy_repository, &["init", "--quiet"])?;
         write_file(&decoy_credential, DECOY_CREDENTIAL_BODY)?;
         write_file(&decoy_undeclared, DECOY_UNDECLARED_BODY)?;
         write_file(&decoy_executable, DECOY_EXECUTABLE_BODY)?;
+        write_file(&decoy_descriptor, DECOY_DESCRIPTOR_BODY)?;
         make_executable(&decoy_executable)?;
 
         let readable_roots = system_readable_roots(host, root.path());
@@ -779,10 +789,8 @@ impl Fixture {
                 capsule_root.clone(),
                 Vec::new(),
             ),
-            listener: TcpListener::bind(LOOPBACK_ANY_PORT).map_err(|error| FixtureFault::Io {
-                path: PathBuf::from(LOOPBACK_ANY_PORT),
-                detail: error.to_string(),
-            })?,
+            listener: TcpListener::bind(LOOPBACK_ANY_PORT)
+                .map_err(|error| fixture_io(Path::new(LOOPBACK_ANY_PORT), &error))?,
             own_session: own_session(),
             observed_sessions: RefCell::new(Vec::new()),
             root,
@@ -794,6 +802,7 @@ impl Fixture {
             decoy_readable_input,
             decoy_undeclared,
             decoy_executable,
+            decoy_descriptor,
         })
     }
 
@@ -832,6 +841,52 @@ impl Fixture {
     }
     pub(crate) fn decoy_executable(&self) -> &Path {
         &self.decoy_executable
+    }
+    pub(crate) fn decoy_descriptor(&self) -> &Path {
+        &self.decoy_descriptor
+    }
+
+    /// Open row 10's three decoy descriptors, inheritable across `exec`
+    /// (`EX-13`).
+    ///
+    /// **A fresh set per arm, never once per fixture.** The backend's sweep
+    /// marks the *parent's* descriptors close-on-exec and that change is
+    /// permanent, so row 10's confining probe arm closes any long-lived set and
+    /// the control arm that follows it would find nothing left to leak — a row
+    /// that passes for no reason (`F-26`).
+    pub(crate) fn inheritable_decoys(&self) -> Result<InheritableDecoys, FixtureFault> {
+        let readable = rustix::fs::open(
+            &self.decoy_descriptor,
+            OFlags::RDONLY,
+            rustix::fs::Mode::empty(),
+        )
+        .map_err(|error| fixture_io(&self.decoy_descriptor, &error))?;
+
+        // Never linked into any directory: `O_TMPFILE` names the directory the
+        // file's blocks live in — the fixture's own root — and hands back the
+        // only handle there will ever be. So the control arm's mutation is
+        // unreachable by name and dies with the descriptor, and this phase
+        // still introduces no unlink and no delete primitive (invariant 8,
+        // `VA-3`).
+        let root = self.root.path();
+        let writable = rustix::fs::open(
+            root,
+            OFlags::WRONLY | OFlags::TMPFILE,
+            rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        )
+        .map_err(|error| fixture_io(root, &error))?;
+
+        let pair_label = Path::new(DECOY_SOCKET_PAIR_LABEL);
+        let (near, peer) = UnixStream::pair().map_err(|error| fixture_io(pair_label, &error))?;
+        let socket = OwnedFd::from(near);
+        make_inheritable(&socket).map_err(|error| fixture_io(pair_label, &error))?;
+
+        Ok(InheritableDecoys {
+            readable,
+            writable,
+            socket,
+            peer,
+        })
     }
     pub(crate) const fn listener(&self) -> &TcpListener {
         &self.listener
@@ -893,6 +948,82 @@ impl Fixture {
     }
 }
 
+/// Row 10's three decoy descriptors: the **only** descriptors this suite ever
+/// leaves inheritable across `exec` (`EX-13`).
+///
+/// [`PropertyRemoval::DescriptorsClosed`] removes the backend's parent-side
+/// sweep. A sweep with nothing to close is a removal that changes nothing, so
+/// the row needs descriptors that are already inheritable when the arm spawns —
+/// and Rust opens its own files `O_CLOEXEC`, which is the trap PHASE-05 `VT-4`
+/// records. Hence `rustix::fs::open` without [`OFlags::CLOEXEC`] for the two
+/// files, and [`make_inheritable`] for the socket end `UnixStream::pair` opened
+/// closed.
+///
+/// **No descriptor the trusted side holds for real is ever made inheritable.**
+/// The pair's far end is held here, for real, and keeps close-on-exec.
+///
+/// Closing all three is `Drop`'s, so a set outlives exactly the arm that holds
+/// it.
+#[derive(Debug)]
+pub(crate) struct InheritableDecoys {
+    /// A named, readable file under the fixture's own root.
+    readable: OwnedFd,
+    /// A write-only file that was never linked into any directory. Named by
+    /// nothing, so a capsule that inherits it can write but cannot reach what it
+    /// wrote, and the blocks are reclaimed when the last handle closes.
+    writable: OwnedFd,
+    /// One end of a socket pair — a descriptor over no filesystem at all, which
+    /// is the third *kind* of thing an inherited descriptor can be.
+    socket: OwnedFd,
+    /// The far end, held so the pair stays a pair for as long as the decoys
+    /// exist. Deliberately untouched by [`make_inheritable`].
+    peer: UnixStream,
+}
+
+impl InheritableDecoys {
+    /// How many descriptors above the standard streams a capsule inherits when
+    /// the sweep is skipped — what row 10's payload counts in `/proc/self/fd`.
+    pub(crate) const COUNT: usize = 3;
+
+    /// The three, in the order this type documents them.
+    pub(crate) fn descriptors(&self) -> [BorrowedFd<'_>; Self::COUNT] {
+        [
+            self.readable.as_fd(),
+            self.writable.as_fd(),
+            self.socket.as_fd(),
+        ]
+    }
+
+    /// The far end of the socket pair, held for real and close-on-exec.
+    pub(crate) fn retained_peer(&self) -> BorrowedFd<'_> {
+        self.peer.as_fd()
+    }
+}
+
+/// Clear close-on-exec, so a descriptor the fixture chose survives the capsule's
+/// `exec` — the inverse of the backend's parent-side sweep.
+///
+/// Applied to [`InheritableDecoys`]' three and to nothing else. A caller that
+/// widened that set would be widening invariant 12's only exception.
+fn make_inheritable<Fd: AsFd>(fd: Fd) -> Result<(), rustix::io::Errno> {
+    let flags = fcntl_getfd(&fd)?;
+    fcntl_setfd(&fd, flags.difference(FdFlags::CLOEXEC))
+}
+
+/// Whether `fd` survives an `exec`.
+fn is_inheritable<Fd: AsFd>(fd: Fd) -> bool {
+    matches!(fcntl_getfd(fd), Ok(flags) if !flags.contains(FdFlags::CLOEXEC))
+}
+
+/// [`FixtureFault::Io`] over anything that displays, because four call sites
+/// would otherwise each spell the same closure.
+fn fixture_io(path: &Path, error: &dyn std::fmt::Display) -> FixtureFault {
+    FixtureFault::Io {
+        path: path.to_path_buf(),
+        detail: error.to_string(),
+    }
+}
+
 /// Signal every live process whose session is `session`.
 ///
 /// `own` is passed rather than read here so the refusal is a *parameter* of the
@@ -940,6 +1071,16 @@ const CONTROL_PLANE_STATE_LEAF: &str = ".doctrine";
 const DECOY_CREDENTIAL_BODY: &str = "decoy-token: not-a-real-credential\n";
 const DECOY_UNDECLARED_BODY: &str = "declared to no placement\n";
 const DECOY_EXECUTABLE_BODY: &str = "#!/bin/sh\necho decoy\n";
+const DECOY_DESCRIPTOR_BODY: &str = "readable through an inherited descriptor\n";
+
+/// What a socket-pair failure is reported *at*. [`FixtureFault::Io`] carries a
+/// path and a socket pair has none; naming it is honest where reusing the run
+/// root would blame a directory that is fine.
+const DECOY_SOCKET_PAIR_LABEL: &str = "<decoy socket pair>";
+
+/// What the kernel appends to `/proc/<pid>/fd/<n>`'s target once the file has no
+/// remaining link — how the write-only decoy's namelessness is read back.
+const DELETED_SUFFIX: &str = " (deleted)";
 const EXECUTABLE_MODE: u32 = 0o755;
 
 /// The synthesized control-plane document: a `[capsule]` table over the
@@ -1041,10 +1182,7 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<String, FixtureFault> {
 }
 
 fn make_directory(path: &Path) -> Result<(), FixtureFault> {
-    std::fs::create_dir_all(path).map_err(|error| FixtureFault::Io {
-        path: path.to_path_buf(),
-        detail: error.to_string(),
-    })
+    std::fs::create_dir_all(path).map_err(|error| fixture_io(path, &error))
 }
 
 /// `File::create` plus `write_all`, because `std::fs::write` is banned
@@ -1053,21 +1191,14 @@ fn write_file(path: &Path, contents: &str) -> Result<(), FixtureFault> {
     if let Some(parent) = path.parent() {
         make_directory(parent)?;
     }
-    let io = |error: std::io::Error| FixtureFault::Io {
-        path: path.to_path_buf(),
-        detail: error.to_string(),
-    };
-    let mut file = File::create(path).map_err(io)?;
-    file.write_all(contents.as_bytes()).map_err(io)
+    let mut file = File::create(path).map_err(|error| fixture_io(path, &error))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|error| fixture_io(path, &error))
 }
 
 fn make_executable(path: &Path) -> Result<(), FixtureFault> {
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(EXECUTABLE_MODE)).map_err(
-        |error| FixtureFault::Io {
-            path: path.to_path_buf(),
-            detail: error.to_string(),
-        },
-    )
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(EXECUTABLE_MODE))
+        .map_err(|error| fixture_io(path, &error))
 }
 
 /// The readable roots the fixture declares, **derived from the host** rather
@@ -2611,6 +2742,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs::File;
     use std::io::Write as _;
+    use std::os::fd::AsRawFd as _;
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
@@ -2619,12 +2751,13 @@ mod tests {
     use super::Weakening as ProfileWeakening;
     use super::{
         Admission, AdmissionVerdict, ArmResult, ArmShape, AuthorityGrant, AuxOutcome, Axis, Bound,
-        Claim, ConcurrentWitness, ConformanceBackend, Delta, Fixture, HOME_VARIABLE, HostPid,
-        Indeterminacy, LIVENESS_MARKER, NotAdmitted, Observed, PidProbe, Probe, PropertyRemoval,
-        Row, RowId, RowVerdict, SHELL, TMPFS_MAGIC, TempRoot, Which, admission, available_bytes_of,
-        capsule_config_document, classify, classify_concurrent, decode_mount_field, git,
-        mount_points, on_real_disk, prepare_root, row_ids_in_more_than_one_table, row_verdict,
-        second_filesystem, system_readable_roots, top_level_ancestor, verify, verify_over,
+        Claim, ConcurrentWitness, ConformanceBackend, DELETED_SUFFIX, Delta, Fixture,
+        HOME_VARIABLE, HostPid, Indeterminacy, InheritableDecoys, LIVENESS_MARKER, NotAdmitted,
+        Observed, PidProbe, Probe, PropertyRemoval, Row, RowId, RowVerdict, SHELL, TMPFS_MAGIC,
+        TempRoot, Which, admission, available_bytes_of, capsule_config_document, classify,
+        classify_concurrent, decode_mount_field, git, is_inheritable, mount_points, on_real_disk,
+        prepare_root, row_ids_in_more_than_one_table, row_verdict, second_filesystem,
+        system_readable_roots, top_level_ancestor, verify, verify_over,
     };
     use super::{
         Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
@@ -3900,6 +4033,7 @@ mod tests {
             fixture.own_export(),
             fixture.decoy_undeclared(),
             fixture.decoy_executable(),
+            fixture.decoy_descriptor(),
         ];
         for path in beneath {
             assert!(
@@ -3933,6 +4067,149 @@ mod tests {
             "row 5's target is not the internet"
         );
         assert_ne!(address.port(), 0);
+    }
+
+    /// `EX-13`'s two halves in one assertion: row 10's three decoys survive an
+    /// `exec`, and every descriptor the trusted side holds *for real* does not.
+    ///
+    /// The first half is the one with a trap under it. Rust opens its own files
+    /// `O_CLOEXEC` (PHASE-05 `VT-4`), so a fixture that reached for `File::open`
+    /// would hand the row three descriptors the sweep never had to close — and
+    /// the removal would change nothing while the row still passed.
+    #[test]
+    fn the_row_ten_decoys_are_the_only_inheritable_descriptors() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let decoys = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+
+        for descriptor in decoys.descriptors() {
+            assert!(
+                is_inheritable(descriptor),
+                "a row 10 decoy is close-on-exec, so removing the sweep would change nothing"
+            );
+        }
+
+        // Held for real, and so never inheritable: the pair's far end, and the
+        // fixture's own listener.
+        assert!(
+            !is_inheritable(decoys.retained_peer()),
+            "the socket pair's retained end leaks into the capsule"
+        );
+        assert!(
+            !is_inheritable(fixture.listener()),
+            "row 5's trusted-side listener leaks into the capsule"
+        );
+    }
+
+    /// The write-only decoy is reachable by no name, so the control arm's
+    /// mutation dies with the descriptor (`EX-13`, `VA-1`'s write half).
+    ///
+    /// Two assertions, and the test is vacuous without the second: the file is
+    /// genuinely writable, and it adds no entry to the fixture root. A decoy
+    /// that could not be written proves nothing about a capsule that inherits
+    /// it.
+    #[test]
+    fn the_write_only_decoy_is_reachable_by_no_name() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let before = entry_names(fixture.root());
+
+        let decoys = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+        let [_readable, writable, _socket] = decoys.descriptors();
+
+        let written = rustix::io::write(writable, b"the control arm's mutation\n")
+            .expect("the write-only decoy is writable");
+        assert_ne!(written, 0, "the write-only decoy accepted no bytes");
+
+        assert_eq!(
+            before,
+            entry_names(fixture.root()),
+            "the write-only decoy was linked into the fixture root"
+        );
+
+        // Unnamed, but still the fixture's own root's filesystem — invariant 7
+        // holds for a file with no name as much as for one with a name.
+        let target = std::fs::read_link(format!("/proc/self/fd/{}", writable.as_raw_fd()))
+            .expect("the kernel names the decoy's origin");
+        let shown = target.to_string_lossy().into_owned();
+        assert!(
+            shown.starts_with(&fixture.root().to_string_lossy().into_owned()),
+            "the write-only decoy was created outside the fixture root: {shown}"
+        );
+        assert!(
+            shown.ends_with(DELETED_SUFFIX),
+            "the write-only decoy still has a link: {shown}"
+        );
+    }
+
+    /// A decoy set is per-arm state, not fixture state (`F-26`).
+    ///
+    /// The backend's parent-side sweep marks the *parent's* descriptors
+    /// close-on-exec, permanently. Row 10's confining probe arm therefore closes
+    /// whatever set was open when it ran, and a set held once per fixture would
+    /// leave the control arm nothing to leak — a row passing for no reason.
+    #[test]
+    fn a_decoy_set_opened_after_a_sweep_is_inheritable_again() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let swept = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+
+        // What `mark_inherited_descriptors_close_on_exec` does to the parent,
+        // applied here to this set alone rather than to the whole process.
+        for descriptor in swept.descriptors() {
+            rustix::io::fcntl_setfd(descriptor, rustix::io::FdFlags::CLOEXEC)
+                .expect("the sweep can close a decoy");
+            assert!(!is_inheritable(descriptor));
+        }
+
+        let fresh = fixture
+            .inheritable_decoys()
+            .expect("a second decoy set opens");
+        for descriptor in fresh.descriptors() {
+            assert!(
+                is_inheritable(descriptor),
+                "the control arm inherited a set the probe arm's sweep had already closed"
+            );
+        }
+    }
+
+    /// How many descriptors above the standard streams row 10's payload counts.
+    #[test]
+    fn a_decoy_set_is_three_descriptors_of_three_kinds() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let decoys = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+
+        assert_eq!(decoys.descriptors().len(), InheritableDecoys::COUNT);
+        let numbers: BTreeSet<i32> = decoys
+            .descriptors()
+            .iter()
+            .map(std::os::fd::AsRawFd::as_raw_fd)
+            .collect();
+        assert_eq!(
+            numbers.len(),
+            InheritableDecoys::COUNT,
+            "two of row 10's decoys are the same descriptor"
+        );
+        assert!(
+            numbers.iter().all(|number| *number > 2),
+            "a decoy sits at or below the standard streams, which is row 12's mechanism"
+        );
+    }
+
+    /// The leaf names directly beneath `path`, sorted — a listing that changes
+    /// only when something is *linked* there.
+    fn entry_names(path: &Path) -> BTreeSet<std::ffi::OsString> {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return BTreeSet::new();
+        };
+        entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.file_name()))
+            .collect()
     }
 
     /// The second-filesystem selection is only informative if the path it names
