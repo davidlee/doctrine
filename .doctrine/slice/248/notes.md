@@ -1330,6 +1330,82 @@ under the sheet's own fallback.
     into. Generalises past row 9: **any** row whose payload states more than one
     channel wants a per-channel row beside it. (`F-21`.)
 
+120. **A residual left open for later rows was closed by isolation, not carried
+    — and the tally is on the channel the hazard runs on.** `F-19` closed the
+    setup→fork window for the descriptor seam's own discriminator by running it
+    in a process of its own, and said plainly that the residual stayed open for
+    any shipped row carrying the descriptor delta. Row 10 is that row. The same
+    isolation was taken rather than the residual accepted: every *executed*
+    row-10 assertion — shipped verdict, three authority modes, both directions
+    of the write-only decoy, and the whole-table control walk that row 10's
+    arrival infected — runs in a re-executed child holding one `#[ignore]`d
+    instrument, single-threaded by construction, with the parent requiring each
+    marker line *positively* so a selector that matches nothing cannot pass by
+    exiting 0 having run nothing. No residual is carried, so there is no rate to
+    report for one. Nothing settled was reopened to get there: the production
+    descriptor guard is not re-entrant, no window is carried into the fork
+    through a changed `run` signature, no test-only mutex, no weakened
+    assertion. Verified as 5/5 clean full runs of `doctrine check gate` — the
+    channel the hazard actually runs on, not `cargo test` and not CPU spinners —
+    against the 1-in-3 failure measured on that same channel before isolation.
+    The general shape: when a prior task records a residual as *open for later
+    rows*, the later row owes an explicit decision and an explicit measurement,
+    taken before it lands, not discovered by whoever next sees it flake.
+    (`F-22`.)
+
+121. **A row joining the shipped tables can import its own hazard into tests
+    that never mention it.** Row 10 carries the descriptor delta, so the moment
+    it entered `table_a()` the `VA-4` whole-table walk —
+    `every_shipped_rows_control_is_seen_to_fail`, which runs *every* shipped
+    row's control arm in-process — inherited the setup→fork window measured at
+    1 in 3, and would have started failing for a reason nothing in its own text
+    names. Closed by moving the **whole walk** into a child process, not row
+    10's leg of it: excluding one row from a walk whose entire value is that it
+    covers all of them would be an invisible hole. The rows walked, the arms
+    run and the result required are unchanged. Generalises: **adding a row is a
+    change to every test that iterates the tables**, and the cost lands on
+    tests chosen by no one. (`F-23`.)
+
+122. **No stub backend can be run through `run_row`, and the phase sheet asked
+    for two that were.** `run_row` provisions each arm through the backend under
+    test, and `provision` reads a transaction identity back out of a capsule's
+    stdout — so a stub answering every execution with one fixed payload dies at
+    provisioning with `IdentityNotPersisted` before either arm is classified.
+    That is `provision` failing closed and behaving correctly; it is also why no
+    stub anywhere in this suite reaches `run_row`. The mutants took the file's
+    own established seam instead — `run_arm` per arm, `row_verdict` over the
+    pair — carrying the shipped row's shape, its `Observed` and its delta
+    through `under_for`. Owed: whether the sheet's wording or the harness is
+    what should change. (`F-24`.)
+
+123. **The strongest mutant is unbuildable, and the fidelity was bought
+    elsewhere.** A backend that genuinely leaves a descriptor inherited across a
+    real spawn needs either `mark_inherited_descriptors_close_on_exec` made
+    `pub(crate)` — a production visibility change for a test's benefit — or a
+    third `unsafe` site for `BorrowedFd::borrow_raw`, and the budget is spent.
+    Bought instead by making the mutants' stdout **observed rather than
+    predicted**: row 10's shipped script is run for real under `/bin/sh` with
+    exactly one decoy left inheritable and the other two swept by hand, and what
+    it prints is what the stub answers with. What stays uncovered is the
+    parent-side sweep's own mechanism — the mutants convict a leak against row
+    10's payload and observation contract, not `bubblewrap.rs` against a
+    regressed sweep. Owed as an `ISS-` at merge if a real leaking backend is
+    wanted. (`F-25`.)
+
+124. **A trusted-side reading of per-arm state has to happen inside the arm, and
+    that put a test's observation into production code.** *Unmodified after the
+    probe, mutated after the control* is unreachable from a test: the decoy set
+    is opened by `trusted_side_setup` and dropped when `arm_over` returns, and
+    the write-only decoy is named by nothing, so once a caller holds an
+    `ArmResult` there is neither a descriptor nor a path. Added
+    `InheritableDecoys::write_only_bytes` (an `fstat`, `None` on failure so a
+    failed read cannot pass for *unmodified*), a `Fixture` recorder shaped like
+    `observed_sessions`, and one call in `arm_over` before the set drops — no
+    `CapsuleBackend`, `run`, `Arm` or `run_arm` signature moves. Measured
+    `[Some(0), Some(23)]` against arms `Held`/`Failed`. It is still production
+    code carrying an observation only a test reads, and the reconciler should
+    say whether that is the right home for it. (`F-26`.)
+
 
 ## Open
 

@@ -2310,3 +2310,119 @@ PHASE-09 `F-35`'s four row-B5 tests — nothing else failed in any run. The seam
 cannot be the cause: `trusted_side_setup` returns `None` for every delta a
 shipped row carries, so no shipped row's behaviour changed, and the
 single-threaded suite is 236/236 green unchanged.
+
+## PHASE-10 `T4` — row 10: `ClosedDescriptorSet` / `DescriptorsClosed`
+
+Shard note (`C9`): the sheet nominates `notes_10-12.md` and forbids minting one
+silently. Still no such shard at this sitting, so this record joins `T1`'s and
+`T2`'s here under the sheet's own fallback — the third time that instruction has
+been overridden, which is itself worth correcting.
+
+### The payload — resolution, not counting; presence, not readability
+
+`ls -1 /proc/self/fd` in a clean capsule reports `0 1 2 3`. The fourth entry is
+the enumeration's **own** directory handle, so *no descriptor above 2 appears* is
+literally unsatisfiable, and the round-4 row failed before any decoy was ever
+inherited (`RV-346` `F-36`). Row 10 therefore resolves rather than counts, and
+excludes exactly one descriptor **by identity**: the handle whose target is
+`/proc/*/fd`. Everything else above 2 is printed as `FD-RESOLVED-<target>` and
+the row says `DESCRIPTOR-INHERITED`.
+
+Three things had to be true at once and only one shape gets all three:
+
+- **One process, not two.** A `readlink` per entry resolves *`readlink`'s* own
+  descriptor table, not the capsule's — `F-13`'s trap one level up. A glob over
+  `/proc/self/fd/*` lists a directory handle that is already closed by the time
+  the shell reads it. `ls -l` enumerates and resolves in the same process, in one
+  read.
+- **Exactly one own handle, or no answer.** The payload requires `own -eq 1` and
+  otherwise prints neither token, so a host whose `/proc` answered strangely
+  reads `NoObservation` → `Indeterminate` rather than passing.
+- **Named diagnostics.** A failure names what crossed the `exec`; a count would
+  only say the table was longer than someone expected.
+
+The shell was validated standalone before any Rust was written: clean → `LIVE` /
+`NO-DESCRIPTOR-ABOVE-TWO`; one readable decoy at fd 9 → `LIVE` /
+`FD-RESOLVED-…` / `DESCRIPTOR-INHERITED`; unchanged under a pipe.
+
+### Isolation — the decision `F-19` left open, and it was taken
+
+`F-19` closed `F-16` for the seam's own discriminator by measuring it in a child,
+and recorded that the residual stays open for **any shipped row carrying the
+descriptor delta**. Row 10 is that row. Every executed row-10 claim here is
+measured in a child process — `--exact <helper> --ignored --nocapture`, the
+parent requiring the marker line positively because a selector matching nothing
+exits 0 having run nothing.
+
+The alternatives were all settled upstream and none was reopened: a re-entrant
+descriptor window (rejected by `fork_within_the_descriptor_window`'s own
+contract), carrying an already-held window into the fork (`S6`, a signature
+change), a `#[cfg(test)]` mutex (a known-bad shape that deadlocks row B5), an
+idempotent re-check (laundering), and weakening the assertion (the vacuous pass
+`EX-3` forbids).
+
+**The residual is the multi-threaded test binary's, not `verify`'s.** `verify`
+runs the rows sequentially in one thread, so nothing of its own can sweep this
+process between a row's setup and its fork. The window that made `F-18` a 1-in-3
+is a property of the runner, and removing the runner removes it.
+
+### The three authority modes
+
+A test-local row (id borrowed, as `descriptor_shaped_row`'s is) that holds when
+**none** of the three kinds is present, fails when **all three** are, and prints
+nothing in between — so a partial set reads `Indeterminate` and two-of-three can
+never be mistaken for *the modes are exercised*, which is the failure a `-ge 1`
+threshold would have had. Each mode is recognised by what the descriptor
+resolves to: the readable decoy by its path under the decoy directory, the
+write-only one by the kernel's ` (deleted)` suffix, the socket end by `socket:`.
+Row 10 itself is deliberately blind to kind — it must fail on any of them — so
+this is the complementary claim the shipped row cannot make about itself.
+
+### The write-only decoy, both directions
+
+`F-31`'s lesson stated as a test. The decoy is `O_TMPFILE` and write-only: a
+capsule that inherits it reads zero bytes through it, exactly as it would
+through a closed one, which is how the round-4 row passed a real leak. So the
+trusted side reads the file's **size**, never its contents, and reads it in both
+directions — `[Some(0), Some(23)]` against arms `Held` / `Failed`. One direction
+alone proves nothing: *mutated after the control* would pass for a harness that
+wrote on every arm, and *unmodified after the probe* for one that never wrote.
+
+Two things this cost, both recorded as findings. The reading has to happen inside
+`arm_over`, because the set is per-arm state dropped there and the file is named
+by nothing (`F-26`). And the writing payload is the phase's one destructive
+instrument, so its containment landed ahead of the aim (`C13`): the capsule
+writes only to a descriptor whose target it has already resolved to an unlinked
+file, never to a number chosen blind; there is exactly one redirection; and where
+that write lands was already established by
+`the_write_only_decoy_is_reachable_by_no_name`.
+
+### The mutants
+
+`F-26`'s (one readable descriptor) and `F-31`'s (one write-only descriptor), both
+`Violated` — a probe arm that *fails* convicts regardless of the control, so a
+backend leaking on both arms cannot launder the leak into *the removal changed
+nothing*.
+
+Their stdout is **observed, not predicted**: row 10's shipped script is run under
+`/bin/sh` with exactly one decoy left inheritable and the other two swept by
+hand, and what it really prints is what the stub answers with. A discriminating
+leg runs the same pipeline with nothing leaked and requires a verdict that is not
+`Violated`. Two limits, both findings: no stub can reach `run_row` at all
+(`F-24`), and a *real* partial-leak backend is not constructible without a
+production visibility change or a third `unsafe` site (`F-25`).
+
+### Tally
+
+Five sequential full runs of `doctrine check gate` — the channel the hazard runs
+on, per `F-36`; a green `cargo test` or a CPU spinner would not have seen `F-16`
+either. All five `exit=0`, all five `248 passed; 0 failed; 6 ignored`, wall
+91.45–91.55s. **5/5.**
+
+That number is only worth stating against its predecessor: the same channel
+measured `F-16`'s window at roughly 1 in 3 before the isolation, so five clean
+runs is evidence the arms no longer race a sweep rather than a lucky streak.
+The suite moved 236 → 248 passing with 6 ignored, the growth being the
+`#[ignore]`d child instruments; a log reading `236 passed; 2 ignored` is from a
+previous session and counts for nothing here.
+
