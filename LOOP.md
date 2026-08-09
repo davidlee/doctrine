@@ -256,8 +256,21 @@ Opus, and **thin** — it routes, it does not read source and it does not read
 1. **Guard** — as above. Exit if a sub-agent is live.
 2. **Orient** — `.doctrine/slice/<N>/handover.md`, then `git log --oneline -5`.
    Nothing else.
-3. **Verify the last claim** — if a phase reports complete: `doctrine check gate`,
-   confirm green, then flip it:
+3. **Verify the last claim** — every firing, not only at phase close. Two legs,
+   both cheap:
+   - **The gate is the evidence, the report is a claim.** Run `doctrine check
+     gate` yourself and read the tally by seeking forward to the
+     `doctrine_control-` binary header — the line is neither first nor last.
+     Confirm the delta over the previous task equals the tests the worker says
+     it added.
+   - **Findings reached § *Owed*.** One grep: every `F-` the sheet's § *Findings*
+     gained this task must appear in `notes.md` § *Owed*. This is a one-line
+     check and it belongs **here**, per task, not at phase close — scheduling it
+     at close means a per-task omission stays invisible for as many tasks as the
+     phase has left. `T10`'s `F-51`–`F-54` went four tasks unnoticed for exactly
+     that reason, the second such drift (`notes.md` items 142, 143).
+
+   If a phase reports complete: after the gate is green, flip it:
    `doctrine slice phase <N> <PP> --status completed`. **The flip is the
    orchestrator's, never the worker's**, and it happens after the gate, not after
    the report. Then read the boundary warning; if it names foreign commits,
@@ -440,9 +453,13 @@ sheet to reconstruct it. So the rule follows the practice.
 
 Two constraints keep it safe. **Append at the end, never edit an existing item** —
 numbering is immutable, and the orchestrator may be writing another section in
-the same window. **The orchestrator still verifies at close**: read the sheet's
-Findings against § *Owed* and confirm every `F-` reached it. "The worker wrote
-it" is a claim like any other, and disk is truth (§ *The contract*).
+the same window. **The orchestrator still verifies — every firing, at beat 3**:
+read the sheet's Findings against § *Owed* and confirm every `F-` reached it.
+"The worker wrote it" is a claim like any other, and disk is truth (§ *The
+contract*). Per firing rather than per phase because the check costs one grep
+and the omission is otherwise invisible until close; when a late repair does
+land, append it at the end with its out-of-order arrival stated, never
+interleaved into the existing numbering.
 
 ## Stop conditions
 

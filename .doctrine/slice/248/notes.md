@@ -1647,6 +1647,50 @@ under the sheet's own fallback.
     does not contain — the referent is `design.md` `sec-9`'s `R9`, which the
     criterion's own text names. (Orchestrator, at close.)
 
+143. **Out of order, and deliberately so: `T10`'s four findings, appended by the
+    orchestrator after `T11`'s.** Item 142 is the report of their absence; these
+    four are the repair. Numbering is append-only, so the late arrival shows in
+    the sequence rather than being smoothed away — 139–142 are `T11`'s, 143–146
+    are `T10`'s. A reader reconstructing chronology should read the `F-` labels,
+    not the item numbers. (Orchestrator, at close.)
+
+144. **`backend verify`'s refusing row reads `Indeterminate`, not `Unproven`
+    (`F-51`).** Nineteen rows `Proven`; row 7 is
+    `Property(ProcessTreeTeardown)=Indeterminate { arm: Probe, detail:
+    NoObservation }` — `F-24`/`F-25` exactly: two arms, one byte-identical
+    `Observation`, neither token printed. `admission()` tests `!= Proven`, which
+    is right; any *consumer* written against `RowVerdict::Unproven` would miss
+    this row entirely. The `PHASE-10` sheet's prose says "the unproven row" and
+    is loose. Anything downstream that matches on verdicts must match all three
+    non-`Proven` variants. (Reconciliation: brief the distinction.)
+
+145. **A mutant that does not compile has not been convicted (`F-52`, and the
+    second occurrence in two tasks).** `M3`/`M8`/`M9` first reported CONVICTED
+    while dying on `-D warnings` for an unused binding, before any assertion
+    ran — item 137's lesson recurring one task later, which makes it a property
+    of the *instrument*, not an unlucky arm. Rule: **degrade the value rather
+    than remove it** — truncate a list to its first row, transpose two fields,
+    truncate a string to its first word. A degraded reading is both the mutant
+    that compiles and the sharper one (item 137 from the other side). The
+    battery runner now scans for `error[E` / `could not compile` and reports
+    `<did not compile>` as an outcome distinct from a failing test. Recorded as
+    `mem.pattern.tests.mutant-must-compile-to-convict`.
+
+146. **`clippy::use_debug` fires on `write!` and not on `format!` (`F-53`), and
+    `EX-13`'s clock half is a stated limit (`F-54`).** The lint's subject is a
+    `Debug` rendering reaching an *output handle*, so the `format!` three
+    functions below in the same file has passed every gate since `PHASE-06`
+    while the new `write!` failed — the surrounding code reads as local
+    precedent and is the permitted form, and neither `cargo check` nor
+    `cargo test` says anything; the signal costs a full gate cycle. Recorded as
+    `mem.fact.rust.clippy-use-debug-write-not-format` plus friction record
+    `019fe6cc-f00b-7073-9982-73b52acd42d3`. Separately, `EX-13`'s second half —
+    *`main.rs` performs the wall-clock read and passes `today` in* — is held
+    **structurally, not by a test**: `verify` takes `today` as a parameter and
+    has no clock to reach for, and injecting a seam to assert it would add
+    production surface whose only consumer is its own test. Stated so a later
+    reader does not mistake the silence for coverage.
+
 
 ## Open
 
