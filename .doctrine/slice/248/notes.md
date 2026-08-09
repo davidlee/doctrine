@@ -1292,6 +1292,44 @@ under the sheet's own fallback.
     tallied under `doctrine check gate` rather than spinners. Owed as an `ISS-`
     at merge if the residual is to be tracked past this slice.
 
+118. **Row 9 ships under a title it exceeds, deliberately, and the design's
+    wording for it is not literally satisfiable.** `SL-248`'s design and its
+    PHASE-10 `VT-2` both name `a_write_through_every_readable_mount_fails`. A
+    `Row` carries one `ArmShape`, so both arms run one payload; under the
+    control arm the declared readable mounts are read-write and on this host
+    they are the operator's own `/nix` and `/bin`, so a payload that literally
+    wrote through every readable mount would write **outside the fixture** —
+    which the first spike did, and which item 108 (`F-11`) swept and narrowed.
+    Built instead: the declared mounts derived per entry the way row 4 derives
+    them and read with `[ -w ]` (`access(2)`/`W_OK`, which reports `EROFS` for a
+    read-only mount whatever the caller's identity, so it separates the two
+    attachments without touching them), plus **one** real write, into the source
+    export — `DEC-157`'s channel, this run's own `own_export` beneath the
+    fixture root. The title is kept because `VT-2` makes it a verification floor
+    and renaming it would break the link; the discrepancy is stated at the top
+    of the test's own doc comment rather than left to be discovered. Measured
+    through the real arms, not carried over from `T1`'s bare-capsule spike: the
+    mount channel alone reads `Proven`. **Owed to the reconciler:** decide
+    whether the design's wording is corrected to the mechanism or the mechanism
+    keeps a title it exceeds. Owed as an `ISS-` at merge if deferred. (`F-20`.)
+
+119. **A shipped row that states two channels at once cannot attribute its own
+    verdict, and row 9 is one.** Row 9 holds only when nothing in the input set
+    turned out writable and fails as soon as anything does — the right reading
+    of the property, and what makes `EX-2`'s *fails on the first* true — but it
+    also means `Proven` is satisfied by **either** channel discriminating alone.
+    A mount half that had stopped separating `--ro-bind` from `--bind` would sit
+    invisible behind a working source half, and the per-entry claim would be the
+    one thing in the row nothing measured. Closed by a test-local row wearing
+    row 9's shape over one channel at a time, so each of the two `VT-2` titles
+    is a `Proven` over its own channel; the shipped row still states the
+    property as one claim. The first cut asserted only that the probe arm
+    *held* over the shipped row — a weaker statement than it looks, since it
+    says nothing about the delta being what changed the outcome — and that is
+    recorded because it is the shape a later reader is most likely to relax back
+    into. Generalises past row 9: **any** row whose payload states more than one
+    channel wants a per-channel row beside it. (`F-21`.)
+
 
 ## Open
 

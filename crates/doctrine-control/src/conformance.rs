@@ -130,6 +130,27 @@ const WROTE_NOT: &str = "WROTE-NOT";
 /// What a freshness writer leaves behind, and under what name.
 const SENTINEL_LEAF: &str = "sentinel";
 const SENTINEL_BODY: &str = "left by an earlier transaction";
+
+/// Row 9's mark, and the leaf it takes inside the source export.
+///
+/// Its own leaf and body rather than [`SENTINEL_LEAF`]'s, so a freshness row
+/// looking for state left by an earlier transaction can never read row 9's
+/// write as one.
+const INPUT_IMMUTABILITY_LEAF: &str = "immutability-probe";
+const INPUT_IMMUTABILITY_BODY: &str = "written through a bind declared read-only";
+
+/// Row 9's per-entry lines, one per declared readable mount — so an input set
+/// that is writable in part says *which* entry rather than merely that one of
+/// them was. [`Observed::Token`] matches whole lines, so these are diagnostics
+/// and never the token.
+const MOUNT_WRITABLE: &str = "MOUNT-WRITABLE-";
+const MOUNT_READ_ONLY: &str = "MOUNT-READ-ONLY-";
+
+/// The source export's own outcome, stated positively on both sides for the
+/// same reason: `DEC-157`'s channel is separable from the mounts only if it
+/// reports separately from them.
+const SOURCE_WRITABLE: &str = "SOURCE-WRITABLE";
+const SOURCE_READ_ONLY: &str = "SOURCE-READ-ONLY";
 /// Row B2's ref. A full refname, because `update-ref` and `show-ref --verify`
 /// both take one.
 const SENTINEL_REF: &str = "refs/heads/sentinel";
@@ -2204,6 +2225,10 @@ pub(crate) enum Property {
     /// Row 8. The parent's reading of a resource bound and a termination is the
     /// authority, and each variant is told apart from the others.
     TrustedTerminationObservation,
+    /// Row 9. The declared input set is immutable: every readable mount and the
+    /// source export are attached read-only, and the capsule can write through
+    /// none of them.
+    ImmutableInputSet,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -2998,6 +3023,76 @@ fn writes_past_the_file_size_cap() -> Probe {
     }
 }
 
+/// Row 9's per-entry half: every declared readable mount, named one at a time,
+/// tested for writability **without writing**.
+///
+/// Non-mutating by necessity rather than by preference. A [`Row`] carries one
+/// [`ArmShape`], so both arms run one payload — and under the control arm the
+/// declared inputs are `--bind`, read-write, and they are the operator's own
+/// directories. A payload that literally wrote through each of them would write
+/// outside the fixture; the first spike did (`F-11`). `[ -w ]` is `access(2)`
+/// with `W_OK`, which reports `EROFS` for a read-only mount whatever the
+/// caller's identity, so it separates the two attachments exactly and touches
+/// nothing. The one real write is [`the_source_export_written_through`]'s,
+/// which lands inside the fixture.
+///
+/// The entries are derived the way row 4 derives them — the first component of
+/// each inner `PATH` entry — because half the set is host-dependent and no
+/// payload can be parameterised by the fixture. A derivation that produced
+/// nothing leaves the payload without a token, so a capsule whose input set
+/// never arrived reads [`Indeterminacy::NoObservation`] rather than a hold
+/// established over an empty set.
+fn every_declared_mount_tested_for_writability() -> String {
+    format!(
+        "seen=''; entries=0; \
+         IFS=:; for entry in $PATH; do \
+         leaf=$(echo \"$entry\" | cut -d/ -f2); \
+         case \"$seen\" in *\" $leaf \"*) continue;; esac; \
+         seen=\"$seen $leaf \"; entries=$((entries+1)); \
+         if [ -w \"/$leaf\" ]; then writable=$((writable+1)); echo {MOUNT_WRITABLE}\"$leaf\"; \
+         else echo {MOUNT_READ_ONLY}\"$leaf\"; fi; \
+         done; unset IFS; \
+         [ \"$entries\" -gt 0 ] || exit 0; "
+    )
+}
+
+/// Row 9's `DEC-157` half: the one write in the row, and it lands inside the
+/// fixture.
+///
+/// The source export is this run's own — `own_export`, beneath the fixture root
+/// and reclaimed by its `Drop` — which is what makes a *real* write admissible
+/// on this entry and inadmissible on every other entry in the input set.
+fn the_source_export_written_through() -> String {
+    format!(
+        "if printf '%s' '{INPUT_IMMUTABILITY_BODY}' \
+         > '{INNER_SOURCE}/{INPUT_IMMUTABILITY_LEAF}' 2>/dev/null; \
+         then writable=$((writable+1)); echo {SOURCE_WRITABLE}; \
+         else echo {SOURCE_READ_ONLY}; fi; "
+    )
+}
+
+/// Row 9's payload shape: hold only when **nothing** in the channels it was
+/// given turned out writable.
+///
+/// Not counted-and-compared like [`reads_none_of`]. A partially writable input
+/// set is not an ambiguous observation — it is a violated property — so one
+/// writable entry prints the failure token and the row reads
+/// [`RowVerdict::Violated`] rather than indeterminate. That is the whole of
+/// `EX-2`: a backend binding one declared entry read-only and another writable
+/// fails on the first.
+fn writes_nothing_through(channels: &str) -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; writable=0; {channels}\
+             if [ \"$writable\" -eq 0 ]; then echo {WROTE_NOT}; else echo {WROTE}; fi"
+        )),
+        observed: Observed::Token {
+            held: WROTE_NOT,
+            failed: WROTE,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3072,7 +3167,7 @@ fn observes_the_subject(subject: HostPid) -> Argv {
 /// Table A — `SPEC-030` § *Platform backend contract*'s rows, in the design
 /// document's order, and the ordering of [`Property`] is this list's.
 ///
-/// Eight rows at this phase; rows 9–14 arrive at PHASE-10.
+/// Nine rows at this phase; rows 10–14 arrive later in PHASE-10.
 fn table_a() -> Vec<Row> {
     vec![
         storage_row(
@@ -3123,6 +3218,19 @@ fn table_a() -> Vec<Row> {
             id: RowId::Property(Property::TrustedTerminationObservation),
             shape: ArmShape::Single(writes_past_the_file_size_cap()),
             delta: Delta::Removed(PropertyRemoval::ResourceBound(Bound::FileSize)),
+        },
+        Row {
+            id: RowId::Property(Property::ImmutableInputSet),
+            // Both channels of the input set in one payload, because a `Row`
+            // holds one shape and the property is a statement about the set:
+            // the declared readable mounts, stated per entry, and the source
+            // export `DEC-157` names.
+            shape: ArmShape::Single(writes_nothing_through(&format!(
+                "{}{}",
+                every_declared_mount_tested_for_writability(),
+                the_source_export_written_through()
+            ))),
+            delta: Delta::Removed(PropertyRemoval::InputsWritable),
         },
     ]
 }
@@ -4038,6 +4146,11 @@ mod tests {
         run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
         writes_past_the_file_size_cap,
     };
+    use super::{
+        INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
+        every_declared_mount_tested_for_writability, the_source_export_written_through,
+        writes_nothing_through,
+    };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
         BubblewrapBackend, SpawnOptions, confinement_argv, hold_descriptor_window,
@@ -4045,9 +4158,9 @@ mod tests {
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
-        CapsulePlacement, CapsuleStdio, Execution, FILESYSTEM_ROOT, ForbiddenScopes, INNER_CAPSULE,
-        INNER_PROC, INNER_TMP, InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts,
-        SourceExport, Termination, TransactionRoot,
+        CapsuleEnvVar, CapsulePlacement, CapsuleStdio, Execution, FILESYSTEM_ROOT, ForbiddenScopes,
+        INNER_CAPSULE, INNER_PROC, INNER_TMP, InnerPath, MountedPath, NetworkPosture, Observation,
+        PlacementParts, SourceExport, Termination, TransactionRoot,
     };
     use crate::config::{Argv, ByteCount};
     use crate::host::HostFacts;
@@ -8376,11 +8489,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — thirteen rows, each
+    /// shipped tables are what the design says they are — fourteen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_thirteen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_fourteen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -8390,7 +8503,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 13);
+        assert_eq!(rows.len(), 14);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -8564,6 +8677,217 @@ mod tests {
                 !is_inheritable(descriptor),
                 "provisioning did not sweep a pre-existing decoy set — `F-9` no longer holds \
                  and the seam's placement is free again"
+            );
+        }
+    }
+
+    // ── PHASE-10 `T3`: row 9 — `ImmutableInputSet` / `InputsWritable` ───────
+
+    /// Row 9's shape over **one** of its two channels.
+    ///
+    /// Shipped row 9 states both at once and holds only when neither turned out
+    /// writable, so its `Proven` is satisfied by either channel discriminating
+    /// alone: a mount half that had stopped separating the two attachments would
+    /// be invisible behind a working source half, and the per-entry claim would
+    /// be the one thing in the row nothing measured. Each channel therefore gets
+    /// a row of its own, and `DEC-157` is a claim about one of them.
+    ///
+    /// The id is borrowed, as [`descriptor_shaped_row`]'s is: built here, it
+    /// identifies nothing in the design's tables.
+    fn input_channel_row(channels: &str) -> Row {
+        Row {
+            id: RowId::Property(Property::ImmutableInputSet),
+            shape: ArmShape::Single(writes_nothing_through(channels)),
+            delta: Delta::Removed(PropertyRemoval::InputsWritable),
+        }
+    }
+
+    /// Every path beneath `root` named [`INPUT_IMMUTABILITY_LEAF`].
+    ///
+    /// The whole fixture root rather than the export alone: an escape is only
+    /// visible to a walk that starts above the place the write was meant to
+    /// land. Symlinks are stepped over rather than followed, so the walk cannot
+    /// be led out of the tree it is bounding.
+    fn paths_holding_the_immutability_mark(root: &Path) -> Vec<PathBuf> {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            return Vec::new();
+        };
+        let mut found: Vec<PathBuf> = Vec::new();
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_symlink() {
+                continue;
+            }
+            if path.is_dir() {
+                found.extend(paths_holding_the_immutability_mark(&path));
+            } else if path.file_name() == Some(std::ffi::OsStr::new(INPUT_IMMUTABILITY_LEAF)) {
+                found.push(path);
+            }
+        }
+        found
+    }
+
+    /// `VT-1`, row 9.
+    #[test]
+    fn immutable_input_set_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::ImmutableInputSet)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-2`, row 9's per-entry half — and the one title in this phase that
+    /// **overstates what its payload does**, deliberately and on the record.
+    ///
+    /// A [`Row`] carries one [`ArmShape`], so both arms run one payload. Under
+    /// the control arm the declared inputs are `--bind`, read-write, and on this
+    /// host they are the operator's own `/nix` and `/bin`: a payload that
+    /// literally wrote through every readable mount would write outside the
+    /// fixture, and `T1`'s first spike did exactly that (`F-11`). So the mounts
+    /// are stated per entry and read with `[ -w ]`, which discriminates the two
+    /// attachments without touching them, and the one real write is the one that
+    /// lands inside the fixture — [`a_write_into_the_source_export_fails`]'s.
+    ///
+    /// Both halves are asserted because either alone is satisfiable without the
+    /// other. The verdict is the executed statement that no declared mount was
+    /// writable under the probe *and* that removing the read-only attachment is
+    /// what changed it; the text is what keeps the payload **per entry** rather
+    /// than one representative mount, which is the whole of `EX-2` — a backend
+    /// binding one entry read-only and another writable has to fail on the
+    /// first.
+    ///
+    /// Run over the mount channel alone rather than over shipped row 9, for the
+    /// reason [`input_channel_row`] gives.
+    #[test]
+    fn a_write_through_every_readable_mount_fails() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            run_row(
+                &backend,
+                &SystemHost,
+                &fixture,
+                &input_channel_row(&every_declared_mount_tested_for_writability())
+            ),
+            RowVerdict::Proven,
+            "a declared readable mount was writable under the probe, or every one of \
+             them was still read-only once the delta had rebound them"
+        );
+
+        let row = shipped_row(&RowId::Property(Property::ImmutableInputSet));
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 9 is a one-capsule row");
+        };
+        let script = probe.argv.as_slice().join(" ");
+        assert!(
+            script.contains(MOUNT_WRITABLE) && script.contains(MOUNT_READ_ONLY),
+            "row 9 reports no per-entry outcome, so a partially writable input set \
+             cannot say which entry it was"
+        );
+        assert!(
+            script.contains(&format!("for entry in ${}", CapsuleEnvVar::Path.name())),
+            "row 9 does not walk the declared entries one at a time"
+        );
+    }
+
+    /// `VT-2`, `DEC-157`'s half specifically: the source export is read-only to
+    /// the capsule, and it is the delta that makes it otherwise.
+    ///
+    /// A row of its own rather than a reading of row 9's verdict, for the reason
+    /// [`input_channel_row`] gives.
+    #[test]
+    fn a_write_into_the_source_export_fails() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            run_row(
+                &backend,
+                &SystemHost,
+                &fixture,
+                &input_channel_row(&the_source_export_written_through())
+            ),
+            RowVerdict::Proven,
+            "the source export was writable under the probe, or still read-only once \
+             the delta had rebound it"
+        );
+    }
+
+    /// `VT-2`, single-axis-ness: the control differs by **attachment alone**.
+    ///
+    /// Stated over the assembled argv rather than over the profile, and derived
+    /// rather than spelled: a path word is the absolute one, so *no mount and no
+    /// path* is the statement that every word the delta touches is not a path
+    /// and that the path words are identical in order. A delta that added,
+    /// dropped or moved a mount fails on the length or on the path list, and one
+    /// that changed nothing at all fails on the inequality — which is the
+    /// failure that would make row 9's control vacuous.
+    #[test]
+    fn the_writable_inputs_delta_changes_no_mount_and_no_path() {
+        let probe = assembled(None);
+        let control = assembled(Some(&weakening_for(PropertyRemoval::InputsWritable, None)));
+
+        assert_ne!(probe, control, "the delta changed nothing at all");
+        assert_eq!(
+            probe.len(),
+            control.len(),
+            "the delta changed the argv's length, so a mount appeared or disappeared"
+        );
+
+        for (before, after) in probe.iter().zip(&control).filter(|(a, b)| a != b) {
+            assert!(
+                !Path::new(before).is_absolute() && !Path::new(after).is_absolute(),
+                "the delta moved a path: {before} became {after}"
+            );
+        }
+
+        let paths = |argv: &[String]| -> Vec<String> {
+            argv.iter()
+                .filter(|word| Path::new(word).is_absolute())
+                .cloned()
+                .collect()
+        };
+        assert_eq!(
+            paths(&probe),
+            paths(&control),
+            "the delta changed which paths are bound, or the order they are bound in"
+        );
+    }
+
+    /// `VT-2`, containment. The control arm genuinely writes, and this is the
+    /// assertion that it wrote inside **this run's own export** and nowhere
+    /// else.
+    ///
+    /// The floor a destructive instrument is laid over before it is aimed, not
+    /// an audit after the fact: `T1`'s first spike wrote onto the operator's
+    /// host filesystem (`F-11`). The whole fixture root is walked, so a write
+    /// that escaped `own_export` into the shared base is *named* rather than
+    /// assumed absent, and the non-empty check is what stops the containment
+    /// from passing over a control arm that never wrote at all.
+    #[test]
+    fn the_writable_inputs_control_writes_only_to_this_runs_own_export() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            run_control_arm(
+                &backend,
+                &SystemHost,
+                &fixture,
+                &input_channel_row(&the_source_export_written_through())
+            ),
+            ArmResult::Failed,
+            "the control arm did not write, so containment would be asserted over nothing"
+        );
+
+        let marks = paths_holding_the_immutability_mark(fixture.root());
+        assert!(
+            !marks.is_empty(),
+            "the control arm reported a write the fixture root does not hold"
+        );
+        for mark in &marks {
+            assert!(
+                mark.starts_with(fixture.own_export()),
+                "the control arm wrote outside this run's own export: {}",
+                mark.display()
             );
         }
     }
