@@ -4295,8 +4295,9 @@ mod tests {
         writes_past_the_file_size_cap,
     };
     use super::{
-        DECOY_DESCRIPTOR_LEAF, DECOYS_LEAF, ENUMERATION_HANDLE_TARGET, FD_RESOLVED, LS_LINK_ARROW,
-        PROC_SELF_FD, descriptors_above_two_resolved,
+        DECOY_DESCRIPTOR_LEAF, DECOYS_LEAF, DESCRIPTOR_INHERITED, ENUMERATION_HANDLE_TARGET,
+        FD_RESOLVED, LS_LINK_ARROW, NO_DESCRIPTOR_ABOVE_TWO, PROC_SELF_FD, SHELL_COMMAND,
+        descriptors_above_two_resolved,
     };
     use super::{
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
@@ -9147,13 +9148,18 @@ mod tests {
         println!("{ROW_TEN_VERDICT}{verdict:?}");
     }
 
-    /// Row 10's shipped payload, for the claims stated over its text.
+    /// Row 10's shipped payload — the script itself, not the `sh -c` around it.
     fn row_ten_script() -> String {
         let row = shipped_row(&RowId::Property(Property::ClosedDescriptorSet));
         let ArmShape::Single(probe) = &row.shape else {
             panic!("row 10 is a one-capsule row");
         };
-        probe.argv.as_slice().join(" ")
+        probe
+            .argv
+            .as_slice()
+            .last()
+            .expect("row 10's payload is a shell script")
+            .clone()
     }
 
     /// `VT-1`, row 10.
@@ -9487,6 +9493,164 @@ mod tests {
                 ..CONFINING_OPTIONS
             },
             "the delta switched off more than the descriptor sweep"
+        );
+    }
+
+    /// The decoy set's three, by position in [`InheritableDecoys::descriptors`].
+    const READABLE_DECOY: usize = 0;
+    const WRITE_ONLY_DECOY: usize = 1;
+
+    /// Run row 10's **shipped** payload with exactly one decoy — or none — left
+    /// inheritable, and hand back what it printed.
+    ///
+    /// The mutants' stdout is *observed rather than predicted*. Hand-writing the
+    /// lines a leaking capsule would print would make each mutant a test of my
+    /// own guess about the payload; running the payload against a descriptor
+    /// that really did cross an `exec` makes it a test of the payload. `/bin/sh`
+    /// stands in for the capsule here, which is sound because the payload reads
+    /// nothing but its own `/proc/self/fd` — the thing the leak changes.
+    ///
+    /// **The descriptor window is held across the open, the selective sweep and
+    /// the spawn** (`F-12`). Inheritability is process-wide, every capsule run
+    /// in this suite sweeps it, and this is code that needs its descriptors to
+    /// stay inheritable until the child has them.
+    fn payload_output_leaking(kept: Option<usize>) -> Vec<String> {
+        let _window = hold_descriptor_window();
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let decoys = fixture
+            .inheritable_decoys()
+            .expect("the fixture can open row 10's decoys");
+
+        // What the backend's parent-side sweep does to the whole process,
+        // applied here to the decoys this leak does *not* include.
+        for (index, descriptor) in decoys.descriptors().iter().enumerate() {
+            if Some(index) != kept {
+                rustix::io::fcntl_setfd(*descriptor, rustix::io::FdFlags::CLOEXEC)
+                    .expect("the sweep can close a decoy");
+            }
+        }
+
+        let output = Command::new(SHELL)
+            .arg(SHELL_COMMAND)
+            .arg(row_ten_script())
+            .output()
+            .expect("the payload runs under a shell");
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// A backend that prints `lines` on **both** arms — a leak the removal does
+    /// not create and cannot take away.
+    fn leaking_on_every_arm(lines: &[String]) -> Stub {
+        let borrowed: Vec<&str> = lines.iter().map(String::as_str).collect();
+        Stub::weakening_honestly(&borrowed, &borrowed)
+    }
+
+    /// Row 10, both arms, against a stub backend.
+    ///
+    /// **`run_arm` rather than `run_row`, and the reason is the stub, not the
+    /// row.** `run_row` provisions each arm through the backend under test, and
+    /// provisioning reads an identity back out of a capsule's stdout — a
+    /// backend whose every execution answers with a fixed payload therefore
+    /// never gets past `provision`, and the row reads
+    /// `Indeterminate(BackendError(IdentityNotPersisted))` before either arm's
+    /// observation is classified. That is `provision`'s own fail-closed
+    /// behaviour working correctly, and no stub in this suite reaches `run_row`
+    /// for that reason.
+    ///
+    /// What is preserved is everything the mutant is about: the **shipped**
+    /// row's shape and its `Observed`, the same `run_arm` both real arms take,
+    /// the arm's `Under` derived from the shipped row's own delta by
+    /// [`under_for`], and `row_verdict` reading the pair. Nothing about the
+    /// claim is hand-built except the placement the capsule closure hands back.
+    fn row_ten_against(backend: &Stub) -> RowVerdict {
+        let row = shipped_row(&RowId::Property(Property::ClosedDescriptorSet));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+        let confining = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &row.shape,
+        );
+        let weakened = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
+            &row.shape,
+        );
+        row_verdict(confining, weakened)
+    }
+
+    /// `VT-3`, `EX-4` — `F-26`'s mutant: a backend that leaves one readable
+    /// descriptor inherited, and is identical to the confining one on every
+    /// other observation.
+    ///
+    /// `Violated`, not `Unproven`. A probe arm that *fails* is the harness
+    /// saying the property does not hold of this backend at all, and that
+    /// reading does not depend on what the control arm did — which is why a
+    /// backend leaking on both arms cannot launder the leak into *the removal
+    /// changed nothing*.
+    #[test]
+    fn a_descriptor_leaking_backend_fails_row_ten() {
+        let leaked = payload_output_leaking(Some(READABLE_DECOY));
+        assert!(
+            leaked
+                .iter()
+                .any(|line| line.starts_with(FD_RESOLVED) && line.contains(DECOY_DESCRIPTOR_LEAF)),
+            "the readable decoy did not cross the exec, so this mutant leaks nothing: {leaked:?}"
+        );
+        assert!(
+            leaked.iter().any(|line| line == DESCRIPTOR_INHERITED),
+            "the payload saw the leaked descriptor and did not say so: {leaked:?}"
+        );
+
+        assert_eq!(
+            row_ten_against(&leaking_on_every_arm(&leaked)),
+            RowVerdict::Violated,
+            "a backend leaking a readable descriptor passed row 10"
+        );
+
+        // Discriminating: the same pipeline over a backend that leaks nothing
+        // reaches a verdict that is not `Violated`, so the verdict above came
+        // from the leak and not from the shape of the stub.
+        let clean = payload_output_leaking(None);
+        assert!(
+            clean.iter().any(|line| line == NO_DESCRIPTOR_ABOVE_TWO),
+            "the payload found a descriptor above two with nothing leaked: {clean:?}"
+        );
+        assert_ne!(
+            row_ten_against(&leaking_on_every_arm(&clean)),
+            RowVerdict::Violated,
+            "row 10 reads Violated against a backend that leaks nothing"
+        );
+    }
+
+    /// `VT-3`, `EX-4` — `F-31`'s mutant, and the one that would have passed the
+    /// round-4 row.
+    ///
+    /// The leaked descriptor is write-only, so a capsule that inherits it reads
+    /// **zero bytes** through it — exactly what a closed descriptor gives — and
+    /// a row that asked *can the capsule read anything it should not?* called
+    /// that a pass while a write through the same descriptor mutated host bytes.
+    /// Row 10 asks what is *present*, so the same mutant fails it.
+    #[test]
+    fn a_write_only_descriptor_leaking_backend_fails_row_ten() {
+        let leaked = payload_output_leaking(Some(WRITE_ONLY_DECOY));
+        assert!(
+            leaked
+                .iter()
+                .any(|line| line.starts_with(FD_RESOLVED) && line.ends_with(DELETED_SUFFIX)),
+            "the write-only decoy did not cross the exec, so this mutant leaks nothing: {leaked:?}"
+        );
+        assert!(
+            leaked.iter().any(|line| line == DESCRIPTOR_INHERITED),
+            "row 10's payload could not see a descriptor it cannot read — presence was \
+             the property, and this is the reading that made it so: {leaked:?}"
+        );
+
+        assert_eq!(
+            row_ten_against(&leaking_on_every_arm(&leaked)),
+            RowVerdict::Violated,
+            "a backend leaking a write-only descriptor passed row 10"
         );
     }
 }
