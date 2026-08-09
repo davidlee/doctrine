@@ -1462,6 +1462,34 @@ under the sheet's own fallback.
     tidier. (`F-32`.)
 
 
+129. **`CapsuleStdio::EmptyInputCapturedOutput`'s doc names the right property
+    and justifies it in the wrong direction.** It says descriptors 1 and 2 are
+    "**one-way** endpoints the parent created and reads", which is correct and is
+    what row 12 now enforces. Its reason, though, is that "a socket pair would
+    satisfy *the parent made it* while carrying bytes back into the trusted
+    side" — and bytes reaching the trusted side is the *specified* behaviour of
+    a capture endpoint, not the hazard. The hazard a socket pair actually adds,
+    measured by row 12, is the other direction: the **capsule** can `read(2)`
+    descriptor 1 and receive whatever the trusted side put there, an inbound
+    channel nothing in `CapsuleStdio` declares. A capture pipe's write end
+    answers the same read with `EBADF`. Nothing is broken in the shipping
+    configuration — the backend uses pipes — but a reader repairing this type
+    later has a justification clause pointing at the harmless direction. Owed as
+    a doc/prose correction at merge. (`F-36`, `T6`.)
+
+130. **The phase sheet's `F-` series and `RV-346`'s collide, and the collision is
+    now two ids deep.** The sheet cites `RV-346`'s `F-36` in three places and its
+    `F-38` in the `T6` card, while the sheet's own findings have now reached
+    `F-36`…`F-39` by continuing from the highest present. Doc-local enumerations
+    mean nothing outside the artefact holding them, so both are individually
+    correct and together unreadable: `F-38` in this sheet now denotes two
+    different findings depending on which sentence you are in. Owed as a
+    convention fix at merge — cross-namespace citations in a sheet should be
+    qualified by the owning entity (`RV-346` `F-38`), which is what the boot
+    snapshot's reference-forms rule already asks for and what the sheet's prose
+    stopped doing once the ids overlapped. (`F-38`, `T6`.)
+
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
