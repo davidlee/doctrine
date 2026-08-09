@@ -72,8 +72,9 @@ use crate::backend::bubblewrap::{
 use crate::backend::{
     AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv, CapsuleEnvVar,
     CapsulePlacement, CapsuleStdio, EXPORT_DIRECTORY_LEAF, Execution, FILESYSTEM_ROOT,
-    ForbiddenScopes, INNER_AGENT, INNER_CAPSULE, INNER_PROC, InnerPath, MountedPath,
-    NetworkPosture, Observation, PlacementParts, Termination, TransactionRoot,
+    ForbiddenScopes, INNER_AGENT, INNER_CAPSULE, INNER_DEV, INNER_PROC, INNER_SOURCE, INNER_TMP,
+    InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts, Termination,
+    TransactionRoot,
 };
 use crate::config::{Argv, ByteCount};
 use crate::host::HostFacts;
@@ -895,6 +896,11 @@ impl Fixture {
         make_directory(&decoy_readable_input)?;
         make_directory(&decoy_repository)?;
         git(&decoy_repository, &["init", "--quiet"])?;
+        write_file(
+            &decoy_repository.join(DECOY_REPOSITORY_SECRET_LEAF),
+            DECOY_REPOSITORY_SECRET_BODY,
+        )?;
+        commit_everything(&decoy_repository, "decoy history")?;
         write_file(&decoy_credential, DECOY_CREDENTIAL_BODY)?;
         write_file(&decoy_undeclared, DECOY_UNDECLARED_BODY)?;
         write_file(&decoy_executable, DECOY_EXECUTABLE_BODY)?;
@@ -1257,6 +1263,13 @@ const CONTROL_PLANE_STATE_LEAF: &str = ".doctrine";
 
 const DECOY_CREDENTIAL_BODY: &str = "decoy-token: not-a-real-credential\n";
 const DECOY_UNDECLARED_BODY: &str = "declared to no placement\n";
+
+/// Row 3 reads *the decoy repository's secret blob*, so the decoy repository has
+/// to hold one. Committed rather than merely written, because the property is
+/// about history the capsule was not given, and an uncommitted file is only a
+/// file that happens to sit next to a `.git`.
+const DECOY_REPOSITORY_SECRET_LEAF: &str = "secret";
+const DECOY_REPOSITORY_SECRET_BODY: &str = "history the capsule was never given\n";
 const DECOY_EXECUTABLE_BODY: &str = "#!/bin/sh\necho decoy\n";
 const DECOY_DESCRIPTOR_BODY: &str = "readable through an inherited descriptor\n";
 
@@ -1314,18 +1327,9 @@ fn capsule_config_document(capsule_root: &Path, readable_roots: &[PathBuf]) -> S
 /// copied everything — which is the defect the claim exists to catch.
 fn initialise_project(project_root: &Path, document: &str) -> Result<AcceptedBase, FixtureFault> {
     git(project_root, &["init", "--quiet"])?;
-    git(
-        project_root,
-        &["config", "user.name", FIXTURE_IDENTITY_NAME],
-    )?;
-    git(
-        project_root,
-        &["config", "user.email", FIXTURE_IDENTITY_EMAIL],
-    )?;
 
     write_file(&project_root.join(DOCTRINE_TOML), document)?;
-    git(project_root, &["add", "."])?;
-    git(project_root, &["commit", "--quiet", "-m", "base"])?;
+    commit_everything(project_root, "base")?;
     let base = AcceptedBase::new(git(project_root, &["rev-parse", "HEAD"])?);
 
     git(
@@ -1333,8 +1337,7 @@ fn initialise_project(project_root: &Path, document: &str) -> Result<AcceptedBas
         &["switch", "--quiet", "-c", UNREACHABLE_BRANCH],
     )?;
     write_file(&project_root.join(UNREACHABLE_LEAF), DECOY_UNDECLARED_BODY)?;
-    git(project_root, &["add", "."])?;
-    git(project_root, &["commit", "--quiet", "-m", "unreachable"])?;
+    commit_everything(project_root, "unreachable")?;
     git(
         project_root,
         &["switch", "--quiet", "--detach", base.as_str()],
@@ -1344,6 +1347,23 @@ fn initialise_project(project_root: &Path, document: &str) -> Result<AcceptedBas
 }
 
 /// One trusted-side Git invocation, returning its trimmed stdout.
+/// `git add .` and commit, with the fixture identity configured first.
+///
+/// The identity is set on **every** repository the fixture builds, not once on
+/// the project: a commit in a repository with no `user.email` is where
+/// `mem.pattern.sandbox.git-ident-unset-dns-stall` bites, and the decoy
+/// repository is a second repository.
+fn commit_everything(repository: &Path, message: &str) -> Result<(), FixtureFault> {
+    git(repository, &["config", "user.name", FIXTURE_IDENTITY_NAME])?;
+    git(
+        repository,
+        &["config", "user.email", FIXTURE_IDENTITY_EMAIL],
+    )?;
+    git(repository, &["add", "."])?;
+    git(repository, &["commit", "--quiet", "-m", message])?;
+    Ok(())
+}
+
 fn git(directory: &Path, arguments: &[&str]) -> Result<String, FixtureFault> {
     let argv = || {
         std::iter::once(GIT.to_owned())
@@ -2739,19 +2759,88 @@ fn widens_the_undeclared_decoy(fixture: &Fixture) -> Vec<MountedPath> {
         .collect()
 }
 
-/// Row 2. **Executes** rather than stats (`EX-3`).
+/// Row 2. **Executes** rather than stats (`EX-3`), from **every** bound path.
 ///
-/// The two bound executables run first, and a payload that cannot run *those*
-/// prints neither token — so a capsule with no usable input set is indeterminate
-/// rather than a hold that established nothing.
+/// *Bound path* is read as the mount, not the `PATH` entry: what the profile
+/// binds is a readable root, and the capsule's `PATH` entries are the host's,
+/// identity-mapped, each lying under one of those roots. So the payload derives
+/// the root set from its own `PATH` — first component of each entry — and
+/// requires that every root contributed at least one binary that **ran**. Per
+/// `PATH` *entry* would be a different and false requirement: a Nix-style host
+/// puts one package per entry and most hold none of any fixed candidate list.
+///
+/// The candidates are chosen so that a bare invocation with `stdin` closed exits
+/// 0 and does nothing: `sh`, `cat`, `head` and `env` at EOF, and `true`. Nothing
+/// here runs a binary the payload has not named.
+///
+/// A root that contributed nothing prints **neither token**, so a capsule with an
+/// unusable input set reads [`Indeterminacy::NoObservation`] rather than a hold
+/// that established nothing.
 fn execs_only_what_is_bound() -> Probe {
     Probe {
         argv: shell_argv(&format!(
             "echo {LIVENESS_MARKER}; \
-             {SHELL} {SHELL_COMMAND} 'exit 0' || exit 0; \
-             {GIT} --version > /dev/null 2>&1 || exit 0; \
+             roots=''; covered=''; bound=0; ran=0; \
+             IFS=:; for entry in $PATH; do \
+             root=\" $(echo \"$entry\" | cut -d/ -f2) \"; \
+             case \"$roots\" in *\"$root\"*) ;; \
+             *) roots=\"$roots$root\"; bound=$((bound+1));; esac; \
+             case \"$covered\" in *\"$root\"*) continue;; esac; \
+             for candidate in sh cat head env true; do \
+             if [ -x \"$entry/$candidate\" ] \
+             && \"$entry/$candidate\" < /dev/null > /dev/null 2>&1; \
+             then covered=\"$covered$root\"; ran=$((ran+1)); break; fi; \
+             done; \
+             done; unset IFS; \
+             [ \"$bound\" -gt 0 ] && [ \"$ran\" -eq \"$bound\" ] || exit 0; \
              if '{WIDENED_EXECUTABLE}' > /dev/null 2>&1; \
              then echo {REACHED}; else echo {DENIED}; fi"
+        )),
+        observed: Observed::Token {
+            held: DENIED,
+            failed: REACHED,
+        },
+    }
+}
+
+/// Row 4. The undeclared decoy is unreadable **and** `/` holds only the entries
+/// the profile put there.
+///
+/// The second half is what separates row 4 from row 3 (`EX-4`): row 3 asks about
+/// the specific shapes `SPEC-030` names, row 4 about an arbitrary path — and a
+/// root the capsule did not get is the strongest statement of *arbitrary*.
+///
+/// The permitted set is derived, not hard-coded, because half of it is
+/// host-dependent and no payload can be parameterised by the fixture. The
+/// profile's own inner destinations are constants; the rest of `/` is one entry
+/// per readable root, and a readable root is the first component of some `PATH`
+/// entry — identity-mapped, which is what makes the derivation exact rather than
+/// approximate. Anything else at `/` is the host's root showing through an
+/// unshared mount namespace, and each is named on its own line so a violation
+/// says *what* leaked.
+fn reads_no_undeclared_path_and_sees_only_the_profiles_root() -> Probe {
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             if cat '{WIDENED_UNDECLARED}' > /dev/null 2>&1; \
+             then echo {REACHED}; exit 0; fi; \
+             allowed=' {capsule} {agent} {source} {proc} {dev} {tmp} '; \
+             IFS=:; for entry in $PATH; do \
+             allowed=\"$allowed$(echo \"$entry\" | cut -d/ -f2) \"; \
+             done; unset IFS; \
+             extra=0; \
+             for present in /*; do \
+             leaf=${{present#/}}; \
+             case \"$allowed\" in *\" $leaf \"*) ;; \
+             *) extra=$((extra+1)); echo UNEXPECTED-\"$leaf\";; esac; \
+             done; \
+             [ \"$extra\" -eq 0 ] && echo {DENIED}",
+            capsule = INNER_CAPSULE.trim_start_matches('/'),
+            agent = INNER_AGENT.trim_start_matches('/'),
+            source = INNER_SOURCE.trim_start_matches('/'),
+            proc = INNER_PROC.trim_start_matches('/'),
+            dev = INNER_DEV.trim_start_matches('/'),
+            tmp = INNER_TMP.trim_start_matches('/'),
         )),
         observed: Observed::Token {
             held: DENIED,
@@ -2914,15 +3003,19 @@ fn table_a() -> Vec<Row> {
         },
         Row {
             id: RowId::Property(Property::DeniedCanonicalStateAndCredentials),
+            // The credential, then the decoy repository's secret blob — and its
+            // `HEAD`, because a repository whose history is unreachable but
+            // whose ref tip is readable has still handed over canonical state.
             shape: ArmShape::Single(reads_none_of(&[
                 WIDENED_CREDENTIAL.to_owned(),
+                format!("{WIDENED_REPOSITORY}/{DECOY_REPOSITORY_SECRET_LEAF}"),
                 format!("{WIDENED_REPOSITORY}/{GIT_DIRECTORY_LEAF}/HEAD"),
             ])),
             delta: Delta::Widened(widens_the_credential_and_repository_decoys),
         },
         Row {
             id: RowId::Property(Property::BoundedFilesystemVisibility),
-            shape: ArmShape::Single(reads_none_of(&[WIDENED_UNDECLARED.to_owned()])),
+            shape: ArmShape::Single(reads_no_undeclared_path_and_sees_only_the_profiles_root()),
             delta: Delta::Widened(widens_the_undeclared_decoy),
         },
         Row {
@@ -3799,11 +3892,14 @@ mod tests {
     };
     use super::{
         CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, ESCAPE_SECONDS, INNER_AGENT,
-        LINGER_SECONDS, Property, SENTINEL_LEAF, run_control_arm, tables,
+        LINGER_SECONDS, Property, SENTINEL_LEAF, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE,
+        WIDENED_REPOSITORY, WIDENED_UNDECLARED, run_control_arm, run_probe_arm, tables,
         widens_the_undeclared_decoy,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
-    use crate::backend::bubblewrap::{BubblewrapBackend, SpawnOptions, confinement_argv};
+    use crate::backend::bubblewrap::{
+        BubblewrapBackend, SpawnOptions, confinement_argv, hold_descriptor_window,
+    };
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
@@ -5199,6 +5295,10 @@ mod tests {
     /// the removal would change nothing while the row still passed.
     #[test]
     fn the_row_ten_decoys_are_the_only_inheritable_descriptors() {
+        // Inheritability is process-wide state, and every capsule run in this
+        // suite sweeps it. Held across the open and the reading, or another
+        // test's spawn re-marks these decoys between them (`F-12`).
+        let _window = hold_descriptor_window();
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let decoys = fixture
             .inheritable_decoys()
@@ -5273,6 +5373,9 @@ mod tests {
     /// leave the control arm nothing to leak — a row passing for no reason.
     #[test]
     fn a_decoy_set_opened_after_a_sweep_is_inheritable_again() {
+        // As above: the sweep this test performs by hand is the one a concurrent
+        // capsule run performs for real (`F-12`).
+        let _window = hold_descriptor_window();
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let swept = fixture
             .inheritable_decoys()
@@ -7326,5 +7429,97 @@ mod tests {
                 "{id:?}: the second transaction in the first's root saw no state of it"
             );
         }
+    }
+
+    // ── T6: rows 2, 3 and 4 — the `Widened` family (`VT-1`, `VT-2`) ────────
+
+    /// `VT-1`, row 2.
+    #[test]
+    fn bounded_input_set_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::BoundedInputSet)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-2`, row 2's claim: the row **executes** rather than stats (`EX-3`).
+    ///
+    /// Executed, not read off the payload text. Row 2 prints no token at all
+    /// unless every bound root contributed a binary that *ran*, so a probe arm
+    /// that reaches `Held` is itself the evidence — an arm that only stat-ed
+    /// would be `Indeterminate`, and `assert_eq!` here would say so.
+    ///
+    /// The one thing text can add and execution cannot: that the decoy is
+    /// reached as a **command**, not as an argument to `test`. Both halves are
+    /// asserted because either alone is satisfiable without the other.
+    #[test]
+    fn a_binary_is_executed_from_each_bound_path() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let row = shipped_row(&RowId::Property(Property::BoundedInputSet));
+        assert_eq!(
+            run_probe_arm(&backend, &SystemHost, &fixture, &row),
+            ArmResult::Held,
+            "no bound root ran a binary, so the row established nothing"
+        );
+
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 2 is a one-capsule row");
+        };
+        let script = probe.argv.as_slice().join(" ");
+        assert!(
+            script.contains(&format!("'{WIDENED_EXECUTABLE}' >")),
+            "the decoy is not reached as a command"
+        );
+        assert!(
+            !script.contains(&format!("-x '{WIDENED_EXECUTABLE}'")),
+            "the decoy is stat-ed rather than executed (`EX-3`)"
+        );
+    }
+
+    /// `VT-1`, row 3 — the credential, the decoy repository's committed secret,
+    /// and its `HEAD`.
+    #[test]
+    fn denial_of_canonical_state_and_credentials_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(
+                Property::DeniedCanonicalStateAndCredentials
+            )),
+            RowVerdict::Proven
+        );
+    }
+
+    /// Rows 3 and 4 deny by the same mechanism and are still independent
+    /// (`EX-4`), which is only true if they read **different** things. Pure, and
+    /// it is what stops a later edit from collapsing one into the other.
+    #[test]
+    fn rows_three_and_four_read_disjoint_paths() {
+        let paths = |id: &RowId| -> String {
+            let row = shipped_row(id);
+            let ArmShape::Single(probe) = &row.shape else {
+                panic!("{id:?} is a one-capsule row");
+            };
+            probe.argv.as_slice().join(" ")
+        };
+        let three = paths(&RowId::Property(
+            Property::DeniedCanonicalStateAndCredentials,
+        ));
+        let four = paths(&RowId::Property(Property::BoundedFilesystemVisibility));
+        for named in [WIDENED_CREDENTIAL, WIDENED_REPOSITORY] {
+            assert!(three.contains(named), "row 3 does not read {named}");
+            assert!(!four.contains(named), "row 4 reads row 3's {named}");
+        }
+        assert!(four.contains(WIDENED_UNDECLARED));
+        assert!(!three.contains(WIDENED_UNDECLARED));
+    }
+
+    /// `VT-1`, row 4 — the undeclared decoy is unreachable, and `/` holds only
+    /// the profile's own entries.
+    #[test]
+    fn bounded_filesystem_visibility_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::BoundedFilesystemVisibility)),
+            RowVerdict::Proven
+        );
     }
 }

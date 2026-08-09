@@ -1575,3 +1575,70 @@ the operator's disk.
 Table B's `Repository` axis cannot carry an oid across capsules, so its reader
 recomputes the blob name with `git hash-object --stdin` (no `-w`) rather than
 having the writer's oid baked into a constant it cannot know.
+
+### `T6` — rows 2, 3 and 4, the `Widened` family
+
+Three rows, three payload rewrites, one fixture addition, and one more instance
+of `F-12`'s class.
+
+**Row 2 — "a binary from each bound path", where *bound path* is the mount.**
+The payload derives its own root set from the capsule's `PATH` (first component
+of each entry) and requires every root to have contributed a binary that **ran**;
+short of that it prints neither token and the row is honestly indeterminate. The
+alternative reading — one binary per `PATH` *entry* — is false on a Nix-style
+host, where entries are per-package `bin` directories and most hold no member of
+any fixed candidate list. Roots are exact rather than approximate here because
+readable entries are identity-mapped, so a `PATH` entry's first component *is* a
+readable root.
+
+Candidates are `sh`, `cat`, `head`, `env`, `true` — chosen because a bare
+invocation with `stdin` closed exits 0 and does nothing. The payload runs no
+binary it has not named; picking "the first executable in the directory" would
+eventually pick `reboot`.
+
+**Row 3 — the decoy repository needed a secret to deny.** It was `git init
+--quiet` and nothing else, so "read the decoy repository's secret blob" had
+nothing to read. `Fixture::new` now writes and **commits** one; committed rather
+than written, because the property is about history the capsule was not given and
+an uncommitted file is just a file next to a `.git`. That produced
+`commit_everything`, which also absorbed `initialise_project`'s two
+config-add-commit runs — the ident has to be set per *repository*, and the decoy
+is a second repository (`mem.pattern.sandbox.git-ident-unset-dns-stall`).
+
+Row 3 reads three paths now: the credential, the secret, and the repository's
+`.git/HEAD`. A repository whose history is unreachable but whose ref tip is
+readable has still handed over canonical state.
+
+**Row 4 — `/` enumerated against a derived permitted set.** This was the half
+deferred at `T4` as "host-dependent expected set". It is not, once you notice the
+payload can read its **own** `PATH`: the permitted set is the profile's inner
+destinations (`/capsule`, `/agent`, `/source`, `/proc`, `/dev`, `/tmp` — all
+constants) plus the first component of each `PATH` entry, which enumerates the
+readable roots exactly. Anything else at `/` is the host's root showing through
+an unshared mount namespace, and each is printed as `UNEXPECTED-<leaf>` so a
+violation says what leaked.
+
+Mutation-checked rather than assumed: replacing `capsule` in the permitted set
+with a literal that matches nothing turned the row from `Proven` to
+`Indeterminate{Probe, NoObservation}` — the enumeration runs and is load-bearing.
+
+`rows_three_and_four_read_disjoint_paths` is pure and guards `EX-4`: the two rows
+deny by one mechanism and stay independent only while they read different things.
+
+#### `F-12`'s class recurred, twice more, in the other direction
+
+`check gate` redded again after `T6`, this time on
+`a_decoy_set_opened_after_a_sweep_is_inheritable_again`. Same root cause, opposite
+direction: that test (and `the_row_ten_decoys_are_the_only_inheritable_descriptors`)
+opens descriptors deliberately inheritable and asserts they *stay* so — while
+every capsule run in the suite performs the parent-side sweep that marks every
+descriptor above 2 close-on-exec. `T6` added five capsule-running tests, which is
+what made a latent race land.
+
+A reader of process-wide state is as much a party to the guard as a writer. The
+repair is a named seam: `hold_descriptor_window()` — `pub(crate)`, in
+`bubblewrap.rs`, taken by `fork_within_the_descriptor_window` and by the three
+tests that touch inheritability. A guard nobody outside the module can take is a
+guard everyone outside the module will skip. Memory updated with both directions.
+
+Gate exit 0, three consecutive runs, 217 tests.

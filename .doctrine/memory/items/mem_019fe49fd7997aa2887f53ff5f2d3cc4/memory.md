@@ -34,3 +34,23 @@ exec'd without the descriptor and the handover file came back empty.
   misdiagnosed as "the CI box is loaded".
 - A doc comment that says "this is benign because nothing else does X yet" is a
   dated liability. It was written true and will be read false.
+
+
+## It bites in both directions, and it recurs
+
+Within one phase the same corpus paid for it three times, so treat one sighting
+as a class, not an incident:
+
+1. a **sweep in a test** re-marked another thread's cleared descriptor — the
+   victim's child lost the handover;
+2. a **capsule run's production sweep** re-marked descriptors a *test* had
+   deliberately opened inheritable, between the open and the assertion — twice,
+   in two different tests.
+
+Direction 2 is the one people miss: the test is not mutating anything, it is
+only *reading*, and a reader of process-wide state is as much a party to the
+guard as a writer.
+
+The repair that stuck was a named `pub(crate)` seam — `hold_descriptor_window()`
+— rather than a private static plus a comment. A guard nobody outside the module
+can take is a guard that will be skipped by everyone outside the module.

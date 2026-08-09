@@ -54,7 +54,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rustix::fs::Dir;
@@ -575,6 +575,27 @@ impl BubblewrapBackend<'_> {
 /// harness's capture pipe, so the arm that spawned it never returned.
 static DESCRIPTOR_WINDOW: Mutex<()> = Mutex::new(());
 
+/// Hold [`DESCRIPTOR_WINDOW`], from this module or another.
+///
+/// The invariant is over **process-wide** descriptor flags, so every party to
+/// them is a party to the guard — not only the code that forks. That includes
+/// anything which opens an inheritable descriptor and then expects it to *stay*
+/// inheritable: a capsule run's parent-side sweep marks every descriptor above 2
+/// close-on-exec, and it does so on whatever thread the run is on.
+///
+/// Whole-suite-only reds in both directions have already been paid for once each
+/// — see `mem.pattern.tests.process-wide-state-needs-the-production-guard` — so
+/// this is a named seam rather than a private static plus a comment.
+///
+/// Hold it across the mutation and the reading, and **never** across a capsule
+/// run: `fork_within_the_descriptor_window` releases at the fork precisely so
+/// the observer callback can re-enter (`F-1`).
+pub(crate) fn hold_descriptor_window() -> MutexGuard<'static, ()> {
+    DESCRIPTOR_WINDOW
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Mark, clear, fork — and **nothing else** (`F-31`, `D2`).
 ///
 /// The invariant is about the instant of `fork` alone, so the guard covers
@@ -608,9 +629,7 @@ fn fork_within_the_descriptor_window(
     sweep_descriptors: bool,
     status_file: &File,
 ) -> Result<Child, BackendError> {
-    let _window = DESCRIPTOR_WINDOW
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _window = hold_descriptor_window();
 
     if sweep_descriptors {
         mark_inherited_descriptors_close_on_exec().map_err(|error| mechanism_failed(&error))?;
@@ -2389,9 +2408,7 @@ mod tests {
     /// a test is still the second writer the guard exists to exclude.
     #[test]
     fn every_descriptor_above_two_is_marked_close_on_exec_before_the_exec() {
-        let _window = DESCRIPTOR_WINDOW
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let _window = hold_descriptor_window();
         // A `std::fs::File` is opened `O_CLOEXEC` and would pass against a
         // backend that swept nothing. `dup(2)` does not set the flag, so this
         // descriptor discriminates (`mem.pattern.tests.guard-needs-a-discriminating-difference`).
