@@ -1,9 +1,9 @@
 id = 249
 slug = "knowledge-facet-write-seam"
 title = "Knowledge facet write seam"
-status = "started"
+status = "reconcile"
 created = "2026-08-06"
-updated = "2026-08-08"
+updated = "2026-08-09"
 tags = []
 
 [relationships]
