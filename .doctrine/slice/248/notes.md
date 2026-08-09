@@ -1550,6 +1550,36 @@ under the sheet's own fallback.
     measurement. Owed to `VA-1`, and it is the same class as item 131.
     (Phase sheet `F-48`, `T8`.)
 
+136. **A caveat about a limit of the environment should be a *function* of the
+    environment's own reading, not a constant.** `A6` — this jail's parent
+    already reads `NoNewPrivs: 1`, so an in-jail run cannot attribute the
+    capsule's `1` to the backend. The tempting fix is a hard-coded sentence
+    beside the observation, and it would be **wrong on every host that can
+    attribute**, permanently, while looking like diligence. `no_new_privs`'s
+    provenance caveat is instead computed from the trusted side's own reading:
+    attached when the host already reads set, absent when it reads unset, and a
+    third distinct value when the host could not be read at all. The last
+    distinction is what stops "could not measure" from passing for "measured
+    unset". Consequence for the tests: the parse feeding it is asserted
+    **positively** against real `/proc/self/status`, because a silently-failing
+    parse would attach the unreadable caveat on every host forever — an apology
+    wearing a measurement's clothes, and green. (Phase sheet `F-50`, `T9`.)
+
+137. **Item 134's shape has a second half: a probe can also be defeated by a
+    reading that is *plausible* rather than empty.** Item 134 is "read nothing"
+    passing for "held nothing". Measured at `T9`: dropping one shell parameter
+    expansion truncated the supplementary group list to its **first token**, and
+    the truncation still contained the unmapped `65534` the assertions looked
+    for, so every one of them passed. Emptiness was never the failure mode — a
+    *shorter* reading was. What convicts it is a property the under-read cannot
+    fake: the list's length, compared against the trusted side's own. The
+    generalisation is that an absence probe needs one assertion the degraded
+    reading is unable to satisfy, and "contains the expected token" is rarely
+    it. Also owed from the same battery: a mutant that fails to **compile**
+    (here, under `-D dead-code`) is a lint conviction, not a test conviction,
+    and crediting the guard with it credits evidence the guard never produced —
+    re-run the arm in a compiling shape. (Phase sheet `F-50`, `T9`.)
+
 
 ## Open
 

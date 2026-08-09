@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe6b1-159d-7080-850b-4bdae13fd69a"
+recorded_at = "2026-08-09T13:23:12.925573824Z"
+kind = "friction"
+summary = "/execute mutation testing: a mutation arm that deletes a code path fails to compile under `-D dead-code`, and the compile error is easily miscredited as the guard convicting"
+detail = "SL-248 PHASE-10 T9, crates/doctrine-control/src/conformance.rs. Verifying an absence-probe's guards by mutation. One arm removed the `Reading::Unread` construction so an unread surface would be reported as an empty value instead. The build failed: `error: constant SURFACE_NOT_NAMED is never used` under the workspace's deny-level dead_code. Non-zero exit, red output, in the exact place a conviction would appear — but it is a lint conviction, not a test conviction, and accepting it would have credited the test with evidence it never produced. Cost: one wasted arm plus the re-run in a compiling shape (the unread reason moved into an otherwise-empty `Read`), which then convicted properly. The general shape: in a crate with deny-level dead_code/unused, any mutation that *deletes* rather than *alters* a path is liable to produce a build failure instead of a test failure, and the two are indistinguishable from exit status alone. A mutation battery in such a crate should prefer alterations that keep every symbol live, and must read *which* error it got before scoring the arm. Related to the same phase's earlier tally-reading trap (record 6ed8022b6): both are cases of a red that is not the red you asked for."
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

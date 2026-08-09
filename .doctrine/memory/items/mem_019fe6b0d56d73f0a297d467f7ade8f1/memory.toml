@@ -1,0 +1,43 @@
+memory_uid = "mem_019fe6b0d56d73f0a297d467f7ade8f1"
+memory_key = "mem.pattern.tests.caveats-must-be-measured-not-hard-coded"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A limit-of-environment caveat must be computed from the environment, not hard-coded"
+summary = "When a measurement's provenance is unestablishable *here*, compute the caveat from the environment's own reading rather than writing a constant apology — and assert the read feeding it, or the caveat becomes permanent and silent."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["testing", "honesty", "provenance", "environment", "false-green"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ba274240c1c217b036a4512701c38a554787d4be"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "bdb225584a6ac11ed83ae416d72f125549844d38a35afe98f4c4e4589eaa76e4"
+base_commit = "78ee8f8b6234f419dcd0d5020e1161756945c515"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

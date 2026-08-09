@@ -2529,3 +2529,118 @@ hold. What carries the claim here is arm A — the aggressor named, made
 deterministic, and then shown to be excluded by the seam rather than out-waited.
 The tally corroborates; it does not convict.
 
+## PHASE-10 `T9` — the two unrowed credential observations (`EX-11`, `EX-12`, `VA-5`)
+
+Shard fallback again, for the fourth time: the `PHASE-10` sheet nominates
+`notes_10-12.md` and forbids minting a shard silently; no such shard existed at
+this sitting either, so this record goes here beside `T1`, `T2` and `T4`'s under
+the sheet's own fallback (`F-13`, `F-27`, and now `F-50`).
+
+### The channel, and why it is a third one
+
+`sec-9` `R8`'s two credential mechanisms — the supplementary group list and
+`no_new_privs` — are captured, displayed, and reach **no verdict at all**. That
+is a stronger claim than table C's, and table C could not carry it: `AuxOutcome`
+is `Passed`/`Failed`/`Skipped`, which *is* a verdict. So the observations get a
+third channel whose types have nowhere to put an outcome —
+
+```
+struct Unrowed { section, name }            // :2673
+enum Reading { Read { value, caveat }, Unread(reason) }   // :2696
+AdmissionVerdict.observations: Vec<(Unrowed, Reading)>    // :2603
+```
+
+— and the property that matters is structural rather than remembered: a verdict
+cannot be attached to an observation by accident, because attaching one is a
+type change, and a type change is a diff a reader sees.
+
+The reporter (`:4076`–`:4280`) sits **immediately after `tables()`**, which is
+`VA-5`'s "where the rows are". It carries the sentence the task exists for: *a
+deliberate weakening that is not recorded is indistinguishable from an oversight
+to the next reader.*
+
+### The absence, asserted in an order
+
+The test (`:12397`) is an absence probe, the class `T8` had just caught a live
+vacuous pass in (item 134). "Nothing attached" and "nothing produced" are the
+same empty reading, so the body is ordered and the order is load-bearing: every
+positive claim first — both surfaces named, the read-set compared **whole**
+against `UNROWED_FIELDS`, the unread side asserted empty, `65534` present, the
+group list's **length** equal to the trusted side's, `no_new_privs` reading `1` —
+and only then the absence (no shipped payload reads either key; admission is
+unmoved in both directions, via `verdict_observing`). The disjointness leg is
+guarded twice for non-vacuity: the payload sweep is proved to have found real
+payloads (some payload contains `STATUS_UID_KEY`), and the observation payload is
+proved to contain both keys, so `contains` is a predicate that can say yes.
+
+The sweep itself is exhaustive **by `match`** over `ArmShape`, not by a filter —
+a new variant is a compile error rather than a row the sweep silently walks past.
+
+### The middle claim: why these are unrowable, made checkable
+
+A row needs a delta that moves its reading. These have none — and that is not an
+opinion about bubblewrap, it is asserted: the two readings taken either side of
+table A's only *granting* control (`--cap-add ALL`) are **identical**. Rowing
+either would manufacture two more instances of the `B4` defect (a control that
+cannot fire) the round-6 split exists to remove. Recorded in the test's own doc:
+if that equality ever reds, the mechanism became rowable and it wants a consult,
+not a repair (`S4`).
+
+### `A6` measured, not apologised for
+
+This jail's own parent reads `NoNewPrivs: 1`, so an in-jail run cannot tell
+whether bwrap set the bit or the capsule inherited it. The value is right; the
+provenance is not establishable from in here. Rather than hard-code an apology,
+`no_new_privs_provenance` (`:4166`) is **pure and parameterised on the trusted
+side's own reading**: caveat when the host already reads set, none when it reads
+unset, and a distinct `PROVENANCE_UNREADABLE` when the host could not be read at
+all. So the caveat appears here and disappears on a host that can attribute —
+a measurement, not a constant that is wrong on half its hosts.
+
+That wiring is the reason the test asserts `status_field` **positively** against
+the real `/proc/self/status` before it asserts anything about caveats. A
+silently-failing parse would attach `PROVENANCE_UNREADABLE` on every host
+forever: a permanent apology wearing a measurement's clothes, and green.
+
+### `EX-11` written where the row is
+
+`the_identity_is_exactly` (`:3710`) gained a section recording that **setuid
+regain is neither probed nor rowed**, and why: the obvious payload cannot be
+built by a suite that must not be privileged — a setuid-*root* file requires
+root, and a setuid file the test user owns confers the uid the payload already
+has. It is not deferred work. `no_new_privs` stood in for it in an earlier draft
+and is now retained as an observation and withdrawn as a row.
+
+`tables()`'s doc was stale in the same breath ("sixteen rows … table A's first
+eleven") and is corrected to nineteen — all fourteen of table A and all five of
+table B — with a paragraph naming what is deliberately *not* there.
+
+### The mutation battery
+
+Six arms, all convicting, each reverted from a pristine copy and `diff -q`
+verified identical before the next. Two carry lessons past this task:
+
+- **The group-list under-read initially did not convict.** Dropping
+  `${rest:+ $rest}` from the payload truncates the list to its first token —
+  which still contains `65534` and passed every assertion written at that point.
+  "Unmapped rather than dropped" was the claim and nothing checked it, so the
+  count comparison against the trusted side's own `Groups` length was added; the
+  arm then convicted (`left: 1 right: 9`). Same family as item 134: the probe
+  agreed with an under-read because both produce a *plausible* reading.
+- **One arm produced a lint, not a conviction, and was re-run.** Removing the
+  unread path made `SURFACE_NOT_NAMED` dead code, so the mutant failed to
+  *compile* under `-D dead-code`. That is a lint conviction, not a test
+  conviction, and accepting it would have credited the guard with evidence it
+  never produced. Re-run in a compiling shape (`Reading::Read` with an empty
+  value and the reason moved into the caveat), it convicted at `:12520`.
+
+### Tally
+
+`doctrine check gate` exit **0**; `269 passed; 0 failed; 9 ignored` for
+`doctrine-control`, +1 over `T8`'s 268 and matching the one title claimed. Read
+by seeking forward to the `doctrine_control-` binary header, never `head -1` /
+`tail -1` — that line is neither first nor last in a gate log (`T8`'s parting
+tip, friction record `6ed8022b6`). `cargo fmt` and `cargo clippy -p
+doctrine-control` clean. Landed as `78ee8f8b6`, path-limited to
+`conformance.rs`, +727/−7.
+

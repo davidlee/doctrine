@@ -4,7 +4,7 @@ schema_version = 1
 memory_type = "pattern"
 status = "active"
 title = "An absence-asserting probe must convict a surface it could not read"
-summary = "A probe that passes on an absence must report an unread surface as held, or it passes vacuously — measured: one removed `:-` default turned four green tests into a false green."
+summary = "A probe that passes on an absence must convict a surface it could not read — and a *degraded* reading too: measured twice, one removed `:-` default and one dropped `${rest:+ }` each produced a false green."
 created = "2026-08-09"
 updated = "2026-08-09"
 
