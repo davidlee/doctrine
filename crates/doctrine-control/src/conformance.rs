@@ -963,6 +963,17 @@ pub(crate) struct Fixture {
     /// out. `RefCell` because the fixture is shared immutably across both arms
     /// of a row and the observation is the one thing an arm gives *back* to it.
     observed_sessions: RefCell<Vec<SessionId>>,
+    /// What each arm's write-only decoy held when that arm ended, in arm order.
+    ///
+    /// The only reading of the decoy set that has to happen *inside* the
+    /// harness: the set is per-arm state opened and dropped within
+    /// [`arm_over`], so by the time a caller has an `ArmResult` the descriptor
+    /// is gone and nothing names the file. `None` where the size could not be
+    /// read, so a failed read cannot pass for *unmodified*.
+    ///
+    /// Written by the descriptor delta and by nothing else — every other row
+    /// leaves this empty, because [`trusted_side_setup`] hands it no set.
+    observed_decoy_writes: RefCell<Vec<Option<u64>>>,
 }
 
 impl Fixture {
@@ -1048,6 +1059,7 @@ impl Fixture {
             abstract_listener,
             own_session: own_session(),
             observed_sessions: RefCell::new(Vec::new()),
+            observed_decoy_writes: RefCell::new(Vec::new()),
             root,
             project_root,
             base,
@@ -1182,6 +1194,16 @@ impl Fixture {
         }
     }
 
+    /// Record what an arm's write-only decoy held when that arm ended.
+    fn note_decoy_write(&self, bytes: Option<u64>) {
+        self.observed_decoy_writes.borrow_mut().push(bytes);
+    }
+
+    /// What every arm of this run left in its write-only decoy, in arm order.
+    pub(crate) fn decoy_writes(&self) -> Vec<Option<u64>> {
+        self.observed_decoy_writes.borrow().clone()
+    }
+
     /// Signal every live member of every session this run created (`EX-12`).
     ///
     /// **By session, never by process group.** `RV-346` `F-27` strengthened row
@@ -1255,6 +1277,21 @@ impl InheritableDecoys {
     /// The far end of the socket pair, held for real and close-on-exec.
     pub(crate) fn retained_peer(&self) -> BorrowedFd<'_> {
         self.peer.as_fd()
+    }
+
+    /// How many bytes the write-only decoy holds — the trusted side's only way
+    /// to see what a capsule did through it.
+    ///
+    /// The decoy is `O_TMPFILE` and write-only: nothing names it, and the
+    /// descriptor cannot be read. Its *size* is still the trusted side's, which
+    /// is what makes the presence of an inherited write authority observable
+    /// without the harness ever reading back what a capsule wrote.
+    ///
+    /// `None` where the size could not be read, never `0` — a failed `fstat`
+    /// must not be indistinguishable from an untouched file.
+    pub(crate) fn write_only_bytes(&self) -> Option<u64> {
+        let stat = rustix::fs::fstat(&self.writable).ok()?;
+        u64::try_from(stat.st_size).ok()
     }
 }
 
@@ -3983,7 +4020,7 @@ fn arm_over(
         *trusted_side.borrow_mut() = trusted_side_setup(&row.delta, fixture)?;
         Ok(placement)
     };
-    run_arm(
+    let result = run_arm(
         &Arm {
             backend,
             capsule: &provisioned_and_set_up,
@@ -3993,7 +4030,17 @@ fn arm_over(
             under,
         },
         &row.shape,
-    )
+    );
+
+    // Read here or not at all: the set drops when this function returns, and
+    // the write-only decoy is named by nothing, so no later caller can reach
+    // it. A multi-capsule shape leaves the last capsule's set, which is the
+    // only one still open by now; the descriptor delta's row is `Single`.
+    if let Some(decoys) = trusted_side.borrow().as_ref() {
+        fixture.note_decoy_write(decoys.write_only_bytes());
+    }
+
+    result
 }
 
 /// The probe arm: the placement exactly as `provision` returned it.
@@ -9247,6 +9294,134 @@ mod tests {
             format!("{:?}", RowVerdict::Proven),
             "the control arm did not inherit all three of readable, write-only and \
              socket — a partial set prints no token, so the row reads Indeterminate"
+        );
+    }
+
+    /// What the capsule writes through the inherited write-only decoy, and the
+    /// two tokens the mutation row is read for.
+    ///
+    /// A fixed token rather than anything derived, because the trusted side
+    /// checks the **exact** byte count and a variable-length payload would turn
+    /// that into an inequality — which is how *wrote more than expected* would
+    /// stop being visible.
+    const DECOY_MUTATION: &str = "CONTROL-ARM-WROTE-HERE";
+    const NO_WRITE_AUTHORITY: &str = "NO-WRITE-AUTHORITY";
+    const WROTE_THROUGH_THE_DECOY: &str = "WROTE-THROUGH-THE-DECOY";
+
+    /// The one destructive payload in row 10's neighbourhood: it *writes*
+    /// through whatever write authority crossed the `exec`.
+    ///
+    /// **Not row 10, and row 10 must never do this.** The shipped row observes
+    /// and nothing else. This exists because reading was never the property —
+    /// `F-31`'s mutant returned zero bytes from an inherited write-only
+    /// descriptor, exactly as a closed one would, while a write through that
+    /// same descriptor mutated host bytes. Only writing separates the two, so
+    /// only a test-local row does it.
+    ///
+    /// **Where the write lands is fixed before it is aimed.** The target is
+    /// chosen by resolution, never by number: the capsule writes only to a
+    /// descriptor whose `/proc/self/fd` target the payload has already resolved
+    /// to a file the kernel reports as having no remaining link — the
+    /// `O_TMPFILE` decoy, which
+    /// [`the_write_only_decoy_is_reachable_by_no_name`] establishes is inside
+    /// the fixture's own root, linked into no directory, and reclaimed when the
+    /// last descriptor closes. On the probe arm no such descriptor exists and
+    /// the payload writes nothing at all.
+    fn the_write_only_decoy_mutation_row() -> Row {
+        let per_descriptor = format!(
+            "case \"$target\" in *\"{DELETED_SUFFIX}\") \
+             echo {DECOY_MUTATION} >&$number; wrote=$((wrote+1));; esac; "
+        );
+        Row {
+            id: RowId::Property(Property::TrustedTerminationObservation),
+            shape: ArmShape::Single(Probe {
+                argv: shell_argv(&format!(
+                    "echo {LIVENESS_MARKER}; wrote=0; {}\
+                     if [ \"$wrote\" -eq 0 ]; then echo {NO_WRITE_AUTHORITY}; \
+                     else echo {WROTE_THROUGH_THE_DECOY}; fi",
+                    descriptors_above_two_resolved(&per_descriptor)
+                )),
+                observed: Observed::Token {
+                    held: NO_WRITE_AUTHORITY,
+                    failed: WROTE_THROUGH_THE_DECOY,
+                },
+            }),
+            delta: Delta::Removed(PropertyRemoval::DescriptorsClosed),
+        }
+    }
+
+    const MUTATION_HELPER: &str =
+        "conformance::tests::the_decoy_mutation_measured_in_a_process_of_its_own";
+    const MUTATION_REPORT: &str = "MUTATION-";
+
+    /// The child half of
+    /// [`the_write_only_decoy_is_unmodified_after_the_probe_arm_and_mutated_after_the_control`]
+    /// — **an instrument, not a claim**.
+    ///
+    /// Both arms in one child and one report, because the claim is about the
+    /// *pair*: the same decoy shape, swept on one arm and not on the other.
+    #[test]
+    #[ignore = "instrument: re-executed alone by the_write_only_decoy_is_unmodified_after_the_probe_arm_and_mutated_after_the_control"]
+    fn the_decoy_mutation_measured_in_a_process_of_its_own() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let row = the_write_only_decoy_mutation_row();
+        let probe = run_probe_arm(&backend, &SystemHost, &fixture, &row);
+        let control = run_control_arm(&backend, &SystemHost, &fixture, &row);
+        let _swept = fixture.sweep_observed_sessions();
+        println!("{MUTATION_REPORT}ARMS={probe:?} {control:?}");
+        println!("{MUTATION_REPORT}BYTES={:?}", fixture.decoy_writes());
+    }
+
+    /// `VT-3` — the write-only decoy, checked trusted-side in **both**
+    /// directions.
+    ///
+    /// One direction is not the claim. *Mutated after the control* alone would
+    /// pass for a harness that mutated it on every arm, and *unmodified after
+    /// the probe* alone would pass for one that never wrote at all. The pair is
+    /// what says the sweep is the difference.
+    ///
+    /// **Presence, not readability** (`F-31`). The decoy is write-only, so
+    /// nothing here reads back what the capsule wrote — the trusted side reads
+    /// the file's *size*, which an inherited write authority changes and a
+    /// closed descriptor cannot.
+    ///
+    /// The containment assertions come first, and deliberately: this is the one
+    /// payload in the phase that writes, and where it may write is settled
+    /// before the child that aims it is spawned.
+    #[test]
+    fn the_write_only_decoy_is_unmodified_after_the_probe_arm_and_mutated_after_the_control() {
+        let ArmShape::Single(probe) = &the_write_only_decoy_mutation_row().shape else {
+            panic!("the mutation row is a one-capsule row");
+        };
+        let script = probe.argv.as_slice().join(" ");
+        assert!(
+            script.contains(&format!("*\"{DELETED_SUFFIX}\")")),
+            "the mutation is not gated on a target the kernel reports as unlinked, \
+             so it could land on a named file"
+        );
+        assert_eq!(
+            script.matches(">&").count(),
+            1,
+            "the mutation payload has more than one write redirection"
+        );
+        assert!(
+            script.contains(">&$number"),
+            "the mutation payload redirects to a descriptor it did not resolve"
+        );
+
+        let reported = reported_by_a_child(MUTATION_HELPER, MUTATION_REPORT);
+        assert_eq!(
+            reported,
+            vec![
+                format!("ARMS={:?} {:?}", ArmResult::Held, ArmResult::Failed),
+                format!(
+                    "BYTES={:?}",
+                    vec![Some(0_u64), Some(DECOY_MUTATION.len() as u64 + 1)]
+                ),
+            ],
+            "the probe arm's decoy was written to, or the control arm's was not — \
+             the sweep is not what separates them"
         );
     }
 }
