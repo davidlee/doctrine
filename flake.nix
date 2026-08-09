@@ -78,6 +78,12 @@
 
           shellcheck
           procps # pgrep
+          # Conformance-suite payload dependencies, declared rather than
+          # inherited: an absent binary makes a row's escape silently fail to
+          # launch, and the arm then reads as a hold. That is `EVD-013`'s
+          # false-negative-through-absent-binary, and row 7 was sitting in it.
+          util-linux # setsid — row 7's session escape
+          socat # row 5 — present transitively before this, undeclared
           tinyproxy
           iproute2
 
