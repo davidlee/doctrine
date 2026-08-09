@@ -1442,6 +1442,25 @@ under the sheet's own fallback.
     row re-opens the hazard with nothing to stop it. Owed as an `ISS-` at merge.
     (`F-30`.)
 
+128. **`CapsuleEnv` does not describe the capsule's environment, and the
+    governing prose says it does.** Measured: `bwrap` writes `PWD` into the
+    child's exec block itself, after `--clearenv` and after every `--setenv`,
+    naming the directory `--chdir` moved it to. So a conforming capsule's
+    environment is `CapsuleEnv` **plus** `PWD=/capsule` — one entry doctrine
+    never declared and cannot suppress. Row 11 states the equality over that
+    larger set and admits the entry **by whole value**, never by name, because
+    without `--chdir` the same name carries a *host* path. Nothing is broken in
+    the shipping configuration: row 6 holds the working directory to the
+    capsule's and row 11 holds the environment to declared-plus-that-one, so no
+    host path reaches a capsule. What is wrong is the description — `sec-2`'s
+    "closed environment" and `CapsuleEnv`'s own doc read as an exhaustive
+    account of what crosses, and they are short by one backend-synthesised
+    entry. Owed as a spec correction (or an `ISS-`) at merge: either the prose
+    states the carve-out, or `CapsuleEnv` grows an explicit notion of
+    backend-supplied entries. Deliberately **not** fixed by adding `PWD` to
+    `CapsuleEnv`, which would change production `--setenv` output to make a test
+    tidier. (`F-32`.)
+
 
 ## Open
 
