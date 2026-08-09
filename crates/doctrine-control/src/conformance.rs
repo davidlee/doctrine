@@ -3974,11 +3974,12 @@ mod tests {
         stat_of,
     };
     use super::{
-        CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, ESCAPE_SECONDS, INNER_AGENT,
+        CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, DENIED, ESCAPE_SECONDS, INNER_AGENT,
         LINGER_SECONDS, LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property,
-        SENTINEL_LEAF, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE, WIDENED_REPOSITORY,
-        WIDENED_UNDECLARED, run_control_arm, run_probe_arm, shell_argv, stdout_lines, tables,
-        widens_the_undeclared_decoy, writes_past_the_file_size_cap,
+        REACHED, SENTINEL_LEAF, SUBJECT_LINGER_SECONDS, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE,
+        WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject, run_control_arm,
+        run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
+        writes_past_the_file_size_cap,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
@@ -3988,7 +3989,7 @@ mod tests {
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
         CapsulePlacement, CapsuleStdio, Execution, FILESYSTEM_ROOT, ForbiddenScopes, INNER_CAPSULE,
-        INNER_TMP, InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts,
+        INNER_PROC, INNER_TMP, InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts,
         SourceExport, Termination, TransactionRoot,
     };
     use crate::config::{Argv, ByteCount};
@@ -8056,5 +8057,201 @@ mod tests {
             stdout_lines(&refused).is_empty(),
             "a payload that never ran cannot have printed"
         );
+    }
+    // ── `T11` — row B5, the process axis ───────────────────────────────────
+    //
+    // The shipped observer folds both readings into one token, because a row's
+    // verdict is binary and one token is all it can carry. The two halves are
+    // separated here, each as its own row through `run_row`, so that a control
+    // arm which restores only one of them cannot be reported as restoring both.
+
+    /// Row B5's `/proc` half, alone.
+    fn looks_for_the_subject_in_proc(subject: HostPid) -> Argv {
+        shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             if [ -e '{INNER_PROC}/{pid}' ]; then echo {REACHED}; else echo {DENIED}; fi",
+            pid = subject.0
+        ))
+    }
+
+    /// Row B5's signal half, alone. `kill -0` sends nothing; it asks whether
+    /// this process could signal that one.
+    fn signals_the_subject(subject: HostPid) -> Argv {
+        shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; \
+             if kill -0 {pid} 2>/dev/null; then echo {REACHED}; else echo {DENIED}; fi",
+            pid = subject.0
+        ))
+    }
+
+    /// The pid the subject prints about itself, which nothing reads. It is `1`
+    /// because that is what `$$` reports inside a fresh pid namespace — the
+    /// plausible wrong answer, not an implausible one.
+    const DECOY_PID: i32 = 1;
+
+    /// Row B5's subject, printing a decoy pid about itself.
+    fn lingers_and_lies_about_its_pid() -> Probe {
+        Probe {
+            argv: shell_argv(&format!(
+                "echo {LIVENESS_MARKER}; echo SUBJECT-PID={DECOY_PID}; \
+                 sleep {SUBJECT_LINGER_SECONDS}"
+            )),
+            observed: Observed::Token {
+                held: DENIED,
+                failed: REACHED,
+            },
+        }
+    }
+
+    /// Row B5 with one of its two readings, so a control can be seen to restore
+    /// that one. Same subject, same delta, same shape as the shipped row.
+    fn process_axis_row(observer: fn(HostPid) -> Argv) -> Row {
+        Row {
+            id: RowId::Axis(Axis::Process),
+            shape: ArmShape::Concurrent {
+                subject: lingers(),
+                observer: PidProbe {
+                    argv: observer,
+                    observed: Observed::Token {
+                        held: DENIED,
+                        failed: REACHED,
+                    },
+                },
+            },
+            delta: Delta::Removed(PropertyRemoval::ProcessVisibility),
+        }
+    }
+
+    fn process_axis_verdict(observer: fn(HostPid) -> Argv) -> RowVerdict {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        run_row(&backend, &SystemHost, &fixture, &process_axis_row(observer))
+    }
+
+    /// `VT-5`, table B row B5 — the first of the two positive readings, on its
+    /// own. The shipped row proves both at once; this proves the enumeration
+    /// half cannot be carried by the signal half.
+    #[test]
+    fn concurrent_capsules_cannot_see_each_others_processes() {
+        assert_eq!(
+            process_axis_verdict(looks_for_the_subject_in_proc),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-5` — the second positive reading, on its own. A capsule that cannot
+    /// enumerate a process may still be able to signal it, and `EX-12` asks for
+    /// both.
+    #[test]
+    fn concurrent_capsules_cannot_signal_each_others_processes() {
+        assert_eq!(
+            process_axis_verdict(signals_the_subject),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-5` — the control, read as an arm rather than as a verdict, because a
+    /// row verdict says *the* control failed and this test means to say **both**
+    /// halves became possible under the one delta.
+    #[test]
+    fn control_with_the_pid_namespace_shared_both_become_possible() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        for observer in [looks_for_the_subject_in_proc, signals_the_subject] {
+            assert_eq!(
+                run_control_arm(&backend, &SystemHost, &fixture, &process_axis_row(observer)),
+                ArmResult::Failed,
+                "with the pid namespace shared this reading should have reached the subject"
+            );
+        }
+        let _swept = fixture.sweep_observed_sessions();
+    }
+
+    /// `VT-5`, invariant 10 — the pid rendered into the observer's argv is the
+    /// one the **trusted side** saw, in the host's namespace. The subject prints
+    /// a decoy about itself and the arm still holds, because nothing reads it;
+    /// and the pid the harness did hand over resolves in the host's own process
+    /// table, which a capsule-reported pid could not.
+    #[test]
+    fn the_observed_pid_is_the_one_the_parent_reported_not_one_the_subject_printed() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        // One capsule per capsule the shape runs (`EX-6`): a concurrent arm runs
+        // two, and two capsules sharing a transaction root race each other's
+        // status file.
+        let untouched =
+            || provision_capsule(&fixture, &SystemHost, &backend).map(|capsule| capsule.placement);
+
+        let handed: RefCell<Vec<HostPid>> = RefCell::new(Vec::new());
+        let noticed = |capsule: HostPid| {
+            handed.borrow_mut().push(capsule);
+            fixture.note_capsule_session(capsule);
+        };
+        let result = run_arm(
+            &Arm {
+                backend: &backend,
+                capsule: &untouched,
+                execution: &harness_execution,
+                live: &|pid| capsule_still_running(pid),
+                noticed: &noticed,
+                under: Under::Confining,
+            },
+            &ArmShape::Concurrent {
+                subject: lingers_and_lies_about_its_pid(),
+                observer: PidProbe {
+                    argv: observes_the_subject,
+                    observed: Observed::Token {
+                        held: DENIED,
+                        failed: REACHED,
+                    },
+                },
+            },
+        );
+        assert_eq!(result, ArmResult::Held);
+
+        let handed = handed.into_inner();
+        let subject = *handed
+            .first()
+            .expect("the backend reported the subject's pid");
+        assert_ne!(
+            subject,
+            HostPid(DECOY_PID),
+            "the harness used the pid the subject printed about itself"
+        );
+        assert!(
+            session_of(subject).is_some(),
+            "{subject:?} does not resolve in this host's process table, so it is not a host pid"
+        );
+        let _swept = fixture.sweep_observed_sessions();
+    }
+
+    /// `D4` — row B5's containment, confirmed by observation rather than
+    /// inherited from row 7's argument. The control shares the pid namespace, so
+    /// what the arm leaves behind is an ordinary host process; the session sweep
+    /// is what reaches it, and this asserts that it did.
+    #[test]
+    fn the_sweep_reaches_what_row_b5s_control_leaks() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let row = process_axis_row(looks_for_the_subject_in_proc);
+        assert_eq!(
+            run_control_arm(&backend, &SystemHost, &fixture, &row),
+            ArmResult::Failed
+        );
+
+        let own = own_session().expect("the harness has a session");
+        let swept = fixture.sweep_observed_sessions();
+        assert!(
+            !swept.is_empty(),
+            "the control arm noticed no session, so the sweep had nothing to reach"
+        );
+        for session in &swept {
+            assert_ne!(*session, own, "the sweep reached the harness's own session");
+            assert_eq!(
+                drained_of(*session),
+                Vec::new(),
+                "{session:?} survived the sweep"
+            );
+        }
     }
 }

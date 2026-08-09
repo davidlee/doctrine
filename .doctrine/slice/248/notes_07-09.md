@@ -1891,3 +1891,55 @@ reads each payload against its *own* expected termination and requires `Held`, t
 asserts the expectations pairwise distinct. `Observed::Termination` classifies by
 equality, so holding against your own variant is failing against every other one.
 Five capsule runs instead of twenty-five, and the same claim.
+
+### `T11` — row B5, and `D4` settled by looking rather than by inheriting
+
+**One token cannot carry two claims.** `EX-12` asks B5 to assert two things
+positively — the subject is absent from the observer's `/proc`, and the observer
+cannot signal it — and the shipped observer folds both into one token
+(`[ -e /proc/N ] || kill -0 N`). That is right for the row: a verdict is binary
+and `Observed::Token` is a pair. It is not enough for `VT-5`, because a control
+that restored only one of the two would still read as restoring "the" reading.
+
+So the row is built twice, once per half — same subject, same
+`Delta::Removed(ProcessVisibility)`, same `ArmShape::Concurrent`, differing only in
+the observer's condition — and both go through `run_row`. Both `Proven`. The
+control is then read as an **arm** across both halves rather than as a verdict,
+because `RowVerdict::Proven` says *the* control failed and the claim is that
+**both** became possible under the one delta. Four arms at `SUBJECT_LINGER_SECONDS`
+apiece, about six seconds a test.
+
+**The pid-provenance test needed a subject that lies, and a capsule that would
+believe it.** Invariant 10 says the observed pid is the one the trusted side saw,
+never one the subject reported about itself. To assert that, the wrong answer has
+to be plausible: the subject prints `SUBJECT-PID=1`, because `1` is what `$$`
+reports inside a fresh pid namespace and `/proc/1` **exists** inside the observer's
+namespace. A harness that read the subject's claim would hand the observer a pid it
+can see, the observer would print `REACHED`, and the arm would fail. The arm
+holding *is* the assertion. Two checks ride with it: the pid actually handed over
+is not the decoy, and it resolves in the host's process table, which a
+capsule-namespace pid could not.
+
+One mutation covers the whole seam: substituting `HostPid(1)` for the reported pid
+inside `observe_concurrently` reds all three tests at once — both split rows to
+`Violated`, the provenance arm to `Failed`.
+
+**`D4`: the sweep is sufficient, and it is now asserted rather than presumed.**
+`the_sweep_reaches_what_row_b5s_control_leaks` runs B5's real control arm — shipped
+subject, shipped delta — then reads the sweep: every session the arm noticed is
+swept, none is the harness's own, and `drained_of` finds nothing alive in any of
+them afterwards. Taken from B5's own arm, not inherited from row 7's bespoke
+payload, which is what `D4` asked for.
+
+The mechanism is also why B5 leaks where row 7 blocks. B5's control removes
+`ProcessVisibility`, so the survivor is an ordinary host process in a foreign
+session and the session sweep reaches it. Row 7's control removes teardown, and its
+survivor stays **inside** the pid namespace — which is what makes that arm block on
+a capture pipe rather than leak a process (`T9`). Same containment machinery, two
+quite different shapes of leak.
+
+**A trap paid for on the way.** A concurrent arm runs two capsules (`EX-6`), and a
+directly-built `Arm` that hands both of them one cloned `CapsulePlacement` fails
+with `MechanismFailed("No such file or directory")`: the two runs race the single
+status file in the shared transaction root. `run_probe_arm` provisions per call for
+exactly this reason, and anything assembling an `Arm` by hand has to do the same.
