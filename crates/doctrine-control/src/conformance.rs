@@ -168,10 +168,15 @@ const OVERSIZE_LEAF: &str = "oversize";
 const OVERSIZE_MULTIPLE: u64 = 2;
 
 /// How long a deliberately escaping descendant outlives the arm that spawned it.
-/// Well under [`FIXTURE_TIMEOUT_SECONDS`], or the wall bound reaps the whole tree
-/// and there is nothing left for the sweep to prove anything about; well over the
-/// arm's own runtime, or it exits on its own and the sweep is credited with a
-/// kill it did not make.
+/// Well over the arm's own runtime, or it exits on its own and the sweep is
+/// credited with a kill it did not make.
+///
+/// **Under [`FIXTURE_TIMEOUT_SECONDS`], but that relation is decorative rather
+/// than load-bearing** (`T9`, measured): the wall bound never reaps this escapee
+/// on either arm. On the probe arm teardown kills it when the capsule exits,
+/// about a second in, long before the bound. On the control arm `timeout(1)`'s
+/// own child exits cleanly at that same moment — the arm blocks afterwards on a
+/// capture pipe nobody is waiting on — so the bound never fires at all.
 const ESCAPE_SECONDS: u64 = 23;
 
 /// How long the capsule's own top-level process lingers after spawning the
@@ -818,7 +823,15 @@ const MOUNT_POINT_FIELD: usize = 4;
 /// The synthesized `[capsule]` table's two required bounds. Small, because
 /// every payload the suite runs is a shell one-liner and the wall bound is a
 /// containment mechanism rather than a budget (`EX-11`).
-const FIXTURE_TIMEOUT_SECONDS: u64 = 120;
+///
+/// **Row 8 makes this a suite-runtime constant as well as a containment one**
+/// (`T10`): the only payload that can prove a wall bound is applied is one that
+/// overruns it, so row 8's wall half costs this bound on its probe arm and twice
+/// this bound on its control arm — three times this number, every run,
+/// irreducibly. It is set at the smallest value that keeps an
+/// order of magnitude of headroom over every payload the suite actually runs
+/// (the longest is row B5's subject, [`SUBJECT_LINGER_SECONDS`]).
+const FIXTURE_TIMEOUT_SECONDS: u64 = 30;
 const FIXTURE_FILE_SIZE_CAP_MIB: u64 = 64;
 
 /// The suite's self-contained control plane, built once trusted-side before any
@@ -3964,7 +3977,8 @@ mod tests {
         CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, ESCAPE_SECONDS, INNER_AGENT,
         LINGER_SECONDS, LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property,
         SENTINEL_LEAF, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE, WIDENED_REPOSITORY,
-        WIDENED_UNDECLARED, run_control_arm, run_probe_arm, tables, widens_the_undeclared_decoy,
+        WIDENED_UNDECLARED, run_control_arm, run_probe_arm, shell_argv, stdout_lines, tables,
+        widens_the_undeclared_decoy, writes_past_the_file_size_cap,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
@@ -7807,5 +7821,240 @@ mod tests {
                 measured.cwd
             );
         }
+    }
+    // ── `T10` — row 8, the five terminations ───────────────────────────────
+    //
+    // Two of the five carry a control and are read as rows; three carry none and
+    // are read as observations (`EX-9`). That asymmetry is the row's substance,
+    // not an omission: `Exited`, `Signalled` and `NotExecutable` are what the OS
+    // reported, and there is no confinement property whose removal would change
+    // them. The enforcement half is the two bounded payloads.
+
+    /// Row 8's exit code. Below `timeout(1)`'s 124 and below 128, so
+    /// `classify_termination` cannot re-read it as a timeout or as a signal
+    /// (`R5`).
+    const ROW_EIGHT_EXIT_CODE: i32 = 7;
+    /// The signal row 8 raises on itself. Not `SIGXFSZ`, which
+    /// `classify_termination` reads back as `FileSizeExceeded`, and not a value
+    /// whose `128+N` encoding collides with `ROW_EIGHT_EXIT_CODE`.
+    const ROW_EIGHT_SIGNAL: &str = "TERM";
+    const ROW_EIGHT_SIGNAL_NUMBER: i32 = 15;
+    /// What a shell reports when the command it was told to run could not be
+    /// executed. The number is POSIX's, not this suite's.
+    const EXEC_FAILURE_CODE: i32 = 127;
+    /// An absolute path bound into no capsule: outside the readable set, outside
+    /// the writable set, and not a parent of either.
+    const UNREACHABLE_RUNNER: &str = "/no-such-root/runner";
+    /// How far row 8's wall payload overruns the bound it is proving. Fixed and
+    /// small (`EX-10`): the control arm removes the bound, so this multiple —
+    /// not the bound — is what that arm costs.
+    const WALL_OVERRUN_MULTIPLE: u64 = 2;
+
+    fn exits_with_a_chosen_code() -> Probe {
+        Probe {
+            argv: shell_argv(&format!(
+                "echo {LIVENESS_MARKER}; exit {ROW_EIGHT_EXIT_CODE}"
+            )),
+            observed: Observed::Termination(Termination::Exited {
+                code: ROW_EIGHT_EXIT_CODE,
+            }),
+        }
+    }
+
+    /// `kill` targets the shell itself, so there is no forked child to take the
+    /// signal in its place — the trap `writes_past_the_file_size_cap` needed
+    /// `exec` for.
+    fn signals_itself() -> Probe {
+        Probe {
+            argv: shell_argv(&format!(
+                "echo {LIVENESS_MARKER}; kill -{ROW_EIGHT_SIGNAL} $$"
+            )),
+            observed: Observed::Termination(Termination::Signalled {
+                signal: ROW_EIGHT_SIGNAL_NUMBER,
+            }),
+        }
+    }
+
+    /// `exec`'d for the same reason the oversize writer is: an unexec'd `sleep`
+    /// is a child of the shell, and it is the shell the wall bound wraps.
+    fn overruns_the_wall_bound() -> Probe {
+        Probe {
+            argv: shell_argv(&format!(
+                "echo {LIVENESS_MARKER}; exec sleep {seconds}",
+                seconds = FIXTURE_TIMEOUT_SECONDS.saturating_mul(WALL_OVERRUN_MULTIPLE)
+            )),
+            observed: Observed::Termination(Termination::TimedOut),
+        }
+    }
+
+    /// The runner refused: a shell that ran, looked, and could not exec.
+    fn fails_to_exec_from_a_shell_that_ran() -> Probe {
+        Probe {
+            argv: shell_argv(&format!(
+                "echo {LIVENESS_MARKER}; exec {UNREACHABLE_RUNNER}"
+            )),
+            observed: Observed::Termination(Termination::Exited {
+                code: EXEC_FAILURE_CODE,
+            }),
+        }
+    }
+
+    /// The runner never ran: an argv the capsule's own exec cannot reach, so
+    /// there is no shell, no marker, and no exit code — only a refusal.
+    fn never_executes() -> Argv {
+        argv(&[UNREACHABLE_RUNNER])
+    }
+
+    /// Row 8 with its second bound. The shipped row carries the file-size half;
+    /// this is the same property read through the other resource bound, built
+    /// here rather than shipped because the design's table A has one row 8 and
+    /// the row count is the design's, not the suite's.
+    fn wall_bounded_row() -> Row {
+        Row {
+            id: RowId::Property(Property::TrustedTerminationObservation),
+            shape: ArmShape::Single(overruns_the_wall_bound()),
+            delta: Delta::Removed(PropertyRemoval::ResourceBound(Bound::Wall)),
+        }
+    }
+
+    /// One payload, one capsule, read for its termination alone. The three
+    /// controlless variants are observations of what the OS reported, so they go
+    /// through an arm rather than through `run_row` — there is no delta for
+    /// `run_row` to apply (`EX-9`).
+    fn probe_arm_of(probe: Probe) -> ArmResult {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        run_probe_arm(
+            &backend,
+            &SystemHost,
+            &fixture,
+            &Row {
+                id: RowId::Property(Property::TrustedTerminationObservation),
+                shape: ArmShape::Single(probe),
+                delta: Delta::Removed(PropertyRemoval::ResourceBound(Bound::FileSize)),
+            },
+        )
+    }
+
+    /// `VT-1`, table A row 8 — the file-size half, as shipped.
+    #[test]
+    fn resource_and_termination_observation_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::TrustedTerminationObservation)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// Row 8's other enforcement half. Slow by construction and named as such:
+    /// the probe arm runs until the bound fires and the control arm, with the
+    /// bound removed, runs the payload out.
+    #[test]
+    fn the_wall_bound_is_row_eights_second_enforcement_half() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            run_row(&backend, &SystemHost, &fixture, &wall_bounded_row()),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-2`. Each payload is read against its **own** expected termination and
+    /// must hold; the expectations are then asserted pairwise distinct. Together
+    /// those are the whole claim, because `Observed::Termination` classifies by
+    /// equality: a payload that holds against its own variant cannot hold
+    /// against another one.
+    #[test]
+    fn every_termination_variant_is_distinguished() {
+        let probes = [
+            exits_with_a_chosen_code(),
+            signals_itself(),
+            overruns_the_wall_bound(),
+            writes_past_the_file_size_cap(),
+        ];
+        let expected: Vec<Observed> = probes.iter().map(|probe| probe.observed.clone()).collect();
+        for (first, second) in expected.iter().enumerate().flat_map(|(index, first)| {
+            expected
+                .iter()
+                .skip(index.saturating_add(1))
+                .map(move |second| (first, second))
+        }) {
+            assert_ne!(first, second, "two payloads expect the same termination");
+        }
+        for probe in probes {
+            let expected = probe.observed.clone();
+            assert_eq!(
+                probe_arm_of(probe),
+                ArmResult::Held,
+                "the payload for {expected:?} did not produce it"
+            );
+        }
+    }
+
+    /// The pair the design calls out: *the runner refused* against *the runner
+    /// never ran*. Both are a failure to execute `UNREACHABLE_RUNNER` and they
+    /// are different outcomes, not two spellings of one.
+    #[test]
+    fn not_executable_is_distinct_from_exit_127() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let refused = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions a capsule");
+        let refused = backend
+            .execute(&refused.placement, &harness_execution(&never_executes()))
+            .expect("the backend reports rather than errors");
+
+        assert_eq!(refused.termination, Termination::NotExecutable);
+        assert_ne!(
+            refused.termination,
+            Termination::Exited {
+                code: EXEC_FAILURE_CODE
+            }
+        );
+        assert_eq!(
+            probe_arm_of(fails_to_exec_from_a_shell_that_ran()),
+            ArmResult::Held,
+            "a shell that ran and could not exec reports {EXEC_FAILURE_CODE}"
+        );
+    }
+
+    /// `Termination::NotExecutable` is the one observation that cannot print its
+    /// own liveness marker, so its liveness comes from an execution preceding it
+    /// **in the same capsule** — same placement, same mounts, same profile. That
+    /// ordering is what makes the refusal a statement about the argv. Without it
+    /// the observation passes identically on a host where the capsule cannot
+    /// execute anything at all.
+    #[test]
+    fn not_executable_is_preceded_by_a_liveness_execution_in_the_same_capsule() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let capsule = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions a capsule");
+
+        let alive = backend
+            .execute(
+                &capsule.placement,
+                &harness_execution(&shell_argv(&format!("echo {LIVENESS_MARKER}"))),
+            )
+            .expect("the backend reports rather than errors");
+        assert_eq!(
+            alive.termination,
+            Termination::Exited { code: 0 },
+            "this capsule cannot execute at all, so the refusal below would mean nothing"
+        );
+        assert!(
+            stdout_lines(&alive)
+                .iter()
+                .any(|line| line == LIVENESS_MARKER),
+            "the preceding execution proved nothing"
+        );
+
+        let refused = backend
+            .execute(&capsule.placement, &harness_execution(&never_executes()))
+            .expect("the backend reports rather than errors");
+        assert_eq!(refused.termination, Termination::NotExecutable);
+        assert!(
+            stdout_lines(&refused).is_empty(),
+            "a payload that never ran cannot have printed"
+        );
     }
 }

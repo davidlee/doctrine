@@ -1831,3 +1831,63 @@ payload's escape mechanism or accept that row 7 is unmeasurable in the jail. The
 task's own rule — assert the escape directly, so a payload that stops escaping
 fails rather than passes — is what catches this, provided the assertion is written
 before the payload is trusted.
+
+### `T10` — row 8, and the constant that turned out to be a suite budget
+
+Five payloads, one per `Termination` variant. Two of them carry a control and are
+read as rows; three carry none and are read as arms. That split is the row's
+substance rather than an omission (`EX-9`): `Exited`, `Signalled` and
+`NotExecutable` are observations of what the OS reported, and no confinement
+property's removal would change them, so there is nothing for `run_row` to apply.
+The enforcement half is the two bounded payloads — file-size (the shipped row) and
+wall (built locally, because the design's table A has one row 8 and the row count
+belongs to the design, not to the suite).
+
+**The wall bound made `FIXTURE_TIMEOUT_SECONDS` a runtime budget.** The only
+payload that can prove a wall bound is applied is one that overruns it. So the row
+costs the bound on its probe arm, and on its control arm — where the bound is
+removed — it costs whatever the payload sleeps, which `EX-10` requires to be a
+small fixed multiple. Three times the bound, every run, irreducibly. At the
+inherited 120 s that is six minutes for one row. Lowered to **30 s**, which keeps
+an order of magnitude over every payload the suite actually runs (the longest is
+row B5's subject at three seconds), and the constant's own doc comment already
+described it as small and as containment rather than budget.
+
+Measured after the change: **227 tests, 0 failures, 90.73 s**, of which 90 s is the
+wall row. The suite's wall clock is now `3 × FIXTURE_TIMEOUT_SECONDS` plus noise —
+everything else runs in parallel underneath it. That is `R4`'s number, and it is a
+lever rather than a fact: PHASE-10 can trade the bound against the suite directly.
+
+`ESCAPE_SECONDS = 23` now sits *under* the bound rather than well under it, and
+its doc comment justified the gap by claiming the wall bound would otherwise reap
+row 7's escapee. `T9` measured that false on both arms — the probe's escapee dies
+with teardown about a second in, and on the control arm `timeout(1)`'s own child
+exits cleanly at that same moment, so the bound never fires. The comment now says
+the relation is decorative, because it is.
+
+**`NotExecutable` versus `Exited { code: 127 }` is not a contest between two exit
+codes.** The design's pairing reads that way; the mechanism is not. When the
+capsule's exec fails, `bwrap` exits **1**. `classify_termination` calls that
+`NotExecutable` only because bubblewrap's `--json-status-fd` never reported an
+`exit-code` key — which is what `child_ran` carries — and the `127` in the pair
+comes from the other payload entirely, a shell that ran, looked and could not
+exec. POSIX's number, not bubblewrap's.
+
+That is worth a mutation rather than an assertion, and it is the discriminating
+one `R7` asks for: forcing the `child_ran` branch (`if true || child_ran`) reds
+both `not_executable_*` tests with `left: Exited { code: 1 }, right:
+NotExecutable`. The `1` in that message is the whole finding.
+
+Two consequences for anyone extending the row. An argv-refusal payload must be
+asserted on the *outcome*, never on a code. And the `NotExecutable` observation
+prints no liveness marker of its own — it never ran — so its liveness has to come
+from an execution preceding it **in the same placement**: same mounts, same
+profile, asserted to have exited zero and printed the marker. Without that
+ordering the observation passes identically on a host where the capsule cannot
+execute anything at all, which looks exactly like success.
+
+**Distinction without a cross-product.** `every_termination_variant_is_distinguished`
+reads each payload against its *own* expected termination and requires `Held`, then
+asserts the expectations pairwise distinct. `Observed::Termination` classifies by
+equality, so holding against your own variant is failing against every other one.
+Five capsule runs instead of twenty-five, and the same claim.
