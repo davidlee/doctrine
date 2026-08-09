@@ -261,4 +261,4 @@ capacity = "leaf"           # assess_capacity and the tiers — → config, host
 backend = "leaf"            # CapsuleBackend, CapsulePlacement and the vocabularies — → config (SL-248 PHASE-04, EX-1)
 transaction = "engine"      # CapsuleTransaction/TransactionId/PhaseIdentity — → backend, config (SL-248 PHASE-06, EX-18)
 provision = "engine"        # the thirteen steps — → transaction, backend, capacity, config, host (SL-248 PHASE-06, EX-18)
-conformance = "engine"      # the admission suite — → provision, transaction, backend, config, host (SL-248 PHASE-07, EX-1); provision/transaction arrive with PHASE-08's fixture and freshness delta
+conformance = "engine"      # the admission suite and its fixture — → provision, transaction, backend, config, host (SL-248 PHASE-07/08, EX-1)

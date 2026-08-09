@@ -4,9 +4,9 @@ schema_version = 1
 memory_type = "fact"
 status = "active"
 title = "bwrap 0.11.2: --die-with-parent, not the pid namespace, is what reaps a detached grandchild"
-summary = "Measured on bwrap 0.11.2: dropping --die-with-parent leaves a detached grandchild alive in a foreign session even under --unshare-all; --cap-add ALL and the enumerated non-pid unshare set both work."
+summary = "bwrap 0.11.2 measured: --die-with-parent is what reaps a detached grandchild — but under a Teardown control the escape is unobservable trusted-side, because the pid namespace's init holds the capture until it empties"
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-09"
 
 [scope]
 paths = ["crates/doctrine-control/src/backend/bubblewrap.rs", "crates/doctrine-control/src/conformance.rs"]

@@ -45,3 +45,35 @@ host-range pid and a host-range sid to a host-side reader.
 `/proc/<pid>/task/<tid>/children` does **not** exist (`CONFIG_PROC_CHILDREN`
 off). Descendant discovery must walk `/proc/*/stat` field 4 (ppid) instead of
 reading the children file.
+
+
+## Refinement measured at execution (SL-248 PHASE-08, `F-30`)
+
+The table above stands: the detached grandchild *does* outlive its parents
+under a `Teardown` control. What the probe never asked is whether a harness
+can **observe** that while it happens. It cannot.
+
+The escapee outlives its parents **inside the pid namespace**, and that
+namespace's init process holds the harness's captured stdout/stderr
+descriptors until the namespace empties. So the trusted-side arm — which
+reads the capture to end-of-file — cannot return while the escapee is alive:
+
+| control removed | end-of-file on the capture | escapee at that moment |
+|---|---|---|
+| `Teardown` (pid namespace still present) | waits out the escapee; a long `sleep` payload takes the arm to its wall bound | killed with the tree by `timeout` |
+| `ProcessVisibility` (no pid namespace) | 25ms | alive, in a session of its own |
+
+**Consequence for anyone testing containment:** the escape you can watch is
+the *visibility* control's, not the teardown control's. A test that tries to
+catch a teardown escapee trusted-side either hangs to the wall bound or reads
+"no survivor" for a reason that has nothing to do with teardown.
+
+Two adjacent traps, both paid for in the same session:
+
+- The descent to a capsule's session **leader** needs a live leader. A payload
+  that echoes and exits is gone before the discovery poll runs; its orphan
+  keeps the session id but leads nothing, and the descent correctly answers
+  `None`. Make the payload linger a second after spawning the escapee.
+- `SIGKILL` is asynchronous and a `/proc` entry is not a process. Re-reading
+  the process table immediately after a sweep finds the survivor it just
+  killed. Poll for the session to drain rather than asserting once.

@@ -1132,9 +1132,10 @@ through a real provision.
   `a_backend_ignoring_its_removal_yields_unproven_for_every_row` and not in an
   argv diff. The battery confirms both halves — nothing red, and that test green.
 - **`M3`** was predicted to red the orphan test's escape half. It does not, and
-  `F-30` is why: the escape is unobservable under `Teardown` (the pid namespace,
-  not `--die-with-parent`, is what reaps the descendant), so the test runs the
-  `ProcessVisibility` control instead. `M4` — which breaks exactly that control —
+  `F-30` is why: under `Teardown` the escape is real but *unobservable* — the
+  pid namespace's init holds the harness's capture until the namespace empties,
+  so the arm cannot return while the escapee lives — and the test therefore runs
+  the `ProcessVisibility` control, which has no pid namespace. `M4` — which breaks exactly that control —
   reds it in `M3`'s place. The coverage moved with the arm; it was not lost.
 
 ### Extra reds, all of them the same rule under another fixture
@@ -1147,3 +1148,100 @@ which is the same claim stated once for every axis. `M13` additionally reds the
 and `M18` red both capacity rows because both call the one probe. None is
 entanglement between *rules*, and narrowing any of them would trade real
 coverage for a tidier table.
+
+## `T12` — the `VA` walks
+
+### `VA-1` — nothing survives a run, and nothing is written beside the fixture
+
+Measured on a **cleaned** baseline: both fixture bases emptied first
+(`~/.local/share/doctrine-conformance` and `.git/doctrine-conformance`), a
+listing and a `ps -eo pid,sid,comm` taken, the full suite run, then both taken
+again.
+
+- **Write half.** Both bases are *empty* after 199 tests. Every `TempRoot`
+  reclaimed its own root, and no sibling was left beside them — so no arm wrote
+  outside the root it was given. The mechanical half of the claim (every host
+  path a placement names lies under the fixture root or a system readable root)
+  is now a test, `no_placement_an_arm_builds_names_an_operator_path`, not a walk.
+- **Process half.** The before/after process tables differ by three pids, all
+  three the measurement shell's own (`bash`, `ps`, `sort`). No capsule, no
+  `bwrap`, no `git`, no `sleep` from the run survives it.
+
+**But the baseline was not clean when I found it, and that is the finding.** 26
+fixture roots were sitting under the share base and two under the git-dir base,
+left by runs that were *killed* — the mutation battery's `M21b` (which disables
+`TempRoot::drop` on purpose) and, before it, the runs killed during the `F-31`
+hang. `Drop` does not run for a process that takes `SIGKILL`. The leak is
+bounded and self-identifying — the base is a dedicated directory and every root
+is pid-prefixed — so the remedy is to sweep the base, not to add a delete
+primitive (invariant 8, `VA-3`).
+
+**One orphaned capsule was still alive**, from the `F-31` investigation two days
+before: pid 277938, session 276883, parented to init, `S` in
+`do_wait_intr_irq`. It is `F-31`'s evidence standing in the process table —
+`--json-status-fd 4` with **no descriptor 4 open**, and descriptor 6 holding a
+*different transaction's* `bwrap-status.json` (`276899-19`'s, in a capsule
+belonging to `276899-5`), now `(deleted)`. Killed after recording. Nothing this
+run started was among the survivors, and this one was in the *before* table too.
+
+### `VA-2` — no operator path is named by any placement
+
+Written as a test rather than walked:
+`no_placement_an_arm_builds_names_an_operator_path`. One provision plus every
+`Delta` variant, and for each placement: `root()`, `source().host()` and every
+`writable()` host path under the fixture root; every `readable()` host path
+under the fixture root **or** under a system readable root the fixture derived
+(`/nix`, `/bin` — the shell has to come from somewhere, so a
+fixture-root-only assertion is false, not strict). Two clauses keep it from
+holding vacuously: at least one system root must exist, and at least one
+readable entry must be outside the fixture root.
+
+Discrimination measured, not assumed: pointing the widening at
+`std::env::current_dir()` — the operator's repository, the most plausible wrong
+answer — reds it. Restored by copy.
+
+It joins `every_artefact_the_fixture_builds_lies_beneath_its_own_root` (what the
+fixture *builds*) and `no_readable_root_contains_the_operators_home` /
+`no_readable_root_contains_the_fixture_root` (what the root derivation
+*excludes*). The three cover build, derive and hand-off.
+
+### `VA-3` — the phase introduced no capsule-delete capability
+
+`git diff 3a1e85dba..HEAD -- crates/` for `remove_dir_all` / `remove_file` /
+`std::fs::remove`: **one** added line in the whole phase —
+
+    +        drop(std::fs::remove_dir_all(&self.path));
+
+which is `TempRoot::drop`, over a root the fixture created. The other four hits
+in the crate all pre-date the phase: `provision.rs`'s `roll_back` (private,
+token-guarded, no `pub(crate)` caller), `bubblewrap.rs`'s removal of its own
+`bwrap-status.json`, and two `#[cfg(test)]` cleanups. Nothing public removes
+anything, and no capsule root is reachable by a delete from outside the fixture.
+
+### `VA-4` — `execute_weakened` changes exactly its own axis
+
+The mapping is a **total, one-to-one** match arm: `weakening_for` sends each of
+the ten `PropertyRemoval`s to exactly one `Weakening` (the eleventh, the grant,
+through `weakening_granting`), with one documented fallback —
+`StdioOwned` with no endpoints falls back to `Descriptors`, the *confining*
+descriptors, so a control that was never built reports `Unproven` rather than
+weakening some other axis. Downstream each `Weakening` gates exactly one thing:
+one `if !matches!(…)` per flag in `confinement_argv`, one boolean per axis in
+`SpawnOptions::under`.
+
+The three clauses the sheet singles out, each with its mechanical backing:
+
+- *`EnvCleared` leaves the explicit `--setenv` list unchanged* — the `--setenv`
+  loop is outside the `--clearenv` guard. `every_axis_leaves_the_setenv_list_byte_identical`,
+  and `M5` reds it.
+- *`StdioOwned` touches nothing above descriptor 2* — it replaces
+  `stdin`/`stdout`/`stderr` and leaves `descriptors_closed` true, so the sweep
+  above 2 still runs. `M6` — which makes it drop the sweep too — reds the stdio
+  case and nothing else.
+- *`MappedIdentity` touches no namespace* — it drops `--uid`/`--gid` only, and
+  `M8`, which also drops a `--unshare-*`, reds.
+
+`each_removal_changes_exactly_its_own_flags` is the standing form of the whole
+inspection: eleven cases, each diffing argv and spawn options against the
+confining baseline and asserting the difference is exactly its own. `M2`…`M10`
+all bite on it.

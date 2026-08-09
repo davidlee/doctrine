@@ -810,6 +810,90 @@ is the strongest evidence this slice has that the battery earns its cost.
     commit would have manufactured the exact `UNATTRIBUTABLE` symptom `F-7`
     reported. Good error; it explained the consequence rather than the rule.
 
+### From `PHASE-08` execution (sheet `phase-08.md`, shard `notes_07-09.md`)
+
+58. **A product defect, and the one item on this list that blocks a later
+    phase: `BubblewrapBackend::run`'s parent-side descriptor window is not
+    thread-safe.** `run` mutates *process-wide* descriptor flags either side of
+    its spawn — mark every inherited descriptor `CLOEXEC`, then un-mark the
+    status file — and what reads those flags is `fork`. Two runs in flight at
+    once corrupt each other's handover. Measured, not theorised: a capsule
+    spawned with `--json-status-fd 4` holding **no** descriptor 4, and a
+    *different* transaction's `bwrap-status.json` at descriptor 6; it then
+    blocked at bubblewrap's user-namespace handshake for ever while holding the
+    harness's capture pipe. Contained in-phase by a `#[cfg(test)]` mutex around
+    the window — evidence about a phase should be about that phase — but the
+    hazard belongs to the mechanism: **`ArmShape::Concurrent` (row B5) is
+    exactly a caller that runs two capsules at once**, so `PHASE-09` must not
+    build row B5 on the mechanism as it stands. Wants an issue and a production
+    fix that narrows the window to the fork itself. Sheet `F-31`.
+59. **`EX-12`'s "records the capsule's session id *before* the arm runs" is not
+    realisable, and the phase's answer changes what row 7 proves.** No session
+    exists before the capsule does; the seam that works is a callback *during*
+    the run (`execute_noticing`). Compounding it: the escape the design
+    attributes to `Teardown` is real but **unobservable by the harness**. The
+    descendant outlives its parents *inside the pid namespace*, whose init
+    holds the harness's capture descriptors until the namespace empties, so the
+    arm cannot return while the escapee is alive — a `sleep` payload takes the
+    arm to its wall bound and the escapee dies with the tree. The escape a
+    harness can *see* is `ProcessVisibility`'s, where there is no pid namespace:
+    end-of-file in 25ms, escapee alive in a session of its own. `F-9` stands
+    (`--die-with-parent` is what reaps); `F-30` adds what `F-9` never measured,
+    which is whether anything could watch. Row 7's criterion should name the
+    property and not the removal.
+60. **The design's `ConformanceBackend` sketch is two methods short of the
+    rows it must serve.** `Delta::Granted` has no execution path at all
+    (`execute_granted`, sheet `F-13`), and containment cannot be tied to a row
+    shape, so a fourth defaulted method carries the pid seam for *every* shape
+    (`execute_noticing`, `F-16`/`F-19`). Both are additive and both are in the
+    design's own tables — the sketch, not the tables, is what is wrong.
+61. **Two measured corrections to `D5`'s bubblewrap vocabulary.** `--share-net`
+    is not what bwrap 0.11.2 enforces, and there is **no `--share-pid` at all**
+    — `ProcessVisibility` is expressed by *omitting* `--unshare-all` and
+    enumerating the other five unshares (`F-7`, `F-8`). The design's flag names
+    should be replaced with the enumerated set, which is now a named constant.
+62. **`Delta::SharedRoot` is a rebase of the placement, not a swap of its root
+    field.** Swapping the root alone builds a placement `try_new` *refuses*:
+    the writable carve-out is licensed by that placement's own transaction
+    root, so the entries beneath must move with it. The design describes the
+    swap. Sheet `F-29`; the mutation that expresses the defect (`M11b`) reds
+    with `ForbiddenScopeOverlap`, which is the same trap from the other side.
+63. **Invariant 4 was tested at the seam that *obeys* it, not the seam that
+    *wires* it — and only the battery found that.** The probe-arm test built
+    its own `Arm`, so it established that `run_arm` does not rewrite what it is
+    handed and said nothing about `run_row`, the only place a delta could reach
+    the probe. `M12` redded nothing. Closed in-phase with a new test over a
+    `Recording` backend that provisions with the real mechanism and intercepts
+    only the arms. For the brief: when a design says *nothing else would catch
+    this*, the test has to sit at the seam the defect would enter by, and the
+    battery is what tells you it does not. Sheet `F-33`.
+64. **A deny list can make a plausible defect uncompilable, and a battery row
+    that cannot compile is not a green row.** Three of `PHASE-08`'s 21
+    mutations had to be re-expressed to run at all — `dead_code` and clippy's
+    `drop_ref` refuse two of them outright, and a third reds 21 tests on a
+    fixture refusal rather than on the property it targets. Re-expressed as
+    `M11b`/`M21b`/`M20a`+`M20b` and recorded as such. Cheap fix for future
+    sheets: when authoring a battery row, say which *lint* would catch it if no
+    test does. Sheet `F-32`.
+65. **`EX-2`'s "real disk, never tmpfs" had no mechanism, and the default route
+    violates it on this host** (`F-4`); the second-filesystem probe is
+    conditional by construction and cannot be made unconditional (`F-10`,
+    `F-11`, `F-28`). The auxiliary claims that depend on a second filesystem
+    report `Skipped` naming the reason, which is the honest answer and is now
+    tested — but the criterion should say so rather than promise the reading.
+66. **A killed run leaks its fixture root, and can leave a capsule alive.**
+    `Drop` does not run for a process that takes `SIGKILL`, so 28 fixture roots
+    and one orphaned `bwrap` — parented to init, blocked for two days — were
+    waiting when `VA-1` was walked. The leak is bounded and self-identifying
+    (dedicated base, pid-prefixed roots) and the remedy is to sweep the base,
+    **not** to add a delete primitive: invariant 8 and `VA-3` forbid one, and
+    `PHASE-08` introduced exactly one removal call in the whole phase
+    (`TempRoot::drop`, over a root the fixture created). Sheet `F-35`.
+67. **`plan.md`'s file-ownership table was wrong for this phase too — the
+    sixth consecutive phase.** Recorded once more rather than argued: at this
+    point the table's *shape* is the defect, not any individual row. Sheet
+    `F-1`.
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The

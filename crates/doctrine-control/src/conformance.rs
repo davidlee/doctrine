@@ -951,7 +951,7 @@ impl Fixture {
     /// without spawning: the pid→session read needs a live process, and the
     /// refusal-and-dedup rule needs a session id with no members at all.
     fn note_session(&self, session: SessionId) {
-        if Some(session) == self.own_session {
+        if !signallable(session, self.own_session) {
             return;
         }
         let mut sessions = self.observed_sessions.borrow_mut();
@@ -1070,11 +1070,11 @@ fn fixture_io(path: &Path, error: &dyn std::fmt::Display) -> FixtureFault {
 /// case, not an error — the point of the sweep is that these processes are
 /// exiting or should be — so a failed signal is discarded.
 fn kill_session(session: SessionId, own: SessionId) {
-    if session == own {
+    if !signallable(session, Some(own)) {
         return;
     }
     for facts in process_table() {
-        if facts.session != session {
+        if facts.session != session || !signallable_pid(facts.pid) {
             continue;
         }
         let Ok(pid) = rustix::process::Pid::from_raw(facts.pid.0).ok_or(()) else {
@@ -1082,6 +1082,51 @@ fn kill_session(session: SessionId, own: SessionId) {
         };
         let _signalled = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
     }
+}
+
+/// The lowest session id and pid this suite will ever signal.
+///
+/// Sessions 0 and 1 — and pid 1 — belong to the machine, never to a capsule.
+/// In this project's own jail the sandbox's `bwrap` **is** pid 1 in session 0,
+/// so a sweep that ever recorded session 0 would `SIGKILL` the sandbox out from
+/// under the operator.
+const LOWEST_SIGNALLABLE: i32 = 2;
+
+/// Whether the sweep may signal `session` at all (`F-36`).
+///
+/// Two refusals, and the order is the point. The **floor** comes first and is
+/// unconditional: it is not an optimisation and not a correctness argument, it
+/// is a blast radius. The descent rule that picks a session (*nearest
+/// descendant whose `session == pid`*) should never select the machine's, but
+/// "should never select" is an argument about a selection rule standing in
+/// front of an unguarded mass-`SIGKILL` over the whole process table, and the
+/// cost of being wrong is the operator's machine session rather than a red
+/// test.
+///
+/// The **own-session** refusal is second and is the one with a mechanism behind
+/// it: a defect that fed the recorder the trusted side's pid would otherwise
+/// arm the sweep against the suite's own process tree.
+///
+/// `own` is `Option` because a host that cannot answer `/proc` for the harness
+/// disarms the sweep entirely — there is nothing to compare against, so nothing
+/// may be signalled.
+const fn signallable(session: SessionId, own: Option<SessionId>) -> bool {
+    if session.0 < LOWEST_SIGNALLABLE {
+        return false;
+    }
+    match own {
+        Some(own) => session.0 != own.0,
+        None => false,
+    }
+}
+
+/// Pid 1 is never signalled, whatever session it reports.
+///
+/// The floor above already refuses sessions 0 and 1, and a pid 1 reporting some
+/// third session is a shape this host does not produce — which is exactly why
+/// it is guarded rather than reasoned about.
+const fn signallable_pid(pid: HostPid) -> bool {
+    pid.0 >= LOWEST_SIGNALLABLE
 }
 
 /// The belt behind `run_row`'s sweep (`EX-12`, `VA-1`).
@@ -3197,7 +3242,8 @@ mod tests {
     use super::{
         Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
         capsule_still_running, harness_execution, next_transaction_id, placed_under,
-        provision_capsule, run_arm, run_row, still_running, under_for,
+        provision_capsule, run_arm, run_row, signallable, signallable_pid, still_running,
+        under_for,
     };
     use super::{
         CAPACITY_CLAIM, CAPACITY_FILESYSTEM_CLAIM, DOCTRINE_TOML, EMPTY_FORBIDDEN_EXECUTABLES,
@@ -4541,6 +4587,75 @@ mod tests {
             "row 5's target is not the internet"
         );
         assert_ne!(address.port(), 0);
+    }
+
+    /// `VA-2` over the **placements** rather than over the fixture's artefacts:
+    /// every host path an arm hands the backend is inside the fixture root or
+    /// inside a system readable root the fixture derived. The operator's
+    /// repository, `.doctrine/`, credentials and home are named by none of them.
+    ///
+    /// `every_artefact_the_fixture_builds_lies_beneath_its_own_root` checks what
+    /// the fixture *builds*; a delta could still widen a placement onto
+    /// something the fixture never built, and it is the placement that reaches
+    /// the mechanism.
+    #[test]
+    fn no_placement_an_arm_builds_names_an_operator_path() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let first = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+        let second = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("a second transaction provisions")
+            .placement;
+
+        let deltas = [
+            Delta::Widened(widens_the_undeclared_decoy),
+            Delta::NetworkPermitted,
+            Delta::SharedRoot,
+            Delta::Removed(PropertyRemoval::WorkingDirectory),
+            Delta::Granted(AuthorityGrant::AllCapabilities),
+        ];
+        let mut placements = vec![first.clone()];
+        for delta in &deltas {
+            placements.push(
+                placed_under(delta, &fixture, second.clone(), Some(first.root()))
+                    .expect("every delta yields a lawful placement"),
+            );
+        }
+
+        let root = fixture.root();
+        let system = system_readable_roots(&SystemHost, root);
+        assert!(
+            !system.is_empty(),
+            "with no system root the readable disjunction below is vacuous"
+        );
+        let mut system_bound = false;
+        for placement in &placements {
+            assert!(placement.root().path().starts_with(root));
+            assert!(placement.source().host().starts_with(root));
+            for entry in placement.writable() {
+                assert!(
+                    entry.host().starts_with(root),
+                    "a writable entry escapes the fixture: {}",
+                    entry.host().display()
+                );
+            }
+            for entry in placement.readable() {
+                let inside = entry.host().starts_with(root);
+                system_bound |= !inside;
+                assert!(
+                    inside || system.iter().any(|top| entry.host().starts_with(top)),
+                    "a readable entry names neither the fixture nor a system root: {}",
+                    entry.host().display()
+                );
+            }
+        }
+        assert!(
+            system_bound,
+            "no placement bound anything outside the fixture, so the exclusion \
+             held for no reason"
+        );
     }
 
     /// `EX-13`'s two halves in one assertion: row 10's three decoys survive an
@@ -5996,6 +6111,63 @@ mod tests {
         fixture.note_capsule_session(HostPid(-1));
 
         assert_eq!(fixture.sweep_observed_sessions(), Vec::new());
+    }
+
+    /// The floor (`F-36`): sessions 0 and 1 are the machine's, and this jail's
+    /// own sandbox is pid 1 in session 0. Asserted on the predicate rather than
+    /// on the effect, because the only honest test of "would have signalled" is
+    /// one that signals.
+    ///
+    /// The `own` argument is a **live, memberless** session throughout, so no
+    /// row of this passes for the second reason — the floor is the only thing
+    /// that can refuse the first two, and the fourth row proves the same `own`
+    /// admits an ordinary session.
+    #[test]
+    fn the_sweep_never_signals_the_machines_own_sessions() {
+        let own = Some(SessionId(4242));
+
+        assert!(!signallable(SessionId(0), own), "session 0 is the machine's");
+        assert!(!signallable(SessionId(1), own), "session 1 is the machine's");
+        assert!(!signallable(SessionId(-1), own));
+        assert!(
+            signallable(SessionId(4243), own),
+            "an ordinary session is still swept, or the floor proves nothing"
+        );
+
+        assert!(!signallable_pid(HostPid(1)), "pid 1 is never signalled");
+        assert!(!signallable_pid(HostPid(0)));
+        assert!(signallable_pid(HostPid(2)));
+
+        // The floor is *ahead of* the own-session check, not folded into it,
+        // and a host that cannot name the harness's own session signals
+        // nothing at all rather than everything.
+        assert!(!signallable(SessionId(4242), own));
+        assert!(!signallable(SessionId(4243), None));
+    }
+
+    /// A session at the floor is refused at *record* time too, so a defect that
+    /// discovered the machine's session never even reaches the signalling site.
+    #[test]
+    fn a_machine_session_is_refused_by_the_recorder() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let memberless = SessionId(
+            process_table()
+                .iter()
+                .map(|facts| facts.session.0)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1),
+        );
+
+        fixture.note_session(SessionId(0));
+        fixture.note_session(SessionId(1));
+        fixture.note_session(memberless);
+
+        assert_eq!(
+            fixture.sweep_observed_sessions(),
+            vec![memberless],
+            "the machine's sessions reached the swept set"
+        );
     }
 
     /// Two capsules of one arm can lead one session between them, and the sweep
