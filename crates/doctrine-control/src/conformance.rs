@@ -709,6 +709,25 @@ pub(crate) struct Fixture {
     decoy_executable: PathBuf,
     /// Trusted-side, row 5's target.
     listener: TcpListener,
+    /// The harness's **own** session, read at build time.
+    ///
+    /// `EX-12` asks the fixture to record the capsule's sid before the arm runs
+    /// and it cannot — the session does not exist until bwrap creates it inside
+    /// the child (`F-3`). What *can* be recorded beforehand is this, and it is
+    /// what makes a foreign session identifiable afterwards: the sweep refuses
+    /// to signal it, so a bug that recorded the harness's own sid kills the
+    /// suite's own process tree instead of quietly doing nothing.
+    ///
+    /// `None` on a host whose `/proc` did not answer. The sweep then signals
+    /// nothing, because a sweep that cannot tell its own session from a
+    /// capsule's is a sweep that must not fire.
+    own_session: Option<SessionId>,
+    /// Every session a capsule of this run was observed to lead.
+    ///
+    /// Appended by the pid seam while a capsule is alive, drained on the way
+    /// out. `RefCell` because the fixture is shared immutably across both arms
+    /// of a row and the observation is the one thing an arm gives *back* to it.
+    observed_sessions: RefCell<Vec<SessionId>>,
 }
 
 impl Fixture {
@@ -764,6 +783,8 @@ impl Fixture {
                 path: PathBuf::from(LOOPBACK_ANY_PORT),
                 detail: error.to_string(),
             })?,
+            own_session: own_session(),
+            observed_sessions: RefCell::new(Vec::new()),
             root,
             project_root,
             base,
@@ -814,6 +835,100 @@ impl Fixture {
     }
     pub(crate) const fn listener(&self) -> &TcpListener {
         &self.listener
+    }
+
+    pub(crate) const fn own_session(&self) -> Option<SessionId> {
+        self.own_session
+    }
+
+    /// Record the session of a capsule process seen alive (`EX-12`, `D3`).
+    ///
+    /// The harness's own session is **refused**, not merely skipped by the
+    /// sweep. A defect that fed this the wrong pid — the wrapper's, or the
+    /// trusted side's — would otherwise arm the sweep against the suite's own
+    /// process tree, and the observable failure would be the test runner dying
+    /// rather than a leaked capsule surviving.
+    pub(crate) fn note_capsule_session(&self, capsule: HostPid) {
+        if let Some(session) = session_of(capsule) {
+            self.note_session(session);
+        }
+    }
+
+    /// The recording rule alone, over a session already read.
+    ///
+    /// Split from [`Self::note_capsule_session`] so both halves are testable
+    /// without spawning: the pid→session read needs a live process, and the
+    /// refusal-and-dedup rule needs a session id with no members at all.
+    fn note_session(&self, session: SessionId) {
+        if Some(session) == self.own_session {
+            return;
+        }
+        let mut sessions = self.observed_sessions.borrow_mut();
+        if !sessions.contains(&session) {
+            sessions.push(session);
+        }
+    }
+
+    /// Signal every live member of every session this run created (`EX-12`).
+    ///
+    /// **By session, never by process group.** `RV-346` `F-27` strengthened row
+    /// 7's payload to a descendant that leaves the original *process group*
+    /// precisely so a process-group-only backend cannot pass — so a
+    /// process-group kill here could not reap the survivor its own control arm
+    /// creates. When a row's payload is strengthened, its containment is part of
+    /// the payload.
+    ///
+    /// Drains: sweeping twice is lawful and the second is a no-op, which is what
+    /// lets this be called after every row *and* from `Drop` without the second
+    /// call signalling a pid the kernel has since recycled.
+    pub(crate) fn sweep_observed_sessions(&self) -> Vec<SessionId> {
+        let Some(own) = self.own_session else {
+            return Vec::new();
+        };
+        let swept: Vec<SessionId> = self.observed_sessions.borrow_mut().drain(..).collect();
+        for session in &swept {
+            kill_session(*session, own);
+        }
+        swept
+    }
+}
+
+/// Signal every live process whose session is `session`.
+///
+/// `own` is passed rather than read here so the refusal is a *parameter* of the
+/// operation: there is no route to this function that has not already had to
+/// name the session it must not touch.
+///
+/// A pid that vanishes between the enumeration and the signal is the normal
+/// case, not an error — the point of the sweep is that these processes are
+/// exiting or should be — so a failed signal is discarded.
+fn kill_session(session: SessionId, own: SessionId) {
+    if session == own {
+        return;
+    }
+    for facts in process_table() {
+        if facts.session != session {
+            continue;
+        }
+        let Ok(pid) = rustix::process::Pid::from_raw(facts.pid.0).ok_or(()) else {
+            continue;
+        };
+        let _signalled = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
+    }
+}
+
+/// The belt behind `run_row`'s sweep (`EX-12`, `VA-1`).
+///
+/// `run_row` sweeps after every row, which is where a survivor is *supposed* to
+/// die. This catches the run that never reached that line — a panic in an arm,
+/// an early return from a claim — and it runs **before** [`TempRoot`]'s `Drop`
+/// removes the tree, because field drops follow the type's own `Drop`.
+///
+/// This kills processes and removes nothing: invariant 8's no-delete rule is
+/// about capsules on disk, and cleanup there is still `TempRoot`'s alone.
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _swept = self.sweep_observed_sessions();
     }
 }
 
@@ -1919,6 +2034,15 @@ pub(crate) struct Arm<'a> {
     /// — which is the difference between the two concurrent indeterminacies
     /// being *specified* and being *tested* (`S8`).
     pub(crate) live: &'a dyn Fn(HostPid) -> bool,
+    /// Where a capsule process seen alive is reported (`EX-12`).
+    ///
+    /// A separate sink from `live` because the two answer different questions
+    /// at different times: `live` is read once, after the observer has run, and
+    /// decides whether row B5's window held; this is called the moment the pid
+    /// exists and decides what the sweep must reach on the way out. Folding
+    /// them together would tie containment to a row shape — and the arm whose
+    /// containment matters most, row 7's, is a `Single`.
+    pub(crate) noticed: &'a dyn Fn(HostPid),
     pub(crate) under: Under,
 }
 
@@ -1986,6 +2110,7 @@ impl Arm<'_> {
 
         let run_observer = |pid: HostPid| {
             seen.set(Some(pid));
+            (self.noticed)(pid);
             let outcome = self.observation(&(observer.argv)(pid), self.under);
             // Sampled **after** the observer capsule finished, not before: the
             // question row B5 asks is whether the observation was taken while
@@ -2274,6 +2399,7 @@ fn run_row(
     row: &Row,
 ) -> RowVerdict {
     let live = |pid: HostPid| capsule_still_running(pid);
+    let noticed = |pid: HostPid| fixture.note_capsule_session(pid);
 
     let untouched = || {
         provision_capsule(fixture, host, backend.as_capsule_backend())
@@ -2285,6 +2411,7 @@ fn run_row(
             capsule: &untouched,
             execution: &harness_execution,
             live: &live,
+            noticed: &noticed,
             under: Under::Confining,
         },
         &row.shape,
@@ -2316,10 +2443,17 @@ fn run_row(
             capsule: &deltaed,
             execution: &harness_execution,
             live: &live,
+            noticed: &noticed,
             under: under_for(&row.delta),
         },
         &row.shape,
     );
+
+    // On the way out of **every** row, not only the last: a survivor left by
+    // row 7's control arm would otherwise still be running while the next row's
+    // arms provision, and `EX-12`'s failure is silent — a leaked process per
+    // run, found by a developer whose machine is slowly filling with them.
+    let _swept = fixture.sweep_observed_sessions();
 
     row_verdict(probe, control)
 }
@@ -4172,6 +4306,7 @@ mod tests {
             capsule,
             execution: &executing,
             live,
+            noticed: &|_pid| (),
             under,
         }
     }
@@ -4488,6 +4623,81 @@ mod tests {
             Indeterminacy::BackendError("Capacity".to_owned())
         );
         assert_eq!(backend.executions(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // The session sweep (`T8`, `EX-12`, `D3`)
+    // -----------------------------------------------------------------------
+    //
+    // That a *real* escaped descendant is reaped is `T10`'s
+    // `the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness`,
+    // which needs a live capsule to discriminate. What is testable here is the
+    // recording rule — which is where the sweep can be armed against the wrong
+    // session, and the only place the mistake is still cheap.
+
+    /// The harness's own session must never reach the swept set. Skipping it at
+    /// signal time would be enough to be safe; refusing it at *record* time is
+    /// what makes the refusal observable, because a sweep that signalled nothing
+    /// and a sweep that recorded nothing look identical from outside.
+    #[test]
+    fn the_harness_never_records_its_own_session_as_a_capsules() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let own = fixture.own_session().expect("this host answers /proc");
+        let leader = HostPid(own.0);
+
+        fixture.note_capsule_session(leader);
+
+        assert_eq!(
+            fixture.sweep_observed_sessions(),
+            Vec::new(),
+            "the harness's own session leader was recorded as a capsule"
+        );
+    }
+
+    /// A pid with no `/proc` entry is a process that has already gone, which is
+    /// the sweep's success case and not something to record. Recording it would
+    /// arm the sweep against a **recycled** pid — the kernel hands the number
+    /// out again, and the next holder is not this run's.
+    #[test]
+    fn a_vanished_capsule_records_no_session() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+
+        fixture.note_capsule_session(HostPid(-1));
+
+        assert_eq!(fixture.sweep_observed_sessions(), Vec::new());
+    }
+
+    /// Two capsules of one arm can lead one session between them, and the sweep
+    /// enumerates `/proc` once per session — so a duplicate is a second full
+    /// walk for nothing. The drain is the other half: sweeping is called after
+    /// every row *and* from `Drop`, and the second call must not signal a pid
+    /// the kernel has since recycled.
+    ///
+    /// Driven with a session id above every live one, so the sweep runs its
+    /// whole real path — enumerate, match, signal — and finds no member. A test
+    /// that named a session with members would be a test that sends `SIGKILL`
+    /// to this machine.
+    #[test]
+    fn the_swept_set_holds_each_session_once_and_is_drained_by_sweeping() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let memberless = SessionId(
+            process_table()
+                .iter()
+                .map(|facts| facts.session.0)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1),
+        );
+
+        fixture.note_session(memberless);
+        fixture.note_session(memberless);
+
+        assert_eq!(fixture.sweep_observed_sessions(), vec![memberless]);
+        assert_eq!(
+            fixture.sweep_observed_sessions(),
+            Vec::new(),
+            "sweeping drains, so the second sweep cannot signal a recycled pid"
+        );
     }
 
     // -----------------------------------------------------------------------

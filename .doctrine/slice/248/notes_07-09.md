@@ -790,3 +790,55 @@ allocation, and the bound sourcing. Recorded so `T7`'s tick is not read as
 reasons said they self-clear when the harness applies a delta and reads a row.
 `R6`'s count is now **one**: `RowId`, which needs PHASE-09's `Property` variants
 to inhabit it.
+
+## T8a — the session sweep (EX-12, D3)
+
+**By session, never by process group, and the reason is the payload.** `RV-346`
+`F-27` strengthened row 7's payload to a descendant that leaves the original
+process group precisely so a process-group-only backend cannot pass. A
+process-group kill in the harness therefore could not reap the survivor its own
+control arm creates. The general rule, worth carrying past this slice: **when a
+row's payload is strengthened, its containment is part of the payload.**
+
+**The fixture records its own sid at build; the capsule's arrives later.**
+`EX-12` asks the fixture to record the capsule's sid *before the arm runs* and
+it cannot — the session does not exist until bwrap creates it inside the child
+(`F-3`). What it can record beforehand is its own, and that is what makes a
+foreign session identifiable afterwards.
+
+**The own-session refusal is at record time, not at signal time.** Skipping the
+harness's own session when signalling would be enough to be *safe*; refusing it
+when recording is what makes the refusal *observable*, because a sweep that
+signalled nothing and a sweep that recorded nothing look identical from outside.
+`the_harness_never_records_its_own_session_as_a_capsules` reads the harness's own
+session leader pid and asserts the swept set stays empty.
+
+**`own` is a parameter of `kill_session`, not a global it reads.** There is no
+route to the signalling loop that has not already had to name the session it
+must not touch. A `None` own-session — a host whose `/proc` did not answer —
+sweeps nothing at all: a sweep that cannot tell its own session from a capsule's
+is a sweep that must not fire.
+
+**Sweeping drains.** It is called after every row *and* from `Fixture::drop`,
+and the second call must not signal a pid the kernel has since recycled. The
+drain makes the second call a no-op by construction rather than by a flag.
+
+**Testing a sweep without killing the machine.** The dedup-and-drain test drives
+a session id **above every live one** (`max(sid) + 1`), so the sweep runs its
+whole real path — enumerate `/proc`, match, signal — and finds no member. A test
+that named a session with members would be a test that `SIGKILL`s this machine.
+The recording rule was split out as `note_session(SessionId)` for exactly this:
+the pid→session read needs a live process, the refusal-and-dedup rule needs a
+session with no members, and one function could not be driven by both.
+
+**`Arm.noticed` is a second sink, not a widened `live`.** They answer different
+questions at different times: `live` is read once, after the observer has run,
+and decides whether row B5's window held; `noticed` fires the moment the pid
+exists and decides what the sweep must reach on the way out. Folding them would
+tie containment to a row *shape* — and the arm whose containment matters most,
+row 7's, is a `Single`.
+
+**`Fixture::drop` sweeps before `TempRoot` removes the tree**, because field
+drops follow the type's own `Drop`. It kills processes and removes nothing:
+invariant 8's no-delete rule is about capsules on disk, and cleanup there is
+still `TempRoot`'s alone.
