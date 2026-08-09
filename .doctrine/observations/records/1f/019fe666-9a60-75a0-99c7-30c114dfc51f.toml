@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe666-9a60-75a0-99c7-30c114dfc51f"
+recorded_at = "2026-08-09T12:01:51.712655467Z"
+kind = "friction"
+summary = "PHASE-10 T7 (/execute): plan-time /proc measurement did not survive the harness — userns map outside-id shifts with nesting depth"
+detail = "The T7 card's A3 recorded uid_map = '1000 0 1' from a hand-run one namespace level up. Under the harness the same capsule property reads '1000 1000 1' (probe) and '100 100 1' (control), because the arms run a level deeper. A row asserting A3's literal text would have been red on arrival for a reason belonging to the measurement rather than to the backend. Cost: one extra measurement round before writing the payload. The general shape — a plan-time reading of a namespace-relative kernel surface is not a prediction of what the harness will read — is worth carrying into future phase sheets that quote /proc output as plan-time evidence."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
