@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe6e5-b172-7270-a175-6aebf5ad41fc"
+recorded_at = "2026-08-09T14:20:40.690725091Z"
+kind = "friction"
+summary = "execute: a repo-wide test-code ban lives in another package's integration test, and only the full gate reports it"
+detail = """
+PHASE-10 T11 added a test that walks the crate's own source tree and needed the manifest directory. `env!("CARGO_MANIFEST_DIR")` is the obvious spelling; it is banned repository-wide by `tests/e2e_no_baked_paths.rs` (CHR-014 / SL-162), which scans `src/`, `tests/` AND `crates/`.
+
+Cost: the crate compiled, `cargo test -p doctrine-control` was green (277/277), clippy was clean, and the ban surfaced only on the ~7-minute `doctrine check gate` — as a failure in the root package naming a file in the member crate.
+
+Nothing reachable from inside `crates/doctrine-control` names the rule: not its own `clippy.toml` (which bans `std::env::var` and says nothing about `env!`), not the phase sheet's `C9` lint list, not the crate's module docs. The two adjacent bans are enforced by two different mechanisms in two different places, and only one of them is in the crate.
+
+The generalisable friction: a lint-shaped rule expressed as an integration test in a *different* package has the worst possible feedback latency for the crate it constrains."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

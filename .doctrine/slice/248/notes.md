@@ -1597,6 +1597,57 @@ under the sheet's own fallback.
     (`LOOP.md` § *The orchestrator's turn*), so it is raised here rather than
     settled. (Orchestrator, after `T9`.)
 
+139. **`REQ-459`'s closure, reported honestly — criterion 2 is `partial`, not
+    discharged, and this clone minted no record for it.** `EX-16` is discharged
+    at `PHASE-10` `F-58` in the sheet rather than as a `REQ-` record, because
+    `C2` forbids this clone minting sequential ids. Criterion 1 (the shared
+    conformance suite) is discharged **over the channels `sec-2`'s channel
+    ledger names** — the qualifier is load-bearing, since *in full* was claimed
+    four times against four tables in this slice and was false the first three.
+    Criterion 2 (Linux/bubblewrap as the initial supported backend) requires
+    `SL-241` evidence **and production acceptance tests**; this slice has the
+    suite and no production acceptance tests, so it is **partial** and belongs
+    in the brief as a contributing `--change`. Criterion 3 (no other backend
+    claims support) is discharged structurally — one suite parameterised by
+    backend, a second backend passing it edits nothing. (Orchestrator, at merge.)
+
+140. **`admission(&[])` returns `Admitted` — characterised, deliberately not
+    repaired, and the repair belongs to `T13`.** `all(Proven)` over an empty
+    list is true, so a caller handing `admission` no rows is told the backend is
+    admitted on no evidence at all — *held nothing* and *read nothing* answering
+    identically, which is `F-47`'s family a third time. It is unreachable in
+    production, and what makes it unreachable is three functions away:
+    `verify_over` is the only production caller and is handed `tables()`, held
+    non-empty by `the_shipped_tables_are_nineteen_distinctly_identified_rows`.
+    `T11` is an audit and `admission`'s body is `T13`'s blocked territory (`S1`
+    forbids filtering a row out of it), so a characterisation test records the
+    behaviour and reds when someone hardens it. Detail at `PHASE-10` `F-56`.
+    (Whoever unblocks `T13`.)
+
+141. **`EX-1`'s "ordered as the table is" is held by reading, and the one-line
+    machine check was refused on purpose.** `Property`'s fourteen variants and
+    `table_a()`'s fourteen rows share the design document's order; membership is
+    compiler-checked both ways (`RowId::Property` keys the verdict;
+    `dead_code` is denied), **ordering is not checked anywhere**. Deriving `Ord`
+    and asserting sortedness would catch a comprehension defect rather than a
+    correctness one, add production surface whose only consumer is its own test
+    (`F-54`'s refusal), and — worst — occupy the name while proving only that
+    two lists in the same file agree, when the claim is code-against-*document*.
+    Stated as a limit in both docs instead. An auditor wanting the claim
+    enforced needs a check that reads `SPEC-030`, not one that reads the enum.
+    Detail at `PHASE-10` `F-57`. (Auditor.)
+
+142. **§ *Owed* and § *Findings* have now drifted twice — `T10`'s `F-51`–`F-54`
+    never reached this list.** They were harvested into the `PHASE-10` sheet and
+    into `notes_10-12.md` and stop there; this list went from 138 straight to
+    `T11`'s items. Reconciling § *Owed* against every phase sheet's § *Findings*
+    at close is the orchestrator's job and is the only place the omission is
+    visible, since each worker only ever appends. Separately: `EX-15`'s card in
+    the `PHASE-10` sheet cites `R9`, which that sheet's risk list (`R1`–`R8`)
+    does not contain — the referent is `design.md` `sec-9`'s `R9`, which the
+    criterion's own text names. (Orchestrator, at close.)
+
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
@@ -1671,6 +1722,38 @@ Options as the planner put them, cheapest first:
 
 Either way this edits two files `PHASE-05` does not own, one of them a
 workspace-level safety posture — which is why it is not a planner's call.
+
+**OPEN — `EX-14` in CI. `DEC-180` settles the local host and stops there.**
+Raised by `PHASE-10` `T11` (`VA-4`) and deliberately **not** answered there.
+
+`EX-14` forbids an availability condition, an `#[ignore]`, a skip or an early
+return reaching `Admitted`: the conformance suite must be able to *fail*, and a
+green skip is the failure mode `DEC-156` names. `T11` confirmed the rule holds
+on this tree, and wrote the confirmation as an executed test rather than a
+reading — every `#[ignore]` under the crate's `src` must carry an
+`instrument:` reason, nine sites today, all lawful re-executed children.
+
+What is settled: **the local host**. `DEC-180` rules the admission test
+unconditional here, and `default-members` brings a failure forward into
+`just check` so it cannot be discovered late.
+
+What is open: **CI**. A runner that cannot give the backend what the nineteen
+rows need makes the suite red for a reason that is not a conformance defect,
+and every reflex available is one `EX-14` forbids — condition the test on
+availability, `#[ignore]` it on CI, return early. `sec-9` residual 3 stands;
+nothing this phase added mitigates it, and `T11` was explicitly instructed not
+to improvise a mitigation, because a mitigation invented by a worker is exactly
+the green skip arriving under a different name.
+
+The shapes worth weighing, none chosen: run the suite only on runners that
+declare the capability and treat *absence of a run* as a visible red at the
+pipeline level rather than a green test; or make backend unavailability a
+**distinct non-`Admitted` verdict** so the suite reports "could not be
+established" without ever reporting "admitted"; or accept the red and fix the
+runner. The second is the only one that keeps the answer inside the type
+`admission` already returns, which is a point in its favour and not a decision.
+(Slice owner / orchestrator, before close.)
+
 
 ## Traps — what already bit this slice
 

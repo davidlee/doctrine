@@ -702,3 +702,173 @@ assertion that provisioned ~50 capsules would double `T12`'s budget for no
 evidence the conformance suite does not already produce. Every dispatch case
 refuses before reaching a backend; the end-to-end reading above was taken by
 hand, once, and is recorded rather than automated.
+
+---
+
+## PHASE-10 `T11` — the honesty pass (`EX-14`, `EX-15`, `EX-16`, `VA-4`)
+
+Three audits and one test, per the card. The hunt three sittings ran against
+tests — `T8`'s `F-47` (a probe that could not tell *held nothing* from *read
+nothing*), `T9`'s `F-50` part 4 (a *degraded* reading defeating an absence probe
+as easily as an empty one) and `T10`'s `F-52` (three of twelve mutants convicted
+by the compiler, not by a test) — run here against prose. Same defect, different
+clothes, and harder to catch because nothing goes red.
+
+### `EX-15` — three stale claims in this phase's own diff
+
+The instruction was to grep my own diff for a count that implies enforcement it
+does not have. Three, and the interesting thing is what they have in common:
+each was written correctly, and each was falsified by a *later task in the same
+phase* that had no reason to look at it.
+
+1. **`table_a()`'s doc: "Eleven rows at this phase; rows 12–14 arrive later in
+   PHASE-10."** `T6`, `T7` and `T8` landed rows 12, 13 and 14. Each edited the
+   `vec![…]` four lines below the sentence and left the sentence alone. Table A
+   has been fourteen rows since `T8` and the doc said eleven until now. This is
+   the same defect as `T9`'s `tables()` catch ("sixteen rows … table A's first
+   eleven", corrected to nineteen) — **twice in one phase, in two doc comments
+   ten lines apart**, which makes it a property of the artefact rather than of
+   either author.
+2. **`every_row_id_is_covered_by_exactly_one_table`: "Vacuous at PHASE-07 —
+   `table_a` and `table_b` are both empty until PHASE-09 and PHASE-10 populate
+   them."** They did. The comment describing a test as vacuous outlived the
+   vacuity by two phases, which is worse than a wrong count: a reader deciding
+   what to trust reads *this test proves nothing* and moves on.
+3. **`main.rs`'s module doc: "`backend verify` follows in PHASE-10."** `T10`
+   landed it, one commit before this one, and did not update the sentence four
+   lines above the `mod` list.
+
+None of the three changed behaviour and none could have been caught by a test.
+All three were found by reading the diff for count-shaped and tense-shaped
+claims, which is exactly what `EX-15` asks for and is the only instrument there
+is.
+
+`PropertyRemoval`'s "**Nine variants, ten removals**" was checked and is
+**correct** — nine variants, `ResourceBound(Bound)` carrying two. That doc
+already explains why the two numbers are not interchangeable, which is what a
+projection looks like when someone is maintaining it.
+
+### `VA-4` / `EX-14` — written as executed tests
+
+`no_ignored_test_in_this_crate_stands_in_for_a_claim` walks every `.rs` under
+the crate's `src` at run time and requires each `#[ignore]` to carry the reason
+prefix `instrument:`. Nine sites today, all lawful: each is a re-executed child
+that asserts nothing on its own and is ignored precisely so the default run
+cannot mistake its exit status for a claim. The reason string is the whole
+discriminator between an instrument and a skip, which is why the test requires
+one rather than counting sites.
+
+Two constructions matter more than the assertion:
+
+- **The positive control comes first.** The walk must be *seen to have reached
+  `conformance.rs`* before anything it says about the crate means anything.
+  Without it, a walk resolving the wrong directory reports zero sites, zero
+  unlawful sites, and passes — `F-47` exactly, one layer up.
+- **The file set is walked, not listed.** An `include_str!` enumeration is a
+  hand-maintained projection, and a unit added without an entry would be audited
+  by nobody while the walk stayed green. The thing being quantified over is the
+  set of files, so the set of files is what gets read from disk.
+
+`every_shipped_row_can_refuse_admission_on_its_own` walks all nineteen shipped
+ids and asserts each refuses on each of the three non-`Proven` verdicts.
+`admitted_requires_every_row_proven` already had the algebra over a hand-built
+four; what it cannot see is a *shipped* row whose verdict never reached the
+list. The `M4` mutant below is that failure in miniature.
+
+**The CI half is not answered here** and is carried into `notes.md` § *Open* as
+the card requires. `DEC-180` settles the local host; nothing in this task touches
+the CI ruling, and nothing in this phase mitigates `sec-9` residual 3.
+
+### The second green path, recorded rather than repaired
+
+`admission` is `all(Proven)`, and `all` over nothing is true — so
+`admission(&[])` returns `Admitted`. A caller handing it no rows is told the
+backend is admitted on no evidence whatever. This is `F-47`'s family a third
+time: *held nothing* and *read nothing* returning the same answer.
+
+It is not reachable in production, and what makes it unreachable is somewhere
+else: `admission`'s only production caller is `verify_over`, which is handed
+`tables()`, and `the_shipped_tables_are_nineteen_distinctly_identified_rows` is
+what asserts that list is neither empty nor silently shortened. The guard is
+real and it is three functions away, which is the whole reason to write it down.
+
+**Not repaired, deliberately.** `T11` is an audit, and `admission`'s body is
+`T13`'s blocked territory — `S1` forbids filtering a row out of it. A drive-by
+one-line hardening would be the phase editing the thing it was auditing, on a
+function a blocked task is waiting to change. The characterisation test is
+`M5` below: if a later task hardens it, the test reds and the record gets
+updated rather than quietly rotting.
+
+### The covering test gained the half its name claimed
+
+`every_row_id_is_covered_by_exactly_one_table` asserted only *at most one* —
+`row_ids_in_more_than_one_table` returning empty. The *at least one* half was in
+the name and nowhere else. It now also asserts `tables()` is exactly `table_a()`
+followed by `table_b()`, so a row dropped or reordered between the two tables
+and the shipped list is caught here. `M4` shows the count test is blind to it.
+
+### The mutation battery — six arms, 6/6 convicted **by a test**
+
+`F-52`'s rule applied from the first arm: each outcome was checked for
+`error[E` / `could not compile` before being credited, so no arm is credited
+with a conviction the compiler produced. Each reverted by `cp` from a pristine
+snapshot with `diff -q` verifying identical (`C11`).
+
+| arm | mutation | convicted |
+|---|---|---|
+| `M1` | the walk resolves `src/backend` instead of `src` | positive control, `:9819` |
+| `M2` | a shipped claim acquires `#[ignore = "flaky on hosts that deny what the backend needs"]` | `:9847` |
+| `M3` | `admission` degraded from `all()` to `any()` | `left: Admitted, right: NotAdmitted { reason: Rows }` |
+| `M4` | `tables()` emits table B before table A — **no row lost**, order moved | the new covering assert, `:6300`; the nineteen-row count test stayed **green** |
+| `M5` | `admission` hardened against the empty list | the characterisation test, `:9909` |
+| `M6` | the manifest variable misspelled — the walk reads nothing | positive control, `:9819` |
+
+`M2` is the arm that matters: it is `EX-14`'s prohibition written as a diff, in
+the exact shape a maintainer would reach for under pressure — an availability
+excuse in the reason string. `M4` is the one that justifies the covering half:
+nothing was lost, and the count-based test could not see it.
+
+### The gate found a rule nothing in this crate names
+
+`env!("CARGO_MANIFEST_DIR")` was the obvious spelling for the source walk. It is
+banned repository-wide by `tests/e2e_no_baked_paths.rs` (`CHR-014` / `SL-162`),
+which scans `src/`, `tests/` **and `crates/`** — so a member crate trips a *root
+package* integration test. The crate compiled, `cargo test -p doctrine-control`
+was green at 277, clippy was clean, and the ban surfaced only on the full gate,
+naming a file in a package I was not testing.
+
+The sanctioned route here is **not** `std::env::var` — the parent memory
+recommends it and this crate bans it through `disallowed_methods`. It is
+`HostFacts::env_var` on `SystemHost`, a runtime read of the variable cargo sets
+for the invoking tree. The `None` arm returns an empty file list, which the
+positive control converts into a red rather than a clean report.
+
+Durable forms: memory `mem_019fe6e4fe5a77b088ac371274e027cf` (narrowed to the
+two deltas on the existing `mem.fact.testing.runtime-manifest-dir`, which owns
+the general rule), and friction record `019fe6e5-b172-7270-a175-6aebf5ad41fc`.
+
+### `EX-1`'s remaining half — audited, and one part is not machine-checkable here
+
+`Property` reaches **fourteen** variants and `table_a()` constructs them in the
+identical order; both verified by reading, variant by variant, against the row
+numbers in the variants' own doc comments. `every_row_id_is_covered_by_exactly_one_table`
+is **not** "still planned" as the card says — it shipped in PHASE-07 and is
+strengthened above.
+
+What the compiler does check is worth stating precisely, because it is more than
+nothing and less than the claim: `RowId::Property` keys the verdict, so a row
+the suite can construct that the enum cannot name is a compile error; and
+`dead_code` is denied, so a variant no code constructs is *also* a compile error
+(this is `F-7`'s weld — the reason each row task lands its variant and its
+`table_a()` row in one commit). Membership is therefore machine-checked in both
+directions.
+
+**Ordering is not, and was left that way.** See `F-57`: the cheap route exists,
+and it is refused for reasons that are the honesty pass's own.
+
+### Tally
+
+`doctrine check gate` exit **0**; `277 passed; 0 failed; 9 ignored`, read by
+seeking forward to the `doctrine_control-` binary header (the line is neither
+first nor last). +3 over `T10`'s 274, matching the three tests added. Suite
+~92 s. Code `80bedf1bf` (+231/−14, `conformance.rs` and `main.rs`).

@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe6e4fe5a77b088ac371274e027cf"
+memory_key = "mem.fact.cargo.env-manifest-dir-banned-read-it-at-runtime"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "The env! path-baking ban reaches member crates, and doctrine-control's route is HostFacts::env_var"
+summary = "The root package's no-baked-paths guard scans crates/ too; in doctrine-control resolve the manifest dir via HostFacts::env_var, not std::env::var"
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a18cd435225ded62236cd7d3f9189d37169aaced"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "96a17a36913154be64e0d03b07b21361602ae2319b8c545db6269b8fd945a8ac"
+base_commit = "80bedf1bf3a59f208956e414496d7404c668f441"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
