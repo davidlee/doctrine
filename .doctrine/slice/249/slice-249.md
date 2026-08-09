@@ -210,11 +210,96 @@ Also out of scope:
 
 ## Summary
 
-*(Filled at close.)*
+Eight phases, all `completed`. Design pass `RV-349` (35 findings) over design run
+`dr-019fd6b6` (17 nodes, locked at rev 89, twelve rulings `DEC-165`…`DEC-183`);
+implementation audit `RV-351` (16 findings, **0 blockers**); reconciled
+2026-08-09 as thirteen direct writes with **no `REV` owed** — the brief's
+governance section was empty by construction, because `PHASE-07` had already
+landed the slice's only governance write. `doctrine check gate` green at close.
+
+All four objectives delivered.
+
+1. **`knowledge edit` exists**, in two halves that share one seam. `PHASE-08`
+   ships the kind-blind card edit — `--title` / `--tags` / `--body` /
+   `--body-mode` — mirroring `memory edit` over the existing write cores rather
+   than copying them (`resolve_body`, `parse_body_mode` and
+   `BODY_MODE_REQUIRES_BODY` moved `src/memory.rs` → `src/input.rs` to be
+   shared). `PHASE-04` ships the typed `--facet` field write: `plan_facet_edits`
+   derives the payload purely from `knowledge::facet_fields`, `apply_facet_edits`
+   is the thin shell. Both ride `src/facet_write.rs`'s existing mixed-type writer
+   through a new `KeyPosture` parameter — **no third writer**. `R4` dissolved on
+   inspection: that module's deletion marker covered only `SL-222`'s three
+   retired float symbols. `PHASE-05` adds `knowledge settle`, composing
+   `PHASE-04`'s planned-edit seam so the captured field, actor, date and status
+   land in **one** write of one document.
+2. **A `form = "create"` disposition mints a filled record.** `PHASE-01` gave
+   `CreateRecord` a `body`; `PHASE-06` gave it a facet slot (`WireFacetValue`,
+   leaf-local — `RawValue` could not cross the layering boundary) validated
+   through the same `plan_facet_edits` the CLI runs, with a five-case refusal
+   catalogue and an idempotent step-5 write.
+3. **`ISS-318`'s declaration axis is closed, totally rather than by patch.**
+   `Declaration::WIRE_KEYS` × `IdKind::declarable` is a total correspondence
+   wired at `Batch::validate`; `Refusal::InertKey` names the subject, its kind,
+   the key, and the kind that would honour it. `I10` generates the whole matrix
+   and requires each cell refused-or-effectful, with three positive controls
+   against the degenerate table plus a replay of `SL-248`'s losing payload at the
+   shell edge. Separately, a `[facet]` key inert at its record's kind is
+   **reported by `doctor` check #12, not refused on read** (`DEC-177`).
+4. **`SPEC-019` and `PRD-010` govern seven record kinds**, both tiers, landed as
+   `REV-050` (`done` · `approved`) — at `PHASE-07` rather than at reconcile
+   (`DEC-182`, an `EX-11` departure settled at reconcile by correcting the design
+   in seven places). Pinned by `tests/governance_kind_coverage.rs`, which reads
+   both tiers of both entities and holds the residual-"four" ban to a **count
+   identity** over an allowlist, not a presence check.
+
+Consciously accepted: `PHASE-01`'s `C2` behaviour-preservation control does not
+exist and cannot be reconstructed — the `EN-2` extraction rests on inspection,
+and the worker that would have run the control died before writing it up
+(`RV-351` `F-9`, the audit's only `tolerated`). Every `VT` passing does not make
+that gap smaller.
 
 ## Follow-Ups
 
-*(Filled at close.)*
+**Closed by this slice.** `IMP-403` (leads 1 and 2 — `resolved` · `fixed`),
+`ISS-318` (declaration axis — `resolved` · `fixed`), `ISS-329`, `ISS-332`.
+
+**Minted at close.**
+
+- `IMP-413` — advisory validation for unfilled facets (`IMP-403` lead 3).
+- `IMP-414` — `knowledge show` conceals an unfilled facet; `facet_json` does not
+  (lead 4).
+- `IMP-415` — skills do not instruct an agent to fill the facet (lead 5).
+- `ISS-333` — `ApplyRequest`'s `#[serde(flatten)]` structurally forbids
+  `deny_unknown_fields`, so a top-level key is discarded. Split out of `ISS-318`
+  observation 3 so the envelope axis keeps an owner.
+
+**Narrowed, not closed.** `ISS-316` — retitled to its surviving half: the
+`EVD`/`HYP`/`CPT` lifecycle vocabularies and supersession rules, whether `CPT`'s
+empty facet is designed, and `ISS-332`'s legibility note (three `SPEC-019`
+sections are knowingly four-kind and read as stale rather than scoped).
+Provenance thinness still binds — `HYP` n=0, `CPT` n=1 — so writing a vocabulary
+now is invention, which argues for waiting for use.
+
+**Open, minted during the slice, none a blocker.** `ISS-327` (the same inert-key
+class on the subject-*state* axis — `I10` proves the kind axis and nothing
+wider), `ISS-328` (the envelope defect at the nested types, where serde offers
+no excuse and stored-snapshot compatibility is the real blocker), `ISS-330`
+(`doctrine config set` panics in any debug build — unrelated), `ISS-331`
+(`cordage`'s `scale_cliffs` asserts a wall-clock ratio and false-reds under
+load — unrelated), `CHR-056`.
+
+**`CHR-060` — read before acting.** The rename of `facet_write::FacetField` →
+`FacetValue` rests on a premise this slice found backwards: that type carries
+key + value, so it *is* a field, and the unkeyed `WireFacetValue` has the better
+claim to the name. `RV-351` `F-7` raised it precisely because nobody reopens a
+chore until pickup. The argument lives in `design.md` § 5.2 and nowhere else;
+`CHR-060` now points there.
+
+**Practice, not code.** `R-inventory` fired six times in eight phases — the
+sixth inside the reconcile ledger written to carry the other five forward, found
+by `slice conformance` rather than by a reader. Carried out of the slice by
+`mem.pattern.verification.re-derive-every-inventory-at-use` and
+`mem.pattern.verification.guard-blind-to-its-own-residue`.
 
 ## Affected surface
 
