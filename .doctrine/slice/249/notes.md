@@ -6,8 +6,15 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-09 · stage `started`, run `dr-019fd6b6` rev 89 `locked` · f993df8e4
-· `PHASE-01` `PHASE-02` `PHASE-08` `PHASE-03` `PHASE-04` `PHASE-05` `PHASE-06` completed, `PHASE-07` next
+fresh-as-of: 2026-08-09 · stage `audit`, run `dr-019fd6b6` rev 89 `locked` · 05e0de495
+· all 8 phases completed · `RV-351` audit done (16 findings, 0 blockers)
+
+**The reconcile ledger below is superseded by `RV-351`'s `## Reconciliation
+Brief`.** Read the brief, not this section, when reconciling — the audit found the
+ledger silent on `slice conformance`'s **undelivered** cell (`F-2`) and
+understating its **undeclared** cell by four times (`F-3`, which *supersedes*
+rather than sits beside the "one file to three" note). The ledger's *count* of
+fourteen owed items was independently re-derived and holds; its content did not.
 
 ### Produced
 
