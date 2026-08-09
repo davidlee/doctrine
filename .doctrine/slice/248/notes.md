@@ -893,6 +893,20 @@ is the strongest evidence this slice has that the battery earns its cost.
     sixth consecutive phase.** Recorded once more rather than argued: at this
     point the table's *shape* is the defect, not any individual row. Sheet
     `F-1`.
+68. **A destructive test instrument must be floored before it is aimed, not
+    after.** `EX-12`'s session sweep refused only the suite's own session — but
+    the harness is not in it. In this jail `bwrap` is pid 1 in session 0 and the
+    agent process is pid 2, also session 0, while the suite runs in a session of
+    its own; session 0 was foreign to the guard and killable, and killing it
+    takes the sandbox and the agent down with no error and no shutdown path.
+    The operator lost their session twice. The mechanism, topology and symptom
+    match exactly; the recording path was never caught in the act, and the claim
+    is bounded to that. Floored at `3860a948c`. **The process defect is the
+    sequencing:** the floor was scheduled as `T12` so as not to change code
+    under test mid-battery — defensible in itself, and it put the safety guard
+    *behind* the twenty-one rows that exercise the thing it makes safe. The
+    battery passed; the teardown happened during `T12`, before the guard inside
+    it was committed. Sheet `F-36`.
 
 ## Open
 

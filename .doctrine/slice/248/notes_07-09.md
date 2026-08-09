@@ -1245,3 +1245,32 @@ The three clauses the sheet singles out, each with its mechanical backing:
 inspection: eleven cases, each diffing argv and spawn options against the
 confining baseline and asserting the difference is exactly its own. `M2`…`M10`
 all bite on it.
+
+### `F-36` — the session sweep's floor, and why it was written too late
+
+The `EX-12` sweep kills by session and refused exactly one: the suite's own.
+The harness is not in the suite's session. Measured in this jail — `bwrap` is
+**pid 1 in session 0**, the agent process is **pid 2, also session 0**, and the
+suite runs in a session of its own. Session 0 was therefore foreign to the
+guard and killable, and killing it takes the sandbox and the agent with it: no
+error, no shutdown, the operator back at their shell. That happened twice; the
+second time the jail's pid 1 was sixteen seconds old, so the whole sandbox had
+been rebuilt rather than just the agent restarted.
+
+The causal claim is deliberately bounded: no `dmesg` in the jail, OOM presents
+identically, and the first death's draft has been built over. Mechanism,
+topology and symptom match; the recording path was never caught in the act.
+
+Floored at both ends in `3860a948c` — a `LOWEST_SIGNALLABLE = 2` refused at
+record time, at sweep time, and per-pid so pid 1 is never signalled whatever
+session it reports; `own_session: None` fails closed; a discriminating test
+each. 201 green in 2.5s afterwards, against a ~14 minute hang before.
+
+**The transferable part is the sequencing.** The floor was scheduled as `T12`
+work to avoid changing code under test while the 21-row battery ran — a
+defensible reason that produced an indefensible ordering. The battery completed;
+the teardown then happened *during* `T12`, before the guard inside it was
+committed. An instrument whose failure mode is killing processes it did not
+start needs its floor in its first commit, ahead of every row that exercises it.
+The rule the next phase should carry: **a destructive test instrument is
+floored before it is aimed, never after.**
