@@ -1642,3 +1642,33 @@ tests that touch inheritability. A guard nobody outside the module can take is a
 guard everyone outside the module will skip. Memory updated with both directions.
 
 Gate exit 0, three consecutive runs, 217 tests.
+
+### `T7` — row 5, both legs, and `S3` measured rather than assumed
+
+**No `S3`.** Under `--unshare-all` both legs are refused; under the permitted
+posture both connect. The verdict is `Proven`, which is only reachable when the
+two legs *agree* — the payload prints its hold token when both were refused, its
+failure token when both connected, and **neither** when they disagree. So `S3`
+would have arrived as `Indeterminate` and named itself, rather than being
+averaged into a pass. Same mechanism (the network namespace) takes both legs, as
+the design reasoned; the difference is that it is now executed.
+
+**The abstract name travels the way the port does.** Per-run, so it cannot be a
+constant, so it goes into the project repository before the base commit and the
+payload reads it at `/capsule/repo/listener-abstract`. It is derived from the run
+root's path, which already carries pid and nonce — `two_fixtures_bind_distinct_abstract_names`
+pins that, because every executed test in this suite builds its own fixture and a
+fixed name would `EADDRINUSE` on the second.
+
+**Both legs are dialled with `socat`, and the TCP leg stopped using `/dev/tcp`.**
+`/dev/tcp` is a bash extension; `SHELL` is contracted only to be POSIX. On a
+`dash` host the redirect fails, the leg reports a refusal it never observed, and
+*both* arms hold — which reads `Unproven` and looks exactly like a delta that did
+not fire. `socat` is checked for at runtime with `command -v`; absent, the
+payload prints neither token, which is an honest indeterminate.
+
+`row_five_dials_both_the_tcp_and_the_abstract_listener` is pure and guards what
+the verdict cannot see: a row 5 that *lost* its abstract leg would still read
+`Proven`, since one refusal out of one is still "all of them". `VA-2`'s
+obligation is that both legs execute, so the count is asserted where it cannot
+silently drop.

@@ -54,8 +54,9 @@ use std::fs::File;
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::linux::net::SocketAddrExt as _;
 use std::os::unix::fs::PermissionsExt as _;
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{SocketAddr, UnixListener, UnixStream};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -787,6 +788,26 @@ const LOOPBACK_ANY_PORT: &str = "127.0.0.1:0";
 /// **bare** export with no working tree to read a file out of.
 const LISTENER_PORT_LEAF: &str = "listener-port";
 
+/// Row 5's *second* leg (`VA-2`): a trusted-side **abstract** unix socket, whose
+/// name reaches the payload the same way the port does.
+///
+/// An abstract name lives in no filesystem, so a backend that denied the network
+/// by mount policy would leave it reachable; it is namespace-scoped, so a
+/// backend that denies by *network namespace* takes both legs at once. That is
+/// the whole point of executing the leg rather than reasoning it — the two
+/// mechanisms are indistinguishable from the TCP leg alone.
+const LISTENER_ABSTRACT_LEAF: &str = "listener-abstract";
+
+/// Prefixed so an abstract name is attributable when one is seen in `ss` output,
+/// and suffixed with the run root's leaf, which already carries pid and nonce.
+const ABSTRACT_LISTENER_PREFIX: &str = "doctrine-conformance-";
+
+/// The one program the second leg needs, and the reason it is a *runtime* check
+/// rather than an assumption: an abstract-socket client is not in coreutils.
+/// Absent, the payload prints neither token — an honest indeterminate, never a
+/// refusal it did not observe.
+const SOCAT: &str = "socat";
+
 /// Where the host's mount table is read from for the second-filesystem
 /// selection. Parsed, never guessed — hardcoding `/tmp` is what `M18` exists to
 /// catch (`T2` step 8).
@@ -851,6 +872,9 @@ pub(crate) struct Fixture {
     decoy_descriptor: PathBuf,
     /// Trusted-side, row 5's target.
     listener: TcpListener,
+    /// Trusted-side, row 5's **second** target ([`LISTENER_ABSTRACT_LEAF`]).
+    /// Held only to keep the abstract name bound for the fixture's lifetime.
+    abstract_listener: UnixListener,
     /// The harness's **own** session, read at build time.
     ///
     /// `EX-12` asks the fixture to record the capsule's sid before the arm runs
@@ -922,6 +946,19 @@ impl Fixture {
             .port();
         write_file(&project_root.join(LISTENER_PORT_LEAF), &format!("{port}\n"))?;
 
+        // The same trick for the same reason, one channel over: the abstract
+        // name is per-run and a payload is a constant, so it travels through the
+        // clone rather than the argv.
+        let abstract_name = format!(
+            "{ABSTRACT_LISTENER_PREFIX}{}",
+            root.path().display().to_string().replace('/', "-")
+        );
+        let abstract_listener = bind_abstract(&abstract_name)?;
+        write_file(
+            &project_root.join(LISTENER_ABSTRACT_LEAF),
+            &format!("{abstract_name}\n"),
+        )?;
+
         let base = initialise_project(
             &project_root,
             &capsule_config_document(&capsule_root, &readable_roots),
@@ -939,6 +976,7 @@ impl Fixture {
                 Vec::new(),
             ),
             listener,
+            abstract_listener,
             own_session: own_session(),
             observed_sessions: RefCell::new(Vec::new()),
             root,
@@ -1038,6 +1076,9 @@ impl Fixture {
     }
     pub(crate) const fn listener(&self) -> &TcpListener {
         &self.listener
+    }
+    pub(crate) const fn abstract_listener(&self) -> &UnixListener {
+        &self.abstract_listener
     }
 
     pub(crate) const fn own_session(&self) -> Option<SessionId> {
@@ -1353,6 +1394,14 @@ fn initialise_project(project_root: &Path, document: &str) -> Result<AcceptedBas
 /// the project: a commit in a repository with no `user.email` is where
 /// `mem.pattern.sandbox.git-ident-unset-dns-stall` bites, and the decoy
 /// repository is a second repository.
+/// A listener on an **abstract** unix address — no filesystem entry, and scoped
+/// to the network namespace, which is the property row 5's second leg reads.
+fn bind_abstract(name: &str) -> Result<UnixListener, FixtureFault> {
+    let address = SocketAddr::from_abstract_name(name)
+        .map_err(|error| fixture_io(Path::new(name), &error))?;
+    UnixListener::bind_addr(&address).map_err(|error| fixture_io(Path::new(name), &error))
+}
+
 fn commit_everything(repository: &Path, message: &str) -> Result<(), FixtureFault> {
     git(repository, &["config", "user.name", FIXTURE_IDENTITY_NAME])?;
     git(
@@ -2849,17 +2898,37 @@ fn reads_no_undeclared_path_and_sees_only_the_profiles_root() -> Probe {
     }
 }
 
-/// Row 5's first leg: the trusted side's loopback listener, whose port the
-/// fixture committed into the repository ([`LISTENER_PORT_LEAF`]).
-fn connects_to_the_trusted_side_listener() -> Probe {
+/// Row 5, **both** legs (`VA-2`): the trusted side's loopback TCP listener and
+/// its abstract unix listener, whose port and name the fixture committed into
+/// the repository ([`LISTENER_PORT_LEAF`], [`LISTENER_ABSTRACT_LEAF`]).
+///
+/// Both are dialled with [`SOCAT`] rather than one with the shell's `/dev/tcp`:
+/// that is a bash extension and [`SHELL`] is only contracted to be POSIX, so on
+/// a `dash` host the redirect fails and the leg reports a refusal it never
+/// observed — a false hold under *both* arms, which reads `Unproven` and looks
+/// like a delta that did not fire.
+///
+/// Counted, not short-circuited. Both refused is the hold, both connected is the
+/// failure, and **one of each prints neither token**: that asymmetry is `S3` —
+/// the legs would then be denied by different mechanisms, which is a further row
+/// rather than a second assertion here — so it must surface as an indeterminate
+/// and not be averaged away.
+fn connects_to_the_trusted_side_listeners() -> Probe {
     Probe {
         argv: shell_argv(&format!(
             "echo {LIVENESS_MARKER}; \
-             port=$(cat '{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}/{LISTENER_PORT_LEAF}' \
-             2>/dev/null); \
-             [ -n \"$port\" ] || exit 0; \
-             if (exec 3<>/dev/tcp/{LOOPBACK_ADDRESS}/\"$port\") 2>/dev/null; \
-             then echo {REACHED}; else echo {DENIED}; fi"
+             here='{INNER_CAPSULE}/{CAPSULE_REPOSITORY_LEAF}'; \
+             port=$(cat \"$here/{LISTENER_PORT_LEAF}\" 2>/dev/null); \
+             name=$(cat \"$here/{LISTENER_ABSTRACT_LEAF}\" 2>/dev/null); \
+             [ -n \"$port\" ] && [ -n \"$name\" ] || exit 0; \
+             command -v {SOCAT} > /dev/null 2>&1 || exit 0; \
+             reached=0; \
+             if {SOCAT} -u /dev/null TCP:{LOOPBACK_ADDRESS}:\"$port\" \
+             > /dev/null 2>&1; then reached=$((reached+1)); fi; \
+             if {SOCAT} -u /dev/null ABSTRACT-CONNECT:\"$name\" \
+             > /dev/null 2>&1; then reached=$((reached+1)); fi; \
+             if [ \"$reached\" -eq 0 ]; then echo {DENIED}; \
+             elif [ \"$reached\" -eq 2 ]; then echo {REACHED}; fi"
         )),
         observed: Observed::Token {
             held: DENIED,
@@ -3020,7 +3089,7 @@ fn table_a() -> Vec<Row> {
         },
         Row {
             id: RowId::Property(Property::ExplicitNetworkPosture),
-            shape: ArmShape::Single(connects_to_the_trusted_side_listener()),
+            shape: ArmShape::Single(connects_to_the_trusted_side_listeners()),
             delta: Delta::NetworkPermitted,
         },
         Row {
@@ -3892,9 +3961,9 @@ mod tests {
     };
     use super::{
         CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, ESCAPE_SECONDS, INNER_AGENT,
-        LINGER_SECONDS, Property, SENTINEL_LEAF, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE,
-        WIDENED_REPOSITORY, WIDENED_UNDECLARED, run_control_arm, run_probe_arm, tables,
-        widens_the_undeclared_decoy,
+        LINGER_SECONDS, LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property,
+        SENTINEL_LEAF, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE, WIDENED_REPOSITORY,
+        WIDENED_UNDECLARED, run_control_arm, run_probe_arm, tables, widens_the_undeclared_decoy,
     };
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
@@ -5320,6 +5389,10 @@ mod tests {
         assert!(
             !is_inheritable(fixture.listener()),
             "row 5's trusted-side listener leaks into the capsule"
+        );
+        assert!(
+            !is_inheritable(fixture.abstract_listener()),
+            "row 5's abstract listener leaks into the capsule"
         );
     }
 
@@ -7521,5 +7594,63 @@ mod tests {
             shipped_verdict(&RowId::Property(Property::BoundedFilesystemVisibility)),
             RowVerdict::Proven
         );
+    }
+
+    // ── T7: row 5, both legs (`VT-1`, `VA-2`) ─────────────────────────────
+
+    /// `VT-1`, row 5.
+    ///
+    /// `VA-2` is discharged *by this verdict*, not beside it. The row prints its
+    /// hold token only when **both** legs were refused and its failure token only
+    /// when both connected; one of each prints neither, so `Proven` here is the
+    /// executed statement that the abstract leg was measured and agreed with the
+    /// TCP leg. `S3` would arrive as `Indeterminate`, which this assertion names.
+    #[test]
+    fn explicit_network_posture_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::ExplicitNetworkPosture)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// The abstract leg is present *and* distinct from the TCP one.
+    ///
+    /// Pure, and it guards the failure the verdict cannot see: a row 5 that lost
+    /// its second leg would still read `Proven`, because one refused leg out of
+    /// one is still "all of them". `VA-2`'s obligation is that both are
+    /// executed, so the count is asserted where it cannot silently drop.
+    #[test]
+    fn row_five_dials_both_the_tcp_and_the_abstract_listener() {
+        let row = shipped_row(&RowId::Property(Property::ExplicitNetworkPosture));
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 5 is a one-capsule row");
+        };
+        let script = probe.argv.as_slice().join(" ");
+        assert!(
+            script.contains(&format!("TCP:{LOOPBACK_ADDRESS}:")),
+            "row 5 lost its TCP leg"
+        );
+        assert!(
+            script.contains("ABSTRACT-CONNECT:"),
+            "row 5 lost its abstract leg (`VA-2`)"
+        );
+        assert!(
+            script.contains(LISTENER_PORT_LEAF) && script.contains(LISTENER_ABSTRACT_LEAF),
+            "a leg's target no longer travels through the clone"
+        );
+    }
+
+    /// The abstract name is per-run. Two fixtures alive at once is the ordinary
+    /// case in this suite — every executed test builds its own — and a fixed name
+    /// would make the second `bind_addr` fail with `EADDRINUSE`.
+    #[test]
+    fn two_fixtures_bind_distinct_abstract_names() {
+        let first = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let second = Fixture::new(&SystemHost).expect("a second fixture binds too");
+        let name_of = |fixture: &Fixture| {
+            std::fs::read_to_string(fixture.project_root().join(LISTENER_ABSTRACT_LEAF))
+                .expect("the abstract name is committed into the project")
+        };
+        assert_ne!(name_of(&first), name_of(&second));
     }
 }
