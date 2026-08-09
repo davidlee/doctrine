@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine-control` — the capsule control binary (SL-248, `DEC-153`).
 //!
-//! PHASE-06 lands the first verb, `provision` (`EX-17`). `backend verify`
-//! follows in PHASE-10. There is deliberately **no** `transaction show`: nothing
-//! operates a transaction yet, and this phase's tests inspect the returned value
-//! directly rather than a rendering of it.
+//! PHASE-06 lands the first verb, `provision` (`EX-17`); PHASE-10 `T10` lands
+//! the second, `backend verify`. There is deliberately **no** `transaction
+//! show`: nothing operates a transaction yet, and PHASE-06's tests inspect the
+//! returned value directly rather than a rendering of it.
 //!
 //! **Bin-only, permanently** (`sec-6`). A `tests/` file cannot link a bin-only
 //! package (`E0433`), and adding a lib target to rescue one would force the

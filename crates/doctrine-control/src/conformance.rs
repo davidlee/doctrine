@@ -3903,9 +3903,18 @@ fn observes_the_subject(subject: HostPid) -> Argv {
 }
 
 /// Table A — `SPEC-030` § *Platform backend contract*'s rows, in the design
-/// document's order, and the ordering of [`Property`] is this list's.
+/// document's order.
 ///
-/// Eleven rows at this phase; rows 12–14 arrive later in PHASE-10.
+/// **Fourteen rows, which is the whole of table A**, complete since PHASE-10
+/// `T8`. The count was last written here as *eleven … rows 12–14 arrive later*
+/// and stayed that way through the three tasks that landed them, which is the
+/// hazard `EX-15` names: a count in a comment is a projection, it is maintained
+/// by hand, and it is wrong by default when it disagrees with the list beneath
+/// it.
+///
+/// That this list's order is [`Property`]'s declaration order, and that both are
+/// the design document's, is **reader discipline and is not checked anywhere** —
+/// see [`Property`]'s own doc for what the compiler does check.
 fn table_a() -> Vec<Row> {
     vec![
         storage_row(
@@ -4960,8 +4969,9 @@ fn admission(rows: &[(RowId, RowVerdict)]) -> Admission {
 ///
 /// A pure helper over a slice of tables so the covering property can be asserted
 /// over the code's own tables *and* over a hand-built pair that deliberately
-/// shares one — the second is what gives the assertion any force while the
-/// code's tables are empty.
+/// shares one. The second was what gave the assertion any force while the code's
+/// tables were empty; both are populated from PHASE-10 `T8`, and the hand-built
+/// pair is kept because it is the only arm that can be seen to *fail*.
 fn row_ids_in_more_than_one_table(tables: &[&[Row]]) -> Vec<RowId> {
     let mut shared: Vec<RowId> = Vec::new();
     for table in tables {
@@ -6274,15 +6284,23 @@ mod tests {
     /// keys the verdict.
     #[test]
     fn every_row_id_is_covered_by_exactly_one_table() {
-        // Vacuous at PHASE-07 — `table_a` and `table_b` are both empty until
-        // PHASE-09 and PHASE-10 populate them. Asserted anyway so it starts
-        // biting the moment a row lands.
+        // No longer vacuous: both tables are populated from PHASE-10 `T8`. The
+        // comment here said they were empty "until PHASE-09 and PHASE-10
+        // populate them" for as long as it took both phases to do it.
         let a = super::table_a();
         let b = super::table_b();
         assert!(row_ids_in_more_than_one_table(&[&a, &b]).is_empty());
 
-        // The assertion that has force today: a pair deliberately sharing one
-        // row id.
+        // The *covering* half, which the helper alone cannot give and the name
+        // claims: `tables()` is exactly `table_a()` then `table_b()`, so a row
+        // dropped or invented between the two tables and the shipped list is
+        // caught here rather than by whichever count is asserted next.
+        let shipped: Vec<RowId> = super::tables().into_iter().map(|row| row.id).collect();
+        let joined: Vec<RowId> = a.iter().chain(b.iter()).map(|row| row.id.clone()).collect();
+        assert_eq!(shipped, joined);
+
+        // The arm that can be seen to fail: a pair deliberately sharing one row
+        // id.
         let mut first = four_rows();
         let shared = one_more_row();
         first.push(shared.clone());
@@ -9605,7 +9623,11 @@ mod tests {
             );
         }
     }
-    // ── `T12` — `VA-4`: the per-row walk ───────────────────────────────────
+    // ── PHASE-09 `T12` — `VA-4`: the per-row walk ──────────────────────────
+    //
+    // Task ids are per-phase, so a bare `T12` here reads as PHASE-10's, which is
+    // `VA-3`'s wall-clock measurement and has nothing to do with this walk. The
+    // phase is named for that reason.
 
     /// The one row whose control cannot yet be seen to fail. `T9` is blocked on
     /// `S8`: row 7's two arms produce a byte-identical `Observation`, so the
@@ -9709,6 +9731,201 @@ mod tests {
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
         assert_eq!(rows.len(), 19);
+    }
+
+    // ── PHASE-10 `T11` — `VA-4` / `EX-14`: the honesty pass, executed ───────
+    //
+    // `EX-14` is a *ruling*: `sec-9` residual 3 gets no mitigation, because
+    // every mitigation available is the green skip `DEC-156` forbids. A ruling
+    // is exactly the kind of thing a later phase breaks silently and in good
+    // faith — the reflex it forbids (guard the suite when an unusual host reds
+    // it) is the first one a maintainer reaches for under pressure. So the two
+    // halves that can be executed are executed rather than asserted in prose.
+
+    /// The reason prefix that makes an `#[ignore]` lawful.
+    ///
+    /// `EX-14` forbids a skip standing in for a *claim*. It does not forbid an
+    /// ignored **instrument**:
+    /// [`every_shipped_rows_control_measured_in_a_process_of_its_own`] and its
+    /// siblings are re-executed children that assert nothing on their own, and
+    /// they are ignored precisely so the default run cannot mistake their exit
+    /// status for a claim. The reason string is the whole discriminator between
+    /// the two, which is why one is required rather than merely conventional.
+    const INSTRUMENT_IGNORE: &str = "#[ignore = \"instrument:";
+
+    /// The bare attribute, matched against a **trimmed line start** so that a
+    /// mention inside a doc comment, a `//` comment or a string literal — this
+    /// module contains all three — is not counted as a site.
+    const IGNORE_ATTRIBUTE: &str = "#[ignore";
+
+    /// A **floor** on what the source walk must find. It is not an inventory and
+    /// it enforces no count: `>=` is the whole comparison, and adding an
+    /// instrument need not touch this number.
+    ///
+    /// It exists because an audit that reads nothing passes every assertion it
+    /// then makes about what it read. That is `F-47`'s defect — a probe that
+    /// could not tell *held nothing* from *read nothing*, where misspelling the
+    /// surface made all four of its tests pass — and a walk resolving the wrong
+    /// directory would land in exactly the same place.
+    const INSTRUMENTS_SEEN_AT_T11: usize = 9;
+
+    /// Every `.rs` file of this crate, as `(display path, text)`.
+    ///
+    /// Walked from disk at run time rather than `include_str!`ed, because **the
+    /// set of files is the thing being quantified over**: an `include_str!` list
+    /// is a hand-maintained enumeration, and a unit added without an entry would
+    /// be audited by nobody while the walk stayed green.
+    ///
+    /// **The manifest directory is read at run time, never `env!`**. The
+    /// compile-time macro is banned repository-wide (`CHR-014` / `SL-162`,
+    /// guarded by `tests/e2e_no_baked_paths.rs`): a binary compiled in one
+    /// worktree bakes that worktree's path and is then reused by cargo's
+    /// fingerprint from another, so the read lands somewhere dead. The runtime
+    /// value cargo sets names the invoking tree. `HostFacts::env_var` is this
+    /// crate's only sanctioned reader — `std::env::var` is `disallowed_methods`.
+    ///
+    /// Absent the variable the walk returns nothing and the caller's positive
+    /// control reds, which is the intended failure: an audit that cannot find
+    /// the crate must say so rather than report a clean crate.
+    fn crate_sources() -> Vec<(String, String)> {
+        let Some(manifest) = SystemHost.env_var("CARGO_MANIFEST_DIR") else {
+            return Vec::new();
+        };
+        let mut pending = vec![PathBuf::from(manifest).join("src")];
+        let mut sources = Vec::new();
+        while let Some(dir) = pending.pop() {
+            let entries = std::fs::read_dir(&dir).expect("the crate's own source tree is readable");
+            for entry in entries {
+                let path = entry.expect("a readable directory entry").path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.extension().is_some_and(|extension| extension == "rs") {
+                    let text = std::fs::read_to_string(&path).expect("a readable source file");
+                    sources.push((path.display().to_string(), text));
+                }
+            }
+        }
+        sources
+    }
+
+    /// `VA-4`, first half — no `#[ignore]` in this crate stands in for a claim.
+    #[test]
+    fn no_ignored_test_in_this_crate_stands_in_for_a_claim() {
+        let sources = crate_sources();
+
+        // The positive control, and the reason this test is not `F-47` again:
+        // the walk must be seen to have reached this very file before anything
+        // it reports about the crate means anything.
+        assert!(
+            sources
+                .iter()
+                .any(|(path, _)| path.ends_with("conformance.rs")),
+            "the walk did not reach this file, so it read the wrong tree: {:?}",
+            sources.iter().map(|(path, _)| path).collect::<Vec<_>>()
+        );
+
+        let sites: Vec<String> = sources
+            .iter()
+            .flat_map(|(path, text)| {
+                text.lines().enumerate().filter_map(move |(offset, line)| {
+                    let line = line.trim_start();
+                    line.starts_with(IGNORE_ATTRIBUTE)
+                        .then(|| format!("{path}:{}: {line}", offset + 1))
+                })
+            })
+            .collect();
+
+        assert!(
+            sites.len() >= INSTRUMENTS_SEEN_AT_T11,
+            "the walk found {} ignore sites where at least {INSTRUMENTS_SEEN_AT_T11} exist, \
+             so it read less than the crate",
+            sites.len()
+        );
+
+        for site in &sites {
+            assert!(
+                site.contains(INSTRUMENT_IGNORE),
+                "{site} skips a claim rather than naming an instrument"
+            );
+        }
+    }
+
+    /// `VA-4`, second half — every **shipped** row can refuse admission on its
+    /// own, so no row is carried by its neighbours.
+    ///
+    /// [`admitted_requires_every_row_proven`] establishes the algebra over a
+    /// hand-built four. What it cannot establish is that each of the nineteen
+    /// rows the suite actually ships reaches that algebra: a row whose verdict
+    /// never entered the list would be invisible to it and to the walk at
+    /// [`every_shipped_rows_control_is_seen_to_fail`], which reads control arms
+    /// rather than the verdict.
+    #[test]
+    fn every_shipped_row_can_refuse_admission_on_its_own() {
+        let ids: Vec<RowId> = tables().into_iter().map(|row| row.id).collect();
+        let all_proven: Vec<(RowId, RowVerdict)> = ids
+            .iter()
+            .cloned()
+            .map(|id| (id, RowVerdict::Proven))
+            .collect();
+        assert_eq!(admission(&all_proven), Admission::Admitted);
+
+        for (position, id) in ids.iter().enumerate() {
+            for blocking in [
+                RowVerdict::Violated,
+                RowVerdict::Unproven,
+                RowVerdict::Indeterminate {
+                    arm: Which::Probe,
+                    detail: Indeterminacy::NoObservation,
+                },
+            ] {
+                let one_bad: Vec<(RowId, RowVerdict)> = all_proven
+                    .iter()
+                    .enumerate()
+                    .map(|(offset, (row_id, proven))| {
+                        let verdict = if offset == position {
+                            blocking.clone()
+                        } else {
+                            proven.clone()
+                        };
+                        (row_id.clone(), verdict)
+                    })
+                    .collect();
+                assert_eq!(
+                    admission(&one_bad),
+                    Admission::NotAdmitted {
+                        reason: NotAdmitted::Rows
+                    },
+                    "{id:?} did not refuse on {blocking:?}"
+                );
+            }
+        }
+    }
+
+    /// The green path `admission` has that is **not** the one invariant 1 names,
+    /// recorded rather than repaired.
+    ///
+    /// [`admission`] is `all(Proven)`, and `all` over nothing is true — so a
+    /// caller handing it an empty row list is told the backend is admitted on no
+    /// evidence whatever. This is `F-47`'s family a third time: *held nothing*
+    /// and *read nothing* returning the same answer.
+    ///
+    /// What holds it up is structural and is somewhere else, which is the whole
+    /// reason to write it down here. `admission`'s only production caller is
+    /// [`verify_over`], which is handed [`tables`], and
+    /// [`the_shipped_tables_are_nineteen_distinctly_identified_rows`] is what
+    /// asserts that list is neither empty nor silently shortened.
+    ///
+    /// Not repaired, deliberately. `T11` is an audit, and `admission`'s body is
+    /// `T13`'s blocked territory (`S1` forbids filtering a row out of it) — a
+    /// drive-by hardening would be the phase editing the thing it was auditing,
+    /// on a function a blocked task is waiting to change.
+    #[test]
+    fn an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it() {
+        assert_eq!(admission(&[]), Admission::Admitted);
+        assert!(
+            !tables().is_empty(),
+            "the shipped tables are what stop the vacuous path being reachable"
+        );
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
