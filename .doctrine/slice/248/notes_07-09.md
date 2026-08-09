@@ -1463,3 +1463,27 @@ Three things worth carrying forward:
   was labelled 512 KiB and wrote 1 MiB. Harmless here because the difference is
   what is measured, but it is the sort of unit error that makes a cap look
   ineffective.
+
+### Where PHASE-09 stands, and the shape of what is left
+
+`T1`, `T2` and `T3` are done, harvested and committed. `T4` onward is not
+started; nothing of it is on disk.
+
+The thing the next worker should read first is the sheet's `F-7`. `T4` is not
+separable from `T5`–`T11`: `dead_code` is denied, an enum variant that is never
+*constructed* trips it, and `table_a()`'s rows are the only construction site
+for a `Property`. So the eight variants, the eight rows and the retirement of
+`RowId`'s `#[expect(dead_code)]` are one compile. `T4` + `T5` together is the
+natural first landing — the spine plus the `Sequential` family, five of the
+thirteen rows — after which `T6`…`T11` each append their own rows and their own
+row-level test.
+
+Two things checked while working that out, so they are not re-derived:
+
+- a `Row` is only `{id, shape, delta}`; every closure (capsule, execution,
+  `live`, `noticed`) belongs to `run_row`, so the table bodies need each row's
+  payload argv, its expected observation and its delta, and nothing else;
+- populating the tables does not make the existing stub-backend `verify` tests
+  run real capsules — those tests inject `FixtureHost`, which has no environment
+  by construction, so `Fixture::new` refuses and every row reports
+  `Indeterminate`, leaving their three assertions (backend, host, date) intact.

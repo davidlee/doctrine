@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe47f-6974-73c1-a604-bfaed7c96198"
+recorded_at = "2026-08-09T03:09:43.156341075Z"
+kind = "friction"
+summary = "phase-09 T4 (/execute): a task boundary the lint deny-list cannot honour"
+detail = "The PHASE-09 sheet schedules T4 as 'land Property's eight variants and the two table bodies', with T5-T11 wiring real rows in afterwards. Under this crate's denied dead_code that sequence does not exist: an enum variant that is never constructed is an error, and the only construction site for a Property is a row in table_a(). So the eight variants, the eight rows and the retirement of RowId's #[expect(dead_code)] are one compile, and T4's box cannot go green independently of T5-T11. The sheet cites mem.pattern.lint.staged-module-unused-deny-collapses-tdd for the intra-task version of this; the cost here is that a worker plans, reads and starts a task that is not separable, and discovers it only at the first cargo invocation. Planning cost: a phase-plan that names a lint-collapsed group as ONE task with one commit would have been cheaper to execute than four tasks that must land together."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
