@@ -333,6 +333,54 @@ const CAPABILITY_HELD: &str = "CAPABILITY-HELD-";
 /// [`the_capability_sets_are_empty`] for why the other two cannot carry a row.
 const CAPABILITY_FIELDS: [&str; 2] = ["CapBnd", "CapInh"];
 
+/// The `/proc/self/status` keys carrying the two credential mechanisms that are
+/// **observed and not rowed** (`EX-12`, `sec-9` `R8`), trailing colon included
+/// as [`STATUS_UID_KEY`]'s is.
+///
+/// Named here, beside the keys rows 13 and 14 read, because the claim that no
+/// row reads *these* is asserted against this list and would be worth nothing
+/// spelled twice.
+const STATUS_GROUPS_KEY: &str = "Groups:";
+const STATUS_NO_NEW_PRIVS_KEY: &str = "NoNewPrivs:";
+
+/// The two unrowed credential surfaces, named where the payload, the reporter
+/// and the test can all cite the same list.
+const UNROWED_GROUPS_FIELD: &str = "groups";
+const UNROWED_NO_NEW_PRIVS_FIELD: &str = "no_new_privs";
+const UNROWED_FIELDS: [&str; 2] = [UNROWED_GROUPS_FIELD, UNROWED_NO_NEW_PRIVS_FIELD];
+
+/// The observation payload's diagnostic lines, one prefix per **side of the
+/// read** rather than per side of a comparison: there is no comparison here and
+/// no verdict to reach, only a value and whether it was obtained.
+///
+/// The second prefix is this payload's whole defence against the trap
+/// [`the_capability_sets_are_empty`] describes, in the shape an *observation*
+/// takes it. A row routes an unreadable surface onto its failing side; an
+/// observation has no failing side, so it must instead be **unable to report an
+/// unread surface as a value**. Both prefixes are `FIELD=VALUE`, so the two
+/// lists partition [`UNROWED_FIELDS`] and a reader sees which was which.
+const CREDENTIAL_READ: &str = "CREDENTIAL-READ-";
+const CREDENTIAL_UNREAD: &str = "CREDENTIAL-UNREAD-";
+
+/// The gid a user namespace shows for a group it did not map — the kernel's
+/// `overflowgid`.
+///
+/// This is `EVD-014`'s finding in one constant: an unprivileged user namespace
+/// may not `setgroups`, so bubblewrap **unmaps** the host's supplementary list
+/// rather than dropping it, and every arm reads the same unmapped list. It is
+/// what makes the mechanism unrowable — there is no delta that changes it.
+const UNMAPPED_GROUP: &str = "65534";
+
+/// What `NoNewPrivs` reads with the bit set, and without it.
+///
+/// Bubblewrap sets it unconditionally, so the capsule reads [`NO_NEW_PRIVS_SET`]
+/// in every arm including under `--cap-add ALL` (`EVD-014`) — again with no
+/// delta that changes it. [`NO_NEW_PRIVS_UNSET`] is what a *trusted side* must
+/// read for the capsule's reading to be attributable to the backend at all; see
+/// [`no_new_privs_provenance`].
+const NO_NEW_PRIVS_SET: &str = "1";
+const NO_NEW_PRIVS_UNSET: &str = "0";
+
 /// [`WORKING_DIRECTORY_VAR`] as the payload compares it: a whole `NAME=VALUE`
 /// entry, because the name alone is the hole.
 fn bubblewraps_working_directory() -> String {
@@ -2550,6 +2598,9 @@ pub(crate) struct AdmissionVerdict {
     pub(crate) rows: Vec<(RowId, RowVerdict)>,
     /// Table C. Reported, never admitted on.
     pub(crate) auxiliary: Vec<(Claim, AuxOutcome)>,
+    /// `sec-9` `R8`'s two unrowed credential mechanisms. Reported, and carrying
+    /// no verdict for anything to be admitted on — see [`Unrowed`].
+    pub(crate) observations: Vec<(Unrowed, Reading)>,
 }
 
 /// The outcome. There is exactly **one** green path (invariant 1).
@@ -2589,6 +2640,65 @@ pub(crate) enum AuxOutcome {
     Passed,
     Failed(String),
     Skipped(String),
+}
+
+/// An unrowed credential observation: a mechanism the suite **reads and
+/// displays and reaches no verdict about** (`EX-12`, `sec-9` `R8`).
+///
+/// Distinct from [`Claim`] because the difference is the whole point. A table C
+/// claim is reported and never *admitted on*, but it still has an outcome — it
+/// passed, failed, or was skipped. These two have no outcome at all, and there
+/// is nowhere in this type or in [`Reading`] to put one. A verdict cannot be
+/// attached to an observation by accident; attaching one is a type change, which
+/// is a diff a reader will see.
+///
+/// **Why no verdict, and not merely no admission.** A row needs a delta that
+/// falsifies its reading, and bubblewrap offers none for either of these: an
+/// unprivileged user namespace may not `setgroups`, so the supplementary list is
+/// unmapped identically in every arm; and `no_new_privs` is set unconditionally,
+/// reading set in every arm including under `--cap-add ALL` (`EVD-014`,
+/// measured). A condition no delta can change is not a test. Rowing one anyway
+/// would produce a row whose control cannot fire — the `B4` defect the round-6
+/// split exists to remove — so it would *lower* the suite's honesty while
+/// raising its row count.
+///
+/// **The exposure this leaves, named rather than mitigated.** `sec-7` cannot
+/// tell a backend that confines these from one that never had to. That is a fact
+/// about *this* backend and not about the contract: a second backend exposing a
+/// `no_new_privs` switch makes the row constructible immediately, and `ADR-020`
+/// already requires a macOS mechanism to demonstrate credential authority
+/// independently. The residual is expected to shrink, and `sec-9` `R8` is where
+/// it is carried meanwhile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Unrowed {
+    pub(crate) section: &'static str,
+    pub(crate) name: &'static str,
+}
+
+/// What an unrowed observation read. **Not an outcome.**
+///
+/// There is no passing variant and no failing one, because there is nothing here
+/// to pass or fail: the value is reported and the reader draws their own
+/// conclusion. What the type *does* carry is the two things a reader cannot
+/// reconstruct from a bare value.
+///
+/// [`Reading::Unread`] exists because this is an absence-shaped report and the
+/// empty string is what both "the surface said nothing" and "I never looked"
+/// produce. A row routes an unread surface to its failing side; an observation
+/// has no failing side, so the honest equivalent is that an unread surface
+/// cannot be rendered as a value at all
+/// (`mem.pattern.tests.absence-probes-must-convict-an-unread-surface`).
+///
+/// `caveat` is the other one: a value can be right while this run is unable to
+/// say the *backend* produced it. See [`no_new_privs_provenance`], which is that
+/// distinction made by measurement rather than by apology.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Reading {
+    Read {
+        value: String,
+        caveat: Option<String>,
+    },
+    Unread(String),
 }
 
 /// The host an admission verdict was recorded on.
@@ -3595,9 +3705,33 @@ const MAP_ENTRY_END: &str = "|";
 /// ## What each field is compared against
 ///
 /// - **uid and gid**: the *real* id, `/proc/self/status`'s first column. The
-///   saved-set ids are not read — a setuid regain is unprobed by `EX-11`'s
-///   deliberate choice, and reading them here would half-answer a row that
-///   belongs to another phase.
+///   saved-set ids are not read, for the reason in the next section.
+///
+/// ## The weakening: setuid regain is neither probed nor rowed (`EX-11`)
+///
+/// Recorded here, beside the row it weakens, rather than left for a later reader
+/// to notice as an omission — **a deliberate weakening that is not recorded is
+/// indistinguishable from an oversight**. Reading the saved-set ids above would
+/// half-answer this, which is worse than not answering it.
+///
+/// The obvious payload cannot be built by a suite that must not be privileged,
+/// and the bind is closed on both sides:
+///
+/// - a setuid-**root** file is the payload that would demonstrate the regain,
+///   and creating one requires root — which this suite must not have;
+/// - a setuid file the **test user owns** can be created, and confers the uid the
+///   payload already runs as. It demonstrates nothing, and a row resting on it
+///   would pass against a backend that prevented no regain whatever.
+///
+/// So this is not deferred work waiting for a later phase. It is a claim this
+/// harness cannot make, and the honest record is that it is unmade.
+///
+/// `no_new_privs` was substituted for it in an earlier draft — a plausible
+/// stand-in, since it is the bit that *disables* the regain. It is retained as an
+/// unrowed observation ([`Unrowed`], `EX-12`) and **withdrawn as a row**, because
+/// bubblewrap sets it unconditionally and no delta the backend offers can
+/// falsify it. Keeping it as a row would have left this file claiming a
+/// protection was tested when what was tested could not fail.
 /// - **the maps**: not the raw text, which carries an *outside* id belonging to
 ///   the trusted side and shifting with namespace nesting depth (measured
 ///   `1000 0 1` one level up and `1000 1000 1` two levels down, same capsule
@@ -3916,9 +4050,15 @@ fn table_b() -> Vec<Row> {
 
 /// Tables A and B, which [`admission`] is computed from.
 ///
-/// Sixteen rows at this phase — table A's first eleven and all five of table B
-/// — so [`Admission::Admitted`] now means what it will mean at PHASE-10: every
-/// one of them [`RowVerdict::Proven`]. It is no longer reachable vacuously.
+/// Nineteen rows — all fourteen of table A and all five of table B — so
+/// [`Admission::Admitted`] now means the whole of what it will ever mean: every
+/// one of them [`RowVerdict::Proven`]. It is not reachable vacuously.
+///
+/// **What is deliberately not here.** Two credential mechanisms are read and
+/// displayed and appear in no row, and one property is not probed at all. Both
+/// are recorded rather than merely absent — [`Unrowed`] for the first (`EX-12`,
+/// `sec-9` `R8`) and [`the_identity_is_exactly`] for the second (`EX-11`) —
+/// because an unrecorded weakening reads as an oversight.
 ///
 /// Built **eagerly**, before any fixture exists (see [`verify`]'s ordering), and
 /// that is what makes every payload here a constant: a row cannot be told a
@@ -3930,6 +4070,211 @@ fn tables() -> Vec<Row> {
     let mut rows = table_a();
     rows.extend(table_b());
     rows
+}
+
+// ---------------------------------------------------------------------------
+// The unrowed credential observations (`EX-11`, `EX-12`, `sec-9` `R8`)
+// ---------------------------------------------------------------------------
+//
+// Immediately below the tables on purpose. `VA-5` asks that these be written
+// down *where the rows are* rather than merely be absent, and the reason is
+// worth stating once, here, in the plainest terms available:
+//
+//     A deliberate weakening that is not recorded is indistinguishable from an
+//     oversight to the next reader.
+//
+// Two weakenings are recorded in this file. One is [`Unrowed`]'s: two credential
+// mechanisms are read and displayed and never rowed, because no delta this
+// backend offers can move them. The other is `EX-11`'s and is recorded beside
+// the row it weakens, in [`the_identity_is_exactly`]: **setuid regain is neither
+// probed nor rowed**, and the reason is that the obvious payload cannot be built
+// by a suite that must not be privileged. `no_new_privs` was substituted for it
+// in an earlier draft; it is retained here as an observation and withdrawn as a
+// row, which is a smaller claim than the draft made and is the honest one.
+
+/// The supplementary-group observation (`EX-12`).
+const UNMAPPED_GROUPS: Unrowed = Unrowed {
+    section: "sec-9",
+    name: "the capsule's supplementary groups are unmapped rather than dropped",
+};
+
+/// The `no_new_privs` observation (`EX-12`) — the one reading in this file whose
+/// provenance is conditional on the host; see [`no_new_privs_provenance`].
+const NO_NEW_PRIVS: Unrowed = Unrowed {
+    section: "sec-9",
+    name: "the capsule runs with `no_new_privs` set",
+};
+
+/// What the report says when the capsule's `no_new_privs` cannot be attributed
+/// to the backend, and when the question could not be asked at all.
+///
+/// Spelled as constants rather than built per call so the test asserting the
+/// caveat appears is asserting the *same sentence* the reader gets.
+const PROVENANCE_INHERITED: &str = "the trusted side already reads `no_new_privs` set, so this run cannot tell whether the \
+     backend set the bit or the capsule inherited it — the value is right and its provenance \
+     is not established here (`EVD-014` `A6`)";
+const PROVENANCE_UNREADABLE: &str = "the trusted side's own `no_new_privs` could not be read, so this run cannot attribute \
+     the capsule's reading to the backend either (`EVD-014` `A6`)";
+
+/// Why an observation has no value: the payload never named the surface.
+const SURFACE_NOT_NAMED: &str = "the payload reported no reading for this surface";
+
+/// The payload behind both observations: read two `/proc/self/status` fields and
+/// say, per field, what was read **or that it was not**.
+///
+/// Not a [`Probe`], and the difference is the whole design. A `Probe` carries an
+/// [`Observed`] — a rule for turning stdout into a verdict — and there is no
+/// verdict to reach here. This returns the script alone; nothing classifies it.
+///
+/// The `${rest:+ $rest}` is not cosmetic. `Groups:` is a *list*, so `read -r key
+/// value rest` splits it across two variables and a reader that took `$value`
+/// alone would report the first group as though it were the whole list — an
+/// under-read that looks exactly like a correct read. The expansion also keeps
+/// an empty list empty rather than turning it into a space, which is what lets
+/// the emptiness test below mean what it says.
+fn unrowed_credential_payload() -> String {
+    let [groups, no_new_privs] = UNROWED_FIELDS;
+    format!(
+        "groups=; nnp=; \
+         while read -r key value rest; do \
+         case \"$key\" in \
+         {STATUS_GROUPS_KEY}) groups=$value${{rest:+ $rest}} ;; \
+         {STATUS_NO_NEW_PRIVS_KEY}) nnp=$value ;; \
+         esac; done < {PROC_SELF_STATUS}; \
+         report() {{ if [ -n \"$2\" ]; \
+         then echo \"{CREDENTIAL_READ}$1=$2\"; \
+         else echo \"{CREDENTIAL_UNREAD}$1=\"; fi; }}; \
+         report {groups} \"$groups\"; \
+         report {no_new_privs} \"$nnp\""
+    )
+}
+
+/// `EVD-014` `A6`, as a pure function of what the **trusted side** reads.
+///
+/// The spike's own caveat: *"If the parent already reads 1, this host cannot
+/// answer it either — say so rather than reporting bwrap's 1 as evidence."* This
+/// jail's parent does read it set, so an in-jail run genuinely cannot establish
+/// provenance; the design host's parent read it unset, and there the capsule's
+/// reading *is* attributable.
+///
+/// So the caveat is **measured rather than declared**. A constant apology
+/// attached to this observation forever would be wrong on half the hosts that
+/// run it, and — worse — would keep saying "we cannot know" on a host where the
+/// suite just established that we can. Taking the trusted side's own reading as
+/// a parameter is what makes the difference decidable, and keeps the deciding
+/// pure.
+fn no_new_privs_provenance(trusted_side: Option<&str>) -> Option<String> {
+    match trusted_side {
+        Some(NO_NEW_PRIVS_UNSET) => None,
+        Some(_) => Some(PROVENANCE_INHERITED.to_owned()),
+        None => Some(PROVENANCE_UNREADABLE.to_owned()),
+    }
+}
+
+/// The two observations, from a capsule's reported lines and the trusted side's
+/// own `no_new_privs`.
+///
+/// Pure, and the split is the pure/imperative one this crate keeps everywhere
+/// else: the capsule run and the `/proc` read are [`credential_observations`]'s
+/// business, and everything that decides what the report *says* is here, where a
+/// test can drive both branches of every decision without a fixture.
+///
+/// **The list is always both**, whatever the payload managed to read. A report
+/// whose shape depends on the host's luck cannot be read as an absence.
+fn credential_readings(
+    reported: &[String],
+    trusted_side_no_new_privs: Option<&str>,
+) -> Vec<(Unrowed, Reading)> {
+    let [groups, no_new_privs] = UNROWED_FIELDS;
+    vec![
+        (UNMAPPED_GROUPS, reading_of(reported, groups, |_| None)),
+        (
+            NO_NEW_PRIVS,
+            reading_of(reported, no_new_privs, |_| {
+                no_new_privs_provenance(trusted_side_no_new_privs)
+            }),
+        ),
+    ]
+}
+
+/// One field's reading, and the one place "I never looked" is kept apart from
+/// "there was nothing there".
+///
+/// A line on the payload's *read* side yields [`Reading::Read`]. Anything else —
+/// the unread side, a field the payload never mentioned, output that never
+/// arrived — yields [`Reading::Unread`] naming which. There is deliberately no
+/// path from a missing line to an empty value.
+fn reading_of(
+    reported: &[String],
+    field: &str,
+    caveat: impl Fn(&str) -> Option<String>,
+) -> Reading {
+    let named = format!("{field}=");
+    let read = reported.iter().find_map(|line| {
+        line.strip_prefix(CREDENTIAL_READ)?
+            .strip_prefix(&named)
+            .map(ToOwned::to_owned)
+    });
+    match read {
+        Some(value) => Reading::Read {
+            caveat: caveat(&value),
+            value,
+        },
+        None => Reading::Unread(SURFACE_NOT_NAMED.to_owned()),
+    }
+}
+
+/// Both observations, read inside a capsule this backend provisioned.
+///
+/// The trusted side's own `no_new_privs` is read here — from the same file, on
+/// this side of the boundary — because it is what makes the capsule's reading
+/// attributable or not. `std::fs::read_to_string` for [`host_descriptor`]'s
+/// reason: it is not among `clippy.toml`'s disallowed methods and this is engine
+/// tier, where provisioning already reaches disk.
+fn credential_observations(
+    backend: &dyn ConformanceBackend,
+    host: &dyn HostFacts,
+    fixture: &Fixture,
+) -> Vec<(Unrowed, Reading)> {
+    let transaction = match provision_capsule(fixture, host, backend.as_capsule_backend()) {
+        Ok(transaction) => transaction,
+        Err(refusal) => return observations_unread(&refusal),
+    };
+    let argv = shell_argv(&unrowed_credential_payload());
+    let observed =
+        match ran_cleanly(backend.execute(&transaction.placement, &harness_execution(&argv))) {
+            Ok(observation) => observation,
+            Err(why) => return observations_unread(&why),
+        };
+    credential_readings(
+        &stdout_lines(&observed),
+        status_field(
+            std::fs::read_to_string(PROC_SELF_STATUS).ok().as_deref(),
+            STATUS_NO_NEW_PRIVS_KEY,
+        )
+        .as_deref(),
+    )
+}
+
+/// One whitespace-separated `/proc/self/status` field's value, trusted-side.
+fn status_field(status: Option<&str>, key: &str) -> Option<String> {
+    status?.lines().find_map(|line| {
+        let (found, value) = line.split_once(char::is_whitespace)?;
+        (found == key).then(|| value.trim().to_owned())
+    })
+}
+
+/// Both observations, unread for one reason — the run that would have produced
+/// them did not happen.
+///
+/// Reported rather than omitted, for [`claims_skipped`]'s reason: the report's
+/// shape must not change with the host's luck. A reader who sees one observation
+/// where there should be two learns nothing about which.
+fn observations_unread(reason: &str) -> Vec<(Unrowed, Reading)> {
+    [UNMAPPED_GROUPS, NO_NEW_PRIVS]
+        .into_iter()
+        .map(|observation| (observation, Reading::Unread(reason.to_owned())))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -4676,7 +5021,20 @@ pub(crate) fn verify(
         Err(fault) => claims_skipped(&format!("{fault:?}")),
     };
 
-    verify_over(backend, host, today, &tables(), &claims, &run)
+    let observations = || match fixture.get_or_init(|| Fixture::new(host)) {
+        Ok(fixture) => credential_observations(backend, host, fixture),
+        Err(fault) => observations_unread(&format!("{fault:?}")),
+    };
+
+    verify_over(
+        backend,
+        host,
+        today,
+        &tables(),
+        &claims,
+        &observations,
+        &run,
+    )
 }
 
 /// [`verify`] over an injected row set and row runner.
@@ -4694,6 +5052,7 @@ fn verify_over(
     today: String,
     rows: &[Row],
     auxiliary: &dyn Fn() -> Vec<(Claim, AuxOutcome)>,
+    observations: &dyn Fn() -> Vec<(Unrowed, Reading)>,
     run_row: &dyn Fn(&dyn ConformanceBackend, &Row) -> RowVerdict,
 ) -> AdmissionVerdict {
     let backend_id = backend.id();
@@ -4709,6 +5068,9 @@ fn verify_over(
             },
             rows: Vec::new(),
             auxiliary: Vec::new(),
+            // Nothing ran, so there is nothing read to report. The verdict
+            // already names what was missing and what would satisfy it.
+            observations: Vec::new(),
         };
     }
 
@@ -4727,10 +5089,14 @@ fn verify_over(
             },
             rows: Vec::new(),
             auxiliary: Vec::new(),
+            // Nothing ran, so there is nothing read to report. The verdict
+            // already names what was missing and what would satisfy it.
+            observations: Vec::new(),
         };
     }
 
     let auxiliary = auxiliary();
+    let observations = observations();
 
     let verdicts: Vec<(RowId, RowVerdict)> = rows
         .iter()
@@ -4745,6 +5111,7 @@ fn verify_over(
         outcome,
         rows: verdicts,
         auxiliary,
+        observations,
     }
 }
 
@@ -4807,6 +5174,13 @@ mod tests {
         WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject, run_control_arm,
         run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
         writes_past_the_file_size_cap,
+    };
+    use super::{
+        CREDENTIAL_READ, CREDENTIAL_UNREAD, NO_NEW_PRIVS, NO_NEW_PRIVS_SET, NO_NEW_PRIVS_UNSET,
+        PROVENANCE_INHERITED, PROVENANCE_UNREADABLE, Reading, STATUS_GROUPS_KEY,
+        STATUS_NO_NEW_PRIVS_KEY, STATUS_UID_KEY, UNMAPPED_GROUP, UNMAPPED_GROUPS, UNROWED_FIELDS,
+        UNROWED_GROUPS_FIELD, UNROWED_NO_NEW_PRIVS_FIELD, Unrowed, credential_readings,
+        no_new_privs_provenance, observations_unread, status_field, unrowed_credential_payload,
     };
     use super::{
         DECOY_DESCRIPTOR_LEAF, DECOYS_LEAF, DESCRIPTOR_INHERITED, ENUMERATION_HANDLE_TARGET,
@@ -5243,6 +5617,27 @@ mod tests {
             TODAY.to_owned(),
             rows,
             &|| auxiliary.clone(),
+            &Vec::new,
+            &|backend, row| runner.run(backend, row),
+        )
+    }
+
+    /// [`verdict_over`]'s other axis: an injected set of unrowed observations,
+    /// with table C empty so anything the outcome does is theirs.
+    fn verdict_observing(
+        backend: &dyn ConformanceBackend,
+        host: &dyn HostFacts,
+        rows: &[Row],
+        observations: Vec<(Unrowed, Reading)>,
+        runner: &ScriptedRunner,
+    ) -> AdmissionVerdict {
+        verify_over(
+            backend,
+            host,
+            TODAY.to_owned(),
+            rows,
+            &Vec::new,
+            &|| observations.clone(),
             &|backend, row| runner.run(backend, row),
         )
     }
@@ -11897,5 +12292,330 @@ mod tests {
             RowVerdict::Violated,
             "row 14 reads Violated against a backend that confines capabilities"
         );
+    }
+
+    // ── PHASE-10 `T9`: the two unrowed credential observations ──────────────
+    //
+    // These are **not** a row and must never become one (`EX-12`, `sec-9` `R8`).
+    // The whole of what is asserted here is that two credential mechanisms are
+    // read, displayed, and reach no verdict — so this test is an *absence*
+    // probe, and an absence probe cannot tell "nothing attached" from "nothing
+    // was produced": both are the same empty reading
+    // (`mem.pattern.tests.absence-probes-must-convict-an-unread-surface`,
+    // `F-47`, `notes.md` item 134).
+    //
+    // The body is therefore ordered, and the order is load-bearing: every
+    // positive claim first — the observations exist, by name, read whole, with
+    // the values `EVD-014` measured — and only then the absence. An absence
+    // asserted over a reading that was never taken is a green that means
+    // nothing.
+
+    /// The shipped observation payload read in a sandbox this test built —
+    /// rows 13 and 14's instrument ([`payload_output_in_a_sandbox`]) pointed at
+    /// a payload that belongs to no row, `extra` being the one axis under study.
+    fn credential_observation_in(extra: &[&str]) -> Vec<String> {
+        payload_output_in_a_sandbox(extra, &unrowed_credential_payload())
+    }
+
+    /// The surfaces an observation reading names, whichever side they fell on —
+    /// see [`fields_named`], shared rather than copied a fourth time (`F-39`).
+    fn observed_surfaces(reported: &[String]) -> Vec<String> {
+        fields_named(reported, CREDENTIAL_READ, CREDENTIAL_UNREAD)
+    }
+
+    /// The value a reading reported for `field` on its **read** side, if any.
+    fn value_read(reported: &[String], field: &str) -> Option<String> {
+        let named = format!("{field}=");
+        reported.iter().find_map(|line| {
+            line.strip_prefix(CREDENTIAL_READ)?
+                .strip_prefix(&named)
+                .map(ToOwned::to_owned)
+        })
+    }
+
+    /// The caveat the reporter attached to `name`, and whether it attached one.
+    fn caveat_on(reported: &[(Unrowed, Reading)], name: &str) -> Option<String> {
+        reported.iter().find_map(|(observation, reading)| {
+            match (observation.name == name, reading) {
+                (true, Reading::Read { caveat, .. }) => caveat.clone(),
+                _ => None,
+            }
+        })
+    }
+
+    /// Every payload the shipped tables run, whatever arm shape carries it.
+    ///
+    /// **Exhaustive by `match`**: a new [`ArmShape`] variant is a compile error
+    /// here rather than a row this sweep silently walks past, which is what
+    /// keeps the disjointness claim below a claim about *the tables* and not
+    /// about the shapes I happened to remember.
+    fn every_shipped_payload() -> Vec<String> {
+        let script_of = |argv: &Argv| argv.as_slice().last().cloned().unwrap_or_default();
+        tables()
+            .iter()
+            .flat_map(|row| match &row.shape {
+                ArmShape::Single(probe) => vec![script_of(&probe.argv)],
+                ArmShape::Sequential { writer, reader } => {
+                    vec![script_of(&writer.argv), script_of(&reader.argv)]
+                }
+                ArmShape::Concurrent { subject, observer } => vec![
+                    script_of(&subject.argv),
+                    script_of(&(observer.argv)(SWEPT_PID)),
+                ],
+            })
+            .collect()
+    }
+
+    /// A pid for [`every_shipped_payload`]'s rendering of the one concurrent
+    /// row. Nothing is spawned; only the argv is read.
+    const SWEPT_PID: HostPid = HostPid(4242);
+
+    /// `VT-6`, `EX-11`, `EX-12`, `VA-5` — the two credential mechanisms `sec-9`
+    /// `R8` observes and refuses to row: captured, displayed, and carrying no
+    /// verdict at all.
+    ///
+    /// ## Why they are unrowed, asserted rather than asserted *about*
+    ///
+    /// A row needs a delta that moves its reading; these have none. That is not
+    /// an opinion about bubblewrap, it is the middle claim below — the two
+    /// readings taken either side of table A's only *granting* control are
+    /// **identical**. A mechanism no delta can move is not a test, and rowing it
+    /// manufactures the `B4` defect (a control that cannot fire) the round-6
+    /// split exists to remove.
+    ///
+    /// So if this test ever reds on that equality, the finding is not that the
+    /// suite is broken: it is that one of these became rowable, and it wants a
+    /// consult rather than a repair.
+    ///
+    /// ## `EX-11`, and what is *not* here
+    ///
+    /// **Setuid regain is neither probed nor rowed** — see
+    /// [`the_identity_is_exactly`], where that weakening is recorded beside the
+    /// row it weakens. `no_new_privs` stood in for it in an earlier draft; it is
+    /// retained here as an observation and withdrawn as a row.
+    #[test]
+    fn the_unrowed_credential_observations_are_reported_without_a_verdict() {
+        // ── Positively, first: both surfaces exist and were read. ──────────
+        let confined = credential_observation_in(&[]);
+        let granted = credential_observation_in(&SANDBOX_CAPABILITY_GRANT);
+
+        for reading in [&confined, &granted] {
+            assert_eq!(
+                observed_surfaces(reading),
+                sorted(&UNROWED_FIELDS),
+                "the observation payload did not read every declared credential surface, \
+                 so what follows is an absence it never looked for: {reading:?}"
+            );
+            assert_eq!(
+                separated_by(reading, CREDENTIAL_READ, CREDENTIAL_UNREAD).1,
+                Vec::<String>::new(),
+                "a credential surface was reported unread: {reading:?}"
+            );
+        }
+
+        // The values `EVD-014` measured, by name.
+        let groups = value_read(&confined, UNROWED_GROUPS_FIELD)
+            .expect("the reading names every declared surface on its read side");
+        assert!(
+            groups
+                .split_whitespace()
+                .any(|entry| entry == UNMAPPED_GROUP),
+            "the supplementary group list names no unmapped group, so bubblewrap did not \
+             unmap the host list the way `EVD-014` measured: {groups}"
+        );
+
+        // *Unmapped rather than dropped* is the claim, and a count is what
+        // separates the two: bubblewrap cannot `setgroups` in an unprivileged
+        // user namespace, so it rewrites each entry it cannot map and the list
+        // keeps its length. This is also the only thing that convicts a payload
+        // that read the list's **first token** and stopped — an under-read whose
+        // value still names an unmapped group and so passes every test above.
+        let host_status = std::fs::read_to_string(PROC_SELF_STATUS)
+            .expect("every Linux host presents `/proc/self/status`");
+        let host_groups = status_field(Some(&host_status), STATUS_GROUPS_KEY)
+            .expect("the trusted side reports its own supplementary groups");
+        assert_eq!(
+            groups.split_whitespace().count(),
+            host_groups.split_whitespace().count(),
+            "the capsule's supplementary list is not the host's length, so the list was \
+             dropped or under-read rather than unmapped: {groups} against {host_groups}"
+        );
+        assert_eq!(
+            value_read(&confined, UNROWED_NO_NEW_PRIVS_FIELD).as_deref(),
+            Some(NO_NEW_PRIVS_SET),
+            "`no_new_privs` did not read set inside the capsule: {confined:?}"
+        );
+
+        // The middle claim, and the reason neither can carry a verdict: table
+        // A's only granting control moves neither of them.
+        assert_eq!(
+            confined, granted,
+            "a credential observation moved across `{SANDBOX_CAPABILITY_GRANT:?}`, so it \
+             now has a delta that falsifies it and is rowable — `S4`: consult, do not \
+             quietly row it here"
+        );
+
+        // ── Displayed: the reporter turns that reading into two named
+        // observations, and the shape of the report does not depend on luck. ─
+        let reported = credential_readings(&confined, Some(NO_NEW_PRIVS_UNSET));
+        assert_eq!(
+            reported
+                .iter()
+                .map(|(observation, _)| observation.name)
+                .collect::<Vec<_>>(),
+            vec![UNMAPPED_GROUPS.name, NO_NEW_PRIVS.name],
+            "the report does not name both unrowed observations"
+        );
+        for (observation, reading) in &reported {
+            let Reading::Read { value, .. } = reading else {
+                panic!(
+                    "`{}` was reported unread from a reading that read it: {reading:?}",
+                    observation.name
+                );
+            };
+            assert!(
+                !value.trim().is_empty(),
+                "`{}` was reported as read with nothing in it, which is the empty reading \
+                 an unread surface also produces",
+                observation.name
+            );
+        }
+
+        // `A6` rests on the trusted side's own reading, so that read must work
+        // here or the caveat is a permanent apology wearing a measurement's
+        // clothes — every host would look unreadable and every reading would
+        // carry `PROVENANCE_UNREADABLE` forever. Asserted positively, and with
+        // a miss to show the parse can say no.
+        let status = std::fs::read_to_string(PROC_SELF_STATUS)
+            .expect("every Linux host presents `/proc/self/status`");
+        let parent = status_field(Some(&status), STATUS_NO_NEW_PRIVS_KEY);
+        assert!(
+            parent.is_some_and(|value| value == NO_NEW_PRIVS_SET || value == NO_NEW_PRIVS_UNSET),
+            "the trusted side's own `{STATUS_NO_NEW_PRIVS_KEY}` did not parse, so the \
+             provenance caveat would be attached on every host regardless of the facts"
+        );
+        assert_eq!(
+            status_field(Some(&status), "NoSuchKey:"),
+            None,
+            "the status parse answers a key this file does not carry, so finding one \
+             establishes nothing"
+        );
+        assert_eq!(
+            no_new_privs_provenance(None),
+            Some(PROVENANCE_UNREADABLE.to_owned()),
+            "a trusted side that could not be read must not pass for one that read unset"
+        );
+
+        // `A6`, measured rather than apologised for: the caveat is attached
+        // when — and only when — the trusted side already reads the bit set.
+        assert_eq!(
+            caveat_on(&reported, NO_NEW_PRIVS.name),
+            None,
+            "a host whose own `no_new_privs` reads unset can attribute the capsule's \
+             reading to the backend, so no caveat is owed"
+        );
+        let inherited = credential_readings(&confined, Some(NO_NEW_PRIVS_SET));
+        assert_eq!(
+            caveat_on(&inherited, NO_NEW_PRIVS.name).as_deref(),
+            Some(PROVENANCE_INHERITED),
+            "a host whose own `no_new_privs` already reads set cannot tell whether the \
+             backend set the bit, and the report must say so"
+        );
+        assert_eq!(
+            caveat_on(&inherited, UNMAPPED_GROUPS.name),
+            None,
+            "`A6` is `no_new_privs`'s caveat alone; the group list's provenance is not in \
+             question"
+        );
+        assert_eq!(
+            caveat_on(&credential_readings(&confined, None), NO_NEW_PRIVS.name).as_deref(),
+            Some(PROVENANCE_UNREADABLE),
+            "a trusted side that could not be read establishes no provenance either"
+        );
+
+        // The absence probe's own guard: a surface the payload never named is
+        // reported **unread**, never as a value that happens to be empty.
+        let silent = credential_readings(&[], Some(NO_NEW_PRIVS_UNSET));
+        assert_eq!(
+            silent.len(),
+            reported.len(),
+            "the report's shape changed with what the payload managed to read"
+        );
+        assert!(
+            silent
+                .iter()
+                .all(|(_, reading)| matches!(reading, Reading::Unread(_))),
+            "a payload that read nothing at all was reported as having read something: \
+             {silent:?}"
+        );
+
+        // ── And only now, the absence. ─────────────────────────────────────
+        //
+        // No row reads either mechanism. Non-vacuity first, twice over: the
+        // sweep found real payloads, and `contains` is a predicate that can say
+        // yes — otherwise "no payload contains it" is a fact about the sweep.
+        let payloads = every_shipped_payload();
+        assert!(
+            payloads
+                .iter()
+                .any(|payload| payload.contains(STATUS_UID_KEY)),
+            "the payload sweep found no row reading `{STATUS_UID_KEY}`, so it is reading \
+             nothing and the disjointness below asserts nothing"
+        );
+        let observing = unrowed_credential_payload();
+        for key in [STATUS_GROUPS_KEY, STATUS_NO_NEW_PRIVS_KEY] {
+            assert!(
+                observing.contains(key),
+                "the observation payload does not read `{key}`: {observing}"
+            );
+            for payload in &payloads {
+                assert!(
+                    !payload.contains(key),
+                    "a row's payload reads `{key}`, which `EX-12` and `sec-9` `R8` keep \
+                     unrowed — a mechanism no delta can move cannot carry a row: {payload}"
+                );
+            }
+        }
+
+        // And no reading of them moves the outcome, in either direction:
+        // `admission` is computed from the row list and is not given these.
+        let backend = Stub::ignoring_its_removal(&[LIVENESS_MARKER, HELD]);
+        let host = host_with_shell();
+        let rows = four_rows();
+        for observations in [
+            reported,
+            observations_unread("the fixture could not be built"),
+        ] {
+            let admitted = verdict_observing(
+                &backend,
+                &host,
+                &rows,
+                observations.clone(),
+                &ScriptedRunner::new(vec![RowVerdict::Proven; 4]),
+            );
+            assert_eq!(
+                admitted.outcome,
+                Admission::Admitted,
+                "an unrowed credential observation blocked an otherwise proven admission"
+            );
+            assert_eq!(
+                admitted.observations, observations,
+                "the verdict dropped the observations it was told to report"
+            );
+
+            let one_bad = ScriptedRunner::new(vec![
+                RowVerdict::Proven,
+                RowVerdict::Proven,
+                RowVerdict::Proven,
+                RowVerdict::Violated,
+            ]);
+            assert_eq!(
+                verdict_observing(&backend, &host, &rows, observations, &one_bad).outcome,
+                Admission::NotAdmitted {
+                    reason: NotAdmitted::Rows
+                },
+                "an unrowed credential observation rescued a row that was not proven"
+            );
+        }
     }
 }
