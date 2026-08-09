@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe4bce5027bb19c24e10c284db25e"
+memory_key = "mem.pattern.tests.re-exec-the-test-binary-to-vary-process-wide-state"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Vary process-wide state in a child, not in the test process"
+summary = "When a test must vary cwd/env that the whole process shares, re-exec the test binary with Command::current_dir/env and read the child's stdout — and pin the --exact name in a constant, because --exact fails open."
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["testing", "rust", "process-state"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7bab9df019bf28a71bfe4920a565e8f41b6b61d2"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "a161cdb8db61309a2f31dcf833a4daec7d449ccc89744d2aff96ae797b5390c1"
+base_commit = "bbc40d4602b3a6f063d7b5d413656e660040bce5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019fe49fd7997aa2887f53ff5f2d3cc4"
+

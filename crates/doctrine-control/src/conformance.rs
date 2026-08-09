@@ -3927,6 +3927,7 @@ mod tests {
     use std::io::Write as _;
     use std::os::fd::AsRawFd as _;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
     use std::time::Duration;
 
     use tempfile::TempDir;
@@ -3972,9 +3973,9 @@ mod tests {
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
         AcceptedBase, Availability, BackendError, BackendId, CapsuleBackend, CapsuleEnv,
-        CapsulePlacement, CapsuleStdio, Execution, ForbiddenScopes, INNER_CAPSULE, INNER_TMP,
-        InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts, SourceExport,
-        Termination, TransactionRoot,
+        CapsulePlacement, CapsuleStdio, Execution, FILESYSTEM_ROOT, ForbiddenScopes, INNER_CAPSULE,
+        INNER_TMP, InnerPath, MountedPath, NetworkPosture, Observation, PlacementParts,
+        SourceExport, Termination, TransactionRoot,
     };
     use crate::config::{Argv, ByteCount};
     use crate::host::HostFacts;
@@ -7652,5 +7653,159 @@ mod tests {
                 .expect("the abstract name is committed into the project")
         };
         assert_ne!(name_of(&first), name_of(&second));
+    }
+
+    // ── T8: row 6 — a value, from two trusted-side cwds (`VT-1`, `VT-2`) ────
+
+    /// The two trusted-side working directories row 6's second measurement runs
+    /// from (`D1`).
+    ///
+    /// Both exist on the host **and** inside the capsule at the *same* path —
+    /// `/` is the capsule's own root, `/tmp` its tmpfs — which is what lets the
+    /// un-`--chdir`ed control arm's `pwd` come back equal to the directory it
+    /// inherited. A host-only directory would leave bubblewrap's `chdir` to
+    /// fail and the capsule wherever bubblewrap happened to leave it, and the
+    /// measurement would then be about that fallback rather than about
+    /// inheritance. The suite's own cwd is deliberately not one of them: it is
+    /// whatever `cargo test` chose, so it is not a *varied* input.
+    const TRUSTED_SIDE_CWDS: [&str; 2] = [FILESYSTEM_ROOT, INNER_TMP];
+
+    /// The `--exact` name of [`row_six_arms_from_this_processes_cwd`].
+    ///
+    /// A rename that forgets this constant selects **zero** tests in the child,
+    /// which prints none of the three lines below — so the drift is a loud parse
+    /// failure in [`row_six_measured_from`], never a quietly green measurement
+    /// of nothing.
+    const ROW_SIX_HELPER: &str = "conformance::tests::row_six_arms_from_this_processes_cwd";
+    const ROW_SIX_CWD: &str = "ROW6-CWD=";
+    const ROW_SIX_VERDICT: &str = "ROW6-VERDICT=";
+    const ROW_SIX_TRACKS: &str = "ROW6-TRACKS=";
+
+    /// What one child measured.
+    #[derive(Debug)]
+    struct RowSixFromCwd {
+        cwd: String,
+        verdict: String,
+        tracks: String,
+    }
+
+    /// Row 6, measured in a **child process** whose working directory is `cwd`
+    /// (`D1` route 3).
+    ///
+    /// `Command::current_dir` is per-spawn and so thread-safe;
+    /// `std::env::set_current_dir` is process-wide and would race every other
+    /// test in this multi-threaded binary — including
+    /// [`super::operator_regions`], which reads the cwd to decide what a fixture
+    /// may bind. Route 2 — putting the cwd on the `Command` that spawns
+    /// bubblewrap — would have been cheaper still, but there is no route from
+    /// the harness down to that `Command` short of widening a production type on
+    /// the security boundary purely to serve a test (`S1`/`S5`). So the cwd is
+    /// varied one level up: what bubblewrap inherits is its spawner's cwd, and
+    /// the spawner here is a whole test process of our own choosing.
+    fn row_six_measured_from(cwd: &str) -> RowSixFromCwd {
+        let executable = std::env::current_exe().expect("the test binary's own path");
+        let output = Command::new(executable)
+            .current_dir(cwd)
+            .args(["--exact", ROW_SIX_HELPER, "--ignored", "--nocapture"])
+            .output()
+            .expect("the test binary re-executes");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let value = |prefix: &str| {
+            stdout
+                .lines()
+                .find_map(|line| line.strip_prefix(prefix))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "no `{prefix}` line from the child in {cwd}\n--- stdout\n{stdout}\
+                         --- stderr\n{}",
+                        String::from_utf8_lossy(&output.stderr)
+                    )
+                })
+                .to_owned()
+        };
+        RowSixFromCwd {
+            cwd: value(ROW_SIX_CWD),
+            verdict: value(ROW_SIX_VERDICT),
+            tracks: value(ROW_SIX_TRACKS),
+        }
+    }
+
+    /// The child half of [`row_six_measured_from`] — **an instrument, not a
+    /// claim**, which is why it is ignored by default.
+    ///
+    /// It reports two readings of the *same shipped payload* from whatever cwd
+    /// it was started in: the shipped row's verdict, and the arm result of a row
+    /// that differs from it in one place only — `Observed::Exactly` naming this
+    /// process's cwd instead of `/capsule`. The second is what gives the first
+    /// its force: it says the un-`--chdir`ed capsule landed on the trusted
+    /// side's directory *here*, so `/capsule` on the probe arm is a directory
+    /// the profile chose rather than one it happened to inherit.
+    #[test]
+    #[ignore = "instrument: re-executed with a chosen cwd by the_working_directory_does_not_track_the_trusted_side_cwd"]
+    fn row_six_arms_from_this_processes_cwd() {
+        let cwd = std::env::current_dir().expect("a working directory");
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let shipped = shipped_row(&RowId::Property(Property::DeterministicWorkingDirectory));
+        let ArmShape::Single(probe) = &shipped.shape else {
+            panic!("row 6 is a one-capsule row");
+        };
+        let tracking = Row {
+            id: shipped.id.clone(),
+            shape: ArmShape::Single(Probe {
+                argv: probe.argv.clone(),
+                observed: Observed::Exactly(cwd.display().to_string()),
+            }),
+            delta: Delta::Removed(PropertyRemoval::WorkingDirectory),
+        };
+        let verdict = run_row(&backend, &SystemHost, &fixture, &shipped);
+        let tracks = run_control_arm(&backend, &SystemHost, &fixture, &tracking);
+        println!("{ROW_SIX_CWD}{}", cwd.display());
+        println!("{ROW_SIX_VERDICT}{verdict:?}");
+        println!("{ROW_SIX_TRACKS}{tracks:?}");
+    }
+
+    /// `VT-1`, row 6.
+    #[test]
+    fn deterministic_working_directory_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::DeterministicWorkingDirectory)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-2`, row 6 — the executed half of `sec-2`'s
+    /// `working_directory_has_no_inherit_value`.
+    ///
+    /// One cwd cannot say this. Run from a single directory, row 6 reports
+    /// `Proven` whether the working directory is *fixed at `/capsule`* or merely
+    /// *not equal to this one directory*; the design's measured table separates
+    /// them only because it has two rows without `--chdir`. So this reproduces
+    /// that table: two children, two different trusted-side directories, and for
+    /// each of them both readings — the profile's `/capsule` and the inheritance
+    /// it displaced.
+    #[test]
+    fn the_working_directory_does_not_track_the_trusted_side_cwd() {
+        let proven = format!("{:?}", RowVerdict::Proven);
+        let held = format!("{:?}", ArmResult::Held);
+        let [from_root, from_tmp] = TRUSTED_SIDE_CWDS.map(row_six_measured_from);
+
+        assert_ne!(
+            from_root.cwd, from_tmp.cwd,
+            "both children ran from the same directory, so nothing was varied"
+        );
+        for measured in [&from_root, &from_tmp] {
+            assert_eq!(
+                measured.tracks, held,
+                "without `--chdir` the capsule did not land on the trusted side's \
+                 {}, so this cwd establishes nothing about inheritance: {measured:?}",
+                measured.cwd
+            );
+            assert_eq!(
+                measured.verdict, proven,
+                "row 6 from {}: {measured:?}",
+                measured.cwd
+            );
+        }
     }
 }

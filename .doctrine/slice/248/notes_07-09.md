@@ -1672,3 +1672,68 @@ the verdict cannot see: a row 5 that *lost* its abstract leg would still read
 `Proven`, since one refusal out of one is still "all of them". `VA-2`'s
 obligation is that both legs execute, so the count is asserted where it cannot
 silently drop.
+
+### `T8` — row 6, and `D1` settled on route 3 (a child process, not a shared cwd)
+
+**`D1`: route 3. Route 2 does not exist without moving a production type.** The
+sheet recommended trying `Command::current_dir` on the spawn first. It is the
+right *idea* — what bubblewrap inherits is its spawner's cwd — but the `Command`
+is built inside `BubblewrapBackend::run`, five call frames below anything the
+harness holds, and nothing on the way down carries a working directory:
+`Execution`, `CapsulePlacement`, `SpawnOptions` and the `ConformanceBackend`
+trait would each have to gain one. That is a production type widened on the
+security boundary to serve a test, which is `S1`'s shape and `S5`'s stop.
+
+So the cwd is varied one level up, and route 3 turns out to be route 2 aimed at
+a different process: the test re-executes **its own test binary** with
+`Command::current_dir(cwd)`, and the child — a whole process whose cwd is ours
+to choose — runs the arms. `current_dir` is per-spawn and thread-safe; the child
+has its own `DESCRIPTOR_WINDOW`, its own fixture, and no shared mutable state
+with the parent suite at all.
+
+Route 1 stays rejected, and the reason is sharper than "process-wide":
+`operator_regions` (`conformance.rs:1510`) reads `std::env::current_dir()` to
+decide which roots a fixture may bind. Mutating the process cwd would silently
+change what *every other concurrently running test's* capsule can see. That is
+not a race against a hypothetical reader; it is a race against this file.
+
+**The instrument.** `row_six_arms_from_this_processes_cwd` is `#[ignore]`d — it
+is a measurement, not a claim, and it is selected by `--exact` + `--ignored`
+from `row_six_measured_from`. Its name is a constant (`ROW_SIX_HELPER`) because
+a rename that forgets it selects *zero* tests, and a child that runs nothing
+prints nothing; the parse then fails loudly rather than measuring nothing
+quietly. Three prefixed lines cross the boundary (`ROW6-CWD=`, `ROW6-VERDICT=`,
+`ROW6-TRACKS=`), read out of the child's stdout by prefix.
+
+**Two readings per cwd, and the second is what gives the first force.** One cwd
+cannot distinguish *the working directory is fixed at `/capsule`* from *it is
+merely not equal to this one directory* — the design's measured table
+(`design.md:3906–3915`) separates them only because it has two rows without
+`--chdir`. So each child reports the shipped row's verdict **and** the arm
+result of a row differing from it in one place only: `Observed::Exactly` naming
+the child's own cwd instead of `/capsule`, on the same payload, on the
+`WorkingDirectory`-removed arm. Measured, both cells:
+
+```
+--chdir /capsule, trusted cwd /      →  pwd = /capsule   (Proven, tracks Held)
+--chdir /capsule, trusted cwd /tmp   →  pwd = /capsule   (Proven, tracks Held)
+```
+
+`tracks: Held` is the un-`--chdir`ed capsule landing on the trusted side's own
+directory, so `/capsule` on the probe arm is a directory the profile *chose*
+rather than one it happened to inherit.
+
+**Why `/` and `/tmp`.** Both exist on the host and inside the capsule at the
+same path — `/` is the capsule's root, `/tmp` its tmpfs. A host-only directory
+would leave bubblewrap's fallback `chdir` to fail and the capsule wherever
+bubblewrap left it, and the measurement would be about that fallback rather than
+about inheritance. The suite's own cwd is deliberately not one of the two: it is
+whatever `cargo test` chose, so it is not a *varied* input.
+
+**Mutation-checked.** Disabling the `--chdir` push in `confinement_argv` turned
+`deterministic_working_directory_is_proven` from `Proven` to `Violated` and
+redded the two-cwd test with `verdict: "Violated", tracks: "Held"` — the two
+readings move independently, which is what makes the pair worth running.
+
+Cost: two child processes, ~1.5 s each, three capsules apiece. Gate exit 0, 222
+tests (one ignored, which is the instrument).
