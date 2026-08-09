@@ -3,7 +3,7 @@ version = 1
 
 id = 60
 slug = "rename-facet-writefacetfield-to-facetvalue"
-title = "Rename facet_write::FacetField to FacetValue"
+title = "facet_write::FacetField — the FacetValue rename target is wrong; settle the name"
 kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place

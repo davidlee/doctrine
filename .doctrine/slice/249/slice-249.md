@@ -288,12 +288,19 @@ no excuse and stored-snapshot compatibility is the real blocker), `ISS-330`
 (`cordage`'s `scale_cliffs` asserts a wall-clock ratio and false-reds under
 load — unrelated), `CHR-056`.
 
-**`CHR-060` — read before acting.** The rename of `facet_write::FacetField` →
-`FacetValue` rests on a premise this slice found backwards: that type carries
-key + value, so it *is* a field, and the unkeyed `WireFacetValue` has the better
-claim to the name. `RV-351` `F-7` raised it precisely because nobody reopens a
-chore until pickup. The argument lives in `design.md` § 5.2 and nowhere else;
-`CHR-060` now points there.
+**`CHR-060` — rewritten at close, not merely flagged.** The chore said *rename
+`facet_write::FacetField` → `FacetValue`*. `RV-351` `F-7` called the premise
+contested; checked against the code it is simply **false** — that type carries
+key + value and exposes `key()`, so it is a field, while the unkeyed
+`design_run::WireFacetValue` is what `FacetValue` describes, and that type's own
+doc comment says it declined the name *only* because this chore had a claim on
+it. As written the chore held a better name hostage for a backwards rename, so
+it was rewritten rather than left to trap its picker: the premise is settled in
+the item, what survives is `FacetEdit`/`FacetAssignment` as the live candidate
+for the older type, whether `WireFacetValue` keeps its independently-justified
+`Wire` prefix, and the now-stale pointer in `submission.rs`. Doing nothing but
+the last is a defensible outcome. `design.md` § 5.2 remains the historical
+record of the dispute; `CHR-060` is the live carrier.
 
 **Practice, not code.** `R-inventory` fired six times in eight phases — the
 sixth inside the reconcile ledger written to carry the other five forward, found
