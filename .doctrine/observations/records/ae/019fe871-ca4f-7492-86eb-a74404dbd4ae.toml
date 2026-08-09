@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe871-ca4f-7492-86eb-a74404dbd4ae"
+recorded_at = "2026-08-09T21:33:19.311721857Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-09 T9: a long mutation battery was orphaned by double-backgrounding, and its evidence was lost twice to output buffering"
+detail = """
+Three consecutive wasted runs of a ~92s-per-iteration mutation battery, all from harness/tooling mechanics rather than the work.
+
+(1) I launched 'nohup python3 ... &' INSIDE a Bash call that was itself started with run_in_background: true. The outer shell exited immediately, the task reported exit 0, and python was SIGKILLed mid-write. The log was 0 bytes and the source file was left mutated. Use exactly one backgrounding mechanism, never two.
+
+(2) The driver's stdout was block-buffered and piped to tail. When the process was killed the buffer was never flushed, so a run that had produced real conviction data reported nothing at all. Fix: python3 -u redirected to a file, then read the file.
+
+(3) A stray extra '--' in the subprocess arg list ('--bins','--','--']+FILTER) widened the test filter from four fast tests to the whole 92s suite, so seven mutations blew the timeout.
+
+Cost: roughly three full battery cycles plus the diagnosis, and in two of the three the failure mode was indistinguishable from a genuine test failure (bare 'Killed', empty log) which sent the diagnosis toward OOM before 'free -m' ruled it out. The general lesson is that when the instrument under test can kill its own runner, every layer between the runner and the log has to be unbuffered and single-owner, or a real signal reads as a crash."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

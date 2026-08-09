@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe872ab8b7672946494c88aabb8c0"
+memory_key = "mem.pattern.testing.additive-widening-one-input-two-readings"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Prove an additive widening by reading one input two ways"
+summary = "An additive change whose additivity is untested is a claim; read the same bytes under the old rule and the new one in a single test"
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "api-design"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "adfb1ca52e97e46d5771408a40273a9128d19985"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "8645331d6ec58f24c8d9e2c5757e201afb56c053a0de73d29362515a29f1820e"
+base_commit = "065e4191b1eece4ef4fb88d1113a277277c19255"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

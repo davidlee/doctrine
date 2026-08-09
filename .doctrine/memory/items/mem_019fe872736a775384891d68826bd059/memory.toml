@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe872736a775384891d68826bd059"
+memory_key = "mem.pattern.testing.mutation-battery-synthetic-targets"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A mutation battery on a signalling instrument must drive synthetic targets"
+summary = "The mutant you are convicting is the one that removes the containment, so it will aim the instrument at its own runner"
+created = "2026-08-09"
+updated = "2026-08-09"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "mutation-testing", "signals"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "adfb1ca52e97e46d5771408a40273a9128d19985"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "dbbd3b2dc9d98b8091f878bcd987a014f2d429ac1ca64ef56058cb560967bc24"
+base_commit = "065e4191b1eece4ef4fb88d1113a277277c19255"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

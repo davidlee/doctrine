@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe871-f0ec-7703-bb25-cb1497594dcf"
+recorded_at = "2026-08-09T21:33:29.196902131Z"
+kind = "friction"
+summary = "/execute SL-248 PHASE-09 T9: the task was briefed on a host premise that measurement contradicted, and the contradiction was only findable by running the payload"
+detail = """
+T9's brief stated, as a settled fact not to be re-derived, that without setsid(1) row 7's descendant 'still outlives the capsule' and merely fails to leave the process group — so that exactly one of the four planned tests would read a false green.
+
+Measured, the opposite: setsid is absent from every reachable path, the payload redirects the setsid invocation's own stderr to /dev/null, so it prints LIVE, exits 0, and spawns NOTHING. A silent no-op. Two of the four in-scope items were unbuildable, not one.
+
+The friction is not that the premise was wrong — it is that the brief marked it 'given once, not to be re-derived', which is exactly the framing that discourages the five-second 'sh -c <the payload>; ps' that settles it. A blocker premise that is cheap to measure should be handed over WITH its measurement, or explicitly flagged as unmeasured. I spent the floor commit and the vocabulary commit before discovering the rest of the scope was unreachable; measuring first would have reordered nothing, but it would have let the orchestrator hear the blocker an hour earlier.
+
+Generalisable: when a brief asserts a host fact that gates scope, the handover should carry the command that established it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
