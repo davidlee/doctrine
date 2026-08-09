@@ -1,0 +1,40 @@
+### host
+Linux 7.1.6 x86_64
+bwrap: /nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin/bwrap bubblewrap 0.11.2
+python3: /nix/store/60m4rxhg2fldqaak400c0lry96ijrzqn-python3-3.13.13/bin/python3
+own sid: 109577 (floor sid>=2, pid>=3)
+setsid binary on PATH: <absent — the EVD-013 trap>
+escape seconds: 8
+
+=== P — positive control, no bwrap at all ===
+STARTED
+  DESCENDANT SURVIVES: yes
+    pid sid: 109595 109595
+  swept pid=109595 sid=109595 (P)
+
+=== C1 (pid-ns=present, --die-with-parent=no) ===
+  arm returned in 8s: STARTED
+  DESCENDANT SURVIVES: no
+
+=== C2 (pid-ns=absent, --die-with-parent=no) ===
+  arm returned in 0s: STARTED
+  DESCENDANT SURVIVES: yes
+    pid sid: 109647 109645
+  swept pid=109647 sid=109645 (C2)
+
+=== C3 (pid-ns=present, --die-with-parent=yes) ===
+  arm returned in 0s: STARTED
+  DESCENDANT SURVIVES: no
+
+=== C4 (pid-ns=absent, --die-with-parent=yes) ===
+  arm returned in 0s: STARTED
+  DESCENDANT SURVIVES: yes
+    pid sid: 109684 109682
+  swept pid=109684 sid=109682 (C4)
+
+=== C1b (pid-ns=present, --die-with-parent=no, arm stdout on a FILE) ===
+  bwrap exited in 0s: STARTED
+  DESCENDANT SURVIVES: yes
+    pid sid: 109703 109703
+    pid sid: 109706 109703
+  swept pid=109703 sid=109703 (C1b)

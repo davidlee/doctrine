@@ -1365,3 +1365,64 @@ that unit's. Both of the latter fail *by hanging* against the old mechanism,
 so each was run alone under a shell `timeout` before joining the suite (`R1`).
 
 Suite 201 → 205, 1.38 s, all pre-existing tests green unchanged (`C10`).
+
+### `T2` — `VA-1`: `EVD-013`'s 2×2 re-run against the session-escaping payload
+
+Instrument: `.doctrine/slice/248/spike-teardown-2x2.sh`, output
+`spike-teardown-2x2-output.txt`. Both committed with this task, and the sweep
+inside the script is floored **above** the cells that need it, not below them
+(`F-36`): sid ≥ 2, sid ≠ our own, pid ≥ 3. The pid floor is one higher than
+`conformance.rs`'s because this script runs *beside* the agent rather than
+under the suite — pid 2 is the process reading its output.
+
+**Method, and the two false negatives it had to route around.** `setsid` is
+still absent from this jail's PATH — `EVD-013`'s own recorded trap, still live.
+`python3` is present and `os.setsid()` is the same syscall. The first draft had
+the escapee `execv` into `sleep` with the search marker as argv[0]; coreutils
+ships `sleep` as a **multi-call symlink that dispatches on argv[0]**, so the
+escapee died instantly with "unknown program" and every cell reported a clean
+false negative. Caught by the positive control, which is the whole reason
+`EVD-013` insists on one. The escapee now sleeps in python with the marker in
+its source.
+
+Each cell carries its own marker so a survivor is attributed to the arm that
+spawned it, and every cell records the arm's **wall duration**, which is what
+makes the result legible at all.
+
+| # | pid ns | `--die-with-parent` | arm returns after | descendant survives |
+|---|---|---|---|---|
+| P | — (no bwrap) | — | 0s | **yes**, in a session of its own |
+| C1 | present | absent | **8s** (= the escapee's whole life) | no |
+| C2 | absent | absent | 0s | **yes** |
+| C3 | present | present | 0s | no |
+| C4 | absent | present | 0s | **yes** |
+
+`EVD-013`'s table stands against the strengthened payload: **both** mechanisms
+are required and `--die-with-parent` is what reaps. `S2` does not fire. A
+descendant that leaves its session is no harder to reap than a plain orphan,
+because `setsid` moves a session and the reap works through the namespace.
+
+**C1 is not a reap, and the duration is what says so.** Eight seconds is
+exactly `ESCAPE_SECONDS`: the arm waited the escapee out. Read without the
+duration, C1 says "no survivor" and looks like C3.
+
+### `C1b` — what hides the escapee is the capture pipe, not the namespace
+
+`$(bwrap …)` waits on two things at once — the process exiting and the capture
+reaching end-of-file — and the harness's `wait_with_output` conflates them the
+same way. C1 re-run with the arm's stdout on a **file** instead of a pipe:
+
+| arm's stdout | bwrap exits after | escapee visible afterwards |
+|---|---|---|
+| pipe read to EOF | the escapee's whole lifetime | no |
+| file | **0s** | **yes** — two processes, the namespace init and the escapee, in a session of their own |
+
+`bwrap` returns promptly either way. What waits is end-of-file, because the
+namespace's init inherits the capture descriptor and holds it until the
+namespace empties. This sharpens `F-30`: the thing that makes a teardown
+escapee unobservable is the **capture**, which is a choice, not the namespace,
+which is not.
+
+`S4` does **not** fire on this: the delta plainly produces its row's control
+failure — C1b shows the escaped descendant alive and host-visible. What is in
+question is the *observation*, and that is `T9`'s to solve. See `F-6`.
