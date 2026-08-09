@@ -2426,3 +2426,106 @@ The suite moved 236 → 248 passing with 6 ignored, the growth being the
 `#[ignore]`d child instruments; a log reading `236 passed; 2 ignored` is from a
 previous session and counts for nothing here.
 
+## PHASE-10 `T4` residual — the mirror the isolation left
+
+`T4`'s tally above was 5/5 and honest, and the leg still redded on the next
+agent's first run. That is the whole lesson of this sitting: **a tally of greens
+is not a reproduction, and it cannot stand in for one.** 27 further unaggravated
+runs were also green — 21 filtered to the decoy subset at `--test-threads 32`,
+then 6 full suites at 91.4–91.6s. The flake was never once observed by waiting
+for it.
+
+### The agent, named
+
+The brief's diagnosis was "another test inside its own
+`hold_descriptor_window()`". Checked against the source before acting on it, and
+it is not possible: `payload_output_leaking` **takes that same lock** and holds
+it across its open, its selective CLOEXEC sweep and its `Command::new(SHELL)`
+fork. A thread inside the window is the one thing that provably cannot interfere.
+
+The real agents were the callers that took **no** window —
+`the_write_only_decoy_is_reachable_by_no_name`,
+`a_decoy_set_is_three_descriptors_of_three_kinds`, and
+`a_decoy_set_opened_before_provisioning_is_already_closed_by_it`, the last
+holding an inheritable set across an entire `provision_capsule`. The generalising
+mistake is worth keeping: a lock *taken by the victim* reads very easily as a
+lock *contended over*, and the hazard is always the path that never takes it.
+
+### The reproduction, by construction
+
+Two arms, one variable, `--test-threads 4`, victim and aggressor only:
+
+| arm | `the_write_only_decoy_is_reachable_by_no_name` | result |
+|---|---|---|
+| A | un-windowed (pre-repair shape), set held open 20s | **RED**, first run |
+| B | windowed, **same** 20s sleep | green |
+
+Arm A's panic is the reported panic: three `FD-RESOLVED-` entries above the
+standard streams, being the fixture's `decoys/descriptor`, a `(deleted)`
+`O_TMPFILE`, and a `socket:[…]` — the three kinds `InheritableDecoys` opens, in
+one payload. Both arms were reverted before the repair commit; neither is in the
+tree.
+
+### Why not the prescribed route
+
+The route offered was `F-19`'s: move the victim's payload into a process of its
+own. Measured before adopting it —
+`exec 9< /etc/hostname && sh -c 'sh -c "ls -1 /proc/self/fd"'` prints
+`0 1 2 3 9`. **An inheritable descriptor survives two `exec` levels.** So a
+re-executed test-binary child inherits whatever was inheritable at the instant of
+spawn and hands it to its own `/bin/sh`; the aggressor's window shrinks from
+"the whole sweep-and-fork" to "the spawn instant" and is not removed. `F-19`
+refused that trade in its own words — "it converts a ~13% flake into a smaller
+flake" — and it would have been the same laundering here.
+
+The asymmetry worth carrying forward: **a child is a closure when it holds the
+aggressor, and only a narrowing when it holds the victim.** Applied to the
+aggressor, nothing else shares the process and there is nothing left to inherit.
+
+### The repair
+
+One seam, `decoys_under_the_window(&fixture) -> (MutexGuard<'static, ()>,
+InheritableDecoys)`, now the only route a test in this process opens an
+inheritable descriptor by. It returns the guard *with* the set, so a caller
+cannot bind the descriptors without binding the lifetime that protects them —
+structural, not remembered. The victim holds that same guard across open, sweep
+and fork, so no other thread can hold an inheritable descriptor while it forks.
+
+Two sites cannot ride it, both commented where they sit:
+
+* `a_decoy_set_opened_after_a_sweep_is_inheritable_again`'s second set is opened
+  under a guard already held and `std::sync::Mutex` is not re-entrant — it is
+  under the same window by lexical scope, which is the property that matters;
+* `a_decoy_set_opened_before_provisioning_is_already_closed_by_it` must keep its
+  set across a `provision_capsule` that forks through
+  `fork_within_the_descriptor_window`, so windowing it deadlocks. **Moved into a
+  process of its own** — the child applied to the aggressor.
+
+`trusted_side_setup` is left alone deliberately and is the standing residual
+(`F-30`): it cannot hold the window across the arm's fork either (`F-16`), and it
+is safe only because every descriptor-delta row currently runs in a child.
+
+Instrument shape, per the brief's ask: **one** instrument, one prefix
+(`PRE-PROVISION=`), one line per decoy carrying `before after` —
+`MUTATION_HELPER`'s single-prefix precedent, chosen over a helper per value
+because the two readings are one measurement of one set, not two claims. The
+child asserts nothing. The parent holds the claim and requires the lines
+positively, `assert_eq!` against a vector of exactly `InheritableDecoys::COUNT`
+elements, so a selector that matches nothing cannot pass by exiting 0. No
+mutant's meaning moved: the shipped row's `shape` and `Observed`, `run_arm` over
+both real arms, `under_for(&row.delta)` and `row_verdict` over the pair are
+untouched.
+
+### Tally
+
+Six sequential `doctrine check gate` runs, all after the repair commit
+(`24155506e`), batched three per call so the harness's 600s clamp could not
+truncate the tail. All six `exit=0`, all six `248 passed; 0 failed; 7 ignored`,
+wall 135–138s. **6/6.** The ignored count moves 6 → 7 — the new
+`PRE-PROVISION` instrument, and nothing else.
+
+State it against what it is worth: `T4`'s 5/5 was the same evidence and did not
+hold. What carries the claim here is arm A — the aggressor named, made
+deterministic, and then shown to be excluded by the seam rather than out-waited.
+The tally corroborates; it does not convict.
+

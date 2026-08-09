@@ -1406,6 +1406,42 @@ under the sheet's own fallback.
     code carrying an observation only a test reads, and the reconciler should
     say whether that is the right home for it. (`F-26`.)
 
+125. **A flake was diagnosed to the wrong agent, and the correction is worth
+    keeping.** The residual red in row 10's leak mutant was attributed to
+    "another test inside its own `hold_descriptor_window()`". Impossible:
+    `payload_output_leaking` holds that same process-wide mutex across its open,
+    its sweep and its fork, so a window-holder is excluded by construction. The
+    agents were the three callers of `inheritable_decoys()` that took **no**
+    window. Recorded because the failure mode generalises — a lock that is
+    *taken* by the victim is easy to read as a lock that is *contended*, and the
+    real hazard is the code path that never takes it. Reproduction needed
+    construction, not repetition: 27 unaggravated runs were green; a two-arm
+    experiment (one site un-windowed and sleeping vs. the same site windowed and
+    sleeping) redded on the first run and reproduced the reported panic exactly.
+    (`F-28`.)
+
+126. **"Run it in a process of its own" is not a general remedy for descriptor
+    inheritance, and the design should stop treating it as one.** Measured: an
+    inheritable descriptor survives two `exec` levels, so a re-executed
+    test-binary child inherits whatever was inheritable at spawn and passes it to
+    its own shell. For a victim, that narrows the exposure to the spawn instant
+    rather than removing the aggressor — the trade `F-19` explicitly refused. It
+    *is* a closure when applied to the **aggressor** (nothing else shares the
+    process), which is where it was used here. Shipped repair is mutual exclusion
+    at the source: one seam returning the guard together with the decoy set, so a
+    caller cannot bind the descriptors without the lifetime that protects them.
+    Whether the design's isolation guidance should be restated in those terms is
+    a reconciler's call. (`F-29`.)
+
+127. **One member of the class is deliberately left open.**
+    `trusted_side_setup` cannot hold the descriptor window across the arm's fork
+    (`fork_within_the_descriptor_window` takes the same lock, `F-16`), so its
+    decoy set is inheritable for the arm's duration. It is harmless only because
+    every descriptor-delta row currently runs in a child — a property of today's
+    row set, not an invariant of the seam. A future in-process descriptor-delta
+    row re-opens the hazard with nothing to stop it. Owed as an `ISS-` at merge.
+    (`F-30`.)
+
 
 ## Open
 
