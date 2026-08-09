@@ -9424,4 +9424,69 @@ mod tests {
              the sweep is not what separates them"
         );
     }
+
+    /// The argv words a mount and an environment are made of.
+    ///
+    /// Spelled here rather than imported from the backend: a test that restated
+    /// the production constant would *follow* a rename of the wire word instead
+    /// of catching it, and these are the words `bwrap` itself reads. As
+    /// [`each_removal_changes_exactly_its_own_flags`] already spells them.
+    const MOUNT_WORDS: [&str; 2] = ["--ro-bind", "--bind"];
+    const ENVIRONMENT_WORDS: [&str; 2] = ["--setenv", "--clearenv"];
+
+    /// `VT-3`, single-axis-ness — and the shape of it is the opposite of row
+    /// 9's.
+    ///
+    /// [`the_writable_inputs_delta_changes_no_mount_and_no_path`] asserts its
+    /// delta moved *something* in the argv and only the right thing. This
+    /// asserts its delta moved **nothing** there: `DescriptorsClosed` is a
+    /// parent-side [`SpawnOptions`] axis, so the two arms hand `bwrap` argv that
+    /// is identical byte for byte, and the difference lives entirely in what the
+    /// harness does to its own descriptor table before the fork.
+    ///
+    /// *No mount and no env* is derived from that, not checked separately: a
+    /// mount and an environment **are** argv words to `bwrap`, so identical argv
+    /// is the stronger statement. What that derivation needs is non-vacuity —
+    /// hence the first assertion, that the baseline has mounts and environment
+    /// words at all. Unchanged says nothing about a thing that was never there.
+    ///
+    /// And byte equality alone would pass for a delta that did nothing whatever,
+    /// which is why the spawn options are required to differ, in exactly one
+    /// field. That pairing sharpens
+    /// [`each_removal_changes_exactly_its_own_flags`]' multiset case for this one
+    /// axis: a multiset is blind to order, and a delta that reordered two mounts
+    /// would satisfy it.
+    #[test]
+    fn the_descriptor_control_changes_no_mount_no_env_and_no_argv_byte() {
+        let weakening = weakening_for(PropertyRemoval::DescriptorsClosed, None);
+        let probe = assembled(None);
+        let control = assembled(Some(&weakening));
+
+        for word in MOUNT_WORDS.iter().chain(&ENVIRONMENT_WORDS) {
+            assert!(
+                probe.iter().any(|assembled| assembled == word),
+                "the baseline argv has no `{word}`, so leaving it unchanged says nothing"
+            );
+        }
+
+        assert_eq!(
+            probe, control,
+            "the descriptor delta moved an argv word, so it is not the parent-side \
+             axis it is declared to be"
+        );
+
+        assert_ne!(
+            SpawnOptions::under(None),
+            SpawnOptions::under(Some(&weakening)),
+            "the delta changed neither the argv nor the spawn options, so it removes nothing"
+        );
+        assert_eq!(
+            SpawnOptions::under(Some(&weakening)),
+            SpawnOptions {
+                descriptors_closed: false,
+                ..CONFINING_OPTIONS
+            },
+            "the delta switched off more than the descriptor sweep"
+        );
+    }
 }
