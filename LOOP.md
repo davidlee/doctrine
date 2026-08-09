@@ -97,7 +97,7 @@ matches pid 1 and reports "building" unconditionally.)
 |---|---|
 | phase `in_progress`, sheet touched < 25 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
 | phase `in_progress`, sheet cold, **but any other leg is fresh** | **exit.** Still alive, just slow. Same as above. |
-| phase `in_progress`, sheet cold > 90 min **and all four legs silent** | it died. Re-spawn, resuming at the first unticked task. |
+| phase `in_progress`, sheet cold > 90 min **and all four legs silent** | it died. **Resume it from its transcript, don't re-spawn** — see below. |
 | phase `completed`, a next phase exists | beat 4 — spawn the planner. |
 | phase `planned`, sheet > 100 lines (filled) | beat 5 — spawn the worker. |
 | phase `planned`, sheet ~27 lines (bare template) | beat 4 — spawn the planner. |
@@ -122,6 +122,72 @@ doubt, exit and re-arm. That asymmetry, not the specific numbers, is the rule.
 
 Three consecutive revives of the same phase → stop and report. Do not loop on a
 sub-agent that cannot finish.
+
+### When the worker dies, resume it — do not re-spawn it
+
+`SendMessage` to the dead agent's id **resumes it from its saved transcript**,
+with everything it had learned still in context. A fresh spawn starts from the
+sheet and re-derives all of it. On a phase that has measured host behaviour the
+design got wrong — the kind that fills a findings ledger — that context is the
+expensive thing in the tree, not the code.
+
+The revive message states **disk state, not instructions**: the tip sha and what
+it contains, which boxes are ticked, exactly what is dirty and how large, and
+"nobody has touched it since". Then re-state the contract in one paragraph,
+because a resumed agent's oldest context is its briefing and that is what
+degrades first. Two things worth saying every time:
+
+- **assess the uncommitted work before building on it** — it was in flight when
+  the process died and may not compile;
+- **if finishing it costs more than redoing it, redo it** — sunk cost is not
+  evidence, and a worker resumed mid-edit is prone to defending its own draft.
+
+**Check `TaskList` before you plan on resuming.** The transcript is only
+reachable while the agent registry is — and the registry does not survive the
+sandbox being rebuilt (below). An empty `TaskList` where a worker should be
+means resume is not available at any price: **re-spawn, and treat the tree as
+your only witness.** Read the tip, the sheet's ticked boxes and the findings
+shard before writing the brief; a worker that got most of the way through a task
+usually left its evidence in the shard even though its context is gone.
+
+### The failure mode above the worker: the harness process itself dies
+
+It takes the worker *and* the loop's own `ScheduleWakeup` with it, so the loop
+does not notice — **it stops firing entirely** and only restarts when a human
+re-invokes it. Nothing in the guard can catch this, because the guard only runs
+when the loop runs. Know the shape so you diagnose it in one read rather than
+three: every leg cold *at once*, by hours, with a clean recent commit and a
+plausible dirty file. That looks like a stalled worker; it is a stopped loop.
+
+The consequence for briefs: **tell workers to commit each task as it goes green**
+rather than at the phase's end. The uncommitted window is the whole exposure,
+and it is the one variable the orchestrator controls from outside the worker.
+
+**One level above that again: the sandbox is rebuilt.** Same symptom, worse
+blast radius — the agent registry goes too, so the transcript is unreachable and
+resume is off the table. The tell is one command: `ps -o pid,etime,comm -p 1`.
+A pid 1 younger than the work you are looking at means the whole jail was torn
+down and restarted, not merely a process killed inside it. Distinguishing the
+two matters because they route differently — a dead harness resumes, a rebuilt
+sandbox re-spawns.
+
+**And if this phase's code can kill processes it did not start, suspect it.**
+Twice in `SL-248` the operator was dropped back to their shell with no error,
+during runs of a suite whose sweep kills by session; the sweep refused only its
+own session, and the harness sits in a *different* one — `bwrap` at pid 1 in
+session 0, the agent at pid 2 in session 0. Nothing in the guard protected
+either. Before spawning a worker back into a suite like that, run it yourself
+once: it is the discriminating experiment, it is cheap, and it is much better
+to lose the orchestrator's firing than the worker's context on top of it.
+
+The rule that generalises out of it, and it belongs in the **planner** brief:
+**a destructive test instrument is floored before it is aimed, never after.**
+The floor in that phase was scheduled as the last task so as not to change code
+under test mid-battery — defensible in itself, and it put the guard behind the
+twenty-one rows that exercise the very thing it makes safe. The battery passed;
+the teardown happened during the task carrying the guard, before it was
+committed. If a phase builds something that signals, deletes, or unmounts, its
+first commit carries the refusal that bounds it.
 
 ## The orchestrator's turn
 
@@ -221,6 +287,12 @@ available. `DEC-181` is what that looks like when it works.
 **End green.** `doctrine check gate` — `check`/`gate` build before validating,
 which is what gives the corpus check a fresh binary. Commit path-limited, with
 the conventional scope `feat(SL-<N>): PHASE-<PP> …`.
+
+**Commit each task as it goes green, not at the phase's end.** The uncommitted
+window is the exposure: a harness restart takes everything not yet committed,
+and it gives no warning. `PHASE-08` lost six hours of position that way. This is
+the same argument as harvest-as-you-go, applied to the tree instead of the
+knowledge.
 
 ## Notes, sharded
 

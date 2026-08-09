@@ -1,0 +1,31 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe447-6778-75f3-ba74-50d4c7c716d6"
+recorded_at = "2026-08-09T02:08:32.632039112Z"
+kind = "friction"
+summary = "/loop SL-248 PHASE-08: harness exited cold with no diagnostic while a mass-SIGKILL-by-session mechanism was under development; cause unprovable after the fact"
+detail = """
+The Claude Code harness process vanished overnight — no error, no shutdown message, the user returned to a bare shell — taking the PHASE-08 worker and the /loop's own ScheduleWakeup with it. The loop stopped firing entirely for ~6h and only restarted on a human re-invocation.
+
+At the moment of death the worker was mid-T8 with +210 uncommitted lines. T8's mechanism is `kill_session`, which enumerates the whole process table and SIGKILLs every process whose session id matches. SIGKILL is exactly the observed signature. The worker's own doc comments on that code name the failure mode ("a bug that recorded the harness's own sid kills the suite's own process tree"), and the guards that prevent it — refusing own_session in both the record and kill paths, passing `own` as a parameter, disarming entirely when /proc does not answer — were all committed AFTER the resume, i.e. they did not exist in the draft that was live when the harness died.
+
+Circumstantial, not proven, and the friction is that it is now unprovable: the pre-death draft was built over, the jail has no dmesg, and OOM presents identically (silent vanish). Three things would each have settled it and none were present:
+
+1. no harness-side record of why it exited — a cold vanish is indistinguishable from OOM, SIGKILL, and a crash;
+2. the worker's uncommitted work was the evidence AND the suspect, and it was destroyed by the same event;
+3. nothing in the loop can detect harness death, because the guard only runs when the loop runs — the failure silences its own detector.
+
+Cost: ~6h of loop wall-clock, an unrecoverable diagnosis, and an unquantified residual risk that development code in this repo can kill the user's session. Mitigation taken: LOOP.md amended with resume-from-transcript, the harness-death failure shape, and commit-each-task-as-it-goes-green (the uncommitted window is the whole exposure). A floor guard (refuse session <= 1, never signal pid 1) was ordered into T12 — kill_session currently refuses only the harness's own session, and this jail's bwrap is pid 1 session 0, so an unguarded mass-SIGKILL sits one enumeration bug away from tearing down the sandbox.
+
+Generalisable: any agent-authored mechanism that signals by session/group/table enumeration should carry a floor guard from its first draft, not from its review, because the first draft is the one that runs unattended against the developer's own machine."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

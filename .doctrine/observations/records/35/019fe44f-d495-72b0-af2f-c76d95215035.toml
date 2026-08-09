@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe44f-d495-72b0-af2f-c76d95215035"
+recorded_at = "2026-08-09T02:17:44.853828001Z"
+kind = "friction"
+summary = "loop/execute: jail torn down mid-phase for the second time — the conformance sweep's session floor"
+detail = "SL-248 PHASE-08. Claude exited cold twice with no error, the operator dropped back to their shell. Second time the jail's bwrap pid 1 had etime 00:16, so the whole sandbox was rebuilt, not just the harness. Mechanism found: the T8 session-kill sweep refused only the suite's own session, but in this jail the harness is NOT in that session - bwrap is pid 1 in session 0 and the Claude process is pid 2 also in session 0, while the suite runs in its own session. Session 0 was foreign to the guard and therefore killable; killing it SIGKILLs the sandbox. Not proven that session 0 was ever actually recorded (no dmesg in the jail, OOM presents identically, and the draft that ran at the first death was built over) but the mechanism is exact and the symptom matches. Floored at commit 3860a948c. Cost: roughly eight hours of loop position across two deaths plus the diagnosis. The generalisable lesson is that a destructive test instrument needs its floor written before its first run, not as a later task in the same phase - I deferred this guard to T12 to avoid disturbing the mutation battery, and the second teardown happened during T12."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
