@@ -706,6 +706,33 @@ pub(crate) enum Observed {
         held: &'static str,
         failed: &'static str,
     },
+    /// Two tokens as [`Observed::Token`], but the forbidden one **dominates**
+    /// instead of contradicting.
+    ///
+    /// The difference is whose mouth the second token comes out of. Under
+    /// [`Observed::Token`] both tokens are the *same* payload's, so both
+    /// present means the payload contradicted itself and the arm is
+    /// [`Indeterminacy::AmbiguousObservation`]. Here the forbidden token is
+    /// spoken by a process the capsule was supposed to have taken with it —
+    /// row 7's escaped descendant, speaking on the inherited stdout *after*
+    /// its parent said its piece and exited (`F-25`). Both tokens is therefore
+    /// not a contradiction but the entire observation: the payload did its
+    /// part, and something outlived it anyway.
+    ///
+    /// Held iff `stated` is present and `forbidden` absent. Failed on
+    /// `forbidden` whatever `stated` says — a survivor is a survivor whether
+    /// or not its parent got its line out first. Neither token is
+    /// [`Indeterminacy::NoObservation`]; `stated` is still required for a
+    /// hold, because an absence is never a hold (invariant 5).
+    ///
+    /// **Additive on purpose, and the additivity is tested.** `Token`'s
+    /// both-present cell is untouched, so no other row's reading moves. The
+    /// alternative considered — teaching `Token` a dominance flag — would have
+    /// routed every row through a cell that exactly one row wants.
+    Unspoken {
+        stated: &'static str,
+        forbidden: &'static str,
+    },
     /// A value line, compared for equality — row 6, where the observation is a
     /// value rather than a binary. **A missing value line is
     /// [`Indeterminacy::NoObservation`], never [`ArmResult::Failed`]**, which is
@@ -809,7 +836,10 @@ pub(crate) enum Indeterminacy {
     NoLiveness,
     /// Live, but neither token — or, for [`Observed::Exactly`], no value line.
     NoObservation,
-    /// Both tokens, which means the payload is wrong.
+    /// Both tokens, which means the payload is wrong. Belongs to
+    /// [`Observed::Token`] alone: under [`Observed::Unspoken`] the second
+    /// token is another process's, so both present is a reading, not a
+    /// contradiction.
     AmbiguousObservation,
     /// The backend failed to run the arm at all. A `String` and not the
     /// `BackendError` itself, so the verdict carries a rendering the backend
@@ -2825,6 +2855,15 @@ fn classify(observation: &Observation, observed: &Observed) -> ArmResult {
                 }
                 (true, false) => ArmResult::Held,
                 (false, true) => ArmResult::Failed,
+                (false, false) => indeterminate(Indeterminacy::NoObservation, Some(observation)),
+            }
+        }
+        Observed::Unspoken { stated, forbidden } => {
+            let saw_stated = lines.iter().any(|line| line.as_str() == *stated);
+            let saw_forbidden = lines.iter().any(|line| line.as_str() == *forbidden);
+            match (saw_stated, saw_forbidden) {
+                (_, true) => ArmResult::Failed,
+                (true, false) => ArmResult::Held,
                 (false, false) => indeterminate(Indeterminacy::NoObservation, Some(observation)),
             }
         }
@@ -5251,6 +5290,11 @@ mod tests {
 
     const HELD: &str = "HELD";
     const HELD_NOT: &str = "HELD-NOT";
+    /// `Observed::Unspoken`'s forbidden token. Deliberately *not* `HELD_NOT`:
+    /// the two kinds read a second token for opposite purposes, and a shared
+    /// constant would let a test read as though `Unspoken` were `Token` with
+    /// one cell moved.
+    const FORBIDDEN: &str = "FORBIDDEN";
     const A_VALUE: &str = "1048576";
     const ANOTHER_VALUE: &str = "0";
 
@@ -5333,6 +5377,13 @@ mod tests {
         Observed::Token {
             held: HELD,
             failed: HELD_NOT,
+        }
+    }
+
+    fn unspoken() -> Observed {
+        Observed::Unspoken {
+            stated: HELD,
+            forbidden: FORBIDDEN,
         }
     }
 
@@ -5679,8 +5730,11 @@ mod tests {
 
     // ── VT-1: classification ───────────────────────────────────────────────
 
-    /// `EX-10`'s two-stage order, over **all three** `Observed` kinds — the
-    /// `Exactly` and `Termination` paths are the ones a single-kind test misses.
+    /// `EX-10`'s two-stage order, over **all four** `Observed` kinds — the
+    /// `Exactly` and `Termination` paths are the ones a single-kind test
+    /// misses, and `Unspoken` is the kind most able to slip the gate, since
+    /// its forbidden token reads `Failed` from a single line and a dead
+    /// capsule's stdout is empty of everything *but* what escaped it.
     ///
     /// Every fixture here carries a **positive** observation that stage two
     /// would read (the failed token, a wrong value, the expected termination),
@@ -5705,6 +5759,10 @@ mod tests {
         assert_eq!(reason(&termination_arm), Indeterminacy::NoLiveness);
         assert_ne!(termination_arm, ArmResult::Held);
 
+        let unspoken_arm = classify(&ran(&[FORBIDDEN]), &unspoken());
+        assert_eq!(reason(&unspoken_arm), Indeterminacy::NoLiveness);
+        assert_ne!(unspoken_arm, ArmResult::Failed);
+
         // The fixtures must discriminate: with the marker present, each of the
         // three reads its own positive answer.
         assert_eq!(
@@ -5725,6 +5783,10 @@ mod tests {
             ),
             ArmResult::Held
         );
+        assert_eq!(
+            classify(&ran(&[LIVENESS_MARKER, FORBIDDEN]), &unspoken()),
+            ArmResult::Failed
+        );
     }
 
     /// Both tokens means the payload is wrong, not that the property held.
@@ -5740,6 +5802,71 @@ mod tests {
             classify(&ran(&[LIVENESS_MARKER, HELD]), &token()),
             ArmResult::Held
         );
+    }
+
+    // ── `Observed::Unspoken`'s truth table (`T9`, route (a)) ───────────────
+    //
+    // Hand-built arms throughout: the reading rule is pure, so nothing here
+    // starts a capsule. What the rule must say is that a token spoken by a
+    // process the capsule failed to take with it is an *observation of
+    // failure*, not a payload contradicting itself.
+
+    /// The two cells `Unspoken` shares with `Token`: a hold needs the stated
+    /// token positively, and silence is indeterminate rather than a hold.
+    #[test]
+    fn a_stated_token_alone_holds_and_neither_token_is_indeterminate() {
+        assert_eq!(
+            classify(&ran(&[LIVENESS_MARKER, HELD]), &unspoken()),
+            ArmResult::Held
+        );
+
+        let silent = classify(&ran(&[LIVENESS_MARKER]), &unspoken());
+        assert_eq!(reason(&silent), Indeterminacy::NoObservation);
+        assert_ne!(silent, ArmResult::Held);
+    }
+
+    /// The cell the whole variant exists for. Under `Token` the both-present
+    /// case is ambiguity; here the forbidden token dominates, because the
+    /// second speaker is the escapee and one utterance is the failure.
+    ///
+    /// Both `forbidden` cells are asserted: a rule that only handled the
+    /// both-present case would leave a bare `FORBIDDEN` — a descendant that
+    /// outlived its parent before the parent spoke — reading indeterminate.
+    #[test]
+    fn a_forbidden_token_fails_whether_or_not_the_stated_token_is_present() {
+        assert_eq!(
+            classify(&ran(&[LIVENESS_MARKER, HELD, FORBIDDEN]), &unspoken()),
+            ArmResult::Failed
+        );
+        assert_eq!(
+            classify(&ran(&[LIVENESS_MARKER, FORBIDDEN]), &unspoken()),
+            ArmResult::Failed
+        );
+    }
+
+    /// Route (a)'s additivity, asserted rather than claimed.
+    ///
+    /// One stdout, read twice. As a `Token` it is still
+    /// [`Indeterminacy::AmbiguousObservation`] — the cell every other row
+    /// depends on, unmoved — and as an `Unspoken` it is
+    /// [`ArmResult::Failed`]. That the *same bytes* give two answers is what
+    /// makes this a test of the widening and not of either kind alone: had the
+    /// widening been done by teaching `Token` a dominance flag, one of these
+    /// two assertions could not exist.
+    #[test]
+    fn the_same_both_present_stdout_is_ambiguous_as_a_token_and_failed_as_unspoken() {
+        let both_present = ran(&[LIVENESS_MARKER, HELD, FORBIDDEN]);
+
+        let as_token = classify(
+            &both_present,
+            &Observed::Token {
+                held: HELD,
+                failed: FORBIDDEN,
+            },
+        );
+        assert_eq!(reason(&as_token), Indeterminacy::AmbiguousObservation);
+
+        assert_eq!(classify(&both_present, &unspoken()), ArmResult::Failed);
     }
 
     /// Row 6's shape: nothing to compare is not the same as comparing unequal.
