@@ -11358,6 +11358,13 @@ mod tests {
     /// under both arms and separate nothing. The row still states all four,
     /// because narrowing it to the surfaces that happen to work on the host in
     /// front of me is what `EX-11` forbids and what `RV-346` `F-27` was.
+    ///
+    /// Those claims are asserted by [`a_mapped_capsules_reading`] and
+    /// [`the_trusted_sides_reading`] rather than restated here, because every
+    /// caller of a reading needs them and the `S4` guard in particular is what
+    /// a caller would drop quietly. What is left in the body is the pairing
+    /// neither reading can make on its own: that the two really are different
+    /// readings, so this is not one observation made twice.
     #[test]
     fn the_capsule_reports_the_declared_identity() {
         let mapped = a_mapped_capsules_reading();
