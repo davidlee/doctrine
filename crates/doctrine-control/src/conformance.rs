@@ -4247,7 +4247,10 @@ mod tests {
         run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
         writes_past_the_file_size_cap,
     };
-    use super::{ENUMERATION_HANDLE_TARGET, FD_RESOLVED, LS_LINK_ARROW, PROC_SELF_FD};
+    use super::{
+        DECOY_DESCRIPTOR_LEAF, DECOYS_LEAF, ENUMERATION_HANDLE_TARGET, FD_RESOLVED, LS_LINK_ARROW,
+        PROC_SELF_FD, descriptors_above_two_resolved,
+    };
     use super::{
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
         every_declared_mount_tested_for_writability, the_source_export_written_through,
@@ -9153,6 +9156,97 @@ mod tests {
         assert!(
             script.contains(FD_RESOLVED),
             "row 10 reports no resolved descriptor, so a failure names nothing"
+        );
+    }
+
+    /// The three tokens of the authority-mode row below.
+    ///
+    /// Two of them, not three: **partial presence prints nothing**, so the arm
+    /// reads [`Indeterminacy::NoObservation`] and the row is `Indeterminate`.
+    /// One-of-three inherited can therefore never be read as *the modes are
+    /// exercised* — the failure mode a `-ge 1` threshold would have.
+    const NO_DECOY_AUTHORITY: &str = "NO-DECOY-AUTHORITY";
+    const EVERY_DECOY_AUTHORITY: &str = "EVERY-DECOY-AUTHORITY";
+
+    /// How a socket end resolves in `/proc/self/fd` — the one kind of target
+    /// that names no filesystem path at all.
+    const SOCKET_TARGET_PREFIX: &str = "socket:";
+
+    /// A row that separates *all three decoy authority modes crossed the `exec`*
+    /// from *none did*, and refuses to answer in between.
+    ///
+    /// **Not row 10**, and it borrows its id as [`descriptor_shaped_row`] does.
+    /// Row 10's claim is that nothing above the standard streams survives, by
+    /// identity — it is deliberately blind to *what kind* of thing a survivor
+    /// was, because it must fail on any of them. This row asks the complementary
+    /// question the shipped row cannot: that the set row 10 is proven against
+    /// actually spans the three kinds `inheritable_decoys` documents, so a
+    /// backend sweeping only, say, regular files could not pass it.
+    ///
+    /// Each mode is recognised by what the descriptor resolves to:
+    /// - the readable decoy, by its path under the fixture's decoy directory;
+    /// - the write-only decoy, by [`DELETED_SUFFIX`] — `O_TMPFILE` linked into
+    ///   no directory, so the kernel reports its target as already gone;
+    /// - the socket end, by [`SOCKET_TARGET_PREFIX`].
+    fn every_descriptor_authority_row() -> Row {
+        let per_descriptor = format!(
+            "case \"$target\" in */{DECOYS_LEAF}/{DECOY_DESCRIPTOR_LEAF}) readable=1;; esac; \
+             case \"$target\" in *\"{DELETED_SUFFIX}\") writeonly=1;; esac; \
+             case \"$target\" in {SOCKET_TARGET_PREFIX}*) socket=1;; esac; "
+        );
+        Row {
+            id: RowId::Property(Property::TrustedTerminationObservation),
+            shape: ArmShape::Single(Probe {
+                argv: shell_argv(&format!(
+                    "echo {LIVENESS_MARKER}; readable=0; writeonly=0; socket=0; {}\
+                     modes=$((readable+writeonly+socket)); \
+                     if [ \"$modes\" -eq 0 ]; then echo {NO_DECOY_AUTHORITY}; \
+                     elif [ \"$modes\" -eq 3 ]; then echo {EVERY_DECOY_AUTHORITY}; fi",
+                    descriptors_above_two_resolved(&per_descriptor)
+                )),
+                observed: Observed::Token {
+                    held: NO_DECOY_AUTHORITY,
+                    failed: EVERY_DECOY_AUTHORITY,
+                },
+            }),
+            delta: Delta::Removed(PropertyRemoval::DescriptorsClosed),
+        }
+    }
+
+    const AUTHORITY_HELPER: &str =
+        "conformance::tests::the_descriptor_authorities_measured_in_a_process_of_its_own";
+    const AUTHORITY_VERDICT: &str = "AUTHORITY-VERDICT=";
+
+    /// The child half of
+    /// [`each_descriptor_authority_mode_is_exercised_readable_write_only_and_socket`]
+    /// — **an instrument, not a claim**.
+    #[test]
+    #[ignore = "instrument: re-executed alone by each_descriptor_authority_mode_is_exercised_readable_write_only_and_socket"]
+    fn the_descriptor_authorities_measured_in_a_process_of_its_own() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let verdict = run_row(
+            &backend,
+            &SystemHost,
+            &fixture,
+            &every_descriptor_authority_row(),
+        );
+        println!("{AUTHORITY_VERDICT}{verdict:?}");
+    }
+
+    /// `VT-3` — row 10's decoy set spans all three authority modes.
+    ///
+    /// `Proven` is the only verdict that says so: the probe arm saw none of the
+    /// three and the control arm saw **all** of them. Two of three inherited
+    /// prints no token and reads `Indeterminate`, which fails here rather than
+    /// passing quietly.
+    #[test]
+    fn each_descriptor_authority_mode_is_exercised_readable_write_only_and_socket() {
+        assert_eq!(
+            one_line_from_a_child(AUTHORITY_HELPER, AUTHORITY_VERDICT),
+            format!("{:?}", RowVerdict::Proven),
+            "the control arm did not inherit all three of readable, write-only and \
+             socket — a partial set prints no token, so the row reads Indeterminate"
         );
     }
 }
