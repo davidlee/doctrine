@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe87f-ac68-7450-90a9-b783b2619c37"
+recorded_at = "2026-08-09T21:48:29.160595469Z"
+kind = "friction"
+summary = "loop orchestrator: improvised a liveness guard instead of running the documented four legs, and read a quiet tree as a finished worker"
+detail = """
+Driving SL-248 via LOOP.md. On a clock wake I ran an ad-hoc guard (ps / git status / git log) rather than LOOP.md's specified four legs. It reported a clean tree and no live processes at 07:39:05, which I read as 'worker finished'. The worker was alive: it wrote at 07:39:23 and 07:39:36, committed 9d48adbc8 at 07:42:09, and the harness notification arrived at 07:46. I had already started a verification gate against a tree I did not own (harmless only by luck -- the late commit touched notes.md only, so the code was byte-identical to the final tip).
+
+Two distinct costs. (1) A wasted 138s gate run plus the re-checking to establish whether its verdict still stood. (2) The ps substitution is the exact instantaneous-sample defect LOOP.md already warns about two paragraphs below the guard -- documented, and re-invented anyway under time pressure, which suggests the warning is placed where it is not read at the moment of use.
+
+Root cause worth generalising: the guard's legs are all alive-detectors. Each can say 'still working'; none can say 'done'. A worker between two tool calls is quiet in exactly the way a finished one is. The only authoritative completion signal is the harness task-notification, and LOOP.md did not say so. Fixed at source in f730eef0f."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
