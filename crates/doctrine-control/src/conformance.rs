@@ -185,6 +185,78 @@ const DESCRIPTOR_INHERITED: &str = "DESCRIPTOR-INHERITED";
 /// are what makes a failure say *which* descriptor crossed and of what kind,
 /// and what the two row-10 mutants are spelled in.
 const FD_RESOLVED: &str = "FD-RESOLVED-";
+
+/// The capsule's environment **as the `exec` delivered it**, as the kernel
+/// presents it — and the pid is `$$`, the payload shell's own, for two measured
+/// reasons.
+///
+/// This is [`PROC_SELF_FD`]'s trap one channel across — *make sure what you read
+/// is what crossed the boundary and not something assembled after it* — and it
+/// bites twice here.
+///
+/// **Not `env`, and not any other child's `/proc/self/environ`.** Those report
+/// the environment of a process the *shell* spawned, and a shell exports
+/// variables of its own into it: measured on this host, `sh -c` started with
+/// `HOME PATH TERM` spawns children holding `HOME PATH PWD SHLVL TERM _`. Row
+/// 11's set equality would then separate on the shell's additions rather than on
+/// what the backend handed the capsule.
+///
+/// **And not `< /proc/self/environ`, which reads back empty.** A redirection is
+/// opened by the shell and the file is then read by the `exec`ed utility; the
+/// kernel binds the `environ` file to the mm it captured at *open*, and that mm
+/// is destroyed by the very `exec` that puts the reader in place. Measured: `tr
+/// '\0' '\n' < /proc/self/environ` yields **zero bytes**, which a payload
+/// comparing sets would read as *every declared variable is missing* — a
+/// statement about the read wearing the shape of a statement about the backend.
+///
+/// `$$` is the shell that `exec` delivered the environment to, it is still alive
+/// while its own child reads, and its block is the one `execve` wrote: a later
+/// `setenv` allocates elsewhere and never moves `env_start`/`env_end`.
+const PROC_SHELL_ENVIRON: &str = "/proc/$$/environ";
+
+/// Row 11's two tokens: the capsule's environment is exactly the declared
+/// [`CapsuleEnv`], or it is not.
+const ENVIRONMENT_EXACT: &str = "ENVIRONMENT-EXACT";
+const ENVIRONMENT_DIFFERS: &str = "ENVIRONMENT-DIFFERS";
+
+/// Row 11's diagnostic lines, one per variable the set equality separated on:
+/// present in the capsule and undeclared, or declared and absent from it.
+///
+/// **Two prefixes because the row is set equality and not a denylist.** A
+/// payload that only reported undeclared variables states half a claim, and the
+/// half it drops is the one a backend that cleared the environment and applied
+/// none of it would fail. [`Observed::Token`] matches whole lines, so these are
+/// diagnostics and never the token — and they are what the row-11 mutants are
+/// spelled in.
+const ENV_UNDECLARED: &str = "ENV-UNDECLARED-";
+const ENV_MISSING: &str = "ENV-MISSING-";
+
+/// The one variable in a capsule's environment that doctrine does not put
+/// there.
+///
+/// **Measured, and it overturned this row's first statement.** `bwrap` writes
+/// `PWD` into the child's exec block itself — after `--clearenv`, after every
+/// `--setenv`, naming the directory `--chdir` moved it to. Confirmed twice: a
+/// hand-run `bwrap --clearenv --setenv PATH … --setenv HOME … --chdir /tmp`
+/// delivers `PWD=/tmp` and one without `--chdir` delivers the *host's* cwd; and
+/// the shipped confining arm reports `PWD=/capsule` and nothing else undeclared.
+/// It is not in [`CapsuleEnv`] and must not be added to it: `CapsuleEnv` is the
+/// list doctrine hands the backend, and this is the backend's own restatement of
+/// a different flag.
+///
+/// **Admitted by value, never by name** — which is what keeps row 11 a set
+/// equality rather than a set equality with a denylisted hole. The only entry
+/// that passes is the one naming the capsule's own [`INNER_CAPSULE`] working
+/// directory, so a backend handing the capsule the *trusted side's* `PWD` — a
+/// host path, and the leak this admission would otherwise open — still fails.
+const WORKING_DIRECTORY_VAR: &str = "PWD";
+
+/// [`WORKING_DIRECTORY_VAR`] as the payload compares it: a whole `NAME=VALUE`
+/// entry, because the name alone is the hole.
+fn bubblewraps_working_directory() -> String {
+    format!("{WORKING_DIRECTORY_VAR}={INNER_CAPSULE}")
+}
+
 /// Row B2's ref. A full refname, because `update-ref` and `show-ref --verify`
 /// both take one.
 const SENTINEL_REF: &str = "refs/heads/sentinel";
@@ -2257,10 +2329,10 @@ pub(crate) enum RowId {
 
 /// One variant per table A row, **ordered as table A is**.
 ///
-/// Eight members at this phase — table A rows 1–8, which PHASE-09 lands with
-/// their rows. Rows 9–14 and their six variants arrive at PHASE-10; `EX-14`
-/// defers membership precisely so a variant never exists without the row that
-/// constructs it.
+/// Eleven members at this phase — table A rows 1–8 landed by PHASE-09 with their
+/// rows, and rows 9, 10 and 11 by PHASE-10 `T3`, `T4` and `T5`. Rows 12–14 and
+/// their three variants arrive later in PHASE-10; `EX-14` defers membership
+/// precisely so a variant never exists without the row that constructs it.
 ///
 /// ## What the compiler checks here, and what it does not
 ///
@@ -2304,6 +2376,10 @@ pub(crate) enum Property {
     /// capsule's own enumeration resolves to nothing above the standard streams
     /// but the handle the enumeration itself opened.
     ClosedDescriptorSet,
+    /// Row 11. The capsule's environment is **exactly** the declared
+    /// [`CapsuleEnv`]: nothing the trusted side held crosses the `exec`, and
+    /// every declared variable arrives.
+    ClosedEnvironment,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -3226,6 +3302,87 @@ fn no_descriptor_above_two_is_inherited() -> Probe {
     }
 }
 
+/// The enumeration row 11's payloads are built on: **read the environment block
+/// the `exec` delivered**, and run `per_name` for each variable in it with
+/// `$name` bound to that variable's name.
+///
+/// [`PROC_SHELL_ENVIRON`] rather than `env` or a redirection, for the two
+/// reasons that constant records: the reading must be of what crossed the
+/// boundary, not of what a shell holds after it — and the obvious spelling of it
+/// reads back empty.
+///
+/// **A payload that read no block at all prints no token**, so the arm reads
+/// [`Indeterminacy::NoObservation`] and the row is `Indeterminate` — not
+/// `Violated`, and not held. Two ways to get there, and both were reached while
+/// this row was being written: the block is NUL-separated and POSIX `sh` cannot
+/// split on NUL, so `tr` does it and a capsule whose bound input set has no `tr`
+/// observes nothing; and the redirection [`PROC_SHELL_ENVIRON`] documents reads
+/// back empty on a live kernel. Either would otherwise report *every declared
+/// variable is missing*, which is a statement about the reading wearing the shape
+/// of a statement about the backend. The same discipline as row 10's own-handle
+/// check, one channel across.
+fn environment_names_resolved(per_name: &str) -> String {
+    format!(
+        "command -v tr > /dev/null 2>&1 || exit 0; \
+         listing=$(tr '\\0' '\\n' < {PROC_SHELL_ENVIRON} 2>/dev/null); \
+         [ -n \"$listing\" ] || exit 0; IFS='\n'; \
+         for entry in $listing; do \
+         name=${{entry%%=*}}; {per_name}\
+         done; unset IFS; "
+    )
+}
+
+/// Row 11's payload: the capsule's environment is **exactly** `env`, plus the
+/// single entry `admitted` the backend writes for itself.
+///
+/// **Set equality, both directions, never a search for known names.** A payload
+/// that looked for credential-shaped names would pass a backend leaking a
+/// variable nobody thought to list — which is row 11's own defect class restated
+/// one level down, and is why the previous proof (a closed [`CapsuleEnvVar`]
+/// enum, which binds *callers* and not backends, plus an argv assertion that
+/// `--clearenv` is present) did not reach it. And a payload that only rejected
+/// undeclared variables would pass a backend that cleared the environment and
+/// applied none of it. So an undeclared variable and a missing declared one each
+/// fail the row, and each says which.
+///
+/// `env` is a parameter rather than [`CapsuleEnv::complete`] read in here,
+/// because the set the payload expects must be the set the arm is *given* —
+/// [`harness_execution`]'s — and one of them is the source.
+///
+/// `admitted` is the one whole `NAME=VALUE` entry the backend synthesises for
+/// itself ([`WORKING_DIRECTORY_VAR`]). It is compared entire, so the exception
+/// is to one *value* and not to a name; it is admitted and **not required**,
+/// because its presence is bubblewrap's undertaking rather than doctrine's and a
+/// capsule that arrived without it is strictly the safer side of this row.
+fn the_environment_is_exactly(env: &CapsuleEnv, admitted: &str) -> Probe {
+    let expected = env
+        .vars()
+        .map(CapsuleEnvVar::name)
+        .collect::<Vec<&str>>()
+        .join(" ");
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; expected='{expected}'; undeclared=0; missing=0; seen=' '; {}\
+             for name in $expected; do \
+             case \"$seen\" in *\" $name \"*) continue;; esac; \
+             missing=$((missing+1)); echo \"{ENV_MISSING}$name\"; \
+             done; \
+             if [ \"$undeclared\" -eq 0 ] && [ \"$missing\" -eq 0 ]; \
+             then echo {ENVIRONMENT_EXACT}; else echo {ENVIRONMENT_DIFFERS}; fi",
+            environment_names_resolved(&format!(
+                "seen=\"$seen$name \"; \
+                 case \" $expected \" in *\" $name \"*) continue;; esac; \
+                 case \"$entry\" in \"{admitted}\") continue;; esac; \
+                 undeclared=$((undeclared+1)); echo \"{ENV_UNDECLARED}$name\"; "
+            ))
+        )),
+        observed: Observed::Token {
+            held: ENVIRONMENT_EXACT,
+            failed: ENVIRONMENT_DIFFERS,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3300,7 +3457,7 @@ fn observes_the_subject(subject: HostPid) -> Argv {
 /// Table A — `SPEC-030` § *Platform backend contract*'s rows, in the design
 /// document's order, and the ordering of [`Property`] is this list's.
 ///
-/// Nine rows at this phase; rows 10–14 arrive later in PHASE-10.
+/// Eleven rows at this phase; rows 12–14 arrive later in PHASE-10.
 fn table_a() -> Vec<Row> {
     vec![
         storage_row(
@@ -3370,6 +3527,18 @@ fn table_a() -> Vec<Row> {
             shape: ArmShape::Single(no_descriptor_above_two_is_inherited()),
             delta: Delta::Removed(PropertyRemoval::DescriptorsClosed),
         },
+        Row {
+            id: RowId::Property(Property::ClosedEnvironment),
+            // The same `CapsuleEnv` every harness payload is executed under
+            // (`harness_execution`), so the set the payload expects and the set
+            // the arm is given have a single source rather than two lists that
+            // agree today.
+            shape: ArmShape::Single(the_environment_is_exactly(
+                &CapsuleEnv::complete(),
+                &bubblewraps_working_directory(),
+            )),
+            delta: Delta::Removed(PropertyRemoval::EnvCleared),
+        },
     ]
 }
 
@@ -3413,7 +3582,7 @@ fn table_b() -> Vec<Row> {
 
 /// Tables A and B, which [`admission`] is computed from.
 ///
-/// Thirteen rows at this phase — table A's first eight and all five of table B
+/// Sixteen rows at this phase — table A's first eleven and all five of table B
 /// — so [`Admission::Admitted`] now means what it will mean at PHASE-10: every
 /// one of them [`RowVerdict::Proven`]. It is no longer reachable vacuously.
 ///
@@ -4299,6 +4468,10 @@ mod tests {
         DECOY_DESCRIPTOR_LEAF, DECOYS_LEAF, DESCRIPTOR_INHERITED, ENUMERATION_HANDLE_TARGET,
         FD_RESOLVED, LS_LINK_ARROW, NO_DESCRIPTOR_ABOVE_TWO, PROC_SELF_FD, SHELL_COMMAND,
         descriptors_above_two_resolved,
+    };
+    use super::{
+        ENV_MISSING, ENV_UNDECLARED, ENVIRONMENT_DIFFERS, ENVIRONMENT_EXACT, PROC_SHELL_ENVIRON,
+        WORKING_DIRECTORY_VAR, bubblewraps_working_directory, environment_names_resolved,
     };
     use super::{
         INPUT_IMMUTABILITY_LEAF, MOUNT_READ_ONLY, MOUNT_WRITABLE,
@@ -8706,11 +8879,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — fifteen rows, each
+    /// shipped tables are what the design says they are — sixteen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_fifteen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_sixteen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -8720,7 +8893,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 15);
+        assert_eq!(rows.len(), 16);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -8862,11 +9035,37 @@ mod tests {
     /// carrying the child's own output, not a quietly green measurement of
     /// nothing (`D3`).
     fn reported_by_a_child(helper: &str, prefix: &str) -> Vec<String> {
+        reported_by_a_child_holding(helper, prefix, &[])
+    }
+
+    /// [`reported_by_a_child`] for a child that must hold `environment` in
+    /// **its own** environment — the route row 11's decoy takes.
+    ///
+    /// `Command::env` is per-spawn and therefore thread-safe. The alternative,
+    /// `std::env::set_var`, is `unsafe` in edition 2024 with this crate's budget
+    /// spent (`S5`, `C8`), and is process-wide (`R3`): it would put the decoy in
+    /// front of every other test's fixture in this binary.
+    ///
+    /// A child is a genuine **closure** here and not merely a narrowing, which
+    /// is the asymmetry
+    /// `mem.pattern.tests.re-exec-the-test-binary-to-vary-process-wide-state`
+    /// records. The child is the *aggressor* — it is the process that holds the
+    /// state others must not see — and a process's environment is its own copy,
+    /// so nothing it sets can reach a sibling's fork. That is not true of an
+    /// inheritable descriptor, which survives two `exec` levels; it is true of
+    /// the environment because inheritance runs only downward.
+    fn reported_by_a_child_holding(
+        helper: &str,
+        prefix: &str,
+        environment: &[(&str, &str)],
+    ) -> Vec<String> {
         let executable = std::env::current_exe().expect("the test binary's own path");
-        let output = Command::new(executable)
-            .args(["--exact", helper, "--ignored", "--nocapture"])
-            .output()
-            .expect("the test binary re-executes");
+        let mut command = Command::new(executable);
+        command.args(["--exact", helper, "--ignored", "--nocapture"]);
+        for (name, value) in environment {
+            command.env(name, value);
+        }
+        let output = command.output().expect("the test binary re-executes");
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let reported: Vec<String> = stdout
             .lines()
@@ -9718,6 +9917,479 @@ mod tests {
             row_ten_against(&leaking_on_every_arm(&leaked)),
             RowVerdict::Violated,
             "a backend leaking a write-only descriptor passed row 10"
+        );
+    }
+
+    // ── PHASE-10 `T5`: row 11 — `ClosedEnvironment` / `EnvCleared` ──────────
+    //
+    // **The executed claims are measured in a child that holds a trusted-side
+    // variable**, and the reason is *not* row 10's. Nothing here races: the
+    // environment is fixed at `Command::env` spawn time and no test in this
+    // binary mutates it afterwards — `std::env::set_var` is `unsafe` with the
+    // budget spent (`S5`, `C8`), so there is no in-process aggressor to be
+    // isolated from and no window for one to arrive through.
+    //
+    // The child is here to *supply* a controlled input. Row 11's control arm
+    // drops `--clearenv`, so what it leaks is whatever the trusted side happens
+    // to hold; measured in this binary that is `cargo`'s incidental environment,
+    // and the row would be `Proven` for a reason no test named. `F-2` records
+    // that there is no environment-decoy field on the fixture and no way to make
+    // one without `set_var`. So the decoy is set one process up, where
+    // `Command::env` is per-spawn, and the control arm's failure then has a
+    // cause this file spells.
+
+    /// The trusted-side variable row 11's decoy half is stated over.
+    ///
+    /// **The name is deliberately not credential-shaped.** A backend leaking
+    /// `AWS_SECRET_ACCESS_KEY` is caught by any denylist; the defect row 11
+    /// exists to close is a leak of a variable nobody thought to list, so the
+    /// decoy is a variable nobody *could* have listed.
+    const TRUSTED_SIDE_DECOY: &str = "SL248_TRUSTED_SIDE_DECOY";
+    const TRUSTED_SIDE_DECOY_VALUE: &str = "set on the trusted side, never on a denylist";
+
+    /// The two tokens the decoy row below is read for.
+    const DECOY_VARIABLE_ABSENT: &str = "TRUSTED-SIDE-VARIABLE-ABSENT";
+    const DECOY_VARIABLE_PRESENT: &str = "TRUSTED-SIDE-VARIABLE-PRESENT";
+
+    /// A row that separates *the trusted side's own variable reached the
+    /// capsule* from *it did not*.
+    ///
+    /// **Not row 11**, and it borrows row 11's id as
+    /// [`every_descriptor_authority_row`] borrows one. Row 11's claim is set
+    /// equality, which is deliberately blind to *which* variable broke it — it
+    /// must fail on any of them. This row asks the complementary question a set
+    /// comparison cannot answer on its own: that the specific variable the
+    /// trusted side was holding is the one the clearing kept out. `Proven` here
+    /// is a two-arm causality reading and nothing weaker — the decoy was absent
+    /// under the probe **and** present under the control, so its absence is
+    /// something `--clearenv` did rather than something that was never there.
+    fn the_trusted_side_decoy_row() -> Row {
+        Row {
+            id: RowId::Property(Property::ClosedEnvironment),
+            shape: ArmShape::Single(Probe {
+                argv: shell_argv(&format!(
+                    "echo {LIVENESS_MARKER}; found=0; {}\
+                     if [ \"$found\" -eq 0 ]; then echo {DECOY_VARIABLE_ABSENT}; \
+                     else echo {DECOY_VARIABLE_PRESENT}; fi",
+                    environment_names_resolved(&format!(
+                        "case \"$name\" in {TRUSTED_SIDE_DECOY}) found=$((found+1));; esac; "
+                    ))
+                )),
+                observed: Observed::Token {
+                    held: DECOY_VARIABLE_ABSENT,
+                    failed: DECOY_VARIABLE_PRESENT,
+                },
+            }),
+            delta: Delta::Removed(PropertyRemoval::EnvCleared),
+        }
+    }
+
+    const ROW_ELEVEN_HELPER: &str =
+        "conformance::tests::row_eleven_measured_in_a_process_holding_a_trusted_side_variable";
+    const ROW_ELEVEN_VERDICT: &str = "ROW11-VERDICT=";
+
+    const ROW_ELEVEN_DECOY_HELPER: &str =
+        "conformance::tests::the_trusted_side_decoy_measured_in_a_process_holding_it";
+    const ROW_ELEVEN_DECOY_REPORT: &str = "ROW11-DECOY-";
+
+    /// The child half of row 11's two verdict claims — **an instrument, not a
+    /// claim**, which is why it is ignored by default and asserts nothing.
+    #[test]
+    #[ignore = "instrument: re-executed holding a trusted-side variable by closed_environment_is_proven and the_capsule_environment_equals_capsule_env_exactly"]
+    fn row_eleven_measured_in_a_process_holding_a_trusted_side_variable() {
+        let verdict = shipped_verdict(&RowId::Property(Property::ClosedEnvironment));
+        println!("{ROW_ELEVEN_VERDICT}{verdict:?}");
+    }
+
+    /// The child half of
+    /// [`a_trusted_side_variable_does_not_appear_in_the_capsule`] — **an
+    /// instrument, not a claim**.
+    ///
+    /// It reports **two** lines, and the first is what stops the second being
+    /// read too generously: whether this process is in fact holding the decoy.
+    /// A child spawned without it would report `Unproven` — both arms absent —
+    /// and *the parent forgot to set it* would otherwise be indistinguishable
+    /// from *the backend leaked nothing on either arm*.
+    #[test]
+    #[ignore = "instrument: re-executed holding a trusted-side variable by a_trusted_side_variable_does_not_appear_in_the_capsule"]
+    fn the_trusted_side_decoy_measured_in_a_process_holding_it() {
+        let held = std::env::var_os(TRUSTED_SIDE_DECOY).is_some();
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let verdict = run_row(
+            &backend,
+            &SystemHost,
+            &fixture,
+            &the_trusted_side_decoy_row(),
+        );
+        println!("{ROW_ELEVEN_DECOY_REPORT}TRUSTED={held}");
+        println!("{ROW_ELEVEN_DECOY_REPORT}VERDICT={verdict:?}");
+    }
+
+    /// Row 11's shipped payload — the script itself, not the `sh -c` around it.
+    fn row_eleven_script() -> String {
+        let row = shipped_row(&RowId::Property(Property::ClosedEnvironment));
+        let ArmShape::Single(probe) = &row.shape else {
+            panic!("row 11 is a one-capsule row");
+        };
+        probe
+            .argv
+            .as_slice()
+            .last()
+            .expect("row 11's payload is a shell script")
+            .clone()
+    }
+
+    /// `VT-1`, row 11.
+    #[test]
+    fn closed_environment_is_proven() {
+        assert_eq!(
+            reported_by_a_child_holding(
+                ROW_ELEVEN_HELPER,
+                ROW_ELEVEN_VERDICT,
+                &[(TRUSTED_SIDE_DECOY, TRUSTED_SIDE_DECOY_VALUE)]
+            ),
+            vec![format!("{:?}", RowVerdict::Proven)],
+            "the probe saw an environment that was not the declared set, or the control \
+             arm — running with the trusted side's own environment, decoy included — saw one \
+             that was"
+        );
+    }
+
+    /// `VT-3`, `VT-4`, row 11's headline claim, and the thing about *how* it is
+    /// stated that the previous proof got wrong.
+    ///
+    /// The verdict is the executed half: the capsule's environment was that set
+    /// exactly, and dropping `--clearenv` is what changed it. The text is the
+    /// half a verdict cannot carry.
+    ///
+    /// - **Set equality, not a denylist.** The payload names every declared
+    ///   variable and separates on membership both ways, so it fails on a
+    ///   variable nobody thought to list. The previous proof was
+    ///   [`CapsuleEnvVar`] being a closed enum — which binds *callers*, not
+    ///   backends — and an argv assertion that `--clearenv` is present; and
+    ///   `sec-2`'s own note that `--clearenv` stops inheritance *only* is the
+    ///   concession that inheritance is a separate channel nothing executed
+    ///   checked.
+    /// - **Read from the `exec`, not from the shell.** The payload reads
+    ///   [`PROC_SHELL_ENVIRON`]; a payload reading `env` would be reading the
+    ///   shell's own additions back as the backend's leak.
+    /// - **One admission, by value.** The set is not `CapsuleEnv` — it is
+    ///   `CapsuleEnv` plus [`WORKING_DIRECTORY_VAR`], which bubblewrap writes
+    ///   itself from `--chdir` and which no `--setenv` list can suppress. That
+    ///   is measurement, not design: the row was written as plain equality and
+    ///   read `Violated` against the shipping backend for this and only this
+    ///   reason. The entry is compared **whole**, so the exception is to one
+    ///   value and not to a name — [`a_backend_that_hands_over_the_trusted_sides_working_directory_fails_row_eleven`]
+    ///   is the mutant that keeps it from being a hole.
+    ///
+    /// The single-axis-ness of the delta is *not* restated here:
+    /// [`each_removal_changes_exactly_its_own_flags`] already holds that
+    /// `EnvCleared` removes `--clearenv` and nothing else, and
+    /// [`every_axis_leaves_the_setenv_list_byte_identical`] that the `--setenv`
+    /// list survives it byte for byte.
+    #[test]
+    fn the_capsule_environment_is_capsule_env_and_the_backends_own_working_directory() {
+        assert_eq!(
+            reported_by_a_child_holding(
+                ROW_ELEVEN_HELPER,
+                ROW_ELEVEN_VERDICT,
+                &[(TRUSTED_SIDE_DECOY, TRUSTED_SIDE_DECOY_VALUE)]
+            ),
+            vec![format!("{:?}", RowVerdict::Proven)],
+            "the probe saw an environment that was not the declared set, or the control \
+             arm saw one that was"
+        );
+
+        let script = row_eleven_script();
+        for var in CapsuleEnv::complete().vars() {
+            assert!(
+                script.contains(var.name()),
+                "row 11's payload does not name `{}`, so it is comparing against \
+                 something other than the declared set",
+                var.name()
+            );
+        }
+        assert!(
+            script.contains(PROC_SHELL_ENVIRON),
+            "row 11 does not read the environment the exec delivered, so it is reading \
+             the shell's own view of it"
+        );
+        assert!(
+            script.contains(ENV_UNDECLARED) && script.contains(ENV_MISSING),
+            "row 11 states one direction of the set equality only — a denylist in the \
+             first case, and blind to a backend that applies none of the environment \
+             in the second"
+        );
+        assert!(
+            script.contains(&bubblewraps_working_directory()),
+            "row 11 admits the backend's working-directory entry by name rather than \
+             whole, which is a denylisted hole and not an admission"
+        );
+    }
+
+    /// `VT-3`, `VT-4`, `EX-3` — the decoy half, and the clause `F-2` records the
+    /// row could not otherwise state.
+    ///
+    /// Without a trusted-side variable this claim is **vacuous**: the probe arm
+    /// sees the declared set either way, so *the trusted side's variable did not
+    /// appear* holds of a variable that was never set. The two-arm reading is
+    /// what makes it say something — absent under the probe, present under the
+    /// control, so the clearing is what kept it out.
+    #[test]
+    fn a_trusted_side_variable_does_not_appear_in_the_capsule() {
+        assert_eq!(
+            reported_by_a_child_holding(
+                ROW_ELEVEN_DECOY_HELPER,
+                ROW_ELEVEN_DECOY_REPORT,
+                &[(TRUSTED_SIDE_DECOY, TRUSTED_SIDE_DECOY_VALUE)]
+            ),
+            vec![
+                String::from("TRUSTED=true"),
+                format!("VERDICT={:?}", RowVerdict::Proven),
+            ],
+            "the child was not holding the decoy, or the decoy crossed the exec under \
+             the probe arm, or it failed to cross it under the control — in which case \
+             the clearing is not what keeps it out"
+        );
+    }
+
+    /// What a **conforming** capsule delivers, as a real process environment:
+    /// every [`CapsuleEnv::complete`] variable under its own name, plus the one
+    /// entry [`WORKING_DIRECTORY_VAR`] the backend writes for itself.
+    ///
+    /// The **names** are what row 11 reads, so most values are only what makes
+    /// the payload runnable. Two are load-bearing: `PATH` takes this process's
+    /// own, because the payload resolves `tr` through it; and the working
+    /// directory takes [`INNER_CAPSULE`], because that value is the entire
+    /// difference between an admission and a denylisted name.
+    fn a_conforming_capsule_environment() -> Vec<(&'static str, String)> {
+        let mut delivered: Vec<(&'static str, String)> = CapsuleEnv::complete()
+            .vars()
+            .map(|var| {
+                let value = var.fixed_value().map_or_else(
+                    || {
+                        SystemHost
+                            .env_var(CapsuleEnvVar::Path.name())
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned()
+                    },
+                    str::to_owned,
+                );
+                (var.name(), value)
+            })
+            .collect();
+        delivered.push((WORKING_DIRECTORY_VAR, INNER_CAPSULE.to_owned()));
+        delivered
+    }
+
+    /// Run row 11's **shipped** payload under a shell holding exactly
+    /// `environment`, and hand back what it printed.
+    ///
+    /// The mutants' stdout is *observed rather than predicted* — the same
+    /// argument [`payload_output_leaking`] makes one channel across. Writing out
+    /// the lines a passthrough capsule would print would make each mutant a test
+    /// of my own guess about the payload; running the payload in a process whose
+    /// environment really is the leaked one makes it a test of the payload.
+    /// `/bin/sh` stands in for the capsule, which is sound because the payload
+    /// reads nothing but its own [`PROC_SHELL_ENVIRON`] — the thing the leak
+    /// changes.
+    ///
+    /// `env_clear` is per-spawn like [`reported_by_a_child_holding`]'s `env`,
+    /// and for the same reason: the environment of *this* process is shared with
+    /// every other test in it.
+    fn payload_output_under(environment: &[(&'static str, String)]) -> Vec<String> {
+        let output = Command::new(SHELL)
+            .arg(SHELL_COMMAND)
+            .arg(row_eleven_script())
+            .env_clear()
+            .envs(environment.iter().map(|(name, value)| (*name, value)))
+            .output()
+            .expect("the payload runs under a shell");
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// The two diagnostic lists row 11's payload separated on, as
+    /// `(undeclared, missing)`.
+    ///
+    /// **Both, always, and compared whole** — a mutant asserting only that *its*
+    /// variable was reported would pass a payload that observed nothing at all
+    /// and reported every declared variable missing. That is the vacuity this
+    /// row exists to close, one level further down again, and it was a live
+    /// false green here before [`PROC_SHELL_ENVIRON`] was measured.
+    fn separated_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
+        let of = |prefix: &str| -> Vec<String> {
+            reported
+                .iter()
+                .filter(|line| line.starts_with(prefix))
+                .cloned()
+                .collect()
+        };
+        (of(ENV_UNDECLARED), of(ENV_MISSING))
+    }
+
+    /// Row 11, both arms, against a stub backend.
+    ///
+    /// `run_arm` rather than `run_row`, for the reason [`row_ten_against`]
+    /// gives: no stub in this suite gets past `provision`.
+    fn row_eleven_against(backend: &Stub) -> RowVerdict {
+        let row = shipped_row(&RowId::Property(Property::ClosedEnvironment));
+        let count = Cell::new(0);
+        let capsule = counting_capsules(&count);
+        let confining = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, Under::Confining),
+            &row.shape,
+        );
+        let weakened = run_arm(
+            &arm(backend, &capsule, ALWAYS_LIVE, under_for(&row.delta)),
+            &row.shape,
+        );
+        row_verdict(confining, weakened)
+    }
+
+    /// `VT-3`, `VT-4`, `EX-4` — the passthrough mutant: a backend that omits
+    /// `--clearenv`, passes every other row, and hands the capsule whatever the
+    /// trusted side holds.
+    ///
+    /// `Violated`, not `Unproven`. A probe arm that *fails* is the harness
+    /// saying the property does not hold of this backend at all, and that
+    /// reading does not depend on what the control arm did — which is why a
+    /// backend leaking on both arms cannot launder the leak into *the removal
+    /// changed nothing*.
+    #[test]
+    fn an_environment_passthrough_backend_fails_row_eleven() {
+        let mut passthrough = a_conforming_capsule_environment();
+        passthrough.push((TRUSTED_SIDE_DECOY, TRUSTED_SIDE_DECOY_VALUE.to_owned()));
+        let leaked = payload_output_under(&passthrough);
+        assert_eq!(
+            separated_on(&leaked),
+            (
+                vec![format!("{ENV_UNDECLARED}{TRUSTED_SIDE_DECOY}")],
+                Vec::new()
+            ),
+            "the payload separated on something other than exactly the leaked variable: \
+             {leaked:?}"
+        );
+        assert!(
+            leaked.iter().any(|line| line == ENVIRONMENT_DIFFERS),
+            "the payload saw an undeclared variable and did not say so: {leaked:?}"
+        );
+
+        assert_eq!(
+            row_eleven_against(&leaking_on_every_arm(&leaked)),
+            RowVerdict::Violated,
+            "a backend passing the trusted side's environment through passed row 11"
+        );
+
+        // Discriminating: the same pipeline over a backend that leaks nothing
+        // reaches a verdict that is not `Violated`, so the verdict above came
+        // from the leak and not from the shape of the stub.
+        let clean = payload_output_under(&a_conforming_capsule_environment());
+        assert!(
+            clean.iter().any(|line| line == ENVIRONMENT_EXACT),
+            "the payload did not read the declared set as exact with nothing leaked: {clean:?}"
+        );
+        assert_ne!(
+            row_eleven_against(&leaking_on_every_arm(&clean)),
+            RowVerdict::Violated,
+            "row 11 reads Violated against a backend that leaks nothing"
+        );
+    }
+
+    /// `VT-3`, `EX-4` — the mutant the *other* direction of the set equality
+    /// exists for.
+    ///
+    /// A backend that clears the environment and applies one declared variable
+    /// short leaks nothing at all, so every undeclared-only reading of row 11 —
+    /// a denylist, or a one-directional set difference — passes it while the
+    /// capsule runs without part of the environment it was declared to have.
+    /// Set equality fails it, and says which variable.
+    #[test]
+    fn a_backend_that_omits_a_declared_variable_fails_row_eleven() {
+        let omitted = CapsuleEnvVar::Term;
+        let short: Vec<(&'static str, String)> = a_conforming_capsule_environment()
+            .into_iter()
+            .filter(|(name, _)| *name != omitted.name())
+            .collect();
+        let observed = payload_output_under(&short);
+        assert_eq!(
+            separated_on(&observed),
+            (Vec::new(), vec![format!("{ENV_MISSING}{}", omitted.name())]),
+            "the payload separated on something other than exactly the omitted variable: \
+             {observed:?}"
+        );
+        assert!(
+            observed.iter().any(|line| line == ENVIRONMENT_DIFFERS),
+            "the payload was short a declared variable and did not say so: {observed:?}"
+        );
+
+        assert_eq!(
+            row_eleven_against(&leaking_on_every_arm(&observed)),
+            RowVerdict::Violated,
+            "a backend applying less than the declared environment passed row 11"
+        );
+    }
+
+    /// `VT-3`, `EX-4` — the mutant that keeps row 11's one admission from being
+    /// a hole in it.
+    ///
+    /// [`WORKING_DIRECTORY_VAR`] is admitted because bubblewrap writes it and no
+    /// `--setenv` list can suppress it. Admitting the **name** would open
+    /// exactly the leak the row exists to close, and not a small one: without
+    /// `--chdir` bubblewrap fills it with the *trusted side's* working
+    /// directory, so the hole's contents would be a host path — measured, on
+    /// this host, by hand-running `bwrap` with and without the flag.
+    ///
+    /// So the admission is to one whole entry, and a capsule handed the same
+    /// name over a different value fails the row like any other undeclared
+    /// variable.
+    #[test]
+    fn a_backend_that_hands_over_the_trusted_sides_working_directory_fails_row_eleven() {
+        let trusted_side = std::env::current_dir()
+            .expect("the trusted side has a working directory")
+            .to_string_lossy()
+            .into_owned();
+        assert_ne!(
+            trusted_side, INNER_CAPSULE,
+            "the trusted side's working directory is the capsule's, so this mutant \
+             mutates nothing"
+        );
+        let misdirected: Vec<(&'static str, String)> = a_conforming_capsule_environment()
+            .into_iter()
+            .map(|(name, value)| {
+                let value = if name == WORKING_DIRECTORY_VAR {
+                    trusted_side.clone()
+                } else {
+                    value
+                };
+                (name, value)
+            })
+            .collect();
+        let observed = payload_output_under(&misdirected);
+        assert_eq!(
+            separated_on(&observed),
+            (
+                vec![format!("{ENV_UNDECLARED}{WORKING_DIRECTORY_VAR}")],
+                Vec::new()
+            ),
+            "the payload admitted the working-directory variable by name, so it would \
+             admit a host path under it: {observed:?}"
+        );
+        assert!(
+            observed.iter().any(|line| line == ENVIRONMENT_DIFFERS),
+            "the payload saw a host path in the capsule's environment and did not say \
+             so: {observed:?}"
+        );
+
+        assert_eq!(
+            row_eleven_against(&leaking_on_every_arm(&observed)),
+            RowVerdict::Violated,
+            "a backend handing the capsule the trusted side's working directory passed \
+             row 11"
         );
     }
 }
