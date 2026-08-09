@@ -51,6 +51,27 @@ to be designed out, not a cost to be budgeted.
   test; it proves nothing about a process that has already exited. Go to beat 3.
 - **Woken by the fallback clock** — run the guard below.
 
+**The notification is the only proof of completion. Silence is never proof.**
+The four legs below are *alive* detectors: each can say "still working", none can
+say "done". So a clock wake that finds every leg quiet has established exactly
+one thing — that the worker is quiet *right now* — and a worker between two tool
+calls is quiet in precisely the same way a finished one is. Absent a
+notification, treat the worker as **live** whatever the tree looks like: do not
+spawn, do not commit, do not run a verification gate. The only conclusion silence
+ever licenses is *death* (§ the 90-minute floor), and death is resumed from the
+transcript — it is never read as completion.
+
+Measured, this loop, 2026-08-10: an ad-hoc guard (`ps`, `git status`, `git log`)
+read a clean tree with no live processes at 07:39:05 and was believed. The worker
+wrote at 07:39:23 and 07:39:36, committed `9d48adbc8` at 07:42:09, and notified at
+07:46 — alive throughout. Two lessons, and the second is the durable one:
+**run the four legs as written, not an improvised substitute** (the `ps` leg is
+the instantaneous-sample defect this file already warns about two paragraphs
+down, re-invented under time pressure); and the legs would in fact have held the
+line here — the commit leg read four minutes old, which is *alive* — so the
+error was reading "five commits landed and nothing is running" as finished.
+Committed-recently means working, not done.
+
 The clock-wake guard is three commands. Run them first, before reading anything
 else:
 
