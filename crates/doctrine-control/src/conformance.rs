@@ -315,6 +315,24 @@ const IDENTITY_OTHER: &str = "IDENTITY-OTHER-";
 /// four are measured to discriminate on which host.
 const IDENTITY_FIELDS: [&str; 4] = ["uid", "gid", "uid_map", "gid_map"];
 
+/// Row 14's verdict tokens: neither capability set the capsule can read holds a
+/// bit, or at least one of them does.
+const CAPABILITIES_CONFINED: &str = "CAPABILITIES-CONFINED";
+const CAPABILITIES_HELD: &str = "CAPABILITIES-HELD";
+
+/// Row 14's diagnostic lines, one prefix per **side of the comparison** as row
+/// 13's are. Each line is `FIELD=VALUE`, so the two lists partition
+/// [`CAPABILITY_FIELDS`] and [`separated_by`] compares both whole (`F-33`).
+const CAPABILITY_EMPTY: &str = "CAPABILITY-EMPTY-";
+const CAPABILITY_HELD: &str = "CAPABILITY-HELD-";
+
+/// The two capability sets row 14 reads, named where the payload, the mutant and
+/// the finding can all cite the same list.
+///
+/// **`CapBnd` and `CapInh` only, never `CapPrm`/`CapEff`** — see
+/// [`the_capability_sets_are_empty`] for why the other two cannot carry a row.
+const CAPABILITY_FIELDS: [&str; 2] = ["CapBnd", "CapInh"];
+
 /// [`WORKING_DIRECTORY_VAR`] as the payload compares it: a whole `NAME=VALUE`
 /// entry, because the name alone is the hole.
 fn bubblewraps_working_directory() -> String {
@@ -2424,10 +2442,10 @@ pub(crate) enum RowId {
 
 /// One variant per table A row, **ordered as table A is**.
 ///
-/// Eleven members at this phase — table A rows 1–8 landed by PHASE-09 with their
-/// rows, and rows 9, 10 and 11 by PHASE-10 `T3`, `T4` and `T5`. Rows 12–14 and
-/// their three variants arrive later in PHASE-10; `EX-14` defers membership
-/// precisely so a variant never exists without the row that constructs it.
+/// **Fourteen members, which is the whole of table A** — rows 1–8 landed by
+/// PHASE-09 with their rows, and rows 9–14 by PHASE-10 `T3`…`T8`, each variant
+/// in the same commit as the `table_a()` row that constructs it. `EX-14` defers
+/// membership precisely so a variant never exists without that row.
 ///
 /// ## What the compiler checks here, and what it does not
 ///
@@ -2483,6 +2501,11 @@ pub(crate) enum Property {
     /// and gid it reports, and the user-namespace maps behind them, all name
     /// that one id and nothing else.
     MappedCapsuleIdentity,
+    /// Row 14. The capsule holds no capability in its own user namespace: the
+    /// bounding and inheritable sets are both empty, so the authority
+    /// `--cap-add ALL` confers is withheld and invariant 4's denial-by-absence
+    /// is standing on a property that was demonstrated rather than assumed.
+    ConfinedCapabilities,
 }
 
 /// `REQ-450` criterion 1's five freshness axes. Closed and complete.
@@ -3617,6 +3640,63 @@ fn the_identity_is_exactly(uid: u32, gid: u32) -> Probe {
     }
 }
 
+/// Row 14's payload: neither capability set the capsule can read holds a single
+/// bit.
+///
+/// ## Two sets, and why not four
+///
+/// `CapBnd` and `CapInh` only, never `CapPrm`/`CapEff` (`EX-9`). The excluded
+/// pair is all-zero for any unprivileged process on any host, so a row reading
+/// them is true vacuously against a backend that confined nothing at all —
+/// which is the *generalising* defect the retired `CredentialsConfined` row was
+/// retired for, a probe that cannot vary. That they do move under `--cap-add
+/// ALL` is not a defence: a field which moves only when the control moves it
+/// catches no backend.
+///
+/// The two that are read are the two that matter to invariant 15. `CapBnd` is
+/// the ceiling on anything the capsule could ever regain, and `CapInh` is what
+/// survives an `execve` inside it — so a capsule holding neither cannot reach
+/// authority the profile withheld, however many times it re-execs.
+///
+/// ## What each set is compared against
+///
+/// Emptiness, spelled as *no non-zero hex digit* rather than as equality with a
+/// literal `0000000000000000`: the kernel prints a mask whose width is a fact
+/// about the host's word size, and a row asserting sixteen zeros would be
+/// asserting that instead.
+///
+/// A set the payload could not read leaves its variable empty, and an empty
+/// value is reported as **held**, never as empty — an unreadable capability set
+/// is a failure to demonstrate the property, never a silent pass. That is
+/// [`the_identity_is_exactly`]'s unreadable-surface rule at this row, and here
+/// it needs saying twice, because the *absence* of a bit is what this payload
+/// is looking for and absence is exactly what a failed read also looks like.
+fn the_capability_sets_are_empty() -> Probe {
+    let [bounding, inheritable] = CAPABILITY_FIELDS;
+    Probe {
+        argv: shell_argv(&format!(
+            "echo {LIVENESS_MARKER}; bounding=; inheritable=; held=0; \
+             while read -r key value rest; do \
+             case \"$key\" in \
+             {bounding}:) bounding=$value ;; \
+             {inheritable}:) inheritable=$value ;; \
+             esac; done < {PROC_SELF_STATUS}; \
+             report() {{ case \"${{2:-unread}}\" in \
+             *[!0]*) echo \"{CAPABILITY_HELD}$1=$2\"; held=$((held+1)) ;; \
+             *) echo \"{CAPABILITY_EMPTY}$1=$2\" ;; \
+             esac; }}; \
+             report {bounding} \"$bounding\"; \
+             report {inheritable} \"$inheritable\"; \
+             if [ \"$held\" -eq 0 ]; \
+             then echo {CAPABILITIES_CONFINED}; else echo {CAPABILITIES_HELD}; fi"
+        )),
+        observed: Observed::Token {
+            held: CAPABILITIES_CONFINED,
+            failed: CAPABILITIES_HELD,
+        },
+    }
+}
+
 /// Row B2's writer: one loose object and one ref, both inside the clone.
 fn writes_an_object_and_a_ref(repository: &str) -> Probe {
     Probe {
@@ -3784,6 +3864,14 @@ fn table_a() -> Vec<Row> {
             // it: the payload asserts what the arm was configured with.
             shape: ArmShape::Single(the_identity_is_exactly(CAPSULE_UID, CAPSULE_GID)),
             delta: Delta::Removed(PropertyRemoval::MappedIdentity),
+        },
+        Row {
+            id: RowId::Property(Property::ConfinedCapabilities),
+            shape: ArmShape::Single(the_capability_sets_are_empty()),
+            // The table's only *grant* (`EX-10`): this control confers the
+            // authority the profile withholds rather than withdrawing a
+            // mechanism, and negates exactly one protection either way.
+            delta: Delta::Granted(AuthorityGrant::AllCapabilities),
         },
     ]
 }
@@ -4691,6 +4779,10 @@ mod tests {
         capsule_still_running, harness_execution, next_transaction_id, placed_under,
         provision_capsule, run_arm, run_row, signallable, signallable_pid, still_running,
         under_for,
+    };
+    use super::{
+        CAPABILITIES_CONFINED, CAPABILITIES_HELD, CAPABILITY_EMPTY, CAPABILITY_FIELDS,
+        CAPABILITY_HELD,
     };
     use super::{
         CAPACITY_CLAIM, CAPACITY_FILESYSTEM_CLAIM, DOCTRINE_TOML, EMPTY_FORBIDDEN_EXECUTABLES,
@@ -9207,11 +9299,11 @@ mod tests {
     /// **one** `shape` and **one** `delta`, and `run_row` hands `row.shape` to
     /// both arms, so there is no way to spell a row whose arms differ in two
     /// places or run different shapes. What a test can still add is that the
-    /// shipped tables are what the design says they are — eighteen rows, each
+    /// shipped tables are what the design says they are — nineteen rows, each
     /// identified once, so a row silently duplicated or dropped cannot pass as
     /// the walk having covered it.
     #[test]
-    fn the_shipped_tables_are_eighteen_distinctly_identified_rows() {
+    fn the_shipped_tables_are_nineteen_distinctly_identified_rows() {
         let rows = tables();
         let mut ids: Vec<String> = rows.iter().map(|row| format!("{:?}", row.id)).collect();
         ids.sort();
@@ -9221,7 +9313,7 @@ mod tests {
             unique
         };
         assert_eq!(ids, unique, "a row id appears twice in the shipped tables");
-        assert_eq!(rows.len(), 18);
+        assert_eq!(rows.len(), 19);
     }
 
     // ── PHASE-10 `T2`: the per-arm trusted-side setup seam (`D1`) ───────────
@@ -11160,22 +11252,26 @@ mod tests {
         separated_by(reported, IDENTITY_DECLARED, IDENTITY_OTHER)
     }
 
-    /// The credential surfaces a reading names, whichever side they fell on,
-    /// sorted.
+    /// The fields a `FIELD=VALUE` reading names, whichever of its two
+    /// diagnostic lists they fell on, sorted.
     ///
-    /// This is what lets the mutant be **host-independent**. Which surfaces
-    /// agree with the declared identity is a fact about the host's operator
-    /// (`F-4`), so a claim naming them would pass here and fail on the design
-    /// host. That the payload read *all four and lost none* is a fact about the
+    /// This is what lets rows 13's and 14's mutants be **host-independent**.
+    /// *Which* side a field falls on is a fact about the host — the operator's
+    /// own uid for row 13 (`F-4`), the cage the suite is already inside for row
+    /// 14 — so a claim naming them would pass here and fail on the design host.
+    /// That the payload read *every* field and lost none is a fact about the
     /// payload, and is the same on every host.
-    fn surfaces_named(reported: &[String]) -> Vec<String> {
-        let (declared, otherwise) = identity_reported_on(reported);
-        let mut named: Vec<String> = declared
+    ///
+    /// Shared by both rows rather than written twice, for `F-39`'s reason: the
+    /// third copy of a helper shape is the one that drifts.
+    fn fields_named(reported: &[String], first: &str, second: &str) -> Vec<String> {
+        let (held, otherwise) = separated_by(reported, first, second);
+        let mut named: Vec<String> = held
             .iter()
             .chain(&otherwise)
             .filter_map(|line| {
-                line.strip_prefix(IDENTITY_DECLARED)
-                    .or_else(|| line.strip_prefix(IDENTITY_OTHER))
+                line.strip_prefix(first)
+                    .or_else(|| line.strip_prefix(second))
             })
             .map(|rest| {
                 rest.split_once('=')
@@ -11187,14 +11283,9 @@ mod tests {
         named
     }
 
-    /// [`IDENTITY_FIELDS`] as [`surfaces_named`] reports them.
-    fn every_surface() -> Vec<String> {
-        let mut all: Vec<String> = IDENTITY_FIELDS
-            .iter()
-            .map(|&field| field.to_owned())
-            .collect();
-        all.sort();
-        all
+    /// The credential surfaces row 13's reading names — see [`fields_named`].
+    fn surfaces_named(reported: &[String]) -> Vec<String> {
+        fields_named(reported, IDENTITY_DECLARED, IDENTITY_OTHER)
     }
 
     /// The `bwrap` words the mapped-capsule instrument is built from.
@@ -11212,24 +11303,28 @@ mod tests {
     const SANDBOX_ROOT: [&str; 3] = ["--ro-bind", FILESYSTEM_ROOT, FILESYSTEM_ROOT];
     const SANDBOX_PROC: [&str; 2] = ["--proc", INNER_PROC];
 
-    /// Row 13's **conforming** reading: the shipped payload in a user namespace
-    /// that really does map the declared identity.
+    /// A shipped payload read in a sandbox this test built, `extra` being the
+    /// one axis under study and everything else the confining words.
     ///
     /// *Observed rather than predicted*, for the reason [`payload_output_over`]
-    /// gives: writing out the lines a correctly-mapped capsule would print
+    /// gives: writing out the lines a correctly-confined capsule would print
     /// would make the mutant a test of my guess about the payload rather than a
     /// test of the payload.
     ///
     /// This is the one place in the suite where a test builds a sandbox, and it
     /// is forced rather than chosen: a [`Stub`] is handed *lines*, and the real
     /// probe arm's stdout is not reachable — an [`ArmResult`] carries a verdict,
-    /// not the bytes behind it. What is built here is the identity mapping and
+    /// not the bytes behind it. What is built here is the credential mapping and
     /// nothing else; the payload, the row and the verdict are all the shipped
     /// ones. It duplicates no production assembly — the confining profile's own
-    /// argv is `confinement_argv`'s, and
-    /// [`the_identity_control_changes_no_mount_no_env_and_no_descriptor`] is
-    /// what holds that assembly to these two flags.
-    fn payload_output_in_a_mapped_capsule() -> Vec<String> {
+    /// argv is `confinement_argv`'s, and the two single-axis tests below are
+    /// what hold that assembly to these flags.
+    ///
+    /// One instrument for rows 13 and 14 rather than two, so `extra` is the
+    /// whole of what separates a reading from its neighbour: row 14's pair
+    /// differ by `--cap-add ALL` and by nothing else, which is the two-arm
+    /// toggle stated in code rather than in a comment.
+    fn payload_output_in_a_sandbox(extra: &[&str], script: &str) -> Vec<String> {
         let mut words = vec![
             SANDBOX_UNSHARE_ALL.to_owned(),
             SANDBOX_UID.to_owned(),
@@ -11241,12 +11336,13 @@ mod tests {
             SANDBOX_ROOT
                 .iter()
                 .chain(&SANDBOX_PROC)
+                .chain(extra)
                 .map(|&word| word.to_owned()),
         );
         words.extend([
             SHELL.to_owned(),
             SHELL_COMMAND.to_owned(),
-            row_thirteen_script(),
+            script.to_owned(),
         ]);
 
         let finished = Command::new(SANDBOX_EXECUTABLE)
@@ -11255,10 +11351,16 @@ mod tests {
             .expect("this host runs `bwrap`, which the shipping backend requires");
         assert!(
             finished.status.success(),
-            "the mapped-capsule instrument did not run: {}",
+            "the sandbox instrument did not run under {extra:?}: {}",
             String::from_utf8_lossy(&finished.stderr)
         );
         printed_lines(&finished.stdout)
+    }
+
+    /// Row 13's **conforming** reading: the shipped payload in a user namespace
+    /// that really does map the declared identity.
+    fn payload_output_in_a_mapped_capsule() -> Vec<String> {
+        payload_output_in_a_sandbox(&[], &row_thirteen_script())
     }
 
     /// Row 13's **mutant** reading: the shipped payload run with no identity
@@ -11293,7 +11395,7 @@ mod tests {
         let host = payload_output_as_the_trusted_side();
         assert_eq!(
             surfaces_named(&host),
-            every_surface(),
+            sorted(&IDENTITY_FIELDS),
             "the payload did not read every declared credential surface: {host:?}"
         );
         assert!(
@@ -11316,7 +11418,7 @@ mod tests {
         let mapped = payload_output_in_a_mapped_capsule();
         assert_eq!(
             surfaces_named(&mapped),
-            every_surface(),
+            sorted(&IDENTITY_FIELDS),
             "the payload did not read every declared credential surface: {mapped:?}"
         );
         assert_eq!(
@@ -11490,6 +11592,310 @@ mod tests {
             row_thirteen_against(&leaking_on_every_arm(&mapped)),
             RowVerdict::Violated,
             "row 13 reads Violated against a backend that maps the declared identity"
+        );
+    }
+
+    // ── PHASE-10 `T8`: row 14 — `ConfinedCapabilities` / `AllCapabilities` ───
+    //
+    // **Nothing here runs in a child of this process's own, and that is a
+    // structural claim rather than an omission** (`C14` step 1). The channel is
+    // the process capability sets, and it is closed twice over.
+    //
+    // First, no agent outside this process can reach them: capability sets are
+    // per-process credentials, and the kernel offers no call by which one
+    // process alters another's — `capset(2)` and `PR_CAPBSET_DROP` act on the
+    // caller alone. Second, no agent *inside* it can either: those calls need
+    // `unsafe` FFI, `unsafe_code` is denied, and the `#[expect]` budget is two
+    // sites, both already spent in `bubblewrap.rs` (`C8`, `S7`). So the
+    // interfering agent **cannot exist** rather than merely not having been
+    // observed.
+    //
+    // The third closure is the one that makes this row's readings independent
+    // of the suite around them: every reading below is taken inside a *fresh
+    // user namespace*, and `create_user_ns()` sets `cred->cap_bset` to
+    // `CAP_FULL_SET` on entry regardless of what the creating process held
+    // (`A2`). So a reading is a function of `bwrap`'s own argv and of nothing
+    // this process could do to itself — which is also why the probe arm's zero
+    // is bubblewrap's doing and not the jail's.
+    //
+    // **Nothing here is timing-sensitive either**, so no tally is the
+    // instrument (`LOOP.md`): every read is of a regular `/proc` file that the
+    // kernel always presents and that cannot block, and no arm waits on a peer.
+    // The two-arm toggle this row needed was aimed at the discriminator —
+    // withdraw `--cap-add ALL` from the granting instrument, watch the mutant
+    // stop convicting; restore it, watch it convict again — and both arms are
+    // recorded in the sheet (`F-46`).
+
+    /// Row 14's shipped payload — see [`shipped_script`].
+    fn row_fourteen_script() -> String {
+        shipped_script(&RowId::Property(Property::ConfinedCapabilities))
+    }
+
+    /// Row 14's two diagnostic lists, as `(empty, held)`.
+    ///
+    /// **Both, always, and each compared whole** (`F-33`). The lists partition
+    /// [`CAPABILITY_FIELDS`], so a claim asserting only that *its* list appeared
+    /// would pass a payload that reported a set on both sides, or one that
+    /// silently read none.
+    fn capabilities_reported_on(reported: &[String]) -> (Vec<String>, Vec<String>) {
+        separated_by(reported, CAPABILITY_EMPTY, CAPABILITY_HELD)
+    }
+
+    /// The capability sets a reading names — see [`fields_named`].
+    fn capability_sets_named(reported: &[String]) -> Vec<String> {
+        fields_named(reported, CAPABILITY_EMPTY, CAPABILITY_HELD)
+    }
+
+    /// The two sets row 14 must **not** read, because they are all-zero for any
+    /// unprivileged process on any host and so discriminate nothing against a
+    /// backend that confined nothing (`EX-9`, `EVD-014`).
+    const NON_DISCRIMINATING_SETS: [&str; 2] = ["CapPrm", "CapEff"];
+
+    /// The `bwrap` words row 14's control is spelled with, spelled here for
+    /// [`SANDBOX_EXECUTABLE`]'s reason: they are the words `bwrap` itself reads,
+    /// and a test restating the production constant would *follow* a rename
+    /// instead of catching it.
+    const SANDBOX_CAPABILITY_GRANT: [&str; 2] = ["--cap-add", "ALL"];
+
+    /// Row 14's **conforming** reading: the shipped payload in a capsule
+    /// confined exactly as the shipping profile confines one.
+    ///
+    /// Everything a caller needs of it is established here rather than restated
+    /// by each: both sets read, **neither** of them holding anything, and the
+    /// payload saying so.
+    fn a_confined_capsules_reading() -> Vec<String> {
+        let confined = payload_output_in_a_sandbox(&[], &row_fourteen_script());
+        assert_eq!(
+            capability_sets_named(&confined),
+            sorted(&CAPABILITY_FIELDS),
+            "the payload did not read every declared capability set: {confined:?}"
+        );
+        assert_eq!(
+            capabilities_reported_on(&confined).1,
+            Vec::<String>::new(),
+            "a capsule confined as the profile confines one reported a capability set \
+             holding something: {confined:?}"
+        );
+        assert!(
+            confined.iter().any(|line| line == CAPABILITIES_CONFINED),
+            "both sets were empty and the payload did not say so: {confined:?}"
+        );
+        confined
+    }
+
+    /// Row 14's **mutant** reading: the same capsule with the table's only
+    /// grant applied, which is what the capsule is left holding when the backend
+    /// confers the authority the profile withholds.
+    ///
+    /// Likewise guarded, and the middle guard is this row's vacuity convict —
+    /// it lives with the reading because it is what a caller would drop quietly.
+    /// The suite is *already inside a cage that strips capabilities*, so unlike
+    /// row 13 this row cannot use the trusted side's own reading as its mutant
+    /// at all: in here the trusted side reads all-zero and is **conforming**.
+    /// The grant is therefore the whole of the discrimination, and on a host
+    /// where `--cap-add ALL` confers nothing observable every claim resting on
+    /// this reading goes vacuous at once — which is `S4`'s situation at row 14,
+    /// and wants a consult rather than a narrowing.
+    fn a_granted_capsules_reading() -> Vec<String> {
+        let granted =
+            payload_output_in_a_sandbox(&SANDBOX_CAPABILITY_GRANT, &row_fourteen_script());
+        assert_eq!(
+            capability_sets_named(&granted),
+            sorted(&CAPABILITY_FIELDS),
+            "the payload did not read every declared capability set: {granted:?}"
+        );
+        assert!(
+            !capabilities_reported_on(&granted).1.is_empty(),
+            "granting all capabilities left both sets empty, so row 14 discriminates \
+             nothing on this host and `S4` applies — stop and consult rather than \
+             narrowing the row: {granted:?}"
+        );
+        assert!(
+            granted.iter().any(|line| line == CAPABILITIES_HELD),
+            "the capsule held capabilities and the payload did not say so: {granted:?}"
+        );
+        granted
+    }
+
+    /// Row 14's verdict against a stub — see [`row_against`].
+    fn row_fourteen_against(backend: &Stub) -> RowVerdict {
+        row_against(backend, &RowId::Property(Property::ConfinedCapabilities))
+    }
+
+    /// `VT-1`, table A row 14 — the whole row, both arms, through the shipping
+    /// backend.
+    #[test]
+    fn confined_capabilities_is_proven() {
+        assert_eq!(
+            shipped_verdict(&RowId::Property(Property::ConfinedCapabilities)),
+            RowVerdict::Proven
+        );
+    }
+
+    /// `VT-6`, `EX-8`, `EX-9` — the payload itself, read on both sides of the
+    /// property.
+    ///
+    /// [`confined_capabilities_is_proven`] says the row separates the arms; this
+    /// says *what* separated them, which is the claim `EX-9` makes: both
+    /// declared sets are read, both are required to be empty, and a capsule
+    /// holding capabilities is reported as holding them.
+    ///
+    /// The second half of `EX-9` is the harder one and is asserted here too:
+    /// `CapPrm` and `CapEff` are not read *at all*. They are all-zero for any
+    /// unprivileged process on any host, so a row reading them would be true
+    /// vacuously against a backend that confined nothing — which is the
+    /// generalising defect the retired credential row was retired for. That they
+    /// happen to move under `--cap-add ALL` is not a defence: a field that only
+    /// moves when the control moves it catches no backend.
+    ///
+    /// The per-reading claims live in [`a_confined_capsules_reading`] and
+    /// [`a_granted_capsules_reading`] rather than here, because every caller of
+    /// a reading needs them and the vacuity convict in particular is what a
+    /// caller would drop quietly. What is left in the body is the pairing
+    /// neither reading can make on its own.
+    #[test]
+    fn the_capsule_holds_no_capabilities_in_the_bounding_or_inheritable_set() {
+        let confined = a_confined_capsules_reading();
+        let granted = a_granted_capsules_reading();
+
+        // Non-vacuity: the two readings really are different readings, so the
+        // pair above is not one observation made twice.
+        assert_ne!(
+            capabilities_reported_on(&confined),
+            capabilities_reported_on(&granted),
+            "a confined capsule and one granted every capability separated the same way, \
+             so the payload is reading something other than the capability sets: \
+             {confined:?} / {granted:?}"
+        );
+
+        let capabilities = row_fourteen_script();
+        for excluded in NON_DISCRIMINATING_SETS {
+            assert!(
+                !capabilities.contains(excluded),
+                "row 14's payload reads `{excluded}`, which cannot vary between a backend \
+                 that confines and one that never did (`EVD-014`): {capabilities}"
+            );
+        }
+    }
+
+    /// `VT-6`, `EX-8`, `EX-10` — single-axis-ness, and **the only one of these
+    /// asserted against a *granting* control**.
+    ///
+    /// `EX-10` is the claim: whether a control negates by withdrawing a
+    /// mechanism or by conferring the authority the mechanism withholds is the
+    /// backend's business, and what the discipline forbids is a control that
+    /// moves two things at once. So the delta is read the same way every
+    /// withdrawing control's is — the argv words that moved are exactly the two
+    /// capability ones, and a mount, an environment variable and an identity
+    /// flag **are** argv words to `bwrap`, so none of them is among them.
+    /// Non-vacuity first: unchanged says nothing about a word that was never in
+    /// the baseline.
+    ///
+    /// *No descriptor* is the half that cannot be read off the argv at all:
+    /// rows 10 and 12 live in parent-side [`SpawnOptions`], so the claim there
+    /// is that the grant leaves those options exactly as the confining profile
+    /// has them.
+    ///
+    /// The payloads are disjoint too, and by **field** rather than by file:
+    /// rows 13 and 14 both read `/proc/self/status`, and `EX-9`'s
+    /// disjoint-by-field claim is that neither reads the other's fields — which
+    /// is what makes a failure name one row.
+    #[test]
+    fn the_capability_grant_changes_no_mount_no_env_no_descriptor_and_no_identity() {
+        let weakening = weakening_granting(AuthorityGrant::AllCapabilities);
+        let probe = assembled(None);
+        let control = assembled(Some(&weakening));
+
+        let identity_words = [SANDBOX_UID, SANDBOX_GID];
+        for word in MOUNT_WORDS
+            .iter()
+            .chain(&ENVIRONMENT_WORDS)
+            .chain(&identity_words)
+        {
+            assert!(
+                probe.iter().any(|assembled| assembled == word),
+                "the baseline argv has no `{word}`, so leaving it unchanged says nothing"
+            );
+        }
+
+        let (removed, added) = word_delta(&probe, &control);
+        assert_eq!(
+            (removed, added.clone()),
+            (Vec::new(), sorted(&SANDBOX_CAPABILITY_GRANT)),
+            "the capability grant moved an argv word that is not a capability flag"
+        );
+        for word in MOUNT_WORDS
+            .iter()
+            .chain(&ENVIRONMENT_WORDS)
+            .chain(&identity_words)
+        {
+            assert!(
+                !added.iter().any(|moved| moved == word),
+                "the capability grant moved `{word}`, which belongs to another row"
+            );
+        }
+
+        assert_eq!(
+            SpawnOptions::under(Some(&weakening)),
+            CONFINING_OPTIONS,
+            "the capability grant moved a parent-side descriptor option, which is rows 10 \
+             and 12's axis"
+        );
+
+        let capabilities = row_fourteen_script();
+        let identity = row_thirteen_script();
+        assert!(
+            !capabilities.contains(PROC_SELF_FD),
+            "row 14's payload enumerates the descriptor table, which is row 10's claim: \
+             {capabilities}"
+        );
+        for set in CAPABILITY_FIELDS {
+            assert!(
+                capabilities.contains(set),
+                "row 14's payload does not read `{set}`, so the disjointness below reads \
+                 nothing: {capabilities}"
+            );
+            assert!(
+                !identity.contains(set),
+                "row 13's payload reads `{set}`, which is row 14's claim: {identity}"
+            );
+        }
+        for surface in IDENTITY_FIELDS {
+            assert!(
+                !capabilities.contains(surface),
+                "row 14's payload reads `{surface}`, which is row 13's claim: {capabilities}"
+            );
+        }
+    }
+
+    /// `VT-6`, `EX-4`, `EX-8` — the mutant: a backend that leaves the capsule
+    /// the capability authority the profile withholds.
+    ///
+    /// `Violated`, not `Unproven`: a probe arm that *fails* is the harness
+    /// saying the property does not hold of this backend, and that reading does
+    /// not depend on what the control arm did.
+    ///
+    /// Both readings are **built**, not borrowed from the trusted side, and that
+    /// is forced rather than chosen — see [`a_granted_capsules_reading`]: inside
+    /// this jail the trusted side's own reading is all-zero and would make the
+    /// mutant conforming.
+    #[test]
+    fn a_capability_retaining_backend_fails_row_fourteen() {
+        let granted = a_granted_capsules_reading();
+        assert_eq!(
+            row_fourteen_against(&leaking_on_every_arm(&granted)),
+            RowVerdict::Violated,
+            "a backend leaving the capsule its capability authority passed row 14"
+        );
+
+        // Discriminating: the same pipeline over a reading from a capsule that
+        // *is* confined reaches a verdict that is not `Violated`, so the verdict
+        // above came from the capability sets and not from the shape of the stub.
+        let confined = a_confined_capsules_reading();
+        assert_ne!(
+            row_fourteen_against(&leaking_on_every_arm(&confined)),
+            RowVerdict::Violated,
+            "row 14 reads Violated against a backend that confines capabilities"
         );
     }
 }

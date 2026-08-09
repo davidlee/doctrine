@@ -1521,6 +1521,35 @@ under the sheet's own fallback.
     which cannot be arranged without a namespace. If `ArmResult` ever carries the
     arm's output, this instrument can go. Owed as a note, not a defect. (`T7`.)
 
+134. **A probe that asserts an *absence* cannot tell "held nothing" from "read
+    nothing", and table A row 14's defence against that is one shell parameter
+    default.** Row 14 passes when both capability sets read empty; a set the
+    payload fails to read also leaves its variable empty. The payload therefore
+    reports an unread set as **held** (`${2:-unread}`), so an unreadable
+    capability set is a failure to demonstrate the property rather than a silent
+    pass. This was measured, not reasoned: with the default removed and the
+    status key deliberately misspelled, `CapBnd` was never read and **all four**
+    of row 14's tests — the row verdict included — went green. That is `R2`'s
+    vacuous pass at this row, and one substituted default is the whole of what
+    stands between the row and it. Owed as the reason not to "simplify" that
+    expression. (Phase sheet `F-47`, `T8`.)
+
+135. **Row 14's mutant is *built*, not borrowed, and the reason is host
+    dependence in the opposite direction to `F-4`'s.** Row 13's trusted-side
+    reading is a usable mutant because this host's operator identity differs from
+    the declared one on two of four surfaces. Row 14's is not: the jail already
+    strips capabilities, so this process reads all-zero and is **conforming** —
+    a mutant borrowed from it would assert nothing. Both of row 14's readings are
+    therefore taken in a `bwrap` of the test's own, differing by `--cap-add ALL`
+    and nothing else. Measured here: probe arm all-zero on all four sets, control
+    `000001ffffffffff` on all four, which confirms `A2` inside the jail. What an
+    in-jail run cannot show is that the *shipping* backend's confinement is what
+    produced the zero rather than the cage around it — `create_user_ns()`
+    restoring `CAP_FULL_SET` in the nested namespace is the argument that it
+    does, and `VA-1`'s off-jail re-run is what turns that argument into a
+    measurement. Owed to `VA-1`, and it is the same class as item 131.
+    (Phase sheet `F-48`, `T8`.)
+
 
 ## Open
 
