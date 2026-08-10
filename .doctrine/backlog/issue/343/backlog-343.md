@@ -17,6 +17,12 @@ error[E0599]: no associated fn                 conformance.rs:1775 SocketAddr::f
 Four unconditional Linux-only APIs. There is **no `cfg(target_os = ...)` gate
 anywhere in the crate** — verified by grep across `crates/doctrine-control/src`.
 
+The split across the release matrix confirms the diagnosis rather than merely
+being consistent with it: `x86_64-unknown-linux-musl` is **green**, both Apple
+targets are red. The failure tracks the target OS exactly, which is what rules
+out a toolchain or feature-resolution explanation and leaves the ungated
+Linux-only imports.
+
 ## Why CI builds it at all
 
 The release job runs a bare `cargo build --release --target <t>`
