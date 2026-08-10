@@ -280,3 +280,130 @@ verdict (`ISS-335`, `ISS-336`). Standalone and deliberately not wired into
 `gate`, since wiring it in is what `F-8` was about. `justfile` was already a
 `design-target` selector, so it adds no undeclared path. In-jail smoke run:
 `outcome=admitted`, 19/19 `Proven`, exit 0.
+
+## Reconciliation Outcome
+
+Written by `/reconcile`, 2026-08-10, on `sl-248`. All eight findings were
+terminal (`verified`) at entry; remediation is recorded here rather than by
+mutating any disposition.
+
+### Direct edits applied
+
+- **`verification-ledger.md` — the conformance claim (`F-1`).** *"reads 24 files,
+  nothing undeclared"* replaced with the measured algebra: **24 conformant, 0
+  undelivered, 172 undeclared**, with the 170 `.doctrine/` paths attributed to the
+  declared `PHASE-09`/`PHASE-10` boundary overlap in the same sentence. The
+  mechanical cause is named (reading the tail of the output, where `conformant`
+  prints, rather than the head, where `undeclared` does) so the next reader does
+  not repeat it. The only other restatements were in `handover.md`, which is
+  gitignored and already superseded.
+- **`verification-ledger.md` — the boundary rows (`F-3`).** All ten
+  `phase → code_start_oid..code_end_oid` rows transcribed out of the gitignored
+  `.doctrine/state/slice/248/boundaries.toml` into the tracked ledger, so the
+  conformance basis survives an `rm -rf` of state.
+- **`design.md` — `T9`'s vocabulary widening (`F-7`), both halves in one edit.**
+  `PHASE-09` `T9`'s `Observed::Unspoken` recorded against the design's
+  three-variant block. And `notes.md` item 138 **answered rather than deferred
+  again**: the design's `AdmissionVerdict` is written as a complete struct with
+  two reporting channels while the shipped type carries three, so the vocabulary
+  *is* closed over channels, `PHASE-10` `T9`'s `observations` channel is the same
+  class of widening, and it owes the same record. Direct edit, not a REV —
+  `design.md` is a per-slice artefact, which is also why the `RV-` named in
+  `handover.md` was a category error.
+- **`design.md` — the sentences the notes say are owed.** The assembly list is an
+  order, not an inventory, and three profile-owned binds it does not name are
+  emitted anyway (item 37). `CapsuleEnv` is short by the backend-synthesised
+  `PWD`, corrected in `design.md`, the property table's row 11, and the shipped
+  doc comment (item 128). `EmptyInputCapturedOutput`'s justification pointed at
+  the harmless direction — bytes reaching the trusted side is the *specified*
+  behaviour of a capture endpoint; the hazard is the capsule reading descriptor 1
+  — corrected in both design and code (item 129). `sec-5`'s `900` now says it
+  bounds a build/verification contract, not any capsule execution (item 16a).
+
+Doc comments only in `backend.rs`; no behaviour changed. `cargo fmt --check` and
+`cargo clippy -p doctrine-control --bins` clean, `doctrine validate` clean.
+
+### Selector registry (the load-bearing conformance fix)
+
+- **`flake.nix` → `design-target` (`F-2`).** It carries `util-linux`/`setsid` for
+  row 7 and `socat` for row 5. Conformance moved **24/0/172 → 25/0/171**.
+- **`LOOP.md` → `scope-relevant`, as adjudication (`F-4`).** *The brief's premise
+  was wrong and the ruling reflects the corrected one.* The brief offered a
+  scope-relevant selector or a recorded exclusion, "either resolves the cell".
+  Neither does: `conformance_outcome` reads **only** `design-target` selectors
+  (`src/slice.rs:2899`) and the registry has no exclusion mechanism. Nor can the
+  cell ever be empty — 170 `.doctrine/` paths remain by the declared overlap. So
+  the achievable goal is adjudication, and the selector's note records that
+  `LOOP.md` stays in the undeclared cell **by ruling, not oversight**.
+  `design-target` was rejected: it would clear the row by calling orchestrator
+  scaffolding design surface.
+
+### REVs completed
+
+- **`REV-051` (`reconcile-sl-248`) — `done`.** Two rows.
+  - **`REQ-459` `pending` → `in-progress`** (auto-landed, `REC-113`). Criterion 1
+    discharged *over the channels `sec-2`'s ledger names* — the qualifier is
+    load-bearing, since *in full* was claimed four times in this slice and was
+    false the first three. Criterion 3 discharged structurally. Criterion 2
+    partial, so `active` would assert a closure it does not support while
+    `pending` no longer describes it (item 139's "contributing `--change`").
+  - **`SPEC-030` modify** (surfaced, landed by hand). Names `setsid`
+    (`util-linux`) and `socat` as production host requirements of the shipped
+    suite, and states criterion 2's two shortfalls.
+
+  **Criterion 2 carries a SECOND shortfall, which this brief did not.** It is
+  recorded because a backlog item does not discharge a reconcile ruling. The
+  conformance fixture binds whole host top-level roots including `/nix`;
+  `--ro-bind` is read-only, **not `noexec`**, and measured off-jail a capsule
+  sees 691 store paths and runs `git`, `curl` and `gcc`. That is the host-shaped
+  default `PHASE-10` `EX-8` exists to refuse, in the very fixture that hosts the
+  capsules where `BoundedInputSet` is demonstrated. The nineteen rows are not
+  falsified — they are evidence about the properties, not about the environment
+  production constrains. Carried as `ISS-341`; slice `SL-252` minted.
+
+### Decisions taken (the brief's conditional set)
+
+- **Row 9's title** (items 118/109) — design wording corrected to the mechanism;
+  the test keeps its name, because `PHASE-10` `VT-2` makes it a verification
+  floor. Rename deferred to `IMP-422`, which must carry the `VT-2` mandate with
+  it. Owner: *"longer term we should rename it not to lie."*
+- **The capsule uid** (items 131/158) — `IMP-419`, sequenced `after` `ISS-338`
+  (`gid_map` unmeasured off-jail, so the baseline is half-verified). Not taken
+  here: net-new work against `PHASE-10`'s closed surface, the disposition `F-8`
+  took to `IMP-417`.
+- **The capacity report's channel** (item 45) — stderr named explicitly in
+  `design.md`, including that a non-terminal caller gets no programmatic access
+  to a `Low` verdict. Better shape deferred to `IMP-420`.
+- **`HostDescriptor`'s home** (item 50) — `IMP-421`, leaning to a `descriptor()`
+  method on `HostFacts`. Coupling argument, not correctness.
+- **Items 76, 85, 96, 87, 132** — recorded; 132's relocation is `CHR-061`.
+
+### Settled by measurement rather than ruled
+
+- **Item 161's userns vacuity does not survive carding.** `CredentialsConfined`
+  is **retired** — it survives only in two doc comments describing its
+  replacement by `MappedIdentity`, which is *measured to fire* — and nothing in
+  `conformance.rs` reads `/proc/self/ns/user`. No `ISS-` owed.
+- **Item 117's residual** — shipped row 10 opens a fresh decoy set *per arm* (the
+  `F-26` repair) and `hold_descriptor_window()` is `pub(crate)`. The in-process
+  window is carried knowingly and documented; same neighbourhood as `ISS-334`.
+- **Item 113** — discharged; the sheet's wording is moot, the sheet being
+  gitignored and discarded.
+- **Item 122 (`F-24`)** — no stub can run through `run_row` at all: `provision`
+  reads a transaction identity back out of stdout and fails closed first. The
+  harness is right.
+- **Item 123 (`F-25`)** — no leaking-backend mutant. It costs a production
+  visibility change or a third `unsafe` site against a spent budget; the
+  uncovered surface is the parent-side sweep's own mechanism, recorded not fixed.
+
+### Withdrawn / tolerated
+
+None. All eight findings are `verified`; `F-5` and `F-6` needed no per-slice
+write (their remediation is `IMP-418` and the mint set the audit already
+executed), and `F-8`'s ruling is `IMP-417`, criterion-level and net-new.
+
+### Handoff
+
+`/close`. Outstanding before the terminal transition: the cross-branch id
+collision sweep, the post-merge `SL-252 references ISS-341` edge, and `LOOP.md`
+as an unlisted merge conflict — see `handover.md`.
