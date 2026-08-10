@@ -2348,7 +2348,18 @@ load-bearing only there). The handover points at this section.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-10 · **at `reconcile` on branch `sl-248`, head `654abd81a`.**
+fresh-as-of: 2026-08-10 · **`/reconcile` COMPLETE on branch `sl-248`, head
+`08ddc2dc7`.** The writer half of the seam is done: `RV-352` carries its
+`## Reconciliation Outcome`, which is the record — not this stamp. `REV-051`
+moved `REQ-459` `pending → in-progress` and amended `SPEC-030`, carrying the
+second shortfall in criterion 2 (`ISS-341`) that the brief did not. `SL-252`
+minted for `ISS-341`'s design; `IMP-419`…`IMP-423` and `CHR-061` minted from the
+brief's deferred decisions. `RFC-025`'s register now records the owner's
+direction to **close all 24 follow-ups before slice 2 starts**. Next: `/close`,
+then land — see `handover.md` for the measured conflict set (`LOOP.md` is one the
+audit never listed; `adr/001/layering.toml` is one it listed that is stale).
+
+The earlier stamp for this line, superseded: **at `reconcile`, head `654abd81a`.**
 All ten phases executed; `RV-352` settled (eight findings terminal, `F-8` ruled);
 lifecycle advanced `started → audit → reconcile` at `8740c66bd`. `ISS-339`'s
 off-jail runs then landed **three** source defects in the conformance fixture —
