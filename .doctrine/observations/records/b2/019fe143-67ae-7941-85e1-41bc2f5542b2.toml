@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe143-67ae-7941-85e1-41bc2f5542b2"
+recorded_at = "2026-08-08T12:05:18.894804526Z"
+kind = "friction"
+summary = "/execute: PHASE-04 T4's compensating control could not reach the region the sheet named, in one run"
+detail = "The sheet required the injected-defect control to send the I11 test red 'on the comment and on [[relation]]' — i.e. D8's region (b), the tail. But the test asserts region (a) (the meta tier above [facet]) first, and the naive toml::to_string writer perturbs (a) too, so assert_eq short-circuits there and the tail assertion never runs. Reaching the named evidence took a second run with (a) temporarily disabled — two injections and two reverts instead of one. Cheap fix for a future sheet: when a control's expected failure is named against a specific assertion, either order that assertion first or tell the worker the control will fire earlier and must be narrowed. Generalises: a multi-assertion test used as a defect detector proves only its FIRST failing assertion unless the run is narrowed."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

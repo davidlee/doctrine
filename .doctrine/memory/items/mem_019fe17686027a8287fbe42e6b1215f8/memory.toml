@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe17686027a8287fbe42e6b1215f8"
+memory_key = "mem.pattern.doctrine.compose-two-write-cores-bind-both-legs"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Composing two toml_edit cores: bind both legs, never ||"
+summary = "When one write composes two document-level cores over a held DocumentMut, bind each leg's changed-bool to a local; `a()? || b()?` short-circuits and silently skips the second core."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/knowledge.rs", "src/facet_write.rs", "src/dep_seq.rs"]
+globs = []
+commands = []
+tags = ["rust", "toml-edit", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2ad8aaa30ceb90e8f45c4764a3c503412c94caaf"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a98c186017a44936707cc5f7c69c00f7dbc3c69c8c4cb8aff981f7545b41db18"
+base_commit = "3373ce06bb2398b0707c3433dd786e98aea32020"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

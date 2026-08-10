@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe222caaa75e298d5f93c770c6d2e"
+memory_key = "mem.pattern.doctrine.comma-separated-facet-flags-split-prose"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Comma-separated facet flags split prose into list elements"
+summary = "knowledge edit --alternatives/--consequences are comma-separated: prose containing a comma is silently stored as multiple list elements; the only symptom is a doubled space on render."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/knowledge.rs"]
+globs = []
+commands = ["doctrine knowledge edit"]
+tags = ["knowledge", "facet", "cli", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e4d5fba59ff7f91fbf45b5f35da9e81fafdf8fd8"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3fa70b422c74213569df009d9ed848d460916c091b817d6bf950524659c1579a"
+base_commit = "560ae024b3db09056aad3e4b59570b183471e178"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+

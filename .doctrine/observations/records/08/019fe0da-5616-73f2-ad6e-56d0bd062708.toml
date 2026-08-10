@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0da-5616-73f2-ad6e-56d0bd062708"
+recorded_at = "2026-08-08T10:10:33.110350978Z"
+kind = "friction"
+summary = "LOOP.md pinned its subject slice in prose, so every cold sub-agent brief had to verbally patch it"
+detail = "Driving SL-249 with the /loop + LOOP.md driver. LOOP.md declared 'Subject slice: SL-248' and described its execution posture as a clone on branch sl-248 that must not mint entities. Neither was true for this run (primary worktree, edge, live corpus), but the file states it is read every firing by a cold context. The orchestrator therefore had to append an 'Amendment to LOOP.md' paragraph to the planner brief correcting two facts before the sub-agent could act, and would have had to repeat that in every subsequent brief. Cost: the patch paragraph itself, plus the risk a sub-agent trusts the file over the brief. Fixed at 3cbccc036 by moving the subject slice into the /loop prompt (which is passed verbatim to each firing) and rewriting the posture section. General shape: a document declared to be re-read by cold contexts must not hardcode the one parameter that varies between runs — the invocation is the right carrier, not the file."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

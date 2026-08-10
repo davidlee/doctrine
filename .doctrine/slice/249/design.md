@@ -128,8 +128,12 @@ by name).
   nothing forces the siting. What binds here is the conclusion on its real
   grounds: step 5 is the existing, already-idempotent effects step, and putting
   the content write there keeps a record's effects resumed as one unit.
-- **`ADR-013`** — the governance amendment routes through a REV landing at
-  reconcile, over **two** entities (`SPEC-019`, `PRD-010` — `DEC-175`).
+- **`ADR-013`** — the governance amendment routes through a REV over **two**
+  entities (`SPEC-019`, `PRD-010` — `DEC-175`). *Corrected at reconcile
+  (`RV-351` `F-1`): the REV was drafted here as landing at reconcile, and
+  `DEC-182` moved it into `PHASE-07`, where it landed as `REV-050`
+  (`done` · `approved`). The routing constraint is unchanged; only the landing
+  point moved.*
 - **`ADR-004` / `SPEC-018`** — `link`/`unlink` own relations; `edit` does not
   touch them.
 - **`ADR-001`** — leaf ← engine ← command, no cycles. The pure write seam is a
@@ -275,9 +279,16 @@ subsystem; every box below already exists except the table.
 
 The one artefact this design adds:
 
+*Name corrected at reconcile (`RV-351` `F-4`): the declaration struct shipped as
+`FacetFieldRow`, not `FacetField`. `ISS-329` found two `FacetField` types in one
+crate; the ruling was to rename this one and leave `facet_write::FacetField`
+alone, with `CHR-060` carrying the honest second half. `Row` over `Spec` (which
+names an entity kind) and `Decl` (an abbreviation with no precedent) — the tree
+carries ~20 `…Row` table-row types.*
+
 ```rust
 /// One facet field: its key, and the shape the writer must emit.
-pub(crate) struct FacetField {
+pub(crate) struct FacetFieldRow {
     pub(crate) name: &'static str,
     pub(crate) shape: FieldShape,
 }
@@ -290,7 +301,7 @@ pub(crate) enum FieldShape {
 
 /// Every field one record kind owns, in template order — the single authored
 /// derivation of the per-kind field sets (STD-001).
-pub(crate) fn facet_fields(kind: RecordKind) -> &'static [FacetField];
+pub(crate) fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow];
 ```
 
 It lives in `src/knowledge.rs`, adjacent to `validate_facet`, because the table
@@ -418,11 +429,31 @@ each subverb's arg names equal its kind's table row, so the two cannot drift. Se
 `memory edit` unchanged, and ride `entity::write_body`, which that verb already
 uses. Nothing new on the prose tier.
 
+*Spelling recorded at reconcile (`RV-351` `F-11`): the kind-dispatched payload
+ships as `Option<Box<KnowledgeFacetEdit>>`, boxed. Forced by
+`clippy::large_enum_variant` under `warnings = "deny"` — unboxed, the variant
+makes `KnowledgeCommand` wide enough to trip the lint, and the gate is
+zero-warnings. One optional facet-edit payload on the edit command either way;
+only the indirection differs. No id owed.*
+
 ## What `settle` derives, and the one thing it does not
 
-`DEC-178` derives *coverage*: a state is settleable when the kind's facet carries
-`<state>_by` and `<state>_on`. That is mechanical over `facet_fields` and yields
+`DEC-178` derives *coverage*: a state is settleable when it is a **status token
+of that kind** *and* the kind's facet row carries `<state>_by` and
+`<state>_on`. The derivation is quantified over the status vocabulary and
+**intersected** with the facet row; both legs do real work, and it yields
 exactly four transitions.
+
+*Sharpened at reconcile (`RV-351` `F-6`). This section first said "mechanical
+over `facet_fields`", which taken literally yields **five**:
+`DECISION_FACET_FIELDS` carries `decided_by`/`decided_on` while `decided` is no
+status of a decision, so a facet-name scan alone would hand `settle` a
+transition the vocabulary does not hold. The correction aligns § 5.2 with
+`DEC-178`'s own recorded rationale — "laying the status vocabularies against the
+facet field names gives an exact correspondence", and a correspondence is an
+intersection — rather than amending the ruling. `I5` then holds from both sides:
+`accepted` is excluded by the facet leg, `decided` by the status leg. Shipped as
+`derived_settleable` (`src/knowledge.rs`), whose doc comment states the same.*
 
 It does not derive *which field holds the outcome*. `QUE`'s is `answer`, `CON`'s
 is `waiver_reason`, and no naming rule connects either to its state token without
@@ -450,6 +481,29 @@ Stating this plainly rather than claiming full derivation: `DEC-178`'s reach
 ruling stands, and the honest scope of "derived" is the coverage, not the whole
 row.
 
+## `settle` is a one-way door per record
+
+*Stated at reconcile (`RV-351` `F-12`, `R-withdrawn-overlap`). Intended
+behaviour, and it needs writing down precisely because nobody decided it: it
+falls out of two correct rules meeting, so no single rule's author had cause to
+state it.*
+
+`invalidated` and `waived` sit in **both** the derived settleable set and
+`WITHDRAWN_STATUSES` (`src/knowledge.rs`), and `settle` refuses a withdrawn
+record. So settling an `ASM` to `invalidated` or a `CON` to `waived` is
+terminal: the record can afterwards be neither re-settled nor moved to its
+sibling state, because the act of settling is what withdrew it. `validated` and
+`answered` are not withdrawn statuses, so an `ASM` may still travel
+`validated → invalidated` — and land in the same terminal place. With the
+state-to-itself refusal, every kind's settle graph is therefore acyclic and at
+most one step deep.
+
+Whoever first tries to correct a mistakenly waived constraint will meet this.
+The escape is the uncoupled pair, not a second `settle`: `knowledge status`
+moves the status (it validates the token and carries no withdrawn guard) and
+`knowledge edit constraint` corrects the captured field. That they are separate
+verbs is `I4`, not an oversight.
+
 ## The pure seam
 
 ```rust
@@ -458,7 +512,7 @@ pub(crate) struct RawEdit<'a> { pub(crate) field: &'a str, pub(crate) value: Raw
 pub(crate) enum RawValue { Text(String), List(Vec<String>) }
 
 /// One validated mutation, ready to write.
-pub(crate) struct FacetEdit { pub(crate) field: &'static FacetField, pub(crate) value: RawValue }
+pub(crate) struct FacetEdit { pub(crate) field: &'static FacetFieldRow, pub(crate) value: RawValue }
 
 /// Validate raw assignments against the kind's table: every field is owned by
 /// this kind, every `Closed` value parses to a variant, every `List` value is a
@@ -545,9 +599,37 @@ pub(crate) struct CreateRecord {
     pub(crate) body: Option<String>,
     /// The record's `[facet]` fields, by field name (phase B).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub(crate) facet: BTreeMap<String, RawValue>,
+    pub(crate) facet: BTreeMap<String, WireFacetValue>,
 }
 ```
+
+*Type corrected at reconcile (`RV-351` `F-7`): this design's literal spelling was
+`BTreeMap<String, RawValue>`, and it is **unbuildable**. `RawValue` lives in
+`src/knowledge.rs`, which is command tier; `design_run` is declared `leaf` with
+`out=0` (`.doctrine/adr/001/layering.toml:31`), so importing it would hard-fail
+`tests/architecture_layering.rs` — the `ADR-001` constraint this same section
+cites. `PHASE-06` therefore shipped a leaf-local wire type,
+`WireFacetValue` (`src/design_run/submission.rs`), sibling to the existing
+`WireKey` in the same module. The shape and the validation are unchanged: the
+map is still validated by `plan_facet_edits` against `facet_fields(kind)` at
+admission. A departure taken because the alternative did not compile.*
+
+**Why the name is `WireFacetValue` and not `FacetValue`.** `FacetValue` is the
+name `CHR-060` proposes to give `facet_write::FacetField` (`ISS-329`'s ruled
+option 2 — see § 5.1). `Wire`-prefixing keeps this type collision-proof under
+every `CHR-060` outcome, including `FacetEdit`, which `knowledge::FacetEdit`
+already holds.
+
+> **`CHR-060`'s premise is contested, and this paragraph is its only carrier.**
+> `CHR-060` says rename `facet_write::FacetField` → `FacetValue`. This slice
+> found the opposite argument while doing the work: `facet_write`'s type is a
+> **key plus a value**, so it really *is* a field, and an **unkeyed** value type
+> has the better claim to the name `FacetValue`. That would make `CHR-060`'s
+> premise wrong rather than merely blocked. Nobody reopens `CHR-060` until
+> pickup, so whoever picks it up must read this argument **before** acting on
+> the rename — otherwise they execute a rename on a premise this slice showed
+> may be false. Argue it openly at `CHR-060`; do not let a phase settle it by
+> taking the name first.
 
 **On calling it `body`.** The tempting alternative is a distinct name — `prose` —
 on the reasoning that `body` is the key that ate SL-248's content. Rejected: the
@@ -728,9 +810,12 @@ and is already where status and the `shapes` edge land — so the facet and pros
 write joins effects that are resumed as a unit, rather than splitting the record's
 content across two steps with different resume semantics. That is a design
 preference with a stated reason, not a constraint. The ruling should be corrected
-to say so; the correction is carried to reconcile with the objective 4 REV, since
-this slice has no verb for amending a knowledge record — which is, precisely, the
-hole it exists to close.
+to say so. *Corrected at reconcile (`RV-351` `F-1`): the correction did not ride
+the objective 4 REV. `PHASE-07` **executed** it in place with `knowledge edit
+decision` — the verb this slice built — recording the withdrawal of the false
+rationale rather than dropping it silently. The design drafted this as a
+reconcile-time REV passenger because at drafting no verb for amending a
+knowledge record existed; by `PHASE-07` one did.*
 
 The guard lands in **Phase A**, with the first payload-bearing write. Phase A is
 what introduces content that can diverge, so it is what owes the binding.
@@ -968,9 +1053,21 @@ Each is a property a test asserts, not a habit. `I1`–`I9` are the drafting set
 - **I9 — the wire-key table is total.** A fully-populated `Declaration`'s serde
   key set equals the table's (`DEC-169`). This is an *inventory* claim and
   nothing more — see `I10`.
-- **I10 — no wire key is accepted and ignored.** For every (`Declaration` key ×
-  design-run subject kind) pair, a submission carrying that key on that subject
-  is either observably effectful or refused. Never silently accepted. `I9`
+- **I10 — no wire key is accepted and ignored *at the wrong kind*.** For every
+  (`Declaration` key × design-run subject kind) pair: the key is **refused** at
+  that kind, or **some** submission at that kind makes it observably effectful.
+  Never silently accepted at a kind that does not honour it. *Quantifier
+  narrowed at reconcile (`RV-351` `F-5`) per `DEC-183`: the drafted wording read
+  the disjunction over **every** submission, and the generated matrix quantifies
+  existentially over submissions at each kind — because four wire keys are read
+  on only one of their honouring kind's two paths, so a submission carrying one
+  at the honouring kind in the other state is neither effectful nor refused.
+  `I10` proves the **kind** axis and nothing wider; the state axis is carried by
+  `ISS-327` / `ISS-328`, neither a blocker. The existential reading is not
+  vacuous — the disjunction alone would be satisfied by a table that refuses
+  everything, which is exactly why `PHASE-02` shipped three positive controls
+  against that form, and why the four state-inert cells are named in the test
+  module rather than only in a gitignored phase sheet.* `I9`
   compares two key sets and would stay green if the table mapped `body` to `cp-`
   or `dispose` to `sec-`, because the sets are identical either way; `I10`'s
   oracle is behaviour, not the table under test (`RV-349` `F-4`). This is also
@@ -1098,10 +1195,13 @@ now answered; two resolve later, and *later* is the right place for them.
   because what was ever at stake was the invariant across future template edits
   rather than one reading of them.
 
-## Open, and resolving at REV authorship
+## Open at drafting, resolved at REV authorship
 
-Both belong to reconcile, when the REV is actually written. Recording the
-recommendation now so the authorship is not re-derived:
+*Corrected at reconcile (`RV-351` `F-1`): drafted as belonging to reconcile,
+"when the REV is actually written". `DEC-182` moved the REV into `PHASE-07`, so
+both were resolved there, at authorship — which is where this section always
+said they belonged. The recommendations below stood; each carries its
+disposition.*
 
 - **`inq-7` — does this REV explicitly discharge `SL-159`'s undelivered
   governance axis, and where is the lineage recorded?** Recommendation: yes, by
@@ -1112,6 +1212,10 @@ recommendation now so the authorship is not re-derived:
   countervailing consideration is that a REV claiming to discharge another
   slice's axis is asserting something about work it did not do — which is why
   this wants the REV's author to look at it, not a design-time ruling.
+  *Resolved in `REV-050`: yes, by name, with the claim narrowed — `SL-159` and
+  `SL-197` discharged their own **implementation** obligation; what they left
+  unlanded is the **governance axis**, and that is what `REV-050` discharges.
+  The narrowing is what the countervailing consideration bought.*
 - **`inq-9` — should the REV give `src/facet_write.rs` a spec source anchor, and
   to which spec?** Recommendation: `SPEC-004`, as shared substrate. The module is
   the entity engine's edit-preserving `[facet]` write mechanism, kind-agnostic,
@@ -1119,16 +1223,73 @@ recommendation now so the authorship is not re-derived:
   consumer, and anchoring a shared writer to one consumer is how the next
   consumer ends up outside governance. This slice makes the anchor more
   necessary, not less — it adds `KeyPosture`, a behavioural axis with no
-  governing sentence anywhere.
+  governing sentence anywhere. *Resolved in `REV-050`: anchored to `SPEC-004` as
+  shared substrate, which also gave `KeyPosture` its first governing sentence
+  anywhere in the corpus.*
 
 ## Unknowns
 
 - **Can `ADR-013`'s apply path auto-apply a prose-heavy amendment?** Carried
-  unverified from the scope card. It affects how the REV lands at reconcile, not
-  what it says. Worth probing before reconcile rather than at it. It now carries
-  a second passenger: `D8a`'s correction to `DEC-168`'s rationale rides the same
-  REV, for want of a verb to amend a knowledge record — which this slice is
-  building.
+  unverified from the scope card. It affects how the REV lands, not what it
+  says. *Answered at `PHASE-07` (`RV-351` `F-1`): no, and it does not need to.
+  `revision apply` auto-lands `status` rows only; `modify` rows are surfaced for
+  manual landing under the authored-truth honour model, which is how `REV-050`'s
+  two prose amendments landed. The second passenger this bullet anticipated —
+  `D8a`'s correction to `DEC-168`'s rationale — did **not** ride the REV: by
+  `PHASE-07` the verb this slice was building existed, and the correction was
+  executed in place with `knowledge edit decision` (§ 5.3, `D8a`).*
+
+## What the implementation actually touched
+
+*Added at reconcile (`RV-351` `F-2`, `F-3`) as the human mirror of the selector
+registry. The **registry** is the load-bearing surface —
+`doctrine slice conformance` reads the `design-target` selectors in
+`slice-249.toml` and nothing in this prose — so this section is legible record,
+not the fix. Both cells are now empty of source: `undelivered (0)`,
+`conformant (18)`.*
+
+**Two design targets the implementation did not use** (`F-2`, removed from the
+registry):
+
+- `src/catalog/scan.rs` — named as the tripwire's home. It landed in
+  `src/doctor_checks.rs` (+257), because `doctor_checks.rs`'s
+  `*_findings(root) -> Vec<Finding>` is the shipped precedent and no
+  `catalog::scan` function exists under the assumed name.
+- `src/design_run/admission.rs` — named as the correspondence refusal's home.
+  It landed in `Batch::validate` (`src/design_run/submission.rs`) with the typed
+  fault in `refusal.rs`, because `Batch::validate` is the batch's admission gate
+  and runs before any arm touches the working snapshot.
+
+Both landings are right; the selectors were stale.
+
+**Eleven paths the implementation touched without declaring** (`F-3`, now
+declared). This **supersedes** the `PHASE-07` ledger's "one file to three" —
+that count was wrong by a factor of four, and writing the three would have
+re-shipped the defect:
+
+| path(s) | why touched |
+|---|---|
+| `src/commands/facet.rs` | the `KeyPosture` call site (`1683a5703`) |
+| `src/commands/doctor.rs`, `src/finding.rs` | check #12's registry and its `Finding` category (`dfd51354d`) |
+| `src/commands/guard.rs` | classification of a new CLI variant |
+| `src/input.rs`, `src/memory.rs`, `tests/e2e_mcp_server.rs` | `PHASE-08` `T1`'s DRY hoist of the body-flag helpers (`7a4e5bd07`, net −45 in `memory.rs`) |
+| `src/design_run/ids.rs`, `run.rs`, `tests.rs` | design-run support edits inside the `scope-relevant` fence |
+| `tests/governance_kind_coverage.rs` | `PHASE-07`'s coverage canary |
+
+A correction to the brief's mechanism, found while making the edit: a
+`scope-relevant` selector does **not** discharge the undeclared cell.
+`conformance::compute` is handed the `design-target` selectors alone
+(`src/slice.rs`, `src/conformance.rs`), which is why the design-run trio sat in
+the cell despite `src/design_run/**` being declared, and why all eleven were
+declared `design-target`.
+
+**Staying undeclared, deliberately:** `LOOP.md` (the dispatch loop's own
+process doc, fixed mid-slice — a practice artefact, not this slice's subject)
+and `tests/fixtures/governance_kind_coverage/**` (the canary's fixture data,
+declared through the test that owns it). The remaining undeclared paths are
+`.doctrine/**` authored entities — memories, backlog items, observations,
+`REV-050`, the amended specs — which the registry does not declare for any
+slice.
 
 ## Deliberately not asked here
 
@@ -1242,9 +1403,11 @@ Three more, each forced by a finding on `RV-349` rather than chosen freely.
   already exists, is already idempotent, and already carries status and the
   `shapes` edge, so the content write joins effects resumed as a unit instead of
   splitting the record across two steps with different resume semantics. The
-  correction to the record itself rides the objective 4 REV at reconcile: this
-  slice has no verb for amending a knowledge record, which is the hole it exists
-  to close.
+  correction to the record itself was drafted as riding the objective 4 REV at
+  reconcile, for want of a verb to amend a knowledge record. *Corrected at
+  reconcile (`RV-351` `F-1`): by `PHASE-07` the verb existed, so `D8a` was
+  **executed** in place with `knowledge edit decision` rather than carried — the
+  hole this slice exists to close, closed in time to close it.*
 - **D9 — the coverage canary reads both tiers and asserts an absence.**
   `DEC-176`'s ruling stands; its observable is strengthened. `RV-349` `F-5`
   showed the canary as written — every `kinds::RECORD` prefix appears in
@@ -1566,6 +1729,79 @@ Restated from the scope card with what drafting and review changed:
 - `IMP-403` leads 1 and 2 are demonstrably closed; leads 3–5 carry their own
   follow-up items.
 
+## Sole guards — read this before waiving a `VT`
+
+*Added at reconcile (`RV-351` `F-13`), and sited here because this is the
+section someone reads when deciding whether a criterion still earns its test.*
+
+`VT-3` is the **sole** guard on `EX-5` — the retry-binding criterion, that a
+resumed mint is about the payload it was journalled with and that the digest
+covers the facet by construction rather than by an enumeration. The singularity
+was **measured, not assumed**: swapping `skip_serializing_if` for
+`skip_serializing` on the wire's optional payload failed **exactly one test**.
+
+So waiving, skipping or deleting `VT-3` does not degrade coverage — it removes
+it. The acceptance digest silently stops covering the facet and nothing else in
+the suite notices. Before this reconcile the fact had no owner at all: it sat in
+`notes.md` § *Open* and in none of the `PHASE-07` ledger's three carried groups,
+so it would have reached close carried by nobody. It is recorded here so the
+cost is visible at the moment someone contemplates paying it.
+
+## When a red cannot be staged
+
+*Added at reconcile (`RV-351` `F-10`). Reusable shape, not a defect: three
+tasks in this slice hit it and each substituted a positive control that was
+actually run.*
+
+Under `warnings = "deny"` with `-D dead-code`, a phase whose **enabling** task
+must land before its **test** task cannot observe a red by the ordinary rhythm:
+the code that would fail does not compile until the thing it tests exists. Such
+a task owes a **positive control** instead — a deliberate mutation, run and
+observed, that proves the assertion can fail. The three instances:
+
+- `PHASE-08` `T4` and `T6` passed on first run (`T5`'s mode parameter was needed
+  for `T3` to compile; `T6`'s guards live inside `run_edit`). Compensated by
+  swapping the guard order to make the refusal test fail.
+- `PHASE-06` substituted `EX-4`'s verification recipe outright. The sheet's
+  resume fixture cannot work on **any** tree: the mint completes before the
+  abandon hook, so the intent journals at `IntentState::Applied` and
+  `execute_mint`'s `state() < Applied` guard skips step 5 — a resume-shaped test
+  would compare a file to itself with no writer between the reads, vacuously
+  green. Replaced with an explicit green pin of the guard state plus a direct
+  second `apply_record_effects` call.
+- `PHASE-03` `T3(b)` expected a field deleted from every row to fail both `I3`
+  and `I2`; only `I2` failed, because `I3`'s input is built from the table's own
+  rows — totality is `I2`'s job, placement is `I3`'s (§ 5.1 `P1`/`P2`). The
+  complement was run instead and `I3` caught it.
+
+None is a criterion failure. The reason to state the shape rather than the three
+instances: `PHASE-05`'s permanently-open control — a control nothing in the tree
+could discharge — is the standing example of what happens when it goes unstated.
+
+## The evidence this slice did not get
+
+*Recorded at reconcile (`RV-351` `F-9`, the audit's one **tolerated** finding).
+Stated, deliberately not fixed.*
+
+`PHASE-01`'s `EN-2` extraction claims behaviour preservation and rests on
+**inspection**, not on a control that would have gone red. No characterization
+test of `set_record_status`'s foreign-state refusal exists anywhere in the tree
+— none pre-existing, none added — and whether the worker ran a green-first
+control is **unrecoverable**: it died before writing Findings.
+
+It cannot be closed retroactively. The control had to run *before* the
+extraction; writing the test now would prove today's behaviour equals today's
+behaviour, which is not the missing evidence. Two facts make the toleration
+honest rather than lazy:
+
+- the equivalence argument is narrow and inspectable — one call site, an
+  identical format string;
+- the systemic cause was fixed **mid-slice**: `LOOP.md` now requires a commit
+  and a Findings line per task, which is why no later phase carries this shape.
+
+Every `VT` in this slice passing does not make this gap smaller, and the closing
+story should not read as though it does.
+
 ## What evidence changes
 
 The `answer`/`answered_by`/`answered_on` population on `QUE` is the slice's
@@ -1590,25 +1826,37 @@ history is retained in the sibling `design-history.md`.
    combination, and a cell asserting the wrong side of the disjunction is a test
    that passes while the mapping is wrong — which is what `F-4` found one level
    up. The largest thing still undefined.
-2. **Whether `settle` still earns a separate verb.** `DEC-178`'s case was partly
-   that the transition is a coupled multi-write. It is now one write of one
-   document, which is what `knowledge edit question` will also be. The remaining
-   case — a disposition is part of resolving, not a field one may forget — is
-   `DEC-062`'s and stands on its own, but it is now the *whole* case rather than
-   the larger half of one.
-3. **`D8a`'s correction has no home yet.** `DEC-168`'s recorded rationale is
-   known-false and the fix rides the objective 4 REV at reconcile — a governance
-   vehicle carrying a knowledge-record correction because no other exists until
-   this slice ships. Someone should check that is a legitimate home rather than
-   the only one available.
+2. ~~**Whether `settle` still earns a separate verb.**~~ **Struck at reconcile**
+   (`RV-351` `F-8`). The item attributed to `DEC-178` an argument `DEC-178` does
+   not make: that ruling's recorded rationale is entirely about **reach** —
+   which states are settleable, derived from facet-name correspondence — and the
+   coupled-multi-write argument was this design's own drafted `D6`, so `RV-349`
+   `F-2` struck a drafting artefact rather than a plank of the decision.
+   Verified against `doctrine knowledge inspect DEC-178`. The verb survives on
+   its own merits regardless: "one write of one document" is true of the
+   *mechanism* and false of the *reach* — `knowledge edit` writes `[facet]`
+   only, while `apply_settlement` puts `status` and `updated` in the same write,
+   so reaching `answered` **with its answer** through existing verbs still takes
+   two commands; and `settle` rests on a refusal `edit` cannot host, since
+   `edit` must keep an empty string as a legitimate clear while `settle` must
+   refuse it. Two opposite readings of the same empty string.
+3. ~~**`D8a`'s correction has no home yet.**~~ **Resolved at `PHASE-07`**
+   (`RV-351` `F-1`). The press item asked whether the objective 4 REV was a
+   legitimate home for a knowledge-record correction or merely the only one
+   available. The question dissolved: the proper vehicle shipped first, and
+   `PHASE-07` executed the correction in place with `knowledge edit decision`
+   (§ 5.3, § 7 `D8a`). No governance vehicle carried it.
 4. **Three unverified code claims worth pressing.** `entity::write_body`'s
    behaviour on an absent file, `resolve_ref`'s refusal surface, and
    `catalog::scan`'s shape as the tripwire's precedent carry no evidence anywhere
    in this design, and each is one command from being either evidence or a
    finding.
-5. **`inq-7` and `inq-9` left open into reconcile.** Both are recorded with a
-   recommendation (§ 6). The counter-argument to ruling them here is that both
-   are about what the REV *says*, and the REV does not exist yet.
+5. ~~**`inq-7` and `inq-9` left open into reconcile.**~~ **Resolved at REV
+   authorship** (`RV-351` `F-1`). `DEC-182` moved the REV into `PHASE-07`, and
+   both were ruled there, on the recommendations § 6 recorded — `inq-7` with the
+   claim narrowed to the governance axis, `inq-9` anchored to `SPEC-004`. The
+   counter-argument this item stated was the right one, and it was honoured: the
+   REV's author ruled them, not the design.
 6. **`R8`.** `src/knowledge.rs` gains tables and three verbs and already carries
    the CLI. Splitting it is out of scope — a judgement about sequencing, not
    about whether the module is too big.

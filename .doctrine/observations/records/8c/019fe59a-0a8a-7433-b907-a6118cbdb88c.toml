@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe59a-0a8a-7433-b907-a6118cbdb88c"
+recorded_at = "2026-08-09T08:18:25.546315725Z"
+kind = "friction"
+summary = "/reconcile: brief named the selector verb but not its --intent, and conformance reads design-target only"
+detail = "RV-351's brief instructed 'doctrine slice selector add 249 <paths>' for F-3 and asserted src/design_run/* needed nothing because it 'already rides the scope-relevant selector'. Both are the same gap: conformance::compute is handed the design-target selectors alone (src/slice.rs conformance shell), so a scope-relevant declaration leaves the undeclared cell red — which is the brief's own headline warning ('prose-only fix leaves the cell red') one level deeper. Resolving it cost a read of src/conformance.rs and src/slice.rs mid-write. A brief item naming a CLI verb should carry the flag values that make it load-bearing, and 'doctrine slice conformance' output would be more self-explaining if the undeclared header said which intent it reads."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

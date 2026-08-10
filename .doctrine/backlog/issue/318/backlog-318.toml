@@ -5,10 +5,10 @@ id = 318
 slug = "dispositions-on-an-inquiry-subject-are-silently-discarded"
 title = "Declaration keys inert at the subject's kind are silently ignored"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-09"
 tags = ["area:cli", "cluster:design-run", "footgun"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -1,0 +1,78 @@
+id = 251
+slug = "acts-carry-their-own-payload-contract"
+title = "Acts carry their own payload contract"
+status = "design"
+created = "2026-08-09"
+updated = "2026-08-09"
+tags = ["area:cli", "area:design", "cluster:design-run"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/design_run/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/command/design*"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/design-prompts/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "governed_by"
+target = "STD-001"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-390"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-333"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "contract structure rides a const table, not the prose asset — the register this slice reuses on the payload axis"
+target = "DEC-123"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "sealed narrative contract assets; the deferral of project-authored contracts holds here too"
+target = "DEC-122"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "SL-249's WIRE_KEYS table and its I9 drift pin are the answer-shape inherited here"
+target = "ISS-318"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the gate-condition analogue of this surface; seam to ride, not to parallel"
+target = "SL-244"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

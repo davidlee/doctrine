@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe22e-bb78-7b43-8174-5b6455b54221"
+recorded_at = "2026-08-08T16:22:21.304527072Z"
+kind = "friction"
+summary = "execute/phase-07 worker: staging a stub-based red costs a compile cycle under -D unused"
+detail = "The phase sheet's TDD instruction was 'write every fixture assertion against a stub check that returns vec![]'. In this repo that does not compile: -D unused makes the stub's unread struct fields (Exempt::{tier,phrase,expect,why}, Tier::{name,text}) and the unused paired_form helper hard errors, and -D elided-lifetimes-in-paths rejects &[Tier] in the stub signature. So the first red was a COMPILE red carrying no information about the assertions, and a second cycle was needed after adding a temporary dead_code allow and spelling Tier<'_>. Cost: one build plus the reasoning to tell a lint red from a test red. A sheet prescribing a stub-based red in a deny-unused crate should say to seed the temporary allow up front."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

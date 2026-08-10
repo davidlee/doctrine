@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe12e97e27472b96b236d1ccf8bf0"
+memory_key = "mem.fact.clap.subcommand-vs-optional-positional"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clap subcommand beats an OPTIONAL positional; a required one is what fights"
+summary = "In clap 4, a bare positional can coexist with subcommands iff the positional is optional; the SL-210 failure was the required-positional joint, not coexistence itself."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/knowledge.rs", "src/commands/compare.rs"]
+globs = []
+commands = []
+tags = ["clap", "cli", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "21b22f5858f5c103dc1163e8ebec16f3ff78df3b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a4c4f736d3968b96e521f90c6321263653eb092475fa142c57b4c4fd63f2ba83"
+base_commit = "dcd67b14d866b13f1927f3a7ca70a08870a4339d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe1fce9567f33b87263b85c049cd9"
+memory_key = "mem.pattern.testing.replay-cannot-prove-idempotence-behind-a-state-guard"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Idempotence via replay is vacuous when a journalled state guard skips the step"
+summary = "A resume-shaped fixture asserts byte-equality across a step that never ran twice; call the step again directly, and pin the guard state that proves replay would not."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/commands/design.rs"]
+globs = []
+commands = []
+tags = ["testing", "idempotence", "control", "design-run"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "398b98bcda52f85ef2ca79980e649cc639b5ae70"
+ref_name = "refs/heads/edge"
+checkout_state_id = "e9eff0f8af641e889bb66571cb181ee4b15efd5c82e703ffa80dbbf7f312d13e"
+base_commit = "803e56e98eb247c5f6163db9ea877e5cdaf46440"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

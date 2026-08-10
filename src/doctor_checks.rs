@@ -13,6 +13,7 @@ use crate::catalog::diagnostic::CatalogDiagnostic;
 use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey};
 use crate::catalog::scan::{self, ScanMode};
 use crate::finding::{Category, Finding};
+use crate::knowledge::RecordKind;
 use crate::mcp_server::dispatch::{
     TOOL_DISPATCH_AUTHORED_DIVERGENCE, TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT,
     TOOL_DISPATCH_NEXT_READY, TOOL_DISPATCH_PHASE_RECEIPT, TOOL_DISPATCH_REAP,
@@ -127,6 +128,117 @@ pub(crate) fn toml_parse_findings(root: &Path) -> Vec<Finding> {
 /// None` and are excluded.
 fn is_facet_diagnostic(d: &CatalogDiagnostic) -> bool {
     matches!(d.field.as_deref(), Some("estimate" | "value" | "facet"))
+}
+
+// ---------------------------------------------------------------------------
+// InertFacetKey — #12 populated-but-inert facet key tripwire
+// ---------------------------------------------------------------------------
+
+/// Report every `[facet]` key that is populated but **inert** at its record's
+/// kind — the key is carrying content nothing will ever read, because
+/// `validate_facet` discards every field its kind does not own.
+///
+/// It **reads**. It never refuses and never repairs, and `knowledge list` keeps
+/// working on the corpus it reports (DEC-177) — the locality of the report is the
+/// point, and it is why this is a warning where the design-run seam's equivalent
+/// is a refusal.
+///
+/// ## Disjointness from #7 `TomlParse` (D8)
+///
+/// A record whose TOML will not parse is **skipped silently**: check #7 already
+/// owns malformed-TOML findings, and reporting it again here would put one defect
+/// under two categories. This check says nothing it does not own.
+///
+/// ## What "populated" means (D5)
+///
+/// Decided from the TOML value — a non-empty string, a non-empty array, or any
+/// other value type — never from a declared shape. An inert key *has* no declared
+/// shape at the record's kind; that is what inert means.
+pub(crate) fn inert_facet_key_findings(root: &Path) -> Vec<Finding> {
+    let mut findings = Vec::new();
+
+    for kind in RecordKind::ALL {
+        // A missing tree yields an empty listing, so a corpus with no knowledge
+        // records needs no existence guard.
+        let Ok(mut ids) = crate::entity::scan_ids(&root.join(kind.kind().dir)) else {
+            continue;
+        };
+        ids.sort_unstable();
+
+        let owned: BTreeSet<&str> = crate::knowledge::facet_fields(kind)
+            .iter()
+            .map(|field| field.name)
+            .collect();
+
+        for id in ids {
+            let Ok(text) =
+                std::fs::read_to_string(crate::knowledge::record_toml_path(root, kind, id))
+            else {
+                continue;
+            };
+            // D8 — malformed TOML belongs to #7, not here.
+            let Ok(doc) = text.parse::<toml::Table>() else {
+                continue;
+            };
+            let Some(facet) = doc.get("facet").and_then(toml::Value::as_table) else {
+                continue;
+            };
+
+            for (key, value) in facet {
+                if owned.contains(key.as_str()) || !is_populated(value) {
+                    continue;
+                }
+                findings.push(Finding {
+                    category: Category::InertFacetKey,
+                    entity: Some(kind.canonical_id(id)),
+                    message: inert_key_message(key, &honouring_kinds(key)),
+                });
+            }
+        }
+    }
+
+    findings
+}
+
+/// D5's predicate: emptiness is the only thing that makes a key unpopulated, and
+/// a seeded `""`/`[]` is exactly the shape the templates leave behind.
+fn is_populated(value: &toml::Value) -> bool {
+    match value {
+        toml::Value::String(text) => !text.is_empty(),
+        toml::Value::Array(items) => !items.is_empty(),
+        _ => true,
+    }
+}
+
+/// Every record kind whose row carries `key`, in `RecordKind::ALL` order (D7).
+///
+/// A list, not a single kind: `confidence` is honoured by assumption *and*
+/// evidence, so a single-kind lookup would have to pick one arbitrarily and would
+/// be wrong half the time for the one field where it shows.
+fn honouring_kinds(key: &str) -> Vec<&'static str> {
+    RecordKind::ALL
+        .into_iter()
+        .filter(|kind| {
+            crate::knowledge::facet_fields(*kind)
+                .iter()
+                .any(|field| field.name == key)
+        })
+        .map(RecordKind::as_str)
+        .collect()
+}
+
+/// D6: a key no kind honours is reported too, and the message says so rather than
+/// rendering an empty list. Such a key is populated and inert *everywhere* — the
+/// worst case, not the one to pass over to keep a message template tidy.
+fn inert_key_message(key: &str, honouring: &[&str]) -> String {
+    if honouring.is_empty() {
+        format!("inert facet key `{key}` (no record kind honours it)")
+    } else {
+        format!(
+            "inert facet key `{key}` (honoured by {})",
+            honouring.join("/")
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -811,6 +923,7 @@ mod tests {
         Catalog, CatalogEdge, CatalogEdgeLabel, CatalogKey, EdgeTarget, Units,
     };
     use crate::catalog::test_helpers::*;
+    use crate::listing::ListArgs;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -2100,6 +2213,150 @@ mod tests {
         assert!(
             coord_hook_findings(&primary).is_empty(),
             "a non-numeric dispatch fork must not be treated as a coordination worktree"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // InertFacetKey — #12 tripwire tests (SL-249 PHASE-03, VT-3)
+    // ------------------------------------------------------------------
+
+    /// A knowledge record + its prose stub under a temp root. A local sibling of
+    /// `knowledge::tests::seed_record` rather than a widening of it: the fixture
+    /// belongs to the module whose tests read it, and `facet` is spliced verbatim
+    /// so a test can seed a key no kind honours.
+    fn seed_knowledge_record(root: &Path, kind: RecordKind, id: u32, facet: &str) {
+        let name = format!("{id:03}");
+        let dir = root.join(kind.kind().dir).join(&name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("record-{name}.toml")),
+            format!(
+                "schema = \"doctrine.knowledge\"\n\
+                 version = 1\n\n\
+                 id = {id}\n\
+                 slug = \"fixture\"\n\
+                 title = \"Fixture\"\n\
+                 record_kind = \"{}\"\n\
+                 status = \"proposed\"\n\
+                 created = \"2026-01-01\"\n\
+                 updated = \"2026-01-01\"\n\
+                 tags = []\n\n\
+                 [facet]\n{facet}\n\
+                 [evidence]\n\
+                 supports = []\n\
+                 contradicts = []\n\
+                 notes = []\n",
+                kind.as_str()
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(format!("record-{name}.md")),
+            format!("# {}: Fixture\n", kind.canonical_id(id)),
+        )
+        .unwrap();
+    }
+
+    /// A populated key the record's kind does not honour is reported once, naming
+    /// the record, the key, and EVERY kind that would honour it.
+    ///
+    /// `confidence` is the deliberate choice: it is the one field two kinds own
+    /// (assumption and evidence), so a single-kind lookup would have to pick one
+    /// arbitrarily and would be wrong half the time for the only case where it
+    /// shows (D7).
+    #[test]
+    fn a_populated_inert_key_is_reported_with_every_honouring_kind() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_knowledge_record(
+            root,
+            RecordKind::Decision,
+            1,
+            "context = \"why\"\nconfidence = \"high\"\n",
+        );
+
+        let findings = inert_facet_key_findings(root);
+
+        assert_eq!(findings.len(), 1, "exactly one inert key: {findings:?}");
+        let finding = &findings[0];
+        assert_eq!(finding.category, Category::InertFacetKey);
+        assert_eq!(finding.entity.as_deref(), Some("DEC-001"));
+        assert!(
+            finding.message.contains("confidence"),
+            "the message names the key: {}",
+            finding.message
+        );
+        assert!(
+            finding.message.contains("assumption") && finding.message.contains("evidence"),
+            "the message names BOTH honouring kinds: {}",
+            finding.message
+        );
+    }
+
+    /// A key no kind honours at all is reported too, and says so (D6). It is
+    /// populated and inert everywhere — the worst case, not the one to pass over
+    /// in order to keep a message template tidy.
+    #[test]
+    fn a_populated_key_no_kind_honours_is_reported_as_honoured_by_none() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_knowledge_record(root, RecordKind::Decision, 2, "frobnicate = \"yes\"\n");
+
+        let findings = inert_facet_key_findings(root);
+
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("frobnicate")
+                && findings[0].message.contains("no record kind honours it"),
+            "{}",
+            findings[0].message
+        );
+    }
+
+    /// A clean corpus reports nothing — including a seeded-but-EMPTY inert key,
+    /// which is not populated (D5). "Populated" is read off the TOML value, not
+    /// off any shape: an inert key has no declared shape at the record's kind,
+    /// which is what inert means.
+    #[test]
+    fn a_clean_corpus_and_an_empty_inert_key_report_nothing() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_knowledge_record(
+            root,
+            RecordKind::Decision,
+            3,
+            "context = \"why\"\nalternatives = [\"a\"]\nrationale = \"\"\nanswer = \"\"\n",
+        );
+
+        assert!(
+            inert_facet_key_findings(root).is_empty(),
+            "a seeded-but-empty inert key is not populated"
+        );
+    }
+
+    /// `EX-7` — the read path stays tolerant. `knowledge list` still succeeds on
+    /// the damaged corpus: the tripwire reports, it never refuses and never
+    /// repairs (DEC-177). `RawFacet` carries no `deny_unknown_fields`, so this
+    /// holds by construction — asserted anyway, because if it ever stops holding
+    /// that is a finding about the read model.
+    #[test]
+    fn knowledge_list_still_succeeds_on_a_corpus_carrying_an_inert_key() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_knowledge_record(
+            root,
+            RecordKind::Decision,
+            1,
+            "context = \"why\"\nconfidence = \"high\"\n",
+        );
+
+        assert!(
+            !inert_facet_key_findings(root).is_empty(),
+            "the fixture really is damaged"
+        );
+        assert!(
+            crate::knowledge::run_list(Some(root.to_path_buf()), ListArgs::default()).is_ok(),
+            "knowledge list must stay green on a corpus carrying an inert key"
         );
     }
 }

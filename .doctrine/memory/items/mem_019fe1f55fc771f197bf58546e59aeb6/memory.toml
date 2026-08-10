@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe1f55fc771f197bf58546e59aeb6"
+memory_key = "mem.pattern.testing.anyhow-alternate-display-for-the-cause-chain"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Asserting on an anyhow cause: to_string() shows only the outermost context"
+summary = 'A test asserting error.to_string().contains(cause) fails or passes vacuously when .with_context() wraps it; format!("{:#}") renders the whole chain.'
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/commands"]
+globs = []
+commands = []
+tags = ["testing", "anyhow", "error-handling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f301c12c1aaeb7fdc14490c2f1da5ce7ff55e997"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3672dfce708b7ba15d03ceef45012be6bfdc72e052732dbd9007eadff4125051"
+base_commit = "db93e4bd5efd2d8493b777c2e1149f92b6220d51"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

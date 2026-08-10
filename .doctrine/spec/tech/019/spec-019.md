@@ -7,34 +7,38 @@
 
 The knowledge-record entity surface is doctrine's epistemic-and-governance capture
 layer realising **PRD-010**: the durable, typed, citable home for the assumptions,
-decisions, questions, and constraints that *shape* work without being work. It is a
-component of the entity engine (**SPEC-004**) — four `record_kind`s riding four engine
+decisions, questions, constraints, evidence, hypotheses, and concepts that *shape* work
+without being work. It is a component of the entity engine (**SPEC-004**) — seven
+`record_kind`s riding seven engine
 `Kind`s over the same kind-blind materialiser, the structural sibling of the backlog
 surface (**SPEC-015**). All shared mechanism (identity, the atomic claim, id
 allocation, edit-preserving status transition, and the scaffold/render pipeline) lives
 in the parent container and is used here unchanged; this spec carries only what is
-specific to this family: the four-kind discrimination, the **per-kind lifecycle
+specific to this family: the seven-kind discrimination, the **per-kind lifecycle
 vocabularies**, the per-kind typed `[facet]` blocks plus the shared evidence structure,
 prefix→kind resolution on the read path, the outbound relation seam over the SPEC-018
 contract, and the cross-kind supersession lifecycle verb.
 
-It is **forward-intent**: no code is shipped yet, so this spec describes the planned
-mechanism. The per-slice `/design` owns the concrete fileset names, module placement,
-and code-impact; what is fixed here is the durable architecture and the contracts that
-outlive any one change. The truth/work boundary is the spine — this family records what
-*shapes* slices, the backlog, and governance; it never becomes them.
+The mechanism described here is **shipped**: the family is implemented in
+`src/knowledge.rs` and exercised by the suites, and this spec describes what the code
+does rather than what it was planned to do. The per-slice `/design` owns the concrete
+fileset names, module placement, and code-impact; what is fixed here is the durable
+architecture and the contracts that outlive any one change. The truth/work boundary
+is the spine — this family records what *shapes* slices, the backlog, and
+governance; it never becomes them.
 
 ## Responsibilities
 
-Mirrors the structured `responsibilities` list: bind the four record kinds onto the
+Mirrors the structured `responsibilities` list: bind the seven record kinds onto the
 engine, carry the per-kind lifecycle vocabularies and hide-set, hold the per-kind typed
 facets and the shared evidence structure, resolve kind from the id prefix, hold the
 outbound relation seam over the contract, and own the cross-kind supersession verb.
 
-### Four kinds, one engine
+### Seven kinds, one engine
 
-A knowledge record exists in four subtypes — assumption (`ASM`), decision (`DEC`),
-question (`QUE`), constraint (`CON`) — each a data-valued engine `Kind` with its own
+A knowledge record exists in seven subtypes — assumption (`ASM`), decision (`DEC`),
+question (`QUE`), constraint (`CON`), evidence (`EVD`), hypothesis (`HYP`), and
+concept (`CPT`) — each a data-valued engine `Kind` with its own
 tree under `.doctrine/knowledge/<kind>/` and its own reservation namespace, so `ASM-001`
 and `DEC-001` coexist with independent counters. The subtypes share one
 `record-NNN.{toml,md}` fileset and an `NNN-slug` symlink alias, diverging only in their
@@ -108,27 +112,48 @@ Each kind seeds its own typed `[facet]` block; there is no untyped frontmatter b
 - **constraint** — the statement, its `source` (canon / adr / external / technical /
   legal / compatibility / operator), what it applies to, and the waiver reason and
   waived by-and-on.
+- **evidence** — the `datum`, its `provenance` (inspection / experiment / reproduction /
+  citation), and a `confidence` (low / medium / high).
+- **hypothesis** — the `proposition` and what it `predicts`.
+- **concept** — **nothing.** A concept's `[facet]` is empty *by design*: its content is
+  its prose, so there is no typed field to carry. The empty block is seeded anyway, to
+  hold the scaffold-order invariant. This is a **case, not an exception** — the empty
+  facet rides the same machinery as a full one, and `knowledge edit concept` therefore
+  refuses rather than presenting an editor with no fields.
 
-`confidence` is an **assumption-only** facet, not a common field (PRD-010 OQ-004) — the
-common schema is identity, summary, and tags only. The closed enums (`confidence`,
-`basis`, constraint `source`) ride the same `"" -> None` optional seam the backlog's
-`Resolution`/risk axes use: a tolerant raw parse reads them as strings, a separate
-`validate` pass maps empty to absent and parses any non-empty token to its variant,
-erroring on an unknown one. This is the parent container's three-layer parse model,
-specialised for seeded-empty optionals.
+`confidence` is owned by the **assumption and evidence** rows, and by no others. It is
+still not a *common* field (PRD-010 OQ-004) — the
+common schema is identity, summary, and tags only. A field name shared **across** rows
+is sound; the same name duplicated **within** one row would be damage. (The original
+wording said "assumption-only", which was true before `EVD` existed and is corrected
+here rather than being quietly dropped.) The closed enums (`confidence`, `basis`,
+constraint `source`, evidence `provenance`) ride the same `"" -> None` optional
+seam the backlog's `Resolution`/risk axes use: a tolerant raw parse reads them as
+strings, a separate `validate` pass maps empty to absent and parses any non-empty
+token to its variant, erroring on an unknown one. This is the parent container's
+three-layer parse model, specialised for seeded-empty optionals.
 
-Evidence is a single **shared** minimal support structure across all four kinds — a
-typed `[evidence]` table of `supports` / `contradicts` / `notes` citations (PRD-010
-NF-001). It is **not** its own entity kind and **not** a free-form blob; in v1 it is a
+The `[evidence]` **support structure** is a single shared minimal table carried by
+every record kind — `supports` / `contradicts` / `notes` citations (PRD-010
+NF-001). It is **not** a free-form blob; in v1 it is a
 minimal citation structure, never queryable graph machinery (PRD-010 §2 out-of-scope).
+
+Do not confuse it with the **evidence record kind** (`EVD`). They are different things
+that share a word: the `[evidence]` table is the citation slot *every* record has for
+pointing at what supports or contradicts it, while `EVD` is a record kind in its own
+right, with its own tree, prefix and `[facet]` block. The original wording — "evidence
+is not its own entity kind" — was true of the shared table and is no longer true as a
+statement about the word; `SL-159` made `EVD` a kind, and this spec now says which
+sense is meant at each use.
 
 ### Prefix→kind resolution on the read path
 
 Capture takes `record_kind` explicitly and derives the prefix from the engine `Kind`
 (the single source), as the backlog does. The **read** path inverts this: `show`,
 transition, relate, and supersede name a record by id and resolve `record_kind` from the
-id **prefix** (`ASM`/`DEC`/`QUE`/`CON` → the kind), so one verb set dispatches across all
-four prefixes and selects the right lifecycle vocabulary and facet shape. Identity — the
+id **prefix** (`ASM`/`DEC`/`QUE`/`CON`/`EVD`/`HYP`/`CPT` → the kind), so one verb set
+dispatches across every record prefix and selects the right lifecycle vocabulary and
+facet shape. Identity — the
 kind prefix plus number — is permanent; the slug is never authoritative; and
 `record_kind` is fixed at capture and never silently changes (PRD-010 NF-003). This
 prefix→kind resolver is the half PRD-010 §2 explicitly handed to the technical spec.
@@ -153,9 +178,9 @@ The contract is realised by two cooperating layers this surface plugs into:
   (ADR-004). An **exact-coverage invariant test** holds the two in lockstep — per
   source kind, the reader's emitted labels equal the table's labels.
 
-Plugging the four record kinds in therefore requires, concretely:
+Plugging the seven record kinds in therefore requires, concretely:
 
-1. **`integrity::KINDS` rows** for ASM/DEC/QUE/CON (kind constants + each kind's
+1. **`integrity::KINDS` rows** for ASM/DEC/QUE/CON/EVD/HYP/CPT (kind constants + each kind's
    stateful status set) — the corpus-wide id table the contract and graph both scan.
 2. **A `RECORD` source-group and rules in `RELATION_RULES`** — the records' outbound
    labels. Most **reuse existing** labels by joining the `RECORD` source-group to their
@@ -204,7 +229,7 @@ both records, sanctioned because the supersession already moves the predecessor 
 terminal status and rewrites its file, so the reverse edge adds zero marginal coupling.
 In `RELATION_RULES` terms this is the `Supersedes` label at `LinkPolicy::LifecycleOnly`
 — never plain-`link` — added as a **new RECORD-sourced rule row** whose `TargetSpec` is
-the four record kinds (cross-kind *within the family*, unlike the governance row's
+the seven record kinds (cross-kind *within the family*, unlike the governance row's
 `SameKind`). Like governance supersession (SPEC-018 OD-3), it is
 **storage-excluded from the tier-1 `[[relation]]` migration**: the pair stays a typed
 `[relationships]` block (mirroring SPEC-005's ADR seam) because the sanctioned reverse
@@ -228,10 +253,10 @@ tells you to *do*. That is the durable invariant — **no record state is ever
 `Workable`**, so records are never `eligible`, never in `survey`/`next`, and carry zero
 work-lineage consequence (record→artefact labels stay out of `counts_toward_consequence`
 — a record *shaping* an artefact is not the artefact *depending on it for work*). Admitting
-the four kinds to `integrity::KINDS` forces **four full `priority::partition` entries** —
-one per kind, each `workable: &[]` with *every* status of that kind in `terminal` (the
+the record kinds to `integrity::KINDS` forces **one full `priority::partition` entry per
+kind**, each `workable: &[]` with *every* status of that kind in `terminal` (the
 invariant requires `workable ∪ terminal` to cover the whole vocabulary, else
-`Unrecognised`), plus the four VT-1 drift canaries binding each kind's `*_STATUSES` const.
+`Unrecognised`), plus a VT-1 drift canary per kind binding its `*_STATUSES` const.
 This is **not** the status-less REC path: REC carries no status and rides `status_class`'s
 `None → Terminal` fast path with no table entry; records are status-ful and *cannot*, so
 the interim is an explicit all-`Terminal` partition — a **positive declaration, not an
@@ -271,11 +296,13 @@ The family is fronted by one command namespace, `doctrine knowledge`, riding the
 here. The verb set is the shared one plus the family's lifecycle verbs:
 
 - **`knowledge new <record_kind> [title]`** — capture; `record_kind` is the
-  `clap::ValueEnum` positional (assumption/decision/question/constraint), reserving an id
+  `clap::ValueEnum` positional (assumption/decision/question/constraint/evidence/
+  hypothesis/concept), reserving an id
   in that kind's namespace and seeding its default state, typed `[facet]`, and empty
   evidence/relation seams (mirrors `backlog new <item_kind>`).
 - **`knowledge show <ID>`** — reassemble identity, kind, state, summary, the kind
   `[facet]`, evidence, and relations; kind auto-detected from the id prefix.
+- **`knowledge inspect <ID>`** — the same metadata without the prose body.
 - **`knowledge list`** — survey, carrying the mandatory `CommonListArgs` spine
   (`--filter`/`-f`, `-r`, `-i`, `--status`/`-s`, `--tag`/`-t`, `--all`/`-a`, `--format`,
   `--json`, `--columns`), the status known-set check, the canonical-id form, and the
@@ -286,6 +313,19 @@ here. The verb set is the shared one plus the family's lifecycle verbs:
 - **`knowledge status <ID> <state>`** — the lifecycle transition (the shared transition
   seam), validating `<state>` against the record's own kind vocabulary and refusing a
   foreign-kind state.
+- **`knowledge edit`** — facet and content authorship, in two halves. Kind-blind
+  `edit <ID>` carries `--title` / `--tags` / `--body` (with `--body-mode` replace or
+  append) and touches no `[facet]`. One **kind-dispatched subverb per facet-bearing
+  kind** — `edit assumption` / `decision` / `question` / `constraint` / `evidence` /
+  `hypothesis` — writes that kind's typed fields, so a flag set can never be offered
+  to a kind that has no such field. `edit concept` **refuses**: the kind carries no
+  facet, and a refusal is the honest surface for that, not an editor with nothing in
+  it. Absent both an id and a subverb is its own refusal.
+- **`knowledge settle <ID>`** — move a record to a resolving state *and* capture the
+  disposition that resolves it, in **one write**. The two halves are not separable:
+  a status moved without its disposition is a record that claims to be resolved and
+  cannot say how, which is the failure mode `settle` exists to make unrepresentable.
+  Settling is a one-way door per record.
 
 Relate and supersede do not get bespoke kind verbs: **relate** rides the uniform
 `link`/`unlink` verb — **already shipped and wired** (SL-046/SL-048), so FR-005 is
@@ -312,9 +352,9 @@ spec acknowledges the provenance and owns none of that protocol.
   failure mode is a kind's known-set drifting from its enum, or a transition validated
   against the wrong kind's vocabulary after a prefix→kind misresolution.
 - **Facet-enum drift.** The closed facet enums (`confidence`, `basis`, constraint
-  `source`) each need a known-set guard mirroring their variant set — the facet analogue
-  of the status canary above — or a renamed/added variant silently slips the `validate`
-  pass.
+  `source`, evidence `provenance`) each need a known-set guard mirroring their
+  variant set — the facet analogue of the status canary above — or a renamed/added
+  variant silently slips the `validate` pass.
 - **Disjointness with the backlog.** No `record_kind` may be admitted as a
   `backlog_item.item_kind` and no `item_kind` as a `record_kind` (PRD-010 §4); the two
   families are disjoint by the work-intake membership test. The two prefix sets and two
@@ -335,17 +375,17 @@ spec acknowledges the provenance and owns none of that protocol.
   only — in release an unrouted prefix falls through to a silent empty edge list, so the
   lockstep is test/debug-time, not a compile error. The blast radius also includes two
   **ordered** goldens — `kinds_table_covers_the_numbered_kinds` (the prefix vector is
-  pinned in order) and `sources_match_shipped_accessors` — both of which the four new
-  kinds edit. The storage-ordering F1 invariant (typed tables before `[[relation]]`
-  arrays) is the other on-disk hazard.
+  pinned in order) and `sources_match_shipped_accessors` — both of which every newly
+  admitted record kind edits. The storage-ordering F1 invariant (typed tables
+  before `[[relation]]` arrays) is the other on-disk hazard.
 - **Closed-vocabulary coverage gap.** `RelationLabel` is closed; PRD-010's link list
   resolves into source-set extensions plus two minted variants (the record→backlog-item
   relate label and `spawns`) — the verdict is pinned in D6, not deferred. Under-minting
   silently drops a legal link; over-minting leaves an un-routed label tripping the
   coverage invariant.
 - **Forced partition entry.** Adding the record kinds to `integrity::KINDS` obliges
-  **four** `priority::partition` entries (one per kind), each `workable: &[]` /
-  all-`Terminal`, plus four VT-1 drift canaries — *not* the status-less REC path. No
+  **one** `priority::partition` entry **per kind**, each `workable: &[]` /
+  all-`Terminal`, plus one VT-1 drift canary each — *not* the status-less REC path. No
   record state is ever `Workable`; IMP-047 later splits the unsettled states into the
   `Gating` class. The hazard is forgetting an entry (→ `Unrecognised`), or mis-classing a
   live state `Workable` and leaking records into `next` as fake work.
@@ -356,14 +396,19 @@ spec acknowledges the provenance and owns none of that protocol.
 
 ## Hypotheses
 
-- **One entity discriminated by `record_kind` beats four schemas.** The four kinds share
+- **One entity discriminated by `record_kind` beats per-kind schemas.** The kinds share
   enough structure (fileset, identity, evidence, relations, reassembly) that one
-  kind-blind materialiser serving all four — diverging only by prefix, lifecycle
-  vocabulary, and facet seed — is preferred over four parallel implementations, exactly
-  as the backlog's single-entity discipline (SPEC-015) proved for its five kinds.
+  kind-blind materialiser serving them all — diverging only by prefix, lifecycle
+  vocabulary, and facet seed — is preferred over parallel implementations, exactly
+  as the backlog's single-entity discipline (SPEC-015) proved for its five kinds. The
+  hypothesis has since been paid off in the strongest available currency: the family
+  grew from the original kind set to seven (`EVD` and `HYP` in SL-159, `CPT` in SL-197)
+  without a second materialiser, and `CPT` — whose `[facet]` is empty — rode the same
+  seam as a degenerate case rather than an exception.
 - **Per-kind lifecycle is data, not a new engine.** The divergence from the backlog —
-  four status vocabularies instead of one — is a `record_kind`-keyed lookup over the same
-  edit-preserving transition seam, not a second transition mechanism. The engine stays
+  one status vocabulary per kind instead of one overall — is a `record_kind`-keyed
+  lookup over the same edit-preserving transition seam, not a second transition
+  mechanism. The engine stays
   kind-blind; the kind table carries the per-kind status set, as `integrity::KINDS`
   already carries a stateful status set per kind.
 - **Supersession reuses IMP-006, not a bespoke fork.** The transactional supersede verb
@@ -376,7 +421,7 @@ spec acknowledges the provenance and owns none of that protocol.
 - **D1 — `parent = SPEC-004`, `descends_from = PRD-010`; the thin-not-anaemic component
   shape.** Identity, claim, id allocation, edit-preserving transition, and the
   scaffold/render pipeline are the parent container's and are restated nowhere here; this
-  component owns only the four-kind discrimination, the per-kind lifecycles and facets,
+  component owns only the record-kind discrimination, the per-kind lifecycles and facets,
   the evidence structure, prefix→kind resolution, and the supersession verb. It is the
   structural sibling of SPEC-005 (ADR) and SPEC-015 (backlog).
 - **D2 — lifecycle and facets are `record_kind`-keyed, not global.** Each kind owns its
@@ -392,11 +437,15 @@ spec acknowledges the provenance and owns none of that protocol.
 - **D4 — capture takes the kind, the read path resolves it from the prefix.** Capture is
   kind-explicit (the prefix derives from the engine `Kind`); `show`/transition/relate/
   supersede are kind-implicit, resolving `record_kind` from the id prefix so one verb set
-  serves all four kinds. `record_kind` is fixed at capture and identity is permanent.
-- **D5 — evidence is a shared minimal typed structure, not a kind.** All four kinds share
+  serves every kind. `record_kind` is fixed at capture and identity is permanent.
+- **D5 — the `[evidence]` support table is shared machinery, not a record kind.** Every
+  record kind carries
   one `[evidence]` table of typed `supports`/`contradicts`/`notes` citations; it is never
-  its own entity kind and never a free-form blob, and graph/search machinery over it is
-  out of v1 (PRD-010 §2).
+  a free-form blob, and graph/search machinery over it is
+  out of v1 (PRD-010 §2). The name now does double duty and the distinction is load-bearing:
+  this decision is about the shared **table**, and says nothing about the **evidence record
+  kind** (`EVD`), which SL-159 later admitted as a kind in its own right. D5 constrains
+  where citations live; it does not constrain what kinds exist.
 - **D6 — the relation seam extends the SL-046/SL-048 machinery, never forks it; the
   label classes are pinned.** Record relations are realised by adding `integrity::KINDS`
   rows, a `RECORD` source-group and rules in `RELATION_RULES`, an `outbound_for` dispatch

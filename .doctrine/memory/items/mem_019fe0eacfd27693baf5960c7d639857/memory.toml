@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe0eacfd27693baf5960c7d639857"
+memory_key = "mem.pattern.doctrine.new-cli-variant-needs-guard-classification"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Adding a CLI subcommand variant requires classifying it in guard.rs"
+summary = "A new <Kind>Command variant is a compile error in src/commands/guard.rs until its read/write class is declared — by design, not an oversight."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/commands/guard.rs"]
+globs = []
+commands = []
+tags = ["cli", "guard", "worker-mode"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8e2ddb2457dd97da65ee56d388321ac1d0748ccc"
+ref_name = "refs/heads/edge"
+checkout_state_id = "dc3e631a9531b064416ed66e696d0adee03dd80fb6e28e837a9c07e1886e3e8f"
+base_commit = "66539791f670b77d87854ca33de473a438e37053"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

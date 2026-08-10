@@ -55,3 +55,34 @@ field alive. Dropping the derive to fix one lint hands you a fresh crop of
 `dead_code` on fields that were fine a moment ago.
 
 Still: do not reason about it, compile.
+
+## Second confirmation, and a second way the expect comes back unfulfilled
+
+**SL-249 PHASE-03** staged a whole table (`FacetField` / `FieldShape` /
+`facet_fields` + seven row consts) one task ahead of its production consumer and
+hit this twice more. Both times the compile-don't-reason rule above was what
+resolved it; both times a *prediction* written into the phase sheet was wrong.
+
+**(a) A never-constructed struct subsumes its fields' deadness.** A per-field
+`#[cfg_attr(not(test), expect(dead_code, …))]` on `FacetField::shape` came back
+unfulfilled while the struct itself was still dead. rustc reports the struct
+(`struct FacetField is never constructed`) and stops; the field's own deadness is
+never separately diagnosed, so there is nothing for the field's expect to fulfil.
+**A field of a dead struct must NOT carry its own expect** — put it on the struct
+only, and revisit once the struct is constructed. This qualifies
+[[mem.pattern.lint.dead-code-staged-ahead-cfg-test]]'s "every item in a staged
+chain carries its own expect": every *separately diagnosed* item does, and a
+field of a dead struct is not one.
+
+**(b) The derives rule bit again, in the opposite direction from the plan.** The
+sheet predicted `FacetField::shape` and `FieldShape` would *stay* dead after the
+production consumer landed, because that consumer reads only `.name` and never
+the shape column. They went live anyway: `#[derive(Debug, Clone, Copy, PartialEq,
+Eq)]` generates code reading every field, exactly as this memory records. All 14
+staged expects retired in one build.
+
+The generalisation across both: **deadness is a property of the item's whole
+reachable graph, including derive-generated code and including which enclosing
+item rustc diagnoses first.** It is not predictable by reading your own call
+sites. Add the item bare, build, and let rustc name the set — under
+`warnings = "deny"` that costs one cycle and is never wrong.

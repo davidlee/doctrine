@@ -1,9 +1,9 @@
 id = 249
 slug = "knowledge-facet-write-seam"
 title = "Knowledge facet write seam"
-status = "ready"
+status = "done"
 created = "2026-08-06"
-updated = "2026-08-08"
+updated = "2026-08-09"
 tags = []
 
 [relationships]
@@ -13,7 +13,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 [[selector]]
 selector = "src/knowledge.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = "src/design_run/**"
@@ -22,7 +22,7 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/commands/design.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = ".doctrine/spec/tech/019/**"
@@ -31,37 +31,82 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/facet_write.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = "src/design_run/submission.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
-
-[[selector]]
-selector = "src/design_run/admission.rs"
-intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = "src/design_run/refusal.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
-
-[[selector]]
-selector = "src/catalog/scan.rs"
-intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = "src/doctor_checks.rs"
 intent = "design-target"
-note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the refusal (admission.rs/refusal.rs), the step-5 write (commands/design.rs), the tripwire (catalog/scan.rs + doctor_checks.rs)."
+note = "SL-249 design sections 5.1-5.3: the table and verbs (knowledge.rs), the posture parameter (facet_write.rs), the wire payload and inert-key table (submission.rs), the admission refusal (Batch::validate in submission.rs, typed fault in refusal.rs), the step-5 write (commands/design.rs), the inert-key tripwire (doctor_checks.rs). Reconciled at RV-351 F-2: catalog/scan.rs and design_run/admission.rs were candidate homes the implementation did not use and are no longer declared."
 
 [[selector]]
 selector = "src/design_run/attestation.rs"
 intent = "design-target"
 note = "SL-249 design § 5.3 / D8 / I12 (added in review, RV-349 F-1): RecoveryIntent gains the #[serde(default)] payload digest that binds a resumed mint to the payload its acceptance was given for. Phase A."
+
+[[selector]]
+selector = "src/commands/facet.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/finding.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/input.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/design_run/ids.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/design_run/run.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "src/design_run/tests.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
+
+[[selector]]
+selector = "tests/governance_kind_coverage.rs"
+intent = "design-target"
+note = "Declared at reconcile (RV-351 F-3), which superseded the PHASE-07 ledger's 'one file to three': the undeclared cell held eleven source/test paths, each touched for a stated reason. The KeyPosture call site (commands/facet.rs, 1683a5703); doctor check #12's registry and its Finding category (commands/doctor.rs, finding.rs, dfd51354d); the new CLI variant's guard classification (commands/guard.rs); PHASE-08 T1's DRY hoist of the body-flag helpers (input.rs, memory.rs, tests/e2e_mcp_server.rs, 7a4e5bd07); the design-run support edits under the scope-relevant fence (design_run/ids.rs, run.rs, tests.rs); and PHASE-07's coverage canary (tests/governance_kind_coverage.rs). Intent is design-target because conformance reads that intent alone (src/conformance.rs, slice.rs resolve_conformance) — a scope-relevant declaration leaves the cell red."
 
 [[relation]]
 label = "references"

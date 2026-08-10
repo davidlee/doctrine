@@ -67,6 +67,29 @@ impl IdKind {
         IdKind::AgentDeclaration,
     ];
 
+    /// Whether a subject of this kind may be addressed by a declaration.
+    ///
+    /// Three kinds may not: each is written through a run-level payload field of
+    /// its own, and a declaration route to any of them would be a second way into
+    /// state the sole-writer boundary keeps single. The declaration engine
+    /// refuses them whole, and its message names the field to use — so the
+    /// wire-key check consults this and stands aside rather than shadowing a
+    /// remedy with a symptom.
+    ///
+    /// A second exhaustive match over this enum, and deliberately so: adding a
+    /// kind is then a compile error here as well as in the engine's own dispatch,
+    /// which is the property a `const` list of the five would not have.
+    pub(crate) const fn declarable(self) -> bool {
+        match self {
+            IdKind::Inquiry
+            | IdKind::Section
+            | IdKind::Checkpoint
+            | IdKind::Attestation
+            | IdKind::Finding => true,
+            IdKind::Delegation | IdKind::CheckpointAct | IdKind::AgentDeclaration => false,
+        }
+    }
+
     /// The id prefix, including its trailing hyphen.
     ///
     /// Two prefixes may share a stem (`cp-` / `cpa-`), and [`IdKind::ALL`]'s

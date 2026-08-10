@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine doctor` — corpus health scan.
 //!
-//! Runs all eleven checks (id integrity, relation integrity, spec FK, memory health,
+//! Runs all twelve checks (id integrity, relation integrity, spec FK, memory health,
 //! lifecycle, raw label, TOML parse, prose citation, agent conformance, spawn seam
-//! symmetry, coord hook) over the corpus, renders them
+//! symmetry, coord hook, inert facet key) over the corpus, renders them
 //! grouped by category with severity, and exits non-zero on any error-severity
 //! finding. The `--json` flag emits a flat JSON array of finding objects.
 
@@ -75,6 +75,11 @@ pub(crate) fn run_doctor(
     // #11 — Coord Hook (Warning) — SL-228 PHASE-02: every live coordination worktree
     // must carry the safe-commit pre-commit backstop (design §7), else ISS-234 reopens.
     findings.extend(crate::doctor_checks::coord_hook_findings(&root));
+
+    // #12 — Inert Facet Key (Warning) — SL-249 PHASE-03 (DEC-177): a `[facet]`
+    // key populated but inert at its record's kind is content nothing will ever
+    // read. Reports; never refuses, never repairs.
+    findings.extend(crate::doctor_checks::inert_facet_key_findings(&root));
 
     if json {
         // Reuse the shared list envelope `{kind, rows}` (design §5.4 / F7) so the

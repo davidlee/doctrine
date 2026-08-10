@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe13b56d6720091deb14fb3e3ae70"
+memory_key = "mem.fact.rust.dead-code-staging-does-not-cascade"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "dead_code staging does not cascade to callees"
+summary = "A dead_code-suppressed fn is not a live root: types it reads stay dead, so a staged chain retires all at once, not incrementally."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src"]
+globs = []
+commands = []
+tags = ["rust", "dead-code", "staging"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ca3e0fef38e6acfdfda18c8ac5b425f7221a19b1"
+ref_name = "refs/heads/edge"
+checkout_state_id = "565466a648da582270c5c61e3a20e45778fcdd618b395a420f69bfe50b62912e"
+base_commit = "cad45a6a643fc349b9213753167d80be9f6b4581"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

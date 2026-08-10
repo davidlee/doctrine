@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe15a-e860-7531-824d-c8b6d6a3c2c7"
+recorded_at = "2026-08-08T12:30:59.168160508Z"
+kind = "friction"
+summary = "/execute: memory record --provenance-source KIND:REF rejects a durable entity id as the kind"
+detail = "Wrote --provenance-source 'SL-249:PHASE-04 T9', the shape the whole project trains you toward (cite the durable id). Refused: 'provenance source kind must match [a-z][a-z0-9-]*'. The help says KIND:REF with the example 'github.com/org/repo'-adjacent form but never names the closed kind vocabulary, so the correct value ('slice:SL-249') is a guess. One wasted round trip on a memory-record command that was otherwise correct. Either list the known kinds in the refusal, or accept a bare entity id and infer the kind from its prefix."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

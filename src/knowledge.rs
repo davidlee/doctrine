@@ -25,6 +25,7 @@
 //! production writes go through `render_record_toml_seed` (template) +
 //! `dep_seq::set_authored_status` (`toml_edit`).
 
+use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -238,6 +239,24 @@ pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
     }
 }
 
+/// Refuse a token that is not in `kind`'s own status vocabulary — the check
+/// `set_record_status` carried inline and `settle` needs *before* it opens the
+/// document (SL-249 EN-2, I7). One check, one sentence, two callers.
+///
+/// A guard rather than a bare predicate (D-E): the refusal SENTENCE is the part
+/// that must not be retyped (STD-001), and a `bool` would leave every caller to
+/// restate it — which is the duplication EN-2 exists to prevent.
+pub(crate) fn ensure_status_token(kind: RecordKind, state: &str) -> anyhow::Result<()> {
+    let vocab = statuses(kind);
+    anyhow::ensure!(
+        vocab.contains(&state),
+        "`{state}` is not a {} status (known: {})",
+        kind.as_str(),
+        vocab.join(", ")
+    );
+    Ok(())
+}
+
 /// The token a DEC-088 user acceptance unlocks. One spelling, one owner (STD-001).
 const ACCEPTED_STATUS: &str = "accepted";
 
@@ -354,8 +373,9 @@ impl Confidence {
     }
 
     /// The known-set — the drift-canary authority (VT-3). Lockstep with the
-    /// variants (`confidence_known_set_matches_variants`), its only consumer.
-    #[cfg(test)]
+    /// variants (`confidence_known_set_matches_variants`); read by that canary and
+    /// by `facet_fields`, which takes its `Closed` tokens from here rather than
+    /// retyping them (STD-001, SL-249 D4).
     pub(crate) const KNOWN: &'static [&'static str] = &["low", "medium", "high"];
 }
 
@@ -380,8 +400,8 @@ impl Provenance {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
     pub(crate) const KNOWN: &'static [&'static str] =
         &["inspection", "experiment", "reproduction", "citation"];
 }
@@ -410,8 +430,8 @@ impl Basis {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "observation",
         "prior-art",
@@ -449,8 +469,8 @@ impl ConstraintSource {
         }
     }
 
-    /// The known-set — the drift-canary authority (VT-3), its only consumer.
-    #[cfg(test)]
+    /// The known-set — the drift-canary authority (VT-3); also `facet_fields`'s
+    /// `Closed` token source (STD-001, SL-249 D4).
     pub(crate) const KNOWN: &'static [&'static str] = &[
         "canon",
         "adr",
@@ -611,7 +631,12 @@ struct RawRecordToml {
 /// `#[serde(default)]`, all raw `String`/`Vec<String>` (the `"" -> None` seam is a
 /// `validate` pass, not a serde derive). `validate` reads only the fields its
 /// `record_kind` owns and discards the rest.
-#[derive(Debug, Default, Deserialize)]
+/// `Serialize` is carried for one reader: `I2` derives this struct's key set
+/// through serde rather than restating it, so a field added here without a
+/// `facet_fields` row fails the suite (DEC-169's idiom). Nothing serialises a
+/// `RawFacet` in production — the emit goes through `render_record_toml` /
+/// `toml_edit`.
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct RawFacet {
     // assumption
     #[serde(default)]
@@ -801,6 +826,549 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
             let _ = raw;
             RecordFacet::Concept(ConceptFacet::default())
         }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The per-kind facet field table (SL-249 §5.1) — the single authored derivation
+//
+// Four consumers share it: `knowledge edit <kind>`'s flag set, `knowledge
+// settle`'s settleable states (DEC-178), `doctor`'s inert-key tripwire
+// (DEC-177), and the step-5 write's shape dispatch. It sits beside
+// `validate_facet` because it is the data form of what that function's arms
+// already say in code, and splitting them across modules is how the two drift.
+//
+// Authoring is forced — Rust has no reflection over struct fields and DEC-169
+// refused a proc macro written for one table — so the design question is only
+// how it is kept honest. Three pins in `mod tests`, each one comparison:
+//
+// - `I2` totality: the union over `RecordKind::ALL` equals `RawFacet`'s serde
+//   key set. A model field with no row fails; a row naming no field fails too.
+// - `I3` placement, as an EQUALITY: the fields `validate_facet` retains for a
+//   kind equal that kind's row. Inclusion is blind to a row handed a field its
+//   kind does not own (RV-349 F-3 round one).
+// - `I3b` uniqueness: no row names a field twice — the case both set
+//   comparisons collapse silently (F-3 round two).
+//
+// What no pin can see: the row ORDER (EX-1's "template order"), which only the
+// template pin (`VT-2`, R5) reads, and then only as a set. Order is a reading
+// convenience, not an enforced invariant.
+// ---------------------------------------------------------------------------
+
+/// One facet field: its key, and the shape a writer must emit for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FacetFieldRow {
+    pub(crate) name: &'static str,
+    /// Read by the pins (which derive each field's test value from it) and by
+    /// PHASE-04's `toml_edit` write dispatch.
+    pub(crate) shape: FieldShape,
+}
+
+/// The emit shape of a facet field — free text, a list of strings, or one token
+/// from a closed set. `Closed` carries the enum's own `KNOWN` set rather than a
+/// retyped literal (STD-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldShape {
+    Text,
+    List,
+    Closed(&'static [&'static str]),
+}
+
+const ASSUMPTION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "claim",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "confidence",
+        shape: FieldShape::Closed(Confidence::KNOWN),
+    },
+    FacetFieldRow {
+        name: "basis",
+        shape: FieldShape::Closed(Basis::KNOWN),
+    },
+    FacetFieldRow {
+        name: "validation_plan",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "validated_by",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "validated_on",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "invalidated_by",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "invalidated_on",
+        shape: FieldShape::Text,
+    },
+];
+
+const DECISION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "context",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "choice",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "alternatives",
+        shape: FieldShape::List,
+    },
+    FacetFieldRow {
+        name: "rationale",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "consequences",
+        shape: FieldShape::List,
+    },
+    FacetFieldRow {
+        name: "decided_by",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "decided_on",
+        shape: FieldShape::Text,
+    },
+];
+
+const QUESTION_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "question",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "why_matters",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "answer",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "answered_by",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "answered_on",
+        shape: FieldShape::Text,
+    },
+];
+
+const CONSTRAINT_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "statement",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "source",
+        shape: FieldShape::Closed(ConstraintSource::KNOWN),
+    },
+    FacetFieldRow {
+        name: "applies_to",
+        shape: FieldShape::List,
+    },
+    FacetFieldRow {
+        name: "waiver_reason",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "waived_by",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "waived_on",
+        shape: FieldShape::Text,
+    },
+];
+
+const EVIDENCE_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "datum",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "provenance",
+        shape: FieldShape::Closed(Provenance::KNOWN),
+    },
+    // Legitimately shared with the assumption row — multiplicity ACROSS rows is
+    // sound (§5.5 "The one shared field name"); only within a row is it damage.
+    FacetFieldRow {
+        name: "confidence",
+        shape: FieldShape::Closed(Confidence::KNOWN),
+    },
+];
+
+const HYPOTHESIS_FACET_FIELDS: &[FacetFieldRow] = &[
+    FacetFieldRow {
+        name: "proposition",
+        shape: FieldShape::Text,
+    },
+    FacetFieldRow {
+        name: "predicts",
+        shape: FieldShape::Text,
+    },
+];
+
+/// Concept's `[facet]` is empty by design (DEC-172/DEC-173) — its content is its
+/// prose. The empty row is a case, not an exception: `I3` confirms it retains
+/// nothing, and `VT-2` confirms the template's bare `[facet]` header matches.
+const CONCEPT_FACET_FIELDS: &[FacetFieldRow] = &[];
+
+/// Every field one record kind owns, in template order — the single authored
+/// derivation of the per-kind field sets (STD-001).
+pub(crate) const fn facet_fields(kind: RecordKind) -> &'static [FacetFieldRow] {
+    match kind {
+        RecordKind::Assumption => ASSUMPTION_FACET_FIELDS,
+        RecordKind::Decision => DECISION_FACET_FIELDS,
+        RecordKind::Question => QUESTION_FACET_FIELDS,
+        RecordKind::Constraint => CONSTRAINT_FACET_FIELDS,
+        RecordKind::Evidence => EVIDENCE_FACET_FIELDS,
+        RecordKind::Hypothesis => HYPOTHESIS_FACET_FIELDS,
+        RecordKind::Concept => CONCEPT_FACET_FIELDS,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The settleable transitions (SL-249 §5.2, DEC-178) — a derived SET, and a
+// pinned annotation that may add detail to it but not extend it.
+// ---------------------------------------------------------------------------
+
+/// A resolving transition: its state, and the field whose content the
+/// transition exists to capture. The actor/date pair is NOT here — it is
+/// derived from the state token (DEC-178).
+pub(crate) struct Settlement {
+    state: &'static str,
+    /// `None` where the kind's facet carries no post-hoc text field for the
+    /// transition — an assumption records who validated it and when, and
+    /// nothing else.
+    captures: Option<&'static str>,
+}
+
+/// The suffixes that make a state settleable. A kind's facet must carry BOTH,
+/// spelled from the state token — `answered` needs `answered_by` and
+/// `answered_on`. One derivation, no retyped names (STD-001).
+const SETTLEMENT_ACTOR_SUFFIX: &str = "_by";
+const SETTLEMENT_DATE_SUFFIX: &str = "_on";
+
+const ASSUMPTION_SETTLEMENTS: &[Settlement] = &[
+    Settlement {
+        state: "validated",
+        captures: None,
+    },
+    Settlement {
+        state: "invalidated",
+        captures: None,
+    },
+];
+const QUESTION_SETTLEMENTS: &[Settlement] = &[Settlement {
+    state: "answered",
+    captures: Some("answer"),
+}];
+const CONSTRAINT_SETTLEMENTS: &[Settlement] = &[Settlement {
+    state: "waived",
+    captures: Some("waiver_reason"),
+}];
+/// `DEC`, `EVD`, `HYP` and `CPT` settle nothing, and the empty row is the case
+/// that makes `I5` hold by SHAPE: `accepted` is not guarded out of `settle`, it
+/// was never in the derived set to begin with (DEC-088).
+const NO_SETTLEMENTS: &[Settlement] = &[];
+
+/// Which resolving transitions a kind has, and what each captures — the one
+/// authored thing about settling. Its state set is pinned EQUAL to
+/// [`derived_settleable`] (EX-2), so this table cannot quietly widen `settle`'s
+/// reach; it only says which field holds the outcome, which no naming rule
+/// derives (§5.2).
+pub(crate) fn settlements(kind: RecordKind) -> &'static [Settlement] {
+    match kind {
+        RecordKind::Assumption => ASSUMPTION_SETTLEMENTS,
+        RecordKind::Question => QUESTION_SETTLEMENTS,
+        RecordKind::Constraint => CONSTRAINT_SETTLEMENTS,
+        RecordKind::Decision
+        | RecordKind::Evidence
+        | RecordKind::Hypothesis
+        | RecordKind::Concept => NO_SETTLEMENTS,
+    }
+}
+
+/// The states of `kind` a settle may reach: a status token of this kind whose
+/// facet carries both `<state>_by` and `<state>_on`.
+///
+/// Quantified over the STATUS VOCABULARY, intersected with the facet row (D-A) —
+/// not a scan of facet field names. The distinction is load-bearing and both
+/// legs do real work on the decision kind: `accepted` is a status but has no
+/// `accepted_by`, and `decided_by`/`decided_on` are facet fields but `decided`
+/// is no status of a decision. A facet-name scan would yield `decided` and give
+/// `settle` a transition to a state the vocabulary does not hold. This is the
+/// intersection `DEC-178`'s rationale describes as *"laying the status
+/// vocabularies against the facet field names"*.
+fn derived_settleable(kind: RecordKind) -> Vec<&'static str> {
+    let owned: BTreeSet<&str> = facet_fields(kind).iter().map(|row| row.name).collect();
+    statuses(kind)
+        .iter()
+        .copied()
+        .filter(|state| {
+            owned.contains(format!("{state}{SETTLEMENT_ACTOR_SUFFIX}").as_str())
+                && owned.contains(format!("{state}{SETTLEMENT_DATE_SUFFIX}").as_str())
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Pure: plan a facet edit (SL-249 PHASE-04)
+//
+// The kind-aware half of the WRITE path, and the mirror of `validate_facet` on
+// the read path. Every decision an edit needs — does this kind own the field,
+// is the value's shape the row's shape, is a closed token one the enum knows —
+// is made here, against `facet_fields`'s row, with no filesystem in sight.
+//
+// `plan_facet_edits` is the SOLE constructor of a `FacetEdit`: its fields are
+// private to this module, so "a validated edit" is a property of the type and
+// not a convention a caller may forget (I4's facet half).
+// ---------------------------------------------------------------------------
+
+/// One caller-supplied edit, before it has been checked against any row — the
+/// CLI's `--rationale x` or PHASE-06's `facet` map entry, verbatim.
+pub(crate) struct RawEdit<'a> {
+    pub(crate) field: &'a str,
+    pub(crate) value: RawValue,
+}
+
+/// The two value shapes a caller can supply. `Text("")` is the clear for a
+/// `Text` or `Closed` field; `List(vec![])` is the clear for a `List` one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RawValue {
+    Text(String),
+    List(Vec<String>),
+}
+
+/// A validated edit: a row this kind really owns, paired with a value of that
+/// row's shape. Constructible only by [`plan_facet_edits`] — the fields stay
+/// private to the module so the guarantee cannot be bypassed.
+#[derive(Debug, Clone)]
+pub(crate) struct FacetEdit {
+    field: &'static FacetFieldRow,
+    value: RawValue,
+}
+
+const EXPECTED_LIST: &str = "a list of values";
+const EXPECTED_SINGLE: &str = "a single value";
+
+/// Why [`plan_facet_edits`] refused. Typed rather than stringly so PHASE-06's
+/// `CreateRecord.facet` map — which validates through this same function — can
+/// discriminate without matching on prose (design D5). Converted to `anyhow` at
+/// the shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FacetEditRefusal {
+    /// The kind owns no such field. Reachable from a map-shaped caller; the CLI
+    /// surface catches it earlier, in clap.
+    UnknownField { field: String, kind: RecordKind },
+    /// A `Closed` field was given a token its own enum does not know.
+    BadToken {
+        field: String,
+        value: String,
+        known: &'static [&'static str],
+    },
+    /// A list where the row wants a single value, or the reverse. Unreachable
+    /// from clap (a `Text` flag cannot receive a list) but reachable from the
+    /// map-shaped caller.
+    ShapeMismatch {
+        field: String,
+        expected: &'static str,
+    },
+}
+
+impl std::fmt::Display for FacetEditRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FacetEditRefusal::UnknownField { ref field, kind } => {
+                let known = facet_fields(kind)
+                    .iter()
+                    .map(|row| row.name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "`{field}` is not a facet field of a {} record",
+                    kind.as_str()
+                )?;
+                if known.is_empty() {
+                    write!(f, " — it carries none")
+                } else {
+                    write!(f, " — known fields: {known}")
+                }
+            }
+            FacetEditRefusal::BadToken {
+                ref field,
+                ref value,
+                known,
+            } => write!(
+                f,
+                "`{field}`: `{value}` is not a known token — expected one of: {}",
+                known.join(", ")
+            ),
+            FacetEditRefusal::ShapeMismatch {
+                ref field,
+                expected,
+            } => write!(f, "`{field}` takes {expected}"),
+        }
+    }
+}
+
+/// Resolve each caller-supplied edit against `kind`'s row, in the caller's
+/// order. The sole constructor of [`FacetEdit`].
+///
+/// An empty value is ALWAYS the clear and bypasses `Closed` token validation
+/// (D6): `optional_enum` maps `""` to `None` before parsing it, so `""` is the
+/// read model's own cleared form for a closed field. Validating it against
+/// `KNOWN` would leave closed fields the one kind of field that cannot be
+/// cleared.
+pub(crate) fn plan_facet_edits(
+    kind: RecordKind,
+    given: &[RawEdit<'_>],
+) -> Result<Vec<FacetEdit>, FacetEditRefusal> {
+    given
+        .iter()
+        .map(|edit| {
+            let field = facet_fields(kind)
+                .iter()
+                .find(|row| row.name == edit.field)
+                .ok_or_else(|| FacetEditRefusal::UnknownField {
+                    field: edit.field.to_string(),
+                    kind,
+                })?;
+            check_shape(field, &edit.value)?;
+            Ok(FacetEdit {
+                field,
+                value: edit.value.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The row's shape is the authority: a `List` row takes only a list, a `Text` or
+/// `Closed` row only a single value, and a `Closed` row's token is checked
+/// against that row's OWN `KNOWN` slice (never a retyped literal — STD-001).
+fn check_shape(field: &FacetFieldRow, value: &RawValue) -> Result<(), FacetEditRefusal> {
+    match (field.shape, value) {
+        (FieldShape::List, RawValue::List(_)) | (FieldShape::Text, RawValue::Text(_)) => Ok(()),
+        (FieldShape::Closed(known), RawValue::Text(token)) => {
+            if token.is_empty() || known.contains(&token.as_str()) {
+                Ok(())
+            } else {
+                Err(FacetEditRefusal::BadToken {
+                    field: field.name.to_string(),
+                    value: token.clone(),
+                    known,
+                })
+            }
+        }
+        (FieldShape::List, RawValue::Text(_)) => Err(FacetEditRefusal::ShapeMismatch {
+            field: field.name.to_string(),
+            expected: EXPECTED_LIST,
+        }),
+        (FieldShape::Text | FieldShape::Closed(_), RawValue::List(_)) => {
+            Err(FacetEditRefusal::ShapeMismatch {
+                field: field.name.to_string(),
+                expected: EXPECTED_SINGLE,
+            })
+        }
+    }
+}
+
+/// The facet table's name on disk — one derivation for the writer's table
+/// argument (STD-001).
+const FACET_TABLE: &str = "facet";
+
+/// Write a planned facet edit set to one record's `record-NNN.toml` — the thin
+/// imperative shell over [`plan_facet_edits`]'s pure decisions (D3).
+///
+/// Rides `facet_write::apply_set_mixed` rather than opening a second envelope:
+/// `edit_in_place` already gives read → parse → mutate → write-once-if-changed,
+/// which is I11's idempotence and I7's inertness for free. A second envelope
+/// would be the parallel implementation `AGENTS.md` forbids.
+///
+/// The posture is `RequirePresent` (F-1, DEC-170): all seven scaffolds seed
+/// every facet key, so an absent one is damage and the refusal names `canonical`
+/// rather than tail-inserting into the trailing `[relationships]`.
+///
+/// No `updated` stamp (D9): I4 reserves that to `dep_seq::apply_status`, and a
+/// facet-only edit does not reach it.
+pub(crate) fn apply_facet_edits(
+    path: &Path,
+    canonical: &str,
+    edits: &[FacetEdit],
+) -> anyhow::Result<bool> {
+    crate::facet_write::apply_set_mixed(
+        path,
+        FACET_TABLE,
+        &writer_fields(edits),
+        crate::facet_write::KeyPosture::RequirePresent { record: canonical },
+    )
+}
+
+/// Planned edits in the writer's own vocabulary — the ONE `FacetEdit` →
+/// `facet_write::FacetField` derivation, shared by [`apply_facet_edits`] and
+/// [`apply_settlement`]. Extracted rather than copied into the second caller
+/// (`AGENTS.md`: no parallel implementation).
+fn writer_fields(edits: &[FacetEdit]) -> Vec<crate::facet_write::FacetField> {
+    edits
+        .iter()
+        .map(|edit| match edit.value {
+            RawValue::Text(ref value) => crate::facet_write::FacetField::Str {
+                key: edit.field.name,
+                value: value.clone(),
+            },
+            RawValue::List(ref values) => crate::facet_write::FacetField::Arr {
+                key: edit.field.name,
+                values: values.clone(),
+            },
+        })
+        .collect()
+}
+
+/// Apply planned facet edits and a status transition to one record in a single
+/// edit-preserving write. Composes the two existing document-level cores over
+/// one held document; introduces no third writer (`I4`, `RV-349` `F-2`).
+///
+/// `[facet]`, `status` and `updated` are keys of the SAME `record-NNN.toml`, so
+/// there is no two-file transaction to order. Both cores mutate the held
+/// document in memory only, and `edit_in_place` writes once — iff the closure
+/// returns `Ok(true)`. A refusal from either leg propagates out of the closure
+/// and nothing is written at all, so the partial settlement is removed rather
+/// than mitigated.
+///
+/// Beyond the design's illustrative signature (§5.2) by two parameters, both
+/// mechanically forced by the cores composed (D-C): `canonical` by
+/// `KeyPosture::RequirePresent`'s F-1 refusal, `hint` by `apply_status`'s.
+pub(crate) fn apply_settlement(
+    path: &Path,
+    canonical: &str,
+    edits: &[FacetEdit],
+    managed: &[(&str, &str)],
+    hint: &str,
+) -> anyhow::Result<bool> {
+    let fields = writer_fields(edits);
+    crate::facet_write::edit_in_place(path, |doc| {
+        // Bound to locals, never `a()? || b()?`: `||` short-circuits, so a
+        // changed facet leg would skip the status leg entirely and write a
+        // green half-settlement — the exact defect this verb exists to remove.
+        let facet_changed = crate::facet_write::set_facet_mixed(
+            doc,
+            FACET_TABLE,
+            &fields,
+            crate::facet_write::KeyPosture::RequirePresent { record: canonical },
+        )?;
+        let status_changed = crate::dep_seq::apply_status(doc, managed, hint)?;
+        Ok(facet_changed || status_changed)
     })
 }
 
@@ -1700,6 +2268,378 @@ pub(crate) fn run_status(
     Ok(())
 }
 
+/// The flag payload for [`run_edit`], grouped so the shell's signature stays
+/// readable (the shape `memory::EditFields` already has). Borrowed throughout —
+/// the CLI owns the strings for the length of the call.
+pub(crate) struct EditFields<'a> {
+    /// `--title`, raw. Trimmed and refused when empty by [`run_edit`].
+    pub(crate) title: Option<&'a str>,
+    /// `--tags a,b` — ADDITIVE merge, never a replace (SL-249 PHASE-08 D2).
+    /// Removal and clearing stay with `doctrine tag set -d` / `tag clear`; one
+    /// verb owning removal is cheaper than two spellings of it.
+    pub(crate) tags: &'a [String],
+    /// `--body`, raw (unresolved): `-` means "read stdin", anything else is
+    /// used verbatim. Resolved by `input::resolve_body`.
+    pub(crate) body: Option<&'a str>,
+    /// `--body-mode`, resolved by `input::parse_body_mode`. Absent → `replace`.
+    /// Never an edit on its own — see [`run_edit`]'s totality guard.
+    pub(crate) body_mode: Option<&'a str>,
+}
+
+/// `doctrine knowledge edit <ID> [flags]` — the INVARIANT tier of the record
+/// edit surface (SL-249 PHASE-08): title, tags, and the `.md` prose. Kind-blind
+/// by construction — nothing below knows a `[facet]` field or dispatches on
+/// `RecordKind`; that tier is a separate, kind-dispatched surface. For a concept
+/// this verb is the whole edit surface, because a concept carries no facet by
+/// design (DEC-172).
+///
+/// Like `memory::run_edit`, this touches TWO files and so is **not** atomic
+/// across them. The mitigation is the write ORDERING, and the argument for it is
+/// stated in full on `memory::run_edit` — not restated here: every fallible step
+/// precedes every disk write, then the body lands before the TOML.
+///
+/// One open, one write (D4): title and tags are applied to ONE held
+/// `DocumentMut` and it is written ONCE, so `updated` is stamped exactly once
+/// per invocation and no torn intermediate state exists. A genuine no-op writes
+/// nothing at all — all three concerns report a changed-flag and the TOML write
+/// is gated on their disjunction.
+///
+/// One asymmetry, inherited rather than introduced: `dep_seq::apply_status`
+/// REFUSES a record whose `title`/`updated` keys are missing (F-1 — all seven
+/// scaffolds seed them, so an absent key is damage, and a tail insert would land
+/// inside the trailing `[relationships]`), while `tag::apply_tags_set` self-heals
+/// an absent `tags`. Both postures come from the existing seams.
+pub(crate) fn run_edit(
+    path: Option<PathBuf>,
+    reference: &str,
+    fields: &EditFields<'_>,
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // The totality guard sits AHEAD of the at-least-one-flag gate, as it does in
+    // `memory::run_edit`: a lone `--body-mode` would otherwise fall through to
+    // the generic message and say nothing about *why* it is not an edit. The
+    // wording is `input`'s single const (STD-001).
+    if fields.body_mode.is_some() && fields.body.is_none() {
+        anyhow::bail!("{}", crate::input::BODY_MODE_REQUIRES_BODY);
+    }
+    if fields.title.is_none() && fields.tags.is_empty() && fields.body.is_none() {
+        anyhow::bail!("`knowledge edit` requires at least one flag");
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+
+    // --- every fallible step, ahead of every write (I7) ---
+    let title = match fields.title {
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                anyhow::bail!("--title must not be empty");
+            }
+            Some(trimmed)
+        }
+        None => None,
+    };
+    // `normalize_tag` is the single WRITE chokepoint — a malformed tag is a hard
+    // refusal naming the token, raised before the document is even opened.
+    let adds: BTreeSet<String> = fields
+        .tags
+        .iter()
+        .map(|t| crate::tag::normalize_tag(t))
+        .collect::<anyhow::Result<_>>()?;
+    let mode = fields
+        .body_mode
+        .map(crate::input::parse_body_mode)
+        .transpose()?
+        .unwrap_or(entity::BodyMode::Replace);
+    let body = fields
+        .body
+        .map(|raw| crate::input::resolve_body(raw, &mut io::stdin()))
+        .transpose()?;
+
+    let toml_path = record_toml_path(&root, kind, id);
+    let text = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("record not found at {}", toml_path.display()))?;
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    // Both write cores mutate the held document IN MEMORY only, so a refusal
+    // from either has written nothing.
+    let today = crate::clock::today();
+    let title_changed = match title {
+        Some(t) => crate::dep_seq::apply_status(
+            &mut doc,
+            &[("title", t), ("updated", &today)],
+            &format!(
+                "malformed record {}: missing seeded `title`/`updated` \
+                 — restore the missing keys and retry; the file is left untouched",
+                kind.canonical_id(id)
+            ),
+        )?,
+        None => false,
+    };
+    let tags_changed = if adds.is_empty() {
+        false
+    } else {
+        crate::tag::apply_tags_set(&mut doc, &adds, &BTreeSet::new(), &today)?
+    };
+
+    // --- writes, body first (D5) ---
+    let body_changed = match body {
+        Some(ref prose) => write_record_body(&root, kind, id, prose, mode)?,
+        None => false,
+    };
+    // A body-only edit needs this explicit stamp: neither TOML core can see the
+    // prose tier. Idempotent when a core already stamped the same day. Root
+    // `insert` is the edit-preserving idiom on a held document (CHR-019).
+    if body_changed {
+        doc.insert("updated", toml_edit::value(today.as_str()));
+    }
+
+    if title_changed || tags_changed || body_changed {
+        crate::fsutil::write_atomic(&toml_path, doc.to_string().as_bytes())
+            .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+    }
+
+    // Post-state, in `run_status`'s shape: the canonical id and the value that
+    // now stands.
+    writeln!(
+        writer,
+        "{}: {}",
+        kind.canonical_id(id),
+        doc.get("title")
+            .and_then(toml_edit::Item::as_str)
+            .unwrap_or_default()
+    )?;
+    Ok(())
+}
+
+/// `doctrine knowledge edit <kind> <ID> [--<field> V]…` — the KIND-DISPATCHED
+/// tier of the record edit surface (SL-249 PHASE-04), and the production caller
+/// [`plan_facet_edits`] / [`apply_facet_edits`] were built for.
+///
+/// Every fallible step precedes every write (I7), and the order is load-bearing:
+/// the concept refusal, the at-least-one-flag guard, the id↔subverb kind check
+/// and the whole plan are all settled before the document is opened, so each of
+/// `VT-5`'s four refusals leaves the record byte-identical.
+///
+/// No `updated` stamp (D9) — `I4` reserves that to `dep_seq::apply_status`, which
+/// a facet-only edit does not reach.
+pub(crate) fn run_facet_edit(
+    path: Option<PathBuf>,
+    kind: RecordKind,
+    reference: &str,
+    given: &[RawEdit<'_>],
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // D10 — a concept's `[facet]` is empty by design (DEC-173), so this subverb
+    // exists only to name the remedy. Ahead of the flag guard because a concept
+    // subverb declares no field flags at all: `given` is always empty here, and
+    // the generic "requires at least one field flag" would say nothing useful.
+    if kind == RecordKind::Concept {
+        anyhow::bail!("concept records carry no facet fields; use `knowledge edit {reference}`");
+    }
+    if given.is_empty() {
+        anyhow::bail!(
+            "`knowledge edit {}` requires at least one field flag",
+            kind.as_str()
+        );
+    }
+
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (actual, id) = resolve_ref(reference)?;
+    let canonical = actual.canonical_id(id);
+    // The subverb names a kind; the id carries one. A disagreement is the
+    // caller's, and the refusal names the subverb that would have worked.
+    if actual != kind {
+        anyhow::bail!(
+            "`{canonical}` is a {} record; use `knowledge edit {}`",
+            actual.as_str(),
+            actual.as_str()
+        );
+    }
+
+    let edits = plan_facet_edits(kind, given)
+        .map_err(|refusal| anyhow::anyhow!("{canonical}: {refusal}"))?;
+    apply_facet_edits(&record_toml_path(&root, kind, id), &canonical, &edits)?;
+
+    // Post-state in `run_edit`'s shape: the canonical id, then what now stands.
+    let set: Vec<&str> = edits.iter().map(|edit| edit.field.name).collect();
+    writeln!(writer, "{canonical}: {}", set.join(", "))?;
+    Ok(())
+}
+
+/// A facet field's flag spelling — `_` → `-`. One derivation for the refusals
+/// that name a flag and for the oracle that pins them (STD-001).
+fn kebab_flag(field: &str) -> String {
+    field.replace('_', "-")
+}
+
+/// The blank-value refusal, one sentence for `--by` and for the capture flag
+/// (STD-001). `EX-4`'s actual claim: a settlement whose evidence is blank is
+/// the 0-of-38 outcome wearing a green command, and `plan_facet_edits` reads
+/// `Text("")` as a legitimate *clear*, so nothing downstream will catch it.
+fn blank_settle_flag_refusal(flag: &str) -> String {
+    format!(
+        "`--{flag}` must not be blank — a settlement whose evidence is empty is \
+         what `settle` exists to prevent; use `knowledge status` to move the token alone"
+    )
+}
+
+/// `doctrine knowledge settle <ID> <state> --by WHO [--answer V | --waiver-reason V]`
+/// — the COUPLED transition (`DEC-178`, `DEC-062`): the disposition and the
+/// status token move together, in one write, or neither moves.
+/// `knowledge status` stays the uncoupled escape hatch, and every refusal below
+/// names it or the `knowledge edit` verb that would have worked instead.
+///
+/// **Validation order is the contract** (`EX-5`, `I7`). Steps 1–4 are settled
+/// before the record's file is opened at all, which is why a foreign state, an
+/// unsettleable one, and a missing or blank capture refuse *identically*
+/// against an id that names no record on disk — the only observable that
+/// distinguishes "refused early" from "refused late without writing".
+///
+/// `clock::today()` is called ONCE and the same string is used for `<state>_on`
+/// and for `updated`, so the two can never disagree by a midnight.
+pub(crate) fn run_settle(
+    path: Option<PathBuf>,
+    reference: &str,
+    state: &str,
+    by: &str,
+    given: &[(&'static str, &str)],
+    color: bool,
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
+    // 1 — identity, from the reference alone.
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (kind, id) = resolve_ref(reference)?;
+    let canonical = kind.canonical_id(id);
+
+    // 2 — the kind's own status vocabulary. A foreign-kind state dies here, in
+    // the check `set_record_status` also calls (EN-2's extraction).
+    ensure_status_token(kind, state)?;
+
+    // 3 — settleability, decided by the DERIVED set and not by the annotation
+    // (EX-2: coverage is derived, never listed). This is where `accepted` dies
+    // (EX-3, I5): by ABSENCE from the derivation, never by a guard naming the
+    // token, so DEC-088's reservation is upheld by the derivation's shape
+    // rather than by a check someone could later relax.
+    let settleable: BTreeSet<&str> = derived_settleable(kind).into_iter().collect();
+    anyhow::ensure!(
+        settleable.contains(state),
+        "`{state}` is not a settle transition for a {}; use `knowledge status`",
+        kind.as_str()
+    );
+    // The annotation supplies ONLY the thing no naming rule derives: which
+    // field holds the outcome. Its state set is pinned EQUAL to the derived one
+    // (P-b), so a `None` here means "this state captures no text" and never
+    // "this state is unknown" — which is why the two collapse safely and why
+    // this is a lookup rather than an unwrap.
+    let captures = settlements(kind)
+        .iter()
+        .find(|candidate| candidate.state == state)
+        .and_then(|candidate| candidate.captures);
+
+    // 4 — the capture flags. `--by` is required by clap but may still arrive
+    // blank, and for an assumption it is the WHOLE evidence, so it is checked
+    // on the same footing as the capture.
+    anyhow::ensure!(!by.trim().is_empty(), "{}", blank_settle_flag_refusal("by"));
+    if let Some((wrong, _)) = given.iter().find(|(field, _)| Some(*field) != captures) {
+        anyhow::bail!(
+            "`--{}` is not part of settling a {} to `{state}`{}",
+            kebab_flag(wrong),
+            kind.as_str(),
+            match captures {
+                Some(field) => format!("; use `--{}`", kebab_flag(field)),
+                None => " — that state captures no text, only `--by`".to_string(),
+            }
+        );
+    }
+    let captured = match captures {
+        None => None,
+        Some(field) => {
+            let value = given
+                .iter()
+                .find(|(candidate, _)| *candidate == field)
+                .map(|(_, value)| *value)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "settling {canonical} to `{state}` requires `--{}` — the disposition is \
+                         part of resolving, not a field to fill in later",
+                        kebab_flag(field)
+                    )
+                })?;
+            anyhow::ensure!(
+                !value.trim().is_empty(),
+                "{}",
+                blank_settle_flag_refusal(&kebab_flag(field))
+            );
+            Some((field, value))
+        }
+    };
+
+    // 5 — the first disk touch. State-to-itself is checked BEFORE withdrawn
+    // (D-D): an already-`waived` constraint is both cases at once, and D7's
+    // remedy is the more actionable of the two messages.
+    let record = read_record(&root, kind, id)?;
+    anyhow::ensure!(
+        record.status != state,
+        "{canonical} is already `{state}`; a transition from a state to itself is not a \
+         transition. To amend what was captured, use `knowledge edit {} --<field>` — that keeps \
+         `{state}_on` meaning when it was settled rather than when the command last ran",
+        kind.as_str()
+    );
+    anyhow::ensure!(
+        !is_withdrawn(&record.status),
+        "{canonical} is `{}`, which withdraws it from use; use `knowledge status` to bring it \
+         back before settling it",
+        record.status
+    );
+
+    // 6 — the raws. The actor and date keys are spelled FROM the state token,
+    // which is the same derivation `derived_settleable` admitted it by.
+    let today = crate::clock::today();
+    let actor_key = format!("{state}{SETTLEMENT_ACTOR_SUFFIX}");
+    let date_key = format!("{state}{SETTLEMENT_DATE_SUFFIX}");
+    let mut raws: Vec<RawEdit<'_>> = Vec::new();
+    if let Some((field, value)) = captured {
+        raws.push(RawEdit {
+            field,
+            value: RawValue::Text(value.to_string()),
+        });
+    }
+    raws.push(RawEdit {
+        field: &actor_key,
+        value: RawValue::Text(by.to_string()),
+    });
+    raws.push(RawEdit {
+        field: &date_key,
+        value: RawValue::Text(today.clone()),
+    });
+    let edits = plan_facet_edits(kind, &raws)
+        .map_err(|refusal| anyhow::anyhow!("{canonical}: {refusal}"))?;
+
+    // 7 — ONE write of one document: the capture, the actor, the date, the
+    // status and the stamp, or none of them (F-2).
+    apply_settlement(
+        &record_toml_path(&root, kind, id),
+        &canonical,
+        &edits,
+        &[("status", state), ("updated", &today)],
+        &malformed_status_hint(&canonical),
+    )?;
+
+    // 8 — post-state, in `run_status`'s and `run_facet_edit`'s shapes together.
+    let set: Vec<&str> = edits.iter().map(|edit| edit.field.name).collect();
+    writeln!(
+        writer,
+        "{canonical}: {} — {}",
+        crate::listing::status_colored(state, color),
+        set.join(", ")
+    )?;
+    Ok(())
+}
+
 /// The per-record directory — `root/<kind-dir>/<id:03>` — the layout every path
 /// into one record's authored/prose files walks. Shared by `record_toml_path`,
 /// `read_record`'s two paths, and `write_record_body` (STD-001).
@@ -1714,25 +2654,36 @@ pub(crate) fn record_toml_path(root: &Path, kind: RecordKind, id: u32) -> PathBu
     record_dir(root, kind, id).join(format!("{RECORD_STEM}-{id:03}.toml"))
 }
 
-/// Write a record's `.md` prose tier wholesale (SL-249, DEC-086 step 5).
+/// Write a record's `.md` prose tier (SL-249, DEC-086 step 5).
 ///
-/// The seam a design-run checkpoint's `create` disposition writes its payload
-/// `body` through: `entity::write_body` takes `dir` + `file` so kind layout
-/// stays with the caller, and the owner of knowledge record layout is this
-/// module, not the design-run shell. Always `BodyMode::Replace` — a resumed
-/// step 5 re-applies the same payload and must produce the same bytes, which
-/// `Append` would double.
+/// The ONE path to a record's prose (EX-4): `entity::write_body` takes `dir` +
+/// `file` so kind layout stays with the caller, and the owner of knowledge
+/// record layout is this module, not any calling shell. `mode` is the caller's
+/// (SL-249 PHASE-08 D3) — the design-run checkpoint and `knowledge edit` differ
+/// on it, and a direct `entity::write_body` call from either would re-derive the
+/// `record-NNN.md` name.
 pub(crate) fn write_record_body(
     root: &Path,
     kind: RecordKind,
     id: u32,
     text: &str,
+    mode: entity::BodyMode,
 ) -> anyhow::Result<bool> {
     entity::write_body(
         &record_dir(root, kind, id),
         &format!("{RECORD_STEM}-{id:03}.md"),
         text,
-        entity::BodyMode::Replace,
+        mode,
+    )
+}
+
+/// `dep_seq::apply_status`'s F-1 bail sentence for a knowledge record — the
+/// single source both `set_record_status` and `apply_settlement` pass in
+/// (STD-001). `name` is what the message calls the record.
+fn malformed_status_hint(name: &str) -> String {
+    format!(
+        "malformed record {name}: missing seeded `status`/`updated` \
+         — restore the missing keys and retry; the file is left untouched"
     )
 }
 
@@ -1745,20 +2696,9 @@ pub(crate) fn set_record_status(
     id: u32,
     state: &str,
 ) -> anyhow::Result<()> {
-    let vocab = statuses(kind);
-    if !vocab.contains(&state) {
-        anyhow::bail!(
-            "`{state}` is not a {} status (known: {})",
-            kind.as_str(),
-            vocab.join(", ")
-        );
-    }
+    ensure_status_token(kind, state)?;
     let today = crate::clock::today();
-    let name = format!("{id:03}");
-    let hint = format!(
-        "malformed record {name}: missing seeded `status`/`updated` \
-         — restore the missing keys and retry; the file is left untouched"
-    );
+    let hint = malformed_status_hint(&format!("{id:03}"));
     crate::dep_seq::set_authored_status(
         &record_toml_path(root, kind, id),
         &[("status", state), ("updated", &today)],
@@ -1833,6 +2773,33 @@ pub(crate) enum KnowledgeCommand {
         #[command(flatten)]
         common: crate::CommonShowArgs,
     },
+    /// Edit a knowledge record's title, tags, and prose body.
+    Edit {
+        /// Knowledge record reference — `ASM-007`, `DEC-012`, `CPT-001`.
+        /// Optional only so the kind-dispatched subverbs can occupy the slot
+        /// (D4); absent with no subverb is its own refusal.
+        id: Option<String>,
+        /// The kind-dispatched `[facet]` tier — `knowledge edit decision DEC-007
+        /// --rationale …`. Neither `args_conflicts_with_subcommands` nor
+        /// `subcommand_negates_reqs` is set: making `id` optional removes the
+        /// requirement outright, so there is nothing left to negate (D4).
+        #[command(subcommand)]
+        facet: Option<Box<KnowledgeFacetEdit>>,
+        /// Replace the title.
+        #[arg(long)]
+        title: Option<String>,
+        /// Add tags (comma-separated). Additive — use `doctrine tag set -d` to remove.
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
+        /// New prose for the `.md` body; `-` reads stdin.
+        #[arg(long)]
+        body: Option<String>,
+        /// How `--body` treats the existing prose: `replace` (default) or `append`.
+        #[arg(long)]
+        body_mode: Option<String>,
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
     /// Set a knowledge record's status.
     Status {
         id: String,
@@ -1840,6 +2807,9 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Settle a knowledge record: move it to a resolving state and capture the
+    /// disposition that resolves it, in one write.
+    Settle(SettleArgs),
 
     /// Print the file paths of each knowledge record entity directory.
     Paths {
@@ -1863,6 +2833,374 @@ pub(crate) enum KnowledgeCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+}
+
+/// `doctrine knowledge settle <ID> <state> --by WHO [--answer V | --waiver-reason V]`.
+///
+/// A struct rather than inline variant fields, so [`captures`](Self::captures)
+/// can own the one argv→capture mapping — the seam the flag oracle reads, and
+/// the tier at which a flag declared but never mapped would otherwise write
+/// nothing in silence.
+///
+/// The capture flags are declared by their facet field's OWN name, kebab-cased
+/// (§5.2, refining `DEC-178`'s illustrative `--reason`), and pinned to
+/// `Settlement.captures` by a test — a fifth settlement cannot ship
+/// unreachable.
+#[derive(clap::Args)]
+pub(crate) struct SettleArgs {
+    /// Knowledge record reference — `QUE-005`, `ASM-007`, `CON-012`.
+    id: String,
+    /// The resolving state: `answered`, `validated`, `invalidated`, `waived`.
+    /// Every other state stays with `knowledge status`.
+    state: String,
+    /// Who settled it — written to `<state>_by`. The date is `today`, never
+    /// taken from the caller.
+    #[arg(long)]
+    by: String,
+    /// A question's answer — the disposition `answered` exists to capture.
+    #[arg(long)]
+    answer: Option<String>,
+    /// A constraint's waiver reason — the disposition `waived` exists to capture.
+    #[arg(long)]
+    waiver_reason: Option<String>,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
+impl SettleArgs {
+    /// The capture flags argv actually carried, each paired with the facet
+    /// field it names — the ONE argv→capture mapping (the shape
+    /// [`KnowledgeFacetEdit::raw_edits`] uses one tier down).
+    fn captures(&self) -> Vec<(&'static str, &str)> {
+        [
+            ("answer", self.answer.as_deref()),
+            ("waiver_reason", self.waiver_reason.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(field, given)| given.map(|value| (field, value)))
+        .collect()
+    }
+}
+
+/// The reference + root every facet subverb takes. Flattened so the seven
+/// variants declare it once (STD-001) and `id` stays the first positional.
+#[derive(clap::Args)]
+pub(crate) struct FacetEditTarget {
+    /// Knowledge record reference — must be of the kind the subverb names.
+    id: String,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    path: Option<PathBuf>,
+}
+
+/// `doctrine knowledge edit <kind> <ID> [--<field> V]…` — one subverb per record
+/// kind, whose flags are that kind's `[facet]` fields, kebab-cased.
+///
+/// The args stay clap-derive-declared, as the rest of this CLI is, and
+/// `facet_fields` is their ORACLE rather than their source (D3): `VT-4` asserts
+/// each subverb's arg names equal its kind's row, so the two cannot drift.
+/// Generating them would mean the builder API for six commands alone — a second
+/// idiom for the benefit of not typing thirty flag names once.
+///
+/// `List`-shaped fields are `Option<Vec<String>>` with `num_args = 0..` (D7): a
+/// bare `Vec` cannot tell "flag absent" from "flag present, cleared", and `[]`
+/// must be spellable. The cost is that `--applies-to` is greedy, so the id goes
+/// first — as it does in every documented invocation.
+#[derive(Subcommand)]
+pub(crate) enum KnowledgeFacetEdit {
+    /// Edit an assumption's facet fields.
+    Assumption {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What is being assumed.
+        #[arg(long)]
+        claim: Option<String>,
+        /// How sure — one of the confidence vocabulary; `""` clears.
+        #[arg(long)]
+        confidence: Option<String>,
+        /// What the assumption rests on; `""` clears.
+        #[arg(long)]
+        basis: Option<String>,
+        /// How the assumption would be validated.
+        #[arg(long)]
+        validation_plan: Option<String>,
+        /// Who validated it.
+        #[arg(long)]
+        validated_by: Option<String>,
+        /// When it was validated (YYYY-MM-DD).
+        #[arg(long)]
+        validated_on: Option<String>,
+        /// Who invalidated it.
+        #[arg(long)]
+        invalidated_by: Option<String>,
+        /// When it was invalidated (YYYY-MM-DD).
+        #[arg(long)]
+        invalidated_on: Option<String>,
+    },
+    /// Edit a decision's facet fields.
+    Decision {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The situation the decision was taken in.
+        #[arg(long)]
+        context: Option<String>,
+        /// What was chosen.
+        #[arg(long)]
+        choice: Option<String>,
+        /// What else was considered (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        alternatives: Option<Vec<String>>,
+        /// Why this choice over the alternatives.
+        #[arg(long)]
+        rationale: Option<String>,
+        /// What the choice commits us to (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        consequences: Option<Vec<String>>,
+        /// Who decided.
+        #[arg(long)]
+        decided_by: Option<String>,
+        /// When it was decided (YYYY-MM-DD).
+        #[arg(long)]
+        decided_on: Option<String>,
+    },
+    /// Edit a question's facet fields.
+    Question {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The question itself.
+        #[arg(long)]
+        question: Option<String>,
+        /// What turns on the answer.
+        #[arg(long)]
+        why_matters: Option<String>,
+        /// The answer, once there is one.
+        #[arg(long)]
+        answer: Option<String>,
+        /// Who answered it.
+        #[arg(long)]
+        answered_by: Option<String>,
+        /// When it was answered (YYYY-MM-DD).
+        #[arg(long)]
+        answered_on: Option<String>,
+    },
+    /// Edit a constraint's facet fields.
+    Constraint {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What the constraint requires or forbids.
+        #[arg(long)]
+        statement: Option<String>,
+        /// Where the constraint comes from — one of the source vocabulary; `""` clears.
+        #[arg(long)]
+        source: Option<String>,
+        /// What it binds (comma-separated; bare flag clears).
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        applies_to: Option<Vec<String>>,
+        /// Why it was waived.
+        #[arg(long)]
+        waiver_reason: Option<String>,
+        /// Who waived it.
+        #[arg(long)]
+        waived_by: Option<String>,
+        /// When it was waived (YYYY-MM-DD).
+        #[arg(long)]
+        waived_on: Option<String>,
+    },
+    /// Edit an evidence record's facet fields.
+    Evidence {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// What was observed.
+        #[arg(long)]
+        datum: Option<String>,
+        /// Where the datum came from — one of the provenance vocabulary; `""` clears.
+        #[arg(long)]
+        provenance: Option<String>,
+        /// How sure — one of the confidence vocabulary; `""` clears.
+        #[arg(long)]
+        confidence: Option<String>,
+    },
+    /// Edit a hypothesis's facet fields.
+    Hypothesis {
+        #[command(flatten)]
+        target: FacetEditTarget,
+        /// The proposition under test.
+        #[arg(long)]
+        proposition: Option<String>,
+        /// What it predicts we would observe.
+        #[arg(long)]
+        predicts: Option<String>,
+    },
+    /// Refuse: concept records carry no facet fields.
+    // The subverb exists only so the refusal can name the remedy, rather than
+    // dying in `resolve_ref` with "`concept` is not a canonical record ref"
+    // (D10 / DEC-173).
+    Concept {
+        #[command(flatten)]
+        target: FacetEditTarget,
+    },
+}
+
+/// One raw text assignment when the flag was given, nothing when it was absent.
+/// `Some(String::new())` is the CLEAR, never "unset" — `DEC-170` forbids
+/// clearing by omission, and `RawEdit` has no way to express it.
+fn text_flag<'a>(field: &'a str, given: Option<&String>) -> Option<RawEdit<'a>> {
+    given.map(|value| RawEdit {
+        field,
+        value: RawValue::Text(value.clone()),
+    })
+}
+
+/// The list-shaped counterpart. `Some(vec![])` is the list clear, written `[]`.
+fn list_flag<'a>(field: &'a str, given: Option<&Vec<String>>) -> Option<RawEdit<'a>> {
+    given.map(|values| RawEdit {
+        field,
+        value: RawValue::List(values.clone()),
+    })
+}
+
+impl KnowledgeFacetEdit {
+    /// The kind the subverb names, the record it targets, and the raw field
+    /// assignments it carries — the ONE argv→[`RawEdit`] mapping (D5).
+    ///
+    /// This is the phase's drift surface: a flag declared above but never mapped
+    /// here satisfies `VT-4`'s name oracle and silently writes nothing. Only
+    /// `VT-1`, which drives argv end to end and reads the record back, sees it.
+    fn raw_edits(&self) -> (RecordKind, &FacetEditTarget, Vec<RawEdit<'static>>) {
+        match *self {
+            KnowledgeFacetEdit::Assumption {
+                ref target,
+                ref claim,
+                ref confidence,
+                ref basis,
+                ref validation_plan,
+                ref validated_by,
+                ref validated_on,
+                ref invalidated_by,
+                ref invalidated_on,
+            } => (
+                RecordKind::Assumption,
+                target,
+                [
+                    text_flag("claim", claim.as_ref()),
+                    text_flag("confidence", confidence.as_ref()),
+                    text_flag("basis", basis.as_ref()),
+                    text_flag("validation_plan", validation_plan.as_ref()),
+                    text_flag("validated_by", validated_by.as_ref()),
+                    text_flag("validated_on", validated_on.as_ref()),
+                    text_flag("invalidated_by", invalidated_by.as_ref()),
+                    text_flag("invalidated_on", invalidated_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Decision {
+                ref target,
+                ref context,
+                ref choice,
+                ref alternatives,
+                ref rationale,
+                ref consequences,
+                ref decided_by,
+                ref decided_on,
+            } => (
+                RecordKind::Decision,
+                target,
+                [
+                    text_flag("context", context.as_ref()),
+                    text_flag("choice", choice.as_ref()),
+                    list_flag("alternatives", alternatives.as_ref()),
+                    text_flag("rationale", rationale.as_ref()),
+                    list_flag("consequences", consequences.as_ref()),
+                    text_flag("decided_by", decided_by.as_ref()),
+                    text_flag("decided_on", decided_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Question {
+                ref target,
+                ref question,
+                ref why_matters,
+                ref answer,
+                ref answered_by,
+                ref answered_on,
+            } => (
+                RecordKind::Question,
+                target,
+                [
+                    text_flag("question", question.as_ref()),
+                    text_flag("why_matters", why_matters.as_ref()),
+                    text_flag("answer", answer.as_ref()),
+                    text_flag("answered_by", answered_by.as_ref()),
+                    text_flag("answered_on", answered_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Constraint {
+                ref target,
+                ref statement,
+                ref source,
+                ref applies_to,
+                ref waiver_reason,
+                ref waived_by,
+                ref waived_on,
+            } => (
+                RecordKind::Constraint,
+                target,
+                [
+                    text_flag("statement", statement.as_ref()),
+                    text_flag("source", source.as_ref()),
+                    list_flag("applies_to", applies_to.as_ref()),
+                    text_flag("waiver_reason", waiver_reason.as_ref()),
+                    text_flag("waived_by", waived_by.as_ref()),
+                    text_flag("waived_on", waived_on.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Evidence {
+                ref target,
+                ref datum,
+                ref provenance,
+                ref confidence,
+            } => (
+                RecordKind::Evidence,
+                target,
+                [
+                    text_flag("datum", datum.as_ref()),
+                    text_flag("provenance", provenance.as_ref()),
+                    text_flag("confidence", confidence.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            KnowledgeFacetEdit::Hypothesis {
+                ref target,
+                ref proposition,
+                ref predicts,
+            } => (
+                RecordKind::Hypothesis,
+                target,
+                [
+                    text_flag("proposition", proposition.as_ref()),
+                    text_flag("predicts", predicts.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            // No field flags to map: the run shell refuses on the kind alone.
+            KnowledgeFacetEdit::Concept { ref target } => (RecordKind::Concept, target, Vec::new()),
+        }
+    }
 }
 
 pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()> {
@@ -1890,7 +3228,49 @@ pub(crate) fn dispatch(cmd: KnowledgeCommand, color: bool) -> anyhow::Result<()>
             };
             run_inspect(common.path, &common.id, format)
         }
+        // The kind-dispatched tier first: a subverb in the slot means the
+        // positional `id` was never filled (D4).
+        KnowledgeCommand::Edit {
+            facet: Some(sub), ..
+        } => {
+            let (kind, target, raws) = sub.raw_edits();
+            run_facet_edit(
+                target.path.clone(),
+                kind,
+                &target.id,
+                &raws,
+                &mut io::stdout(),
+            )
+        }
+        KnowledgeCommand::Edit {
+            id,
+            title,
+            tags,
+            body,
+            body_mode,
+            path,
+            ..
+        } => run_edit(
+            path,
+            &id.ok_or_else(|| anyhow::anyhow!("`knowledge edit` requires a record reference"))?,
+            &EditFields {
+                title: title.as_deref(),
+                tags: &tags,
+                body: body.as_deref(),
+                body_mode: body_mode.as_deref(),
+            },
+            &mut io::stdout(),
+        ),
         KnowledgeCommand::Status { id, state, path } => run_status(path, &id, &state, color),
+        KnowledgeCommand::Settle(args) => run_settle(
+            args.path.clone(),
+            &args.id,
+            &args.state,
+            &args.by,
+            &args.captures(),
+            color,
+            &mut io::stdout(),
+        ),
         KnowledgeCommand::Paths {
             refs,
             toml,
@@ -2846,5 +4226,2045 @@ target = \"ADR-001\"
         let record = validate(raw).unwrap();
         assert_eq!(record.title, "Test");
         assert_eq!(record.record_kind, RecordKind::Assumption);
+    }
+
+    // ── `knowledge edit` — the kind-blind tier (SL-249 PHASE-08) ─────────────
+
+    /// A scratch root this module wholly owns. `root::find` returns an explicit
+    /// `path` verbatim, so the verb runs against it with no marker file.
+    fn edit_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("doctrine-sl249-p08-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    /// A facet-BEARING fixture: populated `[facet]` values, `[evidence]`,
+    /// `[relationships]`, a `[[relation]]` row and a hand-written comment —
+    /// every tier `knowledge edit` must leave byte-identical (EX-3, EX-4).
+    ///
+    /// `notes` inside `[facet]` is an UNKNOWN sibling (SL-249 PHASE-04): no
+    /// `facet_fields` row names it and `RawFacet` does not carry it, so it is
+    /// exactly the forward-compatibility case I11 protects — a key a future
+    /// schema might add, which today's writer must not eat.
+    fn facet_bearing_decision() -> String {
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = 7
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"decision\"
+status = \"proposed\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"seed\"]
+
+[facet]                         # a hand-written comment on the facet header
+context      = \"the context\"
+choice       = \"the choice\"
+alternatives = [\"a\", \"b\"]
+rationale    = \"because\"
+consequences = [\"c\"]
+decided_by   = \"david\"
+decided_on   = \"2026-01-01\"
+notes        = \"keep me\"
+
+[evidence]
+supports    = [\"SL-249\"]
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = [\"DEC-006\"]
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+"
+        )
+    }
+
+    /// The other end of the facet spectrum: a concept, whose `[facet]` is empty
+    /// BY DESIGN (DEC-172 — a concept's content is its prose). `knowledge edit`
+    /// is the whole edit surface such a record has.
+    ///
+    /// Its `tags` are deliberately UNSORTED — a hand-authored store is allowed
+    /// to be, and `apply_tags_set` compares as sets precisely so an idempotent
+    /// re-add against one does not spuriously write (R2).
+    fn empty_facet_concept() -> String {
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = 3
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"concept\"
+status = \"draft\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"zeta\", \"alpha\"]
+
+[facet]                         # empty by design (DEC-172)
+
+[evidence]
+supports    = []
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = []
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+"
+        )
+    }
+
+    /// Everything from `[facet]` on — the inert tail this verb never writes.
+    /// Compared byte-for-byte, so a lost comment or a re-serialised array fails
+    /// the assertion (EX-3: asserted on file bytes, never by reading an error).
+    fn inert_tail(text: &str) -> &str {
+        let at = text
+            .find("\n[facet]")
+            .expect("fixture carries a [facet] table");
+        text.get(at..).unwrap_or_default()
+    }
+
+    fn read_toml_text(root: &Path, kind: RecordKind, id: u32) -> String {
+        std::fs::read_to_string(record_toml_path(root, kind, id)).unwrap()
+    }
+
+    fn read_md_text(root: &Path, kind: RecordKind, id: u32) -> String {
+        std::fs::read_to_string(record_dir(root, kind, id).join(format!("record-{id:03}.md")))
+            .unwrap()
+    }
+
+    /// VT-1, the facet-bearing end: `knowledge edit DEC-007` round-trips title,
+    /// tags and prose, and leaves every other tier byte-identical. The prose
+    /// goes out through `write_record_body` → `entity::write_body`; nothing
+    /// else in the diff writes an `.md`.
+    #[test]
+    fn knowledge_edit_round_trips_the_invariant_tier_on_a_decision() {
+        let root = edit_root("dec");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let before = read_toml_text(&root, RecordKind::Decision, 7);
+
+        let mut out = Vec::new();
+        run_edit(
+            Some(root.clone()),
+            "DEC-007",
+            &EditFields {
+                title: Some("A new title"),
+                tags: &["Alpha".to_string(), "beta".to_string()],
+                body: Some("# New prose\n"),
+                body_mode: None,
+            },
+            &mut out,
+        )
+        .unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Decision, 7);
+        assert!(
+            after.contains("title = \"A new title\""),
+            "title should be set: {after}"
+        );
+        // Additive merge, stored sorted (D2) — the seeded tag survives, and both
+        // new tags are normalised through the single write chokepoint.
+        assert!(
+            after.contains("tags = [\"alpha\", \"beta\", \"seed\"]"),
+            "tags should merge additively and sort: {after}"
+        );
+        assert!(
+            after.contains(&format!("updated = \"{}\"", crate::clock::today())),
+            "updated should be stamped once: {after}"
+        );
+        assert_eq!(
+            read_md_text(&root, RecordKind::Decision, 7),
+            "# New prose\n"
+        );
+        assert_eq!(
+            inert_tail(&after),
+            inert_tail(&before),
+            "[facet], [evidence], [relationships], [[relation]] and comments must be byte-identical"
+        );
+        assert!(
+            String::from_utf8(out).unwrap().contains("DEC-007"),
+            "the post-state print names the canonical id"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Drive the verb's prose tier alone — no `--title`, no `--tags` — so a
+    /// body-only edit's stamping and no-op behaviour is observed in isolation.
+    fn edit_body(root: &Path, body: &str, mode: Option<&str>) -> anyhow::Result<()> {
+        run_edit(
+            Some(root.to_path_buf()),
+            "CPT-003",
+            &EditFields {
+                title: None,
+                tags: &[],
+                body: Some(body),
+                body_mode: mode,
+            },
+            &mut Vec::new(),
+        )
+    }
+
+    /// VT-2: `--body-mode`'s vocabulary and semantics are `entity::write_body`'s,
+    /// unchanged. `BodyMode::Append` OWNS the separator — its doc comment is the
+    /// specification these arms are read off, not recollection. Nothing new is
+    /// decided about prose here.
+    #[test]
+    fn knowledge_edit_body_mode_replace_and_append_match_write_body() {
+        let root = edit_root("bodymode");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+
+        // `replace` overwrites wholesale (and is the default when the flag is absent).
+        edit_body(&root, "first\n", Some("replace")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "first\n");
+
+        // `append` onto a body ending in ONE newline inserts exactly one blank line.
+        edit_body(&root, "second\n", Some("append")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "first\n\nsecond\n");
+
+        // `append` onto a body that ALREADY ends in a blank line does not double it.
+        std::fs::write(&md, "para\n\n").unwrap();
+        edit_body(&root, "next\n", Some("append")).unwrap();
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), "para\n\nnext\n");
+
+        // Vocabulary is normalised (trim + lowercase) and closed — never a
+        // silent default.
+        edit_body(&root, "tail\n", Some("  APPEND ")).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&md).unwrap(),
+            "para\n\nnext\n\ntail\n"
+        );
+        let err = edit_body(&root, "x\n", Some("prepend")).unwrap_err();
+        assert!(err.to_string().contains("unknown body mode"), "{err}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// VT-2's no-op arm, widened to all three concerns (T7): re-stating the
+    /// title a record already has, re-adding a tag it already carries, and
+    /// re-applying its exact prose writes NOTHING — both tiers hold their bytes
+    /// AND their mtime, and `updated` is not re-stamped.
+    ///
+    /// Three independent changed-flags feed one write decision, so a single
+    /// over-eager one would show up here: `dep_seq`'s core no-ops on identity
+    /// equality (excluding the derived `updated` stamp from the comparison),
+    /// `apply_tags_set` no-ops on SET equality against an unsorted store (R2),
+    /// and `entity::write_body` returns `false` without calling `write_atomic`.
+    #[test]
+    fn knowledge_edit_a_genuine_no_op_writes_nothing_at_all() {
+        let root = edit_root("noop");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+        let toml = record_toml_path(&root, RecordKind::Concept, 3);
+
+        let md_before = std::fs::read_to_string(&md).unwrap();
+        let toml_before = std::fs::read_to_string(&toml).unwrap();
+        let md_mtime = std::fs::metadata(&md).unwrap().modified().unwrap();
+        let toml_mtime = std::fs::metadata(&toml).unwrap().modified().unwrap();
+
+        run_edit(
+            Some(root.clone()),
+            "CPT-003",
+            &EditFields {
+                title: Some("Original title"),
+                tags: &["alpha".to_string()],
+                body: Some(&md_before),
+                body_mode: Some("replace"),
+            },
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), md_before);
+        assert_eq!(std::fs::read_to_string(&toml).unwrap(), toml_before);
+        assert!(
+            toml_before.contains("updated = \"2026-01-01\""),
+            "a no-op must not re-stamp `updated`: {toml_before}"
+        );
+        assert_eq!(
+            std::fs::metadata(&md).unwrap().modified().unwrap(),
+            md_mtime
+        );
+        assert_eq!(
+            std::fs::metadata(&toml).unwrap().modified().unwrap(),
+            toml_mtime
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// T7 / R1: a BODY-ONLY edit still stamps `updated` — neither TOML core can
+    /// see the prose tier, so the shell re-stamps explicitly. Exactly one
+    /// `updated` key results, carrying today.
+    #[test]
+    fn knowledge_edit_body_only_stamps_updated_exactly_once() {
+        let root = edit_root("stamp");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+
+        edit_body(&root, "fresh prose\n", None).unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Concept, 3);
+        assert!(
+            after.contains(&format!("updated = \"{}\"", crate::clock::today())),
+            "a body-only edit must stamp `updated`: {after}"
+        );
+        assert_eq!(
+            after.matches("\nupdated = ").count(),
+            1,
+            "exactly one `updated` key: {after}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// I7: every refusal leaves the corpus byte-identical. Asserted on FILE
+    /// BYTES for both tiers, never by inspecting the error — a message is not
+    /// evidence that nothing was written.
+    #[test]
+    fn knowledge_edit_refusals_leave_both_tiers_byte_identical() {
+        let root = edit_root("refuse");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let md = record_dir(&root, RecordKind::Concept, 3).join("record-003.md");
+        let toml = record_toml_path(&root, RecordKind::Concept, 3);
+        let md_before = std::fs::read_to_string(&md).unwrap();
+        let toml_before = std::fs::read_to_string(&toml).unwrap();
+
+        let refuse = |fields: &EditFields<'_>| -> String {
+            run_edit(Some(root.clone()), "CPT-003", fields, &mut Vec::new())
+                .unwrap_err()
+                .to_string()
+        };
+        let none = EditFields {
+            title: None,
+            tags: &[],
+            body: None,
+            body_mode: None,
+        };
+
+        // (a) a lone `--body-mode`. The totality guard sits AHEAD of the
+        // at-least-one-flag gate, so this says why it is not an edit rather
+        // than falling through to the generic message.
+        let lone_mode = refuse(&EditFields {
+            body_mode: Some("append"),
+            ..none
+        });
+        assert!(
+            lone_mode.contains(crate::input::BODY_MODE_REQUIRES_BODY),
+            "{lone_mode}"
+        );
+
+        // (b) no flags at all.
+        let empty = refuse(&none);
+        assert!(empty.contains("at least one flag"), "{empty}");
+
+        // (c) a malformed tag — `normalize_tag`'s refusal names the offending
+        // token, and is raised before the document is ever opened.
+        let bad_tag = refuse(&EditFields {
+            tags: &["Good".to_string(), "bad tag!".to_string()],
+            ..none
+        });
+        assert!(bad_tag.contains("bad tag!"), "{bad_tag}");
+
+        // An empty `--title` after trim is refused (memory's posture).
+        let blank_title = refuse(&EditFields {
+            title: Some("   "),
+            ..none
+        });
+        assert!(blank_title.contains("must not be empty"), "{blank_title}");
+
+        assert_eq!(std::fs::read_to_string(&md).unwrap(), md_before);
+        assert_eq!(std::fs::read_to_string(&toml).unwrap(), toml_before);
+
+        // A nonexistent record surfaces a clear not-found — `resolve_ref` does
+        // not check existence, the read does.
+        let missing = run_edit(
+            Some(root.clone()),
+            "CPT-099",
+            &EditFields {
+                title: Some("nope"),
+                ..none
+            },
+            &mut Vec::new(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(missing.contains("record not found at"), "{missing}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// VT-2, the stdin arm. `--body -` is resolved by `input::resolve_body`,
+    /// which takes `&mut impl Read` precisely so this is assertable without
+    /// driving a real pipe — the verb itself hands it `io::stdin()`, exactly as
+    /// `memory::run_edit` does, so the injectable seam is the helper.
+    #[test]
+    fn knowledge_edit_body_dash_reads_stdin_through_the_shared_resolver() {
+        let md = "# Definition\n\nTwo  spaces, and a trailing newline.\n";
+        let mut cursor = std::io::Cursor::new(md.as_bytes());
+        assert_eq!(
+            crate::input::resolve_body("-", &mut cursor).unwrap(),
+            md,
+            "stdin prose must survive unaltered — no size rule, no reflow"
+        );
+        let mut untouched = std::io::Cursor::new(b"never read".as_slice());
+        assert_eq!(
+            crate::input::resolve_body("# literal", &mut untouched).unwrap(),
+            "# literal"
+        );
+    }
+
+    /// VT-1, the empty-facet end: a concept carries no facet by design
+    /// (DEC-172), so `knowledge edit` reaches everything it has. Same verb, no
+    /// kind dispatch — that is EX-5's whole claim.
+    #[test]
+    fn knowledge_edit_round_trips_the_invariant_tier_on_a_concept() {
+        let root = edit_root("cpt");
+        seed_record(&root, RecordKind::Concept, 3, &empty_facet_concept());
+        let before = read_toml_text(&root, RecordKind::Concept, 3);
+        let reference = RecordKind::Concept.canonical_id(3);
+
+        let mut out = Vec::new();
+        run_edit(
+            Some(root.clone()),
+            &reference,
+            &EditFields {
+                title: Some("A concept, renamed"),
+                tags: &["glossary".to_string()],
+                body: Some("# Definition\n\nThe prose IS the content.\n"),
+                body_mode: None,
+            },
+            &mut out,
+        )
+        .unwrap();
+
+        let after = read_toml_text(&root, RecordKind::Concept, 3);
+        assert!(after.contains("title = \"A concept, renamed\""), "{after}");
+        // Additive merge over an UNSORTED hand-authored store, stored sorted.
+        assert!(
+            after.contains("tags = [\"alpha\", \"glossary\", \"zeta\"]"),
+            "{after}"
+        );
+        assert_eq!(
+            read_md_text(&root, RecordKind::Concept, 3),
+            "# Definition\n\nThe prose IS the content.\n"
+        );
+        assert_eq!(
+            inert_tail(&after),
+            inert_tail(&before),
+            "the empty [facet] header and every inert tier must survive verbatim"
+        );
+        assert!(
+            String::from_utf8(out).unwrap().contains(&reference),
+            "the post-state print names the canonical id"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // -----------------------------------------------------------------------
+    // The facet field table's three pins (SL-249 PHASE-03, VT-1 / EX-2..EX-4)
+    //
+    // `facet_fields` is authored by hand — Rust has no reflection over struct
+    // fields and DEC-169 refused a proc macro for exactly this. So the table is
+    // held honest by three comparisons, none of which restates a field name:
+    // I2 (totality, through `RawFacet`'s serde form), I3 (per-kind placement, by
+    // differencing `validate_facet`'s retention) and I3b (no row repeats a name).
+    // -----------------------------------------------------------------------
+
+    /// The union of every kind's row, as a set of names. A **set**: the rows sum
+    /// to 31 slots while the distinct union is 30, because `confidence` is
+    /// legitimately owned by both assumption and evidence. Comparing lengths here
+    /// would fail by exactly one and look like a missing row.
+    fn tabled_field_union() -> BTreeSet<&'static str> {
+        RecordKind::ALL
+            .into_iter()
+            .flat_map(|kind| facet_fields(kind).iter().map(|field| field.name))
+            .collect()
+    }
+
+    /// A TOML value `validate_facet` will accept for one field, derived from the
+    /// field's own declared shape (D2). This is what makes the shape column
+    /// load-bearing under test: a closed field wrongly declared `Text` yields its
+    /// own name, which `optional_enum` refuses, and I3 fails loudly.
+    fn shaped_value(field: &FacetFieldRow) -> toml::Value {
+        match field.shape {
+            FieldShape::Text => toml::Value::String(field.name.to_string()),
+            FieldShape::List => {
+                toml::Value::Array(vec![toml::Value::String(field.name.to_string())])
+            }
+            FieldShape::Closed(tokens) => toml::Value::String(
+                (*tokens.first().expect("a closed shape names its tokens")).to_string(),
+            ),
+        }
+    }
+
+    /// Every field in the union, populated — I3's input, built from the table's
+    /// own `(name, shape)` pairs rather than from a restated list.
+    fn populated_union() -> toml::Table {
+        let mut table = toml::Table::new();
+        for kind in RecordKind::ALL {
+            for field in facet_fields(kind) {
+                table.insert(field.name.to_string(), shaped_value(field));
+            }
+        }
+        table
+    }
+
+    fn raw_facet_from(table: &toml::Table) -> RawFacet {
+        toml::Value::Table(table.clone())
+            .try_into()
+            .expect("the populated union deserialises into the kind-blind superset")
+    }
+
+    /// `I2` — totality. The table's union is exactly `RawFacet`'s serde key set.
+    ///
+    /// The oracle is the **serialised** superset, not a hand-written list: a facet
+    /// field added to the model and forgotten in the table fails here, and a table
+    /// row naming a key no field carries fails equally. DEC-169's
+    /// read-through-serde idiom, second application (the first is
+    /// `Declaration::WIRE_KEYS`, SL-249 PHASE-02).
+    #[test]
+    fn the_facet_table_union_holds_exactly_raw_facets_serde_keys() {
+        let serialised =
+            serde_json::to_value(RawFacet::default()).expect("the raw facet serialises");
+
+        let on_the_wire: BTreeSet<&str> = serialised
+            .as_object()
+            .expect("the raw facet serialises to an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        assert_eq!(on_the_wire, tabled_field_union());
+    }
+
+    /// `I3` — per-kind placement, as an **equality**.
+    ///
+    /// For each kind, populate every field in the union and read it back through
+    /// the untouched `validate_facet`; a field is *retained* by that kind iff
+    /// removing it changes the typed facet. Then assert the retained set equals
+    /// the kind's row exactly.
+    ///
+    /// The oracle is the layer *below* the table
+    /// (`mem.pattern.testing.mapping-oracle-lives-below-the-check`):
+    /// `validate_facet` does not consult `facet_fields`, so a row handed a field
+    /// its kind does not own fails rather than agreeing with itself. Inclusion
+    /// would be blind to exactly that case — RV-349 `F-3` round one. Concept is a
+    /// case, not an exception: it retains nothing and its row is empty.
+    #[test]
+    fn each_kinds_row_equals_the_fields_validate_facet_retains() {
+        let full_input = populated_union();
+        let union = tabled_field_union();
+
+        for kind in RecordKind::ALL {
+            let full = validate_facet(kind, raw_facet_from(&full_input))
+                .expect("the fully populated union validates for every kind");
+
+            let mut retained: BTreeSet<&str> = BTreeSet::new();
+            for name in &union {
+                // Removing the key is how a field is un-populated: every
+                // `RawFacet` field is `#[serde(default)]`, so an absent key
+                // deserialises to `""`/`[]`, which the `"" -> None` seams map to
+                // absent. Mutating by name would need a 30-arm match — another
+                // restated list.
+                let mut minus = full_input.clone();
+                minus.remove(*name);
+                let without = validate_facet(kind, raw_facet_from(&minus))
+                    .expect("a one-field-lighter union still validates");
+                if without != full {
+                    retained.insert(name);
+                }
+            }
+
+            let row: BTreeSet<&str> = facet_fields(kind).iter().map(|f| f.name).collect();
+            assert_eq!(
+                retained,
+                row,
+                "{}: the fields validate_facet retains must EQUAL its table row",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// `R5` — every shipped `install/templates/knowledge-*.toml` seeds exactly its
+    /// kind's row: no more, no fewer (`VT-2`, `EX-5`).
+    ///
+    /// A *standing* pin. Today's templates already agree (discharged by hand during
+    /// RV-349), so this goes green on first run and cannot stage a red — what it
+    /// guards is the invariant across future edits. Under the F-1 write posture a
+    /// dropped seed key silently converts every existing record of that kind into
+    /// one the writer refuses, which is a corpus-wide failure from a one-line
+    /// template edit.
+    ///
+    /// The template path is not restated: `render_record_toml_seed`'s own `match`
+    /// is the single source of the kind → path mapping, so calling it means this
+    /// test cannot drift from production's choice of file.
+    ///
+    /// Concept is a case, not an exception: its bare `[facet]` header parses to an
+    /// empty table and equals its empty row, which is what makes the F-1 posture
+    /// well-defined for a kind with no fields.
+    #[test]
+    fn each_shipped_template_seeds_exactly_its_kinds_facet_row() {
+        for kind in RecordKind::ALL {
+            let seeded = render_record_toml_seed(kind, 1, "slug", "title", "2026-01-01")
+                .expect("the shipped template renders");
+            let parsed: toml::Table = seeded.parse().expect("a seeded record is valid TOML");
+
+            let seeded_keys: BTreeSet<&str> = parsed
+                .get("facet")
+                .expect("every knowledge template carries a [facet] header")
+                .as_table()
+                .expect("[facet] is a table")
+                .keys()
+                .map(String::as_str)
+                .collect();
+            let row: BTreeSet<&str> = facet_fields(kind).iter().map(|f| f.name).collect();
+
+            assert_eq!(
+                seeded_keys,
+                row,
+                "{}: the shipped template must seed exactly its table row",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// `I3b` — no row names a field twice.
+    ///
+    /// `I2` and `I3` both compare sets, which collapse a duplicate silently while
+    /// every consumer that *iterates* a row sees the field twice: a duplicated
+    /// clap flag, a doubled write, a doubled coverage row. RV-349 `F-3` round two.
+    /// Multiplicity *across* rows stays legitimate — `confidence` is owned by two
+    /// kinds — and this says nothing about it.
+    #[test]
+    fn no_facet_row_names_a_field_twice() {
+        for kind in RecordKind::ALL {
+            let row = facet_fields(kind);
+            let distinct: BTreeSet<&str> = row.iter().map(|f| f.name).collect();
+            assert_eq!(
+                row.len(),
+                distinct.len(),
+                "{}: each row must name every field exactly once",
+                kind.as_str()
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // `plan_facet_edits` — the pure seam (SL-249 PHASE-04 T2)
+    //
+    // Every decision lives here and none of it touches a filesystem. The row it
+    // resolves against is `facet_fields`'s, and a `Closed` token is checked
+    // against that row's OWN `KNOWN` slice — no token is retyped (STD-001).
+    // -----------------------------------------------------------------------
+
+    fn text<'a>(field: &'a str, value: &str) -> RawEdit<'a> {
+        RawEdit {
+            field,
+            value: RawValue::Text(value.to_string()),
+        }
+    }
+
+    fn list<'a>(field: &'a str, values: &[&str]) -> RawEdit<'a> {
+        RawEdit {
+            field,
+            value: RawValue::List(values.iter().map(|s| (*s).to_string()).collect()),
+        }
+    }
+
+    #[test]
+    fn plan_refuses_a_field_no_kind_owns() {
+        let err = plan_facet_edits(RecordKind::Question, &[text("nonesuch", "v")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::UnknownField { ref field, kind }
+                if field == "nonesuch" && kind == RecordKind::Question),
+            "expected UnknownField, got {err:?}"
+        );
+        let rendered = err.to_string();
+        assert!(rendered.contains("nonesuch"), "names the field: {rendered}");
+        assert!(rendered.contains("question"), "names the kind: {rendered}");
+    }
+
+    /// The cross-kind case the design's equality argument turns on: `choice` is a
+    /// real facet field, but a *decision's*. A question must refuse it.
+    #[test]
+    fn plan_refuses_another_kinds_field() {
+        assert!(plan_facet_edits(RecordKind::Decision, &[text("choice", "x")]).is_ok());
+        let err = plan_facet_edits(RecordKind::Question, &[text("choice", "x")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::UnknownField { ref field, .. } if field == "choice"),
+            "expected UnknownField, got {err:?}"
+        );
+    }
+
+    /// The token is checked against the row's own `KNOWN` slice, so this test
+    /// names no token of its own — it asks the table for one it does not hold.
+    #[test]
+    fn plan_refuses_an_unknown_closed_token() {
+        let err =
+            plan_facet_edits(RecordKind::Assumption, &[text("confidence", "banana")]).unwrap_err();
+        let FacetEditRefusal::BadToken {
+            ref field,
+            ref value,
+            known,
+        } = err
+        else {
+            panic!("expected BadToken, got {err:?}");
+        };
+        assert_eq!(field, "confidence");
+        assert_eq!(value, "banana");
+        assert_eq!(known, Confidence::KNOWN);
+        let rendered = err.to_string();
+        for token in Confidence::KNOWN {
+            assert!(rendered.contains(token), "names {token}: {rendered}");
+        }
+    }
+
+    #[test]
+    fn plan_refuses_a_list_value_on_a_text_field() {
+        let err =
+            plan_facet_edits(RecordKind::Decision, &[list("rationale", &["a", "b"])]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::ShapeMismatch { ref field, .. } if field == "rationale"),
+            "expected ShapeMismatch, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn plan_refuses_a_text_value_on_a_list_field() {
+        let err = plan_facet_edits(RecordKind::Decision, &[text("alternatives", "a")]).unwrap_err();
+        assert!(
+            matches!(err, FacetEditRefusal::ShapeMismatch { ref field, .. } if field == "alternatives"),
+            "expected ShapeMismatch, got {err:?}"
+        );
+    }
+
+    /// D6 — `""` is always the clear, and bypasses `Closed` token validation.
+    /// `optional_enum` maps `""` to `None` *before* parsing, so `""` is the read
+    /// model's own cleared form; validating it against `KNOWN` would make closed
+    /// fields the one uncleanable kind of field.
+    #[test]
+    fn plan_accepts_the_empty_clear_on_a_closed_field() {
+        let planned = plan_facet_edits(RecordKind::Assumption, &[text("confidence", "")]).unwrap();
+        assert_eq!(planned.len(), 1);
+        assert_eq!(planned[0].field.name, "confidence");
+        assert_eq!(planned[0].value, RawValue::Text(String::new()));
+    }
+
+    #[test]
+    fn plan_accepts_the_empty_clear_on_a_text_field() {
+        let planned = plan_facet_edits(RecordKind::Decision, &[text("rationale", "")]).unwrap();
+        assert_eq!(planned[0].value, RawValue::Text(String::new()));
+    }
+
+    /// An empty list is the list-shaped clear — `--applies-to` with no values.
+    #[test]
+    fn plan_accepts_the_empty_list_clear() {
+        let planned = plan_facet_edits(RecordKind::Constraint, &[list("applies_to", &[])]).unwrap();
+        assert_eq!(planned[0].value, RawValue::List(Vec::new()));
+    }
+
+    #[test]
+    fn plan_preserves_the_callers_order() {
+        let given = [
+            text("decided_by", "david"),
+            list("alternatives", &["a", "b"]),
+            text("context", "why"),
+        ];
+        let planned = plan_facet_edits(RecordKind::Decision, &given).unwrap();
+        let names: Vec<&str> = planned.iter().map(|e| e.field.name).collect();
+        assert_eq!(names, vec!["decided_by", "alternatives", "context"]);
+    }
+
+    /// Concept owns no facet field, so every field is unknown to it (D10 gives
+    /// the CLI its own refusal; this is the seam's).
+    #[test]
+    fn plan_refuses_every_field_for_a_concept() {
+        let err = plan_facet_edits(RecordKind::Concept, &[text("claim", "x")]).unwrap_err();
+        assert!(matches!(err, FacetEditRefusal::UnknownField { .. }));
+    }
+
+    // -----------------------------------------------------------------------
+    // `apply_facet_edits` — the thin shell (SL-249 PHASE-04 T3)
+    // -----------------------------------------------------------------------
+
+    /// EX-1 — one field of each shape written through the seam and read back
+    /// through `validate_facet`, which is the oracle for "written, read back".
+    #[test]
+    fn apply_writes_each_shape_and_reads_back_through_validate_facet() {
+        let root = edit_root("apply-shapes");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+
+        let edits = plan_facet_edits(
+            RecordKind::Decision,
+            &[
+                text("rationale", "a fresh reason"),
+                list("alternatives", &["x", "y", "z"]),
+                text("decided_by", "someone else"),
+            ],
+        )
+        .unwrap();
+        let changed = apply_facet_edits(&path, "DEC-007", &edits).unwrap();
+        assert!(changed, "a real value change writes");
+
+        let record = read_record(&root, RecordKind::Decision, 7).unwrap();
+        let RecordFacet::Decision(ref facet) = record.facet else {
+            panic!("a decision reads back a decision facet");
+        };
+        assert_eq!(facet.rationale.as_deref(), Some("a fresh reason"));
+        assert_eq!(facet.alternatives, vec!["x", "y", "z"]);
+        assert_eq!(facet.decided_by.as_deref(), Some("someone else"));
+        // Untouched siblings survive.
+        assert_eq!(facet.context.as_deref(), Some("the context"));
+        assert_eq!(facet.choice.as_deref(), Some("the choice"));
+    }
+
+    /// I6 / EX-4 / EX-7 — a managed key absent from `[facet]` is damage, not a
+    /// normal path. The refusal names the record AND the key, and the assertion
+    /// is on the file's BYTES, never on the error text.
+    #[test]
+    fn apply_refuses_an_absent_key_and_leaves_the_file_byte_identical() {
+        let root = edit_root("apply-absent-key");
+        let damaged = facet_bearing_decision().replace("choice       = \"the choice\"\n", "");
+        assert!(!damaged.contains("choice"), "the key really is gone");
+        seed_record(&root, RecordKind::Decision, 7, &damaged);
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+        let before = std::fs::read(&path).unwrap();
+
+        let edits =
+            plan_facet_edits(RecordKind::Decision, &[text("choice", "a new choice")]).unwrap();
+        let err = apply_facet_edits(&path, "DEC-007", &edits).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("DEC-007"), "names the record: {msg}");
+        assert!(msg.contains("choice"), "names the key: {msg}");
+
+        assert_eq!(
+            before,
+            std::fs::read(&path).unwrap(),
+            "a refusal writes nothing at all"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // I11 / VT-3 — edit preservation (SL-249 PHASE-04 T4)
+    //
+    // Asserted by D8's THREE-REGION partition, never by a whole-file equality
+    // built from a string `replace`. `toml_edit`'s `insert` preserves an existing
+    // key and its decor but RESETS the value's decor, so a fixture whose values
+    // are column-aligned would make a substituted-text equality a coin flip on
+    // alignment. Splitting the file instead removes the gamble.
+    //
+    // `inert_tail` is deliberately NOT used here: it slices from `\n[facet]`
+    // onward, which is precisely the region this phase writes. It is PHASE-08's
+    // oracle, not this one's.
+    // -----------------------------------------------------------------------
+
+    /// D8's partition: everything above `[facet]`, the `[facet]` region itself,
+    /// and everything from `[evidence]` on (which carries `[relationships]`, the
+    /// hand-written comment and the `[[relation]]` row).
+    fn three_regions(text: &str) -> (&str, &str, &str) {
+        let facet_at = text
+            .find("\n[facet]")
+            .expect("the fixture carries a [facet] table");
+        let evidence_at = text
+            .find("\n[evidence]")
+            .expect("the fixture carries an [evidence] table");
+        (
+            text.get(..facet_at).unwrap_or_default(),
+            text.get(facet_at..evidence_at).unwrap_or_default(),
+            text.get(evidence_at..).unwrap_or_default(),
+        )
+    }
+
+    #[test]
+    fn apply_preserves_every_byte_it_did_not_intend_to_change() {
+        // The values these edits are expected to leave behind, as TOML source.
+        // Read off the line's right-hand side after trimming, so the assertion
+        // never gambles on `toml_edit`'s value decor.
+        const EDITED: &[(&str, &str)] = &[
+            ("rationale", "\"a fresh reason\""),
+            ("consequences", "[\"c\", \"d\"]"),
+        ];
+
+        let root = edit_root("i11-preservation");
+        seed_record(&root, RecordKind::Decision, 7, &facet_bearing_decision());
+        let path = record_toml_path(&root, RecordKind::Decision, 7);
+        let before = std::fs::read_to_string(&path).unwrap();
+
+        let plan = || {
+            plan_facet_edits(
+                RecordKind::Decision,
+                &[
+                    text("rationale", "a fresh reason"),
+                    list("consequences", &["c", "d"]),
+                ],
+            )
+            .unwrap()
+        };
+        assert!(apply_facet_edits(&path, "DEC-007", &plan()).unwrap());
+        let after = std::fs::read_to_string(&path).unwrap();
+
+        let (head_before, facet_before, tail_before) = three_regions(&before);
+        let (head_after, facet_after, tail_after) = three_regions(&after);
+
+        // (a) everything above `[facet]`.
+        assert_eq!(
+            head_before, head_after,
+            "the meta tier above [facet] must be byte-identical"
+        );
+        // (b) `[evidence]`, `[relationships]`, the comment, `[[relation]]`.
+        assert_eq!(
+            tail_before, tail_after,
+            "everything from [evidence] on must be byte-identical"
+        );
+        // The test would be vacuous if nothing had moved.
+        assert_ne!(
+            facet_before, facet_after,
+            "the [facet] region really was written"
+        );
+
+        // (c) inside `[facet]`, line by line and in place.
+        let lines_before: Vec<&str> = facet_before.lines().collect();
+        let lines_after: Vec<&str> = facet_after.lines().collect();
+        assert_eq!(
+            lines_before.len(),
+            lines_after.len(),
+            "no line is added to or removed from [facet]:\n{facet_after}"
+        );
+        for (line_before, line_after) in lines_before.iter().zip(&lines_after) {
+            let key = line_before.split('=').next().unwrap_or_default().trim();
+            match EDITED.iter().find(|(edited, _)| *edited == key) {
+                Some((_, want)) => {
+                    let got = line_after
+                        .split_once('=')
+                        .expect("an edited line is a key/value pair")
+                        .1
+                        .trim();
+                    assert_eq!(got, *want, "`{key}` should hold the new value");
+                }
+                None => assert_eq!(
+                    line_before, line_after,
+                    "`{key}` was not edited and must be byte-identical"
+                ),
+            }
+        }
+        // Named explicitly, because it is the whole point of the fixture change:
+        // a key no `facet_fields` row and no `RawFacet` field knows about.
+        assert!(
+            after.contains("notes        = \"keep me\""),
+            "the unknown [facet] sibling survives verbatim:\n{after}"
+        );
+
+        // Idempotence: the same edits again write nothing at all.
+        assert!(
+            !apply_facet_edits(&path, "DEC-007", &plan()).unwrap(),
+            "a second identical application is a no-op"
+        );
+        assert_eq!(
+            after,
+            std::fs::read_to_string(&path).unwrap(),
+            "a no-op leaves the file byte-identical"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-4 / EX-8 — the subverb surface, with `facet_fields` as its ORACLE
+    // (SL-249 PHASE-04 T6)
+    //
+    // The args are hand-declared, as the rest of this CLI is (D3); the table is
+    // their oracle, not their source. `find_subcommand` IS the subverb-name pin
+    // — it fails for free when a subverb is missing or misnamed.
+    // -----------------------------------------------------------------------
+
+    /// A facet field's flag spelling — `_` → `-`. One derivation, shared by the
+    /// oracle here and the round-trip generator below (STD-001).
+    fn kebab(name: &str) -> String {
+        name.replace('_', "-")
+    }
+
+    /// One knowledge verb's built subcommand, with clap's generated args in
+    /// place.
+    ///
+    /// Only the `knowledge` subtree is built, never the whole `Cli`:
+    /// `Command::build` recurses every sibling, and `config set`'s
+    /// `required` + `required_unless_present` positional trips clap's debug
+    /// assert on the way past (ISS-330). Drop the narrowing once that is fixed.
+    fn built_knowledge_verb(verb: &str) -> clap::Command {
+        use clap::CommandFactory;
+        let mut knowledge = <crate::Cli as CommandFactory>::command()
+            .find_subcommand("knowledge")
+            .expect("`knowledge` is a top-level command")
+            .clone();
+        knowledge.build();
+        knowledge
+            .find_subcommand(verb)
+            .unwrap_or_else(|| panic!("`{verb}` is a knowledge verb"))
+            .clone()
+    }
+
+    #[test]
+    fn every_subverbs_flags_are_exactly_its_kinds_facet_row() {
+        let edit = built_knowledge_verb("edit");
+        for kind in RecordKind::ALL {
+            let sub = edit
+                .find_subcommand(kind.as_str())
+                .unwrap_or_else(|| panic!("`knowledge edit {}` is a subverb", kind.as_str()));
+            let longs: BTreeSet<&str> = sub
+                .get_arguments()
+                .filter_map(clap::Arg::get_long)
+                .collect();
+            // Excluded below — asserted present FIRST, so a rename can never
+            // turn the filter vacuous and pass an empty comparison.
+            for common in ["help", "path"] {
+                assert!(
+                    longs.contains(common),
+                    "`knowledge edit {}` declares --{common}: {longs:?}",
+                    kind.as_str()
+                );
+            }
+            let declared: BTreeSet<String> = longs
+                .iter()
+                .filter(|long| !matches!(**long, "help" | "path"))
+                .map(|long| (*long).to_string())
+                .collect();
+            let expected: BTreeSet<String> = facet_fields(kind)
+                .iter()
+                .map(|row| kebab(row.name))
+                .collect();
+            assert_eq!(
+                declared,
+                expected,
+                "`knowledge edit {}`'s flags must equal its facet row",
+                kind.as_str()
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-1 / EX-1 — the generated round-trip, driven from ARGV (SL-249 T7)
+    //
+    // GENERATED over `facet_fields`: no field list is written here, so a new
+    // row joins the coverage without a test edit. Driven through
+    // `Cli::try_parse_from` rather than a hand-built args struct (D5) — that is
+    // what lets it see the one thing VT-4 structurally cannot: a flag that is
+    // DECLARED but never MAPPED to a `RawEdit`, which satisfies the name oracle
+    // and silently writes nothing. R2 names this the phase's likeliest defect.
+    // -----------------------------------------------------------------------
+
+    /// A shipped-template record on disk — the real scaffold, not a hand-built
+    /// fixture, so the F-1 `RequirePresent` posture meets the seeded keys it was
+    /// designed against (A2).
+    fn seed_from_template(root: &Path, kind: RecordKind, id: u32) {
+        let seeded = render_record_toml_seed(kind, id, "slug", "title", "2026-01-01")
+            .expect("the shipped template renders");
+        seed_record(root, kind, id, &seeded);
+    }
+
+    /// The argv value for a row, and the `[facet]` line the read model must
+    /// render back for it. Both derive from the row's own shape — a `Closed`
+    /// row's token is its own `KNOWN`'s first, never a retyped literal
+    /// (STD-001).
+    fn round_trip_case(row: &FacetFieldRow) -> (String, String) {
+        match row.shape {
+            FieldShape::List => (
+                "a,b".to_string(),
+                list_line(row.name, &["a".to_string(), "b".to_string()]),
+            ),
+            FieldShape::Closed(known) => {
+                let token = *known.first().expect("a closed row knows a token");
+                (token.to_string(), opt_text_line(row.name, Some(token)))
+            }
+            FieldShape::Text => {
+                let value = format!("v-{}", row.name);
+                let line = opt_text_line(row.name, Some(&value));
+                (value, line)
+            }
+        }
+    }
+
+    /// Parse an argv line to its facet subverb and run it, exactly as `dispatch`
+    /// does — the seam under test is `raw_edits()`, so the test must reach it
+    /// the way production does.
+    fn drive_subverb(argv: &[&str]) -> anyhow::Result<String> {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from(argv)
+            .unwrap_or_else(|err| panic!("{argv:?} should parse: {err}"));
+        let crate::commands::cli::Command::Knowledge { command } = cli.command else {
+            panic!("{argv:?} is a knowledge command");
+        };
+        let KnowledgeCommand::Edit {
+            facet: Some(sub), ..
+        } = command
+        else {
+            panic!("{argv:?} dispatches to a facet subverb, not the kind-blind verb");
+        };
+        let (kind, target, raws) = sub.raw_edits();
+        let mut out = Vec::new();
+        run_facet_edit(target.path.clone(), kind, &target.id, &raws, &mut out)?;
+        Ok(String::from_utf8(out).expect("the post-state print is utf8"))
+    }
+
+    #[test]
+    fn every_facet_field_round_trips_from_argv_through_its_subverb() {
+        for kind in RecordKind::ALL {
+            for row in facet_fields(kind) {
+                let root = edit_root(&format!("vt1-{}-{}", kind.as_str(), row.name));
+                seed_from_template(&root, kind, 3);
+                let canonical = kind.canonical_id(3);
+                let (value, expected_line) = round_trip_case(row);
+                let flag = format!("--{}", kebab(row.name));
+                let root_arg = root.to_str().expect("a utf8 scratch root");
+
+                let printed = drive_subverb(&[
+                    "doctrine",
+                    "knowledge",
+                    "edit",
+                    kind.as_str(),
+                    &canonical,
+                    "-p",
+                    root_arg,
+                    &flag,
+                    &value,
+                ])
+                .unwrap_or_else(|err| panic!("`{} {flag}` should write: {err}", kind.as_str()));
+
+                // `read_record` runs `validate_facet` — the oracle for "written,
+                // read back" (EX-1). `render_facet` then re-emits the TYPED
+                // facet, so the assertion is on the read model's own view of the
+                // value and not on the bytes we just wrote.
+                let record = read_record(&root, kind, 3).unwrap_or_else(|err| {
+                    panic!("`{} {flag}` should read back: {err}", kind.as_str())
+                });
+                let rendered = render_facet(&record.facet);
+                assert!(
+                    rendered.contains(&expected_line),
+                    "`knowledge edit {} {flag}` should leave `{}`:\n{rendered}",
+                    kind.as_str(),
+                    expected_line.trim_end()
+                );
+                assert!(
+                    printed.contains(&canonical) && printed.contains(row.name),
+                    "the post-state print names the record and the field: {printed}"
+                );
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-5 / EX-2 / EX-3 / EX-7 — the refusal catalogue (SL-249 PHASE-04 T8)
+    //
+    // Every case asserts the record's BYTES, both tiers, rather than only
+    // reading the error text back: EX-7 is "the record is left untouched", and
+    // only the bytes can say that. The message assertions pin the remedy the
+    // refusal owes its caller; the bytes are the criterion.
+    // -----------------------------------------------------------------------
+
+    /// Both authored tiers of one record, verbatim. Read as text rather than
+    /// as `Vec<u8>`: `String` equality *is* byte equality, and it is the form a
+    /// failure can be read in.
+    fn record_tiers(root: &Path, kind: RecordKind, id: u32) -> (String, String) {
+        (
+            std::fs::read_to_string(record_toml_path(root, kind, id)).expect("the toml tier"),
+            std::fs::read_to_string(record_dir(root, kind, id).join(format!("record-{id:03}.md")))
+                .expect("the prose tier"),
+        )
+    }
+
+    /// Seed one record from the shipped template, drive `knowledge edit <tail>`
+    /// against it, and assert it was refused with BOTH tiers byte-identical.
+    /// Returns the refusal message so a case can additionally pin its remedy.
+    fn refused_leaving_bytes_intact(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        tail: &[&str],
+    ) -> String {
+        let root = edit_root(scratch);
+        seed_from_template(&root, kind, id);
+        let before = record_tiers(&root, kind, id);
+
+        let mut argv = vec!["doctrine", "knowledge", "edit"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_subverb(&argv).expect_err("this invocation must be refused");
+
+        assert_eq!(
+            before,
+            record_tiers(&root, kind, id),
+            "{tail:?}: a refusal writes nothing to either tier"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+        err.to_string()
+    }
+
+    /// (a) EX-3 — the subverb names one kind, the id carries another. The
+    /// refusal names the subverb that would have worked.
+    #[test]
+    fn vt5_kind_mismatch_is_refused_naming_the_right_subverb() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-a",
+            RecordKind::Decision,
+            7,
+            &["assumption", "DEC-007", "--claim", "x"],
+        );
+        assert!(msg.contains("DEC-007"), "names the record: {msg}");
+        assert!(
+            msg.contains("knowledge edit decision"),
+            "names the subverb that would have worked: {msg}"
+        );
+    }
+
+    /// (b) EX-2 / D10 — a concept carries no facet fields, so the subverb
+    /// exists only to refuse, naming the kind-blind verb with the caller's id.
+    #[test]
+    fn vt5_concept_is_refused_naming_the_kind_blind_verb() {
+        let msg =
+            refused_leaving_bytes_intact("vt5-b", RecordKind::Concept, 3, &["concept", "CPT-003"]);
+        assert!(msg.contains("carry no facet fields"), "says why: {msg}");
+        assert!(
+            msg.contains("knowledge edit CPT-003"),
+            "names the kind-blind verb with the caller's own id: {msg}"
+        );
+    }
+
+    /// (c) No field flag is not an edit — the kind-dispatched mirror of
+    /// `run_edit`'s at-least-one-flag guard.
+    #[test]
+    fn vt5_no_field_flag_is_refused() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-c",
+            RecordKind::Decision,
+            7,
+            &["decision", "DEC-007"],
+        );
+        assert!(
+            msg.contains("requires at least one field flag"),
+            "mirrors `run_edit`'s guard: {msg}"
+        );
+    }
+
+    /// (d) An unknown `Closed` token is refused by `plan_facet_edits`, before
+    /// the document is opened at all. The known set comes from the row's own
+    /// `KNOWN` slice, so this test retypes no token (STD-001).
+    #[test]
+    fn vt5_unknown_closed_token_is_refused_before_the_document_opens() {
+        let msg = refused_leaving_bytes_intact(
+            "vt5-d",
+            RecordKind::Assumption,
+            3,
+            &["assumption", "ASM-003", "--confidence", "banana"],
+        );
+        assert!(msg.contains("ASM-003"), "names the record: {msg}");
+        assert!(msg.contains("banana"), "names the rejected token: {msg}");
+        for token in Confidence::KNOWN {
+            assert!(msg.contains(token), "lists the known token {token}: {msg}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // EN-2 — the extracted status-vocabulary guard (SL-249 PHASE-05 T1)
+    //
+    // T1 is a pure refactor and so cannot stage a BEHAVIOURAL red. Two
+    // compensating controls stand in its place, and both are named here:
+    //
+    // - C1 is the test below. It was written BEFORE `ensure_status_token`
+    //   existed, so its first run was a compile failure (E0425) — the same red
+    //   PHASE-04's T1 used. A test written after the item it names compiles and
+    //   passes on sight and proves nothing.
+    // - C2 is `tests/e2e_knowledge_cli_golden.rs::
+    //   knowledge_status_refuses_a_foreign_kind_state`, which already existed
+    //   and pins the refusal SENTENCE byte-for-byte through argv. It is left
+    //   UNEDITED: it was green before the extraction and must be green after,
+    //   which is the whole claim a pure refactor makes.
+    // -----------------------------------------------------------------------
+
+    /// C1 — the guard refuses a token from another kind's vocabulary, and the
+    /// refusal names the kind and lists its own vocabulary. The known set is
+    /// read from `statuses`, never retyped (STD-001).
+    #[test]
+    fn ensure_status_token_refuses_a_foreign_kind_state() {
+        ensure_status_token(RecordKind::Assumption, "held")
+            .expect("`held` is an assumption status");
+
+        let err = ensure_status_token(RecordKind::Assumption, "accepted")
+            .expect_err("`accepted` is a decision status, not an assumption's");
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "`accepted` is not a assumption status (known: {})",
+                statuses(RecordKind::Assumption).join(", ")
+            )
+        );
+    }
+
+    /// The guard is total over the vocabulary it is given: every token of every
+    /// kind passes for its own kind. Generated, so a new status token joins the
+    /// coverage without a test edit.
+    #[test]
+    fn ensure_status_token_admits_every_token_of_its_own_kind() {
+        for kind in RecordKind::ALL {
+            for state in statuses(kind) {
+                ensure_status_token(kind, state).unwrap_or_else(|err| {
+                    panic!("{}/{state} is its own token: {err}", kind.as_str())
+                });
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // EX-2 / EX-3 / VT-2 — the settleable derivation and its pins
+    // (SL-249 PHASE-05 T2)
+    //
+    // The annotation may add DETAIL to the derived set; it may not EXTEND it.
+    // P-b is what says so, and it is an equality in both directions.
+    // -----------------------------------------------------------------------
+
+    /// P-a — every captured field name is a real field of its own kind's row.
+    /// An annotation naming `reason` on a constraint (`DEC-178`'s illustrative
+    /// spelling, refined to `waiver_reason` by §5.2) fails here.
+    #[test]
+    fn every_settlement_captures_a_field_its_kind_owns() {
+        for kind in RecordKind::ALL {
+            let owned: BTreeSet<&str> = facet_fields(kind).iter().map(|row| row.name).collect();
+            for settlement in settlements(kind) {
+                if let Some(field) = settlement.captures {
+                    assert!(
+                        owned.contains(field),
+                        "{}/{}: `{field}` is not a field of that kind's row",
+                        kind.as_str(),
+                        settlement.state
+                    );
+                }
+            }
+        }
+    }
+
+    /// P-b — the annotation's state set EQUALS the derived set, per kind. An
+    /// equality, both directions: a fifth authored row that the derivation does
+    /// not yield fails, and a derived state the annotation forgot fails too.
+    #[test]
+    fn the_annotations_states_equal_the_derived_settleable_set() {
+        for kind in RecordKind::ALL {
+            let annotated: BTreeSet<&str> = settlements(kind).iter().map(|s| s.state).collect();
+            let derived: BTreeSet<&str> = derived_settleable(kind).into_iter().collect();
+            assert_eq!(
+                annotated,
+                derived,
+                "{}: the annotation may add detail to the derived set, never extend it",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// P-c — the positive control. The union over all seven kinds is exactly
+    /// `DEC-178`'s ruling table, and the two decision exclusions are asserted by
+    /// name because each is excluded by a DIFFERENT leg of the intersection:
+    ///
+    /// - `accepted` by the FACET leg — DEC carries no `accepted_by`/`accepted_on`
+    ///   (I5, EX-3, DEC-088);
+    /// - `decided` by the STATUS leg — DEC *does* carry `decided_by`/`decided_on`,
+    ///   but `decided` is not in `DECISION_STATUSES`.
+    ///
+    /// The second assertion is what makes this a control rather than a
+    /// restatement: it fails against a derivation that scans facet field names
+    /// and passes against one seeded from the status vocabulary (D-A).
+    #[test]
+    fn the_derived_settleable_union_is_exactly_the_ruling_table() {
+        let union: BTreeSet<(&str, &str)> = RecordKind::ALL
+            .into_iter()
+            .flat_map(|kind| {
+                derived_settleable(kind)
+                    .into_iter()
+                    .map(move |state| (kind.as_str(), state))
+            })
+            .collect();
+        assert_eq!(
+            union,
+            BTreeSet::from([
+                ("assumption", "invalidated"),
+                ("assumption", "validated"),
+                ("constraint", "waived"),
+                ("question", "answered"),
+            ]),
+            "DEC-178's correspondence table, derived rather than listed"
+        );
+
+        let decisions = derived_settleable(RecordKind::Decision);
+        assert!(
+            !decisions.contains(&ACCEPTED_STATUS),
+            "I5/EX-3: `accepted` is excluded by the FACET leg — a decision carries \
+             no `accepted_by`/`accepted_on` — never by a named guard (DEC-088)"
+        );
+        assert!(
+            !decisions.contains(&"decided"),
+            "D-A: `decided` is excluded by the STATUS leg — a decision DOES carry \
+             `decided_by`/`decided_on`, but `decided` is not in DECISION_STATUSES. \
+             A facet-name-scanning derivation would yield it"
+        );
+    }
+
+    /// P-d — the three kinds with no actor/date pair derive nothing. `EVD` and
+    /// `HYP` carry a facet but no by/on pair (`DEC-174`); `CPT` carries no facet
+    /// at all (`DEC-172`), and the empty row is a case rather than an exception.
+    #[test]
+    fn kinds_without_an_actor_date_pair_derive_nothing() {
+        for kind in [
+            RecordKind::Evidence,
+            RecordKind::Hypothesis,
+            RecordKind::Concept,
+        ] {
+            assert!(
+                derived_settleable(kind).is_empty(),
+                "{}: no `<state>_by`/`<state>_on` pair, so nothing is settleable",
+                kind.as_str()
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-1 / EX-1 / EX-7 — `apply_settlement` writes ONCE (SL-249 PHASE-05 T3)
+    //
+    // The positive case is necessary and not sufficient. VT-1b and VT-1c are
+    // what actually prove "one write": each damages one leg's precondition and
+    // asserts the OTHER leg left no trace. A two-wrapper implementation passes
+    // VT-1a and fails both.
+    // -----------------------------------------------------------------------
+
+    /// The unknown sibling every facet fixture carries — a key no
+    /// `facet_fields` row names and `RawFacet` does not deserialize, so it is
+    /// exactly the forward-compatibility case `I11` protects.
+    const UNKNOWN_FACET_SIBLING: &str = "notes";
+
+    /// The TOML literal a fixture gives a row, derived from the row's own shape
+    /// — a `Closed` row takes its own `KNOWN`'s first token, never a retyped
+    /// literal (STD-001).
+    fn fixture_literal(row: &FacetFieldRow) -> String {
+        match row.shape {
+            FieldShape::List => "[\"a\", \"b\"]".to_string(),
+            FieldShape::Closed(known) => {
+                format!("\"{}\"", known.first().expect("a closed row knows a token"))
+            }
+            FieldShape::Text => format!("\"v-{}\"", row.name),
+        }
+    }
+
+    /// A facet-BEARING fixture for ANY kind, generated from that kind's own row
+    /// — ONE parameterised builder rather than a near-copy per kind
+    /// (`R-fixtures`; the hand-written `facet_bearing_decision` above predates
+    /// it and stays as PHASE-08's own fixture).
+    ///
+    /// It carries every tier a byte assertion needs to mean something: a
+    /// hand-written comment on the `[facet]` header, an unknown sibling inside
+    /// it, populated `[evidence]` and `[relationships]` tables, a free comment,
+    /// and a trailing `[[relation]]` row.
+    fn facet_bearing_record(kind: RecordKind, id: u32, status: &str) -> String {
+        let width = facet_fields(kind)
+            .iter()
+            .map(|row| row.name.len())
+            .chain(std::iter::once(UNKNOWN_FACET_SIBLING.len()))
+            .max()
+            .unwrap_or(0);
+        let mut facet = String::new();
+        for row in facet_fields(kind) {
+            facet.push_str(&format!(
+                "{:<width$} = {}\n",
+                row.name,
+                fixture_literal(row)
+            ));
+        }
+        facet.push_str(&format!("{UNKNOWN_FACET_SIBLING:<width$} = \"keep me\"\n"));
+
+        format!(
+            "\
+schema = \"{SCHEMA_KNOWLEDGE}\"
+version = 1
+
+id = {id}
+slug = \"test\"
+title = \"Original title\"
+record_kind = \"{}\"
+status = \"{status}\"
+created = \"2026-01-01\"
+updated = \"2026-01-01\"
+tags = [\"seed\"]
+
+[facet]                         # a hand-written comment on the facet header
+{facet}
+[evidence]
+supports    = [\"SL-249\"]
+contradicts = []
+notes       = [\"a note\"]
+
+[relationships]
+supersedes    = []
+superseded_by = []
+
+# a hand-written comment no verb may eat
+[[relation]]
+label = \"shapes\"
+target = \"SL-249\"
+",
+            kind.as_str()
+        )
+    }
+
+    /// Seed one generated fixture and hand back its root and TOML path.
+    fn settle_fixture(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        status: &str,
+    ) -> (PathBuf, PathBuf) {
+        let root = edit_root(scratch);
+        seed_record(&root, kind, id, &facet_bearing_record(kind, id, status));
+        let path = record_toml_path(&root, kind, id);
+        (root, path)
+    }
+
+    /// The three raws a QUE settlement plans — the capture, the actor, the date.
+    fn answered_edits(who: &str, answer: &str, today: &str) -> Vec<FacetEdit> {
+        plan_facet_edits(
+            RecordKind::Question,
+            &[
+                text("answer", answer),
+                text("answered_by", who),
+                text("answered_on", today),
+            ],
+        )
+        .expect("the question row owns all three")
+    }
+
+    /// VT-1a — the positive case: the capture, the actor, the date, the status
+    /// and the `updated` stamp all move, and the untouched tiers survive.
+    #[test]
+    fn vt1a_a_settlement_moves_the_capture_the_actor_the_date_and_the_status() {
+        let (root, path) = settle_fixture("vt1a", RecordKind::Question, 5, "open");
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "because the table says so", &today);
+
+        let changed = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect("a well-formed record settles");
+        assert!(changed, "a settlement of an open question changes the file");
+
+        let record = read_record(&root, RecordKind::Question, 5).expect("it reads back");
+        let rendered = render_facet(&record.facet);
+        for expected in [
+            opt_text_line("answer", Some("because the table says so")),
+            opt_text_line("answered_by", Some("david")),
+            opt_text_line("answered_on", Some(&today)),
+        ] {
+            assert!(
+                rendered.contains(&expected),
+                "expected `{}`:\n{rendered}",
+                expected.trim_end()
+            );
+        }
+        assert_eq!(record.status, "answered", "the status moved");
+        assert_eq!(record.updated, today, "the same day the capture carries");
+
+        // The tiers the write must not eat.
+        let bytes = std::fs::read_to_string(&path).expect("the toml tier");
+        for survivor in [
+            "# a hand-written comment on the facet header",
+            "# a hand-written comment no verb may eat",
+            "keep me",
+            "[[relation]]",
+        ] {
+            assert!(bytes.contains(survivor), "`{survivor}` survived:\n{bytes}");
+        }
+    }
+
+    /// VT-1b — THE ORACLE. The top-level `status` key is deleted, so the status
+    /// leg takes `apply_status`'s F-1 bail. The facet leg would have succeeded,
+    /// and a two-write implementation would already have landed it. Assert the
+    /// file is byte-identical, facet included: that is "no intermediate state a
+    /// reader could observe", made observable.
+    #[test]
+    fn vt1b_a_failing_status_leg_leaves_the_facet_leg_unwritten() {
+        let (root, path) = settle_fixture("vt1b", RecordKind::Question, 5, "open");
+        let damaged = std::fs::read_to_string(&path)
+            .expect("the seeded toml")
+            .replace("status = \"open\"\n", "");
+        std::fs::write(&path, &damaged).expect("the damaged seed writes");
+
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "an answer that must not land", &today);
+        let err = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect_err("a record with no `status` key is malformed");
+        assert!(
+            err.to_string().contains("malformed record QUE-005"),
+            "the F-1 hint names the record: {err}"
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("the toml tier"),
+            damaged,
+            "the facet leg must not have landed ahead of the status leg's refusal"
+        );
+        let _ = root;
+    }
+
+    /// VT-1c — the mirror. The captured facet key is deleted, so the facet leg
+    /// takes `RequirePresent`'s F-1 refusal. Assert `status` and `updated` did
+    /// not move and the file is byte-identical.
+    #[test]
+    fn vt1c_a_failing_facet_leg_leaves_the_status_unmoved() {
+        let (root, path) = settle_fixture("vt1c", RecordKind::Question, 5, "open");
+        let damaged = std::fs::read_to_string(&path)
+            .expect("the seeded toml")
+            .replace("answer      = \"v-answer\"\n", "");
+        assert!(
+            !damaged.contains("\nanswer  "),
+            "the fixture's `answer` key was removed:\n{damaged}"
+        );
+        std::fs::write(&path, &damaged).expect("the damaged seed writes");
+
+        let today = crate::clock::today();
+        let edits = answered_edits("david", "an answer with nowhere to go", &today);
+        let err = apply_settlement(
+            &path,
+            "QUE-005",
+            &edits,
+            &[("status", "answered"), ("updated", &today)],
+            &malformed_status_hint("QUE-005"),
+        )
+        .expect_err("a record missing a managed facet key is malformed");
+        assert!(
+            err.to_string().contains("`answer`"),
+            "the F-1 refusal names the missing key: {err}"
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("the toml tier"),
+            damaged,
+            "the status leg must not have landed after the facet leg's refusal"
+        );
+        let record = read_record(&root, RecordKind::Question, 5).expect("it still reads");
+        assert_eq!(record.status, "open", "the status did not move");
+        assert_eq!(record.updated, "2026-01-01", "nor did the stamp");
+    }
+
+    // -----------------------------------------------------------------------
+    // `knowledge settle` from ARGV (SL-249 PHASE-05 T4)
+    //
+    // Driven through `Cli::try_parse_from` and `SettleArgs::captures()` — the
+    // same seam `dispatch` reaches — so a capture flag DECLARED but never
+    // MAPPED is visible here, which is the drift `raw_edits` warns about one
+    // tier down.
+    // -----------------------------------------------------------------------
+
+    /// Parse an argv line to the settle variant and run it exactly as
+    /// `dispatch` does. Colour off: the assertions are on the text.
+    fn drive_settle(argv: &[&str]) -> anyhow::Result<String> {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from(argv)
+            .unwrap_or_else(|err| panic!("{argv:?} should parse: {err}"));
+        let crate::commands::cli::Command::Knowledge { command } = cli.command else {
+            panic!("{argv:?} is a knowledge command");
+        };
+        let KnowledgeCommand::Settle(args) = command else {
+            panic!("{argv:?} dispatches to `settle`");
+        };
+        let mut out = Vec::new();
+        run_settle(
+            args.path.clone(),
+            &args.id,
+            &args.state,
+            &args.by,
+            &args.captures(),
+            false,
+            &mut out,
+        )?;
+        Ok(String::from_utf8(out).expect("the post-state print is utf8"))
+    }
+
+    /// EX-1 end to end: one argv line moves the capture, the actor, the date
+    /// and the status — and the date is `clock::today()`, never a literal
+    /// (`clock::today` has no test override, carried constraint 6).
+    #[test]
+    fn a_question_settles_from_argv_in_one_line() {
+        let (root, _) = settle_fixture("t4-que", RecordKind::Question, 5, "open");
+        let root_arg = root.to_str().expect("a utf8 scratch root");
+
+        let printed = drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "QUE-005",
+            "answered",
+            "--by",
+            "david",
+            "--answer",
+            "the table says so",
+            "-p",
+            root_arg,
+        ])
+        .expect("a well-formed settle");
+
+        let record = read_record(&root, RecordKind::Question, 5).expect("it reads back");
+        let today = crate::clock::today();
+        assert_eq!(record.status, "answered");
+        assert_eq!(record.updated, today);
+        let rendered = render_facet(&record.facet);
+        for expected in [
+            opt_text_line("answer", Some("the table says so")),
+            opt_text_line("answered_by", Some("david")),
+            opt_text_line("answered_on", Some(&today)),
+        ] {
+            assert!(
+                rendered.contains(&expected),
+                "expected `{}`:\n{rendered}",
+                expected.trim_end()
+            );
+        }
+        assert!(printed.contains("QUE-005"), "names the record: {printed}");
+        assert!(printed.contains("answered"), "names the state: {printed}");
+        for field in ["answer", "answered_by", "answered_on"] {
+            assert!(printed.contains(field), "names {field}: {printed}");
+        }
+    }
+
+    /// A constraint waives with `--waiver-reason`, and an assumption validates
+    /// with no capture flag at all — the two shapes the QUE case cannot show.
+    #[test]
+    fn the_other_settleable_kinds_settle_from_argv() {
+        let (con_root, _) = settle_fixture("t4-con", RecordKind::Constraint, 12, "active");
+        drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "CON-012",
+            "waived",
+            "--by",
+            "david",
+            "--waiver-reason",
+            "superseded by the derivation",
+            "-p",
+            con_root.to_str().expect("a utf8 scratch root"),
+        ])
+        .expect("a well-formed waiver");
+        let con = read_record(&con_root, RecordKind::Constraint, 12).expect("it reads back");
+        assert_eq!(con.status, "waived");
+        let rendered = render_facet(&con.facet);
+        assert!(
+            rendered.contains(&opt_text_line(
+                "waiver_reason",
+                Some("superseded by the derivation")
+            )),
+            "the waiver reason landed:\n{rendered}"
+        );
+
+        let (asm_root, _) = settle_fixture("t4-asm", RecordKind::Assumption, 3, "held");
+        drive_settle(&[
+            "doctrine",
+            "knowledge",
+            "settle",
+            "ASM-003",
+            "validated",
+            "--by",
+            "david",
+            "-p",
+            asm_root.to_str().expect("a utf8 scratch root"),
+        ])
+        .expect("an assumption captures no text, so `--by` alone suffices");
+        let asm = read_record(&asm_root, RecordKind::Assumption, 3).expect("it reads back");
+        assert_eq!(asm.status, "validated");
+        let rendered = render_facet(&asm.facet);
+        assert!(
+            rendered.contains(&opt_text_line("validated_by", Some("david"))),
+            "the actor landed:\n{rendered}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // VT-3 / EX-4 / EX-5 / EX-6 / I7 — the refusal catalogue
+    // (SL-249 PHASE-05 T5)
+    //
+    // The plan's VT-3 names five cases; there are SIX. EX-4's blank capture is
+    // distinct from its omitted sibling and is the one a naive implementation
+    // lets through: `plan_facet_edits` reads `Text("")` as a legitimate CLEAR
+    // (D6), so a blank settlement writes green unless `run_settle` stops it.
+    //
+    // Two observables per case, and they answer different questions:
+    //
+    // - the record's BYTES, both tiers, say the refusal wrote nothing;
+    // - the same invocation against an id naming NO record on disk says the
+    //   refusal ran BEFORE the open (EX-5). Bytes cannot distinguish "refused
+    //   early" from "refused late without writing"; this can.
+    // -----------------------------------------------------------------------
+
+    /// Seed one generated fixture, drive `knowledge settle <tail>` against it,
+    /// and assert it was refused with BOTH tiers byte-identical. Returns the
+    /// refusal message so a case can additionally pin its remedy.
+    fn settle_refused_leaving_bytes_intact(
+        scratch: &str,
+        kind: RecordKind,
+        id: u32,
+        status: &str,
+        tail: &[&str],
+    ) -> String {
+        let (root, _) = settle_fixture(scratch, kind, id, status);
+        let before = record_tiers(&root, kind, id);
+
+        let mut argv = vec!["doctrine", "knowledge", "settle"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_settle(&argv).expect_err("this invocation must be refused");
+
+        assert_eq!(
+            before,
+            record_tiers(&root, kind, id),
+            "{tail:?}: a refusal writes nothing to either tier"
+        );
+        err.to_string()
+    }
+
+    /// EX-5's observable. The same invocation against an EMPTY root, so the id
+    /// names no record on disk. A check that ran after the open would report
+    /// not-found; one that ran before it repeats its own refusal.
+    fn settle_refused_before_any_open(scratch: &str, tail: &[&str]) -> String {
+        let root = edit_root(scratch);
+        let mut argv = vec!["doctrine", "knowledge", "settle"];
+        argv.extend_from_slice(tail);
+        argv.push("-p");
+        argv.push(root.to_str().expect("a utf8 scratch root"));
+        let err = drive_settle(&argv).expect_err("this invocation must be refused");
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("not found") && !msg.contains("no record"),
+            "{tail:?}: refused before the document was opened, so this is not a \
+             not-found error: {msg}"
+        );
+        msg
+    }
+
+    /// (1) EX-4 — the capture flag omitted. The whole point of the verb: the
+    /// disposition is part of resolving, not a field one may forget.
+    #[test]
+    fn vt3_1_an_omitted_capture_flag_is_refused() {
+        let tail = &["QUE-005", "answered", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-1", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-1-unseeded", tail),
+        ] {
+            assert!(msg.contains("requires `--answer`"), "names the flag: {msg}");
+            assert!(
+                !msg.contains("blank"),
+                "and is the OMITTED refusal, not its blank sibling — the two cases \
+                 are distinct and a shared message would hide (2): {msg}"
+            );
+        }
+    }
+
+    /// (2) EX-4 — the capture flag present but BLANK. Distinct from (1) and the
+    /// case a naive implementation lets through: `plan_facet_edits` would treat
+    /// `Text("")` as a clear and write green.
+    #[test]
+    fn vt3_2_a_blank_capture_flag_is_refused() {
+        let tail = &["QUE-005", "answered", "--by", "david", "--answer", "   "];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-2", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-2-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("`--answer` must not be blank"),
+                "names the flag and why: {msg}"
+            );
+        }
+    }
+
+    /// (2b) EX-4 again, for the kind that has no capture at all. An assumption
+    /// settles on `--by` ALONE, so a blank `--by` is the whole of its evidence
+    /// gone — the same defect (1) and (2) name, at the only kind where the
+    /// capture check cannot see it.
+    #[test]
+    fn vt3_2b_a_blank_actor_is_refused() {
+        let tail = &["ASM-003", "validated", "--by", "  "];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-2b", RecordKind::Assumption, 3, "held", tail),
+            settle_refused_before_any_open("vt3-2b-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("`--by` must not be blank"),
+                "names the flag and why: {msg}"
+            );
+        }
+    }
+
+    /// (3) EX-5 — a foreign-kind state. `waived` is a constraint's; on a
+    /// question it is out of vocabulary, and it dies in the check
+    /// `set_record_status` shares (EN-2).
+    #[test]
+    fn vt3_3_a_foreign_kind_state_is_refused() {
+        let tail = &["QUE-005", "waived", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-3", RecordKind::Question, 5, "open", tail),
+            settle_refused_before_any_open("vt3-3-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("is not a question status"),
+                "the shared vocabulary refusal: {msg}"
+            );
+        }
+    }
+
+    /// (4) EX-3 / I5 — a state of the right kind that is not settleable.
+    /// `accepted` IS a decision status, so it passes the vocabulary check and
+    /// dies at the derived set. It must name the escape hatch.
+    #[test]
+    fn vt3_4_a_non_settleable_state_is_refused_and_names_the_escape_hatch() {
+        let tail = &["DEC-007", "accepted", "--by", "david"];
+        for msg in [
+            settle_refused_leaving_bytes_intact("vt3-4", RecordKind::Decision, 7, "proposed", tail),
+            settle_refused_before_any_open("vt3-4-unseeded", tail),
+        ] {
+            assert!(
+                msg.contains("is not a settle transition"),
+                "refused at the derived set: {msg}"
+            );
+            assert!(
+                msg.contains("knowledge status"),
+                "names the escape hatch: {msg}"
+            );
+        }
+    }
+
+    /// (5) EX-6 / D7 — a transition from a state to itself is not a transition.
+    /// The remedy is `knowledge edit`, which keeps `answered_on` meaning *when
+    /// it was answered* rather than when the command last ran.
+    #[test]
+    fn vt3_5_a_state_to_itself_transition_is_refused() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-5",
+            RecordKind::Question,
+            5,
+            "answered",
+            &["QUE-005", "answered", "--by", "david", "--answer", "again"],
+        );
+        assert!(msg.contains("already `answered`"), "says the state: {msg}");
+        assert!(
+            msg.contains("knowledge edit question"),
+            "names the amend verb (D7): {msg}"
+        );
+    }
+
+    /// (5b) D-D — the ORDER of the two EX-6 checks, on the record that is both
+    /// cases at once. `waived` is a settleable state AND a withdrawn one, so an
+    /// already-waived constraint re-waived falls in both arms. State-to-itself
+    /// goes first because its remedy is the more actionable of the two.
+    #[test]
+    fn vt3_5b_the_overlapping_case_gets_the_more_precise_remedy() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-5b",
+            RecordKind::Constraint,
+            12,
+            "waived",
+            &[
+                "CON-012",
+                "waived",
+                "--by",
+                "david",
+                "--waiver-reason",
+                "again",
+            ],
+        );
+        assert!(
+            msg.contains("already `waived`") && msg.contains("knowledge edit constraint"),
+            "the state-to-itself arm, not the vaguer withdrawn one: {msg}"
+        );
+    }
+
+    /// (6) EX-6 — a withdrawn record, refused by REUSING `is_withdrawn` rather
+    /// than a second list. The intended consequence, worth stating: an
+    /// already-`invalidated` assumption cannot be settled to `validated`;
+    /// `knowledge status` remains the correction path.
+    #[test]
+    fn vt3_6_a_withdrawn_record_is_refused() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-6",
+            RecordKind::Assumption,
+            3,
+            "invalidated",
+            &["ASM-003", "validated", "--by", "david"],
+        );
+        assert!(msg.contains("ASM-003"), "names the record: {msg}");
+        assert!(msg.contains("invalidated"), "names the status: {msg}");
+        assert!(
+            msg.contains("knowledge status"),
+            "names the correction path: {msg}"
+        );
+    }
+
+    /// The seventh refusal the sheet's `if` asks for: a capture flag that is
+    /// not THIS settlement's. `--answer` on a constraint's waiver names the
+    /// flag that would have worked.
+    #[test]
+    fn vt3_a_foreign_capture_flag_is_refused_naming_the_right_one() {
+        let msg = settle_refused_leaving_bytes_intact(
+            "vt3-cross",
+            RecordKind::Constraint,
+            12,
+            "active",
+            &["CON-012", "waived", "--by", "david", "--answer", "nope"],
+        );
+        assert!(msg.contains("--answer"), "names the wrong flag: {msg}");
+        assert!(
+            msg.contains("--waiver-reason"),
+            "names the right one: {msg}"
+        );
+    }
+
+    /// D3's oracle, one tier over: every `Settlement.captures` name has a
+    /// declared `--<kebab>` flag on the settle command, so a fifth settlement
+    /// cannot ship unreachable from argv.
+    #[test]
+    fn every_captured_field_has_a_declared_settle_flag() {
+        let settle = built_knowledge_verb("settle");
+        let longs: BTreeSet<&str> = settle
+            .get_arguments()
+            .filter_map(clap::Arg::get_long)
+            .collect();
+        assert!(longs.contains("by"), "`--by` is declared: {longs:?}");
+        for kind in RecordKind::ALL {
+            for settlement in settlements(kind) {
+                if let Some(field) = settlement.captures {
+                    assert!(
+                        longs.contains(kebab(field).as_str()),
+                        "{}/{} captures `{field}` but `--{}` is undeclared: {longs:?}",
+                        kind.as_str(),
+                        settlement.state,
+                        kebab(field)
+                    );
+                }
+            }
+        }
     }
 }

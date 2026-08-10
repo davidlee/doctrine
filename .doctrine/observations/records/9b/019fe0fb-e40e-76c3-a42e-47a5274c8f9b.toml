@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0fb-e40e-76c3-a42e-47a5274c8f9b"
+recorded_at = "2026-08-08T10:47:12.142961319Z"
+kind = "friction"
+summary = "/phase-plan: plan.toml phase entries carry no Reading list field, so a delegated planner told to read 'only the design.md sections its Reading list names' has no referent"
+detail = "The SL-249 PHASE-03 brief instructed the planner to read the phase's plan.toml entry and only the design.md sections its Reading list names. plan.toml's [[phase]] schema has objective / entrance_criteria / exit_criteria / verification / specs / requirements — no reading list. The planner had to reconstruct the section set by grepping the objective and criteria prose for section refs (5.1, 5.4 E, 5.5, 7, 9, 10) and then heading-mapping design.md. That worked but cost a full heading scan plus four speculative section reads. Either the plan should carry a per-phase reading field, or /phase-plan should say 'derive the section list from the entry's citations'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

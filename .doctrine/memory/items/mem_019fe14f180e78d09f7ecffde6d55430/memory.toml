@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe14f180e78d09f7ecffde6d55430"
+memory_key = "mem.fact.clap.introspect-subtree-and-box-wide-subcommand"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Introspecting clap: build the subtree, box the wide subcommand"
+summary = "Command::build() recurses siblings and fires their debug_asserts; a wide nested Subcommand enum trips clippy::large_enum_variant — Option<Box<T>> works."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["clap", "testing", "cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e11cd127a9c7ff64c93d0883fc2e2e652cf9727b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "bbc1a1e050ddbaa18e3759cbd8a5a3b9d213b513f17a79d733e5869d81b7e5aa"
+base_commit = "daa94b8642fe5bbedc8c6f0d4aa0dc27bf3c622a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

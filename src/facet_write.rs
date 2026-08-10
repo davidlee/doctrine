@@ -64,6 +64,15 @@ pub(crate) enum FacetField {
     },
 }
 
+impl FacetField {
+    /// The managed key this field writes, regardless of shape.
+    pub(crate) fn key(&self) -> &'static str {
+        match *self {
+            FacetField::Str { key, .. } | FacetField::Arr { key, .. } => key,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Pure core — set
 // ---------------------------------------------------------------------------
@@ -164,22 +173,58 @@ pub(crate) fn clear_facet(doc: &mut toml_edit::DocumentMut, table: &str) -> bool
 }
 
 // ---------------------------------------------------------------------------
+// KeyPosture — how a write treats a managed key that is not already there
+// ---------------------------------------------------------------------------
+
+/// How [`set_facet_mixed`] treats a managed key (or the whole table) that the
+/// document does not already carry.
+///
+/// The posture is a *parameter of the writer*, not a guard each caller repeats:
+/// a call-site check would have to be restated by every future caller, which is
+/// the parallel implementation `AGENTS.md` forbids (SL-249 D2).
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum KeyPosture<'a> {
+    /// Absent table or absent key is allocated. `doctrine risk set`'s posture.
+    Create,
+    /// Absent table or absent key is a *damage report*, not a normal path: the
+    /// keys are scaffold-seeded, so a missing one means a malformed record.
+    /// Refuse, naming `record`, and leave the document untouched (DEC-170 F-1).
+    RequirePresent { record: &'a str },
+}
+
+/// The single source of the F-1 refusal sentence (STD-001). The leaf cannot
+/// know the record's id, so the posture carries it in — the same shape
+/// `dep_seq::apply_status`'s `hint` uses.
+fn missing_key_refusal(record: &str, table: &str, key: &str) -> String {
+    format!(
+        "malformed record {record}: `[{table}]` is missing `{key}` — restore the key and retry; the file is left untouched"
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Pure core — set (mixed)
 // ---------------------------------------------------------------------------
 
 /// Mutate managed keys of a `[table]` facet where each field is either an
 /// `Str` (insert as a string value) or `Arr` (insert as an array of strings).
-/// Same shape rules as [`set_facet`]: absent allocates, non-table errors,
-/// identical values produce a no-op.
+/// Same shape rules as [`set_facet`]: a non-table errors and identical values
+/// produce a no-op. An *absent* table or key is governed by `posture`:
+/// [`KeyPosture::Create`] allocates, [`KeyPosture::RequirePresent`] refuses
+/// without mutating the document.
 pub(crate) fn set_facet_mixed(
     doc: &mut toml_edit::DocumentMut,
     table: &str,
     fields: &[FacetField],
+    posture: KeyPosture<'_>,
 ) -> anyhow::Result<bool> {
     let root = doc.as_table_mut();
 
     match root.get_mut(table) {
         None => {
+            if let KeyPosture::RequirePresent { record } = posture {
+                let first: &str = fields.first().map_or(table, |f| f.key());
+                anyhow::bail!(missing_key_refusal(record, table, first));
+            }
             // Allocate a fresh table.
             let mut t = toml_edit::Table::new();
             for field in fields {
@@ -209,6 +254,18 @@ pub(crate) fn set_facet_mixed(
                     format!("{table}: expected a standard table, found a scalar or array-of-tables")
                 }
             })?;
+
+            // F-1 (DEC-170): under RequirePresent, every managed key must
+            // already be there. Check them ALL before inserting ANY — the shape
+            // `dep_seq::apply_status` uses — so a refusal never half-writes.
+            if let KeyPosture::RequirePresent { record } = posture
+                && let Some(missing) = fields
+                    .iter()
+                    .map(FacetField::key)
+                    .find(|k| !tbl.contains_key(k))
+            {
+                anyhow::bail!(missing_key_refusal(record, table, missing));
+            }
 
             // No-op guard: compare every managed key.
             let mut changed = false;
@@ -275,7 +332,12 @@ pub(crate) fn set_facet_mixed(
 /// Read→parse→core→write-once-if-changed envelope. Reads the file, parses a
 /// `DocumentMut`, calls the closure `f`, and writes back iff the closure
 /// returned `true`. Returns the closure's bool.
-fn edit_in_place(
+///
+/// `pub(crate)` for `knowledge::apply_settlement` (SL-249 D-B), which composes
+/// TWO cores over one held document. Opening a second envelope there would be
+/// the parallel implementation `AGENTS.md` forbids, and would put a third
+/// writer in front of `I4`.
+pub(crate) fn edit_in_place(
     path: &Path,
     f: impl FnOnce(&mut toml_edit::DocumentMut) -> anyhow::Result<bool>,
 ) -> anyhow::Result<bool> {
@@ -321,8 +383,9 @@ pub(crate) fn apply_set_mixed(
     path: &Path,
     table: &str,
     fields: &[FacetField],
+    posture: KeyPosture<'_>,
 ) -> anyhow::Result<bool> {
-    edit_in_place(path, |doc| set_facet_mixed(doc, table, fields))
+    edit_in_place(path, |doc| set_facet_mixed(doc, table, fields, posture))
 }
 
 // ---------------------------------------------------------------------------
@@ -646,6 +709,7 @@ mod tests {
                     values: vec!["a".into(), "b".into()],
                 },
             ],
+            KeyPosture::Create,
         )
         .unwrap();
         assert!(changed, "allocating a new table returns true");
@@ -679,6 +743,7 @@ mod tests {
                     values: vec!["p".into(), "q".into()],
                 },
             ],
+            KeyPosture::Create,
         )
         .unwrap();
         assert!(changed, "overwriting returns true");
@@ -711,6 +776,7 @@ mod tests {
                     values: vec!["a".into(), "b".into()],
                 },
             ],
+            KeyPosture::Create,
         )
         .unwrap();
         assert!(!changed, "identical values → no-op (false)");
@@ -731,6 +797,7 @@ mod tests {
                 key: "tags",
                 values: vec!["x".into(), "y".into()],
             }],
+            KeyPosture::Create,
         )
         .unwrap();
         assert!(!changed, "identical array → no-op");
@@ -757,6 +824,7 @@ mod tests {
                     values: vec!["p".into(), "q".into()],
                 },
             ],
+            KeyPosture::Create,
         )
         .unwrap();
         assert!(changed, "overwriting returns true");
@@ -772,6 +840,72 @@ mod tests {
         assert!(
             out.contains("tags = [\"p\", \"q\"]"),
             "tags not updated:\n{out}"
+        );
+    }
+
+    // ---- SL-249 VT-2: KeyPosture — both postures on set_facet_mixed ----
+
+    fn one_choice() -> Vec<FacetField> {
+        vec![FacetField::Str {
+            key: "choice",
+            value: "new".into(),
+        }]
+    }
+
+    #[test]
+    fn vt2_require_present_refuses_absent_key_and_leaves_doc_unmutated() {
+        let mut doc = doc_from("[facet]\ncontext = \"why\"\n");
+        let before = doc.to_string();
+        let err = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &one_choice(),
+            KeyPosture::RequirePresent { record: "DEC-007" },
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("DEC-007"),
+            "refusal must name the record: {msg}"
+        );
+        assert!(msg.contains("choice"), "refusal must name the key: {msg}");
+        assert_eq!(before, doc.to_string(), "document must be left unmutated");
+    }
+
+    #[test]
+    fn vt2_require_present_refuses_absent_table() {
+        let mut doc = empty_doc();
+        let before = doc.to_string();
+        let err = set_facet_mixed(
+            &mut doc,
+            "facet",
+            &one_choice(),
+            KeyPosture::RequirePresent { record: "DEC-007" },
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("DEC-007"),
+            "refusal must name the record: {msg}"
+        );
+        assert_eq!(
+            before,
+            doc.to_string(),
+            "an absent table must not be allocated under RequirePresent"
+        );
+    }
+
+    #[test]
+    fn vt2_create_still_allocates_absent_table() {
+        let mut doc = empty_doc();
+        let changed =
+            set_facet_mixed(&mut doc, "facet", &one_choice(), KeyPosture::Create).unwrap();
+        assert!(changed, "Create allocates an absent table");
+        let out = doc.to_string();
+        assert!(out.contains("[facet]"), "missing [facet] header in:\n{out}");
+        assert!(
+            out.contains("choice = \"new\""),
+            "missing choice in:\n{out}"
         );
     }
 }

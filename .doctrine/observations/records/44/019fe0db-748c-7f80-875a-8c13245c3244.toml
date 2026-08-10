@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0db-748c-7f80-875a-8c13245c3244"
+recorded_at = "2026-08-08T10:11:46.444877549Z"
+kind = "friction"
+summary = "/phase-plan: slice research advisory fires on normal lifecycle progression, not research staleness"
+detail = "Planning SL-249 PHASE-08, the /phase-plan skill mandates 'check doctrine slice research <id>; where it reports drift, refresh the affected thread sections then re-stamp'. For SL-249 the advisory reports: changed slice-249.md, added design.md, added plan.md, added plan.toml. Every one of those is the slice's own lifecycle advancing past the research baseline — design and plan are authored AFTER research by construction, so this advisory fires for every slice at every phase-plan from PHASE-01 onward. It carries no signal about whether the research evidence itself has gone stale (that would be a change under src/ or a governance entity the threads cite). Cost: each planner must read the advisory, reason about whether it is real, and decide not to act. In a delegated-planner loop the planner also cannot act on it (authored .doctrine/ state is orchestrator-only), so the decision is re-litigated every phase. Suggested: exclude the slice's own design.md/plan.md/plan.toml/slice-NNN.md from the drift set, or classify them as a distinct 'baseline superseded by lifecycle' advisory separate from evidence staleness."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

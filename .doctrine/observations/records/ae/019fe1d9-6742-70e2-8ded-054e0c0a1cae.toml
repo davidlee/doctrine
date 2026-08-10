@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe1d9-6742-70e2-8ded-054e0c0a1cae"
+recorded_at = "2026-08-08T14:49:09.186440817Z"
+kind = "friction"
+summary = "phase-plan: the whole execution record parked in a single terminal task (T7), so a session-limit death at T7 lost it"
+detail = "SL-249 PHASE-05. The sheet (/phase-plan) put the notes-shard write, the harvest and the commit in T7, the last task. The worker was killed by a session limit at T7 with the whole phase green but uncommitted, so the entire execution record — every task's Findings line — died with the context, and a second worker had to reconstruct it from the recovered commit diff (582ac7ba8). Cost: one full re-read of a 1220-line diff to recover what the first worker already knew, plus one control that is now permanently unevidenceable (T1's C2 green-first characterization of set_record_status's refusal: no such test is in the tree, and whether one was run and deleted cannot be established). LOOP.md's Sub-agent discipline already says harvest as you go, never at the end; the sheet's task shape contradicted it. Planners should distribute the shard write across tasks, or make it explicit that each task appends its own paragraph before ticking."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

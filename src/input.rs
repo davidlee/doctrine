@@ -10,12 +10,59 @@
 //! The stdin prompt is impurity, so it lives here in the shell, never in
 //! `entity.rs` (the kind-blind scaffold engine, free of presentation). The pure
 //! `derive_slug` helper stays in the engine; this only sequences arg/prompt/bail.
+//!
+//! The same argument admits the `--body` / `--body-mode` resolution below
+//! (SL-249 PHASE-08 D1): resolving a flag's raw value — including reading prose
+//! from stdin — is CLI-input resolution, shared by `memory edit` and
+//! `knowledge edit` with one implementation and no per-kind copy.
 
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
-use anyhow::bail;
+use anyhow::{Context, Result, bail};
 
-use crate::entity;
+use crate::entity::{self, BodyMode};
+
+/// Resolve `--body`'s raw value: `-` reads `stdin` in full (a literal one-hyphen
+/// body has no way to spell itself through the flag — SL-230 PHASE-02 EX-5 — it
+/// must come via stdin instead); anything else is used verbatim. Takes
+/// `&mut impl Read` (not `io::stdin()` directly) so the stdin path is testable
+/// without driving a real pipe (mirrors `run_surface`'s in-file idiom,
+/// `memory.rs`, but propagates the read error rather than swallowing it — a
+/// `--body -` that fails to read is a real error, not an advisory that degrades
+/// to silence).
+pub(crate) fn resolve_body(raw: &str, stdin: &mut impl Read) -> Result<String> {
+    if raw == "-" {
+        let mut s = String::new();
+        stdin
+            .read_to_string(&mut s)
+            .context("Failed to read --body from stdin")?;
+        Ok(s)
+    } else {
+        Ok(raw.to_owned())
+    }
+}
+
+/// The ONE wording for "a body mode with nothing to apply it to" (SL-230
+/// PHASE-05 D-P5-3, STD-001). Raised in exactly one place per verb — `memory`'s
+/// `run_edit` and `knowledge`'s `run_edit` — so the CLI and the MCP
+/// `memory_edit` adapter, which delegates to the former, carry the identical
+/// message *by construction* rather than by two assertions happening to agree.
+/// It names both spellings because one message serves both surfaces.
+pub(crate) const BODY_MODE_REQUIRES_BODY: &str = "body_mode requires body — a mode with no body to \
+     apply it to is never an edit (CLI: --body-mode requires --body)";
+
+/// Resolve `--body-mode`'s raw value to the engine's [`BodyMode`]. Lives here,
+/// not in `entity`: `entity` is clap-free and knows nothing of flag spellings
+/// (ADR-001 — the command layer depends downward, never the reverse). Normalizes
+/// like `--trust`/`--severity` (trim + lowercase) and refuses anything else with
+/// a worded error rather than silently defaulting. SL-230 PHASE-03.
+pub(crate) fn parse_body_mode(raw: &str) -> Result<BodyMode> {
+    match raw.trim().to_lowercase().as_str() {
+        "replace" => Ok(BodyMode::Replace),
+        "append" => Ok(BodyMode::Append),
+        other => bail!("unknown body mode {other:?} (known: replace, append)"),
+    }
+}
 
 /// Resolve the title: use the argument, else prompt on stdin. Must be non-empty.
 pub(crate) fn resolve_title(title: Option<String>) -> anyhow::Result<String> {

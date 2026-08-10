@@ -1,0 +1,160 @@
+id    = 351
+slug  = "sl-249-implementation-audit-knowledge-facet-write-seam"
+title = "SL-249 implementation audit — knowledge facet write seam"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-249"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "design.md still says the governance amendment lands at reconcile; it landed in PHASE-07 (EX-11)"
+detail = "Expected: design.md describes where the four-to-seven amendment actually landed. Observed: DEC-182 moved it into PHASE-07 and it landed there (REV-050, done/approved), while design.md §3 and §5.3 still say reconcile. Wrong in seven places, enumerated so reconcile need not grep: l.132 (§3, ADR-013), l.731 (§5.3), l.1103 and l.1127-1128 (§6), l.1245 (§7, D8a), l.1600 and l.1609 (§10). PHASE-07's T10 handed these forward per EX-11. The fix is to correct the design, not to let the plan stand as the higher authority — that inversion is precisely what EX-11 exists to prevent."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a per-slice direct edit of design.md — the seven sites are enumerated in the finding, so reconcile need not re-derive them. DEC-182's move is NOT reopened; only the design's account of it is corrected. Brief: Per-slice."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "conformance undelivered: two design-target selectors name homes the implementation did not use"
+detail = "Expected: every design-target selector matches an actual edit. Observed: doctrine slice conformance 249 reports undelivered (2) — src/catalog/scan.rs and src/design_run/admission.rs. Both files exist; neither was touched. The design named each as a candidate home and a different one won: the inert-key tripwire landed in src/doctor_checks.rs (conformant, +257) because doctor_checks.rs's *_findings(root) -> Vec<Finding> is the shipped precedent, not a catalog::scan function that does not exist under that name; and the admission refusal landed in Batch::validate at src/design_run/submission.rs:1054 (conformant) with refusal.rs, because Batch::validate is the batch's admission gate and runs before any arm touches the working snapshot. Both landings are right; the selectors are stale. NOT carried anywhere in PHASE-07's reconcile ledger — the ledger discusses the undeclared cell and is silent on undelivered."
+disposition = "verified"
+response = "Observation confirmed by the mechanical algebra, not by reading. Delegated to /reconcile. Load-bearing change is the SELECTOR REGISTRY, not prose: doctrine slice selector rm 249 src/catalog/scan.rs src/design_run/admission.rs — conformance reads slice-249.toml, so a prose-only fix leaves the cell red. The design §6 edit is its human mirror, not the fix. Brief: Per-slice (registry verb + §6 mirror)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "the reconcile ledger's scope-divergence item understates the undeclared cell by a factor of four"
+detail = "Expected: notes.md's carried scope item describes the actual conformance undeclared set. Observed: it says PHASE-02 widened undeclared 'from one file to three' (src/design_run/tests.rs, ids.rs, run.rs). The current cell holds eleven source/test paths outside any design-target selector: src/commands/doctor.rs, src/commands/facet.rs, src/commands/guard.rs, src/design_run/ids.rs, src/design_run/run.rs, src/design_run/tests.rs, src/finding.rs, src/input.rs, src/memory.rs, tests/e2e_mcp_server.rs, tests/governance_kind_coverage.rs (plus four fixture files and LOOP.md). Each touch is explicable — facet.rs is the KeyPosture call site (1683a5703); doctor.rs and finding.rs are check #12's registry and its Finding category (dfd51354d); guard.rs classifies a new CLI variant; input.rs/memory.rs/e2e_mcp_server.rs are PHASE-08 T1's DRY hoist of the body-flag helpers (7a4e5bd07, net -45 in memory.rs); design_run/* rides the scope-relevant selector — but explicable is not declared. This is R-inventory's SIXTH firing and the first the audit found rather than a phase."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile, and it SUPERSEDES the reconcile ledger's 'one file to three' item rather than sitting beside it — reconcile should write the eleven, not the three. Load-bearing change is doctrine slice selector add for the paths judged in-scope (the KeyPosture call site, check #12's registry and Finding category, the guard classification, PHASE-08 T1's shared body-flag helpers) with §6 as the mirror; paths judged genuinely out of scope (LOOP.md, the test fixtures) stay undeclared and get a sentence saying why. Brief: Per-slice (registry verb + §6 mirror)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design §5.1 names the type FacetField; it shipped as FacetFieldRow (ISS-329)"
+detail = "Expected: design §5.1's type name matches the tree. Observed: §5.1 spells the declaration struct FacetField verbatim, and it shipped as FacetFieldRow. ISS-329 found two FacetField types in one crate; the user ruled option 1 (rename the new declaration struct, leave facet_write::FacetField alone) plus a backlog item for option 2 (CHR-060, the honest rename of the older enum to FacetValue, whose call sites — risk set / value set / estimate set — are outside this slice). Row was chosen over Spec (loaded: it names an entity kind) and Decl (an abbreviation with no precedent); the tree carries ~20 …Row table-row types. Design-wording correction, not a code defect."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a design.md §5.1 direct edit: FacetField -> FacetFieldRow. The ISS-329 ruling itself is settled (user ruling, option 1 + CHR-060 for option 2) and is not reopened. Brief: Per-slice."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "design §5.5's I10 wording asserts a universal its test only establishes existentially (DEC-183)"
+detail = "Expected: an invariant's prose matches what its test proves. Observed: §5.5 states I10's disjunction ('effectful or refused') over EVERY submission; the generated matrix quantifies over SOME submission at each kind. The gap matters because the disjunction alone is satisfied by a table that refuses everything — the vacuous form — which is why PHASE-02 shipped three positive controls against exactly that. DEC-183 recorded the prose correction as owed at reconcile. ISS-327 and ISS-328 carry the code half; neither is a blocker."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a design.md §5.5 direct edit narrowing I10's quantifier to what the matrix establishes, per DEC-183. The code half stays with ISS-327 / ISS-328; neither blocks. Brief: Per-slice."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "design §5.2's 'mechanical over facet_fields' is under-stated: taken literally it yields five settleable states, not four (D-A)"
+detail = "Expected: the derivation as written produces the shipped set. Observed: over facet_fields alone it yields FIVE settleable states — DECISION_FACET_FIELDS carries decided_by / decided_on while 'decided' is not a decision status. The shipped derivation is status-seeded INTERSECT facet row, which is what DEC-178's own rationale already argues ('laying the status vocabularies against the facet field names gives an exact correspondence' — a correspondence is an intersection). I5 then holds from both sides: 'accepted' excluded by the facet leg, 'decided' by the status leg. Under-stated, not wrong; a wording correction."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a design.md §5.2 direct edit stating the derivation as status-seeded INTERSECT facet row. Note for the writer: DEC-178's rationale already says this ('an exact correspondence'), so the edit aligns §5.2 with a decision that was always right — it does not amend DEC-178. Brief: Per-slice."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "design §5.2's BTreeMap<String, RawValue> spelling is unreachable under the layering gate; shipped as WireFacetValue"
+detail = "Expected: the design's literal type is buildable. Observed: RawValue lives in knowledge (command tier) and design_run is 'leaf, out=0' (layering.toml:31), so §5.2's spelling would hard-fail tests/architecture_layering.rs. PHASE-06 shipped a leaf-local wire type named WireFacetValue — sibling to the existing type WireKey (submission.rs:495), and collision-proof under every CHR-060 outcome including FacetEdit, which knowledge::FacetEdit already holds. This finding also CARRIES CHR-060's contested premise, which has no other carrier: facet_write's type is key + value, so it really is a field, and an unkeyed value type has the better claim to the name FacetValue — which would make CHR-060's premise wrong rather than merely blocked. That belongs argued openly at CHR-060, not settled by a phase taking the name first. Nobody reopens CHR-060 until pickup, so if reconcile drops this, the argument is lost."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a design.md §5.2 direct edit recording WireFacetValue and the layering constraint that forced it. Reconcile MUST also carry the second half — CHR-060's contested premise — because this finding is its only carrier and nobody reopens CHR-060 until pickup. Writing only the type name discharges half the item. Brief: Per-slice (two halves, both owed)."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "design §10 press item 2 attributes to DEC-178 an argument DEC-178 does not make; strike it"
+detail = "Expected: a press item's attribution survives inspection of the decision it cites. Observed: the item attributes to DEC-178 the argument that the resolving transition is a coupled multi-write, but DEC-178's recorded rationale is entirely about REACH (which states are settleable, derived from facet-name correspondence). The ordering argument was the design's own drafted D6, so RV-349 F-2 struck a drafting artefact rather than a plank of the decision. Verified against doctrine knowledge inspect DEC-178. The settle verb survives on its own merits anyway: 'one write of one document' is true of the mechanism but false of the reach — knowledge edit writes [facet] only, while run_settle puts status and updated in the same apply_settlement call, so reaching 'answered' with its answer via existing verbs still takes two commands; and settle rests on refusals edit cannot host, since edit must keep an empty string as a legitimate clear while settle must refuse it. Two opposite readings of the same empty string."
+disposition = "verified"
+response = "Observation confirmed against doctrine knowledge inspect DEC-178. Delegated to /reconcile as a design.md §10 direct edit striking press item 2. The settle verb's justification does not depend on the struck item — the reach argument and the opposite-readings-of-empty-string argument both stand on their own. Brief: Per-slice."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "major"
+title = "PHASE-01's EN-2 extraction rests on inspection, not on a control that would have gone red (T1/C2)"
+detail = "Expected: an extraction claiming behaviour-preservation has a characterization test that would fail if the behaviour moved. Observed: no characterization test of set_record_status's foreign-state refusal exists anywhere in the tree — none pre-existing, none added — so the equivalence rests on inspection (one call site, identical format string). Whether worker 1 ran a green-first control is unrecoverable: it died before writing Findings. Ticked work-complete, flagged control-incomplete. This is the concrete cost of the deferred harvest, and the reason LOOP.md now commits per task. It is the thinnest evidence in the slice and the audit will not paper over it: every VT passing does not make this gap smaller."
+disposition = "tolerated"
+response = "Accepted as an unclosable evidence gap, with rationale, not normalised. It cannot be closed retroactively: the control had to run BEFORE the extraction, and the worker that would have run it died before writing Findings, so the fact is unrecoverable rather than merely unrecorded. Writing a characterization test now would prove today's behaviour equals today's behaviour — it would not restore the red. Two things make the toleration honest rather than lazy: the extraction's equivalence argument is inspectable and narrow (one call site, identical format string), and the systemic cause was fixed mid-slice — LOOP.md now requires a commit and a Findings line per task, which is why no later phase has this shape. Reconcile states the residual; it does not fix it. Brief: Per-slice (stated residual)."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "three phases shipped tasks that structurally could not stage a red; each substituted a positive control"
+detail = "Expected: red/green/refactor, with the red observed. Observed: three separate substitutions. PHASE-08 T4 and T6 passed on first run — T5's mode param was needed for T3 to compile and T6's guards live inside run_edit — compensated by swapping the guard order to make the refusal test fail. PHASE-06 substituted EX-4's verification recipe outright: the sheet's resume fixture cannot work on any tree, because the mint completes before the abandon hook, so the intent journals at IntentState::Applied and execute_mint's state() < Applied guard skips step 5 — a resume-shaped test would compare a file to itself with no writer between the reads, vacuously green. Replaced with an explicit green pin of the guard state plus a direct second apply_record_effects call. PHASE-03 T3(b) expected a field deleted from every row to fail both I3 and I2; only I2 failed, because I3's input is built from the table's own rows — totality is I2's job, placement is I3's (§5.1 P1/P2); the complement was run instead and I3 caught it. None is a criterion failure. The general shape — under warnings=deny with -D dead-code, a phase whose enabling task lands before its test task cannot stage a red — is structural, and two of ten tasks in one phase is not an accident."
+disposition = "verified"
+response = "Observation confirmed; none is a criterion failure and each substitution was the right call on its own facts. Delegated to /reconcile as a per-slice process note, because the general shape is reusable knowledge and not specific to these three tasks: under warnings=deny with -D dead-code, a phase whose enabling task must land before its test task cannot stage a red, and owes a positive control instead. Reconcile states it; PHASE-05's permanently-open control (a control nothing in the tree could discharge) is the standing example of what happens when it is not stated. Brief: Per-slice (process note)."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "nit"
+title = "PHASE-04 spells D4's edit payload Option<Box<KnowledgeFacetEdit>>, not the design's Option<KnowledgeFacetEdit>"
+detail = "Expected: the shipped signature matches D4's literal spelling. Observed: the payload is boxed. Forced by clippy::large_enum_variant under warnings = deny — the unboxed variant makes KnowledgeCommand wide enough to trip the lint, and the gate is zero-warnings. D4's substance is intact (one optional facet-edit payload on the edit command); only the indirection differs. A one-line note, no id owed."
+disposition = "verified"
+response = "Observation confirmed. Delegated to /reconcile as a one-line design note: D4's substance is intact and only the indirection differs, forced by clippy::large_enum_variant under a zero-warnings gate. No id owed. Brief: Per-slice (one line)."
+
+[[finding]]
+id = "F-12"
+status = "verified"
+severity = "minor"
+title = "settle is a one-way door per record and the design never says so (R-withdrawn-overlap)"
+detail = "Expected: a surprising product behaviour is stated where a reader will meet it. Observed: 'waived' and 'invalidated' sit in BOTH a settleable set and WITHDRAWN_STATUSES, so a settled CON or ASM can be neither re-settled nor settled to its sibling state. This is intended — D7 plus the withdrawn refusal, reusing one predicate — and it falls out of two correct rules meeting, which is exactly why nobody wrote it down. Surprising enough to state at reconcile rather than leave to be rediscovered by whoever first tries to correct a waived constraint."
+disposition = "verified"
+response = "Observation confirmed and the behaviour is intended, which is exactly why it needs writing down — it falls out of two correct rules meeting (D7's settleable sets and the withdrawn refusal, reusing one predicate), so no single rule's author had cause to state it. Delegated to /reconcile as a design.md statement where a reader meets settle's contract. Brief: Per-slice."
+
+[[finding]]
+id = "F-13"
+status = "verified"
+severity = "minor"
+title = "VT-3 is the sole guard on EX-5 and its blast radius was measured at exactly one test"
+detail = "Expected: a criterion has more than one thing standing between it and silent regression, or the singularity is recorded. Observed: VT-3 alone guards EX-5. PHASE-01's C2 measured the blast radius rather than assuming it — swapping skip_serializing_if for skip_serializing failed exactly ONE test. So if VT-3 is ever waived, skipped or deleted, the acceptance digest silently stops covering the facet and nothing else in the suite notices. Recorded because the reconcile ledger's split assigns this item to no surface at all: it is in notes.md § Open and in none of the three carried groups, so on the current plan it reaches close with no owner."
+disposition = "verified"
+response = "Observation confirmed, and the finding's real content is that the item had NO surface: it sits in notes.md § Open and in none of the reconcile ledger's three carried groups, so on the pre-audit plan it reached close unowned. Delegated to /reconcile as a design.md note recording that VT-3 is EX-5's sole guard and that the blast radius was measured at one test — sited where a future waiver of VT-3 would be considered, so the cost is visible at the moment someone contemplates paying it. Brief: Per-slice."
+
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = "R-inventory fired six times across the slice; no artefact carries the pattern past close"
+detail = "Expected: a risk that fires repeatedly is either mitigated or named durably. Observed: SL-249's R-inventory fired six times, always the same shape — a hand-maintained count believed from a prior reading, wrong when re-derived. (1) a Finding category's touch sites were 6 not 5; (2) PHASE-04 staged 5 expect(dead_code) not 3; (3) VT-3 shipped 9 refusal cases against a mandate naming 6; (4) the paired-form census was 8 of 28 where a co-presence read said 12; (5) ISS-332's closed-enum list said three where four closed enums ship in src/knowledge.rs; (6) this audit's F-3 — the reconcile ledger's own scope item says three undeclared files where eleven source/test paths sit in the cell. Six is not a run of bad luck, and the sixth landed IN the artefact written to hand the other five forward. Now carried by memory mem.pattern.verification.re-derive-every-inventory-at-use (recorded at the PHASE-07 harvest, 05e0de495); this finding is what pins it to the slice's record."
+disposition = "aligned"
+response = "Observation correct; no reconcile write owed. The pattern is already carried durably rather than in slice prose: memory mem.pattern.verification.re-derive-every-inventory-at-use records all six firings and the practice they argue for, committed at 05e0de495 and cross-linked to its sibling. A slice's notes.md is not an owner for a cross-slice pattern — the memory corpus is. Close names it in the closing story; nothing further to write."
+
+[[finding]]
+id = "F-15"
+status = "verified"
+severity = "minor"
+title = "three backlog carries are owed at close and no phase owns them"
+detail = "Expected: work identified during a slice but out of its scope has a backlog home before the slice closes. Observed: three carries with no owning phase — IMP-403 leads 3-5; CHR-056 (open, not a blocker); and CHR-060 (rename facet_write::FacetField -> FacetValue, ISS-329's ruled option 2, whose premise F-7 shows is itself contested). These are close-time work, not reconcile-time writes, and they are listed here so close has a checklist rather than a recollection."
+disposition = "follow-up"
+response = "Owned future work is the right route and these are work-intake items, not spec or governance findings, so follow-up is permitted here and is not an escape from the reconcile surface. IMP-403 leads 3-5 need minting; CHR-056 and CHR-060 already exist and stay open. CHR-060 additionally inherits the contested premise from F-7 — whoever picks it up must read that argument before acting on the rename, or they will execute a rename whose premise this slice showed may be wrong. Close carries the checklist."
+
+[[finding]]
+id = "F-16"
+status = "verified"
+severity = "minor"
+title = "the PHASE-07 canary is structurally blind to the residue its own amendment left (ISS-332)"
+detail = '''Expected: a guard shipped against a defect class covers the amendment that motivated it. Observed: tests/governance_kind_coverage.rs measures record-kind coverage — the paired long-name/prefix form for each of kinds::RECORD, and a per-tier \bfour\b arithmetic identity. The same amendment introduced a fourth closed facet enum (provenance) and left two sentences enumerating the closed enums saying three. A stale facet-enum list carries no kind name, no prefix and no numeral, so nothing the checker measures moves: the phase's own guard could not have caught the phase's own residue. It was found by VA-1, a different reader asking a different question, and fixed in place (2eb963e14) rather than carried, on the ground that REV-050 itself staled those sentences. Raised here not as an open defect — ISS-332 is resolved/fixed — but because the inference 'widen the canary' is the wrong one, and the right one (a VA criterion is not redundant with a VT criterion over the same prose artefact) is worth pinning to this slice's record. Carried by memory mem.pattern.verification.guard-blind-to-its-own-residue.'''
+disposition = "aligned"
+response = "Observation correct; the defect itself is already fixed (2eb963e14) and ISS-332 is resolved/fixed with its reasoning recorded on the item, so no reconcile write is owed. The durable lesson is carried by memory mem.pattern.verification.guard-blind-to-its-own-residue (05e0de495). Explicitly NOT actioned: widening the canary to cover facet-enum lists. That would chase one adjacent shape and leave the class open; the correct inference is that a VA criterion is not redundant with a VT criterion over the same prose artefact, which is a planning practice, not a test."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe143-67a7-7881-b19b-4cea27992d68"
+recorded_at = "2026-08-08T12:05:18.887186441Z"
+kind = "friction"
+summary = "/execute: PHASE-04 worker brief and phase sheet named different notes shards"
+detail = "The orchestrator's worker-1 brief said to append to .doctrine/slice/249/notes_03-06.md; the phase sheet's T10 said notes_04-06.md. Neither existed, and notes_01-03.md already covered phase 03, so the brief's name would have double-claimed a phase. Cost: a directory listing, a check of the notes_07-08.md precedent (which carries an identical divergence note from PHASE-08 — so this is the second occurrence, not a one-off), and a judgement call a worker should not have to make. The shard name is the orchestrator's sharding scheme; if the brief restates it, it should be generated from the same place the sheet's does, or the brief should not restate it at all."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

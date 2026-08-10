@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe113-2aad-7c22-ad81-b2136e89a058"
+recorded_at = "2026-08-08T11:12:37.552354799Z"
+kind = "friction"
+summary = "/execute (SL-249 PHASE-03): phase sheet's per-test defect attribution and dead-code retirement predictions were both wrong; verifying them cost ~3 extra build cycles"
+detail = """
+The phase sheet for SL-249 PHASE-03 was unusually well planned (651 lines, 11 tasks, 9 pre-ruled decisions), and its explicit instruction to *measure rather than predict* was correct three times over. But three of its own written predictions were wrong, and each cost a build cycle plus a judgement call about whether a STOP had fired:
+
+1. T3(b) specified "I3 must fail on decision AND I2 must fail" for a deleted row entry. Only I2 failed — I3's input is derived from the table itself, so a field deleted from every row leaves the input too and both sides shrink together. Determining that this was a division of labour (design §5.1 P1 vs P2) rather than a hole required inventing and running a complementary injection (b') the sheet did not specify.
+
+2. R1 predicted which dead-code expects would be needed and which would retire. Wrong in both directions: 14 items needed staging (not the ~6 predicted, the seven row consts were unlisted), and all 14 retired at once including the two predicted to survive to PHASE-04.
+
+3. The sheet enumerated five sites plus two tests for a new Finding category. There are six production sites; the sixth (render_findings' hand-written bucket array) silently drops findings.
+
+The friction is not that the predictions were wrong — the sheet itself said predictions here are wrong and to build and read. It is that the predictions were written as *criteria* ("I3 must fail on decision") rather than as expectations, which makes a wrong prediction indistinguishable from a fired STOP condition, and forces the worker to do the adjudication the STOP rule says not to do. Cheaper shape: state the invariant that must hold (each pin discriminates on the defect class it owns) and leave the per-test attribution to the measurement."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

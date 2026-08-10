@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe22b652973239aa273bef6ace8ca"
+memory_key = "mem.pattern.doctrine.conformance-measure-must-match-the-claim"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A conformance canary's measure must be as strict as the claim it checks"
+summary = "A looser text measure scores the defect as partially passing — score the pre-fix bytes with the candidate measure before you trust it"
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["tests/governance_kind_coverage.rs"]
+globs = []
+commands = []
+tags = ["testing", "governance", "canary", "control"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4a50133a2eb4109a6875027002befb53ae4b6e3c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b50877a7bb05b550709c33599d318ff6ca886da45e8079817597f30243480ebe"
+base_commit = "26b88e4208beb29a0bf16f3bb0dca1fe72ca343f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+

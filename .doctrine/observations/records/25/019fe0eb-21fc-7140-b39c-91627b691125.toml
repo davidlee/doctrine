@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe0eb-21fc-7140-b39c-91627b691125"
+recorded_at = "2026-08-08T10:28:53.884533474Z"
+kind = "friction"
+summary = "/execute (SL-249 PHASE-08): phase sheet's reading list omitted src/commands/guard.rs, whose exhaustive match makes a new CLI variant a compile error"
+detail = "The PHASE-08 sheet named every seam the verb writes through and where the verb is declared, but not src/commands/guard.rs:212, which classifies each KnowledgeCommand variant Read/Write for the worker-mode guard. Adding KnowledgeCommand::Edit was therefore a build failure discovered at first cargo build rather than a planned edit. One-line fix, small cost, but it is a systematic gap: any phase adding a CLI verb meets it, and no reading list has named it so far. Captured as mem.pattern.doctrine.new-cli-variant-needs-guard-classification."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

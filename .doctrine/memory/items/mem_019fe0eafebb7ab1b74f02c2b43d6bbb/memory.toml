@@ -1,0 +1,46 @@
+memory_uid = "mem_019fe0eafebb7ab1b74f02c2b43d6bbb"
+memory_key = "mem.fact.doctrine.apply-tags-set-self-heals-before-noop"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "apply_tags_set self-heals before its no-op guard — do not call it with an empty add set"
+summary = "tag::apply_tags_set inserts a missing tags = [] key BEFORE its set-compare no-op check, so an empty-adds call can mutate the held document while returning false."
+created = "2026-08-08"
+updated = "2026-08-08"
+
+[scope]
+paths = ["src/tag.rs"]
+globs = []
+commands = []
+tags = ["tags", "write-core", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8e2ddb2457dd97da65ee56d388321ac1d0748ccc"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3c01b39880dbe4012dbe3593b7d84fddb371c5970a483a1746047877f7e89f4b"
+base_commit = "66539791f670b77d87854ca33de473a438e37053"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-249"
+
