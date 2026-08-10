@@ -1,0 +1,197 @@
+id    = 353
+slug  = "inquisition-the-capsule-programme-against-its-founding-claim-of-simplification"
+title = "Inquisition: the capsule programme against its founding claim of simplification"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+concluded = true
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "RFC-025"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "The programme has deleted nothing; simplification is deferred to a slice that does not exist"
+detail = """
+EXPECTED — RFC-025 opens: "the current investigation into *simplifying* Doctrine's dispatch and confinement model." ADR-020 justifies the fork by the incumbent's brittle composition. The project's own rule of proportion (CLAUDE.md, Guiding Principles): spend as little as possible on complexity, token cost and human attention.
+
+OBSERVED — the programme has retired nothing. `git diff --numstat 6b58d48c^..HEAD -- src/dispatch src/worktree src/commands/dispatch.rs` returns EMPTY. Zero lines deleted from incumbent dispatch. Added: +23,201 lines in `crates/doctrine-control`, +1,624 in `src/interpretation.rs`, +11,584 in `.doctrine/slice`, +1,623 in `.doctrine/review`. RFC-025's own mechanism-census caveat confesses it: the delete/transform/keep verdicts "describe the capsule *target state*, not mechanisms already retired from the incumbent dispatch arms."
+
+Worse, this is by design. RFC-025 § decomposition rules: "every slice but the last lands beside the incumbent worktree arms, **additive and unused**, so the repo never sits in a half-cutover state." Slice 5 is the cutover. Slices 2-5 are unminted. REV-046 — the revision that would authorise the deletions — is `proposed`, `approval=none`, and RFC-025 directs that it not be approved "until there is an exact migration plan rather than an aspirational delete list, which is at slice 5 and not before."
+
+THE HERESY — on the programme's own published plan, the complexity curve rises monotonically through four of five slices, and every gram of simplification sits behind a gate that by construction cannot be reached until the entire replacement is built and proven. A programme whose whole payoff is its final step is not a simplification; it is a rewrite with a simplification epilogue attached to justify it. The founding claim is not a design property of this architecture. It is a promissory note, unpriced, uncollateralised, and now 59,559 inserted lines overdue."""
+disposition = "design-wrong"
+response = "Upheld. The defect is the sequencing, which is a design property and not an execution slip. A programme that justifies itself by deletion must delete early and continuously, or it is not that programme. Remedy: ADR-020's target architecture is withdrawn from 'accepted', and any successor is bound by an inverted rule — no capsule work lands that does not retire incumbent mechanism in the same slice. If a step cannot pay for itself in deletions, it is not taken. RFC-025's 'additive and unused' rule is the specific clause to strike: it was adopted to avoid a half-cutover state and instead guaranteed a permanent pre-cutover state."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "The design manufactures environments by discovery from host paths instead of selecting a self-contained one"
+detail = """
+EXPECTED — the Owner's stated architectural constraint, and the only one that matters here: "Doctrine should not discover how to manufacture an execution environment from arbitrary host paths. It should select/provision an environment using a self-contained, preferably existing mechanism, then confine it." Provision, then confine. Two steps, both boring.
+
+OBSERVED — the design does the opposite at every layer.
+
+1. `conformance.rs::system_readable_roots` declares the *top-level ancestor* of every canonicalized `$PATH` entry a readable root, identity-mapped. The capsule's input set is therefore whatever the host's `$PATH` happens to sweep up — `/nix`, plus the whole of `/run` and `/var`.
+
+2. Production's escape from that is `backend/bubblewrap.rs`: `closure_members` (:837) and `expand_closure_root` (:910) define an **operator-declared `closure-resolver`** — an arbitrary external program that Doctrine execs and whose stdout it parses as absolute paths, one per line, under a 1 MiB `RESOLVER_OUTPUT_LIMIT`, each of which must exist on disk.
+
+3. DEC-186 then decided the fixture's resolver would be "a short POSIX `sh` script the fixture writes into its own temp root and marks executable", which sets `LD_TRACE_LOADED_OBJECTS=1`, execs the queried binary and emits the loader's answer. That is Doctrine reconstructing a Nix closure by tracing the dynamic linker, one binary at a time. DEC-186 was **withdrawn as refuted** at commit 24853a00a, seven hours before this tribunal.
+
+THE HERESY — the closure of a store path is a fact the store already knows and will hand over for free. The design declined to ask it, because POL-002 was read as forbidding the platform from knowing what a store is. So instead of one host-specific line, the programme built a general programmable extension point **inside the trust boundary** — an operator-supplied executable whose output determines what the sandbox can read. That is not platform independence. It is a worse platform dependency wearing a generic costume, and it hands the confinement decision to an unverified external process.
+
+The remedy the Owner already named needs none of it: on NixOS, `nix build`/`nix path-info -r` yields a self-contained closure, or a flake yields an environment outright; bwrap confines it. On macOS, seatbelt. Where neither holds, an image or a microVM. In every case the environment is SELECTED, and confinement is applied to a thing whose contents are known by construction rather than excavated from `$PATH` at runtime."""
+disposition = "design-wrong"
+response = "Upheld, and this is the root heresy from which most of the others descend. The Owner's constraint is adopted as the successor's first principle: SELECT an environment from a self-contained mechanism, then confine it. Concretely — (a) nix+bwrap on Linux, seatbelt on macOS, where the environment is a flake-realised closure or an image and its contents are known by construction; (b) systemd-nspawn / microVM / VM where stronger isolation is wanted. Under either, system_readable_roots, closure-resolver, expand_closure_root, closure_members and the whole inner-PATH derivation cease to exist as problems rather than being fixed. DEC-186's withdrawal at 24853a00a is the accused's own confession on this point and is entered as evidence, not held against the withdrawer. POL-002 is to be re-read before the successor design: it forbids assuming the host's conventions, not naming a confinement mechanism, and the successor must record that reading explicitly so this failure is not repeated."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "61% of the artefact is measurement apparatus, and the apparatus measured the jail"
+detail = """
+EXPECTED — a conformance suite is a proportionate instrument, and its verdicts mean what they say.
+
+OBSERVED, on proportion — `crates/doctrine-control/src/conformance.rs` is **14,252 lines in a single file**: 474 functions and some four hundred string constants for probe tokens. That is 61% of the crate's 23,201 lines. The thing being measured — `provision.rs` (1,922) + `backend/bubblewrap.rs` (2,635) + `backend.rs` (1,805) = 6,362 lines — is measured by an instrument **2.2x its own size**. The tail has eaten the dog.
+
+OBSERVED, on soundness — the instrument proves less than it reads. ISS-341: the fixture builds the very capsules in which the `BoundedInputSet` property is demonstrated by binding **whole host top-level roots**. Measured off-jail on a real host: **691 store paths visible**, and `git`, `curl` (TLS-capable) and `gcc` all EXECUTE inside a capsule whose bounded-input property reads `Proven`. `--ro-bind` is read-only, not `noexec`.
+
+No shipped row can convict it. SL-252's scope states it exactly: "Row 3 reads planted decoys and is silent about everything else; row 4 derives its permitted-`/` set from `$PATH`, so every such root is permitted by the very fact that put it there. Both read `Proven`. The verdicts are not false — they are worth much less than they read, and nothing in the transcript says so."
+
+And production explicitly refuses the shape the fixture uses. SL-248 PHASE-10 EX-8: "no host-shaped default and no fallback — no arrangement of configuration can make a host-wide artefact store readable whole." The fixture IS the host-shaped default EX-8 rules out, and it hosts the capsules the whole suite's authority rests on.
+
+THE HERESY — this is the third instance of one pattern, and the pattern is the finding: **a derivation that is accidentally correct in the single environment it has ever run in.** `/bin/sh` (run 1), the permitted-`/` set (run 2), the root set itself (run 3). The jail supplied `/bin` twice over by coincidence and masked each in turn. Nineteen green rows and a `backend verify` exit 0 with "all fourteen properties and five axes Proven" (RV-352 § Synthesis) were produced inside an environment that falsifies the property being demonstrated. Fourteen thousand lines of apparatus, and what it measured was the jail."""
+disposition = "design-wrong"
+response = "Upheld on both limbs. On proportion: an instrument 2.2x the size of its subject is not an instrument, it is the subject. On soundness: the suite's verdicts were conditioned on the jail. The remedy is not to repair conformance.rs — repairing it is what SL-252 attempted and DEC-188 abandoned. Under a select-then-confine design the property under test collapses from 'is the discovered input set bounded' to 'is the capsule's input set exactly the selected closure', which is a comparison against a manifest the provisioner already holds, and is a test of tens of lines rather than fourteen thousand. The 19-row table, the weakening vocabulary, the arm classification and the mutant harness are to be treated as a disposable spike rig — the same category SL-241 correctly assigned to its own rig — and not migrated."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "The suite never ran outside the environment that made it pass, and now holds the project's gate hostage"
+detail = """
+EXPECTED — a confinement backend is validated across the hosts it claims; and a subsystem landed "additive and unused" costs the host project nothing until it is used.
+
+OBSERVED — ISS-339: "The conformance suite has never run off-jail." It has now run off-jail exactly once, and that single run minted ISS-338 (gid_map has no off-jail reading), ISS-340 (row 2's per-root exec coverage is unsatisfiable on a real host) and ISS-341 (the fixture binds whole host top-level roots).
+
+The blast radius did not stay inside the crate:
+- ISS-342 — "Live-bwrap conformance tests keep `just gate` permanently red off-jail." The project's own commit gate, which AGENTS.md requires green before every commit, is now unconditionally red on a real host.
+- ISS-343 (tagged **release-blocker**) — "doctrine-control is Linux-only, in default-members, and fake-darwin cannot run in the jail."
+- ISS-334 — row B5 sibling tests are load-fragile: a contention race that IMP-417 warns must not be folded into a host-availability verdict, or "the vacuous pass is rebuilt one level up."
+
+THE HERESY — an "additive and unused" subsystem has taken the host project's green gate and its release posture hostage. The one property the additive-landing rule existed to guarantee — that the repo never sits in a degraded half-state — has been violated by the very first slice, and the reproduction evidence in RV-352's synthesis ("two independent gate runs at 297 passed; 0 failed") is now known to have been conditioned on the one environment it was ever run in. Evidence gathered exclusively inside the jail is testimony extracted under conditions that guarantee the answer."""
+disposition = "fix-now"
+response = "Upheld, and this is the ONE finding whose remedy is immediate and independent of the architectural verdict. While the abort is deliberated, the project's gate must be green and its release must not be blocked by an unused subsystem. Required now: remove crates/doctrine-control from default-members so ISS-343 stops blocking release, and gate the live-bwrap conformance tests behind an explicit opt-in so ISS-342 stops holding just gate red off-jail. This is not a downgrade of the architectural charge; it is triage of the blast radius. ISS-342 and ISS-343 already carry the work and stay open until it is done."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "One ADR, one spec and one crate carry seven separable concerns welded into an indivisible boundary"
+detail = """
+EXPECTED — small, composable, single responsibility (CLAUDE.md). ADR-001 layering. One decision per ADR. The Owner's own decomposition, stated at the abort: "separate out concerns like provisioning, confinement, control-plane communication, etc."
+
+OBSERVED — SPEC-030 declares EIGHT responsibilities under one container and 14 requirements, spanning: the control-plane/capsule authority split; a twelve-step transaction lifecycle (resolve, provision, launch, notify, snapshot, harvest/freeze, conform, verify, normalize, journal, admit/integrate, close, cleanup); contracted-base and interpretation-policy provenance with a monotonic restriction algebra; hostile Git-bundle ingestion through a parent-owned snapshot and a fresh quarantine repository; exact-candidate verification in a *second* fresh capsule; durable admission journaling and expected-tip compare-and-swap; adaptation of the existing candidate engine to capsule provenance for stale and conflicted results; a frozen-source / forensic-exhibit retention lifecycle; and a cross-platform backend property contract. ADR-020's single "Decision" is that entire six-step transaction.
+
+The crate mirrors the tangle. `capacity.rs` (391 lines) puts **disk free-space tiering and capacity warnings** inside the confinement crate. `host.rs` probes kernel release. `config.rs` (986 lines) reads a schema that governs which *executables the trusted side may run*. `main.rs` documents that the crate is bin-only **permanently** so the conformance vocabulary need not be made public — the module boundary was bent to accommodate the monolith rather than the monolith cut to fit a boundary.
+
+THE HERESY — none of confinement requires an immutable capsule base, a bundle transport, a quarantine repository, an admission journal, or a free-space tier. Those are dispatch-*transaction* concerns, welded to a *confinement* concern, welded to a *provisioning* concern, and sanctified as one indivisible authority boundary by ADR-020's framing that "the costly fork in the road is the authority boundary, not later policy." That framing is the sin: it converted every downstream policy question into a foundational one, so nothing could be built, tested, or deleted independently of anything else. The evidence is DEC-188's own confession — a single fixture-posture fix could not be made without a revision against another slice's exit criterion and a redesign of the inner-PATH derivation. That is what a tangled design feels like from the inside, and it is priced in slices per fix."""
+disposition = "design-wrong"
+response = "Upheld. ADR-020's framing — 'the costly fork in the road is the authority boundary, not later policy' — is identified as the specific error: it converted every downstream policy question into a foundational one, which is why nothing in the programme can be built, tested or deleted independently. The successor must be decomposed along the Owner's cut, and each part must be separately shippable and separately useful: (1) PROVISIONING — select and realise an environment from a self-contained mechanism; (2) CONFINEMENT — apply the platform sandbox to a realised environment; (3) CONTROL-PLANE TRANSPORT — how the orchestrator talks to a confined worker and receives its result. Admission, verification, journaling, CAS, candidate provenance, retention and capacity are NOT confinement concerns and must not re-enter a confinement design; several are already solved in the incumbent dispatch and SPEC-022 substrate. capacity.rs in particular has no business in this crate under any successor."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Accepted ADR-020 and active SPEC-030 were minted from an open, externally-authored investigation document on n=1 evidence"
+detail = """
+EXPECTED — governance is written FROM settled evidence. RFC-025's own rule: "Epistemic content graduates out of this prose into knowledge records (QUE/DEC/EVD) as it firms; governance (SPEC/ADR/REV) is written *from* those records, not from this document."
+
+OBSERVED — RFC-025 is `open` and self-describes as: "Living investigation document. Originally a working design synthesis from an external (web) agent conversation, dropped in largely as-is on 2026-07-31." From this open, externally-authored, largely-unedited document descend ADR-020 (**accepted**, 2026-08-03 — three days later), SPEC-030 (**active**, 14 requirements) and REV-046.
+
+The evidence base beneath them is SL-241, a spike whose own `go-no-go.md` scopes its verdict to "the measured capsule ingestion and confinement model on Linux/bwrap and the tested client shape; **not production readiness and not a portable macOS result**." ADR-020 restates the limit honestly — "The Linux/bubblewrap evidence is sufficient to select that architecture; it is not evidence for a macOS backend or for production performance" — and then selects the architecture anyway.
+
+RFC-025 attaches its own health warning to that evidence: it "must never be summarized as 16/16: fifteen rows reached model-level, the env-file row is unproven beyond the Rust fixture, structural `n/a` cells are not omissions, and four recorded `fail` rows are successful mutant detections. **The real-agent phase is n = 1.** The seven limits in `evidence/README.md` remain part of every claim."
+
+THE HERESY — an ADR that relocates the trust boundary of the entire dispatch system was accepted on n=1 and a web conversation, three days after the conversation was pasted in. The document's own graduation rule was inverted: governance was written from the prose, and the knowledge records (DEC-128/133/134/135/136/153...) were minted alongside to furnish it with the provenance it lacked. Accepted status was thereby borrowed against evidence that had not been gathered, and every slice since has been obliged to treat that borrowing as settled canon."""
+disposition = "design-wrong"
+response = "Upheld. The governance is to be re-based on evidence rather than repaired in place. ADR-020 must move off 'accepted' — superseded by the successor decision, not merely amended, because its central choice (the capsule transaction as the authority boundary) is the choice being reversed. SPEC-030 is 'active' with all 14 requirements pending and no shipped consumer; it must be withdrawn or reduced to whatever the successor actually specifies. RFC-025 stays as the honest historical record of the investigation and is where the post-mortem belongs — its own graduation rule ('governance is written FROM those records, not from this document') is retained as the standing lesson. Both moves require a revision (REV) against present-tense governance and are reconciliation work, not this tribunal's to execute unilaterally; the successor slice carries them."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "POL-002 inverted: every client must hand-declare its interpreters, and 1,624 lines exist to police the declaration"
+detail = """
+EXPECTED — POL-002 (required): platform independence from host-project conventions and state. The purpose of the rule is that Doctrine must not assume its host's toolchain. The purpose is NOT to make every adopting project pay for that abstinence.
+
+OBSERVED — SPEC-030 makes a v1 `[interpretation]` block in `.doctrine/doctrine.toml` a **hard requirement** of capsule dispatch, with three fields that "are explicit and have no manufactured defaults":
+  trusted_side_forbidden_executables = ["cargo", "nix", "direnv", "just", "rustc"]
+  interpreted_paths = ["build.rs", "**/build.rs", "flake.nix", ".envrc", "rust-toolchain.toml"]
+  [[interpretation.verification]] argv = [...]
+
+Every adopting project must hand-enumerate every interpreter, wrapper and interpreted path in its toolchain, correctly and exhaustively, or the trust boundary leaks — and SPEC-030 says so: "wrappers and interpreters the project uses must be named."
+
+To police that declaration the programme built `src/interpretation.rs` — 1,624 lines, per SL-248 PHASE-02's objective "a strict typed projection of `[interpretation]` beside the deliberately tolerant shared reader — six distinguishable refusals, duplicate rejection before sorting, an injective canonical hash, and the monotonic restriction algebra."
+
+THE HERESY — POL-002 was satisfied in the letter and inverted in the spirit. Host-project knowledge was kept out of the platform's *code* by mandating that every operator supply it as *configuration*, then purchasing 1,624 lines of validation machinery to check the configuration, and a second hazard — a security-critical allowlist maintained by hand, whose omissions are silent. The cost of avoiding one line of host knowledge is paid once by the platform in machinery and again by every client project in attention, forever. Compare the same problem solved by selection: a flake or an image contains its toolchain by construction, and there is nothing to declare because there is nothing to guess."""
+disposition = "design-wrong"
+response = "Upheld. The mandatory no-defaults [interpretation] block and the 1,624-line src/interpretation.rs that polices it are both consequences of F-2's root error: when the environment is discovered rather than selected, its contents must be declared, and the declaration must then be validated. Under selection there is nothing to declare, because a flake or image contains its toolchain by construction. src/interpretation.rs has no consumer outside the capsule path and is a deletion candidate in the successor's first slice — which would make it the programme's first genuine deletion and, per F-1's inverted rule, the right way to open. The security hazard stands on its own merits and must be recorded: a hand-maintained allowlist whose omissions are silent is a poor trust boundary regardless of architecture."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "24 open follow-ups gate slice 2, and the smallest one costs a governance revision plus a redesign"
+detail = """
+EXPECTED — a slice closes with a bounded tail, and a follow-up is discharged inside a phase.
+
+OBSERVED — RFC-025 records that SL-248 closed with **24 open follow-up items**, every one `open`, plus ADR-021 `proposed`. `doctrine backlog list --tag cluster:capsule` shows 15 still open now, including a release-blocker. The Owner's direction at SL-248's reconcile was that the register be closed **in full** before slice 2 begins — "not 'read it' and not 'discharge the programme-level half' — *close them all*."
+
+Then measure the marginal cost of closing one of them. SL-252 exists to fix ONE follow-up: the fixture's readable-input posture (ISS-341). Its design run produced three decisions in a day — DEC-187 (no inner PATH; reach is discovered, not declared), DEC-186 (self-written loader-trace resolver), DEC-188 (the fallback). DEC-186 was **withdrawn as refuted** at 24853a00a. DEC-188 then took S3, "the recorded fallback", and states plainly: "it is not the shape this slice set out to build."
+
+Why: "Every narrowing shape examined turned out to be blocked by the same production defect, ISS-344. Readable inputs are resolved with `canonicalize` and then bound at the resolved path, source and destination both, so the declared name is destroyed. File-granular sets therefore cannot invoke multicall binaries at all, and any set narrow enough to matter empties the inner `PATH` — which breaks *provisioning*, since `clone_inside` runs all four git operations as bare `git`. Repairing that means a revision against SL-248 PHASE-05 EX-3, a redesign of the inner-`PATH` derivation, and probably binding closure roots as well. **That is a slice, not a phase.**"
+
+THE HERESY — the cheapest available fix to the smallest known defect costs a governance revision plus a redesign, and terminated instead in a fallback that the record itself calls dishonest-adjacent: "the set is still wide; it is merely honest about being wide." Twenty-three more such items wait behind it, and the programme's own rule forbids starting slice 2 until they are all discharged. This is not a tail. It is a moat, and the accused dug it themselves."""
+disposition = "design-wrong"
+response = "Upheld. The register is a symptom, not a workstream, and the Owner's 'close them all before slice 2' direction is vacated along with slice 2. On abandonment, the cluster:capsule backlog must be triaged into three piles rather than worked: DISSOLVED (defects in mechanism the successor removes — ISS-340, ISS-341, ISS-344, and the inner-PATH items go with the closure resolver); CARRIED (facts about the host and the sandbox that survive any design — ISS-338's gid_map gap, ISS-337's descriptor inheritance, ISS-339's structural-not-existential probe lesson); and LIVE (F-4's blast-radius items, ISS-342 and ISS-343, which must be fixed now regardless). SL-252 itself is dissolved — it exists to fix ISS-341, which the successor removes. Untriaged, this register is 24 items of debt against a design nobody will build."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "The remaining runway is four unminted slices behind an unapprovable revision, and is by construction unestimable"
+detail = """
+EXPECTED — a programme in flight can state what remains and what it will cost.
+
+OBSERVED — RFC-025's decomposition lists five slices. Slice 1 (SL-248) is done. Slices 2-5 "stay **unminted** until their predecessor is designed." All 14 SPEC-030 requirements are `pending` — RFC-025: "Every SPEC-030 requirement is still `pending`." REQ-448, REQ-450 and REQ-460 "are cross-cutting and close in no single slice." REV-046 is `proposed`, `approval=none`, not to be approved "until there is an exact migration plan rather than an aspirational delete list, which is at slice 5 and not before."
+
+Slice 1 — the smallest and most foundational of the five, carrying only provisioning, one backend and its property suite — cost 23,201 lines of crate, 10 phases, an audit ledger (RV-352, 8 findings), and 24 open follow-ups. Slices 2-5 carry ingestion, quarantine, a verification capsule, normalization, journaled admission, CAS, the candidate-provenance adapter, freeze/repair, retention, and the cutover.
+
+THE HERESY — no estimate of the remaining work exists, and by the programme's own sequencing rule none can exist, because each slice's scope is knowable only after its predecessor is designed. The deletion list that is the entire justification for the programme is, by that same rule, the last artefact anyone will write. The Owner's assessment — "the feature's still an indefinite distance from being usable" — is not a complaint. It is the accurate reading of a plan that has made its own remaining cost formally unknowable."""
+disposition = "design-wrong"
+response = "Upheld. Unestimability is not a scheduling problem to be solved with better estimates; it is the signature of a design whose parts cannot be valued separately. F-5's decomposition is the remedy: three separately-shippable concerns each have an obvious first useful increment and an obvious cost, and the Owner has already demonstrated the baseline — clone, flake, bwrap, five minutes, working confinement. That baseline is the estimate the successor is held to, and any successor design whose first useful increment cannot be stated in those terms is refused at design gate."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "conformance.rs is 14,252 lines in one file, and the crate is bin-only permanently to protect it"
+detail = """
+EXPECTED — CLAUDE.md: "Small, composable, single responsibility." "OBSESS over coupling and cohesion." ADR-001: module layering, no cycles.
+
+OBSERVED — `crates/doctrine-control/src/conformance.rs`: **14,252 lines, 474 functions, one file.** For comparison the entire rest of the crate is 8,949 lines across eight files. `main.rs` records the reason the shape is frozen: "**Bin-only, permanently** (sec-6). A `tests/` file cannot link a bin-only package (E0433), and adding a lib target to rescue one would force the conformance suite's weakening vocabulary public (E0603). Every test in this crate is a `#[cfg(test)]` module inside the unit it tests."
+
+THE HERESY — the crate's public shape was permanently constrained to accommodate one file's internal vocabulary. When a module cannot be split because splitting it would expose its vocabulary, the vocabulary is the design and the module is the symptom. Four hundred probe-token constants (`WROTE`, `WROTE_NOT`, `MOUNT-WRITABLE-`, `IDENTITY-NOT-MAPPED`, `NO-DESCRIPTOR-ABOVE-TWO`...) are a stringly-typed protocol between Rust and embedded shell, dressed in STD-001's clothing: STD-001 forbids magic strings, it does not bless four hundred named ones as a substitute for a type. Note this is workmanship, not architecture, and it is raised as `minor` for that reason — but it is the fingerprint the architecture leaves on the code."""
+disposition = "design-wrong"
+response = "Upheld, though it is the fingerprint rather than the crime. The permanent bin-only constraint is the tell: a crate whose public shape is frozen to protect one module's vocabulary has inverted the dependency between design and expedience. No repair is prescribed, because F-3 disposes the file as spike-rig material that is not migrated. Recorded so that the successor's property suite is held to a proportionate size from its first line, and so that four hundred stringly-typed probe tokens are not mistaken for STD-001 compliance a second time — STD-001 forbids magic strings, it does not bless naming them as a substitute for a type."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
