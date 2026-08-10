@@ -631,6 +631,16 @@ impl CapsuleEnvVar {
 }
 
 /// The environment of one run: an ordered set of variables and **no text**.
+///
+/// **Not the whole of a capsule's environment.** `bwrap` writes `PWD` into the
+/// child's exec block itself, after `--clearenv` and after every `--setenv`,
+/// naming the directory `--chdir` moved it to. A conforming capsule's environment
+/// is therefore this set **plus `PWD`** — an entry doctrine never declared and
+/// cannot suppress. Row 11 states its equality over that larger set and admits the
+/// entry by **whole value, never by name**, because without `--chdir` the same
+/// name would carry a host path. Deliberately not fixed by adding `PWD` here,
+/// which would change production `--setenv` output to make a test tidier
+/// (`RV-352` / `notes.md` item 128).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CapsuleEnv(BTreeSet<CapsuleEnvVar>);
 
@@ -662,8 +672,15 @@ pub(crate) enum CapsuleStdio {
     /// Descriptor 0 is an empty source: reads return EOF immediately.
     /// Descriptors 1 and 2 are **one-way** endpoints the parent created and
     /// reads. One-way rather than merely parent-created, because a socket pair
-    /// would satisfy *the parent made it* while carrying bytes back into the
-    /// trusted side. `/dev/null` is deliberately not named: the property is
+    /// would satisfy *the parent made it* while remaining readable from inside:
+    /// the **capsule** could `read(2)` descriptor 1 and receive whatever the
+    /// trusted side put there — an inbound channel nothing here declares. A
+    /// capture pipe's write end answers that read with `EBADF`. (Row 12 measures
+    /// that direction. An earlier wording justified the rule by a socket pair
+    /// "carrying bytes back into the trusted side", which is the *specified*
+    /// behaviour of a capture endpoint rather than the hazard — corrected at
+    /// reconcile, `RV-352` / `notes.md` item 129.)
+    /// `/dev/null` is deliberately not named: the property is
     /// *yields no bytes*, not *is `/dev/null`*.
     EmptyInputCapturedOutput,
 }

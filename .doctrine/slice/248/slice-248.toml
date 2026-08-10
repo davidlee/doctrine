@@ -83,6 +83,11 @@ selector = "src/clock.rs"
 intent = "design-target"
 note = "PHASE-01 promotes today to pub (E0364); added at the /plan critical pass"
 
+[[selector]]
+selector = "flake.nix"
+intent = "design-target"
+note = "util-linux (setsid, row 7's session escape) and socat (row 5); RV-352 F-2 at reconcile"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-020"

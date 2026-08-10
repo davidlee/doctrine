@@ -344,8 +344,18 @@ pub enum CapsuleStdio {
     /// reads.
     ///
     /// One-way rather than merely parent-created, because a socket pair would
-    /// satisfy *the parent made it* while carrying bytes back into the trusted
-    /// side — `sec-7` row 12's second leg.
+    /// satisfy *the parent made it* while remaining readable from inside.
+    ///
+    /// Corrected at reconcile (`RV-352`, `notes.md` item 129): this clause used
+    /// to justify itself by a socket pair "carrying bytes back into the trusted
+    /// side", which points at the harmless direction — bytes reaching the
+    /// trusted side is the *specified* behaviour of a capture endpoint, not the
+    /// hazard. The hazard row 12 actually measures is the other direction: the
+    /// **capsule** can `read(2)` descriptor 1 and receive whatever the trusted
+    /// side put there, an inbound channel nothing in `CapsuleStdio` declares. A
+    /// capture pipe's write end answers that same read with `EBADF`. Nothing is
+    /// broken in the shipping configuration — the backend uses pipes — but the
+    /// reason had to be repaired before someone rebuilt this type from it.
     ///
     /// `/dev/null` is the obvious realisation of the empty source and is
     /// deliberately not named here: it is a path, and which paths exist inside
@@ -354,6 +364,23 @@ pub enum CapsuleStdio {
     EmptyInputCapturedOutput,
 }
 ```
+
+**`CapsuleEnv` is not the whole of a capsule's environment, and this design used
+to read as though it were** (`RV-352`, `notes.md` item 128). Measured: `bwrap`
+writes `PWD` into the child's exec block *itself*, after `--clearenv` and after
+every `--setenv`, naming the directory `--chdir` moved it to. So a conforming
+capsule's environment is `CapsuleEnv` **plus `PWD=/capsule`** — one entry doctrine
+never declared and cannot suppress. `sec-7` row 11 therefore states its equality
+over that larger set and admits the entry **by whole value, never by name**,
+because without `--chdir` the same name would carry a *host* path.
+
+Nothing is broken in the shipping configuration: row 6 holds the working directory
+to the capsule's own, and row 11 holds the environment to declared-plus-that-one,
+so no host path reaches a capsule. What was wrong is the description — the
+"closed environment" property and `CapsuleEnv`'s own doc above read as an
+exhaustive account of what crosses, and they are short by one backend-synthesised
+entry. Deliberately **not** repaired by adding `PWD` to `CapsuleEnv`, which would
+change production `--setenv` output to make a test tidier.
 
 Every `CapsuleEnvVar` variant's *value* is computed trusted-side from the
 placement; none is caller-supplied text. This slice needs no others: its only
@@ -438,7 +465,7 @@ so the numeral now lives where the rows do.
 | 8 | trusted observation of resource limits and termination | `timeout`, `file_size_cap`, and every `Termination` variant being correctly distinguished |
 | 9 | immutable input set | that a declared readable path cannot be written through |
 | 10 | closed descriptor set | that no open file descriptor crosses `execute` except the ones the contract deliberately owns |
-| 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv`, with nothing inherited from the trusted-side process |
+| 11 | closed environment | that the capsule's environment is exactly `CapsuleEnv` plus the backend-synthesised `PWD` (admitted by whole value, never by name — see above), with nothing inherited from the trusted-side process |
 | 12 | owned standard streams | that descriptors 0, 1 and 2 are the parent's own — an empty source, and one-way capture endpoints it created — never the trusted-side process's |
 | 13 | mapped capsule identity | that the capsule runs as a declared uid and gid, not the trusted side's — the profile passes `--uid`/`--gid` for there to be one |
 | 14 | confined capabilities | that the capsule holds no capability authority in the bounding or inheritable set inside its own user namespace |
@@ -625,6 +652,16 @@ in order:
 --setenv <name> <value>            # once per env entry, in sorted order
 --share-net                        # ONLY when NetworkPosture::Permitted
 ```
+
+**The list is an order, not an inventory** (`RV-352`, `notes.md` item 37). Three
+binds it does not name are emitted all the same: `/source`, `/capsule` and
+`/agent` are *profile-owned*, derived by the backend from the placement's typed
+fields rather than arriving through either declared vector. They cannot arrive
+through a declared vector — `RESERVED_INNER_DESTINATIONS` refuses any entry naming
+them (`PHASE-04` `EX-6`), which is what stops a caller redirecting them. So a
+reader checking this list against the real argv finds three flags it does not
+mention; they belong to the profile, on the same reading as `--proc` and `--dev`
+above.
 
 **`--uid`/`--gid` are new in round 6 and are a real behaviour change, not a
 bookkeeping one.** Without them a capsule runs as the trusted side's uid inside
@@ -2055,6 +2092,20 @@ platform default. `execution-kill-grace-seconds` keeps its default of 5, which
 *is* directly measured (`sandbox.sh:68`) and is a window between two signals
 rather than a bound that ends work.
 
+**What `900` bounds, stated exactly** (`RV-352`, `notes.md` item 16a). The figure
+is derived from a Rust *build* fixture, so it bounds a **build/verification
+contract — not any capsule execution**. The distinction is load-bearing because
+`ADR-020` makes the capsule the dispatch authority boundary and the capsule mounts
+`/agent`, so what a capsule executes may equally be an *agent*, and an agent run
+is not a build: this slice's own `PHASE-03` planner sub-agent took 650s writing no
+code and running no builds. At `900` such a run is `SIGTERM`ed mid-phase.
+
+The slice owner ruled (2026-08-08) that `900` **stands** with that scope, and that
+agent execution gets its own bound as separate work — one key serving both is
+wrong in both directions, too tight for the agent and too slack to fail a build
+fast. The second key is `IMP-416`, deliberately not added here: `PHASE-03` `EX-19`
+fixes the key set, so introducing it in this slice would break an `EX` as written.
+
 **The advisory default survives that argument, and is re-anchored by it.**
 `expected-capsule-size-mib` denotes whole-tree size, which is exactly the
 quantity the spike's 4.4 GiB peak measured — so unlike the per-file cap, this
@@ -3392,6 +3443,18 @@ enum Indeterminacy {
 }
 ```
 
+**Widened in execution: `Observed` ships a fourth variant** (`RV-352` `F-7`).
+`PHASE-09` `T9` added `Observed::Unspoken` on the slice owner's ruling, so the
+shipped enum is `Token` / `Unspoken` / `Exactly` / `Termination`. The block above
+was written as a closed three-variant list, so this is a widening of the design's
+own vocabulary and the record is owed here rather than left in a phase sheet.
+`Unspoken` reads the *dominating* case of a two-token observation: under `Token`
+both tokens come from one payload, so both present is self-contradiction and the
+arm is `AmbiguousObservation`; under `Unspoken` the forbidden token is spoken by a
+process the capsule should have taken with it — row 7's escaped descendant, on the
+inherited stdout after its parent exited. Both tokens there is not a contradiction
+but the whole observation. No other variant's semantics moved.
+
 **The one payload that cannot print its own marker** is row 8's
 `NotExecutable` case, which by definition never runs. Its liveness comes from
 the same capsule instead: a liveness execution precedes it, and only if that
@@ -4174,6 +4237,29 @@ pub(crate) struct HostDescriptor { pub(crate) os: String, pub(crate) kernel: Str
 /// A directory removed on drop. Test-support, in this module.
 struct TempRoot(PathBuf);
 ```
+
+**Widened in execution: the verdict ships a third reporting channel** (`RV-352`
+`F-7`, `notes.md` item 138 — the ruling that item defers to reconciliation). The
+struct above enumerates two channels, `rows` and `auxiliary`. `PHASE-10` `T9` added
+a third, `observations: Vec<(Unrowed, Reading)>`, carrying `sec-9` `R8`'s two
+unrowed credential mechanisms.
+
+Item 138 asks whether this is the same class of widening as `Observed::Unspoken`
+above, or whether the design specified only *"reported without a verdict"* and the
+channel is therefore already covered. **Ruled: it is the same widening, and it owes
+the same record.** The design's reporting vocabulary *is* closed over channels —
+`AdmissionVerdict` is written out as a complete struct, and a reader checking the
+design against the shipped type finds a field the design does not mention. That
+`EX-12` and `sec-9` `R8` *require* a verdict-less report is what makes the addition
+correct; it is not what makes it already-enumerated. The distinction matters
+because the design being closed over channels is exactly what stops a future
+verdict-bearing channel arriving unremarked.
+
+`Reading` is deliberately not an outcome — no passing variant and no failing one.
+`Reading::Unread` exists because an absence-shaped report cannot be rendered as a
+value: a row routes an unread surface to its failing side, and an observation has
+no failing side. `caveat` carries the case where a value is right but this run
+cannot establish that the *backend* produced it.
 
 There is exactly one green path and it requires every row to have been run. An
 unavailable backend takes `NotAdmitted::Unavailable` and exits nonzero, which is

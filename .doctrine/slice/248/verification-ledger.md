@@ -72,9 +72,58 @@ all PASS. Suite 296 → 297 (**+1**), exactly `T13`'s one test. Delta tightened 
 `72fda544e..49ce9d7cd`.
 
 **All ten phases are `completed` and every `VT` row in the slice PASSES.**
-`slice conformance` reads **24 files, nothing undeclared**. `slice status` shows
-the expected divergence — *phases complete but lifecycle not terminal* — which is
-the audit's to resolve, not the loop's.
+`slice status` shows the expected divergence — *phases complete but lifecycle not
+terminal* — which is the audit's to resolve, not the loop's.
+
+### The conformance claim, corrected at reconcile (`RV-352` `F-1`)
+
+This ledger read *"`slice conformance` reads 24 files, nothing undeclared"*. **That
+was false at every close it was stated at.** The selector registry had not moved
+since `PHASE-01` (`6b58d48c8`) while the ten recorded boundary rows span 195
+distinct paths, so the claim cannot have held at any of them. The mechanical cause
+is reading the *tail* of the output — `conformant` prints last — rather than the
+*head*, where `undeclared` prints first.
+
+Measured at the audit tip: **24 conformant, 0 undelivered, 172 undeclared.** Of the
+172, **170 are `.doctrine/` authored state** swept into the ranges by the declared
+`PHASE-09`/`PHASE-10` boundary overlap (§ *The delta boundaries overlap*) — they are
+accounted for by a fact this ledger already records, not an unexplained excess. The
+two that were not `.doctrine/` are `flake.nix` and `LOOP.md`, raised separately as
+`F-2` and `F-4`.
+
+At reconcile `flake.nix` received the `design-target` selector it was always owed
+(`F-2` — it carries `util-linux`/`setsid` for row 7 and `socat` for row 5), so the
+ledger now reads **25 conformant, 0 undelivered, 171 undeclared**: the 170
+`.doctrine/` paths, plus `LOOP.md`.
+
+## The recorded boundary rows (`RV-352` `F-3`)
+
+`slice conformance` folds the boundary registry at
+`.doctrine/state/slice/248/boundaries.toml`, which is **gitignored runtime state**.
+All ten of this slice's rows lived only there, so no reader could re-derive the
+conformance algebra from the committed corpus — and an `rm -rf` of state at any
+point would have destroyed the slice's entire conformance basis *silently*, since
+conformance fails closed to `unavailable` rather than announcing the loss.
+
+Transcribed here so the basis survives the runtime tier. This is the same repair
+this ledger itself received when it moved out of `handover.md`, applied to the one
+input it still depended on. All ten rows are `provenance = "solo"`.
+
+| phase | `code_start_oid` | `code_end_oid` |
+|---|---|---|
+| `PHASE-01` | `63543e129afa4967ae07637613495b46642b05df` | `6b58d48c80bc122bcd75293fe3785c84a9cd8df8` |
+| `PHASE-02` | `18d77791a4e08066d60b41940f7e7522453fa20c` | `a11b158e016a8cde7548063ba9c9d4cbeec13642` |
+| `PHASE-03` | `ee562c9b9d6abc64bdb8d1beed3ff71f71859489` | `2a22084da97a84584313742a74bf0c05c1d97e13` |
+| `PHASE-04` | `3b36b60ed19d25190db48cc7e93adac0cbce9d45` | `4535efde8779e2f5b8fd9c893fb167521be273f6` |
+| `PHASE-05` | `b1553f62ac0b8ce873d7a15d0a83aae1b19ab5a8` | `ab06b2fa7cf051fc67b83acdf959246a40c3d351` |
+| `PHASE-06` | `e222fbcb2af3b2886cdab154d055927dc97fa943` | `d78de861ce2e178dcd7c6cb5055cc379eccf4b1d` |
+| `PHASE-07` | `075c2755c9a10a792f37235630ecbd6e1bfbfdad` | `3da4a9d71b5b859eab552cbe223f9a47a399ff84` |
+| `PHASE-08` | `3a1e85dbad979340bb2e5afbf56c39f5dbf309b0` | `82ec913a9607161c8963a5ddbb8e7f9c8ff9c828` |
+| `PHASE-09` | `57b38f732b764d09fb8f12c101d2ece3d0698da7` | `bcfcfec8010c0aee5c82a8dc26e6b7de6e790352` |
+| `PHASE-10` | `72fda544e5df7c0fb636c543e4b3bf87a499c0d1` | `49ce9d7cd30c5dea41926177948f3582983809bc` |
+
+Whether the platform should track the registry rather than leave it in the runtime
+tier is a governance question this slice does not settle.
 
 ## The delta boundaries overlap, and it cannot be fixed — only declared
 
