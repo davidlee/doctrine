@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019feb26-deaf-7922-808b-f6744d51d0de"
+recorded_at = "2026-08-10T10:10:20.975061888Z"
+kind = "friction"
+summary = "reconcile: slice scaffold comment advertises a link label the CLI rejects"
+detail = "The slice-NNN.toml scaffold comment shows 'doctrine link SL-NNN specs SPEC-018' as a worked example. Running it fails: 'specs is not a relation label authorable by SL via link. Legal labels: references, references, references, supersedes, governed_by, related, fulfils'. Correct form is 'references --role concerns'. Two costs: an agent following the scaffold's own example burns a failed call, and the error's legal-label list prints 'references' three times (once per role) without naming the roles, so it does not tell you what to do next. Cost here: 1 failed call + 1 recovery call."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
