@@ -90,6 +90,20 @@ could not be tightened out at all.
 so **both phases' ranges can claim it**. Tighten it out of whichever one sweeps
 it up, and then check the other.
 
+**`1d33865ed` is interior and probably cannot be tightened out at all.** It
+landed *between* `PHASE-09` `T9`'s commits, while the worker was live — the slice
+owner committed the off-jail audit (`offjail-audit.md`, `offjail-handback.md`)
+and swept up this file with it, both being untracked at the time. A phase's delta
+is one contiguous range, so an interior commit is unreachable by any
+`--start`/`--end`. `PHASE-06` has the precedent. Declare it rather than fight it:
+the audit files are slice evidence and arguably *are* phase work; this file is
+orchestrator infrastructure and is not. Say so at reconciliation instead of
+leaving the auditor to infer it.
+
+The general rule this re-teaches: **hold your own commits while a worker is
+live** — and that applies to the human as much as the orchestrator, so a
+handback is the moment to say "safe to commit now".
+
 `record-delta` only if the sweep caught commits genuinely not the phase's —
 dropping real phase work is what the CLI refused at `PHASE-07`, correctly.
 `verify-vt` cannot attribute before the flip and the boundary (`notes.md`

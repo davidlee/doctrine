@@ -450,6 +450,19 @@ is the usual culprit and has already been moved there once — it only grows, an
 a gitignored file is the wrong home for the one section nobody can afford to
 rediscover.
 
+**The diagnostic that catches this early: a section describing itself as the one
+thing with no copy elsewhere.** That sentence is a bug report, not a boast —
+this file is gitignored, so *no copy elsewhere* means *lost on `rm -rf`*. It was
+written verbatim above `SL-248`'s verification ledger (the orchestrator's own
+per-task gate runs, which `/audit` reads as evidence) and stood for several
+firings before the slice owner caught it. Durable state does not belong here at
+**any** length: move it to a tracked file in the slice directory and leave a
+pointer. Extra files there are free — `doctrine validate` scans entity kinds and
+ignores the rest. So the size rule is downstream of the real one: **the handover
+holds pointers and the current firing's position, nothing a later reader would
+have to rediscover.** A fat handover is the symptom; misfiled durable state is
+the cause, and trimming prose while leaving the state in place fixes neither.
+
 ## Writer map
 
 | surface | writer |
