@@ -1835,13 +1835,23 @@ fn make_executable(path: &Path) -> Result<(), FixtureFault> {
 /// The readable roots the fixture declares, **derived from the host** rather
 /// than hardcoded.
 ///
-/// One rule: the *top-level* ancestor of the resolved shell and of every
-/// resolved host `PATH` entry — `/nix/store/…/bin` yields `/nix`, `/usr/bin`
-/// yields `/usr`. The top-level ancestor and not the entry itself, because a
-/// dynamically linked executable needs its loader and libraries, which on a
-/// store-based host live under sibling directories of the same top level; a
-/// measurement on this host showed `git` runs under `--ro-bind /nix/store` and
-/// cannot under its own `bin` directory alone.
+/// One rule: the *top-level* ancestor of the shell — **both** the literal
+/// [`SHELL`] and what it resolves to — and of every resolved host `PATH` entry.
+/// `/nix/store/…/bin` yields `/nix`, `/usr/bin` yields `/usr`. The top-level
+/// ancestor and not the entry itself, because a dynamically linked executable
+/// needs its loader and libraries, which on a store-based host live under
+/// sibling directories of the same top level; a measurement on this host showed
+/// `git` runs under `--ro-bind /nix/store` and cannot under its own `bin`
+/// directory alone.
+///
+/// **The literal and the resolved shell are two candidates, and both are
+/// needed** (`EX-3`). Roots are identity-mapped, and a payload execs the literal
+/// `/bin/sh`, so `/bin` must name something inside the capsule; on a store-based
+/// host that literal is a symlink to `/nix/store/…/bin/sh`, whose top level is
+/// what carries the loader. Deriving from the resolved target alone binds the
+/// libraries and omits the entry point — the capsule comes up with nothing to
+/// exec, which reads as nineteen `Indeterminate { NoLiveness }` rows rather than
+/// as the missing mount it is.
 ///
 /// **Any candidate containing operator state is dropped** (invariant 7): the
 /// fixture root, `$HOME`, and the working directory. That is what keeps `/home`
@@ -1853,6 +1863,9 @@ fn make_executable(path: &Path) -> Result<(), FixtureFault> {
 /// satisfied without a second deduplication pass.
 fn system_readable_roots(host: &dyn HostFacts, fixture_root: &Path) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
+    if host.path_exists(Path::new(SHELL)) {
+        candidates.push(PathBuf::from(SHELL));
+    }
     if let Ok(shell) = host.resolve(Path::new(SHELL)) {
         candidates.push(shell);
     }
@@ -6726,7 +6739,38 @@ mod tests {
 
         let roots = system_readable_roots(&host, Path::new("/tmp/fixture-root"));
 
-        assert_eq!(roots, vec![PathBuf::from("/nix")]);
+        // `/bin` is the literal shell's own top level, kept so the capsule has
+        // something to exec; `/nix` is its target's. Neither contains `/home`,
+        // which is what this row asserts.
+        assert_eq!(roots, vec![PathBuf::from("/bin"), PathBuf::from("/nix")]);
+    }
+
+    /// `EX-3`: a readable root must cover the path the payloads actually
+    /// **exec**, which is the literal [`SHELL`] — not merely the path that
+    /// literal resolves to.
+    ///
+    /// The discriminating fixture is a store-based host: `/bin/sh` is a symlink
+    /// out of `/bin`, and `/bin` is not on `PATH`. Deriving roots from the
+    /// resolved target alone yields `/nix`, roots are identity-mapped, and the
+    /// capsule then has no `/bin/sh` — every payload `NotExecutable`, every row
+    /// `Indeterminate { NoLiveness }`, for a reason the run never names. A
+    /// fixture whose `PATH` mentions `/bin` cannot discriminate: there the root
+    /// arrives by accident, which is why this survived every in-jail run.
+    #[test]
+    fn a_readable_root_covers_the_literal_shell_the_payloads_exec() {
+        let host = FixtureHost::default()
+            .with_env(HOME_VARIABLE, "/home/operator")
+            .with_env("PATH", "/nix/store/abc-git/bin")
+            .with_resolution(SHELL, "/nix/store/abc-bash/bin/sh")
+            .with_resolution("/nix/store/abc-git/bin", "/nix/store/abc-git/bin");
+
+        let roots = system_readable_roots(&host, Path::new("/tmp/fixture-root"));
+
+        assert!(
+            roots.contains(&PathBuf::from("/bin")),
+            "the roots must cover the shell's own top level, not only its \
+             target's: {roots:?}"
+        );
     }
 
     /// A fixture root that is itself a candidate's top level is excluded too —
@@ -6738,7 +6782,13 @@ mod tests {
             .with_resolution(SHELL, "/scratch/bin/sh")
             .with_resolution("/scratch/bin", "/scratch/bin");
 
-        assert!(system_readable_roots(&host, Path::new("/scratch/run-1")).is_empty());
+        let roots = system_readable_roots(&host, Path::new("/scratch/run-1"));
+
+        // `/bin` survives: it is the literal shell's own top level and has
+        // nothing to do with the fixture root. `/scratch` — the top level of
+        // both the resolved shell and the one `PATH` entry, and the fixture's
+        // own — does not.
+        assert_eq!(roots, vec![PathBuf::from("/bin")]);
     }
 
     /// The synthesized document is the one `provision` parses — asserted by
