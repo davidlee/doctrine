@@ -14,7 +14,7 @@ ref   = "SL-248"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The conformance claim in the verification ledger is false"
 detail = "verification-ledger.md and handover.md both state 'slice conformance reads 24 files, nothing undeclared', restated at the PHASE-08, PHASE-09 and PHASE-10 closes. Measured at the sl-248 tip with the slice's own binary: 24 conformant, 0 undelivered, and 172 UNDECLARED. The selector registry has not changed since PHASE-01 (6b58d48c8) and the ten recorded boundary rows span 195 distinct paths, so the claim cannot have been true at any of those closes. The likely mechanical cause is reading the tail of the output (conformant is printed last) rather than the head (undeclared is printed first). 170 of the 172 are .doctrine/ authored state swept into the ranges by the already-declared overlap and are benign; the two that are not are flake.nix and LOOP.md, raised separately."
@@ -23,7 +23,7 @@ response = "Observation confirmed by measurement at the sl-248 tip. Remediation 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "flake.nix is implementation surface with no design-target selector"
 detail = "flake.nix carries a load-bearing change of this slice: it adds util-linux (setsid, row 7's session escape) and socat (row 5, previously transitive and undeclared) to the jail package set. It appears in the PHASE-09 and PHASE-10 recorded deltas and in the undeclared cell of slice conformance, because no design-target selector covers it. This is the highest-signal undeclared path in the slice: the file is what makes row 7 measurable at all, and the audit reproduced a 7-test red precisely because the auditing jail was built from edge's flake, where the change has not landed. Load-bearing fix is the selector registry, not design prose."
@@ -32,7 +32,7 @@ response = "Confirmed. Load-bearing remediation is the selector registry, not pr
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Conformance evidence rests on gitignored runtime state"
 detail = "slice conformance folds the recorded boundary registry at .doctrine/state/slice/248/boundaries.toml, which is gitignored runtime state. All ten of this slice's boundary rows live only there. The tracked record (verification-ledger.md) states the resulting verdict in prose but not the rows, so no reader can re-derive the conformance algebra from the committed corpus — the audit could only run it because the file was hand-copied out of the clone at ../doctrine-SL-248. An rm -rf of state at any point would have destroyed the slice's entire conformance basis silently, and conformance fails closed to 'unavailable' rather than announcing the loss. Same class as the verification ledger's own move out of handover.md, one artefact short."
@@ -41,7 +41,7 @@ response = "Confirmed. Not remediable inside this slice — boundaries.toml is r
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "LOOP.md is undeclared and is orchestrator infrastructure"
 detail = "LOOP.md changed by 583 lines across the slice and appears undeclared in slice conformance. It is dispatch-loop infrastructure rather than slice deliverable, so the right disposition is an explicit decision — either a scope-relevant selector that declares it as touched-but-not-delivered, or a recorded exclusion. Leaving it in the undeclared cell means the next conformance read carries a path nobody has adjudicated. Related: notes.md records LOOP.md at ~560 lines against its own ~200-line cap, with compression owed at slice end."
@@ -50,7 +50,7 @@ response = "Confirmed and low-cost. Reconcile decides: a scope-relevant selector
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The owed ledger drifted three times and the sweep is manual"
 detail = "notes.md section 'Owed to the reconciliation brief' is the ledger /audit reads first, at 176 items. Its own items 142, 143 and 176 record that it drifted three separate times: T10's F-51..F-54 never reached it and had to be back-appended out of order; and the F-64..F-67 to item 172-175 mapping existed only in the gitignored phase sheet and had to be transcribed at the last beat. Each worker only appends, so reconciling the section against every phase sheet's Findings is a manual orchestrator sweep with no mechanical check. The three caught drifts are evidence the sweep works; they are equally evidence that nothing would have caught a fourth."
@@ -59,7 +59,7 @@ response = "Confirmed by the ledger's own items 142, 143 and 176. No per-slice r
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The handover's mint list carries an obligation its own notes withdrew"
 detail = "handover.md 'Ids to mint' names 'issues for F-31, the session-sweep floor, PHASE-09 F-35, PHASE-10 F-4, F-24, F-25, and item 161's userns vacuity; the trusted_side_setup residual; and the RV- for T9's design widening'. Two defects. (a) F-31 is withdrawn by notes.md item 70, which states the PHASE-08 descriptor-window defect was fixed in-phase by PHASE-09 T1 and that 'the merge owes the record of the defect and its fix, NOT a live ISS-'. Minting from the compact list verbatim creates a spurious issue for a discharged obligation. (b) The list flattens unconditional obligations together with ones the notes make explicitly conditional on the reconciler's choice — items 113, 117, 118, 123, 161 all read 'owed as an ISS- at merge IF ...'. The compact pointer list is not safe to execute without reading each item it points at."
@@ -68,7 +68,7 @@ response = "Confirmed and acted on within the audit. Minted on the parent (edge)
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The record owed for T9's vocabulary widening names two different kinds"
 detail = "handover.md states 'An RV- is owed at merge on the parent: widening a locked design's vocabulary routes through a Revision (ADR-013)'. RV is the review kind; a Revision is REV. The sentence names one and justifies it with the other, so the obligation is unactionable as written. The substance: PHASE-09 T9 added Observed::Unspoken to a design vocabulary the locked design run (revision 93) had closed, on the owner's ruling. notes.md item 138 asks whether PHASE-10's T9 owes the same for the Unrowed/Reading channel and explicitly leaves it unanswered for reconciliation. Which kind applies turns on whether design.md is a per-slice artefact (direct edit at reconcile, no REV) or governance (REV) — the audit skill's own D3 guardrail says per-slice, which would make an RV the wrong instrument for both."
@@ -77,10 +77,19 @@ response = "Confirmed as unactionable-as-written; the audit does not settle it b
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "EX-14 in CI is an open decision the slice cannot close over"
 detail = "notes.md section Open carries 'OPEN — EX-14 in CI. DEC-180 settles the local host and stops there', attributed to '(Slice owner / orchestrator, before close.)' and therefore unresolved at audit. EX-14 forbids an availability condition, an #[ignore], a skip or an early return reaching Admitted: the conformance suite must be able to fail. The local host is settled. CI is not, and every reflex available is one EX-14 forbids. The audit's own environment is the concrete instance: a jail built from edge's flake cannot resolve setsid, so the suite goes 7-red for a reason that is not a conformance defect — exactly the case sec-9 residual 3 names and nothing this slice added mitigates. Raised as a blocker because it is a named pre-close owner decision, not because the code is wrong."
+disposition = "verified"
+response = """
+Ruled by the slice owner, 2026-08-10. Of the three shapes notes.md § Open weighed, the owner accepts the second: make backend unavailability a distinct non-Admitted verdict. It is the only one that keeps the answer inside the type admission() already returns — the row vocabulary carries three values (Proven/Unproven/Indeterminate) while the admission verdict carries two, so the information exists and is discarded at the fold. Restoring it adds no skip, no #[ignore] and no availability condition on any test: EX-14 is satisfied by construction, because the new outcome has no path to Admitted.
+
+The finding is a criterion-level ruling, not a code defect, and the implementation is net-new work against PHASE-10's closed surface rather than a reconcile edit. Recorded as IMP-417, sequenced after ISS-339.
+
+One trap named in IMP-417 and load-bearing: the new outcome must NOT be derived from row-level Indeterminate. ISS-334's four row-B5 siblings return Indeterminate { NoObservation } under CPU contention — a genuine fixture race, correctly reported. Folding that into 'the host could not establish this' rebuilds the vacuous pass one level up under a new name. The discrimination belongs at precondition level: a host-capability probe that runs before the rows and convicts loudly, on the S4 guard's existing model, feeding the new outcome from its own result. Row verdicts stay what they are.
+
+Supporting work landed with this disposition: just capsule-verify on sl-248 (79a6f9093) — the shipped verb rather than the crate's test modules, with a ### host header so an absent binary is a fact in the transcript rather than an inference from a strange verdict. Standalone, deliberately not wired into gate, since wiring it in is what F-8 was about. In-jail smoke run: outcome=admitted, 19/19 Proven, exit 0."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
