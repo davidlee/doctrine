@@ -1968,6 +1968,74 @@ folded into items 131/135/136, which they answer.
     `F-38`'s landed design rather than to row 7, and was judged outside `T9`'s
     card and **not** taken.
 
+**Items 168–171 are the orchestrator's, from the `VA-1` off-jail audit and the
+in-jail run of the instrument it produced** (`offjail-audit.md`,
+`cage-shape.md`, `spike-mounts.sh`, `spike-mounts-output.txt` =off-jail /
+`spike-mounts-injail-output.txt` =in-jail, all tracked at `c953d411d`). Appended
+at the end per the append-only rule.
+
+168. **The cage's two suspected contaminations are CLEARED, against
+    pre-registered failure conditions.** The audit confirmed the cage has its own
+    **mount** namespace with restricted binds, so `BoundedFilesystemVisibility`
+    and `ImmutableInputSet` *could* have been supplied by the cage rather than by
+    the capsule — upgraded at the time from suspected to confirmed exposure. A
+    new probe settles both, and the failure conditions were named **before** it
+    ran, which is what makes the pass mean anything. Row 9: predicted failure was
+    the control arm reading `EROFS-or-denied` (the outer cage overriding a nested
+    `--bind`); measured in-jail the control reads **`W_OK=writable`** against the
+    probe's `EROFS-or-denied`, so the control can fail for its own reason. Row 4:
+    predicted failure was the `$HOME` or `/run/current-system` decoy coming back
+    absent or refused; measured, `$HOME` is **VISIBLE, entries=11**, `/etc` 9, the
+    fixture decoy 1, probe absent. `/run/current-system` does not exist in this
+    jail, so that one candidate honestly **says nothing** — an absent candidate,
+    not a negative reading. Neither row's green is the cage's.
+
+169. **`ExplicitNetworkPosture` is cleared *structurally*, and the distinction
+    between contamination and coverage is the durable part.** The cage **shares
+    the host's network namespace** — inode `4026531833`, verified on *both* sides,
+    which is the only way that reading means anything. A cage sharing the host
+    netns cannot supply the isolation the row attributes to the capsule, so
+    `--unshare-net` on the confining arm really isolates and a network-permitted
+    weakened arm really reaches the host network. No re-run is owed. **The
+    residual is that no spike exercises the row at all** — a *coverage* gap, not a
+    *contamination* one. They are different problems with different costs, the
+    audit's own § E did not separate them, and conflating them is what turns a
+    cheap missing probe into an expensive re-measurement.
+
+170. **Two shipped spike scripts carry `F-41`'s silent-false-negative defect, and
+    one of them is the guard's own sibling.** `spike-deltas.sh` does not pin its
+    sandbox `PATH`; it inherits the ambient one, which in this jail is already
+    store-rooted with `/nix` bound. Run off-jail verbatim, **every arm returned
+    `exit=0` with `command not found`** for `sleep`/`cat`/`cut`/`ls`/`grep`/`dd`
+    — readings of `wrote 0 bytes`, `0s` and empty proc counts: a full-table false
+    negative that *looks like output*. `spike-credentials.sh` already guards
+    exactly this at its own lines 51–61, naming the trap; the sibling did not
+    inherit the guard. `spike-teardown-2x2.sh` has the same shape via
+    `PYTHON=$(command -v python3)`, which resolves on the **host** while the
+    sandbox binds omit `/home`. Its "`setsid` binary on PATH" line likewise
+    reports the *runner's* PATH rather than a host capability, so as the evidence
+    behind `F-27`'s "absent in this jail" claim it is weaker than it reads.
+    `spike-mounts.sh` pins its PATH into a bound root and does not share the
+    defect. Owed as an `ISS-`, and the generalisation is `F-41`'s: **a probe that
+    cannot run is indistinguishable from a probe that found nothing, unless it is
+    built to convict.**
+
+171. **The spike artefacts do not record which environment produced them, and at
+    least two environments are mixed in the corpus.**
+    `spike-credentials-output.txt` reads `uid_map 0 0 4294967295`, userns
+    `user:[4026531837]` and `parent NoNewPrivs: 0` — the **init** user namespace,
+    i.e. produced on the host, with a `bwrap` store hash (`82xr5pn…`) differing
+    from the in-jail deltas artefact's (`x4m5ja…`). But `offjail-prompt.md` frames
+    the credentials spike as jail-measured and `notes_10-12.md:509` states this
+    jail's parent reads `NoNewPrivs: 1`; neither is consistent with that artefact.
+    `spike-deltas-output.txt` self-records `cwd=/workspace/doctrine-SL-248` and is
+    genuinely in-jail. **Cheap durable fix, and it would have made the whole audit
+    unnecessary:** have every spike print `uid_map`,
+    `readlink /proc/self/ns/{user,pid,net}` and `NoNewPrivs` in its `### host`
+    header, so "measured in this jail" becomes a fact *in* the artefact rather
+    than a claim *about* it. `spike-mounts.sh` already does this — it is the
+    pattern to copy. Owed as an `ISS-`.
+
 ## Open
 
 **RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`
