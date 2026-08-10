@@ -61,11 +61,36 @@ own result. Row verdicts stay what they are.
 The `S4` guard in `conformance.rs` is the existing precedent for the convict-loudly
 posture and the model to follow.
 
+## The first concrete probe, supplied by `ISS-339`'s off-jail run
+
+`ISS-339` was done first as advised, and it produced one member of the probe set
+rather than a hypothetical:
+
+> **A readable root must cover the literal path a payload execs.**
+
+The first off-jail run failed every row `Indeterminate { NoLiveness }` because
+the derived bind set carried `/nix` but not `/bin`, so the capsule had no
+`/bin/sh`. The derivation defect is fixed on `sl-248` (`8f837c312`), but the
+*reporting* defect is this item's: a host structurally unable to start a payload
+said nothing about the missing mount and let nineteen rows read as indeterminate.
+
+This is the exact confusion the trap above warns of, arriving from the other
+direction — a genuine host precondition wearing row-level `Indeterminate`'s
+clothes. It is also why the check has to be **structural**, not existential:
+`admission`'s current guard asks `host.path_exists(SHELL)`, which follows the
+symlink and returns true on precisely the host that cannot exec it. The probe
+must instead ask whether `SHELL` falls within a derived readable root —
+`is_within` against `system_readable_roots`, both of which already exist.
+
+Sizing note: the fix that made this pass was four lines in one function. What
+remains here is the loud precondition, not the mount.
+
 ## Related
 
-`ISS-339` — nobody has run the suite off-jail. Worth doing **first**: it is the
-cheapest way to learn what the suite's real host preconditions are before they
-are fixed in a type. `just capsule-verify` (added on `sl-248`) is the invocation.
+`ISS-339` — the off-jail run. Advised first; **done**, and it paid out (above).
+`just capsule-verify` (added on `sl-248`) is the invocation. It stays open until
+a real host is seen to *admit* the backend — a second precondition may sit behind
+the first, and each one found is another probe member for this item.
 
 ## References
 
