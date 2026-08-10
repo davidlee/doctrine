@@ -1840,6 +1840,68 @@ under the sheet's own fallback.
     seen fire is a guard you have not got"* is about **evidence**, and evidence
     does not require the guard to be resident.
 
+**Items 158–161 arrive out of order and are the orchestrator's, not a worker's.**
+They are the `VA-1` off-jail run (`.doctrine/slice/248/offjail-prompt.md`),
+executed by the owner on an unjailed host on 2026-08-10 and pasted back as raw
+arm output. They are appended at the end per the append-only rule rather than
+folded into items 131/135/136, which they answer.
+
+158. **`F-4` is settled and it is *worse framed* than "host-dependent": the uid
+    vacuity is a **choice**, not a host fact.** The off-jail positive control `P`
+    (no `bwrap` at all) reads `uid=1000 gid=100` — the *same* operator uid as
+    this jail — so `uid` and `uid_map` still fail to discriminate there, which
+    confirms item 131 rather than dissolving it. But arm `A3`
+    (`--uid 4242 --gid 4242`) moves `uid`, `gid` **and** `uid_map`
+    (`4242 0 1` against `A1`/`A4`'s `1000 0 1`). So all four of row 13's surfaces
+    discriminate whenever the declared identity differs from the operator's: the
+    two dead ones are dead because `CAPSULE_UID` is 1000 and 1000 is the common
+    operator uid, not because the surfaces are inert. Two routes at
+    reconciliation, and the choice is real: declare a capsule uid no ordinary
+    operator holds (`A3` is the evidence it works), or keep 1000 and carry the
+    host-dependence as stated property. **Caveat on item 131's own wording:** the
+    off-jail payload never reports `gid_map` on any arm, so "only `gid` and
+    `gid_map` discriminate" is *half*-verified — `gid` is confirmed off-jail,
+    `gid_map` is unmeasured there.
+
+159. **`F-48` is settled affirmatively: the shipping backend's confinement is
+    what produces the zero.** The off-jail control `P` reads
+    `CapBnd: 000001ffffffffff` — the full bounding set — with no `bwrap` in the
+    picture, while `A1` and `A2` read all-zero across `CapInh`/`CapPrm`/`CapEff`/
+    `CapBnd` and `A5` (`--cap-add ALL`) restores `000001ffffffffff`. In-jail this
+    could not be shown, because the jail had already stripped capabilities and
+    the probe's zero was unattributable. The `create_user_ns()` argument recorded
+    at item 135 is now a **measurement**. Minor rider: the host's `CapInh` is
+    `0000000800000000` — one inheritable capability, non-zero — and every
+    sandboxed arm except `A5` zeroes it.
+
+160. **`no_new_privs` is settled, and this is the one surface `VA-1`'s stated
+    rationale genuinely rescued rather than merely confirmed.** `A6`: the parent
+    shell reads `NoNewPrivs: 0` *before any `bwrap` ran*, and every `bwrap` arm
+    reads `1`. So on an unjailed host `bwrap` **sets** `no_new_privs`; it does
+    not merely inherit it. In this jail the parent already read `1`, which is
+    exactly the unattributable case item 136 designed for — and that item's
+    ruling (compute the caveat from the trusted side's own reading rather than
+    hard-coding a sentence) is vindicated: on the off-jail host the caveat is
+    correctly *absent* and the attribution is real.
+
+161. **A vacuity candidate nobody carded, visible only in the raw arms.** `bwrap`
+    on the off-jail host is **not setuid** (`mode=555 owner=root`, no `s` bit)
+    and `max_user_namespaces=247154`, so unprivileged user namespaces are the
+    mechanism — and unprivileged `bwrap` creates a fresh userns **whether or not
+    `--unshare-user` is passed**. Measured: `A1` (`--unshare-all`) is
+    `user:[4026536081]`, `A2` (`--unshare-user` *dropped*) is
+    `user:[4026536411]`, and both differ from the host's `user:[4026531837]`.
+    The off-jail prompt's `Q2` discriminator therefore holds, **but not for the
+    reason it states**: distinct inodes separate "a `bwrap` ran" from "none ran",
+    not "the flag was passed" from "the flag was dropped" — two successive
+    `bwrap` invocations differ from each other regardless. Any shipped assertion
+    that reads `CredentialsConfined` off *userns identity* would pass under both
+    arms: the vacuous-pass family again, and the first instance found in a
+    **control arm's premise** rather than in a payload or an assertion. Whoever
+    wires row 13/14 must confirm no shipped assertion rests on the flag rather
+    than on the identity and capability surfaces, which do discriminate (items
+    158, 159). Owed as an `ISS-` at merge if it survives carding.
+
 ## Open
 
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
