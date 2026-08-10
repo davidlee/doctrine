@@ -234,6 +234,21 @@ the defect as fixed in-phase by `PHASE-09` `T1` and states the merge owes the
 `Cargo.lock` (regenerate with a build, do not hand-resolve) and
 `.doctrine/adr/001/layering.toml`.
 
+### Harvest check — nothing is stranded in the phase sheets
+
+The audit tail swept the ten gitignored phase sheets for durable content not
+present in the tracked record. Every finding the sheets themselves mark *owed
+upward* — `PHASE-08` `F-28`/`F-31`/`F-35`/`F-36`, `PHASE-09` `F-2`/`F-35`,
+`PHASE-10` `F-20`/`F-24`/`F-26`/`F-44`/`F-58` — is cited in `notes.md` or its
+shards. Nothing needs sweeping; the slice harvested continuously as it went, and
+its § *Owed* ledger is the reason.
+
+That result is not an argument against `IMP-418`. The check took a hand-written
+`awk` pass over ten files to reach "clean", and it can only confirm the
+*direction* the slice was already careful about. `notes.md` item 176 records the
+opposite direction failing — `PHASE-10` `F-64`–`F-67`'s mapping to items 172–175
+exists only inside the gitignored sheet.
+
 ### `F-8` — the owner's ruling, 2026-08-10
 
 Of the three shapes `notes.md` § *Open* weighed, the owner accepts the second:
