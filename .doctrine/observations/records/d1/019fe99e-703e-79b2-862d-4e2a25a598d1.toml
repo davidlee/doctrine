@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe99e-703e-79b2-862d-4e2a25a598d1"
+recorded_at = "2026-08-10T03:01:42.590447462Z"
+kind = "friction"
+summary = "execute/T9: a pinned test-binary path turned a mutation battery's leftovers into a fake load failure"
+detail = "SL-248 PHASE-09 T9. $BIN was resolved once from cargo test --no-run and reused across the battery. After the last mutant was restored the source was newer than that binary, and doctrine check gate builds/tests its own artefact — so the gate was green at 296 while five hand-run 'load tally' rounds were red, identically, with the mutant's own panic. Diagnosed only by comparing binary and source mtimes. Cost: one full tally round plus a diagnosis round."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

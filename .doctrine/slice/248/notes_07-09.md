@@ -2205,6 +2205,84 @@ tests at once and a neighbour's `bwrap` would be attributed to this arm, which i
 fires the escapee has **not** called `setsid(2)` yet, so the search polls; one
 `CAPSULE_DISCOVERY_INTERVAL` later it has.
 
+### Sizing the confining arm, after the cost claim was withdrawn
+
+The coordinator withdrew the 1004 ms figure mid-task and asked for the confining
+arm to be sized in a capsule. It had already been measured that way here (above);
+the sizing is the part that was owed.
+
+**What the linger is actually for.** Nothing observes row 7's escapee outliving
+the arm, because inside the pid namespace nothing can — the arm waits for it.
+What the linger buys is the window in which the *trusted side* can see the
+escapee: the descent to the capsule polls half a second, the sighting polls
+another half. Survival past that window is unobservable and is pure cost.
+
+So the payload's post-speech linger became `ESCAPEE_LINGERS_SECONDS = 3` — five
+times the worst-case poll — and `ESCAPE_SECONDS = 23` stayed with the one payload
+that still needs it, the **non-escaping** orphan of
+`the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness`,
+whose arm returns in ~25 ms and whose orphan must outlive it. No shipped payload
+reads `ESCAPE_SECONDS` any more, so it moved into `mod tests` (`F-38`'s precedent
+for `STAT_GROUP_FIELD`: an unused `const` in the production block is a
+`dead_code` error, not foreshadowing).
+
+Effect: `process_tree_teardown_is_proven` **26.27 s → 6.26 s**; the control arm
+5 s instead of 25 s; the reaper instrument's host leak bounded at 3 s instead of
+23 s. Gate unchanged at 296 / 92.33 s either way, because row 8's wall row is
+still the floor — the saving is in what the suite *holds*, not in what it costs.
+
+### `a_process_group_only_reaper_fails_row_seven` — the ordering is the experiment
+
+The instrument provisions through the real mechanism (`A4`) and then runs the
+payload itself: an ordinary host process, no namespace and no
+`--die-with-parent`, in a process group of its own via
+`CommandExt::process_group` — a safe, stable API, so the `unsafe` budget is
+untouched (`C8`, `S7`).
+
+**The reap fires when the payload's own process exits, not when its output pipe
+drains.** That was got wrong first and it matters: `--die-with-parent` fires at
+the parent's death, a second before the escapee is due to speak, so a harness
+that drained first would let *every* descendant speak before reaping anything and
+would fail row 7 whether or not its reaper could reach the escapee. Waiting,
+reaping, then draining is what makes the **group escape** the reason it fails —
+`M-P`, below, is the proof.
+
+`R2`, both signalling paths:
+
+- the **process-group** reaper is the shipped, floored, battery-checked
+  instrument (`F-37`), aimed only at a group this test created;
+- the **session** sweep is refused, not avoided. The payload is an ordinary child
+  and so shares the runner's session; `note_session`'s own-session refusal
+  (`F-36`) declines to record it. The test asserts that the sweep was left empty
+  rather than trusting it — a floor for the runner's own tree, asserted.
+
+| mutation | reds |
+|---|---|
+| M-P `setsid` removed, so the descendant stays in the reaped group | `a_process_group_only_reaper_fails_row_seven` → `Unproven` |
+
+### A false red that cost a round: a pinned test-binary path
+
+Five consecutive "load tally" rounds came back red, identically, with the M-P
+mutant's own panic — read at first as a load-dependent failure, because a
+mutant's failure and a real failure are the same assertion firing. The unloaded
+control rounds failed identically, which broke the reading; `ls --time-style` on
+binary and source settled it. `doctrine check gate` builds and tests its own
+artefact, so a `$BIN` resolved once and reused kept pointing at the last mutant's
+binary while the gate was green at 296.
+
+Harvested as `mem.pattern.testing.re-resolve-the-test-binary-never-pin-its-path`.
+The rule that generalises: **treat "a whole batch failed identically" as a
+stale-artefact hypothesis before a load hypothesis**, and rebuild immediately
+after every restore.
+
+### Load tally
+
+`F-36`'s standard, since these tests read live processes, sessions and windows.
+Under 8 spinners on a 32-core host: the four cheap row-7 tests **20/20** over
+five rounds, `process_tree_teardown_is_proven` **3/3**. Gate green 3/3 unloaded.
+No attempt at 24 spinners: `F-35` records that band as already failing on row
+B5's siblings, so a red there would not be attributable to this task.
+
 ---
 
 **`PHASE-10` onward continues in `notes_10-12.md`.** Its records were written

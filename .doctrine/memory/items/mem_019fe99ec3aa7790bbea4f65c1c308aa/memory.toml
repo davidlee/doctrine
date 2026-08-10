@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe99ec3aa7790bbea4f65c1c308aa"
+memory_key = "mem.fact.bubblewrap.pid-namespace-init-holds-the-capture-until-it-empties"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A capsule payload cannot release the harness's capture pipe"
+summary = "A capsule payload cannot release the harness's capture pipe; bwrap's pid-namespace init holds it until the namespace empties"
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["conformance", "bubblewrap", "measurement"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ae9d750a6b7468e743ce54ef6e287f963985fea4"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "64571982966838821a234dd7e0b4912ff0e42a72769e883fa76f2018920a045b"
+base_commit = "610d0670f10498076007ca4f67192ecacf37cc1d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

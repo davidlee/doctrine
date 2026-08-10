@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe99ec4747ae3bab1ff233640232c"
+memory_key = "mem.pattern.testing.re-resolve-the-test-binary-never-pin-its-path"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Never pin a test binary's path across a mutation battery"
+summary = "Never pin a target/debug/deps/<crate>-<hash> path across a mutation battery — it silently becomes the last mutant's binary"
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "mutation", "footgun"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ae9d750a6b7468e743ce54ef6e287f963985fea4"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "c7173de8812c0beb3ec6ff8a70b547e63884f89ffd4cc681c0f3dedd026813bf"
+base_commit = "610d0670f10498076007ca4f67192ecacf37cc1d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+

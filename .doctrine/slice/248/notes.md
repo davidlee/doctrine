@@ -1902,6 +1902,72 @@ folded into items 131/135/136, which they answer.
     than on the identity and capability surfaces, which do discriminate (items
     158, 159). Owed as an `ISS-` at merge if it survives carding.
 
+162. **A payload cannot release the harness's capture pipe from inside a capsule,
+    and a bare-shell measurement of that is a measurement of the *other* arm
+    (`F-44`).** Under `--unshare-pid`, bwrap's namespace init holds the captured
+    descriptors until the namespace empties, so `exec 1>&- 2>&-` in a detached
+    descendant releases nothing and a teardown-removed arm costs that
+    descendant's whole lifetime plus ~130 ms. Delay swept 0…4 against a 23 s
+    escapee: 23.13 / 24.11 / 25.13 / 26.13 / 27.13 s. The same shape in a bare
+    `sh -c` returns in ~1 s because there is no namespace — which is the weakened
+    arm, not the confining one. The ruling's 1004 ms figure was taken that way
+    and inverted the cost conclusion; item 156 had already said it in words.
+    Harvested as
+    `mem.fact.bubblewrap.pid-namespace-init-holds-the-capture-until-it-empties`.
+
+163. **Row 7's escapee is sized to the trusted side's observation window, not to
+    survival (`F-45`, `F-46`).** `ESCAPE_SPEAKS_AFTER_SECONDS = 2` — the reap
+    wins a dead heat at margin zero, so the latency is below the instrument's
+    resolution and this is a full second of margin. `ESCAPEE_LINGERS_SECONDS = 3`
+    — nothing observes the escapee outliving the arm because inside the namespace
+    nothing can, so the linger's only job is the two half-second polls that find
+    it. `process_tree_teardown_is_proven` fell 26.27 s → 6.26 s.
+    `ESCAPE_SECONDS = 23` stays with the non-escaping orphan test and **moved
+    into `mod tests`**, because no shipped payload reads it and `-D dead_code`
+    would red a non-test build — a declaration site outside `T9`'s own additions,
+    forced by the sizing.
+
+164. **The walk's `UNWALKED` exclusion is deleted, and that is what makes the
+    vacuity net live (`F-47`).** `every_shipped_rows_control_is_seen_to_fail` had
+    excluded the one row the double-`Held` trap applies to. With row 7 wired the
+    exclusion is gone rather than retargeted, and mutating the escapee mute reds
+    the walk with `Property(ProcessTreeTeardown) Held` against `Failed` — `EX-3`'s
+    vacuous pass, executed, by the test that used to look away from it.
+
+165. **A group-only reaper must reap at the payload's exit, not after draining its
+    output, or the test convicts nothing (`F-48`).** `--die-with-parent` fires a
+    second before the escapee speaks; a harness that drained first would let every
+    descendant speak before any reap and would fail row 7 regardless of whether
+    its reaper could reach the escapee. Wait, reap, then drain — and removing
+    `setsid` then reds it `Unproven`, which is the discrimination the row exists
+    for. Both signalling paths are accounted for: the process-group reaper is
+    aimed only at a group the test created, and the session sweep is **refused**
+    by `note_session`'s own-session floor, asserted rather than trusted.
+
+166. **A pinned test-binary path turns a mutation battery's leftovers into a fake
+    load failure (`F-49`).** `doctrine check gate` builds and tests its own
+    artefact, so a `$BIN` resolved once from `cargo test --no-run` kept pointing
+    at the last mutant's binary: five identical red rounds read as
+    load-dependence, while the gate was green at 296. A mutant's failure and a
+    real failure are the same assertion firing, so the batch's *uniformity* is
+    the tell, not its content. Rebuild after every restore; re-resolve the path
+    on each use; suspect a stale artefact before load. Harvested as
+    `mem.pattern.testing.re-resolve-the-test-binary-never-pin-its-path`.
+
+167. **`F-38` is confirmed off-jail and its honest fix is already half-landed
+    (`F-50`) — needs a ruling, possibly an `ISS-`.** This jail: 21 live
+    processes, **0** with `pgrp != sess`. Off-jail: 759 live, **34**
+    discriminating. So no test reading *live* processes here can convict a
+    `/proc` field-index slide. `F-38`'s recorded fix already answers that for the
+    reader — the parse rule has one home and is convicted by a **synthetic** stat
+    line asserting group 777 and session 888, which is the manufactured
+    discriminating case the audit asks for, one altitude cheaper than a real
+    process. What stays population-dependent is only the live-`/proc`
+    corroboration, kept deliberately as a separate weaker claim. Whether that
+    corroboration should manufacture a real `pgrp != sess` process is a change to
+    `F-38`'s landed design rather than to row 7, and was judged outside `T9`'s
+    card and **not** taken.
+
 ## Open
 
 **RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`
