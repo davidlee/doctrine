@@ -53,3 +53,36 @@ nothing installed.
 Related: [[mem.fact.tooling.x-bit-is-not-runnability]] — a binary whose loader is
 absent is `-x` and exits 127, which is the failure this closure exists to
 prevent.
+
+
+---
+
+## Correction, 2026-08-11 — the `ldd` equivalence claim is NOT established
+
+The paragraph above beginning *"This is what `ldd` does"* overreaches and must
+not be load-bearing.
+
+Modern glibc `ldd` deliberately **avoids executing the inspected file directly**,
+invoking it through a verified dynamic linker instead, because executing an
+arbitrary file is unsafe. So *set the variable and exec the target* and *run
+`ldd`* are **not** the same operation, and "the difference is one line inside the
+wrapper" is false.
+
+`ldd` is absent from this development jail, so the original claim was never
+verified here — it was recalled, not measured, and it sat in a memory whose other
+claims *were* measured. Raised by an external review of `DEC-186`, 2026-08-11.
+
+**What remains measured and true:** the loader-trace output above, the 691 vs 16
+store-path figures, and the fact that Nix store paths bear no lexical relation to
+their dependencies.
+
+**What is now known to be missing from the mechanism**, and is the reason
+`DEC-186` was withdrawn from `SL-252`:
+
+- A pathless trace line is *not* always a virtual object. `libfoo.so => not
+  found` is also pathless, and discarding it silently converts a broken closure
+  into a successful one.
+- The raw trace is a diagnostic format, not a line-oriented path protocol.
+  Anything consuming it owns a parser.
+- The behaviour is glibc's, not a generic Linux dynamic-linking contract — a host
+  capability, whether or not a tool is acquired to reach it.

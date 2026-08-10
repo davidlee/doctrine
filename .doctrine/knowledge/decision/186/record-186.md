@@ -42,3 +42,88 @@ The sixteen names in the payload inventory are only **six files**: `cat head env
 
 - **The mechanism is *exec the tool and trust the loader to intercept before `main`*.** True for dynamically linked ELF; false for a static binary or a script, where the tool would actually run. Check exit 0 and output shape.
 - **`git` may want more than libraries** — `libexec/git-core`, templates. Table B row 2 uses only `hash-object`, `update-ref`, `cat-file` and `show-ref`, which are builtins of the single binary, but that wants verifying in the first phase rather than assuming.
+
+
+---
+
+## Withdrawn from SL-252, 2026-08-11
+
+**`SL-252` does not implement this decision.** `DEC-188` takes `DEC-185`'s S3
+fallback — the readable set is declared and wide — so no `closure-roots` are
+declared, no resolver is admitted, and the mechanism this record chose has
+nothing to compute. It is withdrawn from the slice rather than deferred inside
+it.
+
+That is the cheap reason. An external critical review supplied better ones, and
+they are recorded here because they must not be lost if the mechanism is ever
+revived.
+
+### What the review refuted
+
+1. **"Emits absolute paths one per line" understates the work.** Loader-trace
+   output is `name => /path (0x…)`, an address-bearing diagnostic format, while
+   `closure_members` accepts only a bare absolute path occupying the whole
+   trimmed line. The decision therefore owns a *parser* from glibc loader
+   diagnostics into Doctrine's closure protocol, and that parser is load-bearing
+   rather than implementation trivia.
+
+2. **"Drop pathless lines" is unsafe, and this is the serious one.** It conflates
+   a legitimate pathless runtime object (`linux-vdso.so.1`) with a dependency the
+   loader *could not resolve* (`libfoo.so => not found`), which is also pathless.
+   Dropping both turns "runtime dependency missing" into "closure computed
+   successfully", and Doctrine's downstream existence checks cannot recover the
+   information because the missing entry was discarded before they ran. Any
+   revival needs four classes — filesystem dependency, known virtual object,
+   unresolved dependency, unrecognised form — with the last two failing closed.
+
+3. **"`ldd` is the same mechanism" is not established.** This record asserts that
+   `ldd` merely sets the variable and execs. Modern glibc `ldd` deliberately
+   avoids executing the inspected file directly, invoking it through a verified
+   dynamic linker instead, precisely because executing an arbitrary file is
+   unsafe. `ldd` is absent from this jail, so the claim was never verified here;
+   it must not be treated as settled. See the correction appended to
+   `mem.fact.linker.ld-trace-loaded-objects-is-the-closure`.
+
+4. **`POL-002` facet (3) does have something to declare.** "No host tool is
+   acquired" is true and does not imply "no host capability is depended on". The
+   mechanism needs a particular loader honouring a particular environment
+   variable and emitting a particular format — glibc behaviour, not a generic
+   Linux dynamic-linking contract. A `sh` resolver script additionally depends on
+   its shebang interpreter existing on the trusted host. Absence should produce
+   an explicit unavailable outcome, not an execution whose result is interpreted.
+
+5. **The safety check runs after the risk.** Checking exit status and output
+   shape cannot be the boundary against a static binary or script, because by
+   then the target has run. A direct-exec design must establish the target is a
+   supported dynamic ELF *before* executing it — at which point the wrapper is
+   acquiring ELF inspection logic of its own, which is what rejecting `ldd` was
+   meant to avoid.
+
+### What survives, and should be carried forward
+
+- **The objective.** `resolved_closure_root` → `expand_closure_root` →
+  `closure_members` has zero live exercise; it is driven only by `FixtureQuery`
+  doubles. Giving it a real one is worth doing, and `REV-051` is part of why.
+  Carried as `IMP-425`.
+- **The root-echo requirement** (§1 of *What the resolver script must do*) is a
+  true statement about production as it stands today, independently confirmed by
+  two reviewers. It stops being true only if closure semantics are separately
+  revised.
+- **Status dominates plausible stdout** — `closure_members` checks exit status
+  before parsing, deliberately. Preserve that ordering in any successor.
+- **Differential testing against `ldd`** remains worthwhile if a glibc-specific
+  resolver is ever revived — but comparing canonical dependency *sets*, not
+  textual output. Note the cost argument this cuts both ways on: if correctness
+  needs `ldd` in the dev environment plus a parser plus a differential test plus
+  target classification plus capability preflight, avoiding `ldd` in the shipped
+  path has bought little.
+- **No silent broadening.** If closure resolution cannot be established, the
+  readable set must not widen to compensate.
+
+### Why the reopen is not being worked here
+
+The review's cost argument is `RSK-231`'s argument at one level down: a mechanism
+presented as a thin wrapper over free loader behaviour in fact owns a parser,
+capability assumptions, unsupported target classes, failure semantics and an
+execution boundary. That is the same failure mode the capsule programme is under
+review for, so reviving it belongs to that architectural revision, not to a slice.

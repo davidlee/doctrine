@@ -93,7 +93,13 @@ question (`RSK-231`). Read `DEC-188` before anything else here.
 - `DEC-185` — the bar is representativeness, not production parity. Amended
   with the owner's standing permission to relent to S3 on cost. **Invoked.**
 - `DEC-186` — the closure resolver is a self-written loader-trace script.
-  **Moot under `DEC-188`** — S3 declares no closure roots and no resolver.
+  **Withdrawn from SL-252**, on two independent grounds: S3 declares no closure
+  roots and no resolver, *and* external review refuted the mechanism (the
+  pathless-line rule silently converts a missing dependency into a successful
+  closure; the trace is a diagnostic format needing a parser; the `ldd`
+  equivalence claim is unverified; the loader behaviour is a `POL-002` host
+  capability after all; the safety check runs after the target has executed).
+  What survives is carried by `IMP-425`.
 - `DEC-187` — no inner `PATH`, reach discovered from `/proc/self/mountinfo`.
   **Readable-set half withdrawn**; the mountinfo half stands but is demoted to
   an improvement, not a dependency.
@@ -107,6 +113,8 @@ question (`RSK-231`). Read `DEC-188` before anything else here.
   the bare-`git` provisioning bootstrap as probably the same repair.
 - `RSK-231` — the capsule programme has exceeded its complexity budget; needs
   architectural revision, not another remediation slice.
+- `IMP-425` — production closure expansion still has no live exercise; what
+  `DEC-186` was for, carried forward without its mechanism.
 - `research/research.md` + `raw/` — the pre-design round (runtime tier).
 - `mem.fact.linker.ld-trace-loaded-objects-is-the-closure`
 - `mem.pattern.capsule.jail-and-host-path-shapes-differ`
