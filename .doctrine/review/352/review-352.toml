@@ -1,0 +1,86 @@
+id    = 352
+slug  = "sl-248-reconciliation-audit-capsule-provisioning-and-linux-backend"
+title = "SL-248 reconciliation audit — capsule provisioning and Linux backend"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-248"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "major"
+title = "The conformance claim in the verification ledger is false"
+detail = "verification-ledger.md and handover.md both state 'slice conformance reads 24 files, nothing undeclared', restated at the PHASE-08, PHASE-09 and PHASE-10 closes. Measured at the sl-248 tip with the slice's own binary: 24 conformant, 0 undelivered, and 172 UNDECLARED. The selector registry has not changed since PHASE-01 (6b58d48c8) and the ten recorded boundary rows span 195 distinct paths, so the claim cannot have been true at any of those closes. The likely mechanical cause is reading the tail of the output (conformant is printed last) rather than the head (undeclared is printed first). 170 of the 172 are .doctrine/ authored state swept into the ranges by the already-declared overlap and are benign; the two that are not are flake.nix and LOOP.md, raised separately."
+disposition = "verified"
+response = "Observation confirmed by measurement at the sl-248 tip. Remediation is a per-slice direct edit at reconcile: verification-ledger.md and its restatements must carry the real algebra (24 conformant / 0 undelivered / 172 undeclared) with the 170 benign .doctrine paths attributed to the already-declared PHASE-09/PHASE-10 overlap. See Reconciliation Brief."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "flake.nix is implementation surface with no design-target selector"
+detail = "flake.nix carries a load-bearing change of this slice: it adds util-linux (setsid, row 7's session escape) and socat (row 5, previously transitive and undeclared) to the jail package set. It appears in the PHASE-09 and PHASE-10 recorded deltas and in the undeclared cell of slice conformance, because no design-target selector covers it. This is the highest-signal undeclared path in the slice: the file is what makes row 7 measurable at all, and the audit reproduced a 7-test red precisely because the auditing jail was built from edge's flake, where the change has not landed. Load-bearing fix is the selector registry, not design prose."
+disposition = "verified"
+response = "Confirmed. Load-bearing remediation is the selector registry, not prose: doctrine slice selector add 248 flake.nix --intent design-target, with design.md section 6 updated as its human mirror. A prose-only fix leaves conformance red. See Reconciliation Brief."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Conformance evidence rests on gitignored runtime state"
+detail = "slice conformance folds the recorded boundary registry at .doctrine/state/slice/248/boundaries.toml, which is gitignored runtime state. All ten of this slice's boundary rows live only there. The tracked record (verification-ledger.md) states the resulting verdict in prose but not the rows, so no reader can re-derive the conformance algebra from the committed corpus — the audit could only run it because the file was hand-copied out of the clone at ../doctrine-SL-248. An rm -rf of state at any point would have destroyed the slice's entire conformance basis silently, and conformance fails closed to 'unavailable' rather than announcing the loss. Same class as the verification ledger's own move out of handover.md, one artefact short."
+disposition = "verified"
+response = "Confirmed. Not remediable inside this slice — boundaries.toml is runtime state by design and the storage rule puts it there. What reconcile can do is transcribe the ten boundary rows into the tracked verification-ledger.md so the conformance basis survives an rm -rf, which is the same repair the ledger itself received when it moved out of handover.md. Whether the platform should track the registry is a separate governance question and is briefed as such."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "LOOP.md is undeclared and is orchestrator infrastructure"
+detail = "LOOP.md changed by 583 lines across the slice and appears undeclared in slice conformance. It is dispatch-loop infrastructure rather than slice deliverable, so the right disposition is an explicit decision — either a scope-relevant selector that declares it as touched-but-not-delivered, or a recorded exclusion. Leaving it in the undeclared cell means the next conformance read carries a path nobody has adjudicated. Related: notes.md records LOOP.md at ~560 lines against its own ~200-line cap, with compression owed at slice end."
+disposition = "verified"
+response = "Confirmed and low-cost. Reconcile decides: a scope-relevant selector declaring LOOP.md as touched-but-not-delivered, or a recorded exclusion. Either resolves the undeclared cell; leaving it unadjudicated does not."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "The owed ledger drifted three times and the sweep is manual"
+detail = "notes.md section 'Owed to the reconciliation brief' is the ledger /audit reads first, at 176 items. Its own items 142, 143 and 176 record that it drifted three separate times: T10's F-51..F-54 never reached it and had to be back-appended out of order; and the F-64..F-67 to item 172-175 mapping existed only in the gitignored phase sheet and had to be transcribed at the last beat. Each worker only appends, so reconciling the section against every phase sheet's Findings is a manual orchestrator sweep with no mechanical check. The three caught drifts are evidence the sweep works; they are equally evidence that nothing would have caught a fourth."
+disposition = "verified"
+response = "Confirmed by the ledger's own items 142, 143 and 176. No per-slice remediation — the three drifts were each caught and repaired. The durable output is a backlog item for a mechanical check reconciling a slice's owed section against its phase sheets' findings before the sheets are discarded, since the sheets are gitignored and the pointers die with them. Briefed as net-new work."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "The handover's mint list carries an obligation its own notes withdrew"
+detail = "handover.md 'Ids to mint' names 'issues for F-31, the session-sweep floor, PHASE-09 F-35, PHASE-10 F-4, F-24, F-25, and item 161's userns vacuity; the trusted_side_setup residual; and the RV- for T9's design widening'. Two defects. (a) F-31 is withdrawn by notes.md item 70, which states the PHASE-08 descriptor-window defect was fixed in-phase by PHASE-09 T1 and that 'the merge owes the record of the defect and its fix, NOT a live ISS-'. Minting from the compact list verbatim creates a spurious issue for a discharged obligation. (b) The list flattens unconditional obligations together with ones the notes make explicitly conditional on the reconciler's choice — items 113, 117, 118, 123, 161 all read 'owed as an ISS- at merge IF ...'. The compact pointer list is not safe to execute without reading each item it points at."
+disposition = "verified"
+response = "Confirmed and acted on within the audit. Minted on the parent (edge), collision-free because edge had already moved past sl-248 in the review, backlog and revision namespaces: ADR-021 (unsafe_code forbid to deny with a two-site budget, notes item 33); IMP-416 (agent-execution timeout key, notes item 16b); ISS-334 (row B5 sibling tests load-fragile, PHASE-09 F-35 / item 104); ISS-335 (spike scripts inherit an unpinned PATH, item 170); ISS-336 (spike artefacts do not record their environment, item 171); ISS-337 (setup decoys stay inheritable across the arm, item 127); ISS-338 (gid_map has no off-jail reading, item 175a); ISS-339 (the conformance suite has never run off-jail, item 175b). Deliberately NOT minted: F-31's issue, withdrawn by item 70. Deliberately deferred to reconcile as conditional: items 113, 117, 118, 122, 123, 131/158, 161."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "The record owed for T9's vocabulary widening names two different kinds"
+detail = "handover.md states 'An RV- is owed at merge on the parent: widening a locked design's vocabulary routes through a Revision (ADR-013)'. RV is the review kind; a Revision is REV. The sentence names one and justifies it with the other, so the obligation is unactionable as written. The substance: PHASE-09 T9 added Observed::Unspoken to a design vocabulary the locked design run (revision 93) had closed, on the owner's ruling. notes.md item 138 asks whether PHASE-10's T9 owes the same for the Unrowed/Reading channel and explicitly leaves it unanswered for reconciliation. Which kind applies turns on whether design.md is a per-slice artefact (direct edit at reconcile, no REV) or governance (REV) — the audit skill's own D3 guardrail says per-slice, which would make an RV the wrong instrument for both."
+disposition = "verified"
+response = "Confirmed as unactionable-as-written; the audit does not settle it because the choice of instrument is reconcile's write-surface decision, not the auditor's. Briefed with the audit's reading: design.md is a per-slice artefact, so ADR-013's Revision route does not obviously apply and neither RV nor REV is clearly correct — the plainer reading is that the owner's ruling already authorised the widening and what is owed is the record in design.md by direct edit. Covers both PHASE-09 T9 (Observed::Unspoken) and the item 138 question about PHASE-10 T9's Unrowed/Reading channel, which must be answered in the same breath or it drifts again."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "blocker"
+title = "EX-14 in CI is an open decision the slice cannot close over"
+detail = "notes.md section Open carries 'OPEN — EX-14 in CI. DEC-180 settles the local host and stops there', attributed to '(Slice owner / orchestrator, before close.)' and therefore unresolved at audit. EX-14 forbids an availability condition, an #[ignore], a skip or an early return reaching Admitted: the conformance suite must be able to fail. The local host is settled. CI is not, and every reflex available is one EX-14 forbids. The audit's own environment is the concrete instance: a jail built from edge's flake cannot resolve setsid, so the suite goes 7-red for a reason that is not a conformance defect — exactly the case sec-9 residual 3 names and nothing this slice added mitigates. Raised as a blocker because it is a named pre-close owner decision, not because the code is wrong."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
