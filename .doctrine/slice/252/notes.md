@@ -80,10 +80,38 @@ restates it — this is the shaping layer over it.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: <yyyy-mm-dd> · <PHASE-NN | stage> · <head-commit>
+fresh-as-of: 2026-08-10 · design/exploring · 0522c99e9
 
 ### Produced
 
+- `DEC-184` — scope: SL-252 stops at its own narrowing.
+- `DEC-185` — the bar is representativeness, not production parity. Amended
+  with the owner's standing permission to relent to S3 on cost.
+- `DEC-186` — the closure resolver is a self-written loader-trace script.
+- `ISS-342` — the six live-`bwrap` tests that keep `just gate` red off-jail.
+- `ISS-343` — `doctrine-control` cannot build on macOS; release-blocking.
+- `research/research.md` + `raw/` — the pre-design round (runtime tier).
+- `mem.fact.linker.ld-trace-loaded-objects-is-the-closure`
+- `mem.pattern.capsule.jail-and-host-path-shapes-differ`
+- `mem.fact.capsule.closure-resolver-contract`
+- Correction appended to `mem.pattern.sandbox.readable-roots-are-top-level-ancestors`
+  (trust high → low), which taught the defect `ISS-341` names.
+- One friction observation: a text-only node amendment invalidates
+  `graph-reviewed`.
+
 ### Learned
 
+Everything durable is in the records above. The two facts that shaped the design
+and would otherwise be re-derived: the loader gives a binary's closure for free
+(16 store paths where the ancestor rule bound 691), and the jail's `$PATH` shape
+cannot exercise the host's `$PATH` bugs.
+
 ### Open
+
+- `inq-2`, `inq-5` — blocking, both now unblocked by their `needs`.
+- `inq-3`, `inq-6`, `inq-7`, `inq-8` — non-blocking consequences.
+- Graph re-review pending: amending `inq-3` invalidated `graph-reviewed`, and
+  the re-declared blocking set (rev 19) has not been confirmed.
+- `inq-1` is held `unresolved` on purpose — shape (C) is the working direction,
+  not a banked decision. Upgrade it to a `DEC` once implementation cost is
+  known, or reopen it if `inq-5` moves.

@@ -1,0 +1,54 @@
+memory_uid = "mem_019feb9f04b577a288bffc2ba3700332"
+memory_key = "mem.fact.linker.ld-trace-loaded-objects-is-the-closure"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "A binary's runtime closure without Nix, ldd, or an ELF parser"
+summary = "LD_TRACE_LOADED_OBJECTS=1 <bin> yields the full transitive library set plus the loader; ldd is a wrapper for it"
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs", "crates/doctrine-control/src/backend/bubblewrap.rs"]
+globs = []
+commands = []
+tags = ["confinement", "capsule", "nix", "tooling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "91c74a7fb5f764a6512e758662422f90081ed92e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1536bdfe0d752b6a1d15ea2756e1a862fd1a5c3ce8e569f6ddc95dd25c6527aa"
+base_commit = "0522c99e9203b7d44500faf1bb6efba5b6dcb16b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-252"
+
+[[source]]
+kind = "decision"
+ref = "DEC-186"
+
+[[relation]]
+label = "related"
+target = "mem_019fc0ec6a047501a7a9e573ec1b3b39"
+

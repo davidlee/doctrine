@@ -1,0 +1,54 @@
+memory_uid = "mem_019feba0226f771194389bc3c8ac4579"
+memory_key = "mem.fact.capsule.closure-resolver-contract"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "What a doctrine closure-resolver must emit"
+summary = "expand_closure_root binds only what the resolver returns — never the queried root; and every returned line must be an existing absolute path"
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = ["crates/doctrine-control/src/backend/bubblewrap.rs"]
+globs = []
+commands = []
+tags = ["capsule", "confinement", "conformance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "91c74a7fb5f764a6512e758662422f90081ed92e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "68a95f45e5012c125b5ee7081b471cf2c8889ff64aedd5d8a14538da793f77d0"
+base_commit = "0522c99e9203b7d44500faf1bb6efba5b6dcb16b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-252"
+
+[[source]]
+kind = "decision"
+ref = "DEC-186"
+
+[[relation]]
+label = "related"
+target = "mem_019feb9f04b577a288bffc2ba3700332"
+

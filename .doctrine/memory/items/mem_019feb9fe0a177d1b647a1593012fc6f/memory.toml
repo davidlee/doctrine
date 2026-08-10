@@ -1,0 +1,54 @@
+memory_uid = "mem_019feb9fe0a177d1b647a1593012fc6f"
+memory_key = "mem.pattern.capsule.jail-and-host-path-shapes-differ"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "The jail's PATH shape cannot exercise the host's PATH bugs"
+summary = "The dev jail's PATH is all individual store paths; the host's has symlink farms — PATH-shape bugs are unexercisable where we develop"
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = ["crates/doctrine-control/src/conformance.rs"]
+globs = []
+commands = []
+tags = ["capsule", "conformance", "nix", "testing", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "91c74a7fb5f764a6512e758662422f90081ed92e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0bf3a4991bd6fd67b9a80a6305c4ba696fb342ea1b2e40316147e33777e43b30"
+base_commit = "0522c99e9203b7d44500faf1bb6efba5b6dcb16b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-252"
+
+[[source]]
+kind = "issue"
+ref = "ISS-341"
+
+[[relation]]
+label = "related"
+target = "mem_019fd64176c97681902a5680f1bc3c78"
+

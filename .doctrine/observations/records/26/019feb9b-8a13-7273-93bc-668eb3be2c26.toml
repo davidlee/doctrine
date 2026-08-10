@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019feb9b-8a13-7273-93bc-668eb3be2c26"
+recorded_at = "2026-08-10T12:17:47.027991709Z"
+kind = "friction"
+summary = "design run: amending a node's question text invalidates graph-reviewed and blocking-set-declared"
+detail = "In /design on SL-252 I amended inq-3's question text to carry a measurement (jail and host have different PATH shapes). The edit changed no structure — no node added or removed, no parent or needs edge touched, and inq-3 is not in the blocking set. The apply still emitted act_invalidated for both cpa-graph-reviewed and agd-blocking-set-declared, so the user must re-review the graph and I must re-declare an identical blocking set. Second occurrence this session; the first was a genuine structural change (adding inq-10) where invalidation was correct. Cost is a full re-review request per text amendment, which pushes an agent toward either batching amendments (losing the just-measured-it timing) or not recording measurements on nodes at all."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

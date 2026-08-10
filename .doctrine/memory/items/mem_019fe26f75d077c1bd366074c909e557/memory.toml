@@ -6,7 +6,7 @@ status = "active"
 title = "Readable roots from PATH: take the top-level ancestor, minus operator regions"
 summary = "Binding a PATH entry's own bin directory is not enough for a dynamically linked executable; bind its top-level ancestor and drop any that contains operator state"
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-10"
 
 [scope]
 paths = []
@@ -34,13 +34,17 @@ reviewed = ""
 review_by = ""
 
 [trust]
-trust_level = "high"
+trust_level = "low"
 
 [ranking]
-severity = "medium"
+severity = "high"
 weight = 0
 
 [[source]]
 kind = "slice"
 ref = "SL-248"
+
+[[relation]]
+label = "related"
+target = "mem_019feb9f04b577a288bffc2ba3700332"
 
