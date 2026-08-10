@@ -425,6 +425,35 @@ const WIDENED_UNDECLARED: &str = "/widened/undeclared";
 const OVERSIZE_LEAF: &str = "oversize";
 const OVERSIZE_MULTIPLE: u64 = 2;
 
+/// The program row 7's payload detaches its descendant with.
+///
+/// Named because two places have to agree on it and a literal inside a
+/// `format!` is where they stop agreeing: the payload spells it, and the guard
+/// that convicts its absence reads the same constant. [`SOCAT`] is the standing
+/// precedent in this file for a host tool a row's discriminating power depends
+/// on.
+///
+/// `setsid(1)` wraps the `setsid(2)` syscall, which is what actually moves the
+/// descendant out of the capsule's session **and** process group (`F-42`).
+const SETSID: &str = "setsid";
+
+/// How long row 7's escapee stays silent before stating the forbidden token.
+///
+/// **This has to exceed the reap latency** — the interval between the capsule's
+/// own process exiting and teardown killing what it left behind. Too small and a
+/// *correct* teardown races the speech: the escapee gets its line out before it
+/// is killed, the probe arm reads `Failed`, and the row reports `Violated`
+/// against a backend that did nothing wrong. Too large and every control-arm run
+/// pays the difference, because the control arm returns when the escapee closes
+/// the capture pipe, which is immediately after it speaks.
+///
+/// Measured, not guessed (`T9`): the transition was located by running the probe
+/// arm at a range of delays and finding the smallest one at which the escapee is
+/// reliably silenced. The table is in the phase's notes shard. This value sits a
+/// whole second past the transition, which is two orders of magnitude past the
+/// latency itself.
+const ESCAPE_SPEAKS_AFTER_SECONDS: u64 = 2;
+
 /// How long a deliberately escaping descendant outlives the arm that spawned it.
 /// Well over the arm's own runtime, or it exits on its own and the sweep is
 /// credited with a kill it did not make.
@@ -3419,27 +3448,53 @@ fn connects_to_the_trusted_side_listeners() -> Probe {
     }
 }
 
-/// Row 7's payload: a descendant that **leaves the original session** before its
-/// parent exits (`RV-346` `F-27`), so a backend reaping by process group alone
-/// cannot pass. All three of its standard streams are redirected, or it holds
-/// the capture pipe itself and no removal helps.
+/// Row 7's payload: a descendant that **leaves the original session and process
+/// group** before its parent exits (`RV-346` `F-27`), and then says so from the
+/// other side of that exit.
+///
+/// Three things have to be true at once, and each of them was measured rather
+/// than reasoned (`T9`):
+///
+/// - **It escapes.** [`SETSID`] puts the descendant in a session and a process
+///   group of its own, both equal to its own pid, so a backend reaping by
+///   process group alone cannot pass — and neither the harness's session sweep
+///   nor that reaper can reach it either (`F-42`).
+/// - **It speaks, and it speaks late.** The forbidden token is stated
+///   [`ESCAPE_SPEAKS_AFTER_SECONDS`] in, which is after the capsule's own
+///   process has exited. So hearing that token *is* hearing something that
+///   outlived the `execute` call; nothing else in the arm can say it, and the
+///   capsule's own process states the held token before it goes. That pairing
+///   is what [`Observed::Unspoken`] reads, and it is the reason that kind
+///   exists.
+/// - **It stops holding the capture pipe the moment it has spoken.** Both
+///   captured descriptors are closed before it lingers. A descendant that
+///   merely inherits stdout holds the pipe for its **whole life** and
+///   `wait_with_output` waits it out — measured at 20 s of dead wall clock, and
+///   the trap this comment used to anticipate without a way past it. Closing
+///   them puts the control arm's cost at the delay rather than at
+///   [`ESCAPE_SECONDS`].
+///
+/// **Its stderr is deliberately not redirected away** until it has spoken. The
+/// shipped payload used to send `setsid`'s own stderr to `/dev/null`, which made
+/// a *missing* `setsid` into a perfectly silent no-op — the arm printed its
+/// liveness marker, exited 0, and spawned nothing at all (`F-41`). Absence has
+/// to convict, and the guard named in `SETSID`'s own docs is the other half of
+/// that.
 fn escapes_its_own_session() -> Probe {
     Probe {
         argv: shell_argv(&format!(
-            "(setsid sleep {ESCAPE_SECONDS} < /dev/null > /dev/null 2>&1 &); \
+            "({SETSID} {SHELL} {SHELL_COMMAND} \
+             'sleep {ESCAPE_SPEAKS_AFTER_SECONDS}; \
+             echo {REACHED}; \
+             exec 1>&- 2>&-; \
+             exec sleep {ESCAPE_SECONDS}' < /dev/null &); \
              echo {LIVENESS_MARKER}; \
+             echo {DENIED}; \
              sleep {LINGER_SECONDS}"
         )),
-        // Neither token is printed, and that is the row's open work: what row 7
-        // observes is trusted-side — whether anything outlived the `execute`
-        // call — and `F-6` measured that the *capture pipe*, not the pid
-        // namespace, is what hides the survivor from a payload-side reading. The
-        // arm therefore reports `NoObservation` until `T9` builds the
-        // trusted-side observation, which is an honest indeterminate rather than
-        // a false hold.
-        observed: Observed::Token {
-            held: DENIED,
-            failed: REACHED,
+        observed: Observed::Unspoken {
+            stated: DENIED,
+            forbidden: REACHED,
         },
     }
 }
@@ -5204,7 +5259,7 @@ mod tests {
         Observed, PidProbe, Probe, PropertyRemoval, Row, RowId, RowVerdict, SHELL, TMPFS_MAGIC,
         TempRoot, Which, admission, available_bytes_of, capsule_config_document, classify,
         classify_concurrent, decode_mount_field, git, is_inheritable, mount_points, on_real_disk,
-        prepare_root, row_ids_in_more_than_one_table, row_verdict, second_filesystem,
+        prepare_root, ran_cleanly, row_ids_in_more_than_one_table, row_verdict, second_filesystem,
         system_readable_roots, top_level_ancestor, verify, verify_over,
     };
     use super::{
@@ -5236,10 +5291,10 @@ mod tests {
     use super::{
         CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, DENIED, ESCAPE_SECONDS, INNER_AGENT,
         LINGER_SECONDS, LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property,
-        REACHED, SENTINEL_LEAF, SUBJECT_LINGER_SECONDS, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE,
-        WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject, run_control_arm,
-        run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
-        writes_past_the_file_size_cap,
+        REACHED, SENTINEL_LEAF, SETSID, SUBJECT_LINGER_SECONDS, WIDENED_CREDENTIAL,
+        WIDENED_EXECUTABLE, WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject,
+        run_control_arm, run_probe_arm, shell_argv, stdout_lines, tables,
+        widens_the_undeclared_decoy, writes_past_the_file_size_cap,
     };
     use super::{
         CREDENTIAL_READ, CREDENTIAL_UNREAD, NO_NEW_PRIVS, NO_NEW_PRIVS_SET, NO_NEW_PRIVS_UNSET,
@@ -10230,18 +10285,281 @@ mod tests {
             );
         }
     }
+    // ── PHASE-09 `T9` — row 7: process-tree teardown ───────────────────────
+
+    /// The descendant row 7's payload detached, found from the trusted side
+    /// while the capsule is still alive.
+    ///
+    /// **Scoped to this capsule's own namespace, never to "a process that
+    /// appeared".** `cargo test` runs this binary on many threads and several of
+    /// them start capsules, so a pid-set diff across the arm would attribute a
+    /// neighbour's `bwrap` to this arm — `F-35`'s class, designed out rather
+    /// than tolerated. The search space is the subtree under the capsule's
+    /// **parent**, which is `bwrap`'s pid-namespace init: the process the
+    /// escapee reparents to the instant the subshell that spawned it exits. No
+    /// other arm reaches into it.
+    ///
+    /// The discriminator is the session. The capsule's top-level process leads
+    /// its own (`capsule_session_leader` is how it is identified at all), and
+    /// `setsid(2)` puts the escapee in a different one — the same fact `F-42`
+    /// measured. So *a descendant of the namespace's init that is not in the
+    /// capsule's session* is exactly the process that escaped, and if the
+    /// payload ever stops escaping there is nothing here to find.
+    fn escaped_descendant(capsule: HostPid) -> Option<HostPid> {
+        let table = process_table();
+        let capsule_facts = table.iter().find(|facts| facts.pid == capsule)?;
+        let init = capsule_facts.parent;
+        table
+            .iter()
+            .filter(|facts| facts.pid != capsule && facts.pid != init)
+            .filter(|facts| facts.session != capsule_facts.session)
+            .find(|facts| depth_from(facts.pid, init, &table).is_some())
+            .map(|facts| facts.pid)
+    }
+
+    const ROW_SEVEN: RowId = RowId::Property(Property::ProcessTreeTeardown);
+
+    /// What a missing [`SETSID`] means for row 7, and what must **not** be done
+    /// about it.
+    ///
+    /// `F-41` is why the absence has to speak at all: the payload used to
+    /// redirect the failing command's own stderr to `/dev/null`, so a host
+    /// without `setsid` produced a perfectly silent no-op — the arm printed its
+    /// liveness marker, exited 0, and spawned nothing. Nothing was wrong
+    /// anywhere a reader would look.
+    ///
+    /// The three wrong fixes are named because each turns a red suite green
+    /// while leaving the row unable to fail, which is the shape `DEC-156`
+    /// forbids and `EX-14` re-rules.
+    const ESCAPE_MECHANISM_MISSING: &str = "\
+row 7 leaves its session with `setsid`, and `setsid` does not resolve here.
+
+Without it the payload spawns no descendant at all. The arm still prints its
+liveness marker and still exits 0, both arms then read alike, and the row cannot
+discriminate a harness that reaps by session from one that reaps by process
+group: it would pass by being unable to fail.
+
+STOP AND CONSULT. Do not narrow the row, do not `#[ignore]` this test, and do
+not substitute another program — *which* program row 7 executes is a production
+host-dependency decision (precedent: the runtime-checked `socat`), and it
+belongs to the slice owner.";
+
+    /// Where `program` resolves on the host's `PATH`, read through the same
+    /// [`HostFacts`] seam `system_readable_roots` uses rather than through a
+    /// second path shape.
+    fn resolves_on_path(host: &dyn HostFacts, program: &str) -> Option<PathBuf> {
+        let raw = host.env_var(CapsuleEnvVar::Path.name())?;
+        std::env::split_paths(&raw)
+            .map(|entry| entry.join(program))
+            .find(|candidate| host.path_exists(candidate))
+    }
+
+    /// `S4` — row 7's discriminating power depends on a host tool, and the
+    /// absence of that tool must **convict**, on both sides of the boundary.
+    ///
+    /// Two readings, because `setsid` resolving on the *host* is not the
+    /// question the payload asks. The payload runs **inside the capsule**, whose
+    /// readable roots are derived from the host's `PATH` — so it should resolve
+    /// there too, but "should" is exactly the reasoning `F-41` punished, and the
+    /// capsule-side reading costs one capsule.
+    ///
+    /// **Deliberately not `command -v setsid || exit 0`.** That silent-skip
+    /// shape is what manufactured the false green in the first place. Here the
+    /// capsule states the path it found and the assertion is on that line; a
+    /// capsule that finds nothing fails the run and is convicted by the
+    /// message, not excused by it.
+    #[test]
+    fn row_sevens_escape_mechanism_resolves_on_this_host_and_inside_the_capsule() {
+        assert!(
+            resolves_on_path(&SystemHost, SETSID).is_some(),
+            "{ESCAPE_MECHANISM_MISSING}"
+        );
+
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let placement = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+        let argv = shell_argv(&format!("echo {LIVENESS_MARKER}; command -v {SETSID}"));
+        let observation = ran_cleanly(backend.execute(&placement, &harness_execution(&argv)))
+            .unwrap_or_else(|why| panic!("{ESCAPE_MECHANISM_MISSING}\n\nthe capsule said: {why}"));
+        let resolved: Vec<String> = printed_lines(&observation.stdout)
+            .into_iter()
+            .filter(|line| line != LIVENESS_MARKER)
+            .collect();
+        assert!(
+            resolved.iter().any(|line| line.ends_with(SETSID)),
+            "{ESCAPE_MECHANISM_MISSING}\n\nthe capsule printed: {resolved:?}"
+        );
+    }
+
+    /// `VT-1`, row 7.
+    #[test]
+    fn process_tree_teardown_is_proven() {
+        assert_eq!(shipped_verdict(&ROW_SEVEN), RowVerdict::Proven);
+    }
+
+    /// What the trusted side saw of row 7's escapee.
+    ///
+    /// Taken **while the capsule is still alive**, which is the only time it can
+    /// be taken at all: `F-42` measured that once the parent exits the escapee
+    /// has reparented and leads a session nothing in the harness ever noted, so
+    /// no descent and no sweep finds it afterwards.
+    #[derive(Debug)]
+    struct EscapeeSighting {
+        capsule_session: SessionId,
+        capsule_group: Option<ProcessGroupId>,
+        escapee: HostPid,
+        escapee_session: Option<SessionId>,
+        escapee_group: Option<ProcessGroupId>,
+        capsule_alive_at_the_reading: bool,
+    }
+
+    /// Row 7's shipped probe arm, with the escapee watched for through the
+    /// noticing seam.
+    ///
+    /// The watch runs *inside* `noticed`, for the same reason row B5's observer
+    /// does (`F-20`): that callback is the interval between the capsule's
+    /// top-level process existing and the trusted side waiting on it, so it
+    /// needs no thread and races nothing. It polls because the escapee has not
+    /// called `setsid(2)` yet when the callback first fires — measured, one
+    /// [`CAPSULE_DISCOVERY_INTERVAL`] later it has.
+    fn row_sevens_probe_arm_and_its_escapee() -> (ArmResult, Option<EscapeeSighting>) {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let backend = BubblewrapBackend::new(&SystemHost);
+        let placement = provision_capsule(&fixture, &SystemHost, &backend)
+            .expect("the fixture provisions")
+            .placement;
+
+        let sighting: RefCell<Option<EscapeeSighting>> = RefCell::new(None);
+        let noticed = |capsule: HostPid| {
+            fixture.note_capsule_session(capsule);
+            for _ in 0..CAPSULE_DISCOVERY_ATTEMPTS {
+                let Some(escapee) = escaped_descendant(capsule) else {
+                    std::thread::sleep(CAPSULE_DISCOVERY_INTERVAL);
+                    continue;
+                };
+                let Some(capsule_session) = session_of(capsule) else {
+                    return;
+                };
+                // Liveness is read **last**, so that a true reading certifies
+                // the earlier ones were taken while the capsule had the escapee
+                // rather than after (`F-34`'s ordering, same argument).
+                *sighting.borrow_mut() = Some(EscapeeSighting {
+                    capsule_session,
+                    capsule_group: group_of(capsule),
+                    escapee,
+                    escapee_session: session_of(escapee),
+                    escapee_group: group_of(escapee),
+                    capsule_alive_at_the_reading: capsule_still_running(capsule),
+                });
+                return;
+            }
+        };
+
+        let result = run_arm(
+            &Arm {
+                backend: &backend,
+                capsule: &|| Ok(placement.clone()),
+                execution: &harness_execution,
+                live: &|_| false,
+                noticed: &noticed,
+                under: Under::Confining,
+            },
+            &shipped_row(&ROW_SEVEN).shape,
+        );
+        let _swept = fixture.sweep_observed_sessions();
+        (result, sighting.into_inner())
+    }
+
+    /// `VT-3` — the escape is asserted **directly**, so a payload that silently
+    /// stops escaping cannot weaken the row without failing (`EX-7`).
+    ///
+    /// Both halves of the escape, because they are different syscall effects
+    /// with different reapers behind them: a new **session** is what a session
+    /// sweep misses, a new **process group** is what a process-group reaper
+    /// misses, and `setsid(2)` produces both (`F-42`). A payload that only left
+    /// the group would still be caught by the harness's own sweep, and the row
+    /// would then be measuring the sweep rather than the backend.
+    #[test]
+    fn the_descendant_escapes_the_original_session_before_its_parent_exits() {
+        let (_result, sighting) = row_sevens_probe_arm_and_its_escapee();
+        let seen = sighting.expect(
+            "row 7's payload detached no descendant this capsule's namespace could show, \
+             so there was no escape to observe",
+        );
+        assert!(
+            seen.capsule_alive_at_the_reading,
+            "the escapee was read after the capsule had gone, so `before its parent exits` \
+             is not what was observed: {seen:?}"
+        );
+        assert_ne!(
+            seen.escapee_session,
+            Some(seen.capsule_session),
+            "the descendant is still in the capsule's session: {seen:?}"
+        );
+        assert!(
+            seen.escapee_group.is_some() && seen.escapee_group != seen.capsule_group,
+            "the descendant is still in the capsule's process group: {seen:?}"
+        );
+        assert_eq!(
+            seen.escapee_session,
+            Some(SessionId(seen.escapee.0)),
+            "the descendant did not lead the session it moved to: {seen:?}"
+        );
+        assert_eq!(
+            seen.escapee_group,
+            Some(ProcessGroupId(seen.escapee.0)),
+            "the descendant did not lead the process group it moved to: {seen:?}"
+        );
+    }
+
+    /// `VT-3` — under the shipping configuration nothing the capsule started is
+    /// still running when `execute` returns.
+    ///
+    /// **The reading is the token, not a survivor scan**, and that is forced
+    /// rather than preferred. Inside the pid namespace the arm cannot return
+    /// while the escapee lives — the namespace's init holds the harness's
+    /// captured descriptors until it empties (`F-6`, `F-24`, and re-measured
+    /// here) — so *no process survives the arm* is true even of an arm whose
+    /// teardown did nothing, and a scan after the arm would pass either way.
+    ///
+    /// What discriminates is **when** the escapee is allowed to speak. It states
+    /// the forbidden token `ESCAPE_SPEAKS_AFTER_SECONDS` in, which is after
+    /// the capsule's own process has exited, so hearing it means something
+    /// outlived the `execute` call and hearing only the capsule's own token
+    /// means nothing did. The same arm under `Removed(Teardown)` is the control,
+    /// and it is seen to fail — twice, in
+    /// [`process_tree_teardown_is_proven`] and in the shipped-row walk.
+    #[test]
+    fn no_descendant_outlives_the_execute_call() {
+        let (result, sighting) = row_sevens_probe_arm_and_its_escapee();
+        let seen = sighting.expect(
+            "row 7's payload detached no descendant, so a held arm says nothing about teardown",
+        );
+        assert_eq!(
+            result,
+            ArmResult::Held,
+            "a descendant of {seen:?} stated the forbidden token, which it can only do \
+             after the capsule's own process has exited"
+        );
+        // Race-free rather than polled, and the ordering is why: the escapee
+        // dies, the namespace empties, its init exits, the captured descriptors
+        // close, and only then does the arm return. `capsule_still_running` is
+        // the right predicate for it as well as for a capsule — a `setsid`
+        // escapee leads its own session, so the recycled-pid half holds too.
+        assert!(
+            !capsule_still_running(seen.escapee),
+            "{:?} is still running after `execute` returned",
+            seen.escapee
+        );
+    }
+
     // ── PHASE-09 `T12` — `VA-4`: the per-row walk ──────────────────────────
     //
     // Task ids are per-phase, so a bare `T12` here reads as PHASE-10's, which is
     // `VA-3`'s wall-clock measurement and has nothing to do with this walk. The
     // phase is named for that reason.
-
-    /// The one row whose control cannot yet be seen to fail. `T9` is blocked on
-    /// `S8`: row 7's two arms produce a byte-identical `Observation`, so the
-    /// shipped payload prints neither token and both arms read `NoObservation`.
-    /// Named here rather than filtered silently — an exclusion nobody can see is
-    /// how a walk starts lying.
-    const UNWALKED: RowId = RowId::Property(Property::ProcessTreeTeardown);
 
     /// `VA-4`, invariant 2, over every shipped row at once: the control was
     /// **seen to fail**, per row, not inferred from the row's verdict.
@@ -10249,6 +10567,16 @@ mod tests {
     /// A row verdict cannot carry this. `RowVerdict::Proven` is `probe Held`
     /// *and* `control Failed`, so reading verdicts would prove it circularly;
     /// this reads the control arms themselves.
+    ///
+    /// **The walk carries no exclusion.** It used to skip row 7, whose two arms
+    /// were byte-identical while its payload stated neither token (`F-24`), and
+    /// the skip was named in a `const` so it could not lie silently. `T9` wired
+    /// that row to [`Observed::Unspoken`] on a payload that discriminates, so
+    /// the exclusion is gone rather than retargeted — and this walk is now the
+    /// net under row 7's own vacuous-pass trap. A payload made to state its held
+    /// token without an escapee that ever speaks reads `Held` on **both** arms,
+    /// which is `EX-3`'s vacuous pass; a row that cannot be seen to fail here is
+    /// exactly what that would look like.
     /// The `--exact` name of [`every_shipped_rows_control_measured_in_a_process_of_its_own`],
     /// and the prefix each of its per-row lines carries.
     const WALK_HELPER: &str =
@@ -10268,7 +10596,7 @@ mod tests {
     fn every_shipped_rows_control_measured_in_a_process_of_its_own() {
         let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
         let backend = BubblewrapBackend::new(&SystemHost);
-        for row in tables().into_iter().filter(|row| row.id != UNWALKED) {
+        for row in tables() {
             let result = run_control_arm(&backend, &SystemHost, &fixture, &row);
             println!("{WALK_ARM}{:?} {result:?}", row.id);
             let _swept = fixture.sweep_observed_sessions();
@@ -10288,15 +10616,11 @@ mod tests {
     /// result required of each are what they were.
     #[test]
     fn every_shipped_rows_control_is_seen_to_fail() {
-        let walked: Vec<RowId> = tables()
-            .into_iter()
-            .map(|row| row.id)
-            .filter(|id| *id != UNWALKED)
-            .collect();
-        assert_eq!(
-            walked.len(),
-            tables().len().saturating_sub(1),
-            "the excluded row is not in the shipped tables"
+        let walked: Vec<RowId> = tables().into_iter().map(|row| row.id).collect();
+        assert!(
+            walked.contains(&ROW_SEVEN),
+            "row 7 is the one this walk used to exclude, so its presence is asserted \
+             rather than assumed"
         );
 
         let reported = reported_by_a_child(WALK_HELPER, WALK_ARM);

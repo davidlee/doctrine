@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe97b-cacf-78d2-b25c-31badc33da65"
+recorded_at = "2026-08-10T02:23:52.016025007Z"
+kind = "friction"
+summary = "execute/T9: the ruling's 'speak, close stdout, then linger' shape does not clear the capture-pipe stall inside a capsule"
+detail = """SL-248 PHASE-09 T9. The owner's ruling recorded an orchestrator measurement: the escapee shape '(setsid sh -c "sleep D; echo TOKEN; exec 1>&-; exec sleep E" &)' returned in 1004ms with both tokens. Re-measured through the real arms (run_probe_arm/run_control_arm on row 7), the control arm costs ESCAPE_SECONDS + D (23.13s at D=0, 25.13s at D=2) — the escapee closing its own copies of the captured descriptors buys nothing, because bwrap's pid-namespace init holds the harness's capture until the namespace empties (F-6/F-24/F-30, measured again here). The 1004ms figure is a bare-shell measurement, not a capsule one. Cost: one worker measurement round to discover that a premise handed down as measured was taken on the wrong side of the boundary it describes."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
