@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe985-80a1-77f1-a33a-dddc1d2f8f55"
+recorded_at = "2026-08-10T02:34:28.385457501Z"
+kind = "friction"
+summary = "off-jail audit: spike instruments returned exit=0 false negatives on a foreign host"
+detail = "SL-248 spike-deltas.sh inherits the ambient PATH into its bwrap sandbox instead of pinning it to store bin dirs. Run off-jail it produced a full table of 'command not found' readings at exit=0 - wrote 0 bytes, 0s, empty proc counts - which look like measurements. Cost a full run/diagnose/re-run cycle before the results were usable. spike-credentials.sh already carries the exact guard (pin SYSPATH to store bins so no arm can false-negative through an absent binary); the sibling script did not inherit it. Same class for spike-teardown-2x2.sh, which resolves python3 on the host PATH but executes it inside a sandbox whose binds exclude /home. Generalises: an instrument that measures a sandbox must pin its own PATH into a bound root, and should print its provenance (uid_map, ns inodes, NoNewPrivs) in its host header."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

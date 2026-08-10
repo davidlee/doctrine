@@ -1,0 +1,64 @@
+### provenance
+Linux 7.1.6 x86_64
+bwrap: /nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin/bwrap bubblewrap 0.11.2
+  ns user  user:[4026531837]
+  ns pid   pid:[4026531836]
+  ns net   net:[4026531833]
+  ns mnt   mnt:[4026531832]
+  uid_map:  0 0 4294967295|
+  gid_map:  0 0 4294967295|
+  NoNewPrivs:	0  uid=1000 gid=100
+  proc entries: 785
+  sandbox PATH: /nix/store/5y8jchf95jisr09cjx2q7lgz3qwnfi5j-coreutils-full-9.11/bin
+
+=== Row 9 — ImmutableInputSet (probe: --ro-bind; control: --bind) ===
+  probe   (--ro-bind)
+    seen as uid=1000 gid=100
+    /source  W_OK=EROFS-or-denied  R_OK=readable  owner=1000:100
+    /readable  W_OK=EROFS-or-denied  R_OK=readable  owner=1000:100
+  control (--bind)
+    seen as uid=1000 gid=100
+    /source  W_OK=writable  R_OK=readable  owner=1000:100
+    /readable  W_OK=writable  R_OK=readable  owner=1000:100
+  the source export written through (control arm, one write, in-fixture):
+    capsule-side exit=0
+    host-side: the byte traversed the bind (fixture only)
+  REQUIRED: probe EROFS-or-denied, control writable. A control that is also
+            denied cannot fail for its own reason — EX-3's vacuous pass here.
+
+=== Row 4 — BoundedFilesystemVisibility (probe: placement only; control: + decoy) ===
+  probe   (no decoy)
+    /widened/undeclared absent
+  control (decoy <- /etc)
+    /widened/undeclared VISIBLE  entries=120
+  control (decoy <- /tmp/tmp.ce475CeY8o/readable)
+    /widened/undeclared VISIBLE  entries=1
+  control (decoy <- /run/current-system)
+    /widened/undeclared VISIBLE  entries=20
+  control (decoy <- /home/david)
+    /widened/undeclared VISIBLE  entries=43
+  REQUIRED: probe absent, control VISIBLE. A control whose decoy cannot be
+            attached, or is attached but invisible, cannot fail for its own
+            reason — the cage supplied the boundedness, not the capsule.
+
+--- reading, off-jail ---
+
+Both rows discriminate cleanly OFF-JAIL. This is the reference arm, not the
+answer: the exposure is only settled by running the same script INSIDE the cage
+and comparing.
+
+Row 9. Probe denies, control permits, and the byte traverses the bind. The
+ownership confound did not bite here — both arms read owner=1000:100, and the
+uid_map is the full range — so the W_OK split is attributable to the attachment
+rather than to identity. That attribution is exactly what `[ -w ]` buys over a
+real write (`F-11`), and it is what the in-jail run must be checked against: the
+cage holds a single mapped uid (`1000 0 1`), so an in-jail reading that differs
+needs to be separated into "the attachment changed" and "the identity changed"
+before it means anything.
+
+Row 4. The probe sees nothing; every candidate decoy is visible under the
+control. `/run/current-system` (20 entries) and `/home/david` (43 entries) are
+the load-bearing candidates — both are paths a cage is unlikely to bind, and
+both attach and read fine here. If either comes back `absent` or
+`bwrap REFUSED the bind` in the cage, the cage is supplying row 4's boundedness
+and the row's control cannot fail for its own reason.

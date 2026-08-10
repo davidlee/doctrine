@@ -173,15 +173,63 @@ audit unnecessary: have each spike print its `uid_map`, `readlink
 
 ---
 
-## E. Not settled here
+## E. The cage, measured — and what it leaves exposed
 
-- The cage's actual shape is still unmeasured (plan step 1). `src/worktree/jail.rs`
-  is the *dispatch-worker* jail and `scripts/pi-spawn-confined.sh` the pi cage;
-  neither is necessarily where the SL-248 agents sat. The `21 processes / 0
-  discriminating` reading in B1 says the cage the orchestrator is in has its own
-  pid namespace, but that is inference from a symptom, not a reading.
-- `BoundedFilesystemVisibility`, `ImmutableInputSet`, `ExplicitNetworkPosture`:
-  not exercised by any of the three spikes, so this audit says nothing about
-  them. `notes_10-12.md:116` records `va2-write` leaving files on `/nix` and
-  `/bin` — off-jail those are the real host paths, which is worth a look before
-  anyone re-runs that probe outside a cage.
+Section E previously recorded the cage's shape as unmeasured and inferred a pid
+namespace from B1's symptom. The orchestrator has since read it from inside:
+
+```
+user:[4026533973]  pid:[4026535160]  mnt:[4026535115]  net:[4026531833]
+uid_map 1000 0 1   gid_map 100 0 1   NoNewPrivs: 1     Seccomp: 0
+CapInh/CapPrm/CapEff/CapBnd all 0000000000000000
+35 proc entries    uid 1000  gid 100  setsid present
+```
+
+The `net` inode is **verified**, not accepted: this host reads
+`net:[4026531833]` for its own init netns — the same inode — while its
+`pid:[4026531836]`, `mnt:[4026531832]` and `user:[4026531837]` all differ from
+the cage's. So the cage owns a **user, pid and mount** namespace and **shares
+the host's network** namespace, with no seccomp filter and capabilities fully
+stripped.
+
+That splits the rows three ways.
+
+**Cleared empirically — `ProcessVisibility`, `ProcessTreeTeardown`.** The cage's
+own pid namespace makes these maskable in principle, which was the exposure this
+audit was opened to test. Section A settles them: both reproduce off-jail
+verdict-for-verdict. Discharged by measurement, not by argument.
+
+**Cleared structurally — `ExplicitNetworkPosture`.** A cage sharing the host's
+netns cannot supply the isolation the row attributes to the capsule.
+`--unshare-net` on the probe arm really isolates, and a network-permitted
+control arm really reaches the host network, *inside the jail*. The row
+discriminates honestly where it runs. What remains is that no spike exercises
+it — a coverage gap, not a contamination one, and a cheaper thing to fix.
+
+**Still exposed — `BoundedFilesystemVisibility` and `ImmutableInputSet`.** The
+cage has its own mount namespace with restricted binds, so it can supply exactly
+the property these rows attribute to the capsule. After the cage reading these
+are the *only* confirmed remaining exposure, upgraded from suspected. Note their
+weakenings are not symmetric in kind: `ImmutableInputSet`'s control is the
+`PropertyRemoval::InputsWritable` removal, whereas `SharedRoot` is a `Delta`
+variant (`EX-8`) — it re-points a placement rather than removing a profile
+property, and is deliberately not a member of the removal vocabulary.
+
+`notes_10-12.md:116` records the `va2-write` probe leaving files on `/nix` and
+`/bin`. Off-jail those are the real host paths, not a cage's copy — worth
+settling before that probe is re-run anywhere outside a cage.
+
+### `F-38`'s root cause, restated mechanically
+
+The cage reading upgrades B1 from a symptom to a mechanism. A fresh pid
+namespace holding ~35 entries, all descended from a single session, is
+*structurally* a population in which nothing has `pgrp != sess`. It is not bad
+luck about one host at one moment: **any** measurement of process-group
+semantics taken inside that cage is non-discriminating, permanently. This
+strengthens B1's recommendation — the fixture must manufacture a `pgrp != sess`
+process. Re-running the test elsewhere only relocates the luck.
+
+The reader this bears on is `stat_of` in `conformance.rs`, which indexes
+`/proc/<pid>/stat` past the comm field via `STAT_STATE_FIELD`,
+`STAT_PARENT_FIELD` and `STAT_SESSION_FIELD`. A slide among those constants is
+the mutation the cage cannot convict.

@@ -1,0 +1,42 @@
+### provenance
+Linux 7.1.6 x86_64
+bwrap: /nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin/bwrap bubblewrap 0.11.2
+  ns user  user:[4026533973]
+  ns pid   pid:[4026535160]
+  ns net   net:[4026531833]
+  ns mnt   mnt:[4026535115]
+  uid_map:  1000 0 1|
+  gid_map:  100 0 1|
+  NoNewPrivs:	1  uid=1000 gid=100
+  proc entries: 11
+  sandbox PATH: /nix/store/x4m5ja2330if46sw08lgwwa57bqw9adm-bubblewrap-0.11.2/bin:/nix/store/y9nx079bq7f3aff4fxp9995mckf3ql7m-socat-1.8.1.3/bin:/home/david/.cargo/bin:/nix/store/mc9igdzkhqn854ny5c7aykia0kbi4hda-jailed-claude/bin:/nix/store/i7q60lb61wk06i9lmfvrg6f9s092w2vc-jailed-dirge/bin:/nix/store/mvs6fjqk476hl92n00d5208apqdq0vsr-jailed-pi/bin:/nix/store/0jn4l44zsq3h349zk27w0gn0p3f49lki-dirge-agent-0.7.7/bin:/nix/store/caqsfh67yxdxx77c3r0m7imrarcjnxap-pi-0.84.0/bin:/nix/store/h4wr5v8zh5b5qd4ab8hvhsda76cpjylb-claude-code-2.1.223/bin:/nix/store/h4wr5v8zh5b5qd4ab8hvhsda76cpjylb-claude-code-2.1.223/bin:/nix/store/9amnl2ij8d5zvwrjagx67p0dphf3360w-codex-0.146.1/bin:/nix/store/h235i1lgkbk8l45hlv9xfg069xqhd3sn-iproute2-7.1.0/bin:/nix/store/dhw12xrm2sv6fmczgb9kxbwafihxnrzg-tinyproxy-1.11.3/bin:/nix/store/4235prclh3wvcqzri7hxssb47i6d444j-util-linux-2.42.2-bin/bin:/nix/store/w88w0pk3yz1zdcpccc2cz4x0ddhv5n0z-procps-4.0.6/bin:/nix/store/zmhypak4grhrashgl04sxkga3drsm2nm-shellcheck-0.11.0-bin/bin:/nix/store/ny4sr7630m513haa25pffx48v7v44z0j-doctrine-0.37.0/bin:/nix/store/c115c542xkl3q21nkrgm81l1xcndw9zd-mermaid-cli-11.16.0/bin:/nix/store/vx3nyq481g9h4d32ygnqjjy0f72f53iz-d2-0.7.1/bin:/nix/store/cn7ik6k9az3jzjdad0hbn1awfa2n3cla-graphviz-15.1.0/bin:/nix/store/51ryf8a3xhd9xj2pdlq65hk93hxb2901-sccache-0.17.0/bin:/nix/store/lqk718ly9a65vwgjyjykvz6z10whr81i-typescript-language-server-5.3.0/bin:/nix/store/95dilk5yr55wyffr8jwd3sjf2bv11iah-typescript-5.9.3/bin:/nix/store/sav1jc5c2axarnzif94rkm8byc6zw0kb-bun-1.3.13/bin:/nix/store/mh4zfg3fvvnh4z430x2w7ps29y3si0ld-eslint-10.8.0/bin:/nix/store/jbr8baiszp449aacg17k0z59bs3v48as-nodejs-26.7.0/bin:/nix/store/w2nk3f7prwzpm6h13rfxh8lh46yfdysj-gcc-15.3.0-lib/bin:/nix/store/l5qkpzsr4gxvksh45b3nhxbkyr5cviar-gcc-wrapper-15.3.0/bin:/nix/store/bwry105g7v5jspr41bx9x3fcfqsmfkq2-bash-interactive-5.3p15/bin:/nix/store/s7i6gk6vw9218d9nds3aif24cvv3ccn3-cargo-edit-0.13.13/bin:/nix/store/6vd95xgryzjddd9h4ksclr16s78z7mfz-rust-analyzer-2026-06-15/bin:/nix/store/j0k0sb4136nnhpkc1xy7fscj8zjvspj2-rust-default-1.98.0-beta.6-2026-07-26/bin:/nix/store/gw651v4xdfs9zwicw5nbrlyaxph17rmd-just-1.57.0/bin:/nix/store/d7ywii2bdxpaisslxj9kxxakx8agy7iw-jjui-0.10.9/bin:/nix/store/1zr7zbdrqcl04krzm9ak4znbx320shyq-jujutsu-0.43.0/bin:/nix/store/60m4rxhg2fldqaak400c0lry96ijrzqn-python3-3.13.13/bin:/nix/store/l8x85xcfsgi94hxxv868id2j8n5lg74p-libnotify-0.8.8/bin:/nix/store/125dz6cpx2059kzq6dch3apxblq3q4xl-ps-procps-4.0.6/bin:/nix/store/2ibrz854pbkhyicbr6yyignvd2rlg4zz-tree-2.3.2/bin:/nix/store/55nbxpjrgrrsplq739z1z8n05h16cgsq-gnutar-1.35/bin:/nix/store/mhw4sjc1rz4zmb3vkdinvfm7ym96fazx-unzip-6.0/bin:/nix/store/ndpbjk6jhw0da5h272dqqnyxa35a9gmx-gzip-1.14/bin:/nix/store/ww555mznia5v7sz2w85lblg4amvhkhv1-diffutils-3.12/bin:/nix/store/vkmv0m1ll2cx8iaqhyfv8cj433hkz917-sd-1.1.0/bin:/nix/store/kgxafhycw2kybbqih759ykc2043qyi5j-gnused-4.9/bin:/nix/store/2smyvywyl08w8sq2bpr03zhxcn7wc5hz-gawk-interactive-5.4.0/bin:/nix/store/4wvhj1qsjgs6zdip59qc6z0xir9m0m56-pulseaudio-17.0/bin:/nix/store/gn94gpcp5q08x4v6g8mvw8v4r65rcjzk-gnugrep-3.12/bin:/nix/store/91d9n98grpqj93576zl27bd5x0khcsvv-which-2.23/bin:/nix/store/c1cjgg6p8m8fssivzrc2p13mwwml3p3v-findutils-4.10.0/bin:/nix/store/wci2b3l9gs8nq3alx6czffsq55bg44cv-fd-10.4.2/bin:/nix/store/gxcm97c2a4sdnnabigp8mns7y1g5llnd-ripgrep-15.1.0/bin:/nix/store/s04d6wm3kqjdgr7zdhlk214f6a2291ks-jq-1.8.1-bin/bin:/nix/store/j9izhj1pb3k07wdw2q2c1z7pw2xkrz69-wget-1.25.0/bin:/nix/store/0aha64svrrch155x78xhzn6kmgrrsl9a-curl-8.20.0-bin/bin:/nix/store/bcnisk3ydfgv26v2gw3zlky24g00yww2-git-2.54.0/bin:/nix/store/cgjr3kj3hs7ngznyws5qfg16c8scpys0-bash-interactive-5.3p9/bin:/nix/store/9ypz3flqsrl5xl495mm8h645gadjsxi1-coreutils-9.11/bin:/nix/store/4wvhzvwmv2rnwgcg0sadhs769hky28xk-zsh-5.9.1/bin:/nix/store/9ypz3flqsrl5xl495mm8h645gadjsxi1-coreutils-9.11/bin:/bin:/home/david/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0/bin
+
+=== Row 9 — ImmutableInputSet (probe: --ro-bind; control: --bind) ===
+  probe   (--ro-bind)
+    seen as uid=1000 gid=100
+    /source  W_OK=EROFS-or-denied  R_OK=readable  owner=1000:100
+    /readable  W_OK=EROFS-or-denied  R_OK=readable  owner=1000:100
+  control (--bind)
+    seen as uid=1000 gid=100
+    /source  W_OK=writable  R_OK=readable  owner=1000:100
+    /readable  W_OK=writable  R_OK=readable  owner=1000:100
+  the source export written through (control arm, one write, in-fixture):
+    capsule-side exit=0
+    host-side: the byte traversed the bind (fixture only)
+  REQUIRED: probe EROFS-or-denied, control writable. A control that is also
+            denied cannot fail for its own reason — EX-3's vacuous pass here.
+
+=== Row 4 — BoundedFilesystemVisibility (probe: placement only; control: + decoy) ===
+  probe   (no decoy)
+    /widened/undeclared absent
+  control (decoy <- /etc)
+    /widened/undeclared VISIBLE  entries=9
+  control (decoy <- /tmp/tmp.A3MUjrPCIj/readable)
+    /widened/undeclared VISIBLE  entries=1
+  control (decoy <- /run/current-system)
+    host: /run/current-system DOES NOT EXIST here — candidate says nothing
+  control (decoy <- /home/david)
+    /widened/undeclared VISIBLE  entries=11
+  REQUIRED: probe absent, control VISIBLE. A control whose decoy cannot be
+            attached, or is attached but invisible, cannot fail for its own
+            reason — the cage supplied the boundedness, not the capsule.
