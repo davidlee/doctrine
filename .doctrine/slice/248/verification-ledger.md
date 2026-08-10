@@ -63,6 +63,43 @@ as the orchestrator's mid-flight correction about which arm the cost lands on.
 Recorded because the ledger would otherwise only ever preserve the failures, and
 "three tallies contradicted" is a misleading base rate without its denominator.
 
+| task | row / subject | commits | orchestrator's own gate | suite |
+|---|---|---|---|---|
+| `T13`+`T14` | `EX-1`'s `Admitted`; `VA-1` adjudicated | `e24c01e55`, `49ce9d7cd` | 2/2, wall 137 / 137 s, 92.47 / 92.27 s | **297** |
+
+`PHASE-10` **closed 2026-08-10**: 14/14, gate exit 0, `verify-vt` `VT-1`…`VT-6`
+all PASS. Suite 296 → 297 (**+1**), exactly `T13`'s one test. Delta tightened to
+`72fda544e..49ce9d7cd`.
+
+**All ten phases are `completed` and every `VT` row in the slice PASSES.**
+`slice conformance` reads **24 files, nothing undeclared**. `slice status` shows
+the expected divergence — *phases complete but lifecycle not terminal* — which is
+the audit's to resolve, not the loop's.
+
+## The delta boundaries overlap, and it cannot be fixed — only declared
+
+`PHASE-09` and `PHASE-10` **each contain the other's commits**, because
+`PHASE-09`'s `T9` sat blocked on an owner ruling while the whole of `PHASE-10`
+executed, then completed afterwards. A phase's delta is one contiguous range, so
+neither can exclude the other:
+
+| phase | recorded range | what rides along |
+|---|---|---|
+| `PHASE-09` | `57b38f732..bcfcfec80` | ~40 `PHASE-10` commits (`4fcc9ab07`…`4e3882b72`) |
+| `PHASE-10` | `72fda544e..49ce9d7cd` | `PHASE-09` `T9`'s completion (`c59f35ce2`…`bcfcfec80`) |
+
+Both were tightened at the tail — each drops the driver commits after its own
+code tip. The interior is unreachable. Interior driver commits specifically:
+`1d33865ed` (the audit files, committed by the owner mid-worker), `cfaffa39e`
+(this file's move) and `756339b3e`. **Declare these at reconciliation.** Forcing
+a narrower range would drop real phase work, which is what the CLI correctly
+refused at `PHASE-07`.
+
+The generalisable point for whoever plans the next slice: **a phase blocked on a
+human ruling, while later phases proceed, produces non-contiguous deltas by
+construction.** The boundary model assumes phases execute to completion in order.
+Worth stating in a plan when a phase carries a known owner-decision dependency.
+
 `T1`–`T12` are `PHASE-10`'s. The last row is **`PHASE-09`'s `T9`**, not
 `PHASE-10`'s — two different tasks share that number and the slice's prose cites
 both, so always qualify it.
