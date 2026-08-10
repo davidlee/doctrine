@@ -3384,6 +3384,37 @@ fn execs_only_what_is_bound() -> Probe {
     }
 }
 
+/// The `/` entries row 4 permits before `$PATH` is consulted, space-fenced for
+/// the payload's `case "$allowed" in *" $leaf "*` match.
+///
+/// The profile's own inner destinations, plus **the top level [`SHELL`] lives
+/// under**. That last one is seeded here rather than left to the payload's
+/// `$PATH` loop, and the asymmetry is the point: `system_readable_roots` binds
+/// it from the *literal* `SHELL` so the capsule has an entry point to exec, and
+/// readable roots are identity-mapped, so it is present at `/` on **every** host
+/// — but it reaches the inner `PATH` only where some host `PATH` entry happens
+/// to live under it. On a store-based host none does. A `$PATH`-only derivation
+/// therefore reports the capsule's own shell directory as `UNEXPECTED-bin` and
+/// the row reads `Indeterminate { NoObservation }`; measured off-jail on
+/// 2026-08-10, and invisible in the jail, where `/bin` is a `PATH` entry.
+fn permitted_root_entries() -> String {
+    let mut leaves: Vec<String> = [
+        INNER_CAPSULE,
+        INNER_AGENT,
+        INNER_SOURCE,
+        INNER_PROC,
+        INNER_DEV,
+        INNER_TMP,
+    ]
+    .iter()
+    .map(|inner| inner.trim_start_matches('/').to_owned())
+    .collect();
+    if let Some(root) = top_level_ancestor(Path::new(SHELL)) {
+        leaves.push(root.to_string_lossy().trim_start_matches('/').to_owned());
+    }
+    format!(" {} ", leaves.join(" "))
+}
+
 /// Row 4. The undeclared decoy is unreadable **and** `/` holds only the entries
 /// the profile put there.
 ///
@@ -3405,7 +3436,7 @@ fn reads_no_undeclared_path_and_sees_only_the_profiles_root() -> Probe {
             "echo {LIVENESS_MARKER}; \
              if cat '{WIDENED_UNDECLARED}' > /dev/null 2>&1; \
              then echo {REACHED}; exit 0; fi; \
-             allowed=' {capsule} {agent} {source} {proc} {dev} {tmp} '; \
+             allowed='{permitted}'; \
              IFS=:; for entry in $PATH; do \
              allowed=\"$allowed$(echo \"$entry\" | cut -d/ -f2) \"; \
              done; unset IFS; \
@@ -3416,12 +3447,7 @@ fn reads_no_undeclared_path_and_sees_only_the_profiles_root() -> Probe {
              *) extra=$((extra+1)); echo UNEXPECTED-\"$leaf\";; esac; \
              done; \
              [ \"$extra\" -eq 0 ] && echo {DENIED}",
-            capsule = INNER_CAPSULE.trim_start_matches('/'),
-            agent = INNER_AGENT.trim_start_matches('/'),
-            source = INNER_SOURCE.trim_start_matches('/'),
-            proc = INNER_PROC.trim_start_matches('/'),
-            dev = INNER_DEV.trim_start_matches('/'),
-            tmp = INNER_TMP.trim_start_matches('/'),
+            permitted = permitted_root_entries(),
         )),
         observed: Observed::Token {
             held: DENIED,
@@ -5335,8 +5361,9 @@ mod tests {
         Observed, PidProbe, Probe, PropertyRemoval, Row, RowId, RowVerdict, SHELL, TMPFS_MAGIC,
         TempRoot, Which, admission, available_bytes_of, capsule_config_document, classify,
         classify_concurrent, decode_mount_field, git, is_inheritable, mount_points, on_real_disk,
-        prepare_root, ran_cleanly, row_ids_in_more_than_one_table, row_verdict, second_filesystem,
-        system_readable_roots, top_level_ancestor, verify, verify_over,
+        permitted_root_entries, prepare_root, ran_cleanly, row_ids_in_more_than_one_table,
+        row_verdict, second_filesystem, system_readable_roots, top_level_ancestor, verify,
+        verify_over,
     };
     use super::{
         Arm, BYTES_PER_MIB, FIXTURE_FILE_SIZE_CAP_MIB, FIXTURE_TIMEOUT_SECONDS, Under,
@@ -9725,6 +9752,28 @@ mod tests {
         }
         assert!(four.contains(WIDENED_UNDECLARED));
         assert!(!three.contains(WIDENED_UNDECLARED));
+    }
+
+    /// Row 4 permits the shell's own top level at `/` **without** help from
+    /// `$PATH`.
+    ///
+    /// Pure, and it has to be: the live verdict below cannot see this. In the
+    /// jail `/bin` is a `PATH` entry, so the payload's own loop names the root
+    /// and the row passes for a reason that does not hold on a store-based host,
+    /// where the root is bound from the literal `SHELL` and appears on no `PATH`
+    /// entry. Off-jail on 2026-08-10 that read `UNEXPECTED-bin`, no token, and
+    /// `Indeterminate { NoObservation }`.
+    #[test]
+    fn the_permitted_root_entries_name_the_shells_own_root() {
+        let permitted = permitted_root_entries();
+        let root = top_level_ancestor(Path::new(SHELL)).expect("SHELL is absolute");
+        let leaf = root.to_string_lossy().trim_start_matches('/').to_owned();
+
+        assert!(
+            permitted.contains(&format!(" {leaf} ")),
+            "row 4 would call the capsule's own shell directory unexpected: \
+             {permitted:?}"
+        );
     }
 
     /// `VT-1`, row 4 — the undeclared decoy is unreachable, and `/` holds only
