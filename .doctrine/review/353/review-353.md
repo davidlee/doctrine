@@ -60,60 +60,102 @@ from host-project conventions.
 
 ## Synthesis
 
-### Judgement
+> **Revised 2026-08-11** after external architectural review. Findings `F-11`,
+> `F-12` and `F-13` narrow the first pass; this synthesis carries the narrowed
+> holding and governs where it conflicts with `F-1`, `F-3`, `F-6`, `F-7` or
+> `F-10`. The ledger is append-only, so those findings stand as raised — read
+> them with their corrections. The inquisitorial register of the first pass has
+> been retired here: this section is intended to read as an architectural record
+> six months from now, not as catharsis.
 
-**Guilty.** The capsule programme is heresy against its own founding claim, and
-the heresy is architectural, not clerical.
+### Holding
 
-Let the record show what is *not* charged. `SL-248`'s code is careful. Its
-constants are named, its refusals are distinguishable, its layering respects
-`ADR-001`, its ledger is honest, and its authors caught their own errors and
-recorded them — `DEC-186` was withdrawn as refuted by the very hand that wrote
-it, and `DEC-188` states the programme's failure more plainly than this tribunal
-could. This is a well-built wrong thing. The inquisition is convened against
-the design precisely because the workmanship cannot be blamed.
+**The programme is stopped.** `RFC-025`'s capsule programme failed its
+simplification objective because it conflated environment construction,
+confinement, and dispatch-transaction concerns. The decisive error was
+attempting to derive a portable executable environment from arbitrary host state
+rather than selecting or provisioning one through an existing substrate. That
+error introduced host-sensitive semantics whose defects propagated across
+otherwise separable concerns, made local fixes programme-level changes, and
+required a conformance apparatus whose strongest claims were invalidated by the
+environment in which it was developed. The programme should stop before further
+investment; reusable confinement mechanics and empirical findings should be
+harvested, while the successor is redesigned around separately shippable
+provisioning, confinement, and control-plane concerns.
 
-The root heresy is **F-2**, and everything else descends from it. Doctrine set
-out to *manufacture* an execution environment by discovering it from arbitrary
-host paths, when it should have *selected* one from a self-contained mechanism
-and confined that. From that single inversion follows the whole edifice: because
-the environment is discovered, its contents must be excavated from `$PATH`
-(`system_readable_roots`); because excavation is host-shaped, a generic escape
-hatch is invented (`closure-resolver`, an operator-supplied executable **inside
-the trust boundary**); because the escape hatch cannot know a project's
-toolchain, every operator must hand-declare it (`[interpretation]`, no
-defaults); because a hand-declaration is a security surface, 1,624 lines of
-validation algebra are purchased to police it; and because nothing about any of
-this is provable by construction, 14,252 lines of apparatus are built to measure
-it — apparatus which then measured the jail it was born in and returned nineteen
-green rows for a property its own fixture falsifies.
+### The case
 
-Sixty thousand inserted lines. Zero deleted. One binary with two verbs,
-`provision` and `backend verify`, wired to nothing. Fourteen requirements, all
-`pending`. Twenty-four open follow-ups, one of them a release-blocker. The host
-project's own commit gate held permanently red by an "additive and unused"
-subsystem. And a plan under which the first deletion — the entire justification
-for the work — is the last thing anyone will write.
+The load-bearing argument is **`F-2` → `F-5` → `F-8`**, and it stands
+independent of every other finding:
 
-The Owner's five-minute baseline is the indictment's final exhibit: *clone the
-repo, use the existing flake, bwrap it, run the agent.* Working confinement, in
-five minutes, with an existing mechanism. Against that, sixteen thousand lines
-of probes and ten phases of transaction lifecycle are not engineering rigour.
-**Burn it.**
+- **`F-2` — the architectural inversion.** The system derives an execution
+  environment from arbitrary host state instead of selecting one and confining
+  it. This single diagnosis explains why canonicalization, `$PATH`, closure
+  resolution, multicall aliases, shebangs, provisioning bootstrap and host
+  topology all became entangled with one another.
+- **`F-5` — the second-order error.** Environment construction was welded to
+  confinement, transaction handling, admission, transport, retention and
+  capacity, so a local defect becomes a programme-level design event. `F-12`
+  adds a further instance: the tangle reached into the root package's *target
+  layout* (a `lib` target, a curated leaf-only export set, the `EXPORTED`
+  assertion, the `sec-6`/`sec-9` invariants) to serve one capsule-only module.
+- **`F-8` — the empirical proof that the abstraction is wrong.** Fixing one
+  supposedly local fixture defect (`SL-252`/`ISS-341`) reached backwards into
+  production semantics, an earlier phase's exit criterion, `PATH` construction
+  and provisioning. `DEC-188`: *"That is a slice, not a phase."*
 
-> *Igne natura renovatur integra.* Let the pyre be built high, and let the
-> fourteen thousand lines feed it first.
+Three findings, sufficient on their own to stop the programme.
 
-### What survives the fire — the salvage manifest
+**Supporting, in narrowed form.** `F-3`'s soundness limb is the substantive
+addition: the conformance apparatus emitted strong claims while its fixture
+silently granted capabilities far broader than those claims implied — 691 store
+paths and an executable toolchain inside a capsule reading `Proven` for
+`BoundedInputSet`. The 14,252-line / 61% / 2.2× figures are *denominator
+evidence* of low evidentiary return per unit complexity, not proof of anything
+by themselves (`F-11`). `F-1` contributes the narrower fact that after the first
+foundational slice the replacement already exceeds the incumbent's apparent
+complexity budget while the benefit remains hypothetical, and that the deferral
+is **self-sealing** — `REV-046` may not be approved until slice 5, and slices
+2–5 stay unminted until their predecessors are designed, so a cutover plan is
+not permitted to exist until the cutover. `F-6` contributes that accepted
+governance hardened assumptions untested across the environmental variation
+those assumptions depended upon. `F-4` is the operational finding and is
+separable from all of the above. `F-10` is an appendix.
 
-The fire is not indiscriminate. An inquisitor who burns the true with the false
-is merely an arsonist. These survive:
+**What is not charged.** `SL-248`'s workmanship. Constants are named, refusals
+are distinguishable, layering respects `ADR-001`, the ledger is honest, and the
+authors caught their own errors in time — `DEC-186` was withdrawn as refuted by
+the hand that wrote it, `DEC-188` states the failure more plainly than this
+tribunal did, and `RSK-231` was filed by the accused against their own
+programme. This is a well-built wrong thing, and the review is against the
+design precisely because the execution cannot be blamed.
 
-**1. The Owner's own baseline — the actual architecture.** Clone, flake, bwrap,
-five minutes. It is not a prototype of the answer; it *is* the answer, and it
-needs automating and a control plane, not replacing. Add the one flake line for
-network isolation. This is salvage rank one and everything else is subordinate
-to it.
+### The three kinds of complexity (`F-13`)
+
+The single most important thing in this record for the successor's benefit.
+Every mechanism the successor considers must be assigned to one tier:
+
+| Tier | What it is | Under abandonment |
+|---|---|---|
+| **1. Intrinsic** | Namespace and mount semantics, descriptor inheritance and closure, process teardown and signals, credential/capability posture, `no_new_privs`, resource limits | **Survives.** Salvage it. |
+| **2. Incumbent transaction** | Deterministic workspace creation, agent lifecycle, control-plane communication, result transport, teardown, recovery, concurrency, non-Nix platforms, stronger isolation on demand | **Returns unsolved.** Predates the programme; abandoning it dissolves nothing. |
+| **3. Self-inflicted** | Environment inference from `$PATH`, the `closure-resolver` extension point, `expand_closure_root`/`closure_members`, inner-`PATH` synthesis, host-shaped conformance fixtures, and the apparatus measuring all of it | **Disappears.** The only tier the verdict may call waste. |
+
+The question no artefact currently answers, and the post-mortem must: *which
+complexity disappears when the architecture changes, and which merely moves back
+to the still-unsolved orchestration problem?* Without it, the successor cannot
+tell its own legitimate hard requirements from evidence that it is repeating the
+failure — and `F-8`'s triage has no principled basis for sorting dissolved from
+carried. **Tier 3 → dissolved. Tiers 1 and 2 → carried.**
+
+### Salvage manifest
+
+**1. The five-minute workflow is the reference baseline — not the finished
+architecture.** Clone, existing flake, bwrap, run the agent; add the one flake
+line for network isolation. It proves the essential confinement workflow can be
+radically simpler than the programme assumed. It does not solve tier 2. The rule
+it yields: **any successor must justify every mechanism it adds relative to that
+working composition.**
 
 **2. `backend/bubblewrap.rs` — the argv assembly, in part (2,635 lines).** The
 knowledge of *how to invoke bwrap correctly* is dearly bought and hard to
@@ -143,10 +185,20 @@ and the 180 friction observations. The governance machinery worked: it recorded
 the failure faithfully and in time for the abort lever to be worth pulling. That
 is the system functioning, and it is why this cost 60k lines instead of 600k.
 
-**Ash, and to be treated as such:** `conformance.rs` (14,252), `provision.rs`'s
-thirteen-step protocol with its publish-or-adopt and creation-token machinery
-(1,922), `src/interpretation.rs` (1,624), `capacity.rs` (391), `SPEC-030`'s
-fourteen pending requirements, and `ADR-020`'s authority-boundary decision.
+**Discard (tier 3):** `conformance.rs` (14,252), `provision.rs`'s thirteen-step
+protocol with its publish-or-adopt and creation-token machinery (1,922),
+`capacity.rs` (391), `SPEC-030`'s fourteen pending requirements, and `ADR-020`'s
+authority-boundary decision.
+
+**Re-examine, do not discard (`F-12`):** `src/interpretation.rs` (1,624) and the
+`[interpretation]` policy. The *mechanism* is disproportionate on its own
+evidence — a required-with-no-defaults block obliging every adopting project to
+exhaustively enumerate its interpreters is a security surface whose omissions
+are silent. But the *requirement* — who may interpret worker-controlled content
+— is orthogonal to how the environment is obtained, and any successor retaining
+a trusted/untrusted execution split inherits it. Answer the retention question
+before deleting anything, and decide the fate of the root package's `lib` target
+separately; it does not automatically follow.
 
 ### Penance, in order
 
@@ -156,29 +208,38 @@ fourteen pending requirements, and `ADR-020`'s authority-boundary decision.
    gate must be green and its release unblocked while the successor is designed.
    *Verification:* `just gate` green off-jail; `doctrine check gate` clean.
 
-2. **Vacate the governance (`F-6`).** A `REV` against present-tense governance:
+2. **Write the complexity partition (`F-13`).** Assign every mechanism in
+   `crates/doctrine-control` and `SPEC-030` to tier 1, 2 or 3. This blocks step
+   3, which cannot sort dissolved from carried without it. *Verification:* every
+   mechanism tiered; the tier-2 list is recorded as returned-unsolved work.
+
+3. **Vacate the governance (`F-6`).** A `REV` against present-tense governance:
    `ADR-020` superseded (not amended — the central choice is being reversed);
    `SPEC-030` withdrawn or reduced to what a successor actually specifies;
    `REV-046` closed unapplied. `RFC-025` **stays** as the historical record and
    receives the post-mortem. *Verification:* `doctrine spec validate` clean; no
    `active` spec with zero shipped consumers.
 
-3. **Triage the register, do not work it (`F-8`).** Sort `cluster:capsule` into
-   dissolved / carried / live per `F-8`'s disposition. `SL-252` is dissolved.
-   *Verification:* no `open` `cluster:capsule` item lacking a triage disposition.
+4. **Triage the register, do not work it (`F-8`).** Sort `cluster:capsule` by
+   the tier rule from step 2: tier 3 → dissolved, tiers 1–2 → carried, `F-4`'s
+   items → live. `SL-252` is dissolved. *Verification:* no `open`
+   `cluster:capsule` item lacking a triage disposition.
 
-4. **Harvest before the fire (`F-3`, salvage 3–4).** Land salvage items 4 and 3
-   as memories and `EVD` records *before* any code is deleted. Knowledge burnt
+5. **Harvest before deleting (`F-3`, salvage 3–4).** Land salvage items 4 and 3
+   as memories and `EVD` records *before* any code is removed. Knowledge deleted
    with its carrier is knowledge re-purchased at full price.
 
-5. **Design the successor under an inverted rule (`F-1`, `F-5`).** Three
-   separately-shippable concerns — provisioning (select + realise), confinement
-   (apply the platform sandbox), control-plane transport. Two provisioning
-   options as the Owner framed them: (a) nix+bwrap / seatbelt; (b) microVM or
-   `systemd-nspawn` into a configured base image. **No slice lands that does not
-   retire incumbent mechanism in the same slice.** First increment must be
-   statable against the five-minute baseline or it is refused at design gate.
-   `src/interpretation.rs`'s deletion is the correct opening move.
+6. **Design the successor (`F-5`, `F-11`).** Three separately-shippable
+   concerns — provisioning (select + realise), confinement (apply the platform
+   sandbox), control-plane transport. Two provisioning options as the Owner
+   framed them: (a) nix+bwrap / seatbelt; (b) microVM or `systemd-nspawn` into a
+   configured base image. The delivery criterion is **incremental independently
+   valuable delivery** — *not* the first pass's withdrawn "retire incumbent
+   mechanism in the same slice", which would force unsafe partial cutovers
+   (`F-11`). Every added mechanism must be justified against the five-minute
+   baseline, and the design must answer `F-12`'s retention question — does a
+   trusted/untrusted execution distinction survive? — before any deletion in the
+   `[interpretation]` area.
 
 ### Standing risks
 
@@ -197,10 +258,24 @@ fourteen pending requirements, and `ADR-020`'s authority-boundary decision.
 - **Confinement strength on non-NixOS hosts** is genuinely weaker under option
   (a), as the Owner already notes. That is a known, bounded, statable tradeoff.
   It is not a reason to rebuild the capsule.
+- **Tier-2 relapse (`F-13`).** The successor will meet deterministic workspace
+  creation, agent lifecycle, control-plane communication, result transport,
+  teardown, recovery and concurrency, because abandoning the capsule returns
+  those problems rather than solving them. If that difficulty is misread as
+  recurrence of this failure, work that is going well will be aborted. The tier
+  partition exists to prevent exactly this.
+- **Over-reading this verdict.** The holding is narrow: the *derivation* of
+  environments from host state was wrong, and the concerns were welded. It is
+  not a finding that isolation is unnecessary, that rigour is waste, or that
+  large test apparatus is inherently suspect. `F-11` records where the first
+  pass overstated; a reader who takes the first pass at face value will
+  over-correct.
 
 ### Tolerated
 
-Nothing. Every charge is upheld, and the one finding disposed `fix-now` is
-triage, not tolerance.
+Nothing. Every finding is terminal. The one finding disposed `fix-now` at the
+first pass (`F-4`) is triage, not tolerance; `F-11` and `F-12` withdraw
+overstated reasoning without disturbing the holding.
 
-> **HERESIS URITOR; DOCTRINA MANET**
+> *Heresis uritor; doctrina manet* — and the doctrine that remains is narrower
+> than the fire that found it.
