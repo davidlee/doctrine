@@ -1,0 +1,27 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 424
+slug = "fold-sl-248s-stranded-loopmd-orchestration-lessons-into-the-loop-template"
+title = "Fold sl-248's stranded LOOP.md orchestration lessons into the loop template"
+kind = "improvement"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-10"
+updated = "2026-08-10"
+tags = ["area:dispatch", "area:skills", "cluster:dispatch-funnel"]
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = [{ to = "IMP-423", rank = 0 }]                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-248"

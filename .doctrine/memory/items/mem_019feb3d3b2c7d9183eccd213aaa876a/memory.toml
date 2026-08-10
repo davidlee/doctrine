@@ -1,0 +1,50 @@
+memory_uid = "mem_019feb3d3b2c7d9183eccd213aaa876a"
+memory_key = "mem.pattern.testing.derivation-correct-only-where-it-has-run"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A derivation is only known correct in the environments it has run in"
+summary = "An environment-derived value that has only ever run in one environment is untested, not correct — the environment's coincidences stand in for the logic."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "conformance", "portability", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3cba47199e30042313900d3087a807937e0fd3ae"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "bda6ebac0b0d9b24edb05d4429801f239c2aef0d2c59cfd90e9f713a8e40a0d2"
+base_commit = "3953b74c32fffb8f50f7b579cc070492b1784a6e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+
+[[source]]
+kind = "backlog"
+ref = "ISS-339"
+

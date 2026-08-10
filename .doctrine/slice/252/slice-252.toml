@@ -20,6 +20,11 @@ role = "concerns"
 descriptor = "the platform backend contract this fixture must stop contradicting"
 target = "SPEC-030"
 
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-341"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
