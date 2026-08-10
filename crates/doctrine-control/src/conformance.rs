@@ -3821,6 +3821,34 @@ const MAP_ENTRY_END: &str = "|";
 /// the property, not the property minus whatever this host cannot see. A row
 /// narrowed to what works is precisely `RV-346` `F-27`.
 ///
+/// ## The dead surfaces are a *choice*, not a host fact (`VA-1`)
+///
+/// Worth stating in the sharper form the off-jail run established, because
+/// "host-dependent" invites the reading that nothing can be done about it.
+///
+/// On the `VA-1` host the unsandboxed control also reads uid 1000, so with the
+/// shipped [`CAPSULE_UID`] the two surfaces stay dead there too — the
+/// host-dependence is real and reproduces. But an arm declaring
+/// `--uid 4242 --gid 4242` moves **uid, gid and `uid_map` together**
+/// (`uid_map` reading `4242 0 1` against the identity-removed arm's
+/// `1000 0 1`). So all of these surfaces discriminate whenever the declared
+/// identity differs from the operator's: the two dead ones are dead because
+/// [`CAPSULE_UID`] is 1000 and 1000 is the *common operator uid*, not because
+/// the surfaces are inert. That is a live choice for whoever revisits the
+/// declared identity — declare a uid no ordinary operator holds, or keep 1000
+/// and carry the host-dependence as a stated property of the row — and it is
+/// **not** this row's to make: `CAPSULE_UID` is the security boundary
+/// `sec-3` fixed, and changing it to make a row discriminate would be narrowing
+/// by the other door.
+///
+/// **One surface is unconfirmed off-jail, and it is `gid_map`.** The off-jail
+/// payload reports uid, gid and `uid_map` on every arm and `gid_map` on none —
+/// so the fourth field, the one `D2` ruled in precisely because it is the
+/// mapping leg that discriminates *here*, has no host reading behind it. It sits
+/// outside the three `VA-1` names, so the obligation's negative path is
+/// unaffected; it is recorded because an unmeasured surface that everyone
+/// assumes moved with its sibling is how the retired credential row happened.
+///
 /// ## What each field is compared against
 ///
 /// - **uid and gid**: the *real* id, `/proc/self/status`'s first column. The
@@ -3910,6 +3938,31 @@ fn the_identity_is_exactly(uid: u32, gid: u32) -> Probe {
 /// the ceiling on anything the capsule could ever regain, and `CapInh` is what
 /// survives an `execve` inside it — so a capsule holding neither cannot reach
 /// authority the profile withheld, however many times it re-execs.
+///
+/// ## Every claim in the section above is measured on a real host (`VA-1`)
+///
+/// The four-versus-two argument was *reasoned* when it was written, and the
+/// jail this suite develops in could not check it: inside the cage all four
+/// sets read zero on the **trusted** side too, so nothing there separates a
+/// field that cannot vary from a field this cage had already flattened.
+///
+/// The `VA-1` off-jail run supplies the positive control the cage cannot. With
+/// **no `bwrap` in the picture at all**, an ordinary unprivileged process on the
+/// host reads `CapPrm 0` and `CapEff 0` — so the excluded pair is confirmed
+/// inert, exactly as the argument above claims — while `CapBnd` reads
+/// `000001ffffffffff` and `CapInh` reads `0000000800000000`. Both of the read
+/// sets are **non-zero unconfined**, and `CapInh`'s single inheritable bit is
+/// the one this jail can never demonstrate, because in here it is zero before
+/// the backend does anything.
+///
+/// So the zero this payload asserts is **the backend's doing, measured**: the
+/// confining arm reads all-zero, the granting arm (`--cap-add ALL`) restores
+/// `000001ffffffffff`, and the unsandboxed control shows what the host had to
+/// give. In-jail the probe was already known not to be *vacuous* — a nested
+/// user namespace gets `cap_bset = CAP_FULL_SET` from `create_user_ns()`, so the
+/// cage's own stripped set is not what the probe reads — but *not vacuous* and
+/// *attributable to the backend* are two different claims, and only the second
+/// one needed a host.
 ///
 /// ## What each set is compared against
 ///

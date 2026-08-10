@@ -1108,3 +1108,161 @@ the `items/<key> → mem_<uid>` symlink that resolution goes through. So
 memory's own TOML, and a key cited from the TOML is a fabricated reference until
 the symlink exists. Created by hand here. **Run `memory show <key>` before
 citing a late-bound key.**
+
+---
+
+## PHASE-10 `T14` — `VA-1`: the off-jail credential run, adjudicated and recorded
+
+**What this task is, after the measurement landed.** `VA-1`'s verb is *re-run*,
+and a jailed process cannot leave its jail (`S2`). The run was performed by the
+slice owner on an unjailed host and its artefacts are tracked, so what remained
+was not execution but **adjudication and record**: read the arms against the
+obligation's own pre-registered negative path, rule, and put the result where
+the rows are. That part is done in full. The execution is not mine and this
+record does not claim it.
+
+### The run and its host (`VA-1`'s "record the run and its host")
+
+From `spike-credentials-output.txt`'s header and its unsandboxed control arm:
+
+| | |
+|---|---|
+| host | Linux 7.1.6 x86_64 |
+| bwrap | `bubblewrap 0.11.2`, `/nix/store/82xr5pn0…/bin/bwrap` |
+| setuid? | **no** — `mode=555 owner=root`; `max_user_namespaces=247154`, so unprivileged userns is the mechanism |
+| operator | `uid=1000 gid=100`, groups `100 1 17 26 57 67 174 966 988` |
+| user namespace | `user:[4026531837]` — the **init** namespace |
+| `uid_map` | `0 0 4294967295` — the identity map, i.e. unmapped |
+| `NoNewPrivs` | **0**, before any `bwrap` ran |
+
+**Why that is off-jail, argued rather than assumed.** Item 171 records that the
+corpus mixes environments and that `offjail-prompt.md` frames this very spike as
+jail-measured — so the prose about the artefact is unreliable and only the
+artefact's readings count. Three independent surfaces disagree with the cage
+measured in `cage-shape.md`:
+
+| surface | cage, in-jail | this artefact's control arm |
+|---|---|---|
+| user namespace | `4026533973` | `4026531837` (init) |
+| `uid_map` | `1000 0 1` | `0 0 4294967295` |
+| `NoNewPrivs` | `1` | `0` |
+
+Any one of those could be argued about. Three agreeing on *init namespace,
+unmapped, `no_new_privs` unset* is a host. **Stated limit:** that is provenance
+**inferred from evidence inside the artefact**, not **declared** by it —
+`spike-credentials.sh`'s `### host` header prints the bwrap build and the
+sandbox PATH but not the namespace/`uid_map`/`NoNewPrivs` triple that item 171
+asks every spike to print. The inference is sound; it is still an inference,
+and item 171's fix is what would make it a fact.
+
+### The negative path, adjudicated — it does not fire
+
+`VA-1` pre-registered its own failure conditions, which is what makes the pass
+mean anything. Each, against the arms:
+
+| condition `VA-1` names | arms | reading | fires? |
+|---|---|---|---|
+| uid does not match the declared identity | `A3` declares `--uid 4242` | `uid=4242` | no |
+| gid does not match | `A3` declares `--gid 4242` | `gid=4242` | no |
+| `uid_map` does not match | `A3` vs `A4` | `4242 0 1` vs `1000 0 1` | no |
+| `CapBnd` does not vary probe vs `--cap-add ALL` | `A1` vs `A5` | `0000000000000000` vs `000001ffffffffff` | no |
+| `CapInh` does not vary | `A1` vs `A5` | `0000000000000000` vs `000001ffffffffff` | no |
+
+**`EVD-014` reproduces off-jail. Rows 13 and 14 are not wrong, `EX-9`'s
+disjoint-by-field claim stands, and no `/consult` is owed.** `S4` does not
+trigger.
+
+### Rescue, confirmation, and attribution are three different things
+
+The obligation's *stated rationale* was that a jailed probe cannot tell a
+confining backend from a cage that had already confined. Reporting all three
+surfaces as one kind of evidence would be the easy error, so:
+
+- **Capabilities — the rationale was falsified in advance, so the off-jail run
+  is confirmation.** `A2`/`F-3` had already shown the in-jail probe is not
+  vacuous: a nested user namespace gets `cap_bset = CAP_FULL_SET` from
+  `create_user_ns()`, so the cage's stripped set is not what the probe reads,
+  and the fields do move in here.
+- **…but it rescues a *different* claim, and this is worth separating.** *Not
+  vacuous* and *attributable to the backend* are not the same statement. In-jail
+  the trusted side reads zero on all four sets, so "the backend produced the
+  zero" was unattributable here however non-vacuous the probe was. The off-jail
+  positive control — **no `bwrap` at all**, `CapBnd 000001ffffffffff`,
+  `CapInh 0000000800000000` — is the missing arm, and it turns item 135's
+  `create_user_ns()` **argument** into a **measurement**. The `CapInh` rider
+  matters on its own: it is *non-zero* on a real host, so that set genuinely
+  discriminates, which this jail can never show because in here it is zero
+  before the backend does anything.
+- **`no_new_privs` — a genuine rescue, and the only one.** `A6`: the parent
+  shell reads `NoNewPrivs: 0` before any `bwrap`, and every arm reads `1`. So
+  `bwrap` **sets** the bit rather than inheriting it. In here the parent already
+  reads `1` and provenance is not establishable at all. This is the single
+  surface where `VA-1`'s rationale was right as written.
+
+### The one off-jail fact this jail can and does assert — already asserted
+
+Worth recording because it is the answer to *"can an in-jail worker assert
+anything about an off-jail environment?"*, and the answer turned out to be yes
+without new code. Item 136's ruling — compute the `no_new_privs` provenance
+caveat from the trusted side's own reading rather than hard-coding it — is what
+makes the report correct in **both** environments, and `T9` already
+machine-checks both branches: caveat **absent** when the trusted side reads
+unset (the off-jail case), `PROVENANCE_INHERITED` when it reads set (here), and
+`PROVENANCE_UNREADABLE` when it cannot be read at all. So the off-jail behaviour
+of the shipped report is an executed assertion **taken inside the jail**, and
+`backend verify` on this tree correctly attaches the caveat. Item 136 is
+vindicated by the run, and nothing further is owed on it.
+
+### Landed where the rows are (`VA-5`'s precedent, `EX-11`'s rule)
+
+Doc comments only; no behaviour change, suite unmoved at 297.
+
+- **Row 14** (`the_capability_sets_are_empty`) — the four-versus-two argument
+  was *reasoned* and this jail could not check it, because in here all four sets
+  read zero on the trusted side too. The off-jail control confirms every clause
+  of it on a real host: `CapPrm`/`CapEff` inert as claimed, `CapBnd` and
+  `CapInh` both non-zero unconfined. Written up beside the payload, with the
+  *not vacuous* versus *attributable* distinction spelled out so the next reader
+  does not collapse them.
+- **Row 13** (`the_identity_is_exactly`) — `F-4` restated in the sharper form
+  the run established: the dead surfaces are a **choice**, not a host fact.
+  Off-jail the unsandboxed control also reads uid 1000, so the vacuity
+  reproduces there with the shipped `CAPSULE_UID` — but `A3` moves uid, gid and
+  `uid_map` **together** once the declared identity differs from the operator's.
+  The surfaces are not inert; the constant makes two of them invisible. Recorded
+  as a live reconciliation choice and explicitly **not** this row's to make
+  (`S4`, `S6`: `CAPSULE_UID` is the boundary `sec-3` fixed, and moving it to make
+  a row discriminate is narrowing by the other door).
+
+### `gid_map` is unconfirmed off-jail, and it is the fourth surface
+
+The off-jail payload reports uid, gid and `uid_map` on every arm and **`gid_map`
+on none**. So the field `D2` ruled in (`F-41`) *precisely because* it is the
+mapping leg that discriminates on a uid-1000 host has no host reading behind it
+at all. It sits outside the three surfaces `VA-1` names, so the negative path is
+untouched — but it is recorded rather than glossed, because an unmeasured
+surface everyone assumes moved with its sibling is how the retired
+`CredentialsConfined` row happened in the first place.
+
+### Item 169's residual — judged outside this card, carded, not taken
+
+`ExplicitNetworkPosture` is cleared **structurally**: the cage shares the host's
+network namespace (inode `4026531833`, read on *both* sides, which is the only
+way that reading means anything), so it cannot supply the isolation the row
+attributes to the capsule. The residual is that **no spike exercises the row at
+all** — a *coverage* gap, not a *contamination* one.
+
+Not taken, on three grounds rather than on scope alone: `VA-1` is the
+**credential** measurements and this is a network row; nothing is blocked on it,
+because the clearing is structural and complete; and closing it means authoring
+a new two-arm probe, which is new work rather than a clause of this obligation.
+Silently expanding into it would also have been the third thing this phase did
+without a card. Left where item 169 already carries it.
+
+### Tally
+
+`doctrine check gate` exit **0**, `297 passed; 0 failed; 9 ignored` in 92.27 s,
+138 s wall, zero compiler diagnostics, 19 `warning:` lines (doctrine's own test
+output). Unchanged from `T13` — this task adds no test and changes no
+behaviour, which is what a doc-only landing should read like. Findings
+`F-65`–`F-67`; § *Owed* items 173–175.

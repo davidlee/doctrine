@@ -2059,6 +2059,67 @@ at the end per the append-only rule.
     over the evidence it names**, because every `all`-shaped predicate admits a
     vacuous green that looks identical to a real one.
 
+173. **`VA-1`'s negative path is adjudicated and does not fire; rows 13 and 14
+    stand.** Each pre-registered failure condition against the off-jail arms:
+    uid, gid and `uid_map` all match the declared identity on the arm that
+    declares one (`--uid 4242 --gid 4242` → `uid=4242 gid=4242
+    uid_map= 4242 0 1`, against the identity-removed arm's `1000 0 1`); and
+    `CapBnd`/`CapInh` both move `0000000000000000` → `000001ffffffffff` between
+    the probe arm and `--cap-add ALL`. `EVD-014` reproduces, `EX-9`'s
+    disjoint-by-field claim stands, `S4` does not trigger and no `/consult` is
+    owed. **The run and its host, recorded as `VA-1` requires:** Linux 7.1.6
+    x86_64, `bubblewrap 0.11.2` at `/nix/store/82xr5pn0…`, **not** setuid
+    (`mode=555 owner=root`, `max_user_namespaces=247154`), operator `uid=1000
+    gid=100`, init user namespace `user:[4026531837]`, `uid_map 0 0 4294967295`,
+    parent `NoNewPrivs: 0`. **The provenance is inferred, not declared** — the
+    artefact's `### host` header prints the bwrap build and sandbox PATH but not
+    item 171's namespace/`uid_map`/`NoNewPrivs` triple, so off-jail-ness rests on
+    three surfaces of the control arm disagreeing with `cage-shape.md`'s cage
+    reading. Sound, and still an inference; item 171's fix is what would make it
+    a fact.
+
+174. **Rescue, confirmation and attribution are three different things, and
+    reporting them as one would have been the easy error.** `VA-1`'s stated
+    rationale was that a jailed probe cannot tell a confining backend from a
+    cage that had already confined. For **capabilities** that rationale was
+    falsified *in advance* — `create_user_ns()` gives a nested userns
+    `cap_bset = CAP_FULL_SET`, so the cage's stripped set is not what the probe
+    reads and the fields do move in here — making the off-jail run
+    **confirmation**. But it rescues a *different* claim that the in-jail run
+    genuinely could not reach: *not vacuous* and *attributable to the backend*
+    are separate statements, and in here the trusted side reads zero on all four
+    sets, so the zero was unattributable however non-vacuous the probe. The
+    off-jail positive control with **no `bwrap` at all** (`CapBnd
+    000001ffffffffff`, `CapInh 0000000800000000`) is the missing arm, and it
+    turns item 135's argument into a measurement. The `CapInh` rider carries its
+    own weight: non-zero on a real host, so that set genuinely discriminates,
+    which this jail can never show. For **`no_new_privs`** it is a genuine
+    rescue and the only one — parent reads `0` before any `bwrap`, every arm
+    reads `1`. **And the off-jail behaviour of the shipped report is already an
+    executed assertion taken inside the jail:** item 136's computed caveat is
+    machine-checked on all three branches by PHASE-09 `T9` — absent when the
+    trusted side reads unset (the off-jail case), `PROVENANCE_INHERITED` when
+    set, `PROVENANCE_UNREADABLE` when unreadable. Item 136 is vindicated by the
+    run and nothing further is owed on it.
+
+175. **Two residuals `VA-1` does not cover, both cheap, both owed as `ISS-`.**
+    (a) **`gid_map` has no off-jail reading.** The off-jail payload reports uid,
+    gid and `uid_map` on every arm and `gid_map` on none — so the fourth surface,
+    the one `D2` ruled in (`F-41`) *precisely because* it is the mapping leg that
+    discriminates on a uid-1000 host, is unconfirmed on a real host. Outside the
+    three surfaces `VA-1` names, so the negative path is untouched; recorded
+    because an unmeasured surface everyone assumes moved with its sibling is
+    exactly how the retired `CredentialsConfined` row happened.
+    (b) **Nobody has run the shipped suite off-jail.** The off-jail work ran
+    *spikes* — shell reproductions of the backend's argv shape — so what is
+    confirmed on a real host is the **mechanism** rows 13 and 14 rest on, not
+    those rows executing there. `VA-1` asked for the credential measurements and
+    got them, so this is not a shortfall against it. It is now unusually cheap,
+    though: `T13` made `backend verify` exit **0** in-jail with all nineteen rows
+    `Proven`, so the confirmation is a single command on the owner's own shell,
+    and it is the only thing that would close `sec-9` residual 3's neighbourhood
+    by measurement rather than by argument.
+
 ## Open
 
 **RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`

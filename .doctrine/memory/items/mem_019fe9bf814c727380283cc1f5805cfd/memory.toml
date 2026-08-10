@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe9bf814c727380283cc1f5805cfd"
+memory_key = "mem.pattern.testing.confinement-probe-needs-an-unconfined-control"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Not vacuous is not attributable — a confinement probe run inside a cage needs an unconfined positive control"
+summary = ""
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "sandbox", "provenance"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e4c5bd5828265de4842ff8e470dab8a86f958c57"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "30c7b65deef0758e3e06ef3b67bf1c5a905c86de2559165520a8b410932526c6"
+base_commit = "e24c01e5507a1943ac49bd7adc518d951b81485e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
