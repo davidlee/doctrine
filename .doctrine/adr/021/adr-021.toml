@@ -7,7 +7,7 @@ title = "Unsafe code deny with a two-site budget"
 status = "proposed"
 created = "2026-08-10"
 updated = "2026-08-10"
-tags = []
+tags = ["cluster:capsule", "lints", "safety", "unsafe"]
 
 [relationships]
 # `supersedes` stays typed — author with `doctrine supersede ADR-NNN <previous>`.
