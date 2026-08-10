@@ -1,7 +1,7 @@
 id = 252
 slug = "conformance-fixture-readable-input-posture"
 title = "Conformance fixture readable-input posture"
-status = "proposed"
+status = "abandoned"
 created = "2026-08-10"
 updated = "2026-08-10"
 tags = ["area:confinement", "area:testing", "cluster:capsule", "conformance"]
