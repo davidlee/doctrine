@@ -77,6 +77,44 @@ test:
 test-all:
   cargo test --workspace
 
+## Capsule conformance — the shipped verb (SL-248)
+##
+# Not the test modules.
+# `just test` already runs this crate's `#[cfg(test)]` suites, because
+# `default-members` names `crates/doctrine-control` for exactly that reason.
+# This runs `backend verify`: the nineteen-row admission the suite exists to
+# produce, exit 0 only on `Admitted`. It has never been run off-jail (`ISS-339`).
+#
+# Standalone by intent, and NOT wired into `gate`: what a host that cannot
+# satisfy the rows should report is an open decision (`RV-352` `F-8`), and
+# every reflex available for wiring it in is one PHASE-10's `EX-14` forbids.
+#
+# The `### host` header runs first so an absent binary is a fact in the
+# transcript rather than an inference from a strange verdict — `ISS-335` and
+# `ISS-336`'s lesson, which is that a probe that cannot run is indistinguishable
+# from a probe that found nothing. The `uid_map`/`gid_map` lines are the
+# *runner's*, not a capsule arm's, so they give provenance for the run; they do
+# not close `ISS-338`, which wants the mapping read from inside an arm.
+
+# Run the capsule backend's nineteen-row admission (`backend verify`).
+capsule-verify:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  echo "### host"
+  echo "uname:      $(uname -srm)"
+  for b in bwrap setsid socat; do
+    printf '%-11s %s\n' "$b:" "$(command -v "$b" || echo MISSING)"
+  done
+  echo "userns:     $(readlink /proc/self/ns/user)"
+  echo "pidns:      $(readlink /proc/self/ns/pid)"
+  echo "netns:      $(readlink /proc/self/ns/net)"
+  echo "uid_map:    $(tr -s ' ' < /proc/self/uid_map | head -1)"
+  echo "gid_map:    $(tr -s ' ' < /proc/self/gid_map | head -1)"
+  echo "NoNewPrivs: $(awk '/^NoNewPrivs/{print $2}' /proc/self/status)"
+  echo
+  echo "### backend verify"
+  cargo run --quiet -p doctrine-control -- backend verify
+
 fake-darwin:
   cargo check --target aarch64-apple-darwin
 
