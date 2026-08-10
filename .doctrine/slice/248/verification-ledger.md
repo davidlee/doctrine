@@ -47,6 +47,21 @@ Two reading conventions, both of which have bitten:
 | `T11` | the honesty pass | `80bedf1bf`, `876025a6e` | 2/2, 92.36 / 92.49 s | 277 |
 | `T12` | `VA-3`, the suite's cost | `4e3882b72` | 2/2, wall **140 s**, 92.54 / 92.41 s | 277 |
 | `T9`**/09** | `PHASE-09` row 7, **partial** | `c59f35ce2`…`9d48adbc8` | 2/2, wall 138 / 136 s, 92.56 / 92.13 s | 291 |
+| `T9`**/09** | `PHASE-09` row 7, **complete** | `06ff02661`…`bcfcfec80` | 2/2, wall 136 / 136 s, 92.12 / 92.32 s | **296** |
+
+`PHASE-09` **closed 2026-08-10** on that pair: 12/12, gate exit 0, `verify-vt`
+`VT-1`…`VT-5` all PASS, and `doctrine-control backend verify` exits **0** with all
+fourteen rows `Proven`, five axes `Proven`, every claim `Passed`. `UNWALKED` is
+gone from the source. Suite 291 → 296 (**+5**), matching the worker's claim, and
+**wall clock did not move** — the row-7 test fell 26.27 s → 6.26 s when the
+escapee was re-sized, paying for its own additions. Warning lines back to **19**
+from the partial's 18, both arms agreeing, 0 compiler diagnostics.
+
+**The one contradiction that did not happen.** This worker's self-tally matched
+the independent run exactly, and it had independently reached the same conclusion
+as the orchestrator's mid-flight correction about which arm the cost lands on.
+Recorded because the ledger would otherwise only ever preserve the failures, and
+"three tallies contradicted" is a misleading base rate without its denominator.
 
 `T1`–`T12` are `PHASE-10`'s. The last row is **`PHASE-09`'s `T9`**, not
 `PHASE-10`'s — two different tasks share that number and the slice's prose cites

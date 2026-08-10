@@ -2120,6 +2120,32 @@ at the end per the append-only rule.
     and it is the only thing that would close `sec-9` residual 3's neighbourhood
     by measurement rather than by argument.
 
+176. **The `F-` → item mapping for `T13`/`T14` lives only in a gitignored file —
+    recorded here so it survives, and noted as the third § *Owed* drift.**
+    Appended by the orchestrator at beat 3. Items 172–175 carry their findings'
+    content in full, but unlike every earlier item (e.g. 131's closing "(Phase
+    sheet `F-40`, `T7`.)") none of them cite the finding id they came from. The
+    cross-references exist — `phase-10.md` lines 785 and 842 say "See `F-64` and
+    § *Owed* item 172" and "See `F-65`–`F-67`, § *Owed* items 173–175" — but the
+    **phase sheet is runtime state and gitignored**, so at merge those pointers
+    go with it and the ids become unresolvable from the tracked record alone.
+    The mapping, for the reconciliation brief:
+
+    | phase-sheet finding | § *Owed* item | subject |
+    |---|---|---|
+    | `PHASE-10` `F-64` | 172 | `EX-1`'s unconditional `Admitted`; the anti-vacuity row-count assertion |
+    | `PHASE-10` `F-65` | 173 | `VA-1`'s negative path adjudicated, does not fire; rows 13/14 stand |
+    | `PHASE-10` `F-66` | 174 | rescue vs confirmation vs attribution are three different things |
+    | `PHASE-10` `F-67` | 175 | the two residuals `VA-1` does not cover |
+
+    Not a defect in the worker's harvest — the content reached the durable ledger,
+    which is what the beat-3 leg exists to enforce, and it verified as present.
+    The convention that failed is the weaker one, and it failed silently. **The
+    durable lesson is the same one the verification ledger taught this slice: a
+    pointer stored only in a disposable file is not a pointer.** Prior drifts of
+    this section are items 142 and 143; this is the third, and the first where the
+    content arrived intact and only the provenance was lost.
+
 ## Open
 
 **RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`
