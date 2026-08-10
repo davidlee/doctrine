@@ -16,6 +16,45 @@ So every conformance capsule on that host has the host's **entire `/run` and
 sockets, `/var/lib` in full — because two unrelated directories happen to sit on
 `PATH`.
 
+## The `/nix` root is the serious one, not the junk roots
+
+`--ro-bind` is read-only, **not `noexec`**. A capsule with `/nix` bound can
+execute anything in the store. Measured in the development jail:
+
+```
+store paths visible: 691
+RAN git:   git version 2.54.0
+RAN curl:  curl 8.20.0 … OpenSSL/3.6.2 … libssh2/1.11.1
+RAN gcc:   gcc (GCC) 15.3.0
+```
+
+A compiler, a version-control client, and a TLS-capable HTTP client, in a capsule
+whose defining property is a *bounded input set*. `/run` and `/var` are noise
+next to this; `/nix` is the finding.
+
+## What makes it a defect and not a tradeoff: production already refuses it
+
+This is not the platform's posture. `readable_set` in `backend/bubblewrap.rs`
+states the opposite rule and enforces it:
+
+> There is **no host-shaped default and no fallback**. Only the two declared
+> lists ever become readable inputs (`EX-8`), which is why no arrangement of
+> configuration — including the branches taken when a list or the resolver is
+> absent — can make a host-wide artefact store readable whole.
+
+Production binds `readable-roots` as declared plus each `closure-roots` entry
+expanded through an operator-declared `closure-resolver` — on a store host, a
+binary's *runtime closure*, which for a shell is a handful of paths rather than
+the whole store. The vocabulary for doing this correctly already exists and is
+already wired.
+
+`system_readable_roots` is exactly the host-shaped default `EX-8` rules out. The
+conformance fixture therefore builds its capsules under the rule the thing it is
+testing exists to refuse — and those are the capsules in which `BoundedInputSet`
+is demonstrated. The row's own subject is compromised by the fixture that hosts
+it: "executes only what is bound" is a much weaker claim when *bound* means the
+entire system toolchain.
+
 ## Why this is worse than it looks
 
 **No shipped row can convict it.** Row 3 reads planted decoys under the fixture
@@ -51,15 +90,37 @@ constraint into an unconditional one.
 
 ## Direction
 
-Bind a root only where some `PATH` entry beneath it actually bears an executable
-— the same predicate row 2 applies from inside. Then the fixture and the payload
-agree by construction instead of by coincidence, and `ISS-340` dissolves: `/run`
-and `/var` stop being roots, their entries leave the inner `PATH`, and row 2's
-coverage set collapses to `/nix`.
+**Make the fixture declare what production would make an operator declare.** The
+target is `closure-roots = [<the shell>]` with a `closure-resolver`, so the
+fixture binds the shell's runtime closure rather than the top level it happens to
+live under. That is the shape `EX-8` already contemplates, it needs no new
+config vocabulary, and it makes the fixture's capsules an honest instance of the
+thing under test instead of a permissive special case.
+
+A weaker interim step, if the above proves to have a tail: bind a root only where
+some `PATH` entry beneath it actually bears an executable — the same predicate
+row 2 applies from inside. That fixes `/run` and `/var` and dissolves `ISS-340`
+(their entries leave the inner `PATH`, and row 2's coverage set collapses to
+`/nix`, which is covered), but it leaves `/nix` bound whole and so leaves the
+serious half of this item open. Do not mistake it for the fix.
 
 Invariant 7's existing exclusions (fixture root, `$HOME`, cwd) are a *deny* list
 over a permissive derivation. What this wants is the derivation to stop being
 permissive — a root has to earn its place.
+
+## The tension to resolve, which is why this is not a small edit
+
+A `closure-resolver` is host-shaped by nature — on this host it is a Nix
+invocation. Production escapes that by making it *operator-declared* config, so
+the platform never names Nix (`POL-002`). A fixture has no operator to declare
+it, and must not grow a Nix dependency of its own. So the fixture needs a way to
+be closure-correct on a store host and still run on one without a resolver, and
+the fallback must not quietly reinstate the whole-top-level bind this item is
+about.
+
+That is a design question, not a patch. It is also the question `SPEC-030`'s
+readable-input contract implicitly answers for operators and leaves open for the
+suite.
 
 ## Loose end worth noticing while here
 
