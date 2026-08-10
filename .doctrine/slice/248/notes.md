@@ -1904,6 +1904,50 @@ folded into items 131/135/136, which they answer.
 
 ## Open
 
+**RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`
+`T9` is unblocked.** The owner ruled against adding `python3` as a production
+host dependency of the conformance suite; the harness was restarted instead and
+`setsid(1)` is now present in the jail
+(`/nix/store/…-util-linux-2.42.2-bin/bin/setsid`, on `PATH`, rooted at `/nix`
+which is a bound readable root). Measured by the orchestrator before the ruling,
+so the ruling rests on measurement rather than expectation:
+
+- **Blocker one is dissolved.** The shipped payload run verbatim now spawns —
+  escapee `ppid 1`, and session and process group both equal to its own pid.
+  `F-41`'s silent no-op is gone.
+- **Blocker two is real and has a sharper shape than "make it speak".** An
+  escapee that merely inherits stdout holds the capture pipe for its **entire
+  lifetime**, not until it speaks: measured, a speak-then-linger escapee cost
+  **20 s** of dead wall clock, which is the trap row 7's own payload comment
+  already anticipated ("or it holds the capture pipe itself and no removal
+  helps"). Naively making it speak trades a false green for a stall on every
+  control-arm run, and the suite's cost is a floor.
+- **The shape that clears both** separates *speaking* from *holding the pipe* —
+  speak, close stdout, then linger:
+  `(setsid sh -c 'sleep D; echo <forbidden>; exec 1>&-; exec sleep <escape>' </dev/null 2>/dev/null &); echo LIVE`.
+  Measured: **returned in 1004 ms** with both tokens captured, and the escapee
+  still alive afterwards in its own session and group. The kill-before-it-speaks
+  arm captured the stated token alone and returned promptly. That is the two-arm
+  delta, at `D` seconds of cost rather than `ESCAPE_SECONDS`.
+- **`D` must exceed the reap latency**, or a correct reap races the speech.
+- **The residual risk is capsule-side, not host-side.** `setsid` was verified on
+  the *host*; the payload runs *inside the capsule*. It must **not** be guarded
+  with `command -v setsid || exit 0` — that is precisely the silent-skip shape
+  that manufactured `F-41`. It takes the `S4` guard pattern (`PHASE-10` `T7`):
+  absence **convicts** with stop-and-consult.
+
+The deciding argument, recorded because it is the part that generalises:
+`Observed::Unspoken` is currently **unwired** — `T9` built it, tested it and
+proved its additivity, but no production row constructs it; every construction
+site is inside the test module. It was built *for row 7*. Leaving row 7 unproven
+would have frozen `Unspoken` as machinery existing only to test itself.
+
+`F-43`'s recommendation stands: land the `S4` guard **in the same commit as the
+wiring**, not before. And the double-`Held` trap still applies — making the
+payload print its own stated token so it "states its part", without the escapee
+actually speaking, yields `Held` under *both* arms, which is `EX-3`'s vacuous
+pass. `every_shipped_rows_control_is_seen_to_fail` is the net for exactly that.
+
 **RULED 2026-08-09 — option 1, free-function spelling. Nothing open here.** The
 ruling is written into the `PHASE-06` sheet as `F-1/R`, which governs: one
 `pub fn forbids(policy: &InterpretationPolicy, candidate: &str) -> bool` in
