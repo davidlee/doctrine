@@ -2096,6 +2096,115 @@ within minutes of running the suite repeatedly and under contention — and
 `F-35` is still open precisely because the cheap evidence never showed it.
 
 
+## `T9` (remainder) — row 7 wired to `Observed::Unspoken`
+
+The signalling floor, `Unspoken` itself and its additivity landed earlier
+(`F-37`, `F-40`); `F-41` blocked the wiring on a payload the owner then ruled
+on. This is the remainder: the payload rewrite, the wiring, the `S4` guard, and
+the three `VT-3` assertions.
+
+### The premise handed down was measured on the wrong side of the boundary
+
+The ruling recorded an orchestrator measurement of the escapee shape
+`(setsid sh -c 'sleep D; echo <forbidden>; exec 1>&-; exec sleep <escape>' &)`:
+**1004 ms**, both tokens captured, escapee still alive. Re-measured through the
+real arms — `run_probe_arm` / `run_control_arm` on row 7, delay swept 0…4:
+
+| delay | probe arm | control arm |
+|---|---|---|
+| 0 | `Failed` 1.13 s | `Failed` 23.13 s |
+| 1 | `Held` 1.13 s | `Failed` 24.11 s |
+| 2 | `Held` 1.12 s | `Failed` 25.13 s |
+| 3 | `Held` 1.13 s | `Failed` 26.13 s |
+| 4 | `Held` 1.13 s | `Failed` 27.13 s |
+
+The control arm's wall clock is `ESCAPE_SECONDS + delay + ~130 ms` at every
+delay. **Closing the escapee's own copies of the captured descriptors releases
+nothing inside a capsule**: `bwrap`'s pid-namespace init holds the harness's
+capture until the namespace empties, which is `F-6` / `F-24` / `F-30` measured
+once more from a third side. The 1004 ms figure is a bare-shell measurement; the
+payload runs inside a capsule, where that shape does not obtain.
+
+Kept anyway, for a reason that is off the namespace path: with no pid namespace
+the escapee holds the pipe itself, and the close is what bounds
+`a_process_group_only_reaper_fails_row_seven`.
+
+### `ESCAPE_SPEAKS_AFTER_SECONDS = 2`, and what the transition actually is
+
+The table locates the transition between delay 0 and delay 1 — but that is not
+the reap latency, it is `LINGER_SECONDS`. At delay 0 the escapee speaks *before*
+its parent exits, which tests nothing about teardown. At delay 1 it speaks at the
+same instant the parent exits and is still silenced, so the reap wins a dead
+heat: the latency is under the resolution of this instrument. `2` is one whole
+second of margin past a race that is already won at zero.
+
+### The escapee's linger costs nothing, so it stays at `ESCAPE_SECONDS`
+
+Under `Removed(Teardown)` whatever the escapee sleeps is what the control arm
+costs — `EX-10`'s rule for row 8's wall payload, one row over, and the reason to
+check rather than assume. Checked: gate **295 passed / 0 failed / 9 ignored /
+92.21 s** against a 291 / 92.06 s baseline. Four tests added at **zero** wall
+cost, because row 8's wall row is still the floor and row 7's two 25 s control
+arms run underneath it. `every_shipped_rows_control_is_seen_to_fail`, which now
+walks row 7, is 36 s. So the strongest form of the negation — a descendant that
+really does outlive its parent by 23 s — is free, and `ESCAPE_SECONDS` was left
+alone rather than traded down for a saving that does not exist.
+
+### `UNWALKED` is gone, and that is what makes the vacuity net live
+
+The walk excluded row 7 because its two arms were byte-identical (`F-24`). With
+the row wired, the exclusion is deleted rather than retargeted — and the walk is
+now the net under row 7's own double-`Held` trap, which is the one the ruling
+names: a payload made to state its held token without an escapee that ever
+speaks reads `Held` on **both** arms. `M-M` below is that trap, executed.
+
+### Battery — five mutants, each convicting a *test*
+
+Reverted by copy and `diff`-verified byte-identical after each (`C11`).
+
+| mutation | reds |
+|---|---|
+| M-L `SETSID` names a program that does not resolve | the guard, host half |
+| M-L2 host half aimed at `SHELL`, `SETSID` unresolvable | the guard, **capsule half alone** |
+| M-M the escapee never speaks (the double-`Held` vacuity) | `process_tree_teardown_is_proven` → `Unproven`; the walk → `Property(ProcessTreeTeardown) Held` |
+| M-N the escapee speaks immediately (delay 0) | `no_descendant_outlives_the_execute_call`; the row → `Violated` |
+| M-O no `setsid` in the payload | `the_descendant_escapes_the_original_session_before_its_parent_exits` |
+
+M-L2 had to be **reformulated**: deleting the host half orphans
+`resolves_on_path` and `-D unused` convicts it at compile time, and a
+compiler-convicted mutant is not a test-convicted mutant (`F-52`). Aiming the
+host half at a program that does resolve keeps both halves used and leaves the
+capsule half as the only thing that can fire.
+
+### What bounds the escapee, established before the first run (owed item 156)
+
+Row 7's control removes `Teardown` and **nothing else**, so the pid namespace
+stands and the escapee is contained by it: the arm cannot even return until the
+namespace empties, so there is no window in which a survivor is loose on the
+host. The probe arm's escapee is killed by teardown. Neither arm removes
+`ProcessVisibility`, which is the combination owed item 156 warns would leak a
+real host process for `ESCAPE_SECONDS` — a `setsid` escapee is missed by the
+session sweep and the process-group reaper alike.
+
+That containment is also *why* `no_descendant_outlives_the_execute_call` reads
+the token rather than scanning for survivors. Inside the namespace, "no process
+survived the arm" is true of an arm whose teardown did nothing, because the arm
+waits for the escapee either way. What discriminates is **when** the escapee is
+allowed to speak, and the same arm under `Removed(Teardown)` is the control that
+is seen to fail.
+
+### `escaped_descendant` — scoped to the namespace, never to "a new process"
+
+The escapee is found from the trusted side inside the noticing callback, by
+searching the subtree under the capsule's **parent** — `bwrap`'s namespace init,
+which is what the escapee reparents to the instant the subshell that spawned it
+exits — for a process not in the capsule's session. A pid-set diff across the
+arm would have been simpler and wrong: `cargo test` runs several capsule-starting
+tests at once and a neighbour's `bwrap` would be attributed to this arm, which is
+`F-35`'s class. Measured detail worth keeping: at the moment `noticed` first
+fires the escapee has **not** called `setsid(2)` yet, so the search polls; one
+`CAPSULE_DISCOVERY_INTERVAL` later it has.
+
 ---
 
 **`PHASE-10` onward continues in `notes_10-12.md`.** Its records were written
