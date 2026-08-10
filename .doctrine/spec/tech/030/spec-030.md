@@ -195,6 +195,31 @@ its mechanism is independently specified and measured. Harness launch is uniform
 headless subprocess execution in the target architecture; harness-specific in-session
 subagent identity is not part of the capsule contract.
 
+**The shipped conformance suite has host dependencies, and they are not optional**
+(`REV-051`, from `SL-248`). A host running the suite needs `setsid` (from
+`util-linux`) and `socat` on `PATH`:
+
+- `setsid` is what makes the process-tree teardown row measurable. Its payload
+  forks a descendant that leaves the original session, precisely so a backend
+  reaping only by process group cannot pass.
+- `socat` carries both legs of the network-posture probe. It replaced `/dev/tcp`,
+  which is a **bash extension** while the contracted shell is only POSIX — a
+  latent false negative. Absent `socat`, the row reads indeterminate rather than
+  silently passing.
+
+Absent either, rows go red for a reason that is not a conformance defect. A
+project's own jail or CI image declaring them is not a substitute for the contract
+naming them.
+
+**Criterion 2 of `REQ-459` is partial, on two counts** (`REV-051`). Production
+acceptance tests do not yet exist; and the conformance fixture derives its readable
+inputs by binding whole host top-level roots, so on a store-managed host the
+suite's own capsules are more permissive than the ones production builds —
+`--ro-bind` is read-only, not `noexec`. That is the host-shaped default the
+platform backend contract exists to refuse, and it is carried as `ISS-341` with
+its own slice. Until it is settled, the suite's rows are evidence about the
+properties, not about the environment production constrains.
+
 ## Concerns
 
 - **Security posture is structural.** Configuration, retention, and monitoring may
