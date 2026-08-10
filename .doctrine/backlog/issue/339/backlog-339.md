@@ -57,6 +57,36 @@ verified by unit test (`a_readable_root_covers_the_literal_shell_the_payloads_ex
 and by a bwrap positive control, but no real host has yet been seen to admit the
 backend, and a second precondition may be sitting behind the first.
 
+## Runs 2 and 3, same day — each one found the next thing
+
+The prediction above held twice. Each fix exposed the precondition behind it.
+
+**Run 2: 17/19.** `BoundedFilesystemVisibility` and `BoundedInputSet` both
+`Indeterminate { NoObservation }` — note *`NoObservation`, not `NoLiveness`*: the
+payloads now ran and then printed neither token, which is a different and much
+narrower failure than run 1's.
+
+Row 4 was a regression from run 1's own fix. Binding the literal `/bin` broke the
+invariant row 4's permitted-`/` derivation rested on — *"a readable root is the
+first component of some `PATH` entry"* — so the capsule's own shell directory
+came back as `UNEXPECTED-bin`. Fixed by seeding the permitted set with the
+shell's top level (`2761d0378`), which is where it belongs: it is bound on every
+host, but reaches `$PATH` only by an accident this host does not have.
+
+**Run 3: 18/19.** Row 4 `Proven`. All four claims `Passed`. Both `sec-9`
+observations `Read`, and the `no_new_privs` reading came back **without its
+caveat** — off-jail the trusted side does not already hold the bit, so the
+backend's provenance for it is established by measurement rather than argued.
+That is `sec-9` residual 3's neighbourhood closing, and it is the thing this item
+said only an off-jail run could do.
+
+`BoundedInputSet` remains. Its per-root exec-coverage precondition is
+unsatisfiable on an ordinary NixOS desktop, and chasing it surfaced a second and
+more serious problem behind it. Both are now carried separately: `ISS-340` (the
+red row) and `ISS-341` (the fixture binds whole host top-level roots — `/run` and
+`/var` in their entirety, which no shipped row can convict). `ISS-341` first;
+its fix dissolves `ISS-340`.
+
 **What it hands `IMP-417`.** The failure was mute: a host structurally unable to
 exec a payload reported nineteen indeterminate rows rather than naming the
 missing mount. `admission`'s existing shell guard could not catch it — it asks
