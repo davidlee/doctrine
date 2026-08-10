@@ -41,3 +41,33 @@ The cost that is *not* cheap to undo is epistemic rather than structural: if row
 ## Explicitly not decided here
 
 Whether bubblewrap confinement is adequate on non-NixOS Linux, or whether such hosts want a VM- or microVM-backed capsule, is a backend-authority question in `ADR-020`'s territory. Nothing in any of the three shapes touches it, and deferring it costs this slice nothing.
+
+
+---
+
+## Withdrawn in part, 2026-08-11
+
+**The readable-set half of this decision is withdrawn.** Measurement one turn
+after it was banked showed that binding files alone does not run: `bwrap`
+dereferences a bind's source and `provision.rs` binds at the **resolved** path,
+so a multicall binary arrives under its target's name and `cat`, `head`, `cut`,
+`ls`, `tr`, `pwd`, `env`, `true` and `sleep` become uninvokable
+(`mem.fact.capsule.resolved-path-bind-breaks-multicall-dispatch`). Worse, an
+empty inner `PATH` breaks *provisioning* — `clone_inside` runs all four git
+operations as bare `git` — so the fixture would refuse before row 1.
+
+A proposed rescue (bind the file when its resolved basename matches the declared
+one, the containing directory when it does not) was withdrawn too: `/bin/sh →
+/usr/bin/dash` is a renamed symlink and not a multicall alias, so the rule binds
+`/usr/bin` for the shell alone.
+
+The root cause is `ISS-344` — canonicalization destroys the declared name, and
+`SL-248` `PHASE-05` `EX-3` and `EX-9` contradict each other about whether it
+should. That is production work and `SL-252` does not take it on. `DEC-188`
+records what `SL-252` does instead.
+
+**The mountinfo half stands, demoted.** Discovering reach from
+`/proc/self/mountinfo` was confirmed by live probe and remains the better shape
+for row 2. But under `DEC-188` the inner `PATH` is populated on and off jail, so
+row 2 needs no rewrite: the mountinfo work is an improvement to be carried
+separately, not a dependency of this slice.

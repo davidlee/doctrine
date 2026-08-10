@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fec3e-cf4e-7150-93ce-1c8c9c75372f"
+recorded_at = "2026-08-10T15:16:07.118711898Z"
+kind = "friction"
+summary = "/design: doctrine design apply reported a JSON parse error yet applied the payload"
+detail = """SL-252 run dr-019feb6b. Submission 'blocking-4' carried an internally-tagged AgentAct ({"act":{"act":"blocking-set-declared","blocking":[...]}}). AgentAct is externally tagged, so apply exited with: 'parse the apply payload as JSON / Caused by: unknown variant `act`, expected `blocking-set-declared` or `drafting-ready`'. Resubmitting the corrected payload under the same submission_id then refused with 'submission id `blocking-4` was already applied with different bytes', and the run had advanced to revision 24 carrying a well-formed blocking-set-declared with that submission's basis text. So a submission the CLI reported as unparseable was nonetheless applied, and the idempotency receipt then locked the caller out of correcting it. Cost: two wasted round trips and a period of believing the declaration had not landed. Adjacent friction: the apply payload's enum tagging is not discoverable from --help or the envelope's 'declare' example — Provenance is internally tagged, AgentAct is externally tagged, and both had to be read out of src/design_run/."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

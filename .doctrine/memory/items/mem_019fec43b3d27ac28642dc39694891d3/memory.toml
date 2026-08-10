@@ -1,0 +1,42 @@
+memory_uid = "mem_019fec43b3d27ac28642dc39694891d3"
+memory_key = "mem.fact.capsule.resolved-path-bind-breaks-multicall-dispatch"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Resolved-path binds break multicall argv[0] dispatch"
+summary = ""
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = ["crates/doctrine-control/src/provision.rs", "crates/doctrine-control/src/backend/bubblewrap.rs"]
+globs = []
+commands = []
+tags = ["capsule", "confinement", "nix", "tooling"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "64a83b3197a98489d0bd3f9eb1de6e901441d1c3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d7516bd4cbba1ef0f4917235d2c9422a0a0192c03d5ce046313b8d8a8af0835e"
+base_commit = "df0fe9c6e71c51bd114bfe9002267996300f17c5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
