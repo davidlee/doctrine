@@ -2316,6 +2316,18 @@ pub fn assess_capacity(
 ) -> CapacityVerdict;
 ```
 
+**Where a non-refusing verdict goes, stated rather than implied** (`RV-352`,
+`notes.md` item 45 / `PHASE-06` `F-6`). `Low` and `Unknown` both *warn and
+continue*, but `EX-6` fixes `provision`'s three parameters and `EX-1` fixes
+`CapsuleTransaction`'s nine fields, so there is no return channel for them:
+`provision` refuses when the verdict refuses, and otherwise writes **one
+structured `key=value` line to a locked stderr**. That is a side effect in a
+function this design otherwise describes as returning a value, and it is
+invisible to a non-terminal caller — a library consumer gets no programmatic
+access to a `Low` verdict at all. Named here as the shipped channel rather than
+left for a reader to discover; an observation field on the transaction, or a
+sink parameter, is the better shape and is deferred work.
+
 **The probe.** `rustix::fs::statvfs(path)`
 (`rustix-1.1.4/src/fs/abs.rs:288`), available bytes as `f_bavail × f_frsize`.
 `rustix` is already a direct dependency for `flock`
@@ -4424,7 +4436,28 @@ Executed, the claims that need naming beyond their row:
 - `the_shared_root_delta_repoints_only_the_second_placement`
 - `a_write_through_every_readable_mount_fails` — row 9's probe stated per
   entry, so a backend binding one entry read-only and another writable cannot
-  pass on the first
+  pass on the first.
+
+  **The name overstates the mechanism, and the mechanism is the correct one**
+  (`RV-352`, `notes.md` items 118/109). A `Row` carries one `ArmShape`, so both
+  arms run one payload; under the control arm the declared readable mounts are
+  read-write, and on a real host those are the operator's own `/nix` and `/bin`.
+  A payload that *literally* wrote through every readable mount would therefore
+  write **outside the fixture** — which the first spike did, leaving
+  `/nix/va2-write` and `/bin/va2-write` on the operator's filesystem where
+  nothing reclaims them.
+
+  What ships instead: the declared mounts are derived per entry the way row 4
+  derives them and read with `[ -w ]` (`access(2)`/`W_OK`, which reports `EROFS`
+  for a read-only mount whatever the caller's identity, so it separates the two
+  attachments without touching them), plus **one** real write, into this run's
+  own source export — `DEC-157`'s channel, beneath the fixture root. Measured
+  through the real arms: the mount channel alone reads `Proven`.
+
+  The test's name is kept because `PHASE-10` `VT-2` makes it a verification
+  floor and renaming it breaks that link. Renaming it properly — together with
+  the `VT-2` mandate that pins it — is deferred work, so that the name stops
+  claiming more than the mechanism does.
 - `a_write_into_the_source_export_fails` — the `DEC-157` half specifically
 - `the_writable_inputs_delta_changes_no_mount_and_no_path` — that the control
   differs by attachment alone, which is what makes it a single delta

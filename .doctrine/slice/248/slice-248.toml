@@ -88,6 +88,11 @@ selector = "flake.nix"
 intent = "design-target"
 note = "util-linux (setsid, row 7's session escape) and socat (row 5); RV-352 F-2 at reconcile"
 
+[[selector]]
+selector = "LOOP.md"
+intent = "scope-relevant"
+note = "dispatch-loop orchestrator infrastructure: touched, not delivered. RV-352 F-4 adjudication — scope-relevant is ignored by conformance (slice.rs:2899), so LOOP.md stays in the undeclared cell BY RULING, not by oversight."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-020"
