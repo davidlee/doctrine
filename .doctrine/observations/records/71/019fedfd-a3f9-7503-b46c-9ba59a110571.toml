@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fedfd-a3f9-7503-b46c-9ba59a110571"
+recorded_at = "2026-08-10T23:24:10.617686276Z"
+kind = "friction"
+summary = "/inquisition: review raise --as rejects the posture role that review new accepts"
+detail = "review new takes --raiser inquisitor (accepted, stored on the ledger), but review raise --as inquisitor is refused with 'unknown --as role (known: raiser, responder)'. The skill tells you posture rides --raiser, which is true at open time; the raise verb's --as is a role assertion against the ledger's two seats, not the posture label. Cost one round-trip. A clearer refusal ('--as asserts a seat; this ledger's raiser seat is labelled inquisitor') would dissolve it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
