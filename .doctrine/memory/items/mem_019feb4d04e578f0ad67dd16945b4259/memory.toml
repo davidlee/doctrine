@@ -1,0 +1,46 @@
+memory_uid = "mem_019feb4d04e578f0ad67dd16945b4259"
+memory_key = "mem.pattern.dispatch.budget-is-a-handover-condition"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Loop budget is a hand-over condition, never a stop condition"
+summary = "An autonomous loop halting on low context is the failure it exists to prevent. Compaction is survivable by construction; budget changes only pre-compaction hygiene."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "orchestration"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0ad8c894671659aae53d7304bd38c6bdf4c4043f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "7ac9f85cd98d3c05f72436584627701ebf6be008468a7187e6686c0933071c2c"
+base_commit = "4d9591ebee727db64820425c659a6fdd40c24e57"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

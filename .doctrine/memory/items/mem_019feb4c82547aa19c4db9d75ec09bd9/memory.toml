@@ -1,0 +1,46 @@
+memory_uid = "mem_019feb4c82547aa19c4db9d75ec09bd9"
+memory_key = "mem.pattern.dispatch.brief-a-diagnosis-as-a-hypothesis"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Brief a diagnosis as a hypothesis, not a repair route"
+summary = "An orchestrator hands a worker the evidence and the constraints a fix must satisfy — never a settled route. A worker that can overturn the brief on evidence is the point of the split."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "orchestration", "skills"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0ad8c894671659aae53d7304bd38c6bdf4c4043f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b16fade6e00caa319ca03d2d984b2f4cd9e7c8b6e602a9dd576b9ab5154b6dd5"
+base_commit = "4d9591ebee727db64820425c659a6fdd40c24e57"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

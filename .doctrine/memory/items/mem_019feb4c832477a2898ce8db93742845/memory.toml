@@ -1,0 +1,46 @@
+memory_uid = "mem_019feb4c832477a2898ce8db93742845"
+memory_key = "mem.pattern.testing.floor-a-destructive-instrument-before-aiming-it"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Floor a destructive test instrument before you aim it"
+summary = "If a phase builds something that signals, deletes or unmounts, the refusal that bounds it ships in that phase's FIRST commit, not its last task."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "safety", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0ad8c894671659aae53d7304bd38c6bdf4c4043f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "41e0f17c8ff8b668c695cd90c11a5183c8f2f05c756100fbb815a28d25eb13fa"
+base_commit = "4d9591ebee727db64820425c659a6fdd40c24e57"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

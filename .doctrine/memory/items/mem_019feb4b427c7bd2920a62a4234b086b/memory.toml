@@ -1,0 +1,46 @@
+memory_uid = "mem_019feb4b427c7bd2920a62a4234b086b"
+memory_key = "mem.pattern.testing.convict-a-race-by-causality-not-repetition"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Convict a race by causality, not by repetition"
+summary = "A tally can only fail to observe a race. Load the hazard's own channel, isolate process-wide state, and convict with a two-arm experiment."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "concurrency", "evidence", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "0ad8c894671659aae53d7304bd38c6bdf4c4043f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "fd8bd04460ec7eabff6015c48ebe589486ed4c2bf3b484960c98df5074486a9f"
+base_commit = "4d9591ebee727db64820425c659a6fdd40c24e57"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-248"
+

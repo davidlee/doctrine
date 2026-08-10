@@ -7,63 +7,57 @@
 ## What happened
 
 `LOOP.md` diverged in two directions from the `edge`/`sl-248` merge base and was
-resolved to `edge`'s copy at landing (merge `3953b74c3`).
+resolved to `edge`'s copy at landing (merge `3953b74c3`), stranding the other
+side.
 
-- **`edge`** — `SL-249` generalised the file: slice named by the firing prompt
-  rather than baked in, primary-worktree posture, minting re-permitted, 294
-  lines. This is the copy a live loop reads every firing.
-- **`sl-248`** — deepened instead, to 557 lines, and was declared dead by
-  `SL-248`'s handover once execution finished.
+**This item was opened naming three stranded commits. The real number was 21.**
+`edge`'s copy was not a rewrite that dropped content — it was a cherry-pick of
+`72ff933ce`, the one commit both lineages share, plus `SL-249`'s four
+generalisation commits (~80 lines: slice-parametric subject, primary-worktree
+posture, a `plan.toml` field correction, commit-per-task). `sl-248` made 21
+further commits on that same base, +365 lines, none of which reached `edge`.
 
-Taking `edge`'s copy was the right call for landing — it is the live file, and
-grafting into it is a deliberate change, not merge cleanup. But three durable
-orchestration lessons exist **only** on the discarded side.
+That inverted the plan recorded here: grafting 365 lines onto `edge` was the
+wrong direction. The correction is in the resolution below.
 
-## The three stranded lessons
+## Resolution
 
-Each is measured, not theorised, and none is `SL-248`-specific.
+`LOOP.md` was **rewritten as a merge of both lineages**, not replayed as
+commits, and kept at the repo root as an explicit **template**: copy it to
+`.doctrine/slice/<N>/LOOP.md`, bake the slice number in, customise § *Where this
+runs*, and fire the loop at the copy. That also delivers `IMP-423`.
 
-- **`f730eef0f` — the notification is the only proof of completion.** Silence is
-  never proof. The liveness legs are *alive* detectors: each can say "still
-  working", none can say "done". A worker between two tool calls is quiet in
-  exactly the way a finished one is. Measured 2026-08-10: an improvised guard
-  read a clean tree with no live processes at 07:39:05 and was believed; the
-  worker wrote at 07:39:23, committed at 07:42:09, and notified at 07:46. The
-  durable half is that the four legs *as written* would have held the line —
-  the commit leg read four minutes old, which is alive — so the error was
-  reading "five commits landed and nothing is running" as finished.
-- **`dcdcff6ce` — the diagnostic feed shows uncommitted intermediate states.**
-  Read it as liveness, not as a defect: a worker mid-refactor has helpers landed
-  and call sites not yet moved, so `dead_code` and unresolved-name diagnostics
-  are the expected shape of work in progress. Check whether the condition
-  survives into a commit (`git show <tip>:<path>`) before advising on it; an
-  advisory that turns out to be noise costs the worker a cycle and costs you the
-  credibility of the next one.
-- **`1e56205ff` — what convicts a race, and how to brief a diagnosis.** Where a
-  test's correctness depends on process-wide state, the answer is isolation and
-  a tally is not the instrument — 27 unaggravated runs were all green while the
-  defect was real. What convicted was a two-arm causality experiment: aggravate
-  the hypothesised aggressor and toggle one variable, red on arm A's first run,
-  green on arm B. Also: the orchestrator's own verification run is what convicts,
-  never the worker's self-tally; and a handed-down diagnosis should be labelled a
-  hypothesis with the constraints a fix must satisfy, not a prescribed route.
+Recovered into the file — everything a cold firing must *act on*:
 
-`edge`'s copy also carries a **weaker two-leg liveness guard** where `sl-248`'s
-carried four (sheet mtime, build artifacts, dirty-path mtime, last commit) with
-the blind-spot table that motivates each. That regression-relative-to-`sl-248`
-is the most operationally load-bearing of the gap.
+- the four-leg liveness guard with each leg's blind spot, replacing `edge`'s
+  two-leg version, and the mechanics that make each leg actually work;
+- **the notification is the only proof of completion; silence is never proof**;
+- *any sign of life beats a cold sheet*, and the waiting-is-cheap-reaping-is-not
+  asymmetry;
+- **budget is NOT a stop condition** — `edge` still listed it as one, which is
+  the regression that turns an autonomous loop back into a babysat one;
+- hold orchestrator commits while a worker is live; `verify-vt` is an
+  orchestrator instrument, not a worker self-check; the worker owns `notes.md`
+  § *Owed* with the orchestrator verifying at beat 3; Traps live in `notes.md`.
 
-## What to do
+Moved to the memory corpus instead — reusable past one slice, so not worth
+re-reading every firing. § *Method* in the file points at each:
 
-Not a straight revert — `edge`'s slice-parametric shape is the one to keep. Fold
-the lessons in, sized against the file's own stated ~200-line budget. Two sinks
-are legitimate and the split is the real question:
+- `mem.pattern.dispatch.loop-death-triage-resume-vs-respawn`
+- `mem.pattern.dispatch.brief-a-diagnosis-as-a-hypothesis`
+- `mem.pattern.dispatch.budget-is-a-handover-condition`
+- `mem.pattern.testing.convict-a-race-by-causality-not-repetition`
+- `mem.pattern.testing.floor-a-destructive-instrument-before-aiming-it`
 
-- the loop template itself, for anything a cold firing must act on (the liveness
-  legs belong here); and
-- the memory corpus, for the reusable diagnostic method (the two-arm causality
-  experiment, briefing a diagnosis as a hypothesis) — cross-slice knowledge that
-  does not need re-reading every firing.
+The race-evidence memory **corrects** an existing one
+(`mem.pattern.testing.timing-tests-need-a-load-tally`): its "press it with
+spinners" step cannot find a hazard on a channel the spinners do not touch.
 
-Sequence after `IMP-423` (extract a slice-agnostic loop template from `LOOP.md`)
-if that lands first — the template is where this content wants to live.
+## Outcome against the ~200-line budget
+
+415 lines drafted → **298 landed**, against `edge`'s 294 and `sl-248`'s 557 —
+so roughly `edge`'s length while carrying `sl-248`'s extra 365 lines of
+material, most of it now in the corpus. The stated aim was ~220. Closing the
+last ~78 means moving § *Sub-agent discipline* — the worker's contract — out of
+the file, which conflicts with it being a template a slice copies and
+customises, so it was left in. Open for a later call.

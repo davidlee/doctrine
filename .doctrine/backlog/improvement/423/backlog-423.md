@@ -38,3 +38,17 @@ every slice edits and no slice owns.
 
 Originates from `SL-248` `RV-352` reconcile (`F-4`) and the owner's call at
 landing.
+
+## Resolution
+
+Delivered with `IMP-424`, which had to merge the two lineages anyway. `LOOP.md`
+stays at the repo root and is now an explicit template: its header says to copy
+it to `.doctrine/slice/<N>/LOOP.md`, bake `<N>` in, customise § *Where this
+runs* — the one section named as non-portable — and fire the loop at the copy,
+folding anything durable the copy learns back into the root file at close.
+
+The cap is now enforceable in the sense this item wanted: 298 lines against
+`edge`'s 294 and `sl-248`'s 557, carrying both lineages, because the reusable
+half went to the memory corpus behind § *Method* rather than accreting in a file
+read every firing. The stated aim was ~220; see `IMP-424` for what the last ~78
+would cost.

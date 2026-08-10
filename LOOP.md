@@ -4,249 +4,241 @@ A self-paced `/loop` drives one slice to completion. Each firing may be a **cold
 context**: it knows nothing except this file, the disk, and the CLI. Nothing
 load-bearing is carried in an agent's head between firings, and nothing may be.
 
-**Subject slice: named by the `/loop` prompt that fires this file.** That prompt
-is the only place the slice lives — it is passed verbatim to each firing, so a
-cold context learns `<N>` from the instruction that woke it, never from this
-file. Substitute `<N>` = that slice's number, `<PP>` = the current phase. If the
-prompt did not name a slice, stop and ask; do not guess from `doctrine status`,
-which lists every active slice and adjudicates between none of them.
+**This is a template.** Copy it to `.doctrine/slice/<N>/LOOP.md`, bake `<N>` in,
+customise § *Where this runs*, and fire the loop at the copy — extra files in a
+slice directory are free. Fold anything durable the copy learns back here at
+close. Untouched, `<N>` comes from the `/loop` prompt, passed verbatim to each
+firing; if it names no slice, stop and ask — never guess from `doctrine status`,
+which lists every active slice and adjudicates between none.
 
-> **This file is read every firing.** Its own length is a recurring cost. Keep
-> it under ~200 lines; push anything phase-specific into the phase sheet.
+> **Read every firing, so its length is a recurring cost.** Keep it near ~200
+> lines. Phase detail belongs in the sheet; anything reusable past this slice
+> belongs in a memory (§ *Method*).
 
 ## The contract
 
 1. **Disk is truth, transcript is not.** Verify from `doctrine`, `git`, and the
-   phase sheet. Never from a sub-agent's report, a memory of the last firing, or
-   a summary. A worker that says "done" and a tree that says otherwise: the tree
-   wins, every time.
-2. **Any firing may be the last.** Kill the session at any point and the next
-   firing must resume with no loss.
-3. **Three writers, and they do not overlap.** See § Writer map.
-4. **One sub-agent at a time.** Sub-agents run **in-tree, no worktree
-   isolation** — two at once would collide in one index and one target dir.
-5. **`git status --porcelain` first**; `git add <paths>` then
-   `git commit <paths> -F -`. Never a pathless commit, never `git add -A`,
-   never stash.
+   sheet — never a report, a recollection, or a summary. A worker that says
+   "done" against a tree that says otherwise: the tree wins.
+2. **Any firing may be the last.** Kill the session anywhere; the next firing
+   resumes with no loss.
+3. **Three writers, and they do not overlap** — § *Writer map*.
+4. **One sub-agent at a time**; two collide in one index and one `target/`.
+5. **`git status --porcelain` first**, then `git add <paths>` and
+   `git commit <paths> -F -`. Never pathless, never `-A`, never stash.
 
 ## Where this runs
 
-The **primary worktree**, on branch **`edge`**, with **no worktree isolation** —
-orchestrator and sub-agent share one tree, one index, one `target/`. Nothing is
-merged back at the end because nothing was forked; commits land on `edge` as
-they are made.
+**Customise per slice — the one part that is not portable.**
 
-Two consequences, and they are the reason this section exists:
+Default: the primary worktree on its own branch, **no isolation** — orchestrator
+and sub-agents share one tree, one index, one `target/`. Nothing merges back
+because nothing forked.
 
-- **Never switch the branch.** No `git checkout <ref>`, no worktree fork, no
-  stash. Read another ref with `git show <ref>:<path>`; restore files with
-  `git restore --source=<ref> -- <explicit paths>`.
-- **Minting is normal.** A corpus-scanning id allocator (`DEC-`/`ISS-`/`RV-`/
-  `REQ-`) sees the live corpus here, so mint entities as findings arise. (An
-  earlier revision of this file ran the loop from a clone and banned minting to
-  avoid colliding with the parent's allocations. That constraint is gone with
-  the clone; do not reintroduce it.)
+- **Never switch the branch.** Read another ref with `git show <ref>:<path>`;
+  restore with `git restore --source=<ref> -- <explicit paths>`.
+- **Minting is normal here** — the allocator scans a live corpus, so mint
+  `DEC-`/`ISS-`/`RV-`/`REQ-` as findings arise. **Invert on a clone or fork**:
+  two trees scanning a corpus frozen at fork time mint the same id and
+  renumbering breaks immutability, so capture in the sheet and mint at merge.
+  `memory record` and `observation record` are exempt either way.
 
 ## Cadence and the re-entrancy guard
 
-**Self-paced, notification-driven.** Sub-agents are spawned in the background, so
-their completion wakes the orchestrator directly. The clock is a *fallback* only:
-after each spawn, `ScheduleWakeup` ~20 min to catch a sub-agent that hung or died
-without notifying. There is no fixed polling interval — a no-op firing is a bug
-to be designed out, not a cost to be budgeted.
+**Self-paced, notification-driven.** Sub-agents run in the background, so
+completion wakes the orchestrator directly. The clock is a *fallback*: after each
+spawn, `ScheduleWakeup` ~20 min to catch one that hung or died without notifying.
+No polling interval — a no-op firing is a bug to design out, not a cost to budget.
 
-**First, establish why you woke.**
+**Establish why you woke.** A task notification means that sub-agent has exited —
+skip the liveness test, which proves nothing about a dead process, and go to beat
+3. A clock wake means run the guard.
 
-- **Woken by a task notification** — that sub-agent is finished. Skip the mtime
-  test; it proves nothing about a process that has already exited. Go to beat 3.
-- **Woken by the fallback clock** — run the guard below.
+**The notification is the only proof of completion. Silence is never proof.** The
+legs below are *alive* detectors: each can say "still working", none can say
+"done", and a worker between two tool calls is quiet exactly as a finished one
+is. Absent a notification treat it as **live** whatever the tree looks like — do
+not spawn, do not commit, do not run a gate. Silence licenses only *death*, and
+death is resumed, never read as completion.
 
-The clock-wake guard is exactly two commands. Run them first, before reading
-anything else:
+**A worker is alive if *any* leg says so** — each is blind where another sees, so
+run all four **as written**. Mtimes beat `pgrep`, which is an *instantaneous
+sample*: a worker between builds shows no `cargo` while plainly working.
 
 ```bash
 ./target/debug/doctrine slice status <N>
-find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -20 | head
+# sheet mtime — ticking a task; blind mid-task, however long that takes
+find .doctrine/state/slice/<N>/phases -name 'phase-*.md' -mmin -25 | head
+# build artifacts — compiling, testing; blind while reading or writing source
+find target/debug/.fingerprint target/debug/deps -maxdepth 0 -mmin -30
+# dirty-path mtime — writing source; blind while building or just after a commit.
+# Rides `git status` for .gitignore; needs -I{} or find exits "paths must precede
+# expression" and the leg reads as a silent dead.
+git status --porcelain | cut -c4- | tr '\n' '\0' | xargs -0 -r -I{} find {} -maxdepth 0 -mmin -30
+# last commit — landing a task; blind mid-task. Covers the just-committed worker,
+# whose clean tree makes the churn leg read dead when it was most productive.
+git log -1 --format=%cr
 ```
 
 | what you see | what you do |
 |---|---|
-| phase `in_progress`, sheet touched < 20 min ago | **exit.** Live sub-agent. One line, re-arm the fallback, stop. |
-| phase `in_progress`, sheet cold > 40 min (two fallbacks, no tick) | it died. Re-spawn, resuming at the first unticked task. |
+| phase `in_progress`, sheet < 25 min old | **exit.** Live. One line, re-arm, stop. |
+| phase `in_progress`, sheet cold, **any other leg fresh** | **exit.** Alive, just slow. |
+| phase `in_progress`, sheet cold > 90 min, **all four silent** | it died — triage, § *Method*. |
 | phase `completed`, a next phase exists | beat 4 — spawn the planner. |
 | phase `planned`, sheet > 100 lines (filled) | beat 5 — spawn the worker. |
 | phase `planned`, sheet ~27 lines (bare template) | beat 4 — spawn the planner. |
-| no phases left | § Stop conditions. |
+| no phases left | § *Stop conditions*. |
 
-`wc -l` on the sheet is the empty/filled test — the materialised template is 27
-lines, a planned sheet is several hundred. Don't eyeball it.
+`wc -l` is the empty/filled test. Don't eyeball it.
 
-The heartbeat is free because workers tick tasks as they go (§ Sub-agent
-discipline). The sheet's mtime *is* the liveness signal — that is a second reason
-for the tick-as-you-go rule, not a coincidence.
+**Sheet mtime alone is not liveness; reaping on it kills healthy workers.** It
+goes quiet exactly when the work is slowest and dearest to lose — a ten-mutation
+battery is ten build-and-test cycles with nothing tickable between them — so the
+proxy inverts under load: the more expensive the phase, the deader it looks.
+**Any sign of life beats a cold sheet**; when legs disagree, believe the one
+saying alive. Re-spawning is not idempotent — a revived worker redoes everything
+since the last tick, and one reaped mid-write leaves a half-edited file the next
+reads as finished. **Waiting is cheap, reaping is not**: that asymmetry, not the
+numbers, is the rule. Three consecutive revives of one phase → stop and report.
 
-Three consecutive revives of the same phase → stop and report. Do not loop on a
-sub-agent that cannot finish.
+Silence has three explanations that present identically and route differently:
+dead worker (resume from its transcript), dead harness (only a human restarts
+it), rebuilt sandbox (re-spawn; resume is gone). Triage before acting —
+`doctrine memory show mem.pattern.dispatch.loop-death-triage-resume-vs-respawn`.
 
 ## The orchestrator's turn
 
-Opus, and **thin** — it routes, it does not read source and it does not read
-`design.md`. Beats in order, stopping at the first that ends the firing:
+Opus, and **thin** — it routes; it reads neither source nor `design.md`. Beats in
+order, stopping at the first that ends the firing:
 
-1. **Guard** — as above. Exit if a sub-agent is live.
-2. **Orient** — `.doctrine/slice/<N>/handover.md`, then `git log --oneline -5`.
-   Nothing else.
-3. **Verify the last claim** — if a phase reports complete: `doctrine check gate`,
-   confirm green, then flip it:
-   `doctrine slice phase <N> <PP> --status completed`. **The flip is the
-   orchestrator's, never the worker's**, and it happens after the gate, not after
-   the report. Then read the boundary warning; if it names foreign commits,
-   tighten: `doctrine slice record-delta <N> <PP> --start <first own>^ --end <own tip>`.
-4. **Plan** — spawn the **planner** (§ Sub-agent briefs). It fills the runtime
-   sheet; you do not.
-5. **Spawn** — one **worker**, one phase. Flip to `in_progress` *before*
-   spawning, so a clock wake's guard sees it.
-6. **Close the firing** — rewrite `handover.md` (§ Handover), `ScheduleWakeup`
-   ~20 min, one line to the user: phase, beat, what's next.
+1. **Guard** — above. Exit if a sub-agent is live.
+2. **Orient** — `handover.md`, then `git log --oneline -5`. Nothing else.
+3. **Verify the last claim**, every firing, not only at close. *The gate is
+   evidence, the report is a claim*: run `doctrine check gate` yourself and
+   confirm the test-count delta matches what the worker claims. *Findings reached
+   § Owed*: one grep — per task, because at close an omission stays invisible for
+   as many tasks as the phase has left. If a phase reports complete, flip it
+   *after* the gate is green (`doctrine slice phase <N> <PP> --status
+   completed`); **the flip is the orchestrator's, never the worker's**. Then read
+   the boundary warning and, if it names foreign commits, tighten with
+   `doctrine slice record-delta`.
+4. **Plan** — spawn the **planner**; it fills the sheet, you do not. Spawn a
+   general agent, **never a read-only `Plan` type**: that cannot write the sheet
+   and returns its whole body as text, which you pay for twice.
+5. **Spawn** — one **worker**, one phase. Flip to `in_progress` *before* spawning
+   so a clock wake's guard sees it.
+6. **Close the firing** — rewrite `handover.md`, `ScheduleWakeup` ~20 min, one
+   line to the user: phase, beat, what's next.
 
-Beats 4 and 5 may fall in the same firing — planning and execution are separated
-by living in **different sub-agent contexts**, which is the whole point of
-delegating them. What must never share a context is planning and execution, not
-planning and spawning.
+Beats 4 and 5 may share a firing. What must never share a *context* is planning
+and execution; planning and spawning may.
+
+**Hold your own commits while a worker is live.** A phase's delta is one
+contiguous range, so a driver or notes commit landing between the worker's first
+and last cannot be excluded by any `--start`/`--end` — it rides into the phase
+and shows up in `slice conformance`'s undeclared cell. Make the edit when it
+bites, hold the commit until after the worker's code tip, and if you do commit
+mid-flight, say so at close rather than leaving the auditor to find it.
 
 ## Sub-agent briefs
 
-Both roles run in-tree on `edge`, **no worktree isolation**, and are told so.
+Both roles run in-tree, no isolation, and are told so. How to write the brief
+itself — hypothesis not route, unstageable reds, inventories against the tree —
+is `doctrine memory show mem.pattern.dispatch.brief-a-diagnosis-as-a-hypothesis`.
 Every brief carries, and carries nothing else:
 
-- the slice and phase id, and the sheet path
-  `.doctrine/state/slice/<N>/phases/phase-<PP>.md` — **the sheet is the brief**;
-- "read `LOOP.md` § Sub-agent discipline and § Where this runs — both bind you";
-- "in-tree on branch `edge`, no isolation; another agent shares this index, so
-  `git status --porcelain` first and path-limit every commit";
-- "commit per task, and harvest at that boundary — not at the end";
-- "end green: `doctrine check gate`. Do not flip your own phase status."
+- the slice and phase id and the sheet path — **the sheet is the brief**;
+- "read `LOOP.md` § *Sub-agent discipline* and § *Where this runs* — both bind you";
+- "another agent shares this index: `git status --porcelain` first, path-limit
+  every commit";
+- "commit per task and harvest at that boundary, not at the end";
+- "end green: `doctrine check gate`. Do not flip your own phase status";
+- "**`slice verify-vt` is not a worker self-check** — it attributes against the
+  delta boundary the orchestrator records *after* you exit, so your own phase
+  reads `UNATTRIBUTABLE` however good your tests are."
 
 **Planner** — Opus, always. Runs `/phase-plan` for one phase: reads that phase's
-`plan.toml` entry — `objective`, `entrance_criteria`, `exit_criteria`,
-`verification`, `specs`, `targets` — and only the `design.md` sections that
-entry's prose actually cites. **There is no Reading-list field in `plan.toml`;
-the Reading list is something the planner writes.** Where the entry cites no
-section, the planner chooses, and records in the sheet which sections it read
-and why. It then writes tasks, carried constraints, STOP conditions, the
-`VT`/`VA` mapping, risks and decisions into the sheet. Writes no source.
+`plan.toml` entry, and of `design.md` only what its row in `plan.md`
+§ *Design-section provenance* grants. Writes tasks, carried constraints, STOP
+conditions, the `VT`/`VA` mapping, risks, decisions and the notes shard's name
+into the sheet; writes no source. Hands back ≤12 lines: task count, open
+decisions, which tasks cannot stage a red and their controls, whether the phase
+wants one worker or two in sequence, and the worker model it recommends.
+`plan.toml` has **no** Reading-list field — § *Reading list* is something the
+planner **writes**; brief one to go read a field that does not exist and it will
+improvise a scope for itself, which is what the provenance table prevents.
 
-Two things every planner brief should carry, both learned the hard way:
-
-- **Name any task that structurally cannot stage a red**, with the compensating
-  positive control that must fail in its place. A test written after the code
-  that makes it compile passes on first run and proves nothing.
-- **Verify inventories against the tree**, never against a prior sheet or a
-  memory — "the five touch sites for a new `Finding` category" were six, and the
-  sixth silently dropped data.
-
-Hands back ≤12 lines: task count, open decisions, which tasks cannot stage a red
-and their controls, whether the phase wants one worker or two in sequence (with
-the split point and the first's exit state), and the worker model it recommends.
-
-**Worker** — Sonnet when the sheet is fully specified and the work is mechanical:
-a known edit shape, no open decisions. Opus when the sheet carries an open
-decision, a STOP condition likely to fire, or verification the worker must
-design. When in doubt: Opus. A Sonnet worker that improvises past a design gap
-costs more than the Opus that would not have.
+**Worker** — Sonnet when the sheet is fully specified and the work mechanical;
+Opus when it carries an open decision, a STOP condition likely to fire, or
+verification the worker must design. In doubt, Opus — a Sonnet that improvises
+past a design gap costs more than the Opus that would not have.
 
 ## Sub-agent discipline
 
-**Tick a task only after its knowledge is durable.** The order is: finish the
-work → harvest it (notes shard, memory, observation) → *then* tick the box and
-note the evidence in the sheet's Findings. A ticked box with un-harvested
-knowledge is a lie the next firing believes. This is also the heartbeat: an
-untouched sheet reads as a dead sub-agent.
+**Tick a task only after its knowledge is durable.** Finish → harvest → *then*
+tick and note the evidence in Findings. A ticked box with un-harvested knowledge
+is a lie the next firing believes, and the tick is also the heartbeat.
 
-**Harvest as you go, never at the end.** Context exhaustion is the expected
-ending, not the exception — a worker has already been killed mid-phase by a
-session limit. Harvest at each task's commit boundary (§ *Commit per task*),
-which is where you still remember why.
+**Harvest as you go, never at the end** — context exhaustion is the expected
+ending, not the exception. Harvest at each task's commit boundary:
 
 - durable gotcha / pattern / footgun → `doctrine memory record`;
 - friction, confusion, token waste → `doctrine observation record friction …`;
 - execution record, divergences, measurements → the notes shard;
-- a decision, issue, or finding needing a `DEC-`/`ISS-`/`RV-` id → mint it (§
-  Where this runs) and cite the id in the sheet's Findings, so the orchestrator
-  reads a reference rather than re-deriving the content.
+- anything needing a `DEC-`/`ISS-`/`RV-` id → mint it (§ *Where this runs*) and
+  cite the id in Findings, so the orchestrator reads a reference.
 
-**Stop, do not improvise.** A STOP condition in the sheet, a design gap, a
-criterion that does not compile as written, a decision needing a human ruling:
-write it into the sheet's Findings, leave the box unticked, and hand back. A
-criterion that does not hold is a stop-and-report, **never** an
-adjust-the-criterion. The loop halting on a real question is the cheapest outcome
-available. `DEC-181` is what that looks like when it works.
+**Stop, do not improvise.** A STOP condition, a design gap, a criterion that does
+not compile as written, a decision needing a human ruling: write it into
+Findings, leave the box unticked, hand back. A criterion that does not hold is a
+stop-and-report, **never** an adjust-the-criterion — the loop halting on a real
+question is the cheapest outcome available.
 
-**Commit per task, not per phase.** One commit per ticked task, path-limited,
-scoped `feat(SL-<N>): PHASE-<PP> T<k> — …`. The commit is not the point; the
-*boundary* is. It is the moment you have just finished thinking about something
-and still remember why — so the commit message, the sheet's Findings, and any
-memory or observation the task earned all get written **there**, while the
-reasoning is cheap. Deferring that to the end trades a certainty (you will
-forget, or run out of context) against a convenience.
+**Commit per task, path-limited**, scoped `feat(SL-<N>): PHASE-<PP> T<k> — …`.
+The commit is not the point, the *boundary* is: it is where you still remember
+why, so the message, the Findings line and the harvest all get written cheaply.
+What survives a dead worker is code and commits; what dies with it is every
+insight still only in its head. A task is done when all three exist, not before.
 
-What survives a dead worker is code and commits. What dies with it is every
-*insight* about that code that was still only in its head. `PHASE-05` proved
-both halves: the source was recovered intact from the working tree and the gate
-re-run green, but the sheet's Findings were empty and the evidence for what each
-control had actually done had to be reconstructed from the diff. The code was
-never at risk. The knowledge was, and some of it did not survive.
-
-So: a task is done when its commit, its Findings line, and its harvest all
-exist. Not before.
-
-**End green.** `doctrine check gate` — `check`/`gate` build before validating,
-which is what gives the corpus check a fresh binary. Green at every commit if
-the task allows it; green without fail at hand-back.
+**End green.** `doctrine check gate`, which builds before validating and so gives
+the corpus check a fresh binary.
 
 ## Notes, sharded
 
-`notes.md` is tracked and committed; `handover.md` is **gitignored**
-(`.gitignore:51`) — it does not survive `rm -rf` of state. Never put anything
-load-bearing only there.
+`notes.md` is tracked; `handover.md` is **gitignored** and does not survive an
+`rm -rf` of state. Never put anything load-bearing only there.
 
-**The sheet names the shard; the brief must not.** The orchestrator got this
-wrong twice — naming `notes_03-06.md` and `notes_07-08.md` in briefs whose
-sheets said `notes_04-06.md` and `notes_08.md` — and both times the worker had
-to adjudicate and leave a note. The orchestrator does not know the shard split,
-because phases do not execute in id order (`SL-249` ran `01 02 08 03 …`) and the
-ranges follow execution, not numbering. So: the planner writes the shard name
-into the sheet, the worker follows the sheet, and the brief says "the shard the
-sheet names" and nothing more.
-
-- `notes_01-03.md`, `notes_04-06.md`, … — the execution record for those phases:
-  what was done, what diverged, what was measured. A worker appends to its own
-  shard and touches no other.
-- `notes.md` stays small and holds only what outlives a phase:
-  1. an index of the shards;
-  2. **Owed to the reconciliation brief** — the ledger `/audit` reads first.
-     This never moves into a shard;
-  3. cross-phase invariants and decisions;
-  4. Open — questions, blockers, deferrals;
-  5. Learned — memories minted, pointers only.
-
-Extra files in a slice directory are fine; `doctrine validate` scans entity kinds
-and ignores them (`spike-credentials.sh` is the precedent).
+- `notes_01-03.md`, `notes_04-06.md`, … — the execution record: what was done,
+  what diverged, what was measured. A worker appends to its own shard only.
+  **The sheet names the shard; a brief must not** — ranges follow the order
+  phases *executed*, not their ids, so an orchestrator deriving the name from
+  `PHASE-NN` eventually names a shard the sheet disagrees with, leaving the
+  worker two instructions and no way to rank them.
+- `notes.md` stays small and holds only what outlives a phase: an index of the
+  shards; **Owed to the reconciliation brief**, the ledger `/audit` reads first
+  and which never moves into a shard; cross-phase invariants and decisions; Open;
+  Learned (pointers to memories); and **Traps**, what already bit this slice —
+  the one section that grows monotonically, hence tracked here.
 
 ## Handover
 
-Rewritten by the orchestrator at the end of every firing. Fixed sections, ~50
-lines, no narrative history — history is the shard.
+Rewritten by the orchestrator at the end of every firing. ~50 lines, no history —
+history is the shard.
 
 ```
 ## Where we are      one line: slice, phase, status, beat
 ## Last firing       what changed, and the sha
 ## Next              the single next action, verbatim enough to execute
 ## Live              open decisions, blockers, awaiting-human
-## Traps             what already bit this slice — do not rediscover
+## Traps             a pointer to `notes.md` § Traps, not a second copy
 ```
 
-If it exceeds ~50 lines, something belongs in `notes.md` instead.
+**The diagnostic: a section describing itself as the one thing with no copy
+elsewhere.** That is a bug report, not a boast — the file is gitignored, so *no
+copy elsewhere* means *lost on `rm -rf`*. Move it to a tracked file and leave a
+pointer. The size rule is downstream: a fat handover is the symptom, misfiled
+durable state the cause, and trimming prose fixes neither.
 
 ## Writer map
 
@@ -257,38 +249,50 @@ If it exceeds ~50 lines, something belongs in `notes.md` instead.
 | phase sheet — tasks, criteria mapping, risks | planner |
 | phase **status** flips, `record-delta` | orchestrator only, after the gate |
 | `notes_NN-MM.md` shard | the phase's worker |
-| `notes.md`, `handover.md` | orchestrator only |
-| authored `.doctrine/` entities (plan, design, backlog) | orchestrator only |
-| new entity **ids** | whoever needs one — the corpus here is live |
+| `notes.md` § *Owed* — **append only, at the end** | the phase's worker |
+| `notes.md` every other section, `handover.md` | orchestrator only |
+| authored `.doctrine/` entities | orchestrator only |
+| new entity **ids** | whoever needs one — but see § *Where this runs* |
 | memories, observations | whoever learns it, at the moment it bites |
+
+**The worker owns § *Owed*** because it already holds the finding. Two
+constraints keep that safe: **append at the end, never edit an existing item**
+(numbering is immutable, and the orchestrator may be writing another section in
+the same window), and **the orchestrator still verifies at beat 3, every
+firing** — "the worker wrote it" is a claim like any other.
 
 ## Stop conditions
 
-Call `ScheduleWakeup(stop: true)` and report, on any of:
+`ScheduleWakeup(stop: true)` and report, on any of:
 
-- **Done.** Last phase `completed` and gate green → route to `/audit`. The audit
-  is not loop work; it needs a human in the loop. Stop.
-- **Blocked.** A sub-agent hit a STOP condition, or a ruling is owed. Stop and
-  ask; do not spawn again.
-- **No progress.** Three firings with no phase-status change and no new commit,
-  or three revives of one phase.
-- **Budget.** Session approaching ~250k: write `handover.md`, stop, and say a
-  fresh session should resume from it. A loop that runs into a summarization is a
-  loop that starts trusting its own recollection.
+- **Done.** Last phase `completed`, gate green → route to `/audit`, which needs a
+  human in the loop and is not loop work.
+- **Blocked.** A sub-agent hit a STOP condition, or a ruling is owed. Ask; do not
+  spawn again.
+- **No progress.** Three firings with no status change and no new commit, or
+  three revives of one phase.
 
-## Budget
+**Budget is NOT a stop condition.** It is a hand-over condition, and it is the
+one beat where getting the distinction wrong turns an autonomous loop back into a
+babysat one — compaction is survivable by construction, so keep going and just
+make sure `handover.md` reflects disk before you get close. Why, and what a
+firing costs: `mem.pattern.dispatch.budget-is-a-handover-condition`.
 
-Delegation is what keeps the orchestrator alive: planning a phase is a
-session-sized job, and doing it in-context burns the loop down in three or four
-phases. So the planner is a sub-agent, always, however tempting it looks to just
-read the design yourself.
+Delegation is what keeps the orchestrator alive — planning a phase in-context
+burns the loop down in three or four phases. If it is reading source or
+`design.md`, the split has failed. Read entities with `doctrine <kind> show
+<ID>`, and use this tree's `./target/debug/doctrine`, never the PATH binary, or
+you will read a corpus through a stale parser.
 
-Rough orchestrator costs per firing: guard-and-exit ≤ 2k, spawn ≤ 10k,
-verify-and-flip ≤ 15k. These are the *orchestrator's* only — a planner or worker
-sub-agent spends its own context freely and hands back ten lines. If the
-orchestrator is reading source or `design.md`, the split has failed and the loop
-is now on a countdown.
+## Method
 
-Read entities with `doctrine <kind> show <ID>`, not raw files. Use this tree's
-`./target/debug/doctrine`, never the PATH binary, or you will read a corpus
-through a stale parser.
+Reusable past one slice, so it lives in the corpus rather than in a file read
+every firing — `doctrine memory show <key>`:
+
+| key | what it settles |
+|---|---|
+| `mem.pattern.dispatch.loop-death-triage-resume-vs-respawn` | dead worker vs dead harness vs rebuilt sandbox; how to word a revive |
+| `mem.pattern.dispatch.brief-a-diagnosis-as-a-hypothesis` | constraints not routes; unstageable reds; inventories against the tree; a diagnostic is liveness before it is a defect |
+| `mem.pattern.dispatch.budget-is-a-handover-condition` | why low context is never a stop; what an orchestrator firing costs |
+| `mem.pattern.testing.convict-a-race-by-causality-not-repetition` | load the hazard's own channel; isolate process-wide state; two-arm experiment |
+| `mem.pattern.testing.floor-a-destructive-instrument-before-aiming-it` | a phase that signals, deletes or unmounts bounds itself in its *first* commit |
