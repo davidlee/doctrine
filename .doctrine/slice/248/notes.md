@@ -2348,7 +2348,15 @@ load-bearing only there). The handover points at this section.
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-08 · **`PHASE-01` and `PHASE-02` executed and green
+fresh-as-of: 2026-08-10 · **at `reconcile` on branch `sl-248`, head `654abd81a`.**
+All ten phases executed; `RV-352` settled (eight findings terminal, `F-8` ruled);
+lifecycle advanced `started → audit → reconcile` at `8740c66bd`. `ISS-339`'s
+off-jail runs then landed **three** source defects in the conformance fixture —
+two fixed here (`8f837c312`, `2761d0378`), the third carried as `ISS-341` and
+blocking `ISS-340`. Off-jail stands at **18/19 rows** `Proven`. Everything below
+this line predates the audit and is kept as the phase-execution record.
+
+The 2026-08-08 stamp: **`PHASE-01` and `PHASE-02` executed and green
 in-tree on `edge`.** `PHASE-01` `74c398acb`+`6b58d48c8`, flipped `completed`
 on the user's acceptance of the adaptations (`DEC-181` superseded — owed item
 1); its delta range tightened to `74c398acb^..6b58d48c8` because the automatic
@@ -2451,6 +2459,13 @@ Design run locked at revision 93 · 6b5036c38
   the phase's own output and mis-words `UNATTRIBUTABLE`; expected tooling
   behaviour. The signal that *is* trustworthy at plan time is the
   `UNCHECKABLE` count.
+- **`--ro-bind` is read-only, not `noexec`.** A bound tree's binaries execute.
+  Measured: `/nix` bound ⇒ 691 store paths, `git`/`curl`/`gcc` all run.
+- **The pattern behind all three off-jail defects** (`ISS-339`): a derivation
+  that is *accidentally correct in the single environment it has ever run in*.
+  The jail supplied `/bin` twice over by coincidence, which masked the shell
+  bind, the permitted-`/` set, and the root set in turn. Candidate memory — not
+  yet recorded; it generalises past `cluster:capsule`.
 
 ### Open
 
@@ -2539,3 +2554,31 @@ Design run locked at revision 93 · 6b5036c38
   - Run state is gitignored runtime state, so none of this is committed. Backups
     of the deleted entity and the pre-edit run state are session-local only and
     will not survive.
+
+#### Off-jail conformance, 2026-08-10 (post-audit, at reconcile)
+
+- **Produced.** `8f837c312` — readable roots must cover the literal `/bin/sh`
+  payloads exec, not only its resolved target. `2761d0378` — row 4's permitted-`/`
+  set must name the shell's own root (regression from the former). `ISS-340`,
+  `ISS-341` minted; `ISS-339`, `IMP-417`, `RFC-025` § follow-up register updated.
+- **`sec-9` residual 3's neighbourhood is closed by measurement**, which is what
+  `ISS-339` existed for: off-jail the trusted side does not already hold
+  `no_new_privs`, so the observation reads **caveat-free** and the backend's
+  provenance for the bit is established rather than argued.
+- **`ISS-341` blocks `ISS-340`** (`after` edge recorded). The fixture's
+  host-derived bind set is the host-shaped default production's `EX-8` exists to
+  refuse; narrowing it dissolves `ISS-340`'s red row without a criterion-level
+  call against `PHASE-10` `EX-3`. Fixing `ISS-340` first would weaken `EX-3` *and*
+  remove `ISS-341`'s only witness — the interim "roots must bear an executable"
+  filter greens the transcript while leaving `/nix` bound whole. Named as a trap
+  on both items.
+- **Owed to the reconciliation brief — a second shortfall in `REQ-459`
+  criterion 2.** `RV-352`'s brief holds it `partial` because production
+  acceptance tests do not exist. `ISS-341` is a *different* shortfall in the same
+  criterion: the suite's own capsules are permissive on a store host, so what the
+  nineteen rows are worth off-jail is less than the record implies. Not yet
+  reflected in the brief. **Reconcile must rule on this** — it is not merely a
+  backlog item.
+- **Owner's call this session:** `ISS-341`'s design gets **its own slice**, not
+  capsule slice 2 — slice 2 has enough to settle without absorbing this cleanup.
+  Recorded here and in `RFC-025`; the slice is not yet minted.
