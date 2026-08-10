@@ -25,3 +25,9 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "DEC-134 makes what a capsule executes an agent; the build-derived 900s timeout SIGTERMs one mid-phase"
+target = "RFC-025"

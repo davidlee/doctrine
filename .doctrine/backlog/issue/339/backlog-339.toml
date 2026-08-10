@@ -25,3 +25,9 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the shipped suite has never run off-jail — the cheapest evidence bearing on next-design-question 9"
+target = "RFC-025"

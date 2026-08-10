@@ -31,3 +31,9 @@ label = "references"
 role = "concerns"
 descriptor = "promotes tier layering from test gate to crate boundary"
 target = "ADR-001"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "DEC-153's two-binaries-over-shared-code answer makes the shared half's crate boundary a decision"
+target = "RFC-025"

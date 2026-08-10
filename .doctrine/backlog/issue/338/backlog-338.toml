@@ -25,3 +25,9 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-248"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "gid_map unmeasured off-jail — the mapping leg that discriminates on a uid-1000 host"
+target = "RFC-025"

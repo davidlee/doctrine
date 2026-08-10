@@ -27,5 +27,11 @@ role = "originates_from"
 target = "SL-248"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "a runner that cannot satisfy the conformance rows needs a third admission outcome — affects every later slice's gate"
+target = "RFC-025"
+
+[[relation]]
 label = "related"
 target = "ISS-334"

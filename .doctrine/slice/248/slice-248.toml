@@ -114,6 +114,12 @@ role = "concerns"
 descriptor = "provisioning and the export half rest on Git"
 target = "ASM-009"
 
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "slice 1 of the capsule decomposition — contract resolution, provisioning, Linux backend and its conformance suite"
+target = "RFC-025"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
