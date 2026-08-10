@@ -116,8 +116,9 @@ window because the cheap fixes all tax every concurrent row. Row 9 ships under a
 title it exceeds, deliberately and documented at the test. `REQ-459` criterion 2
 is `partial`, not discharged, and says so.
 
-**One decision is genuinely open and is the owner's**, recorded as `F-8` and left
-undisposed rather than smoothed: `EX-14` in CI. The slice settles the local host
+**One decision was genuinely open and was the owner's**, recorded as `F-8` and
+raised as a blocker rather than smoothed: `EX-14` in CI. **Ruled 2026-08-10** —
+see the closing section. The slice settles the local host
 via `DEC-180` and stops there, marking the remainder "(Slice owner /
 orchestrator, before close.)". `EX-14` forbids an availability condition, an
 `#[ignore]`, a skip or an early return reaching `Admitted`; a runner that cannot
@@ -188,9 +189,14 @@ environment (item 171) · `ISS-337` setup decoys stay inheritable across the arm
 (item 127) · `ISS-338` `gid_map` has no off-jail reading (item 175a) · `ISS-339`
 the conformance suite has never run off-jail (item 175b).
 
-Also owed, not yet minted: a backlog item for a mechanical check reconciling a
-slice's § *Owed* against its phase sheets' § *Findings* before the sheets are
-discarded (`F-5`).
+`IMP-417` the third admission outcome — the owner's ruling on `F-8` (below) ·
+`IMP-418` a mechanical check reconciling a slice's § *Owed* against its phase
+sheets' § *Findings* before the sheets are discarded (`F-5`).
+
+Every backlog item carries a `references --role originates_from` edge to
+`SL-248`; `ADR-021` cites the slice in prose, because the engine refuses a
+`references` edge from an ADR. `ADR-021` is `proposed` and wants the owner's
+acceptance. `IMP-417` is sequenced `after` `ISS-339`.
 
 **Deliberately not minted.** `F-31`'s issue — withdrawn by item 70, which records
 the defect as fixed in-phase by `PHASE-09` `T1` and states the merge owes the
@@ -227,3 +233,35 @@ the defect as fixed in-phase by `PHASE-09` `T1` and states the merge owes the
 
 `Cargo.lock` (regenerate with a build, do not hand-resolve) and
 `.doctrine/adr/001/layering.toml`.
+
+### `F-8` — the owner's ruling, 2026-08-10
+
+Of the three shapes `notes.md` § *Open* weighed, the owner accepts the second:
+**make backend unavailability a distinct non-`Admitted` verdict.** It is the only
+one that keeps the answer inside the type `admission()` already returns — the row
+vocabulary carries three values while the admission verdict carries two, so the
+information exists and is discarded at the fold. It adds no skip, no `#[ignore]`
+and no availability condition on any test, so `EX-14` is satisfied by
+construction: the new outcome has no path to `Admitted`.
+
+The ruling is criterion-level, and the implementation is net-new work against
+`PHASE-10`'s closed surface, not a reconcile edit. Recorded as `IMP-417`,
+sequenced `after` `ISS-339`.
+
+**The trap, named in `IMP-417` and load-bearing.** The new outcome must not be
+derived from row-level `Indeterminate`. `ISS-334`'s four row-B5 siblings return
+`Indeterminate { NoObservation }` under CPU contention — a genuine fixture race,
+correctly reported. Folding that into "the host could not establish this"
+rebuilds the vacuous pass one level up under a new name. The discrimination
+belongs at **precondition** level: a host-capability probe that runs before the
+rows and convicts loudly, on the `S4` guard's existing model, feeding the new
+outcome from its own result. Row verdicts stay what they are.
+
+**Landed with the ruling.** `just capsule-verify` on `sl-248` (`79a6f9093`) — the
+shipped verb rather than the crate's `#[cfg(test)]` modules, which `just test`
+already runs via `default-members`. A `### host` header prints first so an absent
+binary is a fact in the transcript rather than an inference from a strange
+verdict (`ISS-335`, `ISS-336`). Standalone and deliberately not wired into
+`gate`, since wiring it in is what `F-8` was about. `justfile` was already a
+`design-target` selector, so it adds no undeclared path. In-jail smoke run:
+`outcome=admitted`, 19/19 `Proven`, exit 0.
