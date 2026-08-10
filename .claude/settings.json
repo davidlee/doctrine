@@ -1,8 +1,116 @@
 {
-  "enabledPlugins": {
-    "doctrine@doctrine": true
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface",
+            "type": "command"
+          }
+        ],
+        "matcher": "Read|Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Workflow"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} prompt resolve --role orchestrator",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} memory sync",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree nominate",
+            "type": "command"
+          }
+        ],
+        "matcher": "dispatch-orchestrator"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree denominate",
+            "type": "command"
+          }
+        ],
+        "matcher": "dispatch-orchestrator"
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "command": "${DOCTRINE_BIN:-doctrine} worktree create-fork",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
   },
   "worktree": {
-    "bgIsolation": "none"
+    "baseRef": "head"
   }
 }
