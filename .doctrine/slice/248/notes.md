@@ -2036,6 +2036,29 @@ at the end per the append-only rule.
     than a claim *about* it. `spike-mounts.sh` already does this — it is the
     pattern to copy. Owed as an `ISS-`.
 
+172. **`EX-1`'s unconditional `Admitted` is landed, and the admission test needed
+    an anti-vacuity assertion the outcome could never supply.** PHASE-09 `T9`
+    lifted the block: `backend verify` now exits **0** with all nineteen rows
+    `Proven`, inverting `T10`'s measured exit 1 on the same code path, so the
+    slice holds a two-state observation of the production verb taken by two
+    tasks either side of the change. `S1` was honoured — row 7 proves,
+    `RowVerdict::Proven` was not weakened and no row was filtered out of
+    `admission`. **The durable part is the third assertion.** `admission` is
+    `all(Proven)` and `all` over nothing is true (`T11` found this and
+    deliberately left it unrepaired, as `admission`'s body was `T13`'s
+    territory), so `Admitted` **alone** is also what a verdict that ran no row
+    reports. The test therefore asserts `verdict.rows.len() == tables().len()`
+    beside the outcome, and mutant `M2` — `verify` handed `&[]` instead of
+    `&tables()` — proves that assertion is the only one that catches it: outcome
+    still `Admitted`, refusing-row list still empty, and the whole thing returns
+    in **0.32 s** against the honest run's 21.91 s. An outcome-only admission
+    test would have been `F-47`'s family in the one test whose job is to say the
+    backend was admitted *on evidence*. The hole is closed from **outside**
+    `admission`, so `S1` and `T11`'s reasoning both stand. Generalisation:
+    **a test that asserts a verdict must also assert the verdict was reached
+    over the evidence it names**, because every `all`-shaped predicate admits a
+    vacuous green that looks identical to a real one.
+
 ## Open
 
 **RULED 2026-08-10 — row 7's payload: option (b), rewrite the payload. `PHASE-09`

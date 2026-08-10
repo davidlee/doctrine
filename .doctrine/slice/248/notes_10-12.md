@@ -1004,3 +1004,107 @@ export `CARGO_MANIFEST_DIR` themselves.
 `doctrine check gate` exit **0**, `277 passed; 0 failed; 9 ignored`, read by
 anchoring on the `doctrine_control-` binary header. **No file changed** — `D4`
 refused on evidence. Findings `F-60`–`F-63`; § *Owed* items 147–150.
+
+---
+
+## PHASE-10 `T13` — `EX-1`'s unconditional `Admitted`, unblocked and landed
+
+Blocked at plan time and through eleven tasks; unblocked by PHASE-09 `T9`
+landing row 7. The block was never a defect to route around, and the record of
+*why* it held is the reason it could be discharged in one commit when it lifted.
+
+### The blockage lifted, verified rather than accepted
+
+`./target/debug/doctrine-control backend verify` on this tree: exit **0**,
+`outcome=admitted`, **19 rows, every one `Proven`**, four table C claims
+`Passed`, both unrowed observations `Read`. Twice, 25 s and 25 s serial. That is
+`F-51`'s reading inverted — `T10` measured exit **1** with
+`Property(ProcessTreeTeardown)=Indeterminate { arm: Probe, detail:
+NoObservation }` on the same code path — so the two-state observation of the
+production verb exists in this slice's own record, taken by two different tasks
+either side of the change.
+
+`EN-1` is therefore met, and met the way `S1` required: row 7 proves.
+`RowVerdict::Proven` was not weakened, no row was filtered out of `admission`,
+no `#[ignore]` or availability guard was added. The bar did not move.
+
+### The test, and the one thing it asserts that `Admitted` alone does not
+
+`the_shipped_backend_is_admitted_on_this_host` runs the whole of tables A and B
+through `verify` — the production entry point, not `verify_over` and not a
+hand-built row list — and asserts the outcome. It is the only test in the crate
+that does; every other one asserts a row, an arm, or the algebra over a
+scripted list, and `admission` is computed *inside* `verify` over a row list
+none of them sees whole.
+
+Three assertions, in this order:
+
+1. **the refusing rows, named, before the outcome.**
+   `NotAdmitted { reason: Rows }` says a row refused and not which one, so
+   asserting the outcome first would hand the next reader the start of a
+   diagnosis instead of the diagnosis. The mutant below fails with
+   `rows that did not prove: Property(ConfinedCapabilities)=Unproven`.
+2. **`outcome == Admission::Admitted`** — `EX-1`'s clause, unconditional.
+3. **`verdict.rows.len() == tables().len()`** — and this one is not decoration.
+
+(3) is the anti-vacuity assertion, and it exists because `T11` found the hole
+and deliberately did not repair it: `admission` is `all(Proven)`, and `all` over
+nothing is **true**, so a verdict that ran *no row at all* also reports
+`Admitted`. `an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it`
+records that path and says what holds it up is structural and lives elsewhere.
+An admission test asserting only the outcome would be the third member of
+`F-47`'s family — *held nothing* and *read nothing* returning the same answer —
+in the one test whose whole job is to say the backend was admitted **on
+evidence**. `T13` closes it from outside `admission` rather than inside it, so
+`S1`'s prohibition is untouched and `T11`'s reasoning for leaving the body alone
+still stands.
+
+### The mutation battery — two arms, 2/2 convicted **by a test**
+
+`F-52`'s rule honoured: both mutants compile clean and die on an assertion, not
+on `-D warnings`. Each applied to the restored tree, run alone, reverted, and
+the tree checked back to byte-identical (`grep -c 'MUTANT M'` → 0).
+
+| arm | mutation | convicted by | reading |
+|---|---|---|---|
+| `M1` | row 14's delta `Granted(AllCapabilities)` → `Removed(EnvCleared)`, so its control clears the environment and leaves capabilities confined | assertion (1) | `FAILED` in 27.83 s — `rows that did not prove: Property(ConfinedCapabilities)=Unproven` |
+| `M2` | `verify` hands `verify_over` `&[]` instead of `&tables()` | assertion (3) | `FAILED` in 0.32 s — `left: 0, right: 19`, "the verdict admitted over fewer rows than the shipped tables hold" |
+
+`M1` convicts the row leg: a row that stops proving reds the test, and the
+failure **names the row**. `M2` convicts the vacuity leg specifically — under it
+the outcome is still `Admitted` and the refusing-rows list is still empty, so
+assertions (1) and (2) both pass and only the count catches it. That is the
+proof that (3) is load-bearing rather than belt-and-braces: it is the sole
+assertion standing between this test and a green over zero evidence.
+
+`M2`'s 0.32 s runtime is itself the tell — a verdict over no rows costs nothing,
+which is exactly why an outcome-only assertion would never have looked wrong.
+
+### Cost
+
+21.91 s alone; the suite went 296 → 297 tests and 92.12 s → 92.39 s. `T12`'s
+`F-61` is why that is unsurprising and the number is worth writing down: the
+suite's cost is a **floor dominated by fixed sleeps**, not a slope in test
+count, and this test adds nineteen rows' worth of serial capsule work to a run
+whose long pole is elsewhere. A 22 s test costing the suite 0.27 s is the floor
+being observed directly, and it is the reason `VA-3`'s budget survives `T13`
+without re-measurement.
+
+### Tally
+
+`doctrine check gate` exit **0**, `297 passed; 0 failed; 9 ignored` in 92.39 s,
+137 s wall, 19 `warning:` lines (doctrine's own test-output messages, not rustc
+diagnostics) and zero compiler diagnostics. Read by anchoring on the
+`doctrine_control-` binary header. +1 over the 296 baseline — exactly this
+task's one test. Findings `F-64`; § *Owed* item 172. One memory,
+`mem.pattern.testing.assert-a-verdicts-evidence-count`
+(`mem_019fe9b7500f74c1ad80e90d974ab880`); one friction record.
+
+A tooling trap met on the way out, since the next agent will meet it too:
+`memory record` without `--key` mints an **unkeyed** memory, and
+`memory edit --key` late-binds the key into `memory.toml` **without** minting
+the `items/<key> → mem_<uid>` symlink that resolution goes through. So
+`memory show <key>` answers *memory not found* for a key present in that
+memory's own TOML, and a key cited from the TOML is a fabricated reference until
+the symlink exists. Created by hand here. **Run `memory show <key>` before
+citing a late-bound key.**

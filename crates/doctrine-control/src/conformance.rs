@@ -11113,16 +11113,80 @@ belongs to the slice owner.";
     /// [`the_shipped_tables_are_nineteen_distinctly_identified_rows`] is what
     /// asserts that list is neither empty nor silently shortened.
     ///
-    /// Not repaired, deliberately. `T11` is an audit, and `admission`'s body is
-    /// `T13`'s blocked territory (`S1` forbids filtering a row out of it) — a
-    /// drive-by hardening would be the phase editing the thing it was auditing,
-    /// on a function a blocked task is waiting to change.
+    /// Not repaired, deliberately. `T11` is an audit, and `admission`'s body was
+    /// `T13`'s territory (`S1` forbids filtering a row out of it) — a drive-by
+    /// hardening would have been the phase editing the thing it was auditing.
+    /// `T13` has since landed and changed nothing here: it asserts the outcome
+    /// from outside, and carries the row-count assertion this path makes
+    /// necessary — see [`the_shipped_backend_is_admitted_on_this_host`].
     #[test]
     fn an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it() {
         assert_eq!(admission(&[]), Admission::Admitted);
         assert!(
             !tables().is_empty(),
             "the shipped tables are what stop the vacuous path being reachable"
+        );
+    }
+
+    // ── PHASE-10 `T13`: `EX-1`'s unconditional admission ───────────────────
+
+    /// `EX-1`, the half `T13` carries: **the shipped backend is admitted on this
+    /// host, asserted unconditionally.**
+    ///
+    /// The only test that runs the whole of tables A and B through the
+    /// production entry point and asserts the *outcome*. Every other test here
+    /// asserts a row, an arm, or the algebra over a hand-built list;
+    /// [`admission`] is computed inside [`verify`] over a row list none of them
+    /// sees whole, so none of them can say the shipped verdict admits.
+    ///
+    /// **Unconditional, deliberately** (`EX-14`, `DEC-156`, `sec-7`). No
+    /// availability guard, no `#[ignore]`, no early return: on a host that
+    /// cannot run bubblewrap this fails rather than skipping green. That cost is
+    /// accepted rather than hidden — conditioning it on availability is exactly
+    /// the green skip the row tables exist to replace.
+    ///
+    /// **What unblocked it, recorded because the next reader will find the
+    /// blockage written down all over this slice.** Row 7
+    /// (`Property::ProcessTreeTeardown`) read
+    /// `Indeterminate { arm: Probe, detail: NoObservation }` — two arms, one
+    /// byte-identical observation, neither token printed — so `admission`
+    /// returned `NotAdmitted { reason: Rows }` and this assertion could not be
+    /// made honestly. PHASE-09 `T9` wired the row's escapee and its
+    /// process-group reaper, and row 7 now proves. Nothing weakened
+    /// [`RowVerdict::Proven`] and nothing was filtered out of [`admission`] to
+    /// reach green: the rows are proven and the bar did not move.
+    ///
+    /// **Not vacuous on the empty list.** `admission` is `all(Proven)` and `all`
+    /// over nothing is true (see
+    /// [`an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it`]),
+    /// so `Admitted` on its own would also be reported by a verdict that ran no
+    /// row at all. The row count is asserted against [`tables`] with it, which
+    /// is what makes this test read the run rather than the algebra.
+    #[test]
+    fn the_shipped_backend_is_admitted_on_this_host() {
+        let host = SystemHost;
+        let backend = BubblewrapBackend::new(&host);
+        let verdict = verify(&backend, &host, TODAY.to_owned());
+
+        // Named before the outcome is asserted: `NotAdmitted { reason: Rows }`
+        // says a row refused and not which, and the failure a reader meets here
+        // should be the diagnosis rather than the start of one.
+        let refused: Vec<String> = verdict
+            .rows
+            .iter()
+            .filter(|(_, outcome)| *outcome != RowVerdict::Proven)
+            .map(|(id, outcome)| format!("{id:?}={outcome:?}"))
+            .collect();
+        assert!(
+            refused.is_empty(),
+            "rows that did not prove: {}",
+            refused.join(", ")
+        );
+        assert_eq!(verdict.outcome, Admission::Admitted);
+        assert_eq!(
+            verdict.rows.len(),
+            tables().len(),
+            "the verdict admitted over fewer rows than the shipped tables hold"
         );
     }
 

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fe9b9-cf5d-7501-b9bb-85b5655fc4ed"
+recorded_at = "2026-08-10T03:31:36.41381213Z"
+kind = "friction"
+summary = "record-memory: memory edit --key late-binds the key but mints no convenience symlink, so the key does not resolve"
+detail = "PHASE-10 T13 (SL-248). `doctrine memory record --type pattern <TITLE>` without --key mints an unkeyed, uuid-only memory. Late-binding with `doctrine memory edit <uid> --key mem.pattern.testing.<subject>` writes `memory_key` into memory.toml and reports 'Edited memory', but does NOT mint the `items/<key> -> mem_<uid>` convenience symlink that `record` mints. Resolution goes through that symlink, so `doctrine memory show mem.pattern.testing.<subject>` then fails with 'memory not found' on a memory whose own TOML carries exactly that key. Cost: I had already cited the key in an authored finding, so the reference was fabricated until I noticed and created the symlink by hand (`ln -s mem_<uid> .doctrine/memory/items/<key>`). Two asymmetries worth closing: edit should mint the symlink as record does, or refuse the late-bind and say why; and `memory show` failing on a key that is present in the corpus TOML is a lookup that disagrees with the data. Cheap tell for the next agent: after any late-bind, run `memory show <key>` before citing it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

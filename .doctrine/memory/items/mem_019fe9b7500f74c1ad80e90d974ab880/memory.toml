@@ -1,0 +1,42 @@
+memory_uid = "mem_019fe9b7500f74c1ad80e90d974ab880"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Assert a verdict's evidence count beside the verdict — all() over nothing is true"
+summary = ""
+created = "2026-08-10"
+updated = "2026-08-10"
+memory_key = "mem.pattern.testing.assert-a-verdicts-evidence-count"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "vacuous-pass", "verdict"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6d76cb1f4a8bf763fdbe61d20f09486779c9be1b"
+ref_name = "refs/heads/sl-248"
+checkout_state_id = "8a37b8a065ec19b3b69a97bc83422ef27a38363eeee96ee32cc44d86a9b60947"
+base_commit = "756339b3ec4af86cc95afaa20e0bcbc386987464"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
