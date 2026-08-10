@@ -454,17 +454,25 @@ const SETSID: &str = "setsid";
 /// latency itself.
 const ESCAPE_SPEAKS_AFTER_SECONDS: u64 = 2;
 
-/// How long a deliberately escaping descendant outlives the arm that spawned it.
-/// Well over the arm's own runtime, or it exits on its own and the sweep is
-/// credited with a kill it did not make.
+/// How long row 7's escapee stays alive after it has spoken.
 ///
-/// **Under [`FIXTURE_TIMEOUT_SECONDS`], but that relation is decorative rather
-/// than load-bearing** (`T9`, measured): the wall bound never reaps this escapee
-/// on either arm. On the probe arm teardown kills it when the capsule exits,
-/// about a second in, long before the bound. On the control arm `timeout(1)`'s
-/// own child exits cleanly at that same moment — the arm blocks afterwards on a
-/// capture pipe nobody is waiting on — so the bound never fires at all.
-const ESCAPE_SECONDS: u64 = 23;
+/// **Sized, not chosen** (`T9`, measured in a capsule rather than in a bare
+/// shell). Under `Removed(Teardown)` the arm returns only when the escapee dies:
+/// `bwrap`'s pid-namespace init holds the harness's captured descriptors until
+/// the namespace empties, so closing the escapee's own copies releases nothing,
+/// and the arm's wall clock is the escapee's whole lifetime plus ~130 ms. That
+/// is `EX-10`'s rule one row over — with the bound removed, whatever the payload
+/// sleeps is what the control arm costs — so this is kept to what the row
+/// actually needs.
+///
+/// What it needs is **not** a long survival. The escape is proved by the
+/// forbidden token, spoken [`ESCAPE_SPEAKS_AFTER_SECONDS`] in, which is after
+/// the capsule's own process exited; nothing observes the escapee outliving the
+/// arm, because inside the namespace nothing can. What this buys is the window
+/// in which the trusted side can *see* the escapee — the descent polls for half
+/// a second and the sighting polls for another half — and a margin over that
+/// window under load. `3` is five times the worst-case poll.
+const ESCAPEE_LINGERS_SECONDS: u64 = 3;
 
 /// How long the capsule's own top-level process lingers after spawning the
 /// escapee. The trusted side's descent to that process polls `/proc` for half a
@@ -3472,7 +3480,7 @@ fn connects_to_the_trusted_side_listeners() -> Probe {
 ///   `wait_with_output` waits it out — measured at 20 s of dead wall clock, and
 ///   the trap this comment used to anticipate without a way past it. Closing
 ///   them puts the control arm's cost at the delay rather than at
-///   [`ESCAPE_SECONDS`].
+///   [`ESCAPEE_LINGERS_SECONDS`].
 ///
 /// **Its stderr is deliberately not redirected away** until it has spoken. The
 /// shipped payload used to send `setsid`'s own stderr to `/dev/null`, which made
@@ -3487,7 +3495,7 @@ fn escapes_its_own_session() -> Probe {
              'sleep {ESCAPE_SPEAKS_AFTER_SECONDS}; \
              echo {REACHED}; \
              exec 1>&- 2>&-; \
-             exec sleep {ESCAPE_SECONDS}' < /dev/null &); \
+             exec sleep {ESCAPEE_LINGERS_SECONDS}' < /dev/null &); \
              echo {LIVENESS_MARKER}; \
              echo {DENIED}; \
              sleep {LINGER_SECONDS}"
@@ -5252,6 +5260,8 @@ mod tests {
     use tempfile::TempDir;
 
     use super::Weakening as ProfileWeakening;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+
     use super::{
         Admission, AdmissionVerdict, ArmResult, ArmShape, AuthorityGrant, AuxOutcome, Axis, Bound,
         Claim, ConcurrentWitness, ConformanceBackend, DELETED_SUFFIX, Delta, Fixture,
@@ -5289,12 +5299,12 @@ mod tests {
         PROC_SELF_UID_MAP,
     };
     use super::{
-        CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, DENIED, ESCAPE_SECONDS, INNER_AGENT,
-        LINGER_SECONDS, LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property,
-        REACHED, SENTINEL_LEAF, SETSID, SUBJECT_LINGER_SECONDS, WIDENED_CREDENTIAL,
-        WIDENED_EXECUTABLE, WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject,
-        run_control_arm, run_probe_arm, shell_argv, stdout_lines, tables,
-        widens_the_undeclared_decoy, writes_past_the_file_size_cap,
+        CAPSULE_OUTPUT_LEAF, CAPSULE_RETAINED_TMP_LEAF, DENIED, INNER_AGENT, LINGER_SECONDS,
+        LISTENER_ABSTRACT_LEAF, LISTENER_PORT_LEAF, LOOPBACK_ADDRESS, Property, REACHED,
+        SENTINEL_LEAF, SETSID, SUBJECT_LINGER_SECONDS, WIDENED_CREDENTIAL, WIDENED_EXECUTABLE,
+        WIDENED_REPOSITORY, WIDENED_UNDECLARED, lingers, observes_the_subject, run_control_arm,
+        run_probe_arm, shell_argv, stdout_lines, tables, widens_the_undeclared_decoy,
+        writes_past_the_file_size_cap,
     };
     use super::{
         CREDENTIAL_READ, CREDENTIAL_UNREAD, NO_NEW_PRIVS, NO_NEW_PRIVS_SET, NO_NEW_PRIVS_UNSET,
@@ -5324,7 +5334,7 @@ mod tests {
     use super::{LOWEST_SIGNALLABLE, stat_path, stat_text_past_comm};
     use super::{OwnedStdio, weakening_for, weakening_granting};
     use crate::backend::bubblewrap::{
-        BubblewrapBackend, SpawnOptions, confinement_argv, hold_descriptor_window,
+        BubblewrapBackend, SpawnOptions, confinement_argv, hold_descriptor_window, mechanism_failed,
     };
     use crate::backend::fixture::{WITNESS_ID, WitnessBackend, exited};
     use crate::backend::{
@@ -10317,6 +10327,20 @@ mod tests {
             .map(|facts| facts.pid)
     }
 
+    /// How long the **non-escaping** orphan of
+    /// `the_orphan_left_by_a_teardown_or_visibility_control_is_reaped_by_the_harness`
+    /// outlives the arm that spawned it. Well over that arm's own runtime — it
+    /// returns in ~25 ms, because that control removes the pid namespace — or
+    /// the orphan exits on its own and the sweep is credited with a kill it did
+    /// not make.
+    ///
+    /// **Declared here rather than beside the payload constants** because no
+    /// shipped payload reads it any more: row 7's escapee lingers for
+    /// [`ESCAPEE_LINGERS_SECONDS`], sized to what that row needs, and an unused
+    /// `const` in the production block is a `dead_code` error rather than a tidy
+    /// piece of foreshadowing (`F-38` set this precedent for `STAT_GROUP_FIELD`).
+    const ESCAPE_SECONDS: u64 = 23;
+
     const ROW_SEVEN: RowId = RowId::Property(Property::ProcessTreeTeardown);
 
     /// What a missing [`SETSID`] means for row 7, and what must **not** be done
@@ -10553,6 +10577,249 @@ belongs to the slice owner.";
             "{:?} is still running after `execute` returned",
             seen.escapee
         );
+    }
+
+    /// A harness that reaps **the original process group and nothing else** —
+    /// the defective backend row 7 exists to convict, built rather than argued.
+    ///
+    /// It provisions through the real mechanism, so the row travels its real
+    /// route (`A4`, `R6`), and then executes the payload itself: an ordinary
+    /// host process, no pid namespace and no `--die-with-parent`, placed in a
+    /// process group of its own by `CommandExt::process_group` — a safe, stable
+    /// API, so the `unsafe` budget (`C8`, `S7`) is untouched. On the way out it
+    /// reaps that group, which is the whole of its teardown.
+    ///
+    /// Row 7's payload leaves that group by `setsid(2)` before speaking, so the
+    /// reap misses the descendant and the descendant states the forbidden token.
+    /// Without this, the strengthened payload is a claim no test defends: a
+    /// group-reaping harness would pass row 7 by never being asked.
+    ///
+    /// **`R2` — what signals here, and what stops it.** The reap is the shipped
+    /// [`ProcessGroupReaper`], already floored and battery-checked (`F-37`), and
+    /// the group it is aimed at is one this instrument created: `process_group(0)`
+    /// gives the payload a group of its own, so *the original process group* can
+    /// never name the runner's. The **session** sweep is a second signalling
+    /// path and it is refused rather than avoided: the payload is an ordinary
+    /// child, so it is in the harness's own session, and `note_session`'s
+    /// own-session refusal (`F-36`) declines to record it. That refusal is
+    /// asserted below rather than trusted.
+    ///
+    /// **What it leaks, and why that is the subject rather than a defect.** The
+    /// escapee it fails to reap is a real host process — one detached `sleep`
+    /// per arm, bounded by [`ESCAPEE_LINGERS_SECONDS`] and self-terminating, in a session
+    /// nothing here has noted (`F-42`). Containing it in code would mean
+    /// sweeping by session, which is exactly the reaping this harness is defined
+    /// not to do; it is bounded, benign, and named instead of hidden.
+    struct ProcessGroupOnlyReaper<'m> {
+        mechanism: &'m BubblewrapBackend<'m>,
+        reaper: ProcessGroupReaper,
+        reaped: RefCell<Vec<ProcessGroupId>>,
+    }
+
+    /// Read a captured stream to end of file, or nothing if it was never piped.
+    ///
+    /// Called **after** the reap, so what holds it open is whatever the reap
+    /// missed, and what closes it is that survivor having spoken.
+    fn drained<R: std::io::Read>(stream: &mut Option<R>) -> Result<Vec<u8>, BackendError> {
+        let mut bytes = Vec::new();
+        if let Some(stream) = stream.as_mut() {
+            stream
+                .read_to_end(&mut bytes)
+                .map_err(|error| mechanism_failed(&error))?;
+        }
+        Ok(bytes)
+    }
+
+    impl<'m> ProcessGroupOnlyReaper<'m> {
+        fn over(mechanism: &'m BubblewrapBackend<'m>) -> Self {
+            Self {
+                mechanism,
+                reaper: ProcessGroupReaper::new(),
+                reaped: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn reaped(&self) -> Vec<ProcessGroupId> {
+            self.reaped.borrow().clone()
+        }
+
+        /// The payload as an ordinary host process, in a group of its own, and
+        /// then that group reaped.
+        fn reaping_run(
+            &self,
+            execution: &Execution,
+            noticed: &dyn Fn(HostPid),
+        ) -> Result<Observation, BackendError> {
+            let words = execution.argv().as_slice();
+            let (head, tail) =
+                words
+                    .split_first()
+                    .ok_or_else(|| BackendError::MechanismFailed {
+                        detail: "an argv is non-empty by construction".to_owned(),
+                    })?;
+            let mut command = Command::new(head);
+            command
+                .args(tail)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .process_group(0);
+
+            // Every fork in this process is a party to the descriptor guard,
+            // production or not (`F-12`, `F-17`): this one inherits whatever
+            // the sweep last left, and holding the window is what keeps it out
+            // of another thread's handover.
+            let mut child = {
+                let _window = hold_descriptor_window();
+                command.spawn().map_err(|error| mechanism_failed(&error))?
+            };
+            let mut captured = (child.stdout.take(), child.stderr.take());
+
+            if let Ok(raw) = i32::try_from(child.id()) {
+                let pid = HostPid(raw);
+                noticed(pid);
+                self.reaper.note_capsule_group(pid);
+            }
+
+            // **The reap fires when the payload's own process exits, not when
+            // its output pipe drains, and that ordering is the whole
+            // experiment.** `--die-with-parent` fires at the parent's death,
+            // which is a second before the escapee is due to speak; a harness
+            // that instead drained first would let *every* descendant speak
+            // before reaping anything, and would then fail row 7 whether or not
+            // its reaper could reach the escapee. Waiting, reaping, and only
+            // then draining is what makes the group escape the reason this
+            // fails.
+            let status = child.wait().map_err(|error| mechanism_failed(&error))?;
+            self.reaped
+                .borrow_mut()
+                .extend(self.reaper.reap_observed_groups());
+
+            // Sequential, which is safe for this payload and only this payload:
+            // both streams carry a few tokens, far inside one pipe buffer, so
+            // neither can block the other. A payload that wrote in bulk would
+            // need two threads or a poll.
+            let stdout = drained(&mut captured.0)?;
+            let stderr = drained(&mut captured.1)?;
+
+            let termination = status.code().map_or_else(
+                || Termination::Signalled {
+                    signal: status.signal().unwrap_or_default(),
+                },
+                |code| Termination::Exited { code },
+            );
+            Ok(Observation {
+                termination,
+                stdout,
+                stderr,
+                disk_used: ByteCount::from_bytes(0),
+            })
+        }
+    }
+
+    impl CapsuleBackend for ProcessGroupOnlyReaper<'_> {
+        fn id(&self) -> BackendId {
+            self.mechanism.id()
+        }
+
+        fn availability(&self) -> Availability {
+            self.mechanism.availability()
+        }
+
+        fn execute(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+        ) -> Result<Observation, BackendError> {
+            self.reaping_run(execution, &|_| ())
+        }
+    }
+
+    impl ConformanceBackend for ProcessGroupOnlyReaper<'_> {
+        /// Provisioning goes to the real mechanism. What this harness models is
+        /// a wrong *teardown*, and a harness that could not build a capsule
+        /// would fail the row for a reason row 7 is not about.
+        fn as_capsule_backend(&self) -> &dyn CapsuleBackend {
+            self.mechanism
+        }
+
+        fn execute_weakened(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+            _removal: PropertyRemoval,
+        ) -> Result<Observation, BackendError> {
+            self.reaping_run(execution, &|_| ())
+        }
+
+        fn execute_granted(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+            _grant: AuthorityGrant,
+        ) -> Result<Observation, BackendError> {
+            self.reaping_run(execution, &|_| ())
+        }
+
+        fn execute_observed(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+            observer: &dyn Fn(HostPid),
+        ) -> Result<Observation, BackendError> {
+            self.reaping_run(execution, observer)
+        }
+
+        fn execute_noticing(
+            &self,
+            _placement: &CapsulePlacement,
+            execution: &Execution,
+            _under: Under,
+            noticed: &dyn Fn(HostPid),
+        ) -> Result<Observation, BackendError> {
+            self.reaping_run(execution, noticed)
+        }
+    }
+
+    /// `VT-3` — a harness that reaps by process group alone **fails** row 7, and
+    /// the strengthened payload is what makes it fail.
+    ///
+    /// The verdict is `Violated` off the **probe** arm: this harness's shipping
+    /// configuration already lets the descendant survive, so the property is
+    /// negated before any delta is applied. That is the right reading — a
+    /// backend whose confining posture fails the property does not get to be
+    /// `Unproven`.
+    #[test]
+    fn a_process_group_only_reaper_fails_row_seven() {
+        let fixture = Fixture::new(&SystemHost).expect("this host can host the fixture");
+        let mechanism = BubblewrapBackend::new(&SystemHost);
+        assert_eq!(
+            mechanism.availability(),
+            Availability::Available,
+            "both arms provision for real"
+        );
+        let harness = ProcessGroupOnlyReaper::over(&mechanism);
+
+        let verdict = run_row(&harness, &SystemHost, &fixture, &shipped_row(&ROW_SEVEN));
+
+        // The instrument was armed and fired, so `Violated` is a reaper that
+        // missed rather than a reaper that never ran.
+        assert!(
+            !harness.reaped().is_empty(),
+            "the reaper observed no process group, so nothing was reaped and the row \
+             is not measuring a group-only reaper at all"
+        );
+        // `R2`: the second signalling path, refused rather than avoided. The
+        // payload is an ordinary child of the runner and so shares its session;
+        // `note_session`'s own-session refusal is what keeps the sweep from
+        // being armed against this process tree.
+        assert_eq!(
+            fixture.sweep_observed_sessions(),
+            Vec::new(),
+            "this harness's payload is in the runner's own session, and the sweep was \
+             armed against it"
+        );
+        assert_eq!(verdict, RowVerdict::Violated);
     }
 
     // ── PHASE-09 `T12` — `VA-4`: the per-row walk ──────────────────────────
