@@ -4,7 +4,7 @@ version = 1
 id = 459
 slug = "every-platform-backend-enforces-equivalent-freshness-filesystem-process-credential-network-resource"
 title = "Every platform backend enforces equivalent freshness, filesystem, process, credential, network, resource, and canonical-authority properties; Linux/bubblewrap is the only measured initial backend and macOS remains unselected."
-status = "pending"
+status = "in-progress"
 kind = "functional"
 description = "Platform backends prove one property-equivalent capsule contract; only independently measured backends are supported."
 
