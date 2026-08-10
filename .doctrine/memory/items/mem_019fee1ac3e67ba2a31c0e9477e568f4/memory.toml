@@ -1,0 +1,50 @@
+memory_uid = "mem_019fee1ac3e67ba2a31c0e9477e568f4"
+memory_key = "mem.pattern.review.test-each-downstream-conclusion"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Root-cause findings do not license downstream deletions"
+summary = "A review that finds one root cause must test each downstream conclusion against it separately, or it repeats the coupling error it is charging."
+created = "2026-08-10"
+updated = "2026-08-10"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["review", "inquisition", "architecture", "reasoning"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "1c3e37945598a832cbd91f2adfd75cef071d966e"
+tree = "9cb1c31d84c20f495b90ded4a1cf9652cec6ae9f"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "1c3e37945598a832cbd91f2adfd75cef071d966e"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-353"
+
+[[source]]
+kind = "kind"
+ref = "F-12"
+
