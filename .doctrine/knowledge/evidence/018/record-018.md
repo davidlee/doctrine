@@ -71,7 +71,11 @@ reasoning that predicted it.
 
 ## Limits — n = 1, and they are not optional
 
-* **Host: Sleipnir**, the owner's NixOS host, off-jail, one run, one operator.
+* **Host: Sleipnir**, the owner's NixOS host, off-jail, one operator. **Run
+  twice**, 9/9 both times — the second as the regression on extracting the boot
+  sequence into `probe/harness.sh`, which is why n went up for free rather than
+  by spending a run on it. Still one host and one operator, which is the limit
+  that matters.
 * **Not the host-module path.** The namespace and the tap were created by the
   probe and the runner was started by hand as the human. No systemd units, no
   `NetworkNamespacePath` drop-ins on `microvm@` / `microvm-tap-interfaces@`, no
