@@ -1,0 +1,42 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 10
+slug = "the-host-never-mounts-guest-authored-filesystems"
+title = "The host never mounts guest-authored filesystems"
+record_kind = "assumption"
+status = "held"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "confinement", "ingestion", "microvm"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+claim           = ""
+confidence      = ""            # low | medium | high
+basis           = ""            # observation | prior-art | design-inference | external-source | operator-judgement
+validation_plan = ""
+validated_by    = ""
+validated_on    = ""
+invalidated_by  = ""
+invalidated_on  = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "standing ban on host mounts of guest-authored filesystems"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "removes the outbox-block-device candidate"
+target = "QUE-212"
