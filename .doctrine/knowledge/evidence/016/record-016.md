@@ -77,3 +77,31 @@ an acceptance row or a downstream `EVD`.
 `QUE-212` (the question this settles), `DEC-192` (the decision it supports),
 `EVD-017` (the escalation the same session turned up), `ASM-010` (which removed
 the third candidate before it could be probed), `IMP-426` (the round).
+
+
+## Exercised end to end through the built tool, 2026-08-11
+
+`capsule-collect SL-666` against the running guest — no longer hand commands:
+
+```
+capsule-collect: new quarantine at .vm/host/collect/SL-666.git
+capsule-collect: ssh://agent@10.99.0.2/work/doctrine -> .vm/host/collect/SL-666.git
+Receiving objects: 100% (66602/66602), 32.10 MiB | 117.80 MiB/s, done.
+Resolving deltas: 100% (41404/41404), done.
+ * [new branch]  edge -> refs/capsule/SL-666/edge
+  655d6acdb  capsule/SL-666/edge  3 minutes ago  capsule: collect probe
+```
+
+Three things this adds over the hand probes:
+
+1. **`--no-tags` holds.** Exactly one ref updated, into the host's chosen
+   namespace. `refs/tags/*` did *not* follow — the correction recorded above is
+   fixed in the built path, not merely known.
+2. **The quarantine is created on demand** and named by capsule, so the
+   per-capsule persistent shape (`DEC-192`'s amendment) is what actually runs.
+3. **The pin is printed** — ref plus sha (`655d6acdb`) — which is `DEC-133`'s
+   durable journal entry, produced by the transport rather than derived
+   afterwards. `DEC-193` sets what happens to the exhibit behind it.
+
+Throughput 117.8 MiB/s, consistent with the hand-run figure. Still one host, one
+operator: `n` did not go up, the *path under test* did.
