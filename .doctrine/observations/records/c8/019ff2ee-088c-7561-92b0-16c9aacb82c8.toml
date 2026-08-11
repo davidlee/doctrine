@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff2ee-088c-7561-92b0-16c9aacb82c8"
+recorded_at = "2026-08-11T22:25:13.868783186Z"
+kind = "friction"
+summary = "shared worktree: a concurrent agent's pathless commit swept an entire in-progress feature under an unrelated message"
+detail = "microvm-spike, IMP-426 P1a. While writing the freshness probe I edited probe/harness.sh, probe/netns-boot.sh, flake.nix, NOTES.md, README.md and CLAUDE.md. A concurrent agent in the same worktree ran a pathless commit-all and landed all six of my files inside 49d2d2b, titled 'fix(perimeter): a client wider than MaxClients hangs, silently'. Content survived intact (verified by grepping HEAD for the new symbols), so the cost is provenance rather than correctness: a reviewer reading that commit finds a 208-line harness extraction and a 170-line probe rewrite under a tinyproxy bugfix message, and git blame attributes the whole P1a fixture to the wrong change. Note the direction relative to the earlier doctrine-side instance the owner flagged: there an untracked observation of mine rode into someone else's commit, which is benign. Here an unfinished multi-file refactor was committed on my behalf mid-edit — if the sweep had landed between two of my writes it would have committed a partially-consistent tree that shellcheck had never seen. AGENTS.md's rule ('git commit <paths>, never a pathless commit') is written for doctrine's own repo; the spike has no equivalent note and two agents were in it. Also cost ~4 tool calls to diagnose, because git status and git diff disagreed until I realised the tree had been committed out from under me mid-turn."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
