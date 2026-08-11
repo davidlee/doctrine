@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019feebf-f889-73d1-9d07-999c73251cb0"
+recorded_at = "2026-08-11T02:56:26.249238915Z"
+kind = "friction"
+summary = "references edges cannot target an RV, so a spawned backlog item cannot cite its review"
+detail = "Splitting ISS-345 out of ISS-343 under RV-353, I tried 'doctrine link ISS-345 references RV-353 --role originates_from' and got 'references target must be one of [ISS, IMP, CHR, RSK, IDE, SL], got a RV'. An adversarial review is a first-class kind (ADR-007) and is a legitimate origin for work intake, but the relation model cannot express it — the provenance survives only as prose. Linked to ISS-343 instead, which loses the actual originator. Skill: none (RV-353 F-4 remediation)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

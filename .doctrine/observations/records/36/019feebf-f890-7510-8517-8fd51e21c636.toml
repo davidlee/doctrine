@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019feebf-f890-7510-8517-8fd51e21c636"
+recorded_at = "2026-08-11T02:56:26.256530282Z"
+kind = "friction"
+summary = "memory verify refuses a dirty tree, forcing one commit per attestation"
+detail = "Correcting two stale gate memories then attesting them cost three commits instead of one: 'memory verify' refuses a dirty tree, but verifying the first memory dirties the tree (it stamps the sister toml), which then blocks verifying the second. The rule is right in principle — an attestation over uncommitted content attests nothing — but it serialises a batch into commit/verify ping-pong with no batch verb. Skill: none (RV-353 F-4 remediation)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

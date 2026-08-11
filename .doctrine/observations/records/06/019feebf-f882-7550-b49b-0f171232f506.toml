@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019feebf-f882-7550-b49b-0f171232f506"
+recorded_at = "2026-08-11T02:56:26.242224781Z"
+kind = "friction"
+summary = "tag set and backlog tag take incompatible flag shapes"
+detail = "Following ISS-343's fix I tagged a new backlog item. 'doctrine backlog tag --help' documents add/remove flags, so I reached for 'doctrine tag set ISS-345 --add area:build ...' and got 'unexpected argument --add'. The facet verb is positional ('tag set <REFERENCE> [TAGS]...'); the backlog verb is flagged. Two tag surfaces, two grammars, one round-trip lost. Skill: none (RV-353 F-4 remediation)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
