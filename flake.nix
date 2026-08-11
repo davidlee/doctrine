@@ -49,7 +49,12 @@
         claude = jailLib.agentsByName.claude;
         codex = jailLib.agentsByName.codex;
 
-        projectPkgs = with pkgs; [
+        # The tool set minus the jailed agents: what a doctrine working
+        # environment needs, independent of how it is confined. Exported as
+        # `packages.dev-tools` for consumers that jail differently — the
+        # microvm capsule runs the agent inside a VM, where a bwrap wrapper
+        # binding *host* paths is meaningless.
+        devToolPkgs = with pkgs; [
           jujutsu
           jjui
           just
@@ -86,14 +91,59 @@
           socat # row 5 — present transitively before this, undeclared
           tinyproxy
           iproute2
-
-          codex
-          claude
-          # pi-dev
         ];
 
+        projectPkgs =
+          devToolPkgs
+          ++ [
+            codex
+            claude
+            # pi-dev
+          ];
+
+        # API keys reach the jail over a file descriptor, never over argv.
+        #
+        # jail.nix's stock forwarding (`passApiKeysFromEnv`, on by default for
+        # online profiles) expands `--setenv VAR "$VAR"` straight onto the bwrap
+        # command line. `/proc/<pid>/cmdline` is mode 444 and this host mounts
+        # /proc without hidepid, so every local process could read all six keys
+        # in plaintext for as long as a jail ran — including the `nixbld*` uids,
+        # which execute arbitrary upstream build scripts during any `nix build`.
+        # The jailed-agents.nix header calls this "secrets never sit on disk;
+        # they live only in the bwrap process env", which is true and beside the
+        # point: they arrive there *through argv*, and argv is world-readable.
+        #
+        # `bwrap --args FD` parses NUL-separated arguments from a descriptor
+        # instead, so the keys travel down an anonymous pipe — no argv, no disk.
+        # jail.nix already uses this mechanism for its runtime-closure bind args
+        # (fd 10); bwrap accepts more than one `--args`, so the two coexist.
+        #
+        # The fd number is a literal, not `{FD}<`-allocated: bash expands a
+        # command's words *before* performing its redirections, so `--args "$FD"`
+        # written on the same line as `{FD}< <(…)` would expand to empty. 21 sits
+        # clear of bash's auto-allocation floor of 10.
+        #
+        # The upstream default is switched off per jail via
+        # `passApiKeysFromEnv = false` in mkJail below. `useOpEnv` stays on: the
+        # outer `op run` wrapper is what puts the plaintext in this launcher's
+        # own environ (0600, owner-only) for the printf below to read.
+        apiKeyNames = [
+          "DEEPSEEK_API_KEY"
+          "GEMINI_API_KEY"
+          "MISTRAL_API_KEY"
+          "OPENAI_API_KEY"
+          "OPENROUTER_API_KEY"
+          "VOYAGE_API_KEY"
+        ];
+        apiKeyArgsFd = "21";
+        apiKeysViaFd = jailLib.combinators.unsafe-add-raw-args (
+          "--args ${apiKeyArgsFd} ${apiKeyArgsFd}< <(printf '%s\\0'"
+          + lib.concatMapStrings (var: " --setenv ${var} \"\${${var}:-}\"") apiKeyNames
+          + ")"
+        );
+
         jailEnvOptions = with jailLib.combinators; [
-          (try-fwd-env "OPENROUTER_API_KEY")
+          apiKeysViaFd
           (try-fwd-env "DOCTRINE_BIN")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
           # Claude Code runs Bash-tool commands under `bash` or `zsh` ONLY. Its
@@ -151,53 +201,49 @@
         # (set in the gitignored .envrc; requires `use flake --impure`).
         # makeJailedAgent reads + merges it, so nothing portable lives here.
 
+        # Every jail in this flake shares the same confinement posture; only
+        # the agent and its subagent graph differ. Holding the shared half here
+        # keeps `passApiKeysFromEnv = false` — the argv-leak opt-out that
+        # `apiKeysViaFd` replaces — impossible to forget on a jail added later.
+        mkJail = maker: args:
+          maker ({
+              profile = "specDev";
+              extraPkgs = projectPkgs;
+              extraOptions = jailEnvOptions;
+              passApiKeysFromEnv = false;
+            }
+            // args);
+
         jailPkgs = lib.optionalAttrs isLinux {
-          jailed-pi = jailLib.makeJailedPi {
-            profile = "specDev";
+          jailed-pi = mkJail jailLib.makeJailedPi {
             # exposePostgres = true;
             allowSelfAsSubagent = true;
             maxSubagentDepth = 2;
-            extraPkgs = projectPkgs;
-            extraOptions = jailEnvOptions;
           };
-          # jailed-pi-research = jailLib.makeJailedPi {
+          # jailed-pi-research = mkJail jailLib.makeJailedPi {
           #   name = "pi-research";
           #   profile = "research";
-          #   extraPkgs = projectPkgs;
-          #   extraOptions = jailEnvOptions;
           #   inherit workspaceDeps;
           # };
-          jailed-claude = jailLib.makeJailedClaude {
-            profile = "specDev";
-            extraPkgs = projectPkgs;
-            extraOptions = jailEnvOptions;
+          jailed-claude = mkJail jailLib.makeJailedClaude {
             allowSelfAsSubagent = true;
             # claude can spawn pi/dirge inside its own jail (no re-jail).
             subagents = ["pi" "dirge"];
             maxSubagentDepth = 2;
           };
-          jailed-codex = jailLib.makeJailedCodex {
-            profile = "specDev";
-            extraPkgs = projectPkgs;
-            extraOptions = jailEnvOptions;
+          jailed-codex = mkJail jailLib.makeJailedCodex {
             subagents = ["claude" "pi" "codex"];
           };
-          jailed-dirge = jailLib.makeJailedDirge {
-            profile = "specDev";
+          jailed-dirge = mkJail jailLib.makeJailedDirge {
             # exposePostgres = true;
             allowSelfAsSubagent = true;
             # maxSubagentDepth = 2;
-            extraPkgs = projectPkgs;
-            extraOptions = jailEnvOptions;
           };
 
-          jailed-shell = jailLib.makeJailedAgent {
+          jailed-shell = mkJail jailLib.makeJailedAgent {
             name = "shell";
             agent = pkgs.zsh;
-            profile = "specDev";
-            extraPkgs = projectPkgs;
             subagents = ["pi" "dirge" "claude"];
-            extraOptions = jailEnvOptions;
           };
 
           bubblewrap = pkgs.bubblewrap;
@@ -338,6 +384,15 @@
             # entering the directory at all.
             web-modules = webModules;
             web-dist = webDist;
+            # The devshell's tool set as one closure, for out-of-tree consumers
+            # that need the same tools without the devshell (the microvm
+            # capsule puts this straight into the guest's systemPackages, so
+            # the VM and this devshell can't drift).
+            dev-tools = pkgs.buildEnv {
+              name = "doctrine-dev-tools";
+              paths = devToolPkgs;
+              ignoreCollisions = true;
+            };
             default = doctrine;
           };
 
