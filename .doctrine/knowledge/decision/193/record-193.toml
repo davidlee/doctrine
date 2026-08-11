@@ -1,0 +1,47 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 193
+slug = "capsule-quarantine-retention-and-reaping"
+title = "Capsule quarantine retention and reaping"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "ingestion", "microvm", "retention"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-192's amendment made the persistent quarantine repository the DEC-133 forensic exhibit, turning retention from an open axis into an unset value."
+choice = "Owner's default: explicit confirmation, at slice closure, with a gc backstop. Refined here to auto-reap admitted quarantines and hold refused/conflicted/failed-verification ones, confirming only over the held set."
+alternatives = ["reap per capsule teardown", "retain indefinitely with quota-driven eviction", "no exhibit at all (pin only)"]
+rationale = "For admitted work the objects are in canonical already, so the quarantine is a redundant copy; for refused work it is the only copy, which is the case DEC-133 exists for. A confirmation prompt whose answer is always yes is ceremony that trains click-through."
+consequences = ["gc predicate must be named (capsule gone AND slice closed", " with an age fallback)", "disk high-water mark is per slice not per capsule", "the DEC-133 pin is unaffected by any reaping policy"]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "fills the deliberately-unspecified retention axis"
+target = "DEC-133"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "which made the quarantine the exhibit"
+target = "DEC-192"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule quarantine retention"
+target = "RFC-025"
