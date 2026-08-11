@@ -135,3 +135,15 @@ is not specific to the old tap shape; and the pushed worktree *is* populated
 (`EVD-016`). The guest→host direction over the proxy was broken and has been
 repaired, but it is being removed by this decision regardless. Still unverified:
 cost under `transfer.fsckObjects`, and every P1a/P1b figure.
+
+
+**Residual 3 is overstated and is downgraded here.** `capsule-push` was
+agent-initiated publication from inside the capsule. Doctrine's dispatch has
+never been agent-initiated at the boundary: the orchestrator drives the funnel,
+the worker hands back, the orchestrator imports. Even the claude arm's
+`worker_commit` is a *commit* inside a tree the orchestrator already reads, not a
+publication across a boundary. So host-scheduled collection is the topology
+dispatch already had, and nothing in the current model needed the guest to say
+"take this now". The loss becomes real only if something later wants an
+out-of-band completion signal — and that is a control-plane notification, not a
+Git channel.

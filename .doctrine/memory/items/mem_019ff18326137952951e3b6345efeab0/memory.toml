@@ -1,0 +1,46 @@
+memory_uid = "mem_019ff18326137952951e3b6345efeab0"
+memory_key = "mem.pattern.git.update-instead-needs-head-on-pushed-ref"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "git push provisioning: updateInstead only fires for the branch HEAD points at"
+summary = "Seeding a repo by push populates its worktree only if HEAD already points at the ref being pushed; otherwise the push silently creates a ref and leaves the tree empty"
+created = "2026-08-11"
+updated = "2026-08-11"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["git", "capsule", "provisioning"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "2106bd8e50a6a7da02b5cf39133dacf023db0cb8"
+tree = "93c2005b2d9e5047aed4b31c9d3c492fc605949b"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "2106bd8e50a6a7da02b5cf39133dacf023db0cb8"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "record"
+ref = "EVD-016"
+
