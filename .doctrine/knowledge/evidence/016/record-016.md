@@ -62,10 +62,10 @@ an acceptance row or a downstream `EVD`.
 
 * **Host: Sleipnir**, the owner's NixOS host. Hand-run commands, not scripted,
   not repeated, not run off-jail on any other machine.
-* **Current tap shape, not the netns design.** git over the netns unix-socket
-  `ProxyCommand` is *separately unproven*: `probe/netns.sh` has carried a TCP
-  session to guest:22 across that bridge with `socat` — raw bytes — never a git
-  session.
+* **Settled since capture:** the original probes ran on the current tap shape,
+  and git over the netns unix-socket `ProxyCommand` was unproven — `probe/netns.sh`
+  had carried only raw bytes across that bridge, via `socat`. Host-initiated git
+  has since crossed it, so P0's result is not specific to the old tap shape.
 * **Settled since capture:** `/work/scratch` ends with a populated worktree, on
   `refs/heads/edge` — see the coupling above.
 * **Not measured:** cost under `transfer.fsckObjects`; cost of a
