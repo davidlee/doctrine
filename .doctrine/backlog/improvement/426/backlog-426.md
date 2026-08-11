@@ -130,9 +130,12 @@ guest-authored Git input*, which makes **P1c**'s third demonstration *absence of
 a git channel*. And the host's refspec does not fully decide the destination
 namespace without `--no-tags`.
 
-**P1a / P1b remain blocked on the pending boot** — firecracker with its tap
-inside a namespace, on the host-module path. That is a different boot from the
-devshell `vm capsule` path, which works.
+**P1a / P1b are unblocked.** The namespace boot worked on 2026-08-11 —
+firecracker comes up with its tap inside a capsule namespace on the host-module
+path, the one step `NOTES.md` item 11 had reasoned to from pinned microvm.nix
+source without running. Their figures — wall-clock cold and warm, disk and pack
+per instance, which freshness axes actually hold, teardown, two concurrent
+capsules — remain unmeasured, and are the work.
 
 ## Related
 
