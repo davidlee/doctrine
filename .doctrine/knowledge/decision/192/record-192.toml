@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 192
+slug = "capsule-git-is-host-initiated-in-both-directions-git-daemon-is-deleted"
+title = "Capsule Git is host-initiated in both directions; git-daemon is deleted"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "ingestion", "microvm"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "QUE-212: the spike has the guest push, so the host runs receive-pack as a live hostile-input-parsing service on a port the guest can reach, and the mirror is guest-written. DEC-135 bars trusted control-plane git from running in a capsule-authored repository."
+choice = "Host-initiated git in both directions — fetch into a fresh host-authored quarantine repo (--no-tags, explicit refspec into refs/capsule/<name>/*); push into a guest repo seeded with receive.denyCurrentBranch=updateInstead."
+alternatives = ["guest-push with a confined git-daemon (status quo)", "git bundle handoff (DEC-135's original shape)", "outbox block device mounted host-side (ruled out by ASM-010)"]
+rationale = "Satisfies DEC-135 on both legs by construction — each side runs git only in a repository its own side authored — and deletes git-daemon, the capsule-git uid/group and EVD-017's shared-mirror escalation rather than confining them. EVD-016 measures both legs working on the channel that already exists."
+consequences = ["git-daemon leaves the perimeter (~130 spike lines deleted)", "REQ-448's third demonstration becomes absence of a git channel not absence of a channel", "the index-pack ceiling has no natural source (QUE-213)", "no artifact — a retained quarantine repo is the only DEC-133 exhibit candidate", "capsule-push (agent-initiated publication) is lost", "guest sshd becomes perimeter-load-bearing"]
+decided_by = "owner"
+decided_on = "2026-08-11"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the answer offered to the blocking question"
+target = "QUE-212"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule transport direction"
+target = "RFC-025"

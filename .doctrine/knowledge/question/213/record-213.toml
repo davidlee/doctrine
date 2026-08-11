@@ -1,0 +1,39 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 213
+slug = "what-bounds-a-host-initiated-capsule-fetch"
+title = "What bounds a host-initiated capsule fetch?"
+record_kind = "question"
+status = "open"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "ingestion", "microvm"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "What bounds the host-side index-pack over guest-authored bytes, now that DEC-192 removes the receive side and with it receive.maxInputSize?"
+why_matters = "REQ-451's byte and object bounds survive the transport change and land here; shaping REQ-451/REQ-452 (IMP-426 P1d) needs the answer"
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "residual raised by the decision"
+target = "DEC-192"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "blocks P1d ingestion-bound shaping"
+target = "IMP-426"

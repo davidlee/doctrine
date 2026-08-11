@@ -98,17 +98,45 @@ each cheaply:
 filesystem shares, so the result leaves over a channel, and the channel it picked
 — a live `receive-pack` into a host mirror — is not `DEC-135`'s bundle snapshot.
 `REQ-451`/`REQ-452` cannot be shaped until the transport is chosen, because their
-subject may not exist. The packet names three candidates and expects the outbox
-block device to win, with its own hazard stated (mounting a guest-authored
-filesystem is a kernel-parser surface, and a worse class than the one it removes
-if done naively).
+subject may not exist. (An earlier form of this paragraph expected an outbox
+block device to win; `ASM-010` has since ruled that out standing — the host never
+hands guest-authored filesystem metadata to the host kernel, and `ro`/`nosuid`/
+`nodev`/`noexec` do not mitigate it because the parse precedes them.)
 
 **Out of scope this round:** the conformance suite (`DEC-189`/`DEC-190` — a suite
 needs a capsule to measure), `REQ-455`–`REQ-458`, `REQ-461`, and `DEC-191`'s
 front list.
 
+## P0 landed, 2026-08-11 — the transport is priced
+
+`QUE-212` is **answered** by `DEC-192` (`accepted` — the owner committed to the
+inversion and to removing git-daemon), so this item's `needs` gate is clear.
+
+* `EVD-016` — host-initiated fetch **and** host-initiated push both work over the
+  existing capsule ssh channel, ~32 MiB each way at ~100 MiB/s. n = 1, hand-run,
+  current tap shape, **not** the netns design.
+* `EVD-017` — the shared mirror that guest-push requires re-opens, in reverse,
+  the escalation the `capsule-git` uid split was built to close. The strongest
+  argument for the inversion, and it was not available when the round opened.
+* `DEC-192` — host-initiated in both directions; git-daemon leaves the perimeter.
+  Carries the deletion inventory and three residuals it does not close.
+* `QUE-213` — new blocker for **P1d**: the receive-side size ceiling goes away
+  with the receive side, and its replacement has no natural source.
+
+**Two corrections that must not travel downstream.** *"The guest never initiates
+a connection to the host at all"* is false — the proxy remains and is
+guest-initiated; the claim that holds is *the host runs no service that parses
+guest-authored Git input*, which makes **P1c**'s third demonstration *absence of
+a git channel*. And the host's refspec does not fully decide the destination
+namespace without `--no-tags`.
+
+**P1a / P1b remain blocked on the pending boot** — firecracker with its tap
+inside a namespace, on the host-module path. That is a different boot from the
+devshell `vm capsule` path, which works.
+
 ## Related
 
 `RSK-231`, `RFC-025`, `SPEC-030` `REQ-450`, `DEC-134`, `EVD-015`, `DEC-189`,
-`DEC-190`, `DEC-191`, `CPT-002`, `QUE-212` (blocking), `IMP-397` (capsule egress
-allowlist and build-input provisioning, which this will brush against).
+`DEC-190`, `DEC-191`, `CPT-002`, `IMP-397` (capsule egress allowlist and
+build-input provisioning, which this will brush against). Round P0:
+`QUE-212` (blocking), `DEC-192`, `EVD-016`, `EVD-017`, `QUE-213`, `ASM-010`.

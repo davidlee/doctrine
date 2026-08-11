@@ -1,0 +1,37 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 17
+slug = "a-two-uid-shared-mirror-re-opens-the-escalation-the-uid-split-closed"
+title = "A two-uid shared mirror re-opens the escalation the uid split closed"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "confinement", "ingestion", "microvm"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "capsule-gitd refuses on dubious ownership (daemon uid 972 vs mirror owned by david); the 2775/sharedRepository=group mirror leaves hooks/ and config writable by the daemon uid, and capsule-sync then runs git as david in that repo"
+provenance = "inspection"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the escalation the inversion deletes"
+target = "DEC-192"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule round host-side finding"
+target = "RFC-025"
