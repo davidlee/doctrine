@@ -1,0 +1,43 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 19
+slug = "fresh-capsule-cost-freshness-is-free-at-the-boundary"
+title = "Fresh capsule cost: freshness is free at the boundary"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "freshness", "microvm", "netns"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "sudo probe-freshness on Sleipnir: 8.60 s to a usable fresh capsule (6.34 s cold boot + 2.26 s provision of 32 MiB), a warm boot at 6.36 s that is indistinguishable from the cold one, 12,175 MiB of runner closure shared by every capsule under netns, and ~296 MiB of volume per instance of which ~260 MiB is empty filesystem"
+provenance = "experiment"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the boot this measurement rides on"
+target = "EVD-018"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the round's P1a import — REQ-450 priced"
+target = "IMP-426"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule round: freshness measured"
+target = "RFC-025"
