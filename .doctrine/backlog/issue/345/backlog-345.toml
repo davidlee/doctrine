@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 343
-slug = "doctrine-control-is-linux-only-in-default-members-and-fake-darwin-cannot-run-in-the-jail"
-title = "doctrine-control is Linux-only, in default-members, and fake-darwin cannot run in the jail"
+id = 345
+slug = "just-fake-darwin-cannot-run-in-the-jail-so-the-cross-platform-guard-is-inoperable-where-development"
+title = "just fake-darwin cannot run in the jail, so the cross-platform guard is inoperable where development happens"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-08-10"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-08-11"
 updated = "2026-08-11"
-tags = ["area:build", "area:ci", "cluster:capsule", "release-blocker"]
+tags = ["area:build", "area:ci", "area:tooling", "cross-platform"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -24,8 +24,4 @@ triggers = []                   # watched source globs: { globs, note? }
 [[relation]]
 label = "references"
 role = "originates_from"
-target = "SL-248"
-
-[[relation]]
-label = "related"
-target = "ISS-342"
+target = "ISS-343"

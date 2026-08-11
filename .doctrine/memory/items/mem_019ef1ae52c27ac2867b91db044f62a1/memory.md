@@ -86,8 +86,13 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
 - **Build:** `cargo build` (dev binary at `./target/debug/doctrine`).
 - **Test:** `cargo test` (unit + integration). `just check` for fast pre-commit
   (root package only, skips cordage workspace crate).
-- **Gate:** `just gate` — runs `cargo clippy --workspace` (zero warnings
-  required). Do this before every commit.
+- **Gate:** `just gate` — clippy at zero warnings plus `test-all`. Do this
+  before every commit. `test-all` NAMES its packages
+  (`cargo test -p doctrine -p cordage`), it is not `--workspace`, so **a new
+  workspace member is not auto-gated — add it by name** (RV-353 `F-4`).
+  `crates/doctrine-control` is deliberately outside every default selection
+  (Linux-only, live-`bwrap` rows); reach it with `just capsule-check`. See
+  `mem.pattern.build.just-check-workspace-gates-members`.
 - **Format:** `cargo fmt`.
 - **Environment:** NixOS. Development happens inside a bubblewrap jail mounted
   at `/workspace`. Each worktree builds into its own gitignored in-tree

@@ -68,3 +68,54 @@ Raised from `SL-252`'s design run while resolving its `inq-9` scope question;
 the scoping decision is `DEC-184`. Same family as `ISS-339` (the suite has never
 run off-jail), which is where the measurement discipline that surfaced this
 came from.
+
+## Resolution — fixed 2026-08-11 (RV-353 `F-4`)
+
+### The decision this item owned
+
+**`cargo test`'s default selection asserts the claims that hold on any developer
+host. A claim that depends on a host *capability* is not a claim the default run
+makes — it is a separate instrument, invoked explicitly, and it fails rather than
+skips when the host cannot oblige.**
+
+The reason the nine tests were red off-jail is not that they are wrong. They are
+right, and `EX-14` / `DEC-156` are right that no skip may stand in for a claim —
+this crate executes that ruling on itself at
+`no_ignored_test_in_this_crate_stands_in_for_a_claim`, so `#[ignore]`, an
+availability guard and a narrowed row were each unavailable to a fix here, and
+none was used. The defect was **selection**: `cargo test --workspace` was
+asserting a host-capability-dependent claim in a run whose contract is
+host-independence, and `just gate` / `just release` inherited the consequence
+nobody chose.
+
+Selection is not skipping, and the difference is the whole of the fix. A skip
+makes a claim and then abstains from proving it, which is what `EX-14` forbids.
+Deselection does not make the claim in that run at all. The claim is still made,
+unconditionally and un-skippably, where it can be proved.
+
+### Enacted
+
+- `justfile` — `test-all` names its packages: `cargo test -p doctrine -p cordage`.
+  Verified: 0 `doctrine_control` binaries in the gate set, 117 test binaries
+  present (the positive control — an empty selection would also report 0).
+- `justfile` — new `capsule-check`: `cargo clippy -p doctrine-control` then
+  `cargo test -p doctrine-control`. Not wired into `check` or `gate`. Measured
+  in-jail: 299 passed, 0 failed, 9 ignored, matching this item's baseline.
+- `Cargo.toml` — `default-members = ["."]`, which is `ISS-343`'s fix and also
+  removes the crate from bare `cargo test` / `clippy` / `build`.
+- `just gate` green in-jail after the change.
+
+### What is NOT claimed
+
+The nine still fail on a host that cannot host a capsule — `just capsule-check`
+there will be red, by design. Nothing was diagnosed and nothing was repaired
+about the six process/namespace and unclassified rows this item listed as its
+own; they are host-capability facts awaiting the `cluster:capsule` triage
+(`RV-353` `F-8`, sorted by the `F-13` complexity partition). Their off-jail
+behaviour is now *information* rather than a broken build, which is exactly the
+altitude distinction this item identified.
+
+Consequence recorded because it is a real loss: the gate's test set is now a
+named list, so a new workspace member is no longer auto-gated by `--workspace`.
+The `test-all` comment says so and
+`mem.pattern.build.just-check-workspace-gates-members` was corrected.

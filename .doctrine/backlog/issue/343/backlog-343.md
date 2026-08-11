@@ -78,3 +78,37 @@ same crate.
 
 Surfaced by a forced release tag while `SL-252`'s design run was in its exploring
 stage; captured rather than fixed, per `DEC-184`'s scope discipline.
+
+## Resolution — fixed 2026-08-11 (RV-353 `F-4`)
+
+**Decision on question 1: excluded, not ported.** `crates/doctrine-control` is
+not built for non-Linux targets. `SPEC-030` names Linux/bubblewrap as the
+measured initial backend and evidences no macOS backend, and `RV-353` stopped the
+capsule programme outright — porting or stubbing four Linux-specific mechanisms
+in a crate pending triage would be work spent on a subject under sentence.
+
+Enacted at two seams, deliberately both:
+
+- `Cargo.toml` — `default-members = ["."]`. This is the fix. It retires the
+  `SL-248` `sec-8` entry, whose purpose (the conformance suite must not ship
+  green by never being compiled) no longer pays for making *every* default
+  selection platform-dependent. Verified: `cargo metadata` reports one default
+  member, and `cargo build -v` no longer names the crate.
+- `.github/workflows/release.yml` — `cargo build --release -p doctrine --target
+  <t>`. Redundant with the above and kept anyway: the release set should be a
+  statement in the release job, not a consequence of a key set for local gates.
+
+The coverage the `default-members` entry bought is not discarded, it is made
+explicit — `just capsule-check` (clippy + the crate's suites) and the existing
+`just capsule-verify`. Measured in-jail after the change: 299 passed, 0 failed,
+9 ignored (the instruments), matching the pre-change baseline exactly.
+
+**Question 2 — how the guard becomes operable — is NOT resolved here.** It is
+not a fact about this crate, and it is now `ISS-345`. Closing it inside this
+item would have hidden a live harness defect behind a resolved release blocker.
+
+Not addressed, and not required by this fix: the crate still has no
+`cfg(target_os)` gate anywhere in it. Anyone re-selecting it on a non-Linux host
+meets the same four compile errors. That is correct — it is a Linux-only crate
+and now says so — but it means the exclusion is the only thing holding, and
+`ISS-345` is what would catch its removal.
