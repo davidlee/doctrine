@@ -64,8 +64,11 @@ an acceptance row or a downstream `EVD`.
   not repeated, not run off-jail on any other machine.
 * **Settled since capture:** the original probes ran on the current tap shape,
   and git over the netns unix-socket `ProxyCommand` was unproven — `probe/netns.sh`
-  had carried only raw bytes across that bridge, via `socat`. Host-initiated git
-  has since crossed it, so P0's result is not specific to the old tap shape.
+  had carried only raw bytes across that bridge, via `socat`. Git has since
+  crossed it as git — `EVD-018`, `PASS git speaks over the same socket` — so P0's
+  result is not specific to the old tap shape. Recorded here when the inversion
+  landed, *before* the boot that demonstrates it; `EVD-018` is what makes the
+  sentence true, and it was written ahead of its evidence.
 * **Settled since capture:** `/work/scratch` ends with a populated worktree, on
   `refs/heads/edge` — see the coupling above.
 * **Not measured:** cost under `transfer.fsckObjects`; cost of a

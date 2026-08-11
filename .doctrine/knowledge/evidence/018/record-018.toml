@@ -1,0 +1,43 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 18
+slug = "firecracker-boots-with-its-tap-inside-a-network-namespace"
+title = "Firecracker boots with its tap inside a network namespace"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "isolation", "microvm", "netns"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "sudo probe-netns-boot on Sleipnir: 9 assertions, 0 failed — the VMM starts with its tap inside the capsule namespace, the guest boots and answers ssh from inside it, the root namespace can reach neither tap nor guest, and ssh and git both cross a unix-socket relay unprivileged as the human"
+provenance = "experiment"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "retires this record's open netns limit — git has now crossed the socket as git"
+target = "EVD-016"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "unblocks the round's P1a and P1b imports"
+target = "IMP-426"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule round: the last unknown in the netns shape"
+target = "RFC-025"

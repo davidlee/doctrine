@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff2cf-6ebf-75a0-83fb-9b7ee7510c6d"
+recorded_at = "2026-08-11T21:51:48.415241252Z"
+kind = "friction"
+summary = "/route: RFC-025 claims a spike result the spike itself records as unrun"
+detail = "Routing into the microVM round, RFC-025 § 'Where this stands' states 'The namespace boot worked (2026-08-11) ... P1a and P1b are unblocked' and 'The spike's NOTES.md is updated'. EVD-016's limits carry 'Settled since capture: host-initiated git has since crossed [the netns unix-socket ProxyCommand]'. The spike (/workspace/microvm-spike, staged at 07:46-07:48 today, i.e. six hours AFTER the doctrine harvest at 01:49) says the opposite: NOTES item 17 'Unrun as of this commit', PLAN_C 'Open, in order. One real boot with a namespace - the last unverified thing in the shape', HANDOVER.md 'Not verified: firecracker booting with its tap inside a netns.' Cost ~7 tool calls to detect and it is still unresolved without asking the owner. Shape: a doctrine-side prose record asserting the state of a foreign repo, with no id-bearing evidence record behind the assertion and no way for either side to detect the drift. The netns boot has no EVD; it is prose only. Note the direction - the doctrine record is the OVERSTATED one, and the round's whole discipline is that limits travel with claims."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
