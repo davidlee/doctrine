@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff160-5948-7903-ad7d-80fd9ac26362"
+recorded_at = "2026-08-11T15:10:51.20863601Z"
+kind = "friction"
+summary = "knowledge: backlog has no body-edit verb, so updating IMP-426's prose meant hand-editing the authored .md"
+detail = "doctrine knowledge edit takes --body/--body-mode append; doctrine backlog edit only transitions status+resolution. Landing round findings back into a backlog item therefore drops out of the CLI and into a raw file append, against the read-via-show guardrail. Also: knowledge inspect prints metadata only, so orienting on a record costs an extra call when show was wanted."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
