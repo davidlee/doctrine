@@ -5,10 +5,10 @@ id = 189
 slug = "representativeness-binds-the-row-list-not-only-the-readable-set"
 title = "Representativeness binds the row list, not only the readable set"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-11"
 updated = "2026-08-11"
-tags = []
+tags = ["capsule", "cluster:capsule", "conformance"]
 
 [facet]                         # every field typed; seeded empty (captured later)
 context      = ""
