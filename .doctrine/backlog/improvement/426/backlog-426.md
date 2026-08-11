@@ -67,8 +67,48 @@ No conformance suite, no doctrine integration, no production code. Bounded
 measurement with a written go/no-go, on the `SL-241` precedent — whose verdict
 was explicitly scoped and did **not** claim production readiness or portability.
 
+## Round shape, 2026-08-11 — widened, and it runs in the spike
+
+Owner's direction: **import the most important unproven requirements into the
+spike and price them there** — cheaply, before doctrine's governance gears turn.
+So this item is no longer only the freshness measurement; freshness is one of
+four imports.
+
+The round is directed by a **disposable context packet**,
+`/workspace/microvm-spike/IMPORT.md`, which carries the probe list, the priority
+order, the hazards and the reporting bar. It is deliberately not governance and
+is deleted when its findings graduate into knowledge records and back into this
+item.
+
+**The bar is a price, not a proof.** Each import wants *"costs about this much,
+here's the shape, here's what it breaks"* — not a working implementation and not
+a conformance row.
+
+**Imports chosen** — the VM changes the answer for each, and the spike can price
+each cheaply:
+
+| | requirement | why it is in |
+|---|---|---|
+| P1a | `REQ-450` — fresh mutable state, five axes, worker *and* verifier | the spike is presently the opposite shape by design |
+| P1b | `REQ-454` — verification in a *separate* fresh capsule | `red-team.md` `RT-1`; and per `CPT-002` the highest-value item in the list — it is the substrate for the defence against the threat that actually arrives |
+| P1c | `REQ-448` — the authority floor | `DEC-191` makes it invariant at every posture; mostly already true here, so demonstrate rather than argue |
+| P1d | `REQ-451` / `REQ-452` — ingestion bounds | **blocked on `QUE-212`** |
+
+**Blocked on `QUE-212`** (`needs` edge authored): the spike has no host
+filesystem shares, so the result leaves over a channel, and the channel it picked
+— a live `receive-pack` into a host mirror — is not `DEC-135`'s bundle snapshot.
+`REQ-451`/`REQ-452` cannot be shaped until the transport is chosen, because their
+subject may not exist. The packet names three candidates and expects the outbox
+block device to win, with its own hazard stated (mounting a guest-authored
+filesystem is a kernel-parser surface, and a worse class than the one it removes
+if done naively).
+
+**Out of scope this round:** the conformance suite (`DEC-189`/`DEC-190` — a suite
+needs a capsule to measure), `REQ-455`–`REQ-458`, `REQ-461`, and `DEC-191`'s
+front list.
+
 ## Related
 
 `RSK-231`, `RFC-025`, `SPEC-030` `REQ-450`, `DEC-134`, `EVD-015`, `DEC-189`,
-`DEC-190`, `DEC-191`, `IMP-397` (capsule egress allowlist and build-input
-provisioning, which this will brush against).
+`DEC-190`, `DEC-191`, `CPT-002`, `QUE-212` (blocking), `IMP-397` (capsule egress
+allowlist and build-input provisioning, which this will brush against).
