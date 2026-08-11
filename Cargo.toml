@@ -106,21 +106,28 @@ members = [
     "crates/doctrine-control",
 ]
 # `lint`, `build` and `test` in the justfile are bare `cargo` invocations, which
-# with a package at the workspace root and no `default-members` select the root
-# package alone — `crates/cordage` is outside the fast inner loop for exactly
-# that reason. `doctrine-control` would inherit that exclusion and every later
-# phase would ship a suite that is green by never running, so the key names it
-# (SL-248 `sec-8` § The checked set). `cargo fmt` ignores this key entirely and
-# already walked every member; `test-all`'s `--workspace` is unchanged and still
-# covers all three packages.
+# with a package at the workspace root select whatever this key names —
+# `crates/cordage` is outside the fast inner loop for exactly that reason.
+# `cargo fmt` ignores this key entirely and already walks every member.
+#
+# `crates/doctrine-control` was named here too, by SL-248 `sec-8` § The checked
+# set, so its conformance suite could not ship green by never being compiled.
+# RV-353 `F-4` withdrew that. The crate is Linux-only with no `cfg(target_os)`
+# gate anywhere in it, so naming it made every *default* selection
+# platform-dependent: a macOS contributor cannot run the inner loop at all, and
+# the release matrix's bare `cargo build --release --target <t>` failed to
+# compile on both Apple targets (`ISS-343`, release-blocking). A checked set
+# that cannot be checked on half the supported platforms is not a checked set.
+# The capsule programme is stopped and the crate is pending triage, so the
+# compile coverage the entry bought no longer pays for its blast radius. The
+# crate is selected explicitly instead — `just capsule-check` (lint + suite) and
+# `just capsule-verify` (the shipped verb).
 #
 # It is a *package-selection* default, not a build-command one: it also selects
-# for `cargo package` and `cargo publish`. That is why `doctrine-control` carries
-# `publish = false` AND `just publish` names `-p doctrine` — see that manifest.
-default-members = [
-    ".",
-    "crates/doctrine-control",
-]
+# for `cargo package` and `cargo publish`. Dropping `doctrine-control` from it
+# does NOT retire `publish = false` on that manifest or `-p doctrine` on
+# `just publish`; each states the same intent at a seam the others do not reach.
+default-members = ["."]
 
 [workspace.package]
 edition = "2024"

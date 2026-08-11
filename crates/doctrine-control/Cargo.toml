@@ -25,11 +25,15 @@ repository = "https://github.com/davidlee/doctrine"
 readme = "README.md"
 keywords = ["capsule", "sandbox", "provisioning"]
 categories = ["development-tools"]
-# Never released. `default-members` (workspace Cargo.toml) selects this crate for
-# `cargo package` and `cargo publish` as much as for `build`/`clippy`/`test`, so
-# the key alone is not enough — `just publish` also names `-p doctrine`. Both are
-# required and neither substitutes for the other: `publish = false` makes a bare
-# `cargo publish` *fail*, not skip (`sec-6` § Nothing ships).
+# Never released, and never selected by default since RV-353 `F-4`: this crate is
+# Linux-only with no `cfg(target_os)` gate (`ISS-343`) and its suites are proved
+# by live `bwrap` (`ISS-342`), so it left `default-members` (workspace Cargo.toml)
+# and `just test-all`. Reach it with `just capsule-check` / `just capsule-verify`.
+#
+# `publish = false` is independent of that selection and stays: it makes a bare
+# `cargo publish` *fail* rather than skip (`sec-6` § Nothing ships), which is the
+# guard if the crate is ever re-selected. `just publish` names `-p doctrine` for
+# the same reason. Neither substitutes for the other.
 publish = false
 
 [dependencies]

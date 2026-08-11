@@ -73,15 +73,45 @@ lint-js:
 test:
   cargo test
 
-# Whole workspace incl. cordage — slow; used by the end-of-phase gate.
-test-all:
-  cargo test --workspace
+# The end-of-phase gate's test set: every package whose claims hold on any
+# developer host. Packages are NAMED rather than `--workspace` since RV-353
+# `F-4`. `--workspace` also selects `crates/doctrine-control`, whose conformance
+# rows are proved by live `bwrap` — host-*capability*-dependent claims. On a host
+# that cannot host a capsule nine of them fail, so `gate` and therefore `release`
+# were permanently red off-jail (`ISS-342`).
+#
+# This is a selection decision, not a skip, and the distinction is the whole
+# point. `EX-14` / `DEC-156` forbid a claim standing behind a skip, and that
+# crate executes the ruling on itself
+# (`no_ignored_test_in_this_crate_stands_in_for_a_claim`) — so `#[ignore]`, an
+# availability guard and a narrowed row were all unavailable, and none was used.
+# What changed is which claims the *default* run asserts: it no longer asserts
+# the capsule rows, rather than asserting them and abstaining. They are asserted
+# unconditionally and un-skippably by `just capsule-check`, on a host that can
+# oblige.
+#
+# Because the set is named, a new workspace member is NOT auto-gated — add it.
 
-## Capsule conformance — the shipped verb (SL-248)
+# Gate test set: every package whose claims hold on any developer host.
+test-all:
+  cargo test -p doctrine -p cordage
+
+## Capsule conformance — Linux + bubblewrap only, explicitly invoked (SL-248)
 ##
-# Not the test modules.
-# `just test` already runs this crate's `#[cfg(test)]` suites, because
-# `default-members` names `crates/doctrine-control` for exactly that reason.
+# `crates/doctrine-control` left the default selection at RV-353 `F-4`: it is
+# Linux-only (`ISS-343`) and its rows are proved by live `bwrap` (`ISS-342`).
+# Neither recipe below is wired into `check` or `gate`, and both fail loudly
+# rather than skipping on a host that cannot oblige — that is `EX-14` holding at
+# the altitude where it belongs.
+#
+# `capsule-check`  — the crate's own gate: lint + its `#[cfg(test)]` suites.
+# `capsule-verify` — the shipped verb, `backend verify`.
+
+# Lint + run the capsule crate's suites (the coverage `default-members` used to buy).
+capsule-check:
+  cargo clippy -p doctrine-control
+  cargo test -p doctrine-control
+
 # This runs `backend verify`: the nineteen-row admission the suite exists to
 # produce, exit 0 only on `Admitted`. It has never been run off-jail (`ISS-339`).
 #
@@ -332,10 +362,12 @@ release bump: # readme-index
 # uncommitted. The flag skips that working-tree walk — which also silences the
 # .direnv symlink-loop warnings. release-check (gate + nix-build) is the real
 # correctness guard; the tree is otherwise clean.
-# -p doctrine: `default-members` selects crates/doctrine-control for publishing as
-# much as for building, and that crate is `publish = false` — which makes a bare
-# `cargo publish` FAIL rather than skip it. The manifest key states the intent
-# durably; this flag is what lets the command run (SL-248 `sec-6` § Nothing ships).
+# -p doctrine: names the one published package rather than inheriting a selection.
+# `default-members` no longer includes crates/doctrine-control (RV-353 `F-4`), so
+# a bare `cargo publish` would today select the root alone — but the flag stays:
+# that crate is `publish = false`, which makes a bare `cargo publish` FAIL rather
+# than skip it if it is ever re-selected (SL-248 `sec-6` § Nothing ships), and the
+# published set should be stated here, not derived from a build-time key.
 publish: web-build release-check
   cargo publish -p doctrine --allow-dirty
 

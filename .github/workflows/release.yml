@@ -87,8 +87,15 @@ jobs:
       - name: Build web assets
         run: just web-build
 
+      # -p doctrine: the release artifact is the `doctrine` binary and nothing
+      # else, so the matrix names it rather than inheriting `default-members`.
+      # A bare `cargo build` here selected `crates/doctrine-control` too, which
+      # is Linux-only with no `cfg(target_os)` gate — both Apple targets failed
+      # to compile at v0.37.x (`ISS-343`, RV-353 `F-4`). Dropping that crate from
+      # `default-members` also fixes this; the flag makes the release set an
+      # explicit statement instead of a consequence of a key set for local gates.
       - name: Build doctrine
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release -p doctrine --target ${{ matrix.target }}
 
       # x86_64 binary can't execute natively on the arm64 runner; Rosetta
       # translates it so the smoke gate can actually run the shipped bytes.
