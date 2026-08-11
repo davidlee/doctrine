@@ -1,0 +1,44 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 2
+slug = "the-headline-capsule-threat-is-the-work-not-the-wall"
+title = "The headline capsule threat is the work, not the wall"
+record_kind = "concept"
+status = "draft"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = ["capsule", "cluster:capsule", "confinement", "governance", "threat-model"]
+
+[facet]                         # currently empty; seeded for scaffold-order invariant
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-020"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule threat ranking: heresy over escape"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "scopes the front list to escape"
+target = "DEC-191"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the attention-asymmetry receipt"
+target = "RSK-231"

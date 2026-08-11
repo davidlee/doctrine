@@ -36,6 +36,13 @@ publishes the vector.
   composition established it**. It does not reduce that to a word, a score, or a
   position in an ordering.
 
+**Every front named here is an *escape* front, and the profile must say so**
+(`CPT-002`). It is an honest account of the wall and is silent about the work
+done inside it — where the headline threat actually lives. A reader must not take
+a strong confinement profile as a strong safety claim, and a strong profile
+licenses *more* weight on trusted-side inspection rather than less: as escape
+gets less likely, inspection carries a larger share of the residual risk.
+
 ## Authority is the one axis that is not a front
 
 `REQ-459` today enumerates one undifferentiated list — *"equivalent freshness,
@@ -87,7 +94,9 @@ not a summary of it.
 ## What is deliberately not decided here
 
 - **The front list.** The seven named above are a starting sketch, not a closed
-  enumeration, and closing it is real design work.
+  enumeration, and closing it is real design work. `CPT-002` bounds what closing
+  it can achieve: the list is about escape, and no amount of completeness on it
+  addresses heresy.
 - **The admission floor.** "Not ranked" must not become "nothing can fail". Some
   fronts are presumably mandatory at some strength for *any* admitted backend,
   and which ones is unset. A profile nothing can fail is `ISS-341`'s defect
