@@ -91,3 +91,47 @@ tap inside a namespace.
 `DEC-135` (the rule satisfied by construction), `ASM-010` (which removed the
 third candidate), `DEC-133` (the retention residual), `RSK-231`, `IMP-426`,
 `RFC-025`.
+
+
+## Amended 2026-08-11 — the implementation shape, as built
+
+The decision as ruled said *fresh* quarantine repository. The spike is building
+**persistent per capsule, fetched into incrementally**, with `--no-tags`,
+`-c transfer.fsckObjects=true`, and a write ceiling from `target.nix`. Recorded
+rather than left as silent divergence.
+
+It should win, and the execution-context rule survives it: the quarantine is
+host-created and host-configured, the guest cannot write its `config` or
+`hooks/`, and the refs it lands under are chosen by the host's refspec. What
+persistence buys is an incremental collect and — more importantly — the exhibit.
+
+**Pin versus exhibit, which residual 2 left implicit.** The ref and sha that
+`capsule-collect` prints are the **pin**: the durable, cheap journal entry
+`DEC-133` wants on the trusted side. The **exhibit** is the persistent quarantine
+repository itself. That makes `DEC-133`'s deliberately-unspecified retention
+concrete for the first time — the exhibit expires when the quarantine is reaped,
+so *when to reap* is now a knob someone has to set rather than an open axis.
+
+**The mirror goes with the daemon.** It existed to keep the serving uid away from
+the human's tree; with no serving uid there is nothing to keep away, and
+`EVD-017` is the argument — the mirror *was* the two-uid repository.
+`capsule-provision` pushes from `target.path` directly.
+
+**Consequence worth stating: provisioning carries committed objects only.** A
+push moves refs and objects, so uncommitted and gitignored working state never
+reaches a capsule. Today's dispatch provisions via `.worktreeinclude`, which
+copies exactly that class. Whatever the provisioning manifest turns out to be
+(`QUE-204`, and `RFC-025` next-design-question 2), the Git channel is not its
+carrier.
+
+**Guest seeding depends on `HEAD`.** `updateInstead` fires only for the branch
+`HEAD` points at — see `EVD-016`'s coupling section. Seeding must point `HEAD` at
+the ref being provisioned rather than inherit it.
+
+
+**Two of the four "unverified at decision time" items have since resolved.** Git
+*does* cross the netns unix-socket `ProxyCommand` host-initiated, so P0's result
+is not specific to the old tap shape; and the pushed worktree *is* populated
+(`EVD-016`). The guest→host direction over the proxy was broken and has been
+repaired, but it is being removed by this decision regardless. Still unverified:
+cost under `transfer.fsckObjects`, and every P1a/P1b figure.
