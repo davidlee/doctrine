@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff10c-4fbb-7f92-a159-a3ab8ad45c75"
+recorded_at = "2026-08-11T13:39:03.739947966Z"
+kind = "friction"
+summary = "preflight: 'doctrine <kind> status' is a setter, not a report — collides with 'doctrine status'"
+detail = "Reaching for a lifecycle overview of RFC-025 and SL-252, I ran 'doctrine rfc status' and 'doctrine slice status' and got clap usage errors twice in one turn: both require '<ID> <STATE>' (a transition verb). The report verb is the bare 'doctrine status'. The spine advertises 'new list show paths (+status where lifecycle)' which reads as a per-kind status *report*. Two wasted round-trips. Candidate fixes: rename the transition verb (set-status / transition), or make bare 'doctrine <kind> status' with no args print the kind's lifecycle rollup instead of erroring."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

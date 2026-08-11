@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 211
+slug = "backend-axis-many-mechanisms-under-one-contract-or-assurance-tiers"
+title = "Backend axis: many mechanisms under one contract, or assurance tiers?"
+record_kind = "question"
+status = "answered"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+question    = ""
+why_matters = ""
+answer = "Neither candidate. DEC-191: assurance is a vector over fronts, not one contract and not a rank. Authority is an invariant floor; confinement strength is a published per-front profile. REQ-459 splits along that cut via a REV."
+answered_by = "owner"
+answered_on = "2026-08-11"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule rescue: conformance epistemology onto a microVM backend"
+target = "RFC-025"

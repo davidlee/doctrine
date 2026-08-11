@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 190
+slug = "conformance-splits-into-a-neutral-verdict-kernel-and-per-mechanism-payloads"
+title = "Conformance splits into a neutral verdict kernel and per-mechanism payloads"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-11"
+updated = "2026-08-11"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule rescue: conformance epistemology onto a microVM backend"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "kernel shape was gated on this"
+target = "QUE-211"
