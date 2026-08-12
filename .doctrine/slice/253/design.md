@@ -710,11 +710,29 @@ deliberately forbidden in-crate import, held out of the default graph by
 `required-features`, and a `capsule-check` recipe that inverts the exit status
 **and pins the diagnostic** — `E0433` naming the absent module.
 `Cargo.toml:58-60` already sets that precedent, recording that "omitting either
-is `E0433` for both crates". Pinning the diagnostic also removes the need for a
-separate positive sentinel: a broken `#[path]` still fails, but with `E0583`
-file-not-found, which the check rejects. One target therefore proves both that
-the include resolves and that a forbidden import is refused. How it is spelled
-stays implementation.
+is `E0433` for both crates".
+
+**Two hardenings the first draft of this section got wrong** (`RV-354` `F-2`,
+contested at verification). It claimed the diagnostic pin subsumed a positive
+sentinel. It does not, for two independent reasons.
+
+*The forbidden import is independent of the include.* A `#[path]` aimed at some
+other valid Rust file still lets the added `use crate::conformance::…` line
+produce exactly the expected `E0433`, so the check passes while the real kernel
+was never compiled. The negative target must therefore also **name a symbol only
+the kernel defines** — construct a `Floor`, or match on `FloorProperty` — so a
+misaimed include fails to resolve it. That is the positive sentinel, and it is
+not optional.
+
+*A positive grep accepts a superset.* A missing path emits `E0583` **and** the
+expected `E0433`; `grep -q E0433` passes on that output. So the recipe asserts
+the diagnostic set is **exactly** the expected one — one error, `E0433`, naming
+the forbidden module — rather than merely containing it. Rejecting every
+unexpected diagnostic is the general form and the cheaper thing to write.
+
+With both, one target proves that the include resolves, that the real kernel body
+is present, and that a forbidden import is refused. How it is spelled stays
+implementation.
 
 What the probe does **not** prove is std-only. The target stays inside the
 `doctrine-control` package, so that package's external dependencies remain
@@ -960,10 +978,22 @@ from the kernel's vocabulary:
   two arms* rather than the adjudication, so `qualify_over` calls `row_verdict`
   itself. `RV-354` `F-1` is why. With a `RowVerdict` return the payload performs
   the adjudication and the kernel cannot enforce that its own algebra ran at all,
-  which contradicts § 5.1's rule that the kernel owns the claim algebra: a
-  mechanism could return `Proven` for an id it never read, or encode its own
-  state through the choice of variant. It now cannot construct a `RowVerdict` at
-  all. Nothing is lost in the move — `ArmJudgement::Indeterminate` already
+  which contradicts § 5.1's rule that the kernel owns the claim algebra. It now
+  cannot construct a `RowVerdict` at all.
+
+  **State precisely what that buys, because the first draft of this bullet did
+  not** (`RV-354` `F-1`, contested at verification). The kernel owns the
+  *algebra*; it does not own the *inputs*, and no seam can give it those. A
+  payload can still report `(Held, Failed)` for a row it never ran, and the
+  kernel will faithfully compute `Proven` from it. What `D13` closes is
+  **bypass** — a mechanism can no longer skip the algebra and hand back a verdict
+  of its own choosing — not **fabrication**, which is irreducible: the payload is
+  the only layer that can run a probe, so it is necessarily trusted to report
+  what it observed. The reduction is real and worth having anyway: the set of
+  things a mechanism can get wrong shrinks from *any verdict, for any reason* to
+  *the two arm judgements it reports*, and reporting those honestly is what a
+  mechanism is **for**. Nothing is lost in the move —
+  `ArmJudgement::Indeterminate` already
   carries `Indeterminacy` (§ 5.2.5), so the fixture-fault case that returns
   `RowVerdict::Indeterminate { arm, .. }` today becomes a pair of indeterminate
   judgements from which the nine-cell table derives the same `Which`.
@@ -999,7 +1029,7 @@ struct QualificationRun {
     fronts: FrontCatalog,
 }
 
-fn run_row(backend: &BubblewrapBackend, row: &Row) -> RowVerdict;
+fn run_row(backend: &BubblewrapBackend, row: &Row) -> (ArmJudgement, ArmJudgement);
 ```
 
 `ids()` and `row_for` come from **one** table value, which is what makes
@@ -1343,6 +1373,7 @@ command tier the probes and the fixture for the sake of a string.
 | The kernel is handed an id the payload cannot construct | not reachable — `ids()` and `row_for` come from one table | `I9` |
 
 
+
 <!-- doctrine:section sec-10 -->
 ## 10. Review Notes
 
@@ -1363,6 +1394,7 @@ it ran on the `RV` ledger, so its findings are cited as `RV-354` `F-n`.
 | first | 43 | the draft at `499c2ebbc` | `RF-1` … `RF-9` | dispositioned at rev 45, integrated at rev 46 |
 | second | 50 | the integrated design | `RF-10` … `RF-14` | three blocking, two nits; integrated here |
 | third (external) | 57 | the integrated design + the tree | `RV-354` `F-1` … `F-4` | two blockers, one major, one minor; all `fix-now`, integrated at revs 58–61 |
+| third, verification round | 62 | the *repairs* | — | `F-3`/`F-4` verified; `F-1`/`F-2` **contested**, re-repaired at revs 63–66 |
 
 ### 10.1 What the passes changed
 
@@ -1448,6 +1480,40 @@ class**, not that the list is finally complete.
 `RV-354` `F-4` was a minor and changed a record rather than the design:
 `EVD-022` still carried the three-difference allowance `DEC-199` withdrew.
 
+**The verification round, and it is the most instructive part of this pass.**
+The raiser was asked to attack the repairs rather than accept them, and it
+overturned two of the four.
+
+- **`F-1`'s repair was incomplete and its claim overstated.** Two defects, one
+  mechanical and one of reasoning. The integration changed `run_row`'s return in
+  the kernel signature (§ 5.2.4) and in the narrowings list, and **missed the
+  payload-side contract block**, which went on declaring
+  `fn run_row(…) -> RowVerdict` in direct contradiction of `D13`. Separately, the
+  bullet claimed a mechanism "could return `Proven` for an id it never read" and
+  now cannot — false. It can report `(Held, Failed)` for a row it never ran and
+  the kernel will compute `Proven` faithfully. `D13` closes **bypass**, not
+  **fabrication**, and fabrication is irreducible because the payload is the only
+  layer that can run a probe. Both are repaired above; the ruling is unchanged,
+  its advertised guarantee is not.
+- **`F-2`'s repair was a vacuity guard that was itself vacuous.** It claimed
+  pinning `E0433` subsumed a positive sentinel. It does not: the forbidden import
+  is independent of the include, so a `#[path]` aimed at any other valid file
+  yields the same `E0433` while the kernel goes uncompiled — and a positive grep
+  accepts a superset, since a missing path emits `E0583` *and* `E0433`. The
+  recipe now names a kernel-only symbol and asserts the diagnostic set exactly.
+
+**`F-1`'s mechanical half is the fifth enumeration in this document believed
+complete and wrong, and the first that was not about the seam.** The four before
+it — `DEC-196`'s, the draft's, and each of the first two passes' — enumerated
+*what crosses the seam backwards*. This one enumerated *the footprint of a
+repair*, missed one of three declarations of the same signature, and shipped a
+document contradicting its own new ruling. The lesson generalises past this
+slice and is worth stating plainly: **an enumeration performed to integrate a
+finding deserves the same distrust as the enumeration that produced it.** A
+`grep` for the changed symbol, run to exhaustion and read, would have caught it;
+reasoning about where the signature "obviously" appears did not. That is now the
+standing method here, and § 10.4's cite discipline is its sibling.
+
 **What the third pass did not move, and this matters more than what it did.** It
 attacked `D1`/`I3`, `D2`/`D3`/`D7`, and the `Qualification::Ran` boundary — the
 three § 10.2 items flagged as resting on author-only endorsement — and sustained
@@ -1504,7 +1570,9 @@ because what a pass *closed* is as useful to a later reviewer as what is open.
   adjudication out. `D13` closes the return half. **The captures are still open**
   and no instrument in this design sees them. That is now the standing invitation,
   and the prior it was issued under has been right three times running: assume a
-  fifth class exists.
+  fifth class exists. Note also what `D13` does **not** do, since the repair was
+  overstated once already: it closes bypass of the algebra, never fabrication of
+  its inputs. A mechanism that lies about its arms is still believed.
 - **§ 5.1's placement criterion is new and untested.** The adjudicative normal
   form and the observational-equivalence test were written *in response to* five
   wrong judgement calls, which is the worst moment to trust a new rule. Run them
@@ -1584,6 +1652,7 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
 | `ADR-021` | No `unsafe` added in the kernel (`A3`). |
 | `AGENTS.md` pure/imperative split | Honoured by the kernel after the split, and **not** honoured by the code today (`RF-9`, § 3.3). The kernel performs no I/O (`I10`). |
 | `AGENTS.md` behaviour-preservation gate | Not literally satisfiable across three type-shape changes, which is why `DEC-199` restates the bar at the level the suite measures. § 9.1 carries the restatement and `EVD-022` the pre-split half of the bracket. |
+
 
 
 <!-- doctrine:section sec-6 -->
@@ -1864,9 +1933,8 @@ by `RV-354` `F-1` — the external pass's finding, and the fourth location class
 *the algebra of the claims it emits*, but `run_row: &dyn Fn(&RowId) -> RowVerdict`
 had the payload call `row_verdict` and hand back a finished verdict.
 `qualify_over` then received an adjudication it could not check had ever been
-performed — a mechanism could return `Proven` for an id it never read, or encode
-its own state in the choice of variant. The kernel was a scheduler around payload
-judgement while claiming to be the judge. *Ruling:* `run_row` returns
+performed. The kernel was a scheduler around payload judgement while claiming to
+be the judge. *Ruling:* `run_row` returns
 `(ArmJudgement, ArmJudgement)` — probe and control — and `qualify_over` calls
 `row_verdict` itself. *Rationale:* it costs nothing, which is why this is a
 ruling and not a decision record. `D12` already minted `ArmJudgement` as the
@@ -1881,6 +1949,27 @@ may or may not call. *What it does not buy:* the closure's captures are
 untouched. They can no longer *reach* a verdict except through the kernel's
 algebra, which is the property that was actually needed; they are not eliminated,
 and `I10` now says so.
+
+*And it does not close fabrication, which the first draft of this ruling implied
+it did* (`RV-354` `F-1`, contested at verification). A payload can report
+`(Held, Failed)` for a row it never ran and the kernel will compute `Proven` from
+it faithfully. The kernel owns the algebra, never the inputs, and no seam can
+give it those: the payload is the only layer that can run a probe. `D13` closes
+**bypass**, not fabrication. What shrinks is the surface — from *any verdict for
+any reason* to *the two arm judgements reported* — and reporting those honestly
+is the whole job of a mechanism.
+
+*The class was swept, not just the instance.* `qualify_over` takes three
+closures, and the question `F-1` raises of `run_row` has to be asked of the other
+two. It answers itself from invariants this design already held. `auxiliary`
+returns `Vec<(Claim, AuxOutcome)>` and `I5` keeps those out of admission
+structurally — `FloorReading::from_rows` is handed the row list and nothing else
+— so a fabricated `AuxOutcome` corrupts a *report* and cannot reach a claim.
+`observations` returns `Vec<(Unrowed, Reading)>`, which `I6` gives no outcome slot
+at all, so there is no adjudication there to delegate. `run_row` was the only one
+of the three whose return fed a reduction, which is exactly why it was the only
+one that could carry authority out. The generalisation holds: **a closure's
+return is a seam crossing wherever, and only where, something reduces over it.**
 
 ### 7.3 What was considered and refused at design level
 
@@ -1929,12 +2018,14 @@ Recorded because a later reader will re-propose them:
 - **Parameterise the kernel over the mechanism's fixture type** (`Delta<F>`,
   `Row<F>`). Refused as generics ceremony for a second backend `OQ-1` has ruled
   out building.
-- **A fallible row runner** — `run_row: &dyn Fn(&RowId) -> Option<RowVerdict>`,
-  so a payload handed an identity it cannot construct could say so (`RF-6`).
+- **A fallible row runner** — `run_row: &dyn Fn(&RowId) -> Option<(ArmJudgement,
+  ArmJudgement)>`, so a payload handed an identity it cannot construct could say
+  so (`RF-6`). Restated in `D13`'s return shape; the argument is unchanged by it.
   Refused: `I9` makes that unreachable, because `Table::ids()` and
   `Table::row_for` come from one table value. An error arm nothing can produce is
   worse than none — it is an invitation to fabricate a verdict at the one place a
   fabricated verdict would be invisible.
+
 
 
 <!-- doctrine:section sec-8 -->
@@ -2151,8 +2242,22 @@ against.
 **What this does not buy, stated rather than glossed.** The script proves the
 golden was derived; it does not prove rules 1–7 are themselves correct. That
 remains a reading of `DEC-199` against this design, and layer 3's reviewer
-question survives for it. What changes is that an omitted or invented line is
-now caught by machine rather than by a reader noticing.
+question survives for it. A second implementation of the same rules would only
+move the trusted boundary, not remove it. What changes is that an omitted or
+invented line is now caught by machine rather than by a reader noticing.
+
+**Four self-checks the script owes, and they are what make the totality clauses
+executable rather than aspirational** (`RV-354` `F-3`, supplied at
+verification). Classification must be **exhaustive** — every input line matches
+exactly one of rules 1–7, and an unmatched line is a hard failure, not a
+pass-through. Category counts must be **exact** against `EVD-022`: one header,
+one outcome, one floor row, thirteen assurance rows, five axes, four claims, two
+observations. Every input line must be **consumed once** and every output line
+**produced once**, which is the two totality clauses stated as assertions the
+script makes about its own run. And **duplicate outputs are rejected**, since two
+inputs mapping to one output would satisfy a naive count while losing a line.
+None of this is more than a few dozen lines, and it is the difference between a
+transform that derives the golden and one that merely emits something.
 
 The contract has already decided two things. `D9`: rule 1 is byte-identical, so
 renaming the rendered `date=` key has no derivation and the rename stays
@@ -2315,10 +2420,21 @@ The compile probe (`DEC-197`, § 5.1) is not in this table because it is not a
 test: it is a `harness = false` cargo target whose *compilation* is the
 assertion, and `I7` is what it pins. Its negative control is no longer deferred
 (`RV-354` `F-2`): § 5.1 states what that control must demonstrate — red on a
-forbidden in-crate import, failing for that reason and not another — and names
-the exit-inverting, diagnostic-pinned recipe as a sufficient shape. Only the
-spelling is left to implementation. A probe that cannot fail proves nothing, and
-that is a claim about *this* probe until something has watched it go red.
+forbidden in-crate import, failing for that reason and not another — and names a
+sufficient shape. Only the spelling is left to implementation. A probe that
+cannot fail proves nothing, and that is a claim about *this* probe until
+something has watched it go red.
+
+The shape took a second cut at verification, because the first was itself
+vacuous. A diagnostic pin does **not** subsume a positive sentinel: the forbidden
+import is independent of the include, so a `#[path]` aimed at any other valid
+file still yields the expected `E0433` while the kernel goes uncompiled. And a
+positive grep accepts a superset — a missing path emits `E0583` *and* `E0433`,
+which `grep -q E0433` passes. So the negative target also names a symbol only the
+kernel defines, and the recipe asserts the diagnostic set is **exactly** the
+expected one rather than merely containing it. That the first version of a guard
+against vacuity was itself vacuous is not an aside; it is `R1`'s failure mode
+arriving one level up, and § 10.1 records it as such.
 
 `I10` — the kernel takes values and closures only — is pinned by its own
 signature and by review, not by a test: there is nothing to execute, because the
@@ -2330,5 +2446,6 @@ parameter's type, and `I7` and the compile probe are what cover that.
 (`:11275`) is **retired with its reasoning recorded**, not deleted silently: it
 asserted a defect held shut by an external guard, and this design removes the
 defect rather than the guard.
+
 
 
