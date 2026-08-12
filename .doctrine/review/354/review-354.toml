@@ -1,0 +1,44 @@
+id    = 354
+slug  = "design-review-of-sl-253"
+title = "design review of SL-253"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-253"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "Expected kernel-owned adjudication; observed a payload closure returning the final verdict"
+detail = "SL-253's design states at .doctrine/slice/253/design.md:558-561 that the kernel owns 'the adjudicative normal form' and 'the algebra of the claims it emits', but its proposed entry point accepts run_row: &dyn Fn(&RowId) -> RowVerdict at .doctrine/slice/253/design.md:895-904. The lifecycle makes the delegation explicit at .doctrine/slice/253/design.md:1142-1145: payload code projects the arms and then calls the kernel's row_verdict before returning to the kernel. Thus qualify_over receives an already-adjudicated answer and cannot enforce that row_verdict was called at all; a second mechanism can return Proven for any RowId, ignore the id, or encode mechanism state through variant choice. This is the fourth seam-crossing location class: executable closure value/contract (including its type-erased captured environment), distinct from parameter types, function bodies, and fields of parameter types. The current seam demonstrates the hidden environment at crates/doctrine-control/src/conformance.rs:5229-5248, where all three closures capture the backend, host, and one shared fixture OnceCell, and the kernel fixes the mechanism-sensitive invocation order at crates/doctrine-control/src/conformance.rs:5319-5325. D10 in SL-253's design calls closures structural protection at .doctrine/slice/253/design.md:1675-1682, but the compile probe cannot see a closure's captures or prove its behavioural contract. Change the callback to return neutral pre-adjudication evidence, e.g. a pair/record of ArmJudgement values, and have qualify_over call row_verdict itself; also state and test callback invocation/side-effect semantics. Otherwise the kernel is a scheduler/collector around payload adjudication, not the claimed neutral adjudicator."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Expected a falsifiable neutrality gate; observed an unspecified negative control with no expected-failure runner"
+detail = "The design calls compilation 'the assertion' for a harness=false target at .doctrine/slice/253/design.md:684-689 and makes that probe the machine check for I7 at .doctrine/slice/253/design.md:1240-1247. It then concedes at .doctrine/slice/253/design.md:1438-1440 that 'the compile probe's negative control is not specified', and repeats at .doctrine/slice/253/design.md:2142-2146 that the control's shape is left to implementation. That is not a neutral implementation detail: an intentionally uncompilable Cargo target cannot remain in the normal cargo test graph, while the proposed harness=false target has no stated meta-runner that expects compilation to fail. The current package has only tempfile as test infrastructure (crates/doctrine-control/Cargo.toml:64-74), and just capsule-check runs ordinary clippy and cargo test (justfile:111-113); neither supplies expected-failure semantics. Therefore an implementer can land a positive probe that has never demonstrated a red path, while still satisfying the prose-shaped exit criterion. Specify the negative-control mechanism and its gate wiring before design lock: for example, a normal test/meta-command that builds a temporary synthetic crate containing the real kernel plus a deliberately forbidden in-crate import, asserts the compiler rejects it for the absent module, and is itself run by capsule-check. Add a positive sentinel proving the real kernel body is actually included. Without those details, I7's sole mechanical evidence is not falsifiable."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "blocker"
+title = "Expected the preservation test to verify the total map; observed a post-state golden that can bless an incomplete migration"
+detail = "SL-253's design makes the preservation promise explicit at .doctrine/slice/253/design.md:1944-1950: every pre-split line has exactly one successor and every post-split line exactly one predecessor. It then claims at .doctrine/slice/253/design.md:1971-1983 that 'the noticing is done by a test' and that a whole-output golden of the post-split artefact makes both totality clauses machine-checked. A post-state golden proves only actual_post == authored_expected_post. It does not prove that expected_post was derived bijectively from EVD-022's pre-split transcript; the migration author can omit a pre-split line (or add a new one), author the same omission/addition into the golden, and the test passes. The proposed translation table is not that missing machine relation: .doctrine/slice/253/design.md:2002-2031 gives it row classification plus assurance key/front columns, but no executable mapping for the header, outcome, floor, axes, claims, observations, ordering, or uniqueness of predecessors/successors. Layer 3 is expressly reviewer inspection at .doctrine/slice/253/design.md:1993-1998, confirming that the claimed mechanical closure still depends on the reader noticing the migration error. Commit the pre-split transcript as a test fixture and implement an executable transformer/validator for all seven rules plus ordering, asserting one consumption of every input line and one production of every output line, then compare that mechanically transformed output with the live post-split artefact. Otherwise DEC-199 is a licence to freeze a changed artefact, not proof that the change stayed inside its closed contract."
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "minor"
+title = "Expected EVD-022 to support DEC-199's recut contract; observed the withdrawn three-difference allowance"
+detail = "EVD-022 still says, verbatim, 'Permitted to differ by design: the outcome line (DEC-191), the exit constants (DEC-194) and the row key spellings (DEC-198), since rendering is {:?} over RowId.' DEC-199 and SL-253's design have superseded that exact exception-list framing: .doctrine/slice/253/design.md:1952-1969 additionally derive a floor-row successor, front-labelled assurance lines, and front ordering, while .doctrine/slice/253/design.md:1971-1976 says the exception list was replaced because it could not express those changes. The raw EVD-022 transcript remains valid evidence for layer 1, but its interpretation now contradicts the accepted preservation contract it supports and could make audit apply the withdrawn allowance. Reconcile EVD-022 so it records only the immutable pre-split observations and points permitted transformation to DEC-199's current total map, or append an explicit supersession note; do not leave two banked records defining different legal deltas."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
