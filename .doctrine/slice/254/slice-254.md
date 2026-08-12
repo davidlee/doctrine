@@ -74,9 +74,18 @@ subprocess in a clone — on every harness.**
    `.git` is what lets the worker self-commit and dissolves the orchestrator's
    import-the-diff trade.
 3. **Delete the in-session apparatus** — the four `worktree pretooluse` hook
-   matchers, the `SubagentStart` stamp, marker stamping, and the
+   matchers, the `SubagentStart` stamp, **disk-marker worker identity**, and the
    `claude-force-subprocess-dispatch` config key, which has no second mode left
    to select.
+
+   *Corrected 2026-08-13.* This originally read "marker stamping", which
+   understated it against `DEC-202`'s own list — the marker is mechanism #1 of
+   its four, and `EVD-023` already names `--setenv DOCTRINE_WORKER 1` as the
+   replacement. Under a clone the marker is not merely redundant but
+   **inoperable**: `describe_mode` gates it on `is_linked_worktree`
+   (`marker.rs:89`), which is false for a clone by definition
+   (`shared.rs:54-58`). Scope and research both drifted off the record here; see
+   `research.md` cross-thread finding 7.
 4. **Collapse the skills.** `/dispatch-agent` and `/dispatch-subprocess` merge;
    `/dispatch`'s arm-routing branch goes with them.
 5. **Land the governance.** `ADR-011` Context + D3, and the `SPEC-021`
