@@ -61,6 +61,12 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
   empty fronts.
 - **Admission is named in the taxonomy and carries no outcome field**, on the
   `Unrowed`/`Reading` precedent — equal footing without a provable claim.
+- **The seam cuts at row identity** (`DEC-196`). Kernel keeps identity and
+  judgement; `Row`/`Delta`/`ArmShape`/`Under`/`Arm`/`PropertyRemoval`/
+  `AuthorityGrant`/`ConformanceBackend` are construction and go to the payload.
+- **The kernel classifies as a leaf** (`DEC-197`) — imports std, `backend` and
+  `host` only. **Carry to `/plan` as a required exit criterion**: the
+  architecture gate classifies the kernel unit `leaf` and passes.
 
 ### Risks
 
