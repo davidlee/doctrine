@@ -1779,6 +1779,20 @@ remembers to extend `ALL` — the array length does not force it. *Cost:* at one
 member the struct looks like ceremony. Accepted: it is exactly right as the floor
 grows, and the floor growing is `ADR-020`'s business, not a mechanism's.
 
+*The second guarantee is a claim nothing checks, and that is `RV-354` `F-2`'s
+class rather than a separate concern.* "A new field breaks every construction
+site" is true of a struct **only** while no construction site uses functional
+update and the type derives no `Default`. Both are ordinary, well-intentioned
+edits; neither produces a warning; and either silently voids a guarantee
+`DEC-195` **requires**. This is the same shape as the compile probe before its
+negative control: a compile-time assertion relied upon, never observed to fail,
+and defeatable by an edit that looks like tidying. The remedy is the same and
+just as cheap — `Floor` derives no `Default` and is never built with `..`, stated
+here so the ban is reviewable, and carried in the negative-control target
+alongside the forbidden import if it is cheaper there than in review. Recorded
+rather than repaired in full: the ban is the design's, the mechanism is
+implementation's.
+
 **`D3` — the floor's only constructor may refuse, and the refusal is a state.**
 *Rationale:* this is where `EVD-021` actually dies. A floor built by filtering a
 row list can be built from an empty list; a floor that can only be built by a
@@ -1968,8 +1982,25 @@ structurally — `FloorReading::from_rows` is handed the row list and nothing el
 `observations` returns `Vec<(Unrowed, Reading)>`, which `I6` gives no outcome slot
 at all, so there is no adjudication there to delegate. `run_row` was the only one
 of the three whose return fed a reduction, which is exactly why it was the only
-one that could carry authority out. The generalisation holds: **a closure's
-return is a seam crossing wherever, and only where, something reduces over it.**
+one that could carry authority out.
+
+*The generalisation, stated correctly on the second attempt.* The first said **a
+closure's return is a seam crossing wherever, and only where, something reduces
+over it**, and the *only where* half is false. A closure's return crosses this
+seam in **two independent ways**, and the reduction test finds one of them.
+
+- **Authority delegation** — the return carries the *adjudication* out. This
+  happens wherever, and only where, something reduces over the return; that is
+  why `run_row` had it and `auxiliary`/`observations` do not.
+- **Type contamination** — the return carries a *mechanism type* out. This is
+  `I7`'s crossing and it is indifferent to reduction: if `observations` returned
+  a `Reading` that named `Termination`, nothing would reduce over it and it would
+  still be a leak. `I7` and the compile probe cover this; the reduction test says
+  nothing about it.
+
+Both were live on `run_row`, which is why the single fix appeared to close a
+single class. Anyone applying this rule to a fourth closure must run both tests,
+not the one that caught the last defect.
 
 ### 7.3 What was considered and refused at design level
 
@@ -2025,6 +2056,7 @@ Recorded because a later reader will re-propose them:
   `Table::row_for` come from one table value. An error arm nothing can produce is
   worse than none — it is an invitation to fabricate a verdict at the one place a
   fabricated verdict would be invisible.
+
 
 
 
@@ -2259,6 +2291,36 @@ inputs mapping to one output would satisfy a naive count while losing a line.
 None of this is more than a few dozen lines, and it is the difference between a
 transform that derives the golden and one that merely emits something.
 
+**Which expectations this repair protects, and which it cannot.** `F-3`'s defect
+was an *authored* expectation masquerading as a checked one, so the honest next
+question is how many other authored expectations this design leans on. Three, and
+they are safe or unsafe for three different reasons — the taxonomy matters more
+than the count.
+
+- **Observation-backed** — the pre-split lines. A ground truth exists
+  (`EVD-022`), so the expectation *must* be derived from it and nothing else.
+  That is the repair above, and it is the only one of the three where derivation
+  is even meaningful.
+- **Reality-checked** — the characterisation test's `(row key, expected verdict)`
+  data (§ 9.3). Structurally safe, for a reason worth stating because it is not
+  obvious: it is written **before the split** and therefore asserted against a
+  reality that already exists, so a transcription error fails **immediately**
+  rather than waiting for code to catch up with it. The golden had no such
+  property — its subject did not exist yet — which is precisely why it needed the
+  repair and this does not.
+- **Intent-backed** — § 9.2's key translation table. Its new key spellings and
+  front labels have **no ground truth to derive from**; they *are* the intent, and
+  `DEC-198` is their only source. These are irreducibly reviewer-checked, and no
+  instrument can change that. Deriving them from anything would be deriving
+  intent from its own restatement.
+
+**The residual this leaves, named rather than implied.** The four self-checks
+above bind the *observation* half. A malformed table entry — a missing front, a
+mis-assigned key — produces a golden the counts still accept, because the counts
+are over lines and the table's error is inside one. The table is the contract's
+input (§ 9.2) and is checked by reading it against `DEC-198`, which is layer 3's
+job and stays layer 3's job.
+
 The contract has already decided two things. `D9`: rule 1 is byte-identical, so
 renaming the rendered `date=` key has no derivation and the rename stays
 source-side (`RF-2`). And `RF-11`: § 5.4's rendering constraints are not
@@ -2446,6 +2508,7 @@ parameter's type, and `I7` and the compile probe are what cover that.
 (`:11275`) is **retired with its reasoning recorded**, not deleted silently: it
 asserted a defect held shut by an external guard, and this design removes the
 defect rather than the guard.
+
 
 
 

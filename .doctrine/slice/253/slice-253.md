@@ -185,6 +185,17 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
 - `justfile` — `capsule-check` (`:111-113`) and `capsule-verify` (`:130-146`).
   Neither is wired into `check` or `gate`, so this slice's proof does not run
   under the default gate and verification design must say how it is run.
+  `capsule-check` **gains a leg** (`RV-354` `F-2`): the compile probe's negative
+  control, which inverts the exit status of a second `harness = false` target and
+  asserts the diagnostic set is exactly `E0433` naming the forbidden module.
+- `crates/doctrine-control/Cargo.toml` — two `[[test]]` targets for the compile
+  probe and its negative control, the latter behind `required-features` so
+  `cargo test` never builds it.
+- `scripts/` — a **new one-shot transform script** (`RV-354` `F-3`), stdlib-only
+  Python in the `migrate_value_facets.py` mould. It reads `EVD-022`'s pre-split
+  transcript, applies `DEC-199`'s rules 1–7 plus the ordering clause, and emits
+  the expected post-split artefact, which is committed **as** the golden. Runs
+  before the phase that changes `RowId`; disposable after the split lands.
 
 ### Risks and assumptions
 
@@ -275,8 +286,15 @@ Done is: the kernel is separable and reviewable without loading a confinement
 mechanism, and **its unit classifies `leaf` and the architecture gate passes**
 (`DEC-197`) — necessary but not sufficient, so the kernel's entry point taking
 **values and closures only** (design `I10`) is a second, reviewed exit criterion
-alongside it — and the **compile probe** is a third, because `I10` governs the
-parameter list and says nothing about what rides inside a parameter's type;
+alongside it — and the **compile probe**, *with its negative control*, is a
+third, because `I10` governs the parameter list and says nothing about what rides
+inside a parameter's type, and because a probe nothing has watched go red is a
+claim rather than a check (`RV-354` `F-2`). `I10` itself is narrower than it
+reads: design `D13` establishes that the kernel adjudicates rather than receiving
+an adjudication, which closes a closure's *return* as a route for authority to
+leave the kernel — but a closure's *captured environment* stays invisible to
+every instrument here, and a mechanism that misreports its two arms is still
+believed. `D13` closes bypass, never fabrication;
 `RV-352`'s row-level baseline reproduces unchanged — the nineteen row verdicts
 exactly, with the artefact's text derived line-for-line by `DEC-199`'s
 transformation contract — while the verdict publishes a floor and a profile
@@ -292,7 +310,7 @@ phase that plainly cannot reach a row omits it. **Both need `bwrap`** — the
 re-cut withdrew this record's earlier claim that `capsule-check` does not, which
 had it contradicting the risk stated above.
 
-Three artefacts carry the comparison, all committed: a **key translation table**,
+Four artefacts carry the comparison, all committed: a **key translation table**,
 authored in the phase that changes row identity, whose key and front columns are
 the transformation contract's rule 4 rather than a reader's aid; a
 **characterisation test** recording the row-to-verdict mapping as data, written
@@ -300,7 +318,18 @@ before the split and carried through it, so a regression in the *algebra* fails
 at the phase that broke it; and a **whole-output golden test** in the same phase
 as the table, asserting the post-split artefact verbatim, so a regression in the
 *rendering* fails there too. The two tests are not redundant: the first pins
-layer 1, the second pins layer 2.
+layer 1, the second pins layer 2. And a **one-shot transform script**, which is
+what makes the golden's expected value *derived* rather than authored — a golden
+proves `actual == expected` and nothing about where `expected` came from, so
+without it a migration that drops a line and encodes the same omission into the
+golden passes (`RV-354` `F-3`).
+
+Which of the four can be machine-derived is a question with three different
+answers, and design § 9.1 carries the taxonomy: the pre-split lines are
+observation-backed and must be derived; the characterisation test is
+reality-checked, because being written before the split it is asserted against a
+reality that already exists; the key translation table is intent-backed, has no
+ground truth to derive from, and stays irreducibly reviewer-checked.
 
 ## Non-Goals
 
