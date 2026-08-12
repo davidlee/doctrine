@@ -2239,6 +2239,16 @@ would need re-deriving each time a `RowId` variant is added. A conservative
 channel maximum, stated once, in place of a per-row judgement that would have to
 be made again.
 
+The maximum is **derived, not primitive**, and saying so is what stops a later
+reader deleting one of these two rules as a restatement of the other. `F-5`
+offered them as alternatives — grade each return, *or* declare a conservative
+channel maximum — but the second presupposes the first. A maximum ranges over
+the grades of the elements beneath it, so a channel-level rule with no
+per-return grade under it has nothing to range over. Per-return grading is the
+primitive, because `D13` exists to be applied to a closure nobody has written
+yet; the channel maximum is the convenience that follows once each return can be
+graded.
+
 That leaves this generalisation restated four times, wrong in a *different
 structural way* on each of the first three: an *only where* attached to a test
 that could not carry it, then false independence between a kind and a grade,
@@ -2282,6 +2292,19 @@ Recorded because a later reader will re-propose them:
   fronts, and a front with no rows is vacuously strong — the vacuity is a
   property of reducing over something that can be empty, not of the axis reduced
   on (F2). Fronts group; they never reduce.
+- **Dissolve `I11` by removing what makes order observable, instead of pinning
+  it.** Order is observable only because all three closures share one
+  `OnceCell<Result<Fixture, FixtureFault>>` and race on which of them builds it.
+  Two variants were weighed. *Unshare the cell* — refused outright: the fixture
+  is the expensive object in this suite, and three constructions where there was
+  one trades a contract for minutes of every run. *Build it eagerly, before any
+  closure is invoked* — genuinely cheap, and it closes that channel by
+  construction rather than by contract. Not adopted, because it narrows the
+  invariant without removing the need for it: the payload can share state
+  through any other capture, and `I11` has to hold for closures this design has
+  never seen. Recorded because it is the first thing a reader will propose, and
+  because it remains a real hardening someone may want *on top of* `I11` rather
+  than instead of it.
 - **Keep one closed `Property` enum and grow it per mechanism.** Refused as
   precisely what `REQ-459` criterion 3 forbids, and because it puts a microVM's
   vocabulary in a leaf the microVM does not own.
