@@ -28,8 +28,8 @@ fresh-as-of: 2026-08-12 · design/exploring · 9b5a0fae8
 
 ### Open
 
-- `inq-1`..`inq-8` in the design run. `inq-1`/`inq-2` are decided by `DEC-195`
-  but **not yet dispositioned in the run** — see § Design-run state below.
+- `inq-3`..`inq-8` in the design run. `inq-1`/`inq-2` are dispositioned
+  (`adopt DEC-195`, revision 6). Live frontier: `inq-3`, `inq-5`, `inq-7`.
 - `OQ-2` is closed by `DEC-195`; `OQ-1` closed narrow by the owner.
 
 ## Design surface triage (runbook step `explore.triage`)
@@ -85,26 +85,32 @@ fresh-as-of: 2026-08-12 · design/exploring · 9b5a0fae8
   *guest* kernel, so it is guest-internal and host-blind — the same reasoning
   that struck rows 13 and 14. Carried to `inq-8`; not resolved.
 
-## Design-run state, and one thing that is stuck
+## Design-run state, and the disposition shape (resolved)
 
-Run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 5, stage `exploring`,
-`resolved=0`.
+Run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 7, stage `exploring`,
+`resolved=2`, pin and cursor on `inq-3`.
 
-`inq-1` and `inq-2` are **decided** (`DEC-195`) but **not dispositioned in the
-run**, and this is not an oversight. The `design show` envelope advertises only
-the `declare` and `traversal` payload keys. Two attempts to disposition a node
-(`{"resolve":[{"subject":"inq-1"}]}`, then the same with an unknown field) were
-**silently accepted** — each bumped the revision and wrote a receipt, emitted no
-events, and changed no node state. An unknown top-level key and an unknown inner
-field were both absorbed without complaint.
+`inq-1` and `inq-2` are dispositioned at revision 6 — `cp-1` and `cp-2`, both
+`adopt DEC-195`. Revisions 4 and 5 remain no-op receipts from the two earlier
+probes; nothing was corrupt and nothing needed unwinding.
 
-Per `/design`'s degradation rule — *detect and surface, do not self-heal, do not
-improvise a workflow of your own* — guessing was stopped rather than continued.
-`design-prompts/exploring.toml` and `design-prompts/inquiry.md` were read from
-the library; they carry the stage's obligations and craft but not the mutation
-schema. Friction recorded as an observation (`019ff42b-2655-7aa3-b042-0a83272a328c`).
+**The shape, for the record.** A disposition is not a verb and not a run-level
+payload key — it is a `declare` entry whose subject is a `cp-` checkpoint id:
 
-**The next agent should find the disposition payload shape before applying
-anything else** — likely candidates are a different verb, a stage advance from
-`exploring` to `inquiring`, or a payload key the envelope does not advertise.
-Revisions 4 and 5 are no-op receipts from the two probes; nothing is corrupt.
+    {"subject":"cp-1","disposes":"inq-1",
+     "dispose":{"form":"adopt","record":"DEC-195"}}
+
+`dispose` is the only spelling (EX-12); its four forms are `create` / `adopt` /
+`unresolved` / `non-durable`. The authority is `ApplyRequest` in
+`src/design_run/submission.rs`, which is where the rest of the vocabulary lives
+too — `stage`, `acceptance`, `discharge`, `delegation`, `checkpoint_act`,
+`agent_declaration`, `review_policy`, `adopt_authored`.
+
+**Why it could not be found from the tool.** Neither `ApplyRequest` nor
+`Declaration` denies unknown fields, so a guessed key is dropped and the
+submission still succeeds — revision bumped, receipt written, no events, no
+state change, and the same `revision N stage <stage>` line a real mutation
+prints. Filed as `ISS-346` (with the serde `flatten` constraint on the obvious
+fix noted); friction observation `019ff42b-2655-7aa3-b042-0a83272a328c`; durable
+memory `mem_019ff439bede7fb29c7c09b7fd76d893`. **Read an apply's event rows —
+an empty set is a refusal wearing a success.**

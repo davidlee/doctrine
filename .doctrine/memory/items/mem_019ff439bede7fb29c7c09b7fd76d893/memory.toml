@@ -1,0 +1,42 @@
+memory_uid = "mem_019ff439bede7fb29c7c09b7fd76d893"
+memory_key = "mem.fact.design-run.apply-payload-vocabulary"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "design apply payload vocabulary is undiscoverable from the tool"
+summary = "design apply's payload vocabulary is wider than design show advertises; unknown keys are absorbed silently"
+created = "2026-08-12"
+updated = "2026-08-12"
+
+[scope]
+paths = ["src/design_run/submission.rs"]
+globs = []
+commands = ["doctrine design apply"]
+tags = ["area:design", "area:cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "db26ed7ca89705fa060ee657bc66e284cbb1fc44"
+ref_name = "refs/heads/edge"
+checkout_state_id = "845d1e9b4bdebda320a5679b3f66759fcdf228fdbff25c883ffed8d5c332473b"
+base_commit = "8dbc76770d280bc7adf5d6ed780df319febeee13"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+

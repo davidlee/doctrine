@@ -52,3 +52,7 @@ target = "DEC-191"
 label = "references"
 role = "concerns"
 target = "EVD-021"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
