@@ -39,20 +39,43 @@ Four accepted decisions converge on this slice, and none of them can land alone:
 in place of a rank. The central type's shape is therefore known before the
 extraction starts, which is the precondition that was missing.
 
+**The four decisions above are the slice's inheritance, not its design.** This
+slice's own design run settled seven more — `DEC-195` through `DEC-201` — and
+where they refine an inherited shape they govern. The largest such refinement:
+`DEC-191`'s *vector over fronts* becomes, in `DEC-195`, a closed authority floor
+reduced by exhaustive match plus an assurance profile published **per row**, with
+fronts as open grouping metadata that is never a reduction target. Objective 2
+states the resulting shape; read it rather than `DEC-191`'s sketch.
+
 ## Scope & Objectives
 
-1. **Extract the verdict kernel.** Backend-neutral types and discipline:
-   `Property` / `Axis` (the taxonomy, not its membership), `RowVerdict` and the
-   distinctions between its variants, the verdict types, the four evidential
-   tiers (rows, axes, `Claim`/`AuxOutcome`, `Unrowed`/`Reading`), `DEC-156`'s
-   one-property-removed control discipline, and `BackendId`'s deliberately open
-   construction.
-2. **Publish the vector instead of collapsing it.** Replace the all-or-nothing
-   AND over a fixed row set with a per-front outcome a reader sees before any
-   summary. Fronts are **escape** fronts and the rendering must say so
-   (`CPT-002`), so a strong profile is not read as a strong safety claim.
-   Authority remains a floor: a composition that weakens it is not a weaker
-   posture, it is not a capsule.
+1. **Extract the verdict kernel.** The seam cuts at row **identity**, not at the
+   row (`DEC-196`). Kernel: the taxonomy (`Axis`, and row identity split per
+   `DEC-198` into a closed authority-floor key and an open mechanism-minted
+   assurance key), `RowVerdict` and the distinctions between its variants, the
+   verdict types, the four evidential tiers (rows, axes, `Claim`/`AuxOutcome`,
+   `Unrowed`/`Reading`), `row_verdict`'s two-arm algebra, and `verify_over` keyed
+   on row identity. Payload: `Row`, `Delta`, `ArmShape`, `Under`, `Arm`,
+   `run_arm`, `run_row`, `verify`, `PropertyRemoval`, `AuthorityGrant` and
+   `ConformanceBackend` — construction, all of it. `DEC-156`'s control discipline
+   divides along that line: its portable half is `row_verdict`'s algebra and
+   stays; its construction half is mechanism-keyed and goes. `BackendId` does not
+   move (`DEC-197`) — the kernel imports it from `backend`, and mints its
+   assurance key on its precedent rather than taking the type. The kernel's own
+   unit **classifies as a leaf**, and that is a required exit criterion of this
+   slice, not a happy consequence.
+2. **Publish the profile instead of collapsing it.** Replace the all-or-nothing
+   AND over a fixed row set with a verdict carrying two structures of different
+   semantics (`DEC-195`): a closed **authority floor**, reduced by exhaustive
+   match over a closed enum so an empty floor is unrepresentable, whose
+   membership is row 3 — `DeniedCanonicalStateAndCredentials` — and nothing else;
+   and an **assurance profile**, the remaining rows, published per row and never
+   reduced. Fronts are open grouping metadata over rows and are **never** a
+   reduction target: reducing per front reproduces the vacuity one level up,
+   since `DEC-189` guarantees empty fronts exist. Fronts are **escape** fronts
+   and the rendering must say so (`CPT-002`), so a strong profile is not read as
+   a strong safety claim. Authority remains a floor: a composition that weakens
+   it is not a weaker posture, it is not a capsule.
 3. **Apply `DEC-194`'s rename** across the extracted surface —
    `QualificationVerdict`, `Qualification::{Qualified, Disqualified}`, the verb
    `backend qualify`, exits `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`. This closes
@@ -62,9 +85,17 @@ extraction starts, which is the precondition that was missing.
 5. **Carry the `REV` against `REQ-459`** as a phase of this slice. `REQ-459`
    enumerates one undifferentiated property list with canonical-authority inside
    it, which is exactly the conflation the kernel un-conflates; shipping the code
-   without the revision leaves the spec contradicting the binary. `IMP-405`'s
-   platform-versus-mechanism rename folds in, and `CPT-002`'s threat priority
-   lands in `SPEC-030` § Overview or § Concerns.
+   without the revision leaves the spec contradicting the binary. `DEC-201`
+   settles the REV's shape: **one REV, four payloads**, landing with the code so
+   no commit has the spec contradicting the binary. Criterion 1 splits into two
+   criteria of different invariance — a floor proven on every mechanism, a
+   profile that varies per mechanism. Criterion 3's **text** narrows to *same
+   floor, own profile*: `edits nothing` survives, *the same property suite* does
+   not. **That narrowing is an explicit widening of this slice's scope, taken by
+   the owner** — the objective as first written revised the criteria around
+   criterion 3, not criterion 3 itself. `IMP-405`'s platform-versus-mechanism
+   rename applies across § Platform backend contract, and `CPT-002`'s threat
+   priority lands in `SPEC-030` § **Concerns** — not § Overview.
 6. **The same `REV` revises `REV-051`'s criterion-3 disposition** (owner's
    direction, 2026-08-12). `REV-051` is `done` and applied; it records
    `REQ-459` criterion 3 as *"discharged structurally — one suite parameterised
@@ -73,7 +104,17 @@ extraction starts, which is the precondition that was missing.
    there is no single parameterised suite for a second backend to pass, and the
    structural discharge does not hold. Shipping the kernel makes an applied
    revision's recorded reading false, so the correction rides this slice rather
-   than being left for a reader to notice.
+   than being left for a reader to notice. It is payload 3 of objective 5's one
+   REV, not a second one — `DEC-201` refused splitting them, because the two must
+   be true together and separating them opens a window in which they are not.
+7. **Carve the test bands before the split** (`DEC-200`). The 186 test functions
+   sit in one flat `#[cfg(test)] mod tests` with no inner module declaration at
+   all, and the crate is bin-only by declared intent, so they cannot move to a
+   `tests/` directory and must follow their code. They are sub-moduled into two
+   bands — kernel and payload — as a pure reorganisation against stable types,
+   *before* any code moves, so the split then moves whole sub-modules instead of
+   rewriting a test file. Roughly 67 of the 186 need individual judgement. This
+   is real work the phase plan carries explicitly rather than absorbs.
 
 ### Affected surface
 
@@ -84,30 +125,45 @@ extraction starts, which is the precondition that was missing.
   `admit` (`:153`), `render_verdict`, `render_outcome` (`:217`), and the exit
   constants (`:60,63`). `admit` and `render_outcome` are the only two production
   consumers of the collapsed scalar, and are exactly what `DEC-191` changes.
-- `crates/doctrine-control/src/backend.rs` — `BackendId` at `:811`. It is a
-  kernel type sitting in `leaf` tier while `conformance` is `engine`, so the
-  kernel's dependency on it is a **new `ADR-001` edge to check**, not a given.
+- `crates/doctrine-control/src/backend.rs` — `BackendId` at `:811`. It **stays
+  there** (`DEC-197`). The feared new `ADR-001` edge dissolved on reading the
+  map: `engine` imports `engine + leaf`, so engine-to-leaf is the permitted
+  direction, and `conformance`'s own row already declares an edge to `backend`.
 - `.doctrine/spec/tech/030/` and `REQ-459` — via the `REV`, not by direct edit.
 - `.doctrine/adr/001/layering.toml` — `:257` carries the literal `backend verify`
-  and is the *only* accepted-governance file in `DEC-194`'s rename radius; the
-  tier classifications at `:261`/`:264` need revisiting after the split.
+  and is the *only* accepted-governance file in `DEC-194`'s rename radius. The
+  file **gains one row** for the kernel unit, classified `leaf`; `conformance`,
+  now the payload, keeps `engine`. Nothing existing is re-classified (`DEC-197`).
 - `justfile` — `capsule-check` (`:111-113`) and `capsule-verify` (`:130-146`).
   Neither is wired into `check` or `gate`, so this slice's proof does not run
   under the default gate and verification design must say how it is run.
 
 ### Risks and assumptions
 
-- **The behaviour-preservation gate and `DEC-191` pull against each other.**
-  `AGENTS.md` requires the existing suites to stay green *unchanged* when shared
-  machinery moves, and `DEC-190` names `RV-352`'s baseline as the bar. But
-  `DEC-191` deliberately changes what the verdict renders. The reconciliation is
-  that **row verdicts** must be identical and the **reduction and rendering**
-  are what changes — that distinction has to hold explicitly at design time or
-  the gate will be either falsely red or quietly weakened.
-- **"Not ranked" must not become "nothing can fail."** `DEC-191` leaves the
-  admission floor unset, and `RFC-025` flags this directly: that would be
-  `ISS-341`'s defect family a fourth time. The floor is a design decision this
-  slice must take, not inherit.
+- **The behaviour-preservation gate and `DEC-191` pull against each other —
+  SETTLED by `DEC-199`.** `AGENTS.md` requires the existing suites to stay green
+  *unchanged* when shared machinery moves, and `DEC-190` names `RV-352`'s
+  baseline as the bar, but `DEC-191` deliberately changes what the verdict
+  renders — and three shape changes taken in design (`DEC-196`, `DEC-197`,
+  `DEC-198`) edit test source that names the moved types, so *green unchanged*
+  cannot be literally true. The bar is stated in three layers: the **nineteen row
+  verdicts**, four auxiliary claims and two unrowed readings reproduce exactly;
+  the outcome line, the exit constants and the row key spellings are permitted to
+  differ and that list is closed, so a difference not on it is a regression; test
+  source naming moved types is reviewed as a translation diff in which no
+  asserted value moves. `EVD-022` is the pre-split half of the bracket, captured
+  before any code lands and uncapturable later.
+- **"Not ranked" must not become "nothing can fail." — SETTLED by `DEC-195`.**
+  `DEC-191` left the admission floor unset and `RFC-025` flagged it directly:
+  that would be `ISS-341`'s defect family a fourth time. `EVD-021` showed the
+  vacuous path is already reachable and held shut only by a guard `DEC-189`
+  dissolves. The floor is now closed, reduced by exhaustive match rather than
+  `.all()` over a `Vec`, so the vacuous path is unrepresentable rather than
+  externally guarded.
+- **Thirteen of fourteen `Property` members become payload constants**
+  (`DEC-198`) — recorded as an explicit residual, not a hidden cost. A hypervisor
+  publishes none of rows 10/12/13/14 and mints its own, editing nothing in the
+  kernel; that is the point, but the migration is real.
 - `crates/doctrine-control` is outside every default gate selection — Linux-only,
   live-`bwrap` rows — and is reached by `just capsule-check`, not `just gate`.
   Verification design must account for that or this slice's proof does not run.
@@ -125,19 +181,35 @@ extraction starts, which is the precondition that was missing.
   here rather than deleted because the reasoning binds later phases: the kernel
   must be *shaped* by `DEC-189`'s membership analysis without *implementing* it.
 - **`OQ-2` — where does the admission floor sit** once the AND-reduction is
-  gone? **Promoted from open question to blocking design decision**, and it is
-  the first thing design should settle rather than the last. It is not
-  hypothetical: `EVD-021` records that the vacuous path already exists, is
-  asserted by a test, and is held shut only by a guard `DEC-189` dissolves.
-  Likely wants its own decision record.
+  gone? **CLOSED by `DEC-195`** (2026-08-12). Promoted from open question to
+  blocking design decision, carried as `inq-1`/`inq-2` on the design run's
+  inquiry map, and settled first rather than last. The floor is a closed set of
+  one member reduced by exhaustive match. Retained here rather than deleted
+  because `EVD-021`'s reasoning — the vacuous path is real, and its only guard is
+  external and per-suite — binds the implementation, not just the decision.
 
 ### Verification and closure intent
 
 Done is: the kernel is separable and reviewable without loading a confinement
-mechanism; `RV-352`'s row-level baseline reproduces unchanged while the verdict
-publishes a per-front vector; `backend qualify` replaces `backend verify` with
-its exits renamed; the bubblewrap payload is behind the seam and unported; and
-`SPEC-030` no longer contradicts the binary.
+mechanism, and **its unit classifies `leaf` and the architecture gate passes**
+(`DEC-197`); `RV-352`'s row-level baseline reproduces unchanged — the nineteen
+row verdicts exactly, with only `DEC-199`'s enumerated three permitted to differ
+— while the verdict publishes a floor and a profile instead of a scalar;
+`backend qualify` replaces `backend verify` with its exits renamed; the
+bubblewrap payload is behind the seam and unported; and `SPEC-030` no longer
+contradicts the binary.
+
+**How the proof is run** (`DEC-199`), since neither recipe is wired into
+`just gate`: `just capsule-check` is the per-phase gate, green at the end of
+every phase and needing no `bwrap`; `just capsule-verify` is a **phase exit
+criterion** for every phase touching the payload, and the default for any phase
+where it is arguable — only a phase that plainly cannot reach a row omits it.
+Two artefacts carry the comparison: a committed **key translation table**,
+authored in the phase that changes row identity so the post-split comparison is
+mechanical rather than a judgement made at audit; and a **characterisation test**
+recording the row-to-verdict mapping as data, written before the split and
+carried through it, so the invariance fails at the phase that broke it rather
+than at audit.
 
 ## Non-Goals
 
@@ -155,14 +227,20 @@ its exits renamed; the bubblewrap payload is behind the seam and unported; and
 ## Summary
 
 Split the 14k-line capsule conformance suite into a small backend-neutral
-verdict kernel and an unported bubblewrap payload; stop collapsing the per-front
-vector the verdict already carries; rename the mechanism axis to qualification
-while those types are moving; and revise `SPEC-030` `REQ-459` so the spec stops
-conflating the authority floor with confinement strength.
+verdict kernel and an unported bubblewrap payload, cutting at row identity; stop
+collapsing the row outcomes the verdict already carries, reducing a closed
+authority floor and publishing the rest as an assurance profile; rename the
+mechanism axis to qualification while those types are moving; and revise
+`SPEC-030` `REQ-459` so the spec stops conflating the authority floor with
+confinement strength.
 
 ## Follow-Ups
 
 - The Firecracker row set's implementation, once a backend exists (`OQ-1`).
 - `DEC-191`'s front list closed from a sketch into an enumeration.
+- `IMP-427` — the third test band, splitting the payload into live-`bwrap` and
+  neutral so `just capsule-check` runs meaningfully on a host without `bwrap`.
+  Deferred rather than refused (`DEC-200`), and it must never become the skip
+  `EX-14` and `DEC-156` forbid.
 - `IDE-050` — definition records for bounded-context terms, the general remedy
   for the collision `DEC-194` fixed one instance of.

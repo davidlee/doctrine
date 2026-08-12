@@ -29,3 +29,11 @@ label = "references"
 role = "concerns"
 descriptor = "the evidence promoting OQ-2 to a blocking design decision"
 target = "SL-253"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
+
+[[relation]]
+label = "supports"
+target = "DEC-195"

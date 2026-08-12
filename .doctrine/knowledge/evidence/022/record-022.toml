@@ -29,3 +29,11 @@ label = "references"
 role = "concerns"
 descriptor = "the pre-split behaviour-preservation baseline"
 target = "SL-253"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
+
+[[relation]]
+label = "supports"
+target = "DEC-199"
