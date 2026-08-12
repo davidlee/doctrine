@@ -550,6 +550,26 @@ because `DEC-194` renames the mechanism axis to *qualification* and that is
 exactly what the kernel adjudicates; what remains in `conformance` is the
 bubblewrap suite that submits itself to it.
 
+**What kind of boundary this is, before what it contains** (`RV-354` `F-1`,
+fourth round). This seam separates **evidence acquisition from adjudication**.
+It is not a sandbox against hostile in-crate payload code, and reading it as one
+makes every guarantee below look like a failed attempt at a different guarantee.
+The payload is trusted to run each arm and report its judgement faithfully,
+because the payload is the only layer that *can* run a probe. Given those
+reported judgements, the kernel guarantees that every `RowVerdict` is computed by
+one mechanism-independent algebra, stays bound to the submitted row occurrence
+that produced it, and reaches qualification only through the kernel-owned floor.
+
+    payload authority:  what happened
+    kernel  authority:  what that means
+
+So a payload can fabricate evidence, and no seam drawn here can stop it. What a
+seam *can* stop is the payload holding both authorities at once — acquiring the
+evidence *and* declaring what it means. `D13` removes the second. The residue is
+not an admission of weakness in the boundary; it is the boundary drawn exactly
+where a further separation stops being possible, and § 7.2's `D13` carries the
+consequence in detail.
+
 **What the kernel owns, stated as a criterion.** `P1` weighs each candidate but
 argues only against inclusion, and a boundary defended solely by *is this worth
 it?* drifts — five separate judgement calls have already been wrong in this run.
@@ -1312,19 +1332,67 @@ So the kernel is pinned to a protocol, not merely to a signature — `I11`:
   or deduplicated would satisfy a count-and-membership rule exactly while
   changing what the payload observes through its captures. Counting calls is not
   observing a trace, and the first cut of this invariant counted.
+- **Returns stay bound to invocation occurrences** (`RV-354` `F-1`, fourth
+  round). For each element `rows[i]` the kernel makes one matching `run_row`
+  invocation with an argument value equal to `rows[i]`, and computes that
+  occurrence's `RowVerdict` **only** from the arm pair that invocation returned.
+  It does not pool, cache, reuse or reorder arm pairs between occurrences. Equal
+  `RowId` values do not collapse occurrences: where `rows[i] == rows[j]` and
+  `i != j`, each occurrence's verdict derives from its own invocation's return.
+  *Argument value equal to*, deliberately — this promises nothing about reference
+  or pointer identity, which § 7.2 puts outside the governed trace. The clause is
+  separate from the row-trace clause above because pinning the sequence does not
+  pin the pairing: a kernel that invokes `[A, B, A]` in exactly that order and
+  then adjudicates the second `A`'s arms under the first `A`'s occurrence
+  satisfies every ordering rule here and still misreports.
 - **Not at all on the unavailable path.** `Unavailable` returns before any of
   the three is called, which is `DEC-195`'s lift restated as a call count —
   nothing ran, so there is nothing to report.
-- **Divergence stays the payload's.** The kernel installs no catch, so a
-  panicking closure is the payload's to prevent or to own under either panic
-  strategy. What the kernel accumulates mid-loop — the partial verdict vector —
-  does not outlive the unwind, so there is no corrupt state for a recovery path
-  to repair. And handling a panic would mean inventing a verdict for a row that
-  produced none, which is exactly the fabrication `D13` says no seam can prevent
-  and no seam should simulate.
+- **Effects remain opaque; their opportunity does not.** The kernel neither
+  inspects, specifies nor rolls back state a callback changes. It invokes the
+  callbacks according to the trace above and permits itself no overlap, retry,
+  catch-and-continue or extra invocation — so payload-side effects occur *only*
+  through those ordered opportunities, while their content stays the payload's
+  business. This is the clause the shared `OnceCell` actually needs: the cell is
+  why the ordering is observable, and it is not thereby part of the kernel's
+  contract. It is also why § 7.3's eager-construction hardening is not a
+  substitute for `I11` — it removes today's witness and leaves the scheduling
+  channel intact for the next stateful closure.
+- **Invocation is synchronous and non-overlapping.** A callback returns before
+  the kernel obtains its result and proceeds; no two invocations are ever in
+  flight together. The **structural evidence is the signature** — the callbacks
+  arrive as borrowed `&dyn Fn` carrying no concurrency bounds, so safe kernel
+  code has no way to hand one to an executor. Stated rather than tested for that
+  reason: an enter/exit assertion would document the present structure without
+  discriminating against any kernel this signature permits.
+- **Unwind is transparent.** Under `panic = "unwind"` the kernel does not catch,
+  translate, retry or continue after a callback panics. The original panic
+  propagates through `qualify_over`, no later callback is invoked, and no partial
+  `QualificationVerdict` is produced. What the kernel accumulates mid-loop — the
+  partial verdict vector — does not outlive the unwind, so there is no corrupt
+  state for a recovery path to repair; and handling a panic would mean inventing
+  a verdict for a row that produced none, which is exactly the fabrication `D13`
+  says no seam can prevent and no seam should simulate. § 9.6 tests this at all
+  three call sites.
+- **Non-return cannot be bypassed** — and this clause is argued, not exercised.
+  Because invocation is synchronous, a callback that diverges prevents the kernel
+  from advancing to any later interaction; under `panic = "abort"` the configured
+  runtime terminates the process rather than returning control to the kernel.
+  Both are consequences of the present execution model, and neither is reachable
+  by a test that does not hang or grow a timeout mechanism larger than the
+  behaviour it proves. Introducing an executor, detachment, overlap, a timeout,
+  or any other means for the kernel to continue independently is a change *to*
+  `I11`, and requires the protocol and its instruments to be redesigned. Adding
+  `Send` or `Sync` to the callback bounds is a **review trigger** rather than a
+  prohibition: the bounds alone do not change the protocol, but they make
+  independent scheduling representable, and using that capability does.
 
-§ 9.6 tests this. It is the design's only invariant about *when* rather than
-*what*, and § 7.2 records why an enumeration over types could not have found it.
+§ 9.6 tests what is executable here — the invocation sequence, duplicate
+preservation, result association, the empty unavailable trace, and unwind at
+each of the three call sites. The two clauses it cannot reach say so in their own
+text, and the signature is what carries them. This is the design's only invariant
+about *when* rather than *what*, and § 7.2 records why an enumeration over types
+could not have found it.
 
 **`DEC-194`'s rename lands here**, across the whole surface at once because these
 types are moving anyway and a second migration is the thing being avoided:
@@ -1719,7 +1787,7 @@ decided, where *whatever the verdict records* would itself decide membership —
 and `Front` demonstrates the separation by living in the payload envelope rather
 than the kernel verdict. Asked for a **seventh** location class, the pass
 returned none; the sixth was drawn at the wrong altitude instead, as a symptom
-list rather than as the callback interaction trace that subsumes it.
+list rather than as a temporal class that subsumes it.
 
 **The measured base rate now has a second data point, and it is the point.** The
 self-audit predicted that at least one of its own four repairs would carry a
@@ -1730,6 +1798,48 @@ not about the seam, which has been right since the first cut. A claim that keeps
 being re-derived by the same author is not converging by being rewritten; it
 converges when someone else attacks its shape. That is the argument for the
 external pass, stated as evidence rather than as a preference.
+
+**The fifth round was not a pass, and that is why it worked.** Four rounds had
+produced four correct `F-1` diagnoses and no remedy: the reviewer named the
+defect every time and never once wrote the fix, so every `F-1` repair in this
+document was author-constructed against someone else's diagnosis, and every one
+came back contested. The one finding that closed cleanly, `F-2`, closed on a
+remedy the reviewer wrote out verbatim. So the fifth exchange changed the
+question — the reviewer was asked, as a **collaborator rather than a critic**,
+for the shape it would write if the design were its own. It produced one, and
+three things came out of it that four review rounds had not.
+
+- **The five-element decomposition was the fourth wrong form of the class**, and
+  it was wrong in the way its predecessors were: derived by generalising one step
+  from what had just bitten. *Observable effect* was never an element of the
+  trace — the other four are facts about the kernel's interaction with the
+  callback, while an effect is the payload acting on its own captures — so it
+  named an obligation nothing could discharge. And the list's claim to exhaust
+  *what a caller can observe* is simply false: timing, thread identity and
+  pointer identity all falsify it. § 7.2 now states an **event grammar with an
+  explicit abstraction boundary**, which is closed by construction rather than by
+  enumeration, and exposes incompleteness as five answerable questions.
+- **Result association was a live hole nobody had seen**, including the four
+  passes and the author. `I11` pinned the invocation sequence and bound no return
+  to the occurrence that produced it, so a kernel could invoke `[A, B, A]` in
+  exactly the submitted order and adjudicate the second `A`'s arms under the
+  first `A`. The § 9.6 trace test would have passed it. `I11` gains the clause and
+  the test gains occurrence-distinct returns.
+- **Two clauses were moved out of the instruments and into the signature.**
+  Non-overlap was going to be asserted with enter/exit log pairs; it discriminates
+  against no kernel the present `&dyn Fn` signature permits, so it is stated as
+  structural with the signature named as its evidence. True divergence is argued
+  the same way. The gain is the honesty: `I11` now says which of its clauses are
+  executable and which are consequences of the execution model, instead of
+  implying all of them are tested.
+
+The lesson generalises past this slice and is banked accordingly: **a reviewer
+who diagnoses well may still never remedy, and the framing is what decides
+which you get.** Four rounds of *what is wrong with this* bought four correct
+diagnoses and four author-built repairs with a bad survival rate. One round of
+*what would you write* bought a remedy with an author who is not the designer —
+which is the only thing § 10's opening paragraph says the author-run passes are
+constitutionally unable to supply.
 
 ### 10.2 Attack these first
 
@@ -2181,6 +2291,14 @@ give it those: the payload is the only layer that can run a probe. `D13` closes
 any reason* to *the two arm judgements reported* — and reporting those honestly
 is the whole job of a mechanism.
 
+This is a consequence of the boundary § 5.1 draws, not a shortfall against one it
+claimed (`RV-354` `F-1`, fifth round). The seam separates evidence acquisition
+from adjudication and is not a sandbox against hostile in-crate code; read
+against the second, it will always look like a failed attempt at it. The
+authority a payload legitimately holds is *what happened*; the authority `D13`
+takes back is *what that means*. Holding both is what no component should have,
+and it is the only one of the two a seam here can remove.
+
 *The class was swept, and the sweep's own statement of it was wrong* (`RV-354`
 `F-1`, contested a second time). `qualify_over` takes three closures, and the
 question `F-1` raises of `run_row` has to be asked of the other two. Asking it
@@ -2267,22 +2385,80 @@ to be pinned — invocation count, order, divergence. That is a symptom list, no
 a class, and the cost of the mistake was immediate: `I11` could satisfy the list
 in full while leaving the argument trace unpinned, and it did.
 
-Drawn correctly, the class is the complete **callback interaction trace** —
-callback identity, argument *value and occurrence*, return, panic or divergence,
-and observable effect. Temporal rather than structural, which is why an
-enumeration over types was constitutionally unable to see it. At that altitude
-the class *subsumes* the symptom list instead of being defined by it, so a
-protocol that pins four of the five elements reads as visibly incomplete rather
-than plausibly finished. § 5.4's `I11` is where it is pinned, and the fourth
-pass found it short by exactly the element the symptom list had omitted.
+*The repair for that was itself the fourth wrong form, and it failed the same
+way.* It restated the class as a **five-element decomposition** — callback
+identity, argument value and occurrence, return, panic or divergence, and
+observable effect — on the claim that this exhausts what a caller can observe of
+an opaque function, so that a protocol pinning four of five would read as
+visibly incomplete. The claim is false. A callback can also observe timing,
+thread identity, pointer identity, allocation behaviour and stack shape, none of
+which anyone intends to govern; and *observable effect* was not an element of the
+trace at all. The other four are facts about the **kernel's** interaction with
+the callback. An effect is the payload acting on its own captures — the *reason*
+the trace matters, not a further part of it — so listing it created an obligation
+no finite `I11` clause and no test could ever discharge, and none did. A longer
+enumeration derived the same way the last one was derived is not a class.
 
-Asked for a **seventh** class, the same pass returned none, and that is recorded
-here as a result rather than as an absence of one. The captures themselves stay
-out of scope, and correctly so: the payload's closures must privately hold the
-backend and the fixture, and an instrument inspecting those captures would be
-defeating the seam rather than checking it. What is in scope is the
-kernel-visible *behaviour* of invoking an opaque environment — the sixth class,
-and nothing else in this design was watching it.
+Drawn correctly, the sixth class is the **callback protocol**: the semantic
+interaction trace the kernel produces at an opaque callback boundary.
+
+> A trace is an ordered sequence of synchronous invocation events. Each
+> invocation records the callback identity, its occurrence, and its argument
+> value, and is followed — before another invocation begins — by either the
+> matching normal return or an abnormal non-return. An unwind propagates
+> unchanged; an abort or divergence permits no later interaction. The result of a
+> normal return belongs to the invocation that produced it.
+>
+> The trace is **value-level**. Pointer identity, timing, allocation behaviour,
+> thread identity, and the callback's private captured state are outside the
+> contract — properties of the opaque payload implementation, not facts the
+> kernel may inspect or govern.
+
+Closed because it defines an **event grammar with a stated abstraction
+boundary**, not because it claims to enumerate every physical observation. That
+is the difference from all four previous forms, and it is the only reason to
+believe this one. It is temporal rather than structural, which is why an
+enumeration over types was constitutionally unable to see it.
+
+It also exposes incompleteness mechanically, which the symptom list could not: a
+purported protocol has to answer five questions, and a missing answer is visible
+without anyone recalling what the last defect was.
+
+1. What is the exact sequence of invocations?
+2. What argument value and occurrence labels each invocation?
+3. Does each invocation complete before the next begins?
+4. Which return belongs to which invocation?
+5. What happens after an abnormal non-return?
+
+§ 5.4's `I11` is where all five are pinned. The fourth pass found it short on
+question 2 — the argument sequence — and the fifth found it short on question 4:
+nothing anywhere bound a returned arm pair to the occurrence that produced it, so
+a kernel could invoke `[A, B, A]` in exactly the submitted order and adjudicate
+the second `A`'s arms under the first `A`'s occurrence while satisfying every
+ordering rule the design had. That defect was invisible to the five-element list,
+which counted *return* as pinned because the signature names one.
+
+Asked for a **seventh** class, the fourth pass returned none, and that is
+recorded here as a result rather than as an absence of one. The captures
+themselves stay out of scope, and correctly so: the payload's closures must
+privately hold the backend and the fixture, and an instrument inspecting those
+captures would be defeating the seam rather than checking it — which the grammar
+above now says in its own terms rather than leaving to this paragraph. What is in
+scope is the kernel-visible *behaviour* of invoking an opaque environment — the
+sixth class, and nothing else in this design was watching it.
+
+**Provenance, because it is the one thing that distinguishes this cut from the
+four before it.** The grammar, the striking of *observable effect*, the result-
+association clause and § 9.6's occurrence-distinct instrument were **co-authored
+with the external reviewer**, in an exchange conducted as design collaboration
+rather than as a review round — the reviewer was asked for the shape it would
+write, not for what was missing from mine. Every earlier `F-1` repair was
+author-constructed against a diagnosis, and every one was contested; the one
+finding on `RV-354` that closed cleanly, `F-2`, closed on a remedy the reviewer
+wrote out. That is a small sample and it is the sample there is. A later reader
+weighing how much to trust this section should know that its argument has an
+author who is not the designer, and should also know that this makes the *fifth*
+statement of a generalisation the first four attempts got wrong.
 
 ### 7.3 What was considered and refused at design level
 
@@ -2769,8 +2945,8 @@ Beyond the carve and the characterisation test:
 | `unavailability_carries_no_rows_claims_or_observations` | `DEC-195`'s lift — not-run and ran-and-failed are different claims |
 | `a_host_without_a_shell_is_unavailable_not_violated` | `RF-3` — the behaviour is preserved exactly across the move to the payload |
 | `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make. After `RV-354` `F-1` it also gains reach: `run_row` returns the two arms and the kernel adjudicates, so this table now covers the **only** path to a `RowVerdict` rather than a function the payload may or may not call |
-| `the_kernel_honours_the_callback_protocol` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*. Instrumented closures record the full interaction trace and the test asserts it as a **sequence**, not a multiset: `auxiliary`, then `observations`, then one `run_row` per element of the submitted row list in submitted order with duplicates preserved. Asserting the id *set* would pass a kernel that sorted or deduplicated, which is the defect the first cut shipped (`RV-354` `F-1`, third contest). Not named for *exactly once*, because the protocol's other half is a count of **zero** — none of the three invoked on the `Unavailable` path. That clause is the call-side complement of `unavailability_carries_no_rows_claims_or_observations`, which asserts the output side; a kernel that called all three and discarded the results would pass that test and fail this one |
-| `a_panicking_closure_unwinds_through_the_kernel` | `I11`'s divergence clause, which the protocol test does not reach: a `run_row` that panics propagates, the kernel catches nothing, and no verdict is invented for the row that produced none. Requires `panic = "unwind"` to execute at all, so it carries that condition explicitly rather than silently passing where it cannot run (`RV-354` `F-1`, third contest) |
+| `the_kernel_honours_the_callback_trace` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*. Submits a deliberately discriminating row sequence — two distinct identities and one repeat, `[A, B, A]` — with instrumented closures appending to one shared log and returning **occurrence-distinct** arm pairs. Asserts (1) the log is exactly `auxiliary, observations, row(A,1), row(B,1), row(A,2)`, as a **sequence** and not a multiset, since asserting the id *set* passes a kernel that sorted or deduplicated — the defect the first cut shipped (`RV-354` `F-1`, third contest); (2) duplicates stay distinct and in submitted order; (3) **each occurrence's published verdict is adjudicated from the arm pair its own invocation returned**, checked in the structured verdict before any licensed rendering permutation — a log-only test detects reordering but not a kernel that invokes correctly and then associates results with the wrong occurrence (`RV-354` `F-1`, fifth round); and (4) the `Unavailable` path produces an **empty** trace, with panic-on-call closures so any invocation fails loudly. That last clause is the call-side complement of `unavailability_carries_no_rows_claims_or_observations`, which asserts the output side; a kernel that called all three and discarded the results would pass that test and fail this one. Renamed from `…_honours_the_callback_protocol`: it tests the trace, and `I11`'s two structural clauses are not in it |
+| `a_callback_unwind_is_not_caught_retried_or_converted` | `I11`'s unwind clause, which the trace test does not reach. Table-driven over **all three** protocol positions, injecting a uniquely identifiable panic payload at each and asserting the *same* payload escapes — which distinguishes propagation from catch-and-repanic — that the failing callback is not retried, that no later callback runs, and that no partial `QualificationVerdict` is returned. The three positions are distinct call sites carrying distinct accumulated state, not one assertion three times: at `auxiliary` no callback result has been retained yet; at `observations` auxiliary has completed, so the kernel must not salvage a partial run holding its output; at `run_row` — injected at the **second** row, so one earlier verdict already exists — the row vector is mid-accumulation. A future kernel could catch at one site and not the others. `catch_unwind` appears only outside `qualify_over`. Requires `panic = "unwind"` to execute at all, so it carries that condition explicitly rather than silently passing where it cannot run (`RV-354` `F-1`, third contest; positions and payload identity, fifth round). Named for *unwind*, not divergence: `I11`'s non-return clause is argued from the signature and deliberately not exercised here |
 | `arm_diagnostics_do_not_move_a_judgement` | `D12` — `ArmResult`s differing only in `termination`, `stdout` or `stderr` project to the same `ArmJudgement`, which is § 5.1's equivalence test made executable |
 | `every_submitted_assurance_key_has_a_front` | `I9`/`D11` — `FrontCatalog` is total over the keys its own table submitted, which is why `front_of` returns no `Option` |
 | `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test, asserting drift. Committed in the phase that changes `RowId`, beside § 9.2's table. Its expected value is **derived** by the one-shot transform script, not authored (`RV-354` `F-3`) |
