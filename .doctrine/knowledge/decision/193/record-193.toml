@@ -5,19 +5,19 @@ id = 193
 slug = "capsule-quarantine-retention-and-reaping"
 title = "Capsule quarantine retention and reaping"
 record_kind = "decision"
-status = "proposed"
+status = "accepted"
 created = "2026-08-11"
-updated = "2026-08-11"
+updated = "2026-08-12"
 tags = ["capsule", "cluster:capsule", "ingestion", "microvm", "retention"]
 
 [facet]                         # every field typed; seeded empty (captured later)
-context = "DEC-192's amendment made the persistent quarantine repository the DEC-133 forensic exhibit, turning retention from an open axis into an unset value."
-choice = "Owner's default: explicit confirmation, at slice closure, with a gc backstop. Refined here to auto-reap admitted quarantines and hold refused/conflicted/failed-verification ones, confirming only over the held set."
-alternatives = ["reap per capsule teardown", "retain indefinitely with quota-driven eviction", "no exhibit at all (pin only)"]
-rationale = "For admitted work the objects are in canonical already, so the quarantine is a redundant copy; for refused work it is the only copy, which is the case DEC-133 exists for. A confirmation prompt whose answer is always yes is ceremony that trains click-through."
-consequences = ["gc predicate must be named (capsule gone AND slice closed", " with an age fallback)", "disk high-water mark is per slice not per capsule", "the DEC-133 pin is unaffected by any reaping policy"]
-decided_by   = ""
-decided_on   = ""
+context = "ADR-020 already bounds this. Its step 6 closes and cleans up only after the result — or a repair incorporating it — is integrated and formally closed or explicitly abandoned; until then a harvested capsule is live work that v0 never automatically deletes or evicts. DEC-192's amendment made the persistent quarantine repository the DEC-133 forensic exhibit. So this record sets the separately-owned retention policy ADR-020 leaves open for the post-closure horizon; it does not set the floor, and an earlier draft of it read the axis as unset when it was already floored."
+choice = "Owner's ruling (2026-08-12): nothing is reaped before integration and formal closure. Closure is the earliest reap point; before it, removal happens only when forced — ADR-020 step 6's explicit operator abandonment. Garbage collection is deferred past v0, and whether it is eventually destructive or warning-only is left open."
+alternatives = ["Auto-reap admitted quarantines at ADR-020 step 5 — refused because it fires before closure and the ADR forbids automatic deletion until integration and formal closure", "Reap per capsule teardown", "Retain indefinitely under quota-driven eviction — refused because ADR-020 v0 excludes automatic eviction and backpressure", "No exhibit at all — pin only"]
+rationale = "Two independent facts name the same trigger. ADR-020 sets a floor no later record may undercut: a harvested capsule is live work until integration and formal closure. And the earlier draft's redundancy argument — that an admitted quarantine is a redundant copy because its objects are already in canonical — fails once the quarantine carries transient-tier evidence that is never promoted to canonical at all. Audit is that evidence's reader and audit precedes closure, so reaping on admission would destroy the exhibit before its consumer arrived. A confirmation prompt whose answer is always yes is still ceremony that trains click-through, but the cure for that is a narrower held set after closure, not an earlier trigger."
+consequences = ["Closure is the earliest reap point — admission is not a retention event", "Garbage collection is post-v0 and its destructive-versus-warning shape is deliberately undecided", "Disk high-water is per slice rather than per capsule and ADR-020's configurable free-space warning plus manual intervention is the v0 answer", "The DEC-133 pin is unaffected by any reaping policy"]
+decided_by = "owner"
+decided_on = "2026-08-12"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
@@ -27,6 +27,10 @@ notes       = []
 [relationships]                 # verb-written edges (set by doctrine supersede)
 supersedes    = []   # record ids this one replaces (set by doctrine supersede)
 superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-020"
 
 [[relation]]
 label = "references"
