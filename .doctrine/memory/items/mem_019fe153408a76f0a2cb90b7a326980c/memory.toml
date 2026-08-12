@@ -6,7 +6,7 @@ status = "active"
 title = "Destructure exhaustively so a new field is a compile error"
 summary = "A hand-written variant→payload mapping that destructures without `..` turns addition-drift into a compile error, leaving only deletion-drift for a test to catch."
 created = "2026-08-08"
-updated = "2026-08-08"
+updated = "2026-08-12"
 
 [scope]
 paths = []

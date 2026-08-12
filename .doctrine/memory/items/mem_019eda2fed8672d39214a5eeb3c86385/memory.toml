@@ -2,10 +2,10 @@ memory_uid = "mem_019eda2fed8672d39214a5eeb3c86385"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Reference-map sweeps: pre-enumerated maps are suggestive not exhaustive — always rg after"
-summary = "Design reference maps (like SL-082 §3.2 K1-K11) may miss entries. The ground truth is rg sweep results, not the pre-enumerated map. reconcile/SKILL.md:20 was missed but caught by rg."
+title = "Pre-enumerated maps are suggestive, never exhaustive — grep to exhaustion and read the result"
+summary = "Any pre-enumerated list of reference sites is suggestive; ground truth is a grep run to exhaustion. Applies to a design's reference map AND to the footprint of a repair you are integrating."
 created = "2026-06-18"
-updated = "2026-06-18"
+updated = "2026-08-12"
 
 [scope]
 paths = ["plugins/doctrine/skills/"]
@@ -36,7 +36,7 @@ review_by = ""
 trust_level = "medium"
 
 [ranking]
-severity = "none"
+severity = "high"
 weight = 0
 
 [[relation]]

@@ -29,3 +29,29 @@ asymmetry is the point of having both.
 one integration test on the deletion case. Reach for `..` only when the variant
 genuinely has fields the arm must not care about — and know you have traded the
 compiler's guarantee for a test's.
+
+
+## The construction-side sibling — `..` voids the guarantee in both directions
+
+The same trade exists at **construction** sites, and it is easier to miss because
+the ergonomic edit looks like tidying rather than like weakening a check.
+
+A design that says *"adding a field to this struct fails to compile at every
+construction site"* — and treats that as the mechanism enforcing an invariant —
+is relying on a guarantee that holds **only** while no construction site uses
+functional update (`..other`, `..Default::default()`) and the type derives no
+`Default`. Either edit silently voids it. Neither produces a warning. The
+invariant then rests on nothing, and nothing says so.
+
+`SL-253` `D2` is the case: `Floor` is a struct with one field per member
+precisely because `DEC-195` *requires* that adding a member fail to compile, and
+a `BTreeMap` or a `const ALL: [_; N]` array would give no such guarantee. The
+struct does give it — conditionally, on a condition the design had not stated.
+
+**So:** when a compile-time guarantee is load-bearing for a decision rather than
+merely convenient, write the ban down where the decision lives — this type
+derives no `Default` and is never built with `..` — so the next person to reach
+for the ergonomic form is contradicting a stated rule rather than an unstated
+assumption. This is the same family as a guard nobody has watched fail: see
+[[mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion]]
+for the assertion-side version.
