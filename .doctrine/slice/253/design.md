@@ -1941,23 +1941,54 @@ properties, five axes), four claims `Passed`, two observations `Read`. It
 reproduces `RV-352`'s baseline claim and is **uncapturable after the first line
 of this slice lands**.
 
-**Layer 2 — permitted, enumerated in advance.** Exactly three differences are
-licensed, and the list is closed:
+**Layer 2 — a closed transformation contract.** Not a list of exceptions. A
+**total map** from the pre-split artefact's lines to the post-split artefact's,
+and the two totality clauses are where the strength is:
 
-1. the outcome line (`DEC-191` — a floor standing and a published profile in
-   place of one word);
-2. the exit constants (`DEC-194` — `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`);
-3. the row key spellings (`DEC-198` — rendering is `{:?}` over `RowId`, whose
-   shape changes).
+> Every pre-split line has **exactly one** successor — so nothing may silently
+> disappear. Every post-split line has **exactly one** predecessor — so nothing
+> may silently appear.
 
-**A difference not on that list is a regression.** The list is a closed licence,
-not an open one; widening it is a design change and takes a decision record.
+| # | pre-split line | successor | how it is derived |
+|---|---|---|---|
+| 1 | `backend=… os=… kernel=… arch=… date=…` | byte-identical | the header survives the split untouched; `D9` keeps the rendered `date=` key |
+| 2 | `outcome=<word>` | the floor's standing, then the published profile | `DEC-191`'s one licensed *semantic* change |
+| 3 | `row Property(DeniedCanonicalStateAndCredentials)=V` | `row Floor(DeniedCanonicalStateAndCredentials)=V` | **from `FloorReading`**, not from the row list — the floor row has no `(RowId, RowVerdict)` entry after the split (§ 5.2.2) and would otherwise vanish |
+| 4 | `row Property(X)=V` — the other thirteen | `row Assurance(<key>)=V front=<front>` | key spelling per `DEC-198`; the front label rides the **existing** line |
+| 5 | `row Axis(A)=V` — five lines | byte-identical | the renderer reconstructs `RowId::Axis(axis)` from the verdict's `axes` vector |
+| 6 | `claim <section>/<name>=<outcome>` — four lines | byte-identical | untouched by the split |
+| 7 | `observation <section>/<name>=<reading>` — two lines | byte-identical | untouched by the split |
 
-The list has already done its work once. `D5` renames `AdmissionVerdict::date` to
-`observed_at`, and `render_verdict` emits `date={}` on the header line — a fourth
-difference, and therefore a regression by this rule. `D9` scopes the rename to
-source identifiers and leaves the rendered key alone rather than widening the
-list (`RF-2`). The header line is unchanged in this slice.
+Two clauses sit outside the line map because they are not about a line's text:
+
+- **Ordering.** The assurance block is ordered by front. That is a stated
+  permutation of rule 4's outputs, not an unlicensed difference — and it is how
+  grouping is expressed, since a group *header* would be a line with no
+  predecessor and the second totality clause rejects it.
+- **The exit code.** `EXIT_REFUSED` → `EXIT_DISQUALIFIED` (`DEC-194`). A process
+  exit code, not a line of the artefact.
+
+**A line the contract does not derive is a regression.** So is a pre-split line
+with no successor. The contract may be amended — deliberately, in a decision
+record — but it cannot be quietly widened, which is the whole reason it replaced
+an exception list (`RF-11`). Under an enumerated licence an unlisted difference
+is a regression *if a reviewer notices at audit*; under a total map, the noticing
+is done by a test.
+
+**The instrument is a whole-output golden test**, committed in the same phase as
+§ 9.2's key translation table and asserting the post-split artefact verbatim.
+The translation table supplies rule 4's key and front columns; the golden test is
+what makes the two totality clauses machine-checked rather than reviewer
+discipline. Written before the phase that changes `RowId`, because that phase is
+the first that can break the contract.
+
+The contract has already decided two things. `D9`: rule 1 is byte-identical, so
+renaming the rendered `date=` key has no derivation and the rename stays
+source-side (`RF-2`). And `RF-11`: § 5.4's rendering constraints are not
+stylistic preferences — no standalone group headers, one self-contained line per
+assurance row, a derived successor for the floor row, byte-identical axis lines
+— they are what rules 3, 4 and 5 and the two totality clauses require of the
+renderer.
 
 **Layer 3 — mechanical.** Test source naming moved types is translated and
 reviewed as a *translation diff in which no asserted value moves*. A reviewer's
@@ -1995,6 +2026,10 @@ carries a **third column for each assurance row's front**, because `D8` puts the
 front list in the payload's table and this is where that table's contents are
 first written down.
 
+Those two columns are exactly § 9.1's rule 4 — the new key and the front label —
+so the table is not merely a reader's aid: it is the contract's input, and the
+golden test consumes what it says.
+
 Row 8's name is a standing trap and the table is where it gets corrected in
 writing: `TrustedTerminationObservation` reads epistemic and is a **file-size
 resource bound** (`RLIMIT_FSIZE` on the child). Read a row's `delta`, never its
@@ -2024,6 +2059,12 @@ prose, so `EVD-022`'s invariance becomes an executable assertion.
   against types that are about to move; `P1` justifies the cost by what it
   returns, not by being cheap.
 
+It and the golden test are **not redundant**, and the distinction is worth
+holding: the characterisation test pins layer 1 (the row-to-verdict mapping,
+which must not change), the golden test pins layer 2 (the artefact's text, which
+changes in exactly the ways the contract derives). A regression in the algebra
+fails the first; a regression in the rendering fails the second.
+
 ### 9.4 Instruments, and how the proof is run
 
 Neither recipe is wired into `just gate`, and `just gate`'s `test-all` **names**
@@ -2036,8 +2077,14 @@ be green and prove nothing about this slice — F4. The routing:
 | `just capsule-check` | **every phase**, green at its end | **yes**, for part of the suite |
 | `just capsule-verify` | **phase exit criterion** for every phase touching the payload, and the default wherever it is arguable — only a phase that plainly cannot reach a row omits it | yes |
 
-**Both need `bwrap`** (`RF-4`), which the draft got wrong for `capsule-check`.
-`cargo test -p doctrine-control` runs `#[cfg(test)]` tests that assert
+The characterisation test and the golden test are not a third instrument: both
+are `#[cfg(test)]` tests in `doctrine-control` and ride `capsule-check`. What
+`capsule-verify` adds over them is the *live* artefact — the thing `EVD-022`
+captured and the thing § 9.1's contract is a contract about.
+
+**Both need `bwrap`** (`RF-4`), which the draft got wrong for `capsule-check` —
+as did `DEC-199` until its re-cut withdrew the claim. `cargo test -p
+doctrine-control` runs `#[cfg(test)]` tests that assert
 `backend.availability() == Availability::Available` and provision real capsules
 (`conformance.rs:6915`, `:7244`, `:7453`), and `EX-14` forbids them skipping
 instead, so on a host without `bwrap` they fail rather than pass thinly. The
@@ -2068,6 +2115,11 @@ against stable types, in the same pre-split phase as the characterisation test.
   and `DEC-156` forbid. § 9.4 is why that deferral has a cost: until it lands,
   there is no instrument at all on a host without `bwrap`.
 
+One band assignment is settled by `RF-10` rather than by symbol:
+`an_indeterminate_arm_carries_its_termination_and_output` (`:6176`) stays
+**payload**-side. It asserts what `ArmResult` carries, and `ArmResult` does not
+cross the seam (§ 5.2.5).
+
 ### 9.6 New tests this design requires
 
 Beyond the carve and the characterisation test:
@@ -2082,12 +2134,22 @@ Beyond the carve and the characterisation test:
 | `an_empty_assurance_profile_qualifies_when_the_floor_holds` | the `DEC-189` empty-front case, and that nothing reduces over the profile |
 | `unavailability_carries_no_rows_claims_or_observations` | `DEC-195`'s lift — not-run and ran-and-failed are different claims |
 | `a_host_without_a_shell_is_unavailable_not_violated` | `RF-3` — the behaviour is preserved exactly across the move to the payload |
-| `the_kernel_names_no_mechanism_type` | `I7`, by the architecture gate's `leaf` classification rather than by a unit test |
-| `row_verdict_is_unchanged` | § 5.2.5 — the one function that must not move at all |
+| `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make |
+| `arm_diagnostics_do_not_move_a_judgement` | `D12` — `ArmResult`s differing only in `termination`, `stdout` or `stderr` project to the same `ArmJudgement`, which is § 5.1's equivalence test made executable |
+| `every_submitted_assurance_key_has_a_front` | `I9`/`D11` — `FrontCatalog` is total over the keys its own table submitted, which is why `front_of` returns no `Option` |
+| `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test. Committed in the phase that changes `RowId`, beside § 9.2's table |
+
+The compile probe (`DEC-197`, § 5.1) is not in this table because it is not a
+test: it is a `harness = false` cargo target whose *compilation* is the
+assertion, and `I7` is what it pins. It needs a negative control at
+implementation — a probe that cannot fail proves nothing — and § 10.3 records
+that the control's shape is deliberately left to implementation.
 
 `I10` — the kernel takes values and closures only — is pinned by its own
 signature and by review, not by a test: there is nothing to execute, because the
-claim is about what the parameter list does not contain.
+claim is about what the parameter list does not contain. `RF-10` is the standing
+reminder of that pin's limit: it says nothing about what rides *inside* a
+parameter's type, and `I7` and the compile probe are what cover that.
 
 `an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it`
 (`:11275`) is **retired with its reasoning recorded**, not deleted silently: it

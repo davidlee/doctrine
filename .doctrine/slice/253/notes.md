@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consulted
+fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integrated
 
 ### Produced
 
@@ -22,6 +22,11 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consul
   Crate extraction declined for this slice on scope; `IMP-404` holds it.
 - `DEC-198` — row identity splits a closed floor from an open profile.
 - `DEC-199` — row verdicts are the preservation bar; instruments and artefacts.
+  Layer 2 **re-cut 2026-08-12**: the closed list of three permitted differences
+  becomes a **closed transformation contract** — a total map from the pre-split
+  artefact's lines to the post-split artefact's, two totality clauses, seven
+  rules, and a whole-output golden test as its instrument. The stale
+  `capsule-check needs no bwrap` claim is withdrawn in the same cut.
 - `DEC-200` — test bands are carved before the split, two bands.
 - `DEC-201` — one REV, four payloads; criterion 3's text narrows to the floor.
 - Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 49, stage
@@ -43,10 +48,16 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consul
   `mem_019ff439bede7fb29c7c09b7fd76d893` (the apply payload vocabulary).
 - `IMP-427` — the deferred live-`bwrap`/neutral third test band.
 - Findings `fnd-10` … `fnd-14` on the run — the **second** review pass, raised at
-  rev 50, **undispositioned**. Three blocking (`fnd-10` `ArmResult` drags
-  `backend::Termination` into the kernel; `fnd-11` front rendering escapes
-  § 9.1's closed licence; `fnd-12` `Table::front_of` has no route to `main.rs`),
-  two nits (`fnd-13` stale `§ 2.4` count in `P2`; `fnd-14` two off-by-one cites).
+  rev 50. Three blocking (`fnd-10` `ArmResult` drags `backend::Termination` into
+  the kernel; `fnd-11` front rendering escapes § 9.1's closed licence; `fnd-12`
+  `Table::front_of` has no route to `main.rs`), two nits (`fnd-13` stale `§ 2.4`
+  count in `P2`; `fnd-14` two off-by-one cites). **All five dispositioned and
+  integrated at revs 51–57**; `design show` will not display them, so read
+  `[[review.finding]]` in the runtime `design.toml`.
+- Design-local rulings `D11` (the payload returns a `FrontCatalog` beside the
+  verdict) and `D12` (the kernel takes `ArmJudgement`; diagnostics stay
+  payload-side), added by the second pass. Same treatment as `D1`–`D10`: in
+  `design.md`, not banked as `DEC`s.
 - Codex consultation (3 rounds, thread `019ff556-c847-7800-aa5d-27eb38931e0d`) —
   the repair for all three blocking findings, converged and recorded in the
   re-cut `DEC-197` and in **Open** below. Not an adversarial review; `RV-354`
@@ -113,44 +124,28 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consul
 
 ### Open
 
-- **Stage is `reviewing` (rev 50), second pass raised and NOT yet integrated.**
-  The immediate work is integrating `fnd-10` … `fnd-14`; the repairs are settled
-  (owner-approved, codex-consulted) and are listed below. Then, to lock: every
-  section attested (all ten `outstanding`), the review pass dispositioned —
-  `conducted` naming an RV, or `waived` with a reason — and the owner's
-  `design-accepted`. `RV-354` is still empty scaffolding (`done`, 0 findings,
-  untracked) and is not yet the pass that would be named.
-- **The settled repairs, awaiting integration into `design.md`:**
-  - `fnd-10` → kernel takes `ArmJudgement { Held, Failed, Indeterminate(Indeterminacy) }`;
-    the payload keeps the diagnostic-rich `ArmResult` and projects with
-    `into_judgement()`. **Surrender § 5.2.5's "byte-identical"** and rename
-    § 9.6's `row_verdict_is_unchanged` to a truth table over all nine
-    probe/control pairs, plus a projection test that diagnostics do not move the
-    judgement. `I7` stops citing the `leaf` gate as its machine check and cites
-    the compile probe, with the std-only residual named in `R1`.
-  - `fnd-10` → `BackendId` and `Availability` move into the kernel (re-cut
-    `DEC-197`); § 5.1's edge-inversion argument was wrong and its "two types from
-    `backend`" becomes *no imports at all*.
-  - `fnd-11` → constrain the rendering rather than widening the licence: no
-    standalone group headers, one self-contained line per assurance row carrying
-    its front label, ordered by front; the established floor row keeps a `row …=`
-    successor derived from `FloorReading`; axes reconstruct `RowId::Axis(axis)`
-    so their five lines are byte-identical. **`DEC-199` then needs re-cutting**
-    from three line-shaped exceptions into a closed transformation contract, plus
-    a whole-output golden test. That is a governance act and is *not yet done*.
-  - `fnd-12` → a transient payload envelope `QualificationRun { verdict, fronts }`
-    with `FrontCatalog::front_of(&AssuranceKey) -> &Front`, total. Not the whole
-    `Table` (exposes probes to the command tier) and not a free global lookup
-    (could rebuild a different table, weakening `I9`). § 10.3's "the three the
-    kernel's contract needs" is corrected.
-  - Kernel placement criterion, to state so the kernel does not become a dumping
-    ground: it owns the **adjudicative normal form** — the minimal
-    mechanism-independent inputs whose distinctions it observes, the output claim
-    algebra, and the identity/provenance binding the claim. Not "whatever the
-    verdict records", which would swallow any rendered diagnostic. `P1` stays the
-    review check for over-inclusion; that residual is not machine-enforceable.
-  - `D10` already narrows `DEC-197`'s `&dyn CapsuleBackend` clause and § 7.1's
-    row does not say so — fold a line into § 7.2's `D10`.
+- **Stage is `reviewing` (rev 57). The second pass is fully integrated and all
+  five findings are dispositioned.** `DEC-197` and `DEC-199` are both re-cut.
+  What remains to lock, in order: every section attested (**all ten are
+  `outstanding`** — the integration invalidated the lot), the review pass
+  dispositioned (`conducted` naming an RV, or `waived` with a reason), and the
+  owner's `design-accepted`.
+- **`RV-354` still cannot carry the pass.** It is empty scaffolding — `done`, 0
+  findings, untracked — and needs reopening or replacing before it can be named.
+  **The external adversarial review is still unspent**: both passes so far were
+  run by the design's author, and the codex consultation was explicitly a
+  consultation and not a review. § 10 of `design.md` says so in its own preamble.
+- **What a third pass should be told.** § 10.1 now ends with it: four
+  enumerations of *what crosses the seam backwards* have been wrong, across three
+  location classes (parameter list, function body, a field of a parameter's
+  type), each found only after the previous was closed. **The right prior is that
+  there is a fourth location class**, not that the list is complete. § 10.2's
+  refreshed list marks which items each pass answered and which are untouched —
+  `D1`/`I3` and `D7` have survived two passes without being probed at all.
+- **§ 5.1's placement criterion is new and self-certifying**, which § 10.2 flags
+  as its own attack surface: the adjudicative normal form and the
+  observational-equivalence test were written *in response to* five wrong
+  judgement calls, and have not been run backwards over the calls already made.
 - `OQ-2` is closed by `DEC-195`; `OQ-1` closed narrow by the owner.
 - Carried into `/plan` (each stated in its decision, gathered here):
   the kernel-unit `leaf` classification as an exit criterion (`DEC-197`);
@@ -159,10 +154,17 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consul
   table in the `RowId` phase and the pre-split characterisation test (`DEC-199`);
   the pre-split test-band reorganisation with ~67 tests needing triage
   (`DEC-200`); the REV as a phase carrying four payloads (`DEC-201`).
-- Added by the review pass, also for `/plan`: the `today` → `observed_at` rename
-  is **source-side only**, the rendered `date=` key is unchanged (`D9`); and
-  `just capsule-check` needs `bwrap` too, so neither instrument runs on a host
-  without it until `IMP-427` lands.
+- Added by the first review pass, also for `/plan`: the `today` → `observed_at`
+  rename is **source-side only**, the rendered `date=` key is unchanged (`D9`);
+  and `just capsule-check` needs `bwrap` too, so neither instrument runs on a
+  host without it until `IMP-427` lands.
+- Added by the second pass, for `/plan`: the **transformation contract must be
+  written before the `RowId` phase**, because the whole-output golden test
+  consumes it and that phase is the first that can break it (`DEC-199` re-cut);
+  the golden test lands committed in that same phase beside the key translation
+  table, whose key and front columns *are* the contract's rule 4; and the compile
+  probe needs a **negative control** at implementation (`DEC-197`) or it can be
+  present and prove nothing.
 
 ## Agent hostile pass over the drafted design (stage `reviewing`)
 
