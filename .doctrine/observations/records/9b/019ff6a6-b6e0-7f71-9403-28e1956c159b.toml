@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff6a6-b6e0-7f71-9403-28e1956c159b"
+recorded_at = "2026-08-12T15:45:48.768612793Z"
+kind = "friction"
+summary = "design: listing .doctrine/state/ to find design run storage dumps ~220 mem-surface-seen-*.txt lines"
+detail = "Locating the design run's state file cost a bare ls of .doctrine/state/, which returned about 220 mem-surface-seen-<uuid>.txt entries ahead of the handful of real subdirectories. The signal (state/slice/253/design.toml) was two lines; the noise was the rest of a screen. Per-session memory-surface receipts are runtime bookkeeping and could live in a subdirectory, or the design run could name its own storage path in the resume envelope so no directory listing is needed at all."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -557,23 +557,46 @@ So the positive rule, stated once:
 
 > The kernel owns the **adjudicative normal form** — the minimal
 > mechanism-independent inputs whose distinctions it actually observes, the
-> algebra of the claims it **computes**, and the identity and provenance that
-> bind a claim to what it is about. Nothing else.
+> algebra of the claims it **computes**, the identity and provenance that bind a
+> claim to what it is about, and the **shape of its own verdict** — including
+> conclusions it carries out without reaching. Nothing else.
 
-Read the three clauses as a filter. *Distinctions it observes* is why `Availability`
+Read the four clauses as a filter. *Distinctions it observes* is why `Availability`
 moves and `ArmResult`'s diagnostics do not. *The claim algebra* is why
 `RowVerdict`, `Floor` and `Qualification` are kernel types. *Identity and
-provenance* is why `RowId`, `AssuranceKey`, `BackendId` and `HostDescriptor` are,
-and why `Front` — a label on a claim, reasoned about by nobody — is not.
+provenance* is why `RowId`, `AssuranceKey`, `BackendId` and `HostDescriptor` are.
+*The shape of its own verdict* is why `Claim`, `AuxOutcome`, `Unrowed` and
+`Reading` are, though the kernel reasons about none of the four —
+`Qualification::Ran` structurally contains them.
 
-*Computes*, not *emits*, and the word is load-bearing (`RV-354` `F-1`, contested
-a second time). The kernel emits more claims than it computes: `auxiliary`
-returns `Vec<(Claim, AuxOutcome)>` already adjudicated by the payload, and the
-kernel carries that pair out untouched. A criterion written over what the kernel
-*emits* would therefore assert ownership of a claim algebra the kernel does not
-have. The honest reading is the narrower one — the kernel owns the algebra of
-the claims it reaches itself, and is a faithful courier for the rest — and § 7.2
-records why that distinction is kept rather than tidied away.
+`Front` is the **negative control on that fourth clause**, and the reason it is
+not a licence: it is a label on a claim, reasoned about by nobody, and it is
+*not* a kernel type — because the design keeps it out of `Qualification`
+entirely and hands it to the command tier on `QualificationRun` instead. The
+clause admits a type when the verdict contains it, and the question of what the
+verdict may contain is answered somewhere else.
+
+*Computes*, not *emits*, and the gap between those two words is what the fourth
+clause exists to hold (`RV-354` `F-1`, contested a second time). The kernel emits
+more claims than it computes: `auxiliary` returns `Vec<(Claim, AuxOutcome)>`
+already adjudicated by the payload, and the kernel carries that pair out
+untouched. A criterion written over what the kernel *emits* asserts ownership of
+a claim algebra it does not have. But narrowing to *computes* alone is not the
+repair either — it evicts `Claim` and `AuxOutcome` from the kernel, and there is
+nowhere for them to go, since `Qualification::Ran` contains them and a kernel
+importing the payload's copy is precisely what `I7` forbids. So residence
+follows containment, and that is the fourth clause: **a type the kernel's own
+output contains must live in the kernel**, whether or not the kernel reasons
+about it.
+
+This is deliberately **not** the formulation refused below. *Whatever the verdict
+records* would be a membership rule in its own right, admitting any type that
+happens to be printed beside a verdict. The fourth clause admits nothing by
+itself: it is downstream of a separate decision about what `Qualification` is
+permitted to contain, which the first three clauses and `DEC-195` govern, and
+`Front` is the standing proof that the decision is made separately. It closes a
+hole this criterion had rather than opening one. § 7.2 records the seam crossing
+it corresponds to.
 
 The criterion is deliberately **not** *whatever the verdict records*: that
 formulation would swallow any rendered diagnostic that happens to be printed
@@ -1251,6 +1274,12 @@ the line are the payload's, and that placement is `RF-3`'s and `RF-9`'s repair:
   each assurance row rendered with fronts.front_of(&key)
 ```
 
+**The diagram is data flow, not call order**, and the difference matters now
+that `I11` below pins the order. `auxiliary` and `observations` are drawn where
+their results are *consumed* — the `Ran` constructor — while the code invokes
+both *before* the row loop. This picture is the authority on where a result
+goes; `I11` is the authority on when each closure runs.
+
 The shell-absence path keeps its current behaviour exactly — a host with no
 usable shell is *unavailable*, naming what is missing, and never a violated row.
 What moved is only which layer knows that `/bin/sh` is the thing to look for.
@@ -1279,11 +1308,13 @@ So the kernel is pinned to a protocol, not merely to a signature — `I11`:
 - **Not at all on the unavailable path.** `Unavailable` returns before any of
   the three is called, which is `DEC-195`'s lift restated as a call count —
   nothing ran, so there is nothing to report.
-- **Divergence stays the payload's.** A closure that panics unwinds through the
-  kernel, which catches nothing and holds no state a partial run could corrupt.
-  Handling a panic would mean inventing a verdict for a row that produced none,
-  which is exactly the fabrication `D13` says no seam can prevent and no seam
-  should simulate.
+- **Divergence stays the payload's.** The kernel installs no catch, so a
+  panicking closure is the payload's to prevent or to own under either panic
+  strategy. What the kernel accumulates mid-loop — the partial verdict vector —
+  does not outlive the unwind, so there is no corrupt state for a recovery path
+  to repair. And handling a panic would mean inventing a verdict for a row that
+  produced none, which is exactly the fabrication `D13` says no seam can prevent
+  and no seam should simulate.
 
 § 9.6 tests this. It is the design's only invariant about *when* rather than
 *what*, and § 7.2 records why an enumeration over types could not have found it.
@@ -1579,8 +1610,16 @@ not subsequently falsified. And it swept trait bounds, associated types,
 formatting and serialization impls, enum discriminant ordering, error types and
 const/static values for further seam crossings, and found none.
 
-**The second verification round — the raiser was asked again, and overturned
-both surviving repairs again.** Two findings had been repaired twice by this
+**The second verification round, and the self-audit that followed it.** The
+raiser was asked again and overturned both surviving repairs again; the
+integration was then attacked by its own author before being handed back, which
+found four more defects *in that integration* — a criterion narrowed until it
+evicted a type the kernel must hold, a lifecycle diagram contradicting the
+invariant added beneath it, a taxonomy calling three things independent when two
+were nested, and a lesson filed under one heading when the third of its three
+cases had a different shape. All four are repaired here. The pattern that
+matters is that a round of repairs is itself a body of work with its own defect
+rate, and this document has now measured that rate twice. Two findings had been repaired twice by this
 point, and both re-repairs failed on the same axis: each closed the instance it
 was shown and left the class this document had already named.
 
@@ -1590,8 +1629,11 @@ was shown and left the class this document had already named.
   to authority delegation. `auxiliary` refutes it: it returns an `AuxOutcome`,
   which is an adjudication, and nothing reduces over it. The bound belongs to
   **admission**, not to adjudication in general, and § 5.1's ownership criterion
-  had to narrow with it — from the claims the kernel *emits* to the claims it
-  *computes*. The design had been reading its own defence too generously for two
+  moved with it — narrowing from the claims the kernel *emits* to the claims it
+  *computes*, and then **gaining a fourth clause**, because *computes* alone
+  evicts `Claim` and `AuxOutcome` from a kernel whose own output contains them.
+  The self-audit that followed this round caught that second half; the round
+  itself shipped the narrowing without it. The design had been reading its own defence too generously for two
   rounds, while the code's doc comment said *"reported, never admitted on"* the
   whole time.
 - **`F-1`'s other half had never been answered at all.** The original finding
@@ -1615,15 +1657,27 @@ The matching ruling is that the closures' *captures* are correctly out of scope,
 since an instrument that read them would be defeating the seam rather than
 checking it; what was missing was the kernel-visible behaviour of invoking them.
 
-**The standing lesson from this round is about repairs, not about seams.** All
-three defects above are repairs that closed the instance they were shown while
-leaving the class the same document had already written down. `F-2`'s is the
-starkest: § 5.1 names three vacuities in a single sentence, and two consecutive
-repairs closed the first and the third. **A repair should be checked against the
-class statement nearest to it in the document — that statement is usually the
-one the repair was derived from, and therefore the one it silently narrows.**
-`RF-10`'s sibling lesson was to distrust the enumeration that integrates a
-finding; this one is to distrust the *scope* of the fix that follows it.
+**The standing lesson from this round is about repairs, not about seams — and
+the three defects are not all the same defect.** Two of them are repairs that
+closed the instance they were shown while leaving the class the same document
+had already written down. `F-2`'s is the starkest: § 5.1 names three vacuities
+in a single sentence, and two consecutive repairs closed the first and the
+third. `D13`'s is the same shape at the level of a rule rather than a recipe.
+**A repair should be checked against the class statement nearest to it in the
+document — that statement is usually the one the repair was derived from, and
+therefore the one it silently narrows.** `RF-10`'s sibling lesson was to
+distrust the enumeration that integrates a finding; this one is to distrust the
+*scope* of the fix that follows it.
+
+The third is not that failure and should not be filed under it. `F-1`'s
+callback-protocol half was never repaired at all — three rounds answered the
+half about `run_row`'s return and left the other half untouched, without ever
+disputing it. That is a **compound finding silently reduced to its first
+clause**, which no amount of checking a repair against its class statement would
+catch, because no repair was attempted. The guard against it is different in
+kind: a finding that asks for two things needs its clauses tracked
+independently to disposition, and a disposition that answers one of them is not
+a disposition of the finding.
 
 ### 10.2 Attack these first
 
@@ -2093,30 +2147,38 @@ always said this correctly; `AuxOutcome`'s own doc comment reads *"Reported,
 never admitted on"*, and the design paraphrased it into something stronger than
 it says.
 
-*The generalisation, stated correctly on the third attempt.* Two earlier forms
-were wrong in the same place both times — an *only where* attached to a test
-that cannot carry it. A closure's return crosses this seam in **three
-independent ways**, and the reduction test finds one of them.
+*The generalisation, restructured on the third attempt — and the restructuring
+is the correction.* The first two forms were wrong in the same place, an *only
+where* attached to a test that cannot carry it. The third was wrong in a new
+place: it called three things independent when two of them are nested. What this
+seam has is **two independent kinds of crossing and one severity grade**, and
+the reduction test measures the grade rather than identifying a kind.
 
-- **Admission authority** — the return carries a judgement that *reaches the
-  floor*. This happens wherever, and only where, something reduces over the
-  return into admission; that is why `run_row` had it and `auxiliary` does not.
-  The bound is reduction *into admission*, not reduction in general, and not
-  adjudication in general.
-- **Reported adjudication** — the return carries a conclusion the kernel emits
-  without computing. `auxiliary` does this by design, and it is not a defect;
-  but it is not nothing either. It is the exact boundary of § 5.1's ownership
-  criterion, which is why that criterion says *computes* rather than *emits*.
-- **Type contamination** — the return carries a *mechanism type* out. `I7`'s
-  crossing, and indifferent to reduction: if `observations` returned a `Reading`
-  naming `Termination`, nothing would reduce over it and it would still be a
-  leak. `I7` and the compile probe cover this; the reduction test says nothing
-  about it.
+- **Reported adjudication** *(kind)* — the return carries a conclusion the
+  kernel emits without computing. `auxiliary` does exactly this: `AuxOutcome` is
+  an adjudication and the kernel is its courier. Legitimate by design, and the
+  reason § 5.1's ownership criterion needs its fourth clause.
+- **Type contamination** *(kind)* — the return carries a *mechanism type* out.
+  `I7`'s crossing, and genuinely independent of the first: if `observations`
+  returned a `Reading` naming `Termination` it would leak while adjudicating
+  nothing. The compile probe covers it; the reduction test says nothing about
+  it.
+- **Reaching admission** *(grade — not a third kind)* — whether a reported
+  adjudication is reduced over into the floor. This is where *wherever, and only
+  where, something reduces* belongs, and it belongs nowhere else. It does not
+  classify a crossing; it says what one of the first kind costs.
 
-The first and third were live on `run_row` at once, which is why one fix
-appeared to close one class — and why the appearance survived a second look.
-Anyone applying this rule to a fourth closure must run all three tests, not the
-one that caught the last defect.
+So `run_row` carried the first kind at the severe grade, `auxiliary` carries the
+first kind at the benign grade, and `observations` carries neither kind. One fix
+appeared to close one class because the two grades were never distinguished —
+and the appearance survived two looks because each redraw kept the grade as a
+peer of the kinds instead of a property of one.
+
+That this generalisation has now been restated three times and was wrong in a
+*different structural way* each time is itself the finding. Anyone applying the
+rule to a fourth closure should test both kinds and then grade the first — and
+should treat this paragraph as the least load-bearing thing in the section until
+someone other than its author has attacked the shape rather than the wording.
 
 *And the enumeration of locations was short by one.* Five were counted —
 parameter, body, nested field, callback return, captured environment. The sixth
@@ -2606,7 +2668,7 @@ Beyond the carve and the characterisation test:
 | `unavailability_carries_no_rows_claims_or_observations` | `DEC-195`'s lift — not-run and ran-and-failed are different claims |
 | `a_host_without_a_shell_is_unavailable_not_violated` | `RF-3` — the behaviour is preserved exactly across the move to the payload |
 | `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make. After `RV-354` `F-1` it also gains reach: `run_row` returns the two arms and the kernel adjudicates, so this table now covers the **only** path to a `RowVerdict` rather than a function the payload may or may not call |
-| `the_kernel_invokes_each_closure_exactly_once_in_order` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*: `auxiliary`, then `observations`, then one `run_row` per submitted id and none for an unsubmitted one, with counts and order recorded by the closures themselves; and none of the three invoked at all on the `Unavailable` path (`RV-354` `F-1`) |
+| `the_kernel_honours_the_callback_protocol` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*, with counts and order recorded by instrumented closures: `auxiliary`, then `observations`, then one `run_row` per submitted id and none for an unsubmitted one. Not named for *exactly once*, because the protocol's other half is a count of **zero** — none of the three invoked on the `Unavailable` path. That clause is the call-side complement of `unavailability_carries_no_rows_claims_or_observations`, which asserts the output side; a kernel that called all three and discarded the results would pass that test and fail this one (`RV-354` `F-1`) |
 | `arm_diagnostics_do_not_move_a_judgement` | `D12` — `ArmResult`s differing only in `termination`, `stdout` or `stderr` project to the same `ArmJudgement`, which is § 5.1's equivalence test made executable |
 | `every_submitted_assurance_key_has_a_front` | `I9`/`D11` — `FrontCatalog` is total over the keys its own table submitted, which is why `front_of` returns no `Option` |
 | `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test, asserting drift. Committed in the phase that changes `RowId`, beside § 9.2's table. Its expected value is **derived** by the one-shot transform script, not authored (`RV-354` `F-3`) |

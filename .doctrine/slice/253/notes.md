@@ -78,9 +78,11 @@ integrated through a verification round and a self-audit
   summarises findings to a count.
 - `D13` — the row runner returns `(ArmJudgement, ArmJudgement)`; the kernel
   adjudicates. `D10` narrowed with it. Its *generalisation* took three attempts
-  and now names **three** crossings (admission authority, reported adjudication,
-  type contamination) over **six** location classes — the sixth being the
-  callback's control and effect semantics, pinned as `I11` in § 5.4. Same treatment as `D1`–`D12`: in
+  and a self-audit, and now names **two** independent kinds of crossing (reported
+  adjudication, type contamination) with **one** severity grade (reaching
+  admission) over **six** location classes — the sixth being the callback's
+  control and effect semantics, pinned as `I11` in § 5.4. The third attempt's
+  error was structural rather than verbal: it called the grade a third kind. Same treatment as `D1`–`D12`: in
   `design.md`, not banked as a `DEC`.
 - `mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion` —
   new, and the most portable thing the first verification round produced.
