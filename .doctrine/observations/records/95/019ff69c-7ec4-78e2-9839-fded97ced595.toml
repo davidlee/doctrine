@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff69c-7ec4-78e2-9839-fded97ced595"
+recorded_at = "2026-08-12T15:34:39.044369855Z"
+kind = "friction"
+summary = "record-memory: edit→attest cycle forces a commit per step"
+detail = "Strengthening an existing memory (mem.fact.dispatch.worker-confinement-is-actor-based) cost THREE commits for what is one logical change. Two rules compose badly: (1) 'doctrine memory edit' resets verification_state to unverified on ANY field change — including a scope.paths tweak that cannot invalidate the body; (2) 'doctrine memory verify' refuses a dirty tree by design (no false attestation), so attesting requires committing first. So every edit+attest is at minimum commit → verify → commit, and a follow-up scope correction restarts the cycle: body commit, scope commit, attestation commit. The refusal in (2) is right and I would not weaken it. The cost is in (1): a metadata-only edit that cannot affect the body's truth still burns the attestation. Candidate: scope the reset to body/summary changes, or let 'verify' accept a tree whose only dirt is the memory item being attested. Skill: /record-memory (via /design harvest)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
