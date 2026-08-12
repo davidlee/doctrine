@@ -6,19 +6,29 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
+fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
 
 ### Produced
 
 - `EVD-021` — the vacuous-admission finding.
+- `EVD-022` — the pre-split nineteen-row baseline, captured in-jail at
+  `4662e64eb`. The pre half of `DEC-199`'s bracket; uncapturable later.
 - `DEC-195` — verdict shape: reduced floor, published profile, named admission axis.
-- Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 7, stage
-  `exploring`, eight inquiry nodes, `inq-1`/`inq-2` resolved against `DEC-195`.
+- `DEC-196` — the seam cuts at row identity: kernel keeps identity and judgement,
+  construction goes to the payload.
+- `DEC-197` — the kernel classifies as a leaf; `BackendId` stays in `backend.rs`.
+- `DEC-198` — row identity splits a closed floor from an open profile.
+- `DEC-199` — row verdicts are the preservation bar; instruments and artefacts.
+- `DEC-200` — test bands are carved before the split, two bands.
+- `DEC-201` — one REV, four payloads; criterion 3's text narrows to the floor.
+- Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 18, stage
+  `exploring`, **all eight inquiry nodes resolved**.
 - Research artefact at `.doctrine/slice/253/research/` (runtime tier, gitignored;
   `raw/governance.md`, `raw/codemap.md`, `research.md`).
 - Friction observation `019ff42b-2655-7aa3-b042-0a83272a328c` — `design apply`
   silently absorbs unknown payload keys. Now filed as `ISS-346` and banked as
   `mem_019ff439bede7fb29c7c09b7fd76d893` (the apply payload vocabulary).
+- `IMP-427` — the deferred live-`bwrap`/neutral third test band.
 
 ### Learned
 
@@ -37,9 +47,20 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
 
 ### Open
 
-- `inq-3`..`inq-8` in the design run. `inq-1`/`inq-2` are dispositioned
-  (`adopt DEC-195`, revision 6). Live frontier: `inq-3`, `inq-5`, `inq-7`.
+- **The inquiry axis is closed; the stage gate is not.** All eight nodes are
+  `resolved`, but `exploring`'s two contracts are undischarged and its runbook
+  still reads `obligation 1/5 explore.scope`. Needed before drafting: the agent
+  performs `blocking-set-declared`; the user performs `graph-reviewed` naming it,
+  and `governance-confirmed`. None of this is decision work — the decisions are
+  made and banked.
 - `OQ-2` is closed by `DEC-195`; `OQ-1` closed narrow by the owner.
+- Carried into `/plan` (each stated in its decision, gathered here):
+  the kernel-unit `leaf` classification as an exit criterion (`DEC-197`);
+  `capsule-check` every phase and `capsule-verify` as a phase exit criterion for
+  payload-touching and arguable phases (`DEC-199`); the committed key translation
+  table in the `RowId` phase and the pre-split characterisation test (`DEC-199`);
+  the pre-split test-band reorganisation with ~67 tests needing triage
+  (`DEC-200`); the REV as a phase carrying four payloads (`DEC-201`).
 
 ## Design surface triage (runbook step `explore.triage`)
 
@@ -88,6 +109,11 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
   payload, as a pure reorganisation in the same pre-split phase. ~67 of 186 tests
   need individual triage; the phase plan carries that number. The live/neutral
   third band is deferred to `IMP-427`.
+- **One REV, four payloads** (`DEC-201`) — `REQ-459` criterion 1 splits, criterion
+  3's *text* narrows to "same floor, own profile" (an owner-approved scope
+  widening), `REV-051`'s criterion-3 disposition is corrected to match, and
+  `IMP-405`'s rename plus `CPT-002`'s threat priority land — the latter in
+  `SPEC-030` § **Concerns**, beside "Security posture is structural".
 
 ### Risks
 

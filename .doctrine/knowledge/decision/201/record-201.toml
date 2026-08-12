@@ -1,0 +1,57 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 201
+slug = "one-rev-narrows-criterion-3-to-the-floor"
+title = "One REV narrows criterion 3 to the floor"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-7. The node scoped the REV at three payloads: split REQ-459's undifferentiated property list into an authority floor and a per-front assurance profile, retiring its single green path; correct REV-051's applied criterion-3 disposition, which reads 'discharged structurally — one suite parameterised by backend; a second backend passing it edits nothing' and which DEC-189 contradicts; and carry CPT-002's escape-versus-heresy priority into SPEC-030's Overview or Concerns, with IMP-405's platform-versus-mechanism rename folded in. Reading REQ-459 against DEC-189, DEC-195 and DEC-198 shows the disposition is a paraphrase of criterion 3's own text — no macOS or other backend claims support until its mechanism passes the same property suite independently — so correcting the disposition alone would leave SPEC-030 asserting the thing the correction was made for."
+choice = "ONE REV, FOUR PAYLOADS over two artefacts, landing with the code so no commit has the spec contradicting the binary. (1) REQ-459 criterion 1 splits into two criteria of different invariance — an authority floor proven on every mechanism, and an assurance profile that varies per mechanism and is published rather than reduced; DEC-191's retirement of the single green path falls out of that rather than being a separate edit. (2) REQ-459 criterion 3's TEXT narrows: a second mechanism proves the same FLOOR and publishes its OWN PROFILE — 'edits nothing' survives, 'the same property suite' does not. An explicit widening of the slice's scope, taken by the owner. (3) REV-051's criterion-3 disposition is corrected to match. (4) IMP-405's rename applies across SPEC-030 § Platform backend contract, and CPT-002's threat priority lands in § CONCERNS, not § Overview."
+alternatives = ["Two REVs — spec truth in one, the REV-051 disposition correction in another — refused: cleaner provenance, but the two must be true together and separating them creates a window in which they are not", "A minimal REV over REQ-459's criteria only, deferring IMP-405 and CPT-002 — refused because the slice scope folds IMP-405 in on the grounds that these types move anyway, and CPT-002's placement was owner-directed", "Correct REV-051's disposition without touching criterion 3's text — refused as the finding that reframed this node: the disposition is criterion 3 restated, so fixing one and not the other leaves them contradicting each other"]
+rationale = "The four payloads are not independent. Three are consequences of one un-conflation — canonical-authority denial is invariant and mechanism-independent while the rest of the property list is neither — and the fourth is a wording fix to the section they all live in. Criterion 3 is where the pressure concentrates because DEC-156 reads it as the admission rule for a second mechanism, and that reading is what forced DEC-198's open assurance key; leaving its text unchanged would leave the spec demanding what the code is now built not to require. CPT-002 lands in Concerns rather than Overview because Overview establishes what the container is and descends from, so a threat-priority statement there reads as scoping — while Concerns already carries 'Security posture is structural' in the same declarative form, and that entry is the one most easily misread as escape being the threat."
+consequences = ["The REV is wider than the slice scope literally named — criterion 3's TEXT is in scope by owner direction, 2026-08-12", "The REV lands as a phase of this slice, with the code, so no commit has the spec contradicting the binary", "REQ-459 gains a criterion — three become four, since criterion 1 splits", "REV-051's two recorded criterion-2 shortfalls are untouched: there are still no production acceptance tests, and the conformance fixture's whole-host-root binding is a separate defect this slice does not take", "CPT-002's threat priority lands in SPEC-030 § Concerns, beside 'Security posture is structural'", "IMP-405 is discharged by this REV and can be closed with the slice"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "criterion 3 and the REV's payloads"
+target = "DEC-189"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "criterion 3 and the REV's payloads"
+target = "DEC-195"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "criterion 3 and the REV's payloads"
+target = "DEC-198"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "criterion 3 and the REV's payloads"
+target = "CPT-002"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
