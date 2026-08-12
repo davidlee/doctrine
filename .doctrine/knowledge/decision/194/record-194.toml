@@ -1,0 +1,51 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 194
+slug = "qualification-names-the-mechanism-axis"
+title = "Qualification names the mechanism axis"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["capsule", "cluster:capsule", "conformance", "naming", "terminology"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "The capsule programme spells three unrelated events with the same three words. ADR-020's work transaction owns admission (step 5 — the control plane advances the accepted ref by expected-tip compare-and-swap), verify (step 4 — verify the normalized candidate in a separate fresh capsule) and conform (step 4 — conform the pinned result to its contract). The conformance suite independently uses AdmissionVerdict / Admission::Admitted for a verdict about a backend, backend verify for running the property suite, and conformance.rs for the suite itself. The collision has already cost work twice: DEC-193 was drafted to auto-reap at admission meaning step 5 and therefore before ADR-020's retention floor allows any automatic deletion, and two readers held admission as step 5 and as /close through an entire exchange without either being wrong."
+choice = "The work axis keeps admission, verify and conform. The mechanism axis takes qualification: QualificationVerdict, Qualification::{Qualified, Disqualified { reason }}, the verb backend qualify, and exits EXIT_QUALIFIED / EXIT_DISQUALIFIED. The rename is paid inside DEC-190's kernel split, while those types are moving anyway."
+alternatives = ["Keep admission on both axes and disambiguate by module path — refused because the collision bites hardest in prose and commit messages where no path is present", "Rename the work axis instead — refused because ADR-020 is accepted and unamended and its step numbering is cited across the corpus", "Attestation or certification — refused because attestation carries a specific remote-attestation meaning in this domain that would mislead", "ConformanceVerdict — refused because conform is itself one of the three overloaded words"]
+rationale = "Qualification is unused anywhere in this programme and it says fitness to be used rather than acceptance of a thing. That is exactly what the suite decides about a backend and exactly what it does not decide about a worker's output — so the word carries the distinction rather than merely avoiding the clash. ADR-020 is the senior document and cannot be the one to move. Timing decides the rest: DEC-190's split relocates these types regardless, so renaming during the move is nearly free while renaming afterwards is a second migration. This is a rename and not a redesign — DEC-156's open BackendId contract is untouched and the per-front vector DEC-191 needs is already in the type, where only the final AND-reduction is wrong."
+consequences = ["backend verify becomes backend qualify — a CLI surface change in doctrine-control", "EXIT_REFUSED's mismatch with the NotAdmitted variant is closed at the same time and refused is freed for work outcomes where DEC-193 already uses it", "Admission and verify and conform become reserved for ADR-020's transaction and any later mechanism-axis use of them is a defect rather than a style preference", "The rename must land with DEC-190's split or it becomes a second migration"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-020"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "pins the mechanism-axis vocabulary for the epistemic kernel"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the rename lands inside this split or becomes a second migration"
+target = "DEC-190"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the retention record misdrafted against the overloaded term"
+target = "DEC-193"
