@@ -29,3 +29,7 @@ label = "references"
 role = "concerns"
 descriptor = "Falsifies-the-claude-p-billing-premise"
 target = "ADR-011"
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

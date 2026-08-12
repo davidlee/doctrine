@@ -1,0 +1,99 @@
+id = 254
+slug = "collapse-dispatch-onto-one-subprocess-arm"
+title = "Collapse dispatch onto one subprocess arm"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["area:dispatch", "area:worktree", "cluster:capsule", "harness:claude"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dispatch_config.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dtoml.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "scripts/pi-spawn-confined.sh"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".claude/settings.json"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_worktree_*"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/dispatch-mechanics.md"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-008"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Retires-REQ-288-and-rewrites-REQ-291"
+target = "SPEC-021"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Source-anchors-point-at-deleted-confinement-modules"
+target = "SPEC-012"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IDE-024"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Falsified-premise-enabling-this-change"
+target = "EVD-023"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Brings-forward-roadmap-step-2-for-the-incumbent-arm"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Acute-leg-inherited-from-abandoned-SL-247"
+target = "IMP-401"
+
+[[relation]]
+label = "supersedes"
+target = "SL-247"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

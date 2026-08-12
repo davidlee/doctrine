@@ -39,3 +39,7 @@ label = "references"
 role = "concerns"
 descriptor = "Brings-forward-the-recorded-subprocess-worker-target"
 target = "RFC-025"
+
+[[relation]]
+label = "shapes"
+target = "SL-254"
