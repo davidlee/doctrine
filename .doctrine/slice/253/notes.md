@@ -67,18 +67,30 @@ integrated through a verification round and a self-audit
   is visible only as a change-log row, so `design show` reports zero outstanding
   while blocking findings await disposition.
 - **`RV-354` — the external adversarial pass, now spent.** Codex (GPT-5.5),
-  thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, two rounds: raise, then a
-  verification round attacking the repairs. `F-1`/`F-3` blockers, `F-2` major,
-  `F-4` minor. All four disposed `fix-now`; `F-3`/`F-4` verified by the raiser,
-  `F-1`/`F-2` **contested and re-repaired**, and the ledger still awaits the
-  raiser on those two. Findings and dispositions are on the ledger — read them
+  thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, three rounds: raise, then two
+  verification rounds each attacking the repairs rather than accepting them.
+  `F-1`/`F-3` blockers, `F-2` major, `F-4` minor. All four disposed `fix-now`;
+  `F-3`/`F-4` verified by the raiser, `F-1`/`F-2` **contested twice and repaired
+  three times**, and the ledger still awaits the raiser on those two. Both
+  contests were upheld against the artefact and the code on each occasion —
+  the repairs were the defective party, not the findings. Findings and dispositions are on the ledger — read them
   with `doctrine review show RV-354 --format json`, since the table format
   summarises findings to a count.
 - `D13` — the row runner returns `(ArmJudgement, ArmJudgement)`; the kernel
-  adjudicates. `D10` narrowed with it. Same treatment as `D1`–`D12`: in
+  adjudicates. `D10` narrowed with it. Its *generalisation* took three attempts
+  and now names **three** crossings (admission authority, reported adjudication,
+  type contamination) over **six** location classes — the sixth being the
+  callback's control and effect semantics, pinned as `I11` in § 5.4. Same treatment as `D1`–`D12`: in
   `design.md`, not banked as a `DEC`.
 - `mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion` —
-  new, and the most portable thing this pass produced.
+  new, and the most portable thing the first verification round produced.
+- `mem.pattern.review.repair-closes-a-subset-of-the-stated-class`
+  (`mem_019ff6a77dec7b518fa063f1c3e24d5a`) — new, from the second verification
+  round, and the sharpest lesson of the three. A repair derived from a sentence
+  that enumerates a class closes one member and leaves the rest, because nobody
+  re-reads the enumeration sitting three sentences away. § 5.1 listed three
+  vacuities in one sentence; two consecutive `F-2` repairs closed the first and
+  the third.
 - Two existing memories strengthened rather than duplicated:
   `mem_019eda2fed8672d39214a5eeb3c86385` (pre-enumerated maps, broadened to a
   repair's own footprint) and
@@ -88,7 +100,9 @@ integrated through a verification round and a self-audit
 - Friction observations `019ff661-d3db-7550-ad84-29d319c6a0c8` (`design apply`
   takes whole-section bodies, so a surgical edit needs a scripted
   replace-with-assert-fires-once) and `019ff662-647b-7cd1-b6a0-1385c468d4bd`
-  (`review show`'s table format drops finding bodies; json carries them).
+  (`review show`'s table format drops finding bodies; json carries them), and
+  `019ff6a6-b6e0-7f71-9403-28e1956c159b` (a bare `ls .doctrine/state/` buries the
+  real subdirectories under ~220 `mem-surface-seen-*.txt` receipts).
 
 ### Learned
 
