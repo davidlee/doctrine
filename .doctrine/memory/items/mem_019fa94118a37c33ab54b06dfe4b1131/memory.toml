@@ -6,7 +6,7 @@ status = "active"
 title = "Worker confinement is actor-based and cooperative — every protected tree is markerless"
 summary = "The worker marker identifies the ACTOR, not the write target; re-keying the guard to an explicit -p target inverts confinement"
 created = "2026-07-28"
-updated = "2026-07-28"
+updated = "2026-08-12"
 
 [scope]
 paths = ["src/commands/guard.rs", "src/worktree/marker.rs"]
