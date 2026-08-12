@@ -6,8 +6,9 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · design/reviewing · rev 70, third (external) pass
-integrated through a verification round and a self-audit
+fresh-as-of: 2026-08-13 · design/reviewing · rev 79 (head a7c7bfe14) · four
+external passes integrated, plus one author self-audit; `RV-354` awaits the
+raiser on `F-1` and `F-5`
 
 ### Produced
 
@@ -75,7 +76,20 @@ integrated through a verification round and a self-audit
   verification. **Every contest was upheld against the artefact and the code —
   the repairs were the defective party, not the findings, on all five
   occasions.** `F-5` is the sharpest: it is a defect in a repair the author's own
-  self-audit had just made. Findings and dispositions are on the ledger — read them
+  self-audit had just made.
+- **Every `F-1` repair has been author-constructed and every one has been
+  contested; the one finding that closed (`F-2`) closed on a remedy the reviewer
+  wrote out verbatim.** Codex has supplied a diagnosis for `F-1` in every round
+  and never a remedy. Five data points, not a law — but the row-trace repair at
+  rev 76 is the least externally validated thing in the design, and its three
+  predecessors were each wrong.
+- Rev 78 closes two gaps round four left: `F-5`'s two options are not
+  alternatives (a channel maximum ranges over per-return grades, so it
+  presupposes them and is circular alone — § 7.2 now says the maximum is
+  derived, not primitive), and § 7.3 records the `I11` alternative neither party
+  raised — dissolve the observability rather than pin the order, by building the
+  fixture eagerly before any closure runs. Not adopted; it narrows `I11` without
+  removing the need for it, and is a hardening *on top of* `I11`, not instead. Findings and dispositions are on the ledger — read them
   with `doctrine review show RV-354 --format json`, since the table format
   summarises findings to a count.
 - `D13` — the row runner returns `(ArmJudgement, ArmJudgement)`; the kernel
