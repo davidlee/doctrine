@@ -685,9 +685,36 @@ applied to the seam itself, and it is what `I10` pins.
 kernel into a synthetic crate, and compilation is the assertion** (`DEC-197`).
 Because the kernel imports nothing else in this crate, that target needs no fake
 module, and so carries no allowlist to widen. `harness = false` is load-bearing:
-it stops `cfg(test)` activating and dragging `DEC-200`'s kernel test band in. A
-negative control is required at implementation, or the probe can be present and
-prove nothing.
+it stops `cfg(test)` activating and dragging `DEC-200`'s kernel test band in.
+
+**The probe's own red path is checked, and what that check must demonstrate is
+stated here rather than deferred** (`RV-354` `F-2`). A probe never observed to
+fail is a positive control only. The failure it must exclude is not *a forbidden
+import slipping past* — a target that genuinely builds the kernel rejects that
+correctly. It is the probe compiling green while building **nothing**: a wrong
+`#[path]`, a target outside the default selection, a `required-features` gate
+left on. That is the vacuity `DEC-197` refused the fake module to avoid, on the
+ground that a hand-maintained allowlist is "exactly how a guard gets weakened to
+fit the code" — and a deferred control does not avoid it.
+
+So the negative control must demonstrate two things: that the probe goes **red**
+on a forbidden in-crate import, and that it fails **for that reason and not
+another**. The second clause is what keeps it non-vacuous. A bare exit-status
+inversion passes on any compile failure at all — a typo, a bad feature name, a
+syntax error in the control itself — which would reproduce the defect one layer
+up.
+
+A sufficient shape, named so the implementer is not inventing one: a second
+`harness = false` target that `include!`s the positive probe verbatim plus one
+deliberately forbidden in-crate import, held out of the default graph by
+`required-features`, and a `capsule-check` recipe that inverts the exit status
+**and pins the diagnostic** — `E0433` naming the absent module.
+`Cargo.toml:58-60` already sets that precedent, recording that "omitting either
+is `E0433` for both crates". Pinning the diagnostic also removes the need for a
+separate positive sentinel: a broken `#[path]` still fails, but with `E0583`
+file-not-found, which the check rejects. One target therefore proves both that
+the include resolves and that a forbidden import is refused. How it is spelled
+stays implementation.
 
 What the probe does **not** prove is std-only. The target stays inside the
 `doctrine-control` package, so that package's external dependencies remain
@@ -900,7 +927,7 @@ pub(crate) fn qualify_over(
     rows: &[RowId],                                      // re-keyed — DEC-196
     auxiliary: &dyn Fn() -> Vec<(Claim, AuxOutcome)>,
     observations: &dyn Fn() -> Vec<(Unrowed, Reading)>,
-    run_row: &dyn Fn(&RowId) -> RowVerdict,              // payload closes over its own table
+    run_row: &dyn Fn(&RowId) -> (ArmJudgement, ArmJudgement), // the two arms — RV-354 F-1
 ) -> QualificationVerdict
 ```
 
@@ -926,10 +953,20 @@ from the kernel's vocabulary:
   probes need, and the answer is the layer whose probes need it.
 - `&[RowId]` instead of `&[Row]`. The kernel schedules *identities*; the payload
   maps an identity back to its own `Row` through its own table.
-- `run_row: &dyn Fn(&RowId) -> RowVerdict` instead of
-  `&dyn Fn(&dyn ConformanceBackend, &Row) -> RowVerdict`. The backend is no
-  longer threaded through the kernel to reach the runner, because the runner
-  already has one.
+- `run_row: &dyn Fn(&RowId) -> (ArmJudgement, ArmJudgement)` instead of
+  `&dyn Fn(&dyn ConformanceBackend, &Row) -> RowVerdict`. **Two narrowings in one
+  parameter.** The backend is no longer threaded through the kernel to reach the
+  runner, because the runner already has one — and the closure now returns *the
+  two arms* rather than the adjudication, so `qualify_over` calls `row_verdict`
+  itself. `RV-354` `F-1` is why. With a `RowVerdict` return the payload performs
+  the adjudication and the kernel cannot enforce that its own algebra ran at all,
+  which contradicts § 5.1's rule that the kernel owns the claim algebra: a
+  mechanism could return `Proven` for an id it never read, or encode its own
+  state through the choice of variant. It now cannot construct a `RowVerdict` at
+  all. Nothing is lost in the move — `ArmJudgement::Indeterminate` already
+  carries `Indeterminacy` (§ 5.2.5), so the fixture-fault case that returns
+  `RowVerdict::Indeterminate { arm, .. }` today becomes a pair of indeterminate
+  judgements from which the nine-cell table derives the same `Which`.
 
 The payload's side of the contract is one table, one label catalogue, one runner
 and one return envelope:
@@ -1139,10 +1176,10 @@ the line are the payload's, and that placement is `RF-3`'s and `RF-9`'s repair:
         │                                    (nothing ran; no rows, no claims,
         │                                     no observations to report)
         ▼
-  for id in rows:  run_row(id)          ← payload maps id → Row, runs both arms,
-        │                                  projects each ArmResult through
-        │                                  into_judgement(), then calls the
-        │                                  kernel's row_verdict(probe, control)
+  for id in rows:                       ← payload maps id → Row, runs both arms,
+    (probe, control) = run_row(id)        projects each ArmResult through
+    row_verdict(probe, control)           into_judgement(), and returns the PAIR.
+        │                                  The kernel adjudicates (RV-354 F-1).
         ▼
   FloorReading::from_rows(&verdicts)
         │
@@ -1244,6 +1281,8 @@ command tier the probes and the fixture for the sake of a string.
   **not** the architecture gate's `leaf` classification: the gate proves tier
   direction, not mechanism neutrality, and `backend` is itself `leaf`, so a
   `backend`-resident mechanism type walks straight through it. The probe's own
+  red path is checked by a diagnostic-pinned negative control (§ 5.1,
+  `RV-354` `F-2`) — an unchecked probe is a claim, not a check. The probe's
   residual — a fact re-derived from `std`, or an external dependency of the
   `doctrine-control` package — belongs to `R1`.
 - **`I8` — The nineteen row verdicts are invariant across the split.** Four
@@ -1261,7 +1300,15 @@ command tier the probes and the fixture for the sake of a string.
   `RF-9`'s class unrepresentable rather than merely caught (§ 5.1). Note its
   limit, which `RF-10` demonstrated: `I10` is about the parameter *list*, and a
   mechanism type can still arrive inside a *field* of a value that satisfies it.
-  `I7` and the compile probe are what cover that.
+  `I7` and the compile probe are what cover that. `RV-354` `F-1` then found a
+  **second** limit, of a different shape: a closure satisfying `I10` carries a
+  mechanism's captures in its environment, invisible to both the parameter list
+  and the compile probe — and, before `F-1`'s repair, could return the
+  adjudication itself. The repair removes the second half by making `RowVerdict`
+  unconstructible outside the kernel. The captures remain, and are tolerable only
+  because they can no longer reach a verdict except through the kernel's algebra.
+  State `I10` as what it is: a claim about what the kernel *cannot be handed*,
+  never about what a closure privately holds.
 
 #### Assumptions
 
@@ -1295,22 +1342,27 @@ command tier the probes and the fixture for the sake of a string.
 | A payload emits a `RowId::Floor` the kernel does not know | not representable — `FloorProperty` is closed | `P2` |
 | The kernel is handed an id the payload cannot construct | not reachable — `ids()` and `row_for` come from one table | `I9` |
 
+
 <!-- doctrine:section sec-10 -->
 ## 10. Review Notes
 
-Two review passes have been conducted. Both were agent hostile passes run against
-the working tree rather than against the document alone, and **both were run by
-the design's author**, which is the one thing neither could do anything about:
-they cannot disagree with the design's own framing. The external adversarial pass
-is still unspent.
+Three review passes have been conducted. All three were agent hostile passes run
+against the working tree rather than against the document alone. The first two
+were run by the design's author, which is the one thing neither could do anything
+about: they cannot disagree with the design's own framing. **The third was
+external** — a different model, given the document, the code and an explicit
+brief, and told the correct prior was that a fourth seam-crossing location class
+existed. It found one. The external pass is now spent.
 
 `RF-n` is this document's label for the design run's finding `fnd-n` — the two
-numbering schemes are the same sequence.
+numbering schemes are the same sequence. The third pass is not in that sequence:
+it ran on the `RV` ledger, so its findings are cited as `RV-354` `F-n`.
 
 | pass | run revision | against | findings | outcome |
 |---|---|---|---|---|
 | first | 43 | the draft at `499c2ebbc` | `RF-1` … `RF-9` | dispositioned at rev 45, integrated at rev 46 |
 | second | 50 | the integrated design | `RF-10` … `RF-14` | three blocking, two nits; integrated here |
+| third (external) | 57 | the integrated design + the tree | `RV-354` `F-1` … `F-4` | two blockers, one major, one minor; all `fix-now`, integrated at revs 58–61 |
 
 ### 10.1 What the passes changed
 
@@ -1371,37 +1423,88 @@ them. § 3.2 `F7` and § 5.1 carry the structural and mechanical answers taken
 instead. **The right prior for a third pass is that there is a fourth location
 class**, not that the list is finally complete.
 
+**The third pass — one shape change, two instruments repaired.**
+
+- **`RV-354` `F-1` → `D13`, and `D10` narrowed.** The predicted fourth location
+  class, and it is the **executable closure**. `run_row: &dyn Fn(&RowId) ->
+  RowVerdict` had the payload perform the adjudication and hand the kernel a
+  finished verdict, so the kernel could not enforce the algebra § 5.1 says it
+  owns. The closure is opaque in two directions the parameter list cannot see —
+  its captured environment, and its return type — and `D10` had been read as
+  structural protection against exactly this. `D13` returns the two arms instead;
+  `RowVerdict` becomes unconstructible outside the kernel.
+- **`RV-354` `F-3` → § 9.1 layer 2 rebuilt.** The whole-output golden was claimed
+  to make both totality clauses machine-checked. It does not: a golden proves
+  `actual == expected` and says nothing about where `expected` came from, so an
+  author who drops a pre-split line and encodes the same omission into the golden
+  goes green. The derivation now has its own one-shot instrument and the golden
+  keeps the drift job it is actually good at.
+- **`RV-354` `F-2` → § 5.1's negative control specified.** The compile probe is
+  `I7`'s sole machine check and had never been shown to go red. § 10.3 had
+  deferred the control's shape; the finding's argument was not *you left out a
+  detail* but *the mechanism you chose cannot hold the detail you deferred*,
+  which a deferral cannot immunise itself against. The deferral is spent.
+
+`RV-354` `F-4` was a minor and changed a record rather than the design:
+`EVD-022` still carried the three-difference allowance `DEC-199` withdrew.
+
+**What the third pass did not move, and this matters more than what it did.** It
+attacked `D1`/`I3`, `D2`/`D3`/`D7`, and the `Qualification::Ran` boundary — the
+three § 10.2 items flagged as resting on author-only endorsement — and sustained
+all three on independent reasoning. It re-read the cites against `94d0b5603` and
+reported them clean, which is the first such report this document has that was
+not subsequently falsified. And it swept trait bounds, associated types,
+formatting and serialization impls, enum discriminant ordering, error types and
+const/static values for further seam crossings, and found none.
+
 ### 10.2 Attack these first
 
-Refreshed after the second pass; items it answered are marked and kept, because
-what a pass *closed* is as useful to a later reviewer as what is open.
+Refreshed after the third pass; items a pass answered are marked and kept,
+because what a pass *closed* is as useful to a later reviewer as what is open.
 
 - **`D1` / `I3` — only `Proven` holds the floor.** Still open, and still the one
   substantive ruling in § 5 with no banked decision behind it. `DEC-195` settled
   that the floor is reduced; it said nothing about what `Unproven` does to it.
   The ruling is owner-confirmed and scoped to the floor, but the argument is
   mine: *a control that did not fire licenses no inference, so it cannot hold an
-  authority floor*. If that is wrong, `FloorStanding` is wrong. Neither pass
-  touched it.
+  authority floor*. If that is wrong, `FloorStanding` is wrong. **The third pass
+  sustained it** on independent reasoning — the first endorsement not written by
+  the author. Still carried here because one external endorsement is not a
+  decision record, and this is still the substantive § 5 ruling with nothing
+  banked behind it.
 - **`D7` — is `FloorReading` a wrapper too many?** Still open. Two types and a
   three-variant standing for a set of size one. `D2` and `D3` were each defended
   on their own; `D7` is the third layer and was added under review pressure,
   which is exactly when ceremony gets added without noticing. If
   `floor: Result<Floor, FloorProperty>` reads acceptably in a verdict, `D7` is
-  ceremony and `R6` is real rather than mitigated.
+  ceremony and `R6` is real rather than mitigated. **The third pass sustained
+  `D2` and `D3` as necessary** — they are what make vacuous qualification
+  unrepresentable — and judged `FloorReading` isomorphic to
+  `Result<Floor, FloorProperty>` but defensible as a named domain state. That is
+  a weaker endorsement than the other two and is recorded as such: it says the
+  wrapper does no harm, not that it earns its keep.
 - **The `Qualification::Ran` shape.** Still open. Four collections in one variant
   (`assurance`, `axes`, `auxiliary`, `observations`) plus a `floor`. Ask whether
   `axes` genuinely belongs beside `assurance` rather than inside it — the design
   says a freshness axis is a property of the transaction rather than of the
   mechanism, which is a real distinction, but it is the boundary call in § 5.2 I
-  am least sure of. Both passes endorsed keeping them separate on `CPT-002`
-  grounds; both endorsements came from the same author.
+  am least sure of. The first two passes endorsed keeping them separate on
+  `CPT-002` grounds and both endorsements came from the same author; **the third
+  pass endorsed it independently**, on the ground that closed transaction axes
+  and open mechanism-minted assurance are different kinds. Treat it as settled
+  unless a fourth reader disagrees.
 - **`D10` — does the value-only entry point close `F7`'s class?** **Answered:
   no.** The second pass was invited to find a leak cheaper than `R1`'s
   std-re-derivation residual and found one — `RF-10`, arriving inside a field of
   a value that satisfies `D10` perfectly. The invitation stands in its new form:
   `I10` covers the parameter list and the compile probe covers in-crate imports;
-  find the third thing neither sees.
+  find the third thing neither sees. **Answered again, and by the same
+  invitation:** the third pass found `RV-354` `F-1` — the closure itself, whose
+  captures neither instrument can see and whose return type was carrying the
+  adjudication out. `D13` closes the return half. **The captures are still open**
+  and no instrument in this design sees them. That is now the standing invitation,
+  and the prior it was issued under has been right three times running: assume a
+  fifth class exists.
 - **§ 5.1's placement criterion is new and untested.** The adjudicative normal
   form and the observational-equivalence test were written *in response to* five
   wrong judgement calls, which is the worst moment to trust a new rule. Run them
@@ -1435,9 +1538,12 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
   the *command tier* needs, which is a different consumer and was the source of
   the gap. How the table is built, and whether it subsumes `tables()`, is
   implementation.
-- **The compile probe's negative control is not specified.** `DEC-197` requires
-  one — a probe that cannot fail is a probe that proves nothing — but what it
-  looks like is an implementation call.
+- ~~**The compile probe's negative control is not specified.**~~ **Struck by
+  `RV-354` `F-2`.** The deferral did not survive contact: the finding argued the
+  chosen mechanism cannot host the control that was deferred, which is an attack
+  on the deferral's premise rather than on the missing detail. § 5.1 now states
+  what the control must demonstrate and names a sufficient shape; only its
+  spelling is implementation.
 
 ### 10.4 Known weak points in the evidence
 
@@ -1460,7 +1566,11 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
   cites rather than a coincidence. **No count of passes is claimed here.** What
   can be said is narrower and checkable: `RF-14` re-read the remaining cites
   against the same tree and reported them clean, and a cite introduced after this
-  point carries no provenance at all.
+  point carries no provenance at all. **The third pass re-read them again,
+  aggressively and externally, and found no cite-integrity defect** — the first
+  clean report this document holds that was not later falsified. It is one
+  report, not a proof: the failure mode is an off-by-one against a preceding
+  comment line, and it has already survived two clean bills of health.
 
 ### 10.5 Conformance to governance, stated for checking
 
@@ -1474,6 +1584,7 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
 | `ADR-021` | No `unsafe` added in the kernel (`A3`). |
 | `AGENTS.md` pure/imperative split | Honoured by the kernel after the split, and **not** honoured by the code today (`RF-9`, § 3.3). The kernel performs no I/O (`I10`). |
 | `AGENTS.md` behaviour-preservation gate | Not literally satisfiable across three type-shape changes, which is why `DEC-199` restates the bar at the level the suite measures. § 9.1 carries the restatement and `EVD-022` the pre-split half of the bracket. |
+
 
 <!-- doctrine:section sec-6 -->
 ## 6. Open Questions & Unknowns
@@ -1688,6 +1799,16 @@ refused:* narrowing to `&dyn CapsuleBackend`, which the draft took. It is
 strictly weaker — the trait still names a mechanism contract, and it leaves a
 `&dyn HostFacts` beside it that the shell check was riding in on.
 
+*Narrowed by `RV-354` `F-1`.* The **values** half stands unchanged. The
+**closures** half was over-claimed: this ruling was read — here, and at `I10` —
+as structural protection against `F7`'s class, and it is not. A closure is opaque
+in two directions no parameter list can see. Its captured environment holds
+whatever the payload put there — `conformance.rs:5229-5237` captures the host and
+a shared fixture `OnceCell` — and its *return type* can carry the kernel's own
+adjudication straight back out. `D13` repairs the second. The first is not
+repairable by this shape, and is now stated as a residual rather than left to be
+implied away.
+
 *Relation to `DEC-197`.* `D10` **narrows a clause of the record it sits under**,
 which is the one thing a doc-local ruling is normally not allowed to do, so it is
 stated rather than left to be noticed: `DEC-197`'s original rider had
@@ -1736,6 +1857,30 @@ field that escaped the discipline. *Cost, and it is a real one:* § 5.2.5's
 **byte-identical** claim is surrendered, and § 9.6's `row_verdict_is_unchanged`
 becomes a truth table over all nine probe/control pairs plus a projection test.
 *Alternative refused:* leave `row_verdict` payload-side entirely — see § 7.3.
+
+**`D13` — the row runner returns the two arms; the kernel adjudicates.** Forced
+by `RV-354` `F-1` — the external pass's finding, and the fourth location class
+§ 10.1 predicted would exist. *The defect:* § 5.1 rules that the kernel owns
+*the algebra of the claims it emits*, but `run_row: &dyn Fn(&RowId) -> RowVerdict`
+had the payload call `row_verdict` and hand back a finished verdict.
+`qualify_over` then received an adjudication it could not check had ever been
+performed — a mechanism could return `Proven` for an id it never read, or encode
+its own state in the choice of variant. The kernel was a scheduler around payload
+judgement while claiming to be the judge. *Ruling:* `run_row` returns
+`(ArmJudgement, ArmJudgement)` — probe and control — and `qualify_over` calls
+`row_verdict` itself. *Rationale:* it costs nothing, which is why this is a
+ruling and not a decision record. `D12` already minted `ArmJudgement` as the
+kernel-side projection and it already carries `Indeterminacy`, so the
+fixture-fault path that returns `RowVerdict::Indeterminate { arm, .. }` today
+becomes a pair of indeterminate judgements from which the nine-cell table derives
+the same `Which`. No new type, no lost diagnostic, one moved call. *What it
+buys:* `RowVerdict` becomes unconstructible outside the kernel, so `I7` stops
+depending on the payload's good behaviour — and § 9.6's nine-pair truth table
+starts testing the **only** path to a verdict rather than a function the payload
+may or may not call. *What it does not buy:* the closure's captures are
+untouched. They can no longer *reach* a verdict except through the kernel's
+algebra, which is the property that was actually needed; they are not eliminated,
+and `I10` now says so.
 
 ### 7.3 What was considered and refused at design level
 
@@ -1790,6 +1935,7 @@ Recorded because a later reader will re-propose them:
   `Table::row_for` come from one table value. An error arm nothing can produce is
   worse than none — it is an invitation to fabricate a verdict at the one place a
   fabricated verdict would be invisible.
+
 
 <!-- doctrine:section sec-8 -->
 ## 8. Risks & Mitigations
@@ -1975,12 +2121,38 @@ an exception list (`RF-11`). Under an enumerated licence an unlisted difference
 is a regression *if a reviewer notices at audit*; under a total map, the noticing
 is done by a test.
 
-**The instrument is a whole-output golden test**, committed in the same phase as
-§ 9.2's key translation table and asserting the post-split artefact verbatim.
-The translation table supplies rule 4's key and front columns; the golden test is
-what makes the two totality clauses machine-checked rather than reviewer
-discipline. Written before the phase that changes `RowId`, because that phase is
-the first that can break the contract.
+**The instrument is two things, and the earlier draft of this section conflated
+them** (`RV-354` `F-3`). A whole-output golden test, committed in the same phase
+as § 9.2's key translation table, asserts the post-split artefact verbatim. What
+it proves is `actual_post == expected_post`. What it cannot prove — and what this
+section previously claimed it did — is that `expected_post` was *derived* from
+`EVD-022`'s transcript rather than authored beside the code. A migration author
+who drops a pre-split line and encodes the same omission into the golden goes
+green, and both totality clauses are satisfied vacuously. The golden is the
+right instrument for **drift**; it is no instrument at all for **derivation**.
+
+So the derivation gets its own, and it is deliberately cheap because it fires
+once. A one-shot, stdlib-only Python script reads the committed pre-split
+transcript, applies rules 1–7 plus the ordering clause, and emits the expected
+post-split artefact. Its output **is** the golden. The house pattern is
+established — `scripts/migrate_value_facets.py` is an `SL-220` one-shot whose
+docstring opens *"Throwaway, stdlib-only"*, beside `migrate_estimate_facets.py`
+and `value_baseline.py`.
+
+**The direction of travel is the substance, not the language.** The script runs
+*first*; its output is committed as the golden *before* the phase that changes
+`RowId`; that phase then goes green against it. Running the transform against
+the live post-split artefact and diffing would be the weak direction — it invites
+tuning the transform until it matches whatever the code emits. Written before
+that phase for the reason the draft already gave, since it is the first that can
+break the contract, and now with a red-to-green shape the phase can be executed
+against.
+
+**What this does not buy, stated rather than glossed.** The script proves the
+golden was derived; it does not prove rules 1–7 are themselves correct. That
+remains a reading of `DEC-199` against this design, and layer 3's reviewer
+question survives for it. What changes is that an omitted or invented line is
+now caught by machine rather than by a reader noticing.
 
 The contract has already decided two things. `D9`: rule 1 is byte-identical, so
 renaming the rendered `date=` key has no derivation and the rename stays
@@ -2134,16 +2306,19 @@ Beyond the carve and the characterisation test:
 | `an_empty_assurance_profile_qualifies_when_the_floor_holds` | the `DEC-189` empty-front case, and that nothing reduces over the profile |
 | `unavailability_carries_no_rows_claims_or_observations` | `DEC-195`'s lift — not-run and ran-and-failed are different claims |
 | `a_host_without_a_shell_is_unavailable_not_violated` | `RF-3` — the behaviour is preserved exactly across the move to the payload |
-| `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make |
+| `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make. After `RV-354` `F-1` it also gains reach: `run_row` returns the two arms and the kernel adjudicates, so this table now covers the **only** path to a `RowVerdict` rather than a function the payload may or may not call |
 | `arm_diagnostics_do_not_move_a_judgement` | `D12` — `ArmResult`s differing only in `termination`, `stdout` or `stderr` project to the same `ArmJudgement`, which is § 5.1's equivalence test made executable |
 | `every_submitted_assurance_key_has_a_front` | `I9`/`D11` — `FrontCatalog` is total over the keys its own table submitted, which is why `front_of` returns no `Option` |
-| `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test. Committed in the phase that changes `RowId`, beside § 9.2's table |
+| `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test, asserting drift. Committed in the phase that changes `RowId`, beside § 9.2's table. Its expected value is **derived** by the one-shot transform script, not authored (`RV-354` `F-3`) |
 
 The compile probe (`DEC-197`, § 5.1) is not in this table because it is not a
 test: it is a `harness = false` cargo target whose *compilation* is the
-assertion, and `I7` is what it pins. It needs a negative control at
-implementation — a probe that cannot fail proves nothing — and § 10.3 records
-that the control's shape is deliberately left to implementation.
+assertion, and `I7` is what it pins. Its negative control is no longer deferred
+(`RV-354` `F-2`): § 5.1 states what that control must demonstrate — red on a
+forbidden in-crate import, failing for that reason and not another — and names
+the exit-inverting, diagnostic-pinned recipe as a sufficient shape. Only the
+spelling is left to implementation. A probe that cannot fail proves nothing, and
+that is a claim about *this* probe until something has watched it go red.
 
 `I10` — the kernel takes values and closures only — is pinned by its own
 signature and by review, not by a test: there is nothing to execute, because the
@@ -2155,4 +2330,5 @@ parameter's type, and `I7` and the compile probe are what cover that.
 (`:11275`) is **retired with its reasoning recorded**, not deleted silently: it
 asserted a defect held shut by an external guard, and this design removes the
 defect rather than the guard.
+
 
