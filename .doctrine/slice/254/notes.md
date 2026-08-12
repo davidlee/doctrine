@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 13) · 124c5e44b
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 13) · marker/confinement trace
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -22,6 +22,11 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
 - minted: IMP-428 — harden the worker confinement prefix, deferred out by DEC-209
 - DEC-202's `choice` corrected in place (it read as a claim about worktrees, not dispatch workers)
 - 2 further friction observations recorded and committed — exploring runbook invisible until a stage transition refuses; `agent_declaration` apply emits no event row
+- marker/confinement due-diligence trace: full reader/writer census of the marker
+  surface. `DEC-207` amended (context + rationale + consequences 3 → 7);
+  `DEC-211` `choice` extended with a second `ADR-006` §D2b correction site;
+  minted `CHR-062` — prune the `SL-116` extraction `expect(unused)` in worktree
+  `gc`/`import`
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
@@ -29,12 +34,28 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
 - `worker_commit` is **six belts**, not a bare ro-git bypass; two are not topology-coupled, and its scope belt has exactly two callers (`classify_import` import.rs:147, worker_commit.rs:94) single-sourced from import.rs:24 (DEC-204)
 - `nominate`/`denominate` are a **closed loop** with `pretooluse`'s gate legs — `is_nominated` has no other reader, so they die by construction (DEC-205)
 - The confinement prefix already delivers the write floor (`--ro-bind / /`, scripts/pi-spawn-confined.sh:113-131); thread 5's gaps are defence in depth (DEC-209)
-- ADR-006 §D2b's `SL-064` note identifies the **coordination tree by marker *absence***. Load-bearing against DEC-207 — see Open
+- ~~ADR-006 §D2b's `SL-064` note identifies the **coordination tree by marker *absence***. Load-bearing against DEC-207~~ — **refuted 2026-08-13.** It is a doc-level contrapositive of the refuse predicate, not a mechanism: no reader anywhere concludes "coord" from absence. See `DEC-207` rationale (1)
+- Worker-ness is a property of a **process**; the disk marker models it as a property of a **tree**. That single mismatch is the origin of the whole stale-marker surface (`Cause::Marker`, `--assert`, `marker --clear --operator`, `ISS-028`). `DOCTRINE_WORKER` has no stale class by construction — it dies with the process, and is set by the *same bwrap argv* that establishes the write floor
+- Positive coordination identity **already shipped, marker-free**: `classify_worktree_role` (`shared.rs:77`) — linked + all-numeric `dispatch/<NNN>`. `inventory.rs` carries a **parallel implementation** of the same classifier (`STD-001`)
+- `IMP-065` — which `ADR-006` §D2b still names as "the real positive-marker close" — was **closed obsolete** 2026-07-02 (`REV-018`): a positive marker is a cooperative flag not a boundary, and confinement (`SL-182`/`183`/`185`) is the genuine close. The argument that retired it retires the *negative* marker identically
 
 ### Open
 - **The re-scope, PROPOSED AND UNCONFIRMED.** Owner's direction at end of session: scope SL-254 shy of carving out dispatch proper — separate concern, less clear-cut what stays useful under clone-backed workers, and more manageable split. Proposed line: SL-254 = *the claude arm becomes a pi arm* (confined subprocess, linked worktree, incumbent import transport); clone provisioning + worker self-commit + fetch transport split to a successor slice. Not yet executed
-- **DEC-207 is contested by a later finding of my own.** It deletes the disk marker. Under linked worktrees (i.e. under the re-scope) that appears wrong: ADR-006 §D2b identifies the coordination tree by marker *absence*, so deleting the marker makes everything read as coord. Under a clone it was safe because topology distinguishes. **This is the next session's task** — trace and critically evaluate before acting
+- ~~**DEC-207 is contested**~~ — **RESOLVED 2026-08-13 by the marker/confinement
+  trace. `DEC-207` stands, and is now topology-INDEPENDENT** — it survives
+  unchanged whether workers ride clones or linked worktrees, so the re-scope no
+  longer threatens it. The trace also found one consequence `DEC-207` had missed
+  (`land.rs:173`'s `bears_marker` is the only marker read that asks about
+  *another* tree; it needs the branch-shape classifier as substitute, which is
+  strictly stronger) and one `REV` site `DEC-211` had missed (`ADR-006` §D2b's
+  dangling forward-reference to the obsolete `IMP-065`). Both are now recorded
 - Consequential on the re-scope: DEC-203, DEC-204, DEC-212 would be superseded and DEC-211's site list narrowed; DEC-205, DEC-206, DEC-208, DEC-209, DEC-210 survive untouched
+- **`DEC-211` under-counts `ADR-011`.** Its `choice` (A) says "at four sites" and
+  lists four; this notes file's own *Governance constraining the surface* section
+  says **five** — Context (28), D1 (43-45), D3's table (89, 93), D4 (98-100), and
+  a consequences-register restatement at 263. Noticed during the marker trace and
+  left unfixed deliberately: reconciling the count is a scope call, not a
+  correction I should make unilaterally
 - QUE-214 disposed by DEC-203 but **not settled** — deliberately, pending the re-scope. QUE-215 disposed by DEC-209, safe to settle
 - Design run gate: `governance-confirmed` and `graph-reviewed` both outstanding, both require **user** authority (DEC-088). `blocking-set-declared` (agent half) is live
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
