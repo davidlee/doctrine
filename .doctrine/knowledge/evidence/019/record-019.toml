@@ -11,9 +11,9 @@ updated = "2026-08-11"
 tags = ["capsule", "cluster:capsule", "freshness", "microvm", "netns"]
 
 [facet]                         # every field typed; seeded empty (captured later)
-datum = "sudo probe-freshness on Sleipnir: 8.60 s to a usable fresh capsule (6.34 s cold boot + 2.26 s provision of 32 MiB), a warm boot at 6.36 s that is indistinguishable from the cold one, 12,175 MiB of runner closure shared by every capsule under netns, and ~296 MiB of volume per instance of which ~260 MiB is empty filesystem"
+datum = "sudo probe-freshness on Sleipnir, twice, 22/22 on run 2: 8.31 s to a usable fresh capsule (6.41 s cold boot + 1.90 s provision of 32 MiB), a warm boot at 6.34 s so the price of freshness changed sign between runs (-0.02 s, then +0.07 s) and is indistinguishable from zero, 3.63 s teardown, 12,175 MiB of runner closure shared by every capsule under netns, and ~296 MiB of volume per instance of which ~260 MiB is empty filesystem; four of REQ-450's five axes rowed and green, process deliberately unrowed"
 provenance = "experiment"
-confidence = "medium"
+confidence = "high"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
