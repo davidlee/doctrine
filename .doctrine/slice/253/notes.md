@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
+fresh-as-of: 2026-08-12 · design/reviewing · eeabca359
 
 ### Produced
 
@@ -21,8 +21,18 @@ fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
 - `DEC-199` — row verdicts are the preservation bar; instruments and artefacts.
 - `DEC-200` — test bands are carved before the split, two bands.
 - `DEC-201` — one REV, four payloads; criterion 3's text narrows to the floor.
-- Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 18, stage
-  `exploring`, **all eight inquiry nodes resolved**.
+- Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 49, stage
+  `reviewing`, all eight inquiry nodes resolved, all ten sections drafted and
+  materialised, `reviewing` runbook cleared.
+- Findings `fnd-1` … `fnd-9` on the run — the agent hostile pass, raised at rev
+  43, dispositioned at rev 45, integrated and materialised at rev 46.
+- Design-local rulings `D7` (floor reading), `D8` (fronts payload-side), `D9`
+  (source-side rename), `D10` (value-only kernel entry point), and force `F7`
+  (three enumerations of the backward references have each been wrong). All in
+  `design.md`; none banked as a `DEC`, on `D1`–`D6`'s precedent.
+- Friction observation `019ff53c-902e-7ef2-b45b-685b241313a4` — `design
+  materialise` renders sections in declaration order, so `design.md` reads
+  1–5, 10, 6–9.
 - Research artefact at `.doctrine/slice/253/research/` (runtime tier, gitignored;
   `raw/governance.md`, `raw/codemap.md`, `research.md`).
 - Friction observation `019ff42b-2655-7aa3-b042-0a83272a328c` — `design apply`
@@ -44,6 +54,16 @@ fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
   behind `DEC-199`'s bias toward running `capsule-verify` more often.
 - The 186 tests are flat: one `#[cfg(test)]` at `conformance.rs:5339`, **no inner
   `mod` at all**. Symbol triage sizes the carve at ~67 needing judgement.
+- **`just capsule-check` needs `bwrap` too**, superseding the earlier note that
+  only `capsule-verify` does: `cargo test -p doctrine-control` includes tests
+  asserting `availability() == Available` and provisioning real capsules
+  (`conformance.rs:6915`, `:7244`, `:7453`), and `EX-14` forbids skipping. A
+  host without `bwrap` has no instrument at all until `IMP-427` lands.
+- **The backward-reference enumerations were wrong in the body, not the
+  signature.** Both misses — `host.path_exists(SHELL)` at `:5299`,
+  `host_descriptor()` at `:5280` — were inside `verify_over`, while every pass
+  read its parameter list. The `leaf` classification catches an *import*, not a
+  re-declared constant or a `std` call.
 
 ### Open
 
