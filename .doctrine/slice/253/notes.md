@@ -69,7 +69,13 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
   architecture gate classifies the kernel unit `leaf` and passes.
 - **Row identity splits closed floor from open profile** (`DEC-198`). Thirteen
   of fourteen `Property` members become payload-minted constants; `Axis` stays
-  closed. `inq-5` now carries three shape changes, not one.
+  closed.
+- **Row verdicts are the preservation bar** (`DEC-199`). `EVD-022` is the
+  pre-split half of the bracket. **Carry to `/plan`**: `just capsule-check` green
+  every phase; `just capsule-verify` a phase exit criterion for every
+  payload-touching phase and by default for arguable ones; a committed key
+  translation table in the phase that changes `RowId`; a pre-split
+  characterisation test carried through the split.
 
 ### Risks
 

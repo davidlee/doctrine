@@ -1,0 +1,57 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 199
+slug = "row-verdicts-are-the-preservation-bar"
+title = "Row verdicts are the preservation bar"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-5. AGENTS.md requires existing suites green unchanged for shared machinery; DEC-190 names RV-352's baseline as the bar; DEC-191 requires the output to change; no record reconciled them. Three shape changes taken in this design run compound it — DEC-196's RowId re-keying, DEC-197's backend-parameter narrowing, DEC-198's floor/profile key split — each editing test source that names the moved types, so green unchanged cannot be literally true. Two gate facts constrain the answer: just gate's test-all NAMES its packages (-p doctrine -p cordage) and crates/doctrine-control sits outside every default selection (RV-353 F-4, on ISS-342/ISS-343); the crate is reached by just capsule-check and just capsule-verify, the latter deliberately not wired into gate because RV-352 F-8 left open what a host failing the rows should report. EVD-022 captured the pre-split run at 4662e64eb, in-jail, before any code lands."
+choice = "The bar is stated in three layers and both instruments are used. LAYER 1 INVARIANT — the nineteen row-to-verdict mappings, the four auxiliary claims and the two unrowed readings reproduce exactly. LAYER 2 PERMITTED, enumerated in advance — the outcome line (DEC-191), the exit constants (DEC-194) and the row key spellings (DEC-198); a difference not on that list is a regression. LAYER 3 MECHANICAL — test source naming moved types is translated and reviewed as a translation diff in which no asserted value moves. INSTRUMENTS — just capsule-check is the per-phase gate, green at the end of every phase, needing no bwrap; just capsule-verify is a PHASE EXIT CRITERION for every phase touching the payload and the default for any phase where it is arguable, only a phase that plainly cannot reach a row omitting it. ARTEFACTS — a committed KEY TRANSLATION TABLE authored in the phase that changes RowId, so the post-split comparison is mechanical rather than a judgement at audit; and a CHARACTERISATION TEST recording the row-to-verdict mapping as data, written before the split and carried through it mechanically, so the invariance is an executable assertion and not only a compared artefact."
+alternatives = ["Algebra-only — lean entirely on verify_over's injected seam with hand-built row sets and scripted runners, treating the live run as optional — refused because it proves nothing about the payload, which is where the fourteen rows live", "Artefact comparison alone, without the characterisation test — superseded by the owner taking both: an executable assertion fails at the phase that broke it, a compared artefact fails at audit", "One slice-level capsule-verify run at the end — refused because a regression's cause would then be bisected across several large mechanical phases"]
+rationale = "Green unchanged is not achievable across three type-shape changes, and asserting it would let the slice redefine its own bar silently. What RV-352 actually measured is the row-level verdict, and that is exactly what DEC-191 does not touch: the collapse and the rendering change, the row outcomes do not. Enumerating the permitted differences in advance is what keeps layer 2 from becoming a licence. The characterisation test costs a throwaway scaffold written against types with a two-phase lifespan, accepted because it moves the failure from audit time to the phase that caused it. Running capsule-verify often is cheap on this host — EVD-022's run completed in-jail without difficulty — so the default leans to more often rather than less."
+consequences = ["EVD-022 is the pre-split half of a bracket; the post-split run is its pair, compared under the translation table rather than as a text diff", "PHASE EXIT CRITERION — just capsule-verify green for every payload-touching phase, and by default for any arguable one", "PER-PHASE GATE — just capsule-check green at the end of every phase", "The key translation table is a committed artefact of the phase that changes RowId, never reconstructed at audit", "A characterisation test recording row-to-verdict as data is written pre-split and carried through; it is scaffolding with a short lifespan and is expected to be retired or rewritten once the split lands", "just gate stays the wrong instrument for this slice and doctrine-control is not wired into it; RV-352 F-8's open question about what a failing host should report is untouched"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the behaviour-preservation bar and its instruments"
+target = "DEC-190"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the behaviour-preservation bar and its instruments"
+target = "DEC-191"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the behaviour-preservation bar and its instruments"
+target = "EVD-022"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the behaviour-preservation bar and its instruments"
+target = "DEC-198"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
