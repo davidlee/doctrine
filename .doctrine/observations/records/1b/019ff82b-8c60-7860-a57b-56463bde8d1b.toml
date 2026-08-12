@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff82b-8c60-7860-a57b-56463bde8d1b"
+recorded_at = "2026-08-12T22:50:31.392925925Z"
+kind = "friction"
+summary = "design apply refuses an out-of-run design.md edit and names adopt_authored, but no verb reports the per-section fingerprints it then demands"
+detail = """
+/design, SL-253 rev 79→80. Hand-edited four sections of design.md, then 'doctrine design materialise' refused: watermark drift, 're-adopt the document with an adopt_authored declaration naming its exact current fingerprint'. The document-level fingerprint IS in that refusal, so that half is actionable. The section map is not: submitting adopt_authored with an empty sections map returns only 'marker map is not complete and exact: 10 missing, 0 unknown, 0 mismatched' — a count, no ids and no expected values. 'design show' and 'show --full' print only the STORED (pre-edit) fingerprints, truncated to 12 hex chars, which are by definition the wrong ones for every section that moved. No verb reports the authored-side digests Doctrine just computed to detect the drift.
+
+Cost: had to read src/commands/design.rs authored_sections + src/design_run/document.rs parse/marker_lines/per_line/unescape_line to reconstruct the rule (body = bytes from the line after the marker to the next marker's start, minus one trailing newline, per-line unescaped, sha256), then reimplement it in Python to produce the 10 values. ~6 tool calls of source reading plus a script for what should be one read. Verified by positive control: the 6 unchanged sections reproduced their stored 12-char prefixes exactly, so the replication was right — but an agent without that control would not know.
+
+Candidate fixes, cheapest first: (a) have the refusal enumerate the missing/mismatched ids WITH the fingerprints Doctrine read, since it has already computed them to raise the refusal at all; (b) a --authored flag on 'design show' printing current authored digests beside stored ones; (c) accept an adopt_authored with sections omitted as 'adopt what you read', since the document-level fingerprint already pins the exact bytes being adopted and the section map is derived from those same bytes — the map may be defending against a caller adopting bytes it has not decomposed, but that is not obviously worth an unreadable required field."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

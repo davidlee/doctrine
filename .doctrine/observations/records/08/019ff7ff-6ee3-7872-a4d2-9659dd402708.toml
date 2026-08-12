@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff7ff-6ee3-7872-a4d2-9659dd402708"
+recorded_at = "2026-08-12T22:02:20.259251098Z"
+kind = "friction"
+summary = "/design — notes.md cited an ADR amendment site by bare line number; the line was a section heading, not the content"
+detail = "SL-254 notes.md ## Open cited 'a consequences-register restatement at 263' in ADR-011. Line 263 is the '## Verification' heading; the restatements are at 248-259 (Consequences) and 265-275 (Verification), which are two distinct regions, not one. Verifying the citation cost a grep plus two Reads. Line-number citations into an authored .md are unstable across any edit and carry no self-check; a section name plus a quoted phrase would have been both cheaper to verify and durable."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
