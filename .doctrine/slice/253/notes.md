@@ -6,9 +6,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · design/reviewing · rev 79 (head a7c7bfe14) · four
-external passes integrated, plus one author self-audit; `RV-354` awaits the
-raiser on `F-1` and `F-5`
+fresh-as-of: 2026-08-13 · design/reviewing · rev 83 (head 5fc018d57) · four
+external passes integrated, plus one author self-audit and one **co-authoring
+round** on `F-1`; `RV-354` still awaits the raiser on `F-1` and `F-5`, and the
+raiser has now declined to verify either
 
 ### Produced
 
@@ -211,42 +212,94 @@ raiser on `F-1` and `F-5`
   exempts edgeless modules from classification. The kernel escapes it only
   because `backend`/`conformance`/`transaction`/`main` import it, and the gate
   flags any unit appearing as an edge *target*.
+- **A reviewer who diagnoses well may never remedy, and the framing decides which
+  you get.** Four `RV-354` rounds bought four correct `F-1` diagnoses and zero
+  remedies; every repair was author-built against someone else's diagnosis and
+  every one was contested. Asking the same reviewer *what would you write if this
+  were yours* — explicitly dropping the reviewer role — produced a remedy, a
+  defect four passes had missed (result association), and two clauses correctly
+  demoted from tested to structural. Generalisable, and banked as
+  `mem.pattern.review.ask-for-the-remedy-not-only-the-defect`.
+- **…and the trade is independence.** The raiser then declined to verify `F-1` or
+  `F-5`: it would be adjudicating its own remedy and no longer holds reviewer
+  authority. Collaboration and verification are the same reviewer's *mutually
+  exclusive* uses. Spend the round deliberately, and never let a co-authored
+  repair be recorded as a verified one.
+- **A class stated as an enumeration is not closed, however long the list.** Four
+  successive statements of the sixth seam-crossing class failed the same way —
+  generalise one step from the last defect. What closed it was an **event grammar
+  with an explicit abstraction boundary** (what is governed, and what is
+  deliberately outside), which exposes incompleteness as answerable questions
+  rather than relying on a reader noticing a short list. Also: an element that no
+  invariant can pin and no test can reach is a sign the element belongs to the
+  other side of the boundary — *observable effect* was the payload acting on its
+  own captures, not a fact about the kernel's interaction with it.
+- **Pinning a call sequence does not pin the result pairing.** `I11` fixed the
+  invocation order of `[A, B, A]` and bound no return to the occurrence that
+  produced it, so a kernel could invoke in exactly the submitted order and
+  adjudicate the second `A`'s arms under the first `A` while satisfying every
+  ordering rule. A trace test that logs calls and asserts a sequence passes that
+  kernel; the discriminator is **occurrence-distinct return values** checked in
+  the structured result.
+- **An assertion that no reachable implementation can fail is documentation.**
+  Non-overlap was going to be tested with enter/exit log pairs; nothing the
+  `&dyn Fn` signature permits can interleave, so the pairs would have documented
+  present structure and discriminated against nothing. Moved into `I11` as a
+  structural claim with the signature named as its evidence — and the invariant
+  now states which of its clauses are executable and which are consequences of
+  the execution model, instead of implying all are tested.
 
 ### Open
 
-- **Stage is `reviewing` (rev 70). The third (external) pass is integrated,
-  including a verification round that overturned half its repairs, and a
-  self-audit of those repairs.** What remains to lock, in order: every section
-  attested (**all ten are `outstanding`** — the integration invalidated the lot
-  again), the review pass dispositioned (`conducted` naming `RV-354`), and the
-  owner's `design-accepted`. Human section review is the v1 default; do not
-  invent a reviewer posture to discharge it.
+- **Stage is `reviewing` (rev 83).** Four external passes are integrated, plus a
+  self-audit and the `F-1` co-authoring round. What remains to lock, in order:
+  every section attested (**all ten are `outstanding`** — each integration
+  invalidates the lot again), the review pass dispositioned (`conducted` naming
+  `RV-354`, or `waived` with a reason), and the owner's `design-accepted`. Human
+  section review is the v1 default; do not invent a reviewer posture to discharge
+  it. `changes_since_baseline` is 0 and the inquiry graph is fully resolved, so
+  nothing else is outstanding.
+- **The `F-1` decision now in front of the owner is about verification, not
+  repair.** The repair at rev 81/83 is co-authored and the raiser has declined to
+  verify it — correctly, having spent its independence to write it. So there are
+  three live options and the design records all three: send the current § 5.1,
+  `I11`, § 7.2 and § 9.6 text to a **fresh, unspent reviewer**; dispose the pass
+  `conducted` and accept a co-authored-but-unverified blocker repair; or dispose
+  it `waived` with the reason. The one thing the record must not do is let the
+  co-authored repair read as a verified one — § 10.1 says so explicitly.
+- **`RV-354`'s ledger is deliberately untouched by the fifth round.** `F-1` and
+  `F-5` are still `answered`, and `F-1`'s recorded response describes the rev-76
+  repair, not the current one — the fourth repair answered a *collaboration*, not
+  a contest, and `review dispose` only answers open/contested findings. Anyone
+  quoting `F-1`'s response should read § 7.2 and § 10.1 for the current shape.
 - **`RV-354` is `active`, `concluded`, `await=raiser`, and this does not block
-  the lock.** The run's gate reads *disposal*, and all four findings are
+  the lock.** The run's gate reads *disposal*, and all five findings are
   disposed. The `outstanding 1 blocker, 1 major` the run reports is `F-1` and
-  `F-2` awaiting the **raiser's verification** of their *second* repair — the
-  lamp counts findings whose status is not `verified`/`withdrawn`, which an
-  `answered` finding is not. Resuming the codex thread would clear it.
-- **Whether to run a fourth round is genuinely open.** The argument for: two of
-  four repairs failed verification, so the base rate is bad, and two of the
-  things landed since are unattacked — `D13`'s two-crossing-kinds generalisation
-  and the second cut of `F-2`'s recipe. The argument against: three codex
-  invocations on one design, and the owner has twice steered against
-  gold-plating.
+  `F-5` awaiting the **raiser's verification** — the lamp counts findings whose
+  status is not `verified`/`withdrawn`, which an `answered` finding is not.
+  Resuming the codex thread will **no longer** clear it: that thread is now a
+  co-author and has declined to verify. Only a fresh reviewer or an owner
+  disposition can.
 - **Known defect in the record, not fixable in place.** The `F-1` disposition
   says "the five surviving `RowVerdict` returns" and then lists six categories
   while omitting a seventh occurrence (`design.md:1933`, `D13`'s description of
   the superseded shape). The ledger is append-only so the miscount stands. The
   *design* is correct — the enumeration was re-run and every hit classified; only
   the disposition's prose is wrong. Worth knowing before quoting it.
-- **What a fourth pass should be told.** The prior has now been right four times
-  running, so assume a **sixth** location class. § 10.1 carries the four earlier
-  ones plus the closure; the closure's *captured environment* is explicitly still
-  open and no instrument here sees it. Also unattacked: `D13`'s claim that
-  authority delegation happens *wherever and only where* something reduces over a
-  closure's return, and § 5.1's placement criterion, which § 10.2 has flagged
-  through three passes as new and self-certifying and which nothing has yet run
-  backwards over the calls already made.
+- **What a fresh (fifth) pass should be told.** The prior that a further location
+  class exists has been right five times running — but § 7.2's sixth class is now
+  stated as an **event grammar with an explicit abstraction boundary** rather than
+  an enumeration, so the productive attack is no longer *find a seventh*: it is
+  **does the grammar's boundary sit in the right place, and does `I11` answer all
+  five of its questions**. Everything from the co-authoring round is unattacked by
+  anyone unspent — the grammar, the association invariant, the two clauses demoted
+  from tested to structural, and § 5.1's trust-boundary paragraph. Also still
+  unattacked from earlier: `D13`'s claim that authority delegation happens
+  *wherever and only where* something reduces over a closure's return, and § 5.1's
+  placement criterion, which § 10.2 has flagged through four passes as new and
+  self-certifying and which nothing has yet run backwards over the calls already
+  made. Tell it the repair it is reading was co-authored by its predecessor, so it
+  does not mistake a second author for a second opinion.
 - **§ 5.1's placement criterion is new and self-certifying**, which § 10.2 flags
   as its own attack surface: the adjudicative normal form and the
   observational-equivalence test were written *in response to* five wrong
