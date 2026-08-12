@@ -9,7 +9,7 @@ created = "2026-07-28"
 updated = "2026-08-12"
 
 [scope]
-paths = ["src/commands/guard.rs", "src/worktree/marker.rs"]
+paths = ["src/commands/guard.rs", "src/worktree/marker.rs", "src/worktree/shared.rs", "src/worktree/land.rs"]
 globs = []
 commands = []
 tags = ["dispatch", "worktree", "confinement"]
