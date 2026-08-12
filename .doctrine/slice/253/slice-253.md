@@ -65,14 +65,35 @@ extraction starts, which is the precondition that was missing.
    without the revision leaves the spec contradicting the binary. `IMP-405`'s
    platform-versus-mechanism rename folds in, and `CPT-002`'s threat priority
    lands in `SPEC-030` § Overview or § Concerns.
+6. **The same `REV` revises `REV-051`'s criterion-3 disposition** (owner's
+   direction, 2026-08-12). `REV-051` is `done` and applied; it records
+   `REQ-459` criterion 3 as *"discharged structurally — one suite parameterised
+   by backend; a second backend passing it edits nothing."* `DEC-189` contradicts
+   that: if row membership is a function of the mechanism's available deltas,
+   there is no single parameterised suite for a second backend to pass, and the
+   structural discharge does not hold. Shipping the kernel makes an applied
+   revision's recorded reading false, so the correction rides this slice rather
+   than being left for a reader to notice.
 
 ### Affected surface
 
-- `crates/doctrine-control/src/conformance.rs` — the split's subject.
+- `crates/doctrine-control/src/conformance.rs` — the split's subject. The
+  AND-reduction is `admission` at `:5166`, with one production call site
+  (`:5326`); the verdict types are `:2682-2838`.
 - `crates/doctrine-control/src/main.rs` — `run_backend`, `run_backend_verify`,
-  `admit`, `render_verdict`, `render_outcome`, and the exit constants.
-- `.doctrine/spec/tech/030/` — via the `REV`, not by direct edit.
-- `justfile` — `capsule-check`, which is how this crate is reached at all.
+  `admit` (`:153`), `render_verdict`, `render_outcome` (`:217`), and the exit
+  constants (`:60,63`). `admit` and `render_outcome` are the only two production
+  consumers of the collapsed scalar, and are exactly what `DEC-191` changes.
+- `crates/doctrine-control/src/backend.rs` — `BackendId` at `:811`. It is a
+  kernel type sitting in `leaf` tier while `conformance` is `engine`, so the
+  kernel's dependency on it is a **new `ADR-001` edge to check**, not a given.
+- `.doctrine/spec/tech/030/` and `REQ-459` — via the `REV`, not by direct edit.
+- `.doctrine/adr/001/layering.toml` — `:257` carries the literal `backend verify`
+  and is the *only* accepted-governance file in `DEC-194`'s rename radius; the
+  tier classifications at `:261`/`:264` need revisiting after the split.
+- `justfile` — `capsule-check` (`:111-113`) and `capsule-verify` (`:130-146`).
+  Neither is wired into `check` or `gate`, so this slice's proof does not run
+  under the default gate and verification design must say how it is run.
 
 ### Risks and assumptions
 
@@ -95,17 +116,20 @@ extraction starts, which is the precondition that was missing.
 
 ### Open questions
 
-- **`OQ-1` — does this slice implement the Firecracker row set, or derive it?**
-  `DEC-189` says which four bubblewrap rows lose their delta under a hypervisor
-  and names four a microVM earns. But there is no Firecracker backend in
-  `doctrine-control`; the microVM work lives in `/workspace/microvm-spike` and
-  has not graduated. The narrow reading — derive the membership as a design
-  artefact the kernel is shaped to admit, and implement nothing against a
-  backend that does not exist — keeps this slice inside the measured comfortable
-  band. The wide reading pulls a backend implementation in and roughly triples
-  it. Scoped narrow here, pending the owner.
+- **`OQ-1` — Firecracker row set: implement or derive? — RESOLVED narrow**
+  (owner, 2026-08-12). Derive the membership as a design artefact the kernel is
+  shaped to admit; implement nothing against a backend that does not exist.
+  There is no Firecracker backend in `doctrine-control` — the microVM work is in
+  `/workspace/microvm-spike` and has not graduated. The wide reading would have
+  pulled a backend implementation in and roughly tripled the slice. Retained
+  here rather than deleted because the reasoning binds later phases: the kernel
+  must be *shaped* by `DEC-189`'s membership analysis without *implementing* it.
 - **`OQ-2` — where does the admission floor sit** once the AND-reduction is
-  gone? Named as a risk above; it is a decision, and it may want its own record.
+  gone? **Promoted from open question to blocking design decision**, and it is
+  the first thing design should settle rather than the last. It is not
+  hypothetical: `EVD-021` records that the vacuous path already exists, is
+  asserted by a test, and is held shut only by a guard `DEC-189` dissolves.
+  Likely wants its own decision record.
 
 ### Verification and closure intent
 

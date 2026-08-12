@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 21
+slug = "vacuous-admission-is-reachable-and-its-guard-is-per-suite"
+title = "Vacuous admission is reachable and its guard is per-suite"
+record_kind = "evidence"
+status = "confirmed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["admission-floor", "capsule", "cluster:capsule", "conformance"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "admission(&[]) returns Admission::Admitted. The reducer at crates/doctrine-control/src/conformance.rs:5166 is rows.iter().all(|(_, verdict)| matches!(*verdict, RowVerdict::Proven)), and .all() over an empty slice is vacuously true. This is known and deliberately unrepaired: the test at conformance.rs:11275 is named an_empty_row_list_is_admitted_and_the_shipped_tables_are_what_prevent_it, and its second assertion is !tables().is_empty() with the comment 'the shipped tables are what stop the vacuous path being reachable'. The guard is therefore external to the reducer and depends on there being one fixed table set. DEC-189 makes row membership a function of the mechanism's available deltas, so once membership varies per backend the non-emptiness of one shipped table set stops being the thing that holds the door shut. Verified 2026-08-12 at working tree 94d0b5603."
+provenance = "inspection"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the evidence promoting OQ-2 to a blocking design decision"
+target = "SL-253"
