@@ -1298,13 +1298,20 @@ So the kernel is pinned to a protocol, not merely to a signature — `I11`:
 
 - **Exactly once each.** `availability` and `host_descriptor` are already values
   by the time `qualify_over` is entered. `auxiliary` and `observations` are
-  invoked once per run, and `run_row` once per submitted `RowId` and never for
-  an id the table did not submit.
-- **In a fixed order** — `auxiliary`, then `observations`, then the rows, which
-  is the order the code runs today. The order is arbitrary in itself, and it is
-  pinned *because* it is arbitrary: a shared `OnceCell` makes any order
-  observable, so an unpinned one is a silent behaviour change waiting to be
-  made.
+  invoked once per run.
+- **In a fixed order between the three** — `auxiliary`, then `observations`,
+  then the rows, which is the order the code runs today. The order is arbitrary
+  in itself, and it is pinned *because* it is arbitrary: a shared `OnceCell`
+  makes any order observable, so an unpinned one is a silent behaviour change
+  waiting to be made.
+- **The row trace is the submitted slice, in the submitted order** (`RV-354`
+  `F-1`, contested a third time). `run_row` is invoked once per element of the
+  row list, in that list's order, **with duplicates preserved as submitted** —
+  the argument *sequence* is pinned, not merely the call count and the id set.
+  `rows.iter()` is what the code does today, and a kernel that sorted, reversed
+  or deduplicated would satisfy a count-and-membership rule exactly while
+  changing what the payload observes through its captures. Counting calls is not
+  observing a trace, and the first cut of this invariant counted.
 - **Not at all on the unavailable path.** `Unavailable` returns before any of
   the three is called, which is `DEC-195`'s lift restated as a call count —
   nothing ran, so there is nothing to report.
@@ -1678,6 +1685,51 @@ catch, because no repair was attempted. The guard against it is different in
 kind: a finding that asks for two things needs its clauses tracked
 independently to disposition, and a disposition that answers one of them is not
 a disposition of the finding.
+
+**The third verification round — the first finding to close, and the first the
+document raised against itself and still got wrong.**
+
+- **`F-2` verified.** Three repairs deep, it closes: the positive target is
+  compiled explicitly by name without the control feature, ahead of an
+  authenticated negative target that names a kernel-only symbol and asserts an
+  exact diagnostic set. Wrong-path, unselected-target and `required-features`
+  vacuities all shut. It is the only finding on this ledger to have survived
+  three cuts and then passed.
+- **`F-1` contested a third time**, and on the half that had just been repaired.
+  `I11` pinned callback kind, count and inter-closure order, and left the **row
+  argument trace** unpinned — so a kernel that sorted, reversed or deduplicated
+  the submitted rows would satisfy the invariant exactly while changing what the
+  payload observes through its captures. `rows.iter()` is what the code does.
+  Counting calls is not observing a trace. The § 9.6 test inherited the same
+  defect by asserting a set where it needed a sequence, and reached none of
+  `I11`'s divergence clause.
+- **`F-5` raised, major — and it is a defect in a self-audit repair.** The
+  self-audit had just restructured `D13` into two kinds and one severity grade.
+  The fourth pass found the grade attached to the **callback** rather than to the
+  values it returns, which makes the paragraph's central claim false: `run_row`
+  is mixed-grade, not severe. It returns a `RowVerdict` for `Floor`, `Assurance`
+  and `Axis` alike, and § 5.2's own type declaration says the floor is *reduced*
+  while assurance and axes are *"Published, never reduced"*. Two-thirds of that
+  channel is exactly as benign as the `AuxOutcome` the same paragraph held up as
+  its contrast.
+
+**What survived.** § 5.1's fourth clause was attacked directly and held: it is a
+dependency-closure rule applied *after* `Qualification` membership has been
+decided, where *whatever the verdict records* would itself decide membership —
+and `Front` demonstrates the separation by living in the payload envelope rather
+than the kernel verdict. Asked for a **seventh** location class, the pass
+returned none; the sixth was drawn at the wrong altitude instead, as a symptom
+list rather than as the callback interaction trace that subsumes it.
+
+**The measured base rate now has a second data point, and it is the point.** The
+self-audit predicted that at least one of its own four repairs would carry a
+defect; the fourth pass found one, in the most conceptual of them. Across four
+rounds, `D13`'s generalisation has been restated four times and was structurally
+wrong on each of the first three, every time about **where the grade lives** —
+not about the seam, which has been right since the first cut. A claim that keeps
+being re-derived by the same author is not converging by being rewritten; it
+converges when someone else attacks its shape. That is the argument for the
+external pass, stated as evidence rather than as a preference.
 
 ### 10.2 Attack these first
 
@@ -2163,38 +2215,64 @@ the reduction test measures the grade rather than identifying a kind.
   returned a `Reading` naming `Termination` it would leak while adjudicating
   nothing. The compile probe covers it; the reduction test says nothing about
   it.
-- **Reaching admission** *(grade — not a third kind)* — whether a reported
-  adjudication is reduced over into the floor. This is where *wherever, and only
-  where, something reduces* belongs, and it belongs nowhere else. It does not
-  classify a crossing; it says what one of the first kind costs.
+- **Reaching admission** *(grade — not a third kind, and not a property of a
+  callback)* — whether a *particular returned value* is reduced over into the
+  floor. This is where *wherever, and only where, something reduces* belongs,
+  and it belongs nowhere else. It grades a value's use; it does not classify a
+  crossing, and it does not characterise the channel the value came out of.
 
-So `run_row` carried the first kind at the severe grade, `auxiliary` carries the
-first kind at the benign grade, and `observations` carries neither kind. One fix
-appeared to close one class because the two grades were never distinguished —
-and the appearance survived two looks because each redraw kept the grade as a
-peer of the kinds instead of a property of one.
+**`run_row`'s channel is mixed-grade, and calling it severe was the fourth
+error in this paragraph's history** (`RV-354` `F-5`). It returns a `RowVerdict`
+for every `RowId` — `Floor`, `Assurance` and `Axis` alike — and § 5.2's
+`Qualification::Ran` says outright what becomes of each: the floor is *"Reduced
+… The claim"*, while `assurance` and `axes` are *"Published, never reduced. The
+evidence."* Only floor-row verdicts are severe. An assurance-row verdict handed
+back by the payload is **benign — exactly as benign as `AuxOutcome`**, which the
+previous draft of this paragraph held up as its contrast case.
 
-That this generalisation has now been restated three times and was wrong in a
-*different structural way* each time is itself the finding. Anyone applying the
-rule to a fourth closure should test both kinds and then grade the first — and
-should treat this paragraph as the least load-bearing thing in the section until
-someone other than its author has attacked the shape rather than the wording.
+So a channel carrying more than one grade is treated at its **maximum**, and
+stating that rule is what makes `D13`'s signature change proportionate rather
+than over-broad. `run_row` returns two `ArmJudgement`s for *every* row and not
+only for floor rows, because one callback cannot be typed two ways by a caller
+that has not yet looked at the id, and because a rule that graded per row kind
+would need re-deriving each time a `RowId` variant is added. A conservative
+channel maximum, stated once, in place of a per-row judgement that would have to
+be made again.
 
-*And the enumeration of locations was short by one.* Five were counted —
-parameter, body, nested field, callback return, captured environment. The sixth
-is not a location in a type at all: it is the **callback's control and effect
-semantics** — how many times the kernel invokes each closure, in what order,
-what happens when one panics or diverges, and what the closures do to state they
-share through their captures. It is a temporal channel rather than a structural
-one, which is why an enumeration over types was constitutionally unable to see
-it. § 5.4's `I11` is where it is now pinned.
+That leaves this generalisation restated four times, wrong in a *different
+structural way* on each of the first three: an *only where* attached to a test
+that could not carry it, then false independence between a kind and a grade,
+then the grade attached to the callback rather than to the values it returns.
+Every one of those errors was about **where the grade lives**, which is the only
+durable thing to take from the sequence. Anyone applying the rule to a fourth
+closure should test both kinds and then grade each returned value by its use —
+and should treat this paragraph as the least load-bearing thing in the section,
+on the evidence.
 
-The captures themselves stay out of scope, and correctly so: the payload's
-closures must privately hold the backend and the fixture, and an instrument that
-inspected those captures would be defeating the seam rather than checking it.
-What is in scope is the kernel-visible *behaviour* of invoking an opaque
-environment — which is the sixth class, and nothing else in this design was
-watching it.
+*And the enumeration of locations was short by one — then drawn at the wrong
+altitude.* Five were counted: parameter, body, nested field, callback return,
+captured environment. The sixth was first written as the **callback's control
+and effect semantics** and then enumerated as a list of the things that happened
+to be pinned — invocation count, order, divergence. That is a symptom list, not
+a class, and the cost of the mistake was immediate: `I11` could satisfy the list
+in full while leaving the argument trace unpinned, and it did.
+
+Drawn correctly, the class is the complete **callback interaction trace** —
+callback identity, argument *value and occurrence*, return, panic or divergence,
+and observable effect. Temporal rather than structural, which is why an
+enumeration over types was constitutionally unable to see it. At that altitude
+the class *subsumes* the symptom list instead of being defined by it, so a
+protocol that pins four of the five elements reads as visibly incomplete rather
+than plausibly finished. § 5.4's `I11` is where it is pinned, and the fourth
+pass found it short by exactly the element the symptom list had omitted.
+
+Asked for a **seventh** class, the same pass returned none, and that is recorded
+here as a result rather than as an absence of one. The captures themselves stay
+out of scope, and correctly so: the payload's closures must privately hold the
+backend and the fixture, and an instrument inspecting those captures would be
+defeating the seam rather than checking it. What is in scope is the
+kernel-visible *behaviour* of invoking an opaque environment — the sixth class,
+and nothing else in this design was watching it.
 
 ### 7.3 What was considered and refused at design level
 
@@ -2668,7 +2746,8 @@ Beyond the carve and the characterisation test:
 | `unavailability_carries_no_rows_claims_or_observations` | `DEC-195`'s lift — not-run and ran-and-failed are different claims |
 | `a_host_without_a_shell_is_unavailable_not_violated` | `RF-3` — the behaviour is preserved exactly across the move to the payload |
 | `row_verdict_is_a_truth_table_over_nine_arm_pairs` | § 5.2.5 — the algebra itself, all nine `ArmJudgement` probe/control pairs enumerated as data. **Replaces `row_verdict_is_unchanged`**, which `RF-10` made impossible: the signature changes, so there is no byte comparison to make. After `RV-354` `F-1` it also gains reach: `run_row` returns the two arms and the kernel adjudicates, so this table now covers the **only** path to a `RowVerdict` rather than a function the payload may or may not call |
-| `the_kernel_honours_the_callback_protocol` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*, with counts and order recorded by instrumented closures: `auxiliary`, then `observations`, then one `run_row` per submitted id and none for an unsubmitted one. Not named for *exactly once*, because the protocol's other half is a count of **zero** — none of the three invoked on the `Unavailable` path. That clause is the call-side complement of `unavailability_carries_no_rows_claims_or_observations`, which asserts the output side; a kernel that called all three and discarded the results would pass that test and fail this one (`RV-354` `F-1`) |
+| `the_kernel_honours_the_callback_protocol` | `I11` — § 5.4's callback protocol, the design's only invariant about *when*. Instrumented closures record the full interaction trace and the test asserts it as a **sequence**, not a multiset: `auxiliary`, then `observations`, then one `run_row` per element of the submitted row list in submitted order with duplicates preserved. Asserting the id *set* would pass a kernel that sorted or deduplicated, which is the defect the first cut shipped (`RV-354` `F-1`, third contest). Not named for *exactly once*, because the protocol's other half is a count of **zero** — none of the three invoked on the `Unavailable` path. That clause is the call-side complement of `unavailability_carries_no_rows_claims_or_observations`, which asserts the output side; a kernel that called all three and discarded the results would pass that test and fail this one |
+| `a_panicking_closure_unwinds_through_the_kernel` | `I11`'s divergence clause, which the protocol test does not reach: a `run_row` that panics propagates, the kernel catches nothing, and no verdict is invented for the row that produced none. Requires `panic = "unwind"` to execute at all, so it carries that condition explicitly rather than silently passing where it cannot run (`RV-354` `F-1`, third contest) |
 | `arm_diagnostics_do_not_move_a_judgement` | `D12` — `ArmResult`s differing only in `termination`, `stdout` or `stderr` project to the same `ArmJudgement`, which is § 5.1's equivalence test made executable |
 | `every_submitted_assurance_key_has_a_front` | `I9`/`D11` — `FrontCatalog` is total over the keys its own table submitted, which is why `front_of` returns no `Option` |
 | `the_qualification_artefact_matches_the_transformation_contract` | § 9.1 layer 2 — the whole-output golden test, asserting drift. Committed in the phase that changes `RowId`, beside § 9.2's table. Its expected value is **derived** by the one-shot transform script, not authored (`RV-354` `F-3`) |

@@ -67,22 +67,27 @@ integrated through a verification round and a self-audit
   is visible only as a change-log row, so `design show` reports zero outstanding
   while blocking findings await disposition.
 - **`RV-354` — the external adversarial pass, now spent.** Codex (GPT-5.5),
-  thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, three rounds: raise, then two
+  thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, four rounds: raise, then three
   verification rounds each attacking the repairs rather than accepting them.
-  `F-1`/`F-3` blockers, `F-2` major, `F-4` minor. All four disposed `fix-now`;
-  `F-3`/`F-4` verified by the raiser, `F-1`/`F-2` **contested twice and repaired
-  three times**, and the ledger still awaits the raiser on those two. Both
-  contests were upheld against the artefact and the code on each occasion —
-  the repairs were the defective party, not the findings. Findings and dispositions are on the ledger — read them
+  `F-1`/`F-3` blockers, `F-2` major, `F-4` minor, plus `F-5` major raised on the
+  fourth pass. All five disposed `fix-now`; `F-2`/`F-3`/`F-4` **verified**,
+  `F-1` contested three times and repaired four, `F-5` awaiting first
+  verification. **Every contest was upheld against the artefact and the code —
+  the repairs were the defective party, not the findings, on all five
+  occasions.** `F-5` is the sharpest: it is a defect in a repair the author's own
+  self-audit had just made. Findings and dispositions are on the ledger — read them
   with `doctrine review show RV-354 --format json`, since the table format
   summarises findings to a count.
 - `D13` — the row runner returns `(ArmJudgement, ArmJudgement)`; the kernel
   adjudicates. `D10` narrowed with it. Its *generalisation* took three attempts
   and a self-audit, and now names **two** independent kinds of crossing (reported
   adjudication, type contamination) with **one** severity grade (reaching
-  admission) over **six** location classes — the sixth being the callback's
-  control and effect semantics, pinned as `I11` in § 5.4. The third attempt's
-  error was structural rather than verbal: it called the grade a third kind. Same treatment as `D1`–`D12`: in
+  admission) over **six** location classes — the sixth being the complete
+  callback interaction trace, pinned as `I11` in § 5.4. Each restatement failed
+  structurally, and always in the same place: an *only where* on a test that
+  could not carry it, then the grade as a peer of the kinds, then the grade
+  attached to a callback instead of to a returned value. The seam analysis has
+  been right since the first cut; only the location of the grade kept moving. Same treatment as `D1`–`D12`: in
   `design.md`, not banked as a `DEC`.
 - `mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion` —
   new, and the most portable thing the first verification round produced.
