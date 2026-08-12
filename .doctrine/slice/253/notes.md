@@ -67,6 +67,9 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
 - **The kernel classifies as a leaf** (`DEC-197`) — imports std, `backend` and
   `host` only. **Carry to `/plan` as a required exit criterion**: the
   architecture gate classifies the kernel unit `leaf` and passes.
+- **Row identity splits closed floor from open profile** (`DEC-198`). Thirteen
+  of fourteen `Property` members become payload-minted constants; `Axis` stays
+  closed. `inq-5` now carries three shape changes, not one.
 
 ### Risks
 

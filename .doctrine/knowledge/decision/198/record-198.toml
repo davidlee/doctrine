@@ -1,0 +1,57 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 198
+slug = "row-identity-splits-a-closed-floor-from-an-open-profile"
+title = "Row identity splits a closed floor from an open profile"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-8, with OQ-1 resolved narrow — derive the Firecracker membership, build no backend — and the node warning that an answer showing nothing makes the derivation decoration. Property is today a closed enum of fourteen members, one per table A row, and RowId::Property(Property) keys the verdict; the doc comment holds the closedness to be the one machine-checked projection of table A. DEC-189 says a microVM earns rows bubblewrap cannot and that rows 10, 12, 13 and 14 lose their host-facing delta under a hypervisor; DEC-156 through REQ-459 criterion 3 says a second backend is admitted by passing the assertions and never by editing them; DEC-195 requires the authority floor closed and reduced by exhaustive match. Closedness is load-bearing for the floor and forbidden for the profile, and one type carries both. DEC-196's claim that this node was largely answered in advance is withdrawn."
+choice = "RowId distinguishes three things rather than two, with names settled at implementation: a FLOOR key — a closed enum, exhaustively matched, whose membership is DEC-195's floor and currently the single member DeniedCanonicalStateAndCredentials; an ASSURANCE key — an open mechanism-minted &'static str newtype, exactly BackendId's construction and for BackendId's stated reason that the contract must bind mechanisms nobody has written yet; and AXIS, which stays CLOSED as REQ-450 criterion 1's five freshness axes. A hypervisor publishes no rows 10/12/13/14 and mints its own, editing nothing in the kernel."
+alternatives = ["Keep Property closed and grow it as mechanisms are added — refused as precisely what REQ-459 criterion 3 forbids, and because it puts a microVM's vocabulary in a leaf the microVM does not own", "Make Property wholly open and drop the enum — refused because it breaks DEC-195: with no closed set there is no exhaustive match, and EVD-021's vacuous-admission path returns as a runtime concern rather than a compile-time impossibility", "Leave RowId as it stands and treat DEC-189's derivation as prose — refused as the decoration the node named: a derivation constraining nothing checkable is not shaping the kernel"]
+rationale = "The three decisions do not fit one type, and the fault line between them is exactly what closedness buys in each case. The floor needs exhaustiveness because DEC-195's whole move is to make an empty floor unrepresentable rather than externally guarded. The profile needs openness because DEC-189 makes membership a function of the mechanism and REQ-459 criterion 3 forbids a new backend from editing the suite. Splitting the key is therefore not a compromise between them but the only shape satisfying both. It also introduces no new idea into the crate: BackendId is already a deliberately open &'static str newtype for the same reason, so this is that construction one level down. Axis stays closed because REQ-450's five freshness axes are mechanism-independent — a microVM's checkout is still a checkout — and saying so explicitly stops a later reader assuming the open profile swallowed it."
+consequences = ["RESIDUAL, accepted rather than waved through — thirteen of fourteen Property members become payload-minted constants, so the compile-time projection the doc comment prizes survives only for the floor and the assurance vocabulary becomes a runtime one. Accepted because an open vocabulary cannot be compile-checked by definition and BackendId already took the identical trade", "What is NOT lost: the floor stays exhaustively matched, so EVD-021's vacuous-admission path remains unrepresentable rather than merely untested", "RowId's shape, its serialisation and the verdict rendering all move. inq-5's behaviour-preservation argument now carries three shape changes — DEC-196's RowId re-keying, DEC-197's backend-parameter narrowing, and this split", "DEC-195's carried question about row 8 TrustedTerminationObservation is DE-ESCALATED, not answered: row 8 sits in the profile either way, and with an open profile key whether a hypervisor publishes it is that mechanism's membership question. It joins SL-253's existing follow-up for the Firecracker row set", "Axis stays closed and is stated as staying closed, so freshness is not read as mechanism-shaped by analogy with confinement"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "row identity's closed/open split"
+target = "DEC-189"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "row identity's closed/open split"
+target = "DEC-195"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "row identity's closed/open split"
+target = "DEC-196"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "row identity's closed/open split"
+target = "DEC-156"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
