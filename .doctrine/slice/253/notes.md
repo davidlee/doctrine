@@ -47,11 +47,13 @@ fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
 
 ### Open
 
-- **Stage is `reviewing` (rev 42); all ten sections drafted and materialised.**
-  Outstanding to lock: every section attested, the review pass dispositioned
-  (`conducted` naming an RV, or `waived` with a reason), the owner's
-  `design-accepted`, and runbook step `review.scope`. Eight `RF-` findings from
-  the agent hostile pass are recorded above and **undispositioned**.
+- **Stage is `reviewing` (rev 46).** The agent pass is raised, dispositioned and
+  integrated; scope reconciled. Outstanding to lock: every section attested (all
+  ten currently `outstanding`, and seven changed at rev 44 so a prior attestation
+  would have been stale anyway), the review pass dispositioned — `conducted`
+  naming an RV, or `waived` with a reason — and the owner's `design-accepted`.
+  `RV-354` exists as empty scaffolding (`done`, 0 findings, still untracked) and
+  is not yet the pass that would be named.
 - `OQ-2` is closed by `DEC-195`; `OQ-1` closed narrow by the owner.
 - Carried into `/plan` (each stated in its decision, gathered here):
   the kernel-unit `leaf` classification as an exit criterion (`DEC-197`);
@@ -60,97 +62,59 @@ fresh-as-of: 2026-08-12 · design/exploring · 718b97ee6
   table in the `RowId` phase and the pre-split characterisation test (`DEC-199`);
   the pre-split test-band reorganisation with ~67 tests needing triage
   (`DEC-200`); the REV as a phase carrying four payloads (`DEC-201`).
+- Added by the review pass, also for `/plan`: the `today` → `observed_at` rename
+  is **source-side only**, the rendered `date=` key is unchanged (`D9`); and
+  `just capsule-check` needs `bwrap` too, so neither instrument runs on a host
+  without it until `IMP-427` lands.
 
-## Agent hostile pass over the drafted design (stage `reviewing`, rev 42)
+## Agent hostile pass over the drafted design (stage `reviewing`)
 
-Conducted against `design.md` at `499c2ebbc`, with every code claim re-read in
-the working tree rather than recalled. Findings are `RF-` numbered doc-locally
-and are **undispositioned** until the owner rules.
+Conducted at run revision 43 against `design.md` at `499c2ebbc`, with every code
+claim re-read in the working tree. Nine findings raised as `fnd-1` … `fnd-9` on
+the design run and all nine dispositioned at revision 45; the integrated design
+materialised at revision 46.
 
-### Contradictions inside the design
+Do not restate them here — they are queryable. `doctrine design show SL-253`
+carries each finding, the section it concerns, and its resolution; `design.md`
+§ 10.1 carries what they changed and § 7.2 `D7`–`D10` the rulings taken. The one
+thing worth repeating out of band, because it binds later work rather than this
+document: **three enumerations of what crosses the seam backwards have each been
+careful, believed complete, and wrong** — two of five, then three of five. Both
+misses were in `verify_over`'s body rather than its signature, and the `leaf`
+classification the design had leaned on would have caught neither.
 
-- **`RF-1` — `FloorStanding::NotEstablished` is unreachable as typed.** § 5.2.2
-  makes `Floor` total (one field per member) and `standing()` an exhaustive match
-  over `RowVerdict` returning only `Held` / `Breached`; `NotEstablished` appears
-  in no arm. But § 5.4's flow routes `Floor::from_rows` → `Err(missing)` →
-  `Ran { floor incomplete }` → `NotEstablished`, and § 9.6 pins it with
-  `a_missing_floor_row_is_not_established_not_breached`. `Qualification::Ran`
-  holds a `Floor`, and an incomplete `Floor` is exactly what § 5.2.2 makes
-  unconstructible. `D3` names the consequence in prose and § 5.2.3 does not carry
-  it into the type. Needs a shape ruling: `Ran { floor: Result<Floor, FloorProperty> }`,
-  or `Ran { standing: FloorStanding, … }`, or a third `Qualification` variant.
-- **`RF-2` — `D5` produces a difference § 9.1 does not license.**
-  `main.rs:render_verdict` emits `date={}` on the header line. Renaming the field
-  to `observed_at` changes rendered output, and § 9.1's permitted list is closed
-  at three (outcome line, exit constants, row key spellings). By the design's own
-  rule that is a regression. Either `D5` scopes to the Rust identifier and the
-  rendered key stays `date=`, or the licence gains a fourth entry — which § 9.1
-  says takes a decision record.
+## What a further review pass should probe (runbook step `review.passes`)
 
-### Claims that did not survive checking
+Written after the first pass integrated at revision 46. A second pass **is**
+warranted; the argument for it is not that the first found nine things but that
+of the nine, the four that changed the design's shape were all found by *checking
+the code against the prose* rather than by reasoning about the design. The first
+pass was run by the design's author, so the one thing it structurally could not
+do is disagree with the design's own framing.
 
-- **`RF-3` — the `SHELL` precondition is a fourth backward reference.**
-  `verify_over:5299` checks `host.path_exists(Path::new(SHELL))` under the comment
-  *"Every payload runs under `/bin/sh -c`"* — an explicitly payload-shaped fact,
-  with `SHELL`/`SHELL_REMEDY` defined in `conformance.rs:100,106`. § 5.4 keeps
-  that step on the kernel's path; § 5.1's table enumerates exactly three
-  crossings and this is not among them. **`R1`'s mitigation does not catch it**:
-  a kernel that re-declares `const SHELL: &str = "/bin/sh"` imports nothing, so
-  the `leaf` gate stays green. This is precisely the test § 10.1 invited — *what
-  would have caught the fourth?* — and the answer the design gives fails on it.
-  The seam leaks by duplicated constant, not by import.
-- **`RF-4` — § 9.4's "`capsule-check` needs `bwrap`? no" is false.**
-  `cargo test -p doctrine-control` runs `#[cfg(test)]` tests that assert
-  `backend.availability() == Availability::Available` and provision real capsules
-  (`conformance.rs:6915`, `:7244`, `:7453`, …). `EX-14` forbids skipping, so on a
-  host without `bwrap` they fail. This contradicts § 9.5 / `IMP-427`'s own
-  rationale and understates `R2`'s residual, which covers only `capsule-verify`.
+`design.md` § 10.2 carries the concrete list — `D1`, `D10`, `D7`, `D8` and the
+`Qualification::Ran` shape. What belongs here rather than there, because it is
+about the *pass* and not the artefact:
 
-### Gaps
-
-- **`RF-5` — fronts have no home in any type.** § 5.4 and scope objective 2 make
-  front-labelled rendering a `CPT-002` obligation, but no kernel type, no payload
-  contract function (§ 5.2.4) and no verdict field carries a row→front map.
-  A required rendering behaviour with nothing to compute it from.
-- **`RF-6` — re-keying makes an unknown id representable, with nowhere to report
-  it.** `run_row: &dyn Fn(&RowId) -> RowVerdict` is total, so a payload handed an
-  id it cannot construct must fabricate a verdict. Today's `&[Row]` shape makes
-  that state impossible. Related: `row_for(id) -> Option<&'static Row>` implies a
-  static table; `tables():4289` builds an owned `Vec<Row>` whose `Delta`s carry fn
-  pointers.
-
-### Constructive
-
-- **`RF-7` — the kernel may not need the `CapsuleBackend` trait at all.**
-  `qualify_over` calls exactly `id()` and `availability()`. Passing `BackendId`
-  and `Availability` as *values* drops a trait from the kernel's vocabulary
-  entirely — strictly more `P1`/`P2` than narrowing `ConformanceBackend` to its
-  supertrait, and it removes a dyn dispatch a reader must otherwise resolve.
-
-### Provenance nits (§ 10.3 invited these)
-
-- **`RF-8`** — § 5.2.1 cites `backend.rs:805` for `BackendId`'s shape; the struct
-  is at `:811` (§ 2.6 has it right). § 2.2 cites `:2688` for `AdmissionVerdict`;
-  the struct is at `:2689`.
-
-### Checked and found sound — stated so the pass is not read as only negative
-
-- `Claim` and `Unrowed` are `&'static str` `section`/`name` pairs
-  (`:2726`, `:2770`), not closed mechanism enums, so § 5.2.3's placement of them
-  in the kernel is safe.
-- Leaf→leaf edges already exist in the control tree (`backend → config`,
-  `capacity → config, host`, `layering.toml:259-261`), so the kernel's `leaf`
-  classification introduces no new edge class — `DEC-197` holds.
-- Every `justfile` and `layering.toml` cite in § 5.4's rename radius is exact
-  (`:108`, `:114`, `:129`, `:143`, `:145`; `layering.toml:257`), as are
-  `row_verdict:3177`, `admission:5166`, `verify_over:5270`, `RowId:2580`,
-  `Delta::Widened:2548`, `ConformanceBackend:638`.
-- § 10.1's own doubt — whether `axes` belongs beside `assurance` — resolves in
-  the design's favour: `B1`–`B5` are transaction properties and are **not escape
-  fronts**, so folding them into `assurance` would misrender under `CPT-002`.
-- `D2` holds under the challenge § 10.1 set for it: a `BTreeMap` gives neither
-  `DEC-195` guarantee, and `const ALL: [_; N]` gives only the compile-break, and
-  only if someone remembers to extend it.
+- **An external reviewer is the right instrument, not `/inquisition`.** The open
+  questions are judgement calls on shape (is `FloorReading` a wrapper too many?
+  does the value-only entry point really close `F7`'s class?), not conformance
+  to doctrine. `codex` MCP on the default model is the project's adversarial
+  reviewer; `RV-354` is the ledger it would fill, and is currently empty
+  scaffolding reading `done` with 0 findings — it needs reopening or replacing
+  before it can carry a pass.
+- **Give the reviewer the code, not only the design.** Three of the nine findings
+  were prose-versus-tree mismatches that no amount of reading `design.md` alone
+  would surface. A pass confined to the document will systematically miss that
+  class, which is the class this slice has the worst record on.
+- **`D10` is the highest-value target and the least independently checked.** It
+  was taken under review pressure, in one move, resolving three findings at once.
+  That is exactly the shape of a ruling that over-reaches: ask whether the
+  payload composing `Availability` hides the shell precondition rather than
+  relocating it, and whether a caller can now build an `Availability::Available`
+  that lies.
+- **Do not re-litigate the numbers.** `P1` and § 3.4 answer *this is more than a
+  few hundred lines*, and the owner has ruled the figures are not a criterion.
 
 ## Design surface triage (runbook step `explore.triage`)
 
@@ -177,15 +141,20 @@ and are **undispositioned** until the owner rules.
   externally guarded.
 - **Fronts are open grouping metadata, never a reduction target.** Reducing per
   front would reproduce the vacuity one level up, since `DEC-189` guarantees
-  empty fronts.
+  empty fronts. The review pass placed them **wholly in the payload** (`D8`):
+  the kernel neither reduces over them nor validates them.
 - **Admission is named in the taxonomy and carries no outcome field**, on the
   `Unrowed`/`Reading` precedent — equal footing without a provable claim.
 - **The seam cuts at row identity** (`DEC-196`). Kernel keeps identity and
   judgement; `Row`/`Delta`/`ArmShape`/`Under`/`Arm`/`PropertyRemoval`/
   `AuthorityGrant`/`ConformanceBackend` are construction and go to the payload.
-- **The kernel classifies as a leaf** (`DEC-197`) — imports std, `backend` and
-  `host` only. **Carry to `/plan` as a required exit criterion**: the
-  architecture gate classifies the kernel unit `leaf` and passes.
+- **The kernel classifies as a leaf** (`DEC-197`) — imports `std` plus two types
+  from `backend`, and not `host` at all after the review pass moved the shell
+  check and the descriptor read out (design `D10`). **Carry to `/plan` as two
+  required exit criteria**: the architecture gate classifies the kernel unit
+  `leaf` and passes, *and* the kernel's entry point takes values and closures
+  only (`I10`) — the gate is a check on the import graph and would not have
+  caught either reference the pass found.
 - **Row identity splits closed floor from open profile** (`DEC-198`). Thirteen
   of fourteen `Property` members become payload-minted constants; `Axis` stays
   closed.

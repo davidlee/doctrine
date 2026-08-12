@@ -27,16 +27,22 @@ note = "Redundant against the scope-relevant crates/doctrine-control/src/** glob
 [[selector]]
 selector = "crates/doctrine-control/src/main.rs"
 intent = "design-target"
-note = "Same intent-vs-path overlap as conformance.rs. Commitment is admit/render_outcome, the exit constants and the verb — DEC-191 and DEC-194."
+note = "Same intent-vs-path overlap as conformance.rs. Commitment is admit/render_outcome, render_verdict, the exit constants and the verb — DEC-191 and DEC-194. The review pass added render_verdict explicitly: its header line emits date=, which D9 rules stays unchanged, so this file is a design target for what must NOT move as well as for what must."
 
 [[selector]]
 selector = ".doctrine/adr/001/layering.toml"
 intent = "design-target"
+note = "Gains one row — qualification = leaf — and re-classifies nothing (DEC-197). :257 also carries the 'backend verify' literal and is the only accepted-governance file in DEC-194's rename radius."
 
 [[selector]]
 selector = "crates/doctrine-control/src/qualification.rs"
 intent = "design-target"
 note = "Does not exist yet — the kernel unit DEC-197 creates. 'unmatched' in selector doctor is the correct state until the split phase lands; name provisional per DEC-198."
+
+[[selector]]
+selector = ".doctrine/spec/tech/030/**"
+intent = "design-target"
+note = "SPEC-030 and REQ-459, edited via the REV DEC-201 carries as a phase of this slice — not by direct edit, but the slice commits to the change landing with the code (objective 5)."
 
 [[relation]]
 label = "governed_by"

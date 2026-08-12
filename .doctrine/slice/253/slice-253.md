@@ -64,6 +64,18 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
    assurance key on its precedent rather than taking the type. The kernel's own
    unit **classifies as a leaf**, and that is a required exit criterion of this
    slice, not a happy consequence.
+
+   **The review pass widened what goes to the payload** (design `D10`). Two
+   further backward references were found in `verify_over`'s *body*, where the
+   three earlier enumerations had not looked: the `/bin/sh` precondition, which
+   is a fact about the payload's probes, and `host_descriptor()`, which reads
+   disk. Both move out, and with them the last use of `&dyn HostFacts`. The
+   kernel's entry point therefore takes **values and three closures and nothing
+   else** — `BackendId` and `Availability` rather than any backend trait,
+   `HostDescriptor` rather than a host trait plus a disk read. That is the
+   structural answer to a risk the design had been mitigating by inspection: the
+   `leaf` classification refuses a kernel that *imports* the payload, and would
+   have caught neither of the two references it missed.
 2. **Publish the profile instead of collapsing it.** Replace the all-or-nothing
    AND over a fixed row set with a verdict carrying two structures of different
    semantics (`DEC-195`): a closed **authority floor**, reduced by exhaustive
@@ -74,8 +86,17 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
    reduction target: reducing per front reproduces the vacuity one level up,
    since `DEC-189` guarantees empty fronts exist. Fronts are **escape** fronts
    and the rendering must say so (`CPT-002`), so a strong profile is not read as
-   a strong safety claim. Authority remains a floor: a composition that weakens
-   it is not a weaker posture, it is not a capsule.
+   a strong safety claim. **Fronts live wholly in the payload** (design `D8`):
+   its table declares each row's front and the command tier consults it when
+   rendering, because the kernel neither reduces over fronts nor validates them
+   and `DEC-191`'s front list is still a sketch. Authority remains a floor: a
+   composition that weakens it is not a weaker posture, it is not a capsule.
+
+   The floor's *reading* and the floor's *standing* are two questions, not one
+   (design `D7`): `Floor` stays total so an empty floor is unrepresentable, and
+   a wrapper carries *the floor row was never submitted* — which is a state of
+   the run, distinct from *the answer was no*, and which the rows that did run
+   are still published alongside.
 3. **Apply `DEC-194`'s rename** across the extracted surface —
    `QualificationVerdict`, `Qualification::{Qualified, Disqualified}`, the verb
    `backend qualify`, exits `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`. This closes
@@ -122,9 +143,13 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
   AND-reduction is `admission` at `:5166`, with one production call site
   (`:5326`); the verdict types are `:2682-2838`.
 - `crates/doctrine-control/src/main.rs` — `run_backend`, `run_backend_verify`,
-  `admit` (`:153`), `render_verdict`, `render_outcome` (`:217`), and the exit
-  constants (`:60,63`). `admit` and `render_outcome` are the only two production
-  consumers of the collapsed scalar, and are exactly what `DEC-191` changes.
+  `admit` (`:153`), `render_verdict` (`:177`), `render_outcome` (`:217`), and the
+  exit constants (`:60,63`). `admit` and `render_outcome` are the only two
+  production consumers of the collapsed scalar, and are exactly what `DEC-191`
+  changes. `render_verdict` emits `date=` on the verdict's header line, which is
+  why the `today` → `observed_at` rename is **source-side only** (design `D9`):
+  changing the rendered key would be a fourth entry on a preservation licence
+  the design deliberately keeps closed at three.
 - `crates/doctrine-control/src/backend.rs` — `BackendId` at `:811`. It **stays
   there** (`DEC-197`). The feared new `ADR-001` edge dissolved on reading the
   map: `engine` imports `engine + leaf`, so engine-to-leaf is the permitted
@@ -167,6 +192,20 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
 - `crates/doctrine-control` is outside every default gate selection — Linux-only,
   live-`bwrap` rows — and is reached by `just capsule-check`, not `just gate`.
   Verification design must account for that or this slice's proof does not run.
+  **Both** instruments need `bwrap`, not only `capsule-verify`: `capsule-check`
+  runs `cargo test -p doctrine-control`, whose suites assert
+  `availability() == Available` and provision real capsules, and `EX-14` forbids
+  them skipping. Nested `bwrap` works in the project jail, so the proof runs
+  here; a host without `bwrap` has no instrument at all until `IMP-427` lands.
+- **Three enumerations of what crosses the seam backwards have been wrong** —
+  two of five, then three of five. Carried as a force rather than a risk (design
+  `F7`), because the answer is structural: the kernel's entry point removes the
+  parameters such a reference arrives on, rather than the design promising to
+  look harder. The residual — a kernel that re-derives a mechanism fact from
+  `std` alone — is caught by no gate here and is stated as such.
+- The pure/imperative split is a **target** for this slice, not an inheritance.
+  `verify_over` reads `/proc/sys/kernel/osrelease` from disk today; the split is
+  where the constraint starts holding.
 - Assumes `ADR-020` is not reopened. `DEC-191` was constructed to land without
   doing so, and step 2's *"same authority properties"* sits entirely on the floor.
 
@@ -192,7 +231,9 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
 
 Done is: the kernel is separable and reviewable without loading a confinement
 mechanism, and **its unit classifies `leaf` and the architecture gate passes**
-(`DEC-197`); `RV-352`'s row-level baseline reproduces unchanged — the nineteen
+(`DEC-197`) — necessary but not sufficient, so the kernel's entry point taking
+**values and closures only** (design `I10`) is a second, reviewed exit criterion
+alongside it; `RV-352`'s row-level baseline reproduces unchanged — the nineteen
 row verdicts exactly, with only `DEC-199`'s enumerated three permitted to differ
 — while the verdict publishes a floor and a profile instead of a scalar;
 `backend qualify` replaces `backend verify` with its exits renamed; the
