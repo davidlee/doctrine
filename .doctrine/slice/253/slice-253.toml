@@ -16,7 +16,27 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "justfile"
-intent = "scope-relevant"
+intent = "design-target"
+note = "capsule-verify at :145 runs 'backend verify' and four comments name it — DEC-194's rename reaches the recipe, not just the binary."
+
+[[selector]]
+selector = "crates/doctrine-control/src/conformance.rs"
+intent = "design-target"
+note = "Redundant against the scope-relevant crates/doctrine-control/src/** glob by path, retained by intent: the glob says the slice touches the crate, this says the design commits to changing this file."
+
+[[selector]]
+selector = "crates/doctrine-control/src/main.rs"
+intent = "design-target"
+note = "Same intent-vs-path overlap as conformance.rs. Commitment is admit/render_outcome, the exit constants and the verb — DEC-191 and DEC-194."
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "crates/doctrine-control/src/qualification.rs"
+intent = "design-target"
+note = "Does not exist yet — the kernel unit DEC-197 creates. 'unmatched' in selector doctor is the correct state until the split phase lands; name provisional per DEC-198."
 
 [[relation]]
 label = "governed_by"
