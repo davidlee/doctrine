@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff53c-902e-7ef2-b45b-685b241313a4"
+recorded_at = "2026-08-12T09:10:14.830382823Z"
+kind = "friction"
+summary = "design materialise renders sections in declaration order, so design.md reads 1,2,3,4,5,10,6,7,8,9"
+detail = "SL-253 (/design, reviewing stage). sec-10 was declared out of numeric order during drafting and materialise emits sections in that order, so the authored design.md a human reads has section 10 sitting between 5 and 6. Nothing in 'design show' surfaces the ordering, and there is no apparent verb to reorder — the only lever found was declaration sequence, which is fixed once taken. Cost is reader confusion in the artefact the whole stage exists to produce, and it is unfixable without re-minting the run."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

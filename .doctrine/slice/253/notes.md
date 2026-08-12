@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/reviewing · eeabca359
+fresh-as-of: 2026-08-12 · design/reviewing · rev 50, second review pass consulted
 
 ### Produced
 
@@ -16,7 +16,10 @@ fresh-as-of: 2026-08-12 · design/reviewing · eeabca359
 - `DEC-195` — verdict shape: reduced floor, published profile, named admission axis.
 - `DEC-196` — the seam cuts at row identity: kernel keeps identity and judgement,
   construction goes to the payload.
-- `DEC-197` — the kernel classifies as a leaf; `BackendId` stays in `backend.rs`.
+- `DEC-197` — the kernel classifies as a leaf (**required exit criterion**).
+  Placement rider **re-cut 2026-08-12**: `BackendId` *and* `Availability` now
+  move into the kernel, which then imports no other `doctrine-control` module.
+  Crate extraction declined for this slice on scope; `IMP-404` holds it.
 - `DEC-198` — row identity splits a closed floor from an open profile.
 - `DEC-199` — row verdicts are the preservation bar; instruments and artefacts.
 - `DEC-200` — test bands are carved before the split, two bands.
@@ -39,6 +42,18 @@ fresh-as-of: 2026-08-12 · design/reviewing · eeabca359
   silently absorbs unknown payload keys. Now filed as `ISS-346` and banked as
   `mem_019ff439bede7fb29c7c09b7fd76d893` (the apply payload vocabulary).
 - `IMP-427` — the deferred live-`bwrap`/neutral third test band.
+- Findings `fnd-10` … `fnd-14` on the run — the **second** review pass, raised at
+  rev 50, **undispositioned**. Three blocking (`fnd-10` `ArmResult` drags
+  `backend::Termination` into the kernel; `fnd-11` front rendering escapes
+  § 9.1's closed licence; `fnd-12` `Table::front_of` has no route to `main.rs`),
+  two nits (`fnd-13` stale `§ 2.4` count in `P2`; `fnd-14` two off-by-one cites).
+- Codex consultation (3 rounds, thread `019ff556-c847-7800-aa5d-27eb38931e0d`) —
+  the repair for all three blocking findings, converged and recorded in the
+  re-cut `DEC-197` and in **Open** below. Not an adversarial review; `RV-354`
+  is still empty scaffolding and the external pass is still unspent.
+- Friction observation `019ff550-6459-7002-bb5e-28945ff4c51b` — a raised finding
+  is visible only as a change-log row, so `design show` reports zero outstanding
+  while blocking findings await disposition.
 
 ### Learned
 
@@ -64,16 +79,78 @@ fresh-as-of: 2026-08-12 · design/reviewing · eeabca359
   `host_descriptor()` at `:5280` — were inside `verify_over`, while every pass
   read its parameter list. The `leaf` classification catches an *import*, not a
   re-declared constant or a `std` call.
+- **…and the fourth was in a type's *field*.** `fnd-10`: `ArmResult::Indeterminate`
+  carries `termination: Termination` (`backend.rs:751`). Signature, body, field —
+  three location classes, each found only after the previous was closed.
+- **Observational equivalence decides project-vs-move at a seam**, and it is
+  mechanical where "does this feel neutral?" has now been wrong four times. Two
+  payload values are equivalent if substituting one for the other can never
+  change the kernel's verdict. Where the quotient is *narrower* than the type,
+  **project** (`ArmResult` → `ArmJudgement`: `row_verdict` never reads
+  `termination`/`stdout`/`stderr`). Where the quotient *is* the type, **move**
+  (`Availability`: every distinction is consumed and reproduced in the verdict,
+  so a projection would be an isomorphic copy). Generalisable beyond this slice.
+- **The `leaf` gate proves tier *direction*, not mechanism *neutrality*.** `I7`
+  claims the second and cites the first. They coincided only because the six
+  types `I7` enumerates all live in `conformance`; a `backend`-resident mechanism
+  type walks through, since `backend` is itself `leaf`. Rust offers no per-module
+  import restriction inside one crate — `clippy.toml`'s `disallowed-types` is
+  workspace-scoped. The repair is a `harness = false` cargo test target that
+  `#[path]`-includes the kernel into a synthetic crate; compilation is the
+  assertion. `harness = false` is load-bearing: it stops `cfg(test)` activating
+  and dragging `DEC-200`'s kernel test band in.
+- **The recorded verdict is emitted text, never a serialised value.**
+  `AdmissionVerdict` derives only `Debug, Clone, PartialEq, Eq`; `report`
+  (`main.rs:97`) writes to **stderr**; `EVD-022`'s body is that transcript. So
+  `DEC-156`'s "recorded verdict" means the rendering — which is what lets `D8`
+  keep front labels out of the verdict, and what makes § 9.1 layer 2 the *only*
+  byte-level instrument there is. `just capsule-verify` does not redirect, so
+  re-capturing the baseline needs `2>&1`.
+- **`ISS-326` is a live trap for `DEC-197`'s exit criterion** — the layering gate
+  exempts edgeless modules from classification. The kernel escapes it only
+  because `backend`/`conformance`/`transaction`/`main` import it, and the gate
+  flags any unit appearing as an edge *target*.
 
 ### Open
 
-- **Stage is `reviewing` (rev 46).** The agent pass is raised, dispositioned and
-  integrated; scope reconciled. Outstanding to lock: every section attested (all
-  ten currently `outstanding`, and seven changed at rev 44 so a prior attestation
-  would have been stale anyway), the review pass dispositioned — `conducted`
-  naming an RV, or `waived` with a reason — and the owner's `design-accepted`.
-  `RV-354` exists as empty scaffolding (`done`, 0 findings, still untracked) and
-  is not yet the pass that would be named.
+- **Stage is `reviewing` (rev 50), second pass raised and NOT yet integrated.**
+  The immediate work is integrating `fnd-10` … `fnd-14`; the repairs are settled
+  (owner-approved, codex-consulted) and are listed below. Then, to lock: every
+  section attested (all ten `outstanding`), the review pass dispositioned —
+  `conducted` naming an RV, or `waived` with a reason — and the owner's
+  `design-accepted`. `RV-354` is still empty scaffolding (`done`, 0 findings,
+  untracked) and is not yet the pass that would be named.
+- **The settled repairs, awaiting integration into `design.md`:**
+  - `fnd-10` → kernel takes `ArmJudgement { Held, Failed, Indeterminate(Indeterminacy) }`;
+    the payload keeps the diagnostic-rich `ArmResult` and projects with
+    `into_judgement()`. **Surrender § 5.2.5's "byte-identical"** and rename
+    § 9.6's `row_verdict_is_unchanged` to a truth table over all nine
+    probe/control pairs, plus a projection test that diagnostics do not move the
+    judgement. `I7` stops citing the `leaf` gate as its machine check and cites
+    the compile probe, with the std-only residual named in `R1`.
+  - `fnd-10` → `BackendId` and `Availability` move into the kernel (re-cut
+    `DEC-197`); § 5.1's edge-inversion argument was wrong and its "two types from
+    `backend`" becomes *no imports at all*.
+  - `fnd-11` → constrain the rendering rather than widening the licence: no
+    standalone group headers, one self-contained line per assurance row carrying
+    its front label, ordered by front; the established floor row keeps a `row …=`
+    successor derived from `FloorReading`; axes reconstruct `RowId::Axis(axis)`
+    so their five lines are byte-identical. **`DEC-199` then needs re-cutting**
+    from three line-shaped exceptions into a closed transformation contract, plus
+    a whole-output golden test. That is a governance act and is *not yet done*.
+  - `fnd-12` → a transient payload envelope `QualificationRun { verdict, fronts }`
+    with `FrontCatalog::front_of(&AssuranceKey) -> &Front`, total. Not the whole
+    `Table` (exposes probes to the command tier) and not a free global lookup
+    (could rebuild a different table, weakening `I9`). § 10.3's "the three the
+    kernel's contract needs" is corrected.
+  - Kernel placement criterion, to state so the kernel does not become a dumping
+    ground: it owns the **adjudicative normal form** — the minimal
+    mechanism-independent inputs whose distinctions it observes, the output claim
+    algebra, and the identity/provenance binding the claim. Not "whatever the
+    verdict records", which would swallow any rendered diagnostic. `P1` stays the
+    review check for over-inclusion; that residual is not machine-enforceable.
+  - `D10` already narrows `DEC-197`'s `&dyn CapsuleBackend` clause and § 7.1's
+    row does not say so — fold a line into § 7.2's `D10`.
 - `OQ-2` is closed by `DEC-195`; `OQ-1` closed narrow by the owner.
 - Carried into `/plan` (each stated in its decision, gathered here):
   the kernel-unit `leaf` classification as an exit criterion (`DEC-197`);

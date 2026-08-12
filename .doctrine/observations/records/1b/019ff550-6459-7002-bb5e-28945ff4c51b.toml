@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff550-6459-7002-bb5e-28945ff4c51b"
+recorded_at = "2026-08-12T09:31:54.329303344Z"
+kind = "friction"
+summary = "design: a raised finding is visible only as a change-log row, so a returning reviewer has no standing signal that findings await disposition"
+detail = "SL-253, run dr-019ff3ff, /design at stage reviewing. Raised fnd-10..fnd-14 (three blocking). `doctrine design apply` emitted five finding_raised event rows, and the state file carries them correctly with their blocking flags. But `doctrine design show` surfaces them ONLY in 'changes since revision N' — once a later revision lands they leave the default projection entirely, and the envelope's `outstanding` severity map stays {blocker:0, major:0, minor:0, nit:0} because a finding carries `blocking: bool` and no severity, so nothing feeds those counters. There is no findings section in the turn envelope at any --format (prompt/json/status) or with --full. Two costs, both paid this session. (1) Re-entering the run to audit the PREVIOUS pass's nine findings, neither the envelope nor `design resume` could show their summaries or resolutions; the only route was grepping [[review.finding]] out of .doctrine/state/slice/253/design.toml, which mem_019fc255625877e09ba55d5e11d7c5cb licenses but does not signpost. The prior session's handover had to carry 'read them from the run' as an instruction the run cannot actually satisfy. (2) After raising, the run reports zero outstanding findings while three blocking ones sit undispositioned — an agent trusting the projection would read the pass as clean. The reviewing obligation text says an undispositioned finding blocks the lock and does not expire on its own; the projection gives no way to see the ones that are holding it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
