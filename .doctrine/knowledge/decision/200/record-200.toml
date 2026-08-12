@@ -1,0 +1,45 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 200
+slug = "test-bands-are-carved-before-the-split"
+title = "Test bands are carved before the split"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-6. One #[cfg(test)] at conformance.rs:5339 and no inner mod declarations at all below it — 186 test functions flat to EOF. The crate is bin-only by declared intent (Cargo.toml: every test here is a #[cfg(test)] module inside the unit it tests), so a tests/ directory is unavailable and the tests must follow their code into the kernel and payload modules. A crude symbol-based triage sizes the work: 46 name only kernel symbols, 73 only payload symbols, 28 name both and 39 name neither — so roughly 67 need individual judgement and 119 sort themselves. An estimate for budgeting, not a classification."
+choice = "Carve the bands BEFORE any code moves. The flat mod tests is sub-moduled into two bands — kernel and payload — as a pure reorganisation against stable types, whose exit criterion is mechanical: same 186 test names, all green, nothing semantic changed. The split then moves whole sub-modules rather than rewriting a test file. This lands in the pre-split phase DEC-199 already requires for the characterisation test, adding a task to an existing phase rather than a phase. TWO bands, not three: the live-bwrap versus neutral distinction inside the payload is deferred to a follow-up."
+alternatives = ["Carve with the code, phase by phase — refused because every phase's diff becomes a type move and a test triage in one review, and the 67 judgement calls get spread thin across phases where each is a small decision made while doing something else", "One dedicated carving phase after the split — viable, since payload-to-kernel is a legal edge and the flat module compiles throughout, but refused because the kernel unit would have no tests of its own at the boundary where it is newest", "Three bands, splitting the payload into live-bwrap and neutral so just capsule-check runs meaningfully on a host without bwrap — DEFERRED rather than refused: scope creep against a slice already carrying a split, a rename and a revision, and a third band must never become the skip EX-14 and DEC-156 forbid"]
+rationale = "A reorganisation against stable types is the cheapest thing there is to review: nothing semantic changes and the assertion is mechanical. Doing it first converts the split's test diff from a rewrite into a move, which is what makes the split reviewable at all at this size. It also front-loads the 67 judgement calls into one phase where they are looked at together and compared against each other. DEC-199 already requires a pre-split phase for the characterisation test, so the cost is a task, not a phase."
+consequences = ["The pre-split scaffolding phase carries two tasks: DEC-199's characterisation test and this band reorganisation", "That phase's exit criterion is mechanical — same 186 test names, all green, no semantic change", "Roughly 67 tests need individual triage; the phase plan carries that number explicitly rather than absorbing it", "The live-bwrap versus neutral distinction inside the payload band is a follow-up. Until it is taken, ISS-342's fail-loud posture is unchanged and just capsule-check stays meaningful only where bwrap's absence does not red the crate"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the test carve and its sequencing"
+target = "DEC-199"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the test carve and its sequencing"
+target = "DEC-190"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"

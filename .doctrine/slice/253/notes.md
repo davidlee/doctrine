@@ -26,6 +26,14 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
   production call site, two production consumers.
 - Row titles mislead. `TrustedTerminationObservation` reads epistemic and is a
   file-size resource bound. Read the `Row`'s `delta`, not its name.
+- Nested `bwrap` works inside the project jail, so `just capsule-verify` is
+  runnable on the development host — `ISS-339`'s never-run-off-jail note is not a
+  blocker for this slice's evidence (`EVD-022`).
+- Capsule time-to-interactive is **~2 min** from `capsule-baseline`, excluding
+  delete and provision which are quick (owner, 2026-08-12). This is the figure
+  behind `DEC-199`'s bias toward running `capsule-verify` more often.
+- The 186 tests are flat: one `#[cfg(test)]` at `conformance.rs:5339`, **no inner
+  `mod` at all**. Symbol triage sizes the carve at ~67 needing judgement.
 
 ### Open
 
@@ -76,6 +84,10 @@ fresh-as-of: 2026-08-12 · design/exploring · f87534aeb
   payload-touching phase and by default for arguable ones; a committed key
   translation table in the phase that changes `RowId`; a pre-split
   characterisation test carried through the split.
+- **Test bands are carved before the split** (`DEC-200`) — two bands, kernel and
+  payload, as a pure reorganisation in the same pre-split phase. ~67 of 186 tests
+  need individual triage; the phase plan carries that number. The live/neutral
+  third band is deferred to `IMP-427`.
 
 ### Risks
 
