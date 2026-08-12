@@ -1,0 +1,55 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 196
+slug = "the-verdict-kernel-cuts-at-row-identity"
+title = "The verdict kernel cuts at row identity"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-3. DEC-190 splits conformance.rs (14,252 lines) into a backend-neutral verdict kernel and a per-mechanism payload. Two references point kernel to payload and were named as the obstacle: Delta::Widened(fn(&Fixture) -> Vec<MountedPath>) at conformance.rs:2547, and verify's fixture OnceCell at :5217. Everything else points payload to kernel, one way. Inspection found the second inlet is not real: verify_over (:5270) is already the injected seam — row set, row runner, auxiliary and observation closures are all parameters — and run_row (:5003) already takes &Fixture explicitly, so placing verify and run_row on the payload side dissolves it with no restructuring. Only Delta remained genuinely contested."
+choice = "The seam cuts at row IDENTITY, not at the row. KERNEL — the taxonomy (Property, Axis, RowId), RowVerdict and the distinctions between its variants, the verdict types, row_verdict's two-arm algebra (:3177), and verify_over keyed on RowId rather than Row. PAYLOAD — Row, Delta, ArmShape, Under, Arm, run_arm, run_row, verify, PropertyRemoval, AuthorityGrant, and the whole fixture/probe/table surface; it closes over its own table to map an id back to a row. No kernel type names Fixture, so both backward references vanish by construction rather than by re-plumbing."
+alternatives = ["Erase the fixture — Delta::Widened(Arc<dyn Fn() -> Vec<MountedPath>>), keeping Row/Delta/ArmShape kernel-side and letting the payload close over its own fixture — refused because it keeps on the portable side of the seam exactly what DEC-189 refuses to port: Delta's variants are bubblewrap's list", "Parameterise — Delta<F>/Row<F> generic over the mechanism's fixture type — refused as generics ceremony for a second backend OQ-1 has ruled out building", "Keep DEC-156's two-arm construction vocabulary in the kernel so SL-253 Objective 1's claim on the control discipline is literal — refused: the discipline's portable half is row_verdict's algebra, which stays; its construction half is mechanism-keyed by DEC-156's own third correction"]
+rationale = "DEC-189 refuses to port row membership across mechanisms, and Delta is membership expressed as code — a hypervisor's widened placement is not bubblewrap's. DEC-156's third correction states the governing distinction directly: a clause is written in the vocabulary of what a capsule must not HAVE, a row in the vocabulary of the mechanism by which it GETS it; that record's count moved 7 to 8 to 9 to 11 to 13 as channels were found, and every move was mechanism-specific. So the construction vocabulary is mechanism-keyed by the same reasoning that produced it. What is portable is the inference licence, and that is four lines: probe read first, Violated on a failed probe, Unproven when the control also held, Proven only when the probe held and the control failed. PropertyRemoval and AuthorityGrant follow Delta on inspection rather than by argument — PropertyRemoval's variants are row-keyed with a bubblewrap flag named in a doc comment, and AuthorityGrant's single variant is row 14, which DEC-189 names as losing its host-facing delta under a hypervisor."
+consequences = ["Both kernel-to-payload references dissolve by placement; neither Delta::Widened nor verify's fixture closure needs restructuring, because neither type ends up in the kernel", "The kernel lands nearer DEC-190's few-hundred-lines direction than the codemap's measured ~1,072, since the arm-construction surface leaves with the payload", "A second mechanism reimplements Under/ArmShape/Arm/run_arm — roughly 150 lines of plumbing, accepted by the owner as better duplicated and simple than shared", "verify_over's signature changes from &[Row] plus Fn(&dyn ConformanceBackend, &Row) to RowId-keyed equivalents; that is the kernel's only breaking shape change, and inq-5's behaviour-preservation argument must carry it", "inq-8 is largely answered in advance: a kernel keyed on RowId with mechanism-owned rows IS the shape that admits a row set it will never contain", "DEC-156's control discipline is kernel-tier as algebra and payload-tier as construction; SL-253 Objective 1 lists it under the kernel and should be read that way rather than as a claim on Arm and ArmShape"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the seam DEC-196 places"
+target = "DEC-190"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the seam DEC-196 places"
+target = "DEC-189"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the seam DEC-196 places"
+target = "DEC-156"
+
+[[relation]]
+label = "shapes"
+target = "SL-253"
