@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 210
+slug = "bind-the-harness-config-dir-wholesale-defer-narrowing"
+title = "Bind the harness config dir wholesale, defer narrowing"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Research thread 3 recommended --bare plus ANTHROPIC_API_KEY plus an inline --mcp-config, arguing it minimises what the confinement prefix must bind. Design found that this forfeits EVD-023's property: `claude -p` is subscription-billed BECAUSE it draws from the subscription's usage limits, which is a property of authenticating with the subscription credential — an API key switches the worker to per-token API billing, discarding the evidence that unblocked the slice in exchange for a shorter bind list. Design then recommended binding the credential narrowly. The owner corrected that on practice: the worker needs ~/.claude/ populated or its agents, MCP servers and related definitions come up undefined, so narrowing is not a pure win, and it adds harness-specific complexity for a property that has not bitten on the pi arm. ../microvm-spike has since tackled a narrower mount set — ~/.claude/ read-only and transient, ~/.claude.json partial (the identity section, believed necessary but not definitively proven), ~/.claude/.credentials.json read-only. That is the known refinement, not the requirement."
+choice = "Authenticate with the subscription credential and bind $HOME/.claude the way the pi arm binds $HOME/.pi — wholesale and read-write, on both the Linux inline array and the macOS --extra-rw path. No ANTHROPIC_API_KEY and no inline --mcp-config. Defer the narrower mount set."
+alternatives = ["--bare plus ANTHROPIC_API_KEY plus inline --mcp-config (thread 3). Rejected: it forfeits EVD-023's subscription billing, and DEC-204's deletion of worker_commit removes the MCP surface the inline config was for.", "Adopt ../microvm-spike's narrowed mount set now. Rejected: the identity-section partial is not definitively proven, and read-only-and-transient is a real behaviour change because claude writes into ~/.claude/ during a session. Harness-specific complexity for a property the incumbent arm has not needed.", "Bind only ~/.claude/.credentials.json. Rejected on the owner's correction: it leaves the worker's agents and MCP definitions undefined, which breaks the worker rather than hardening it."]
+rationale = "The narrowing is a genuine improvement with a known shape and an unproven part, and the collapse does not depend on it. The incumbent evidence is that wholesale binding has not caused a problem on the pi arm in practice, and matching the pi arm is also what makes the claude delta the two-line change DEC-202 estimated. Choosing the subscription credential over an API key is the part that is NOT deferrable, because it is the difference between the arrangement EVD-023 documents and a different billing arrangement that happens to work — and the slice's whole authorisation rests on the former."
+consequences = ["DEC-204's deletion of worker_commit discharges cross-thread finding 4 by deletion rather than by provisioning: there is no doctrine MCP surface the worker must reach, so headless MCP auth is not solved because it is not needed.", "The worker inherits ~/.claude/'s agent and MCP definitions, which it requires to function. It therefore also inherits settings — so the settings that configured the deleted confinement wall must actually be REMOVED from what `doctrine install` seeds, not merely left unread. A stale matcher pointing at a deleted handler would be inherited by every worker.", "The subscription credential is reachable inside the confined worker. Accepted knowingly as parity with the pi arm's $HOME/.pi bind; ../microvm-spike's mount set is the known path if that posture changes.", "SL-254's R2 gains a second edge: if Anthropic's paused billing change lands, the worker's billing changes with it and the API-key alternative becomes live again. Monitored, not designed around — consistent with DEC-202's position that the subprocess arm is the better shape independently of billing."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff66f-a4de-76e0-9fa1-dcb0bf6b11b7"
+recorded_at = "2026-08-12T14:45:39.678285158Z"
+kind = "friction"
+summary = "/design: exploring runbook steps invisible in the turn envelope until a stage transition refuses"
+detail = "The design skill's activation text says the envelope 'carries the stage, the next obligation, and the outstanding runbook steps'. `doctrine design show 254` and `show --full` both printed no runbook section at all across revisions 1-7 — sections/records/blockers/frontier only. The five outstanding exploring steps (explore.scope, explore.research, explore.canon, explore.memory, explore.triage) first became visible in the REFUSAL text of `design apply` with a stage declaration, after all ten inquiry nodes were already declared and disposed. Cost: the whole exploring stage was worked without knowing its runbook existed, then a discharge pass has to be reconstructed retroactively. A turn envelope that omits the turn's obligations inverts the skill's own instruction to read the envelope and do what it says."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

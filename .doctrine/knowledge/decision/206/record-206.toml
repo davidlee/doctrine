@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 206
+slug = "re-home-the-jail-primitives-before-deleting-pretooluse"
+title = "Re-home the jail primitives before deleting pretooluse"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Verified at jail_prefix.rs:44-49: the SURVIVING subprocess arm imports four symbols from the dying pretooluse module, cfg-split by platform — non-macOS takes REASON_NO_BWRAP and have_bwrap, macOS takes REASON_PROFILE_WRITE_FAILED and write_seatbelt_profile. jail_prefix.rs's own header calls it the subprocess arm's analog of the claude PreToolUse hook, and it emits the NUL-delimited bwrap prefix a spawn script consumes. So the reusable/hook-serving cut OQ-1 asks about already exists in the tree: the core is jail.rs (bwrap_core_argv, bwrap_argv, validate_policy, select_jailer, resolve_with_policy) and pretooluse.rs is the shell — except for these four primitives, which sit on the wrong side of the line."
+choice = "Move the four primitives from pretooluse.rs to jail.rs as the slice's FIRST implementation step, before any deletion, with the platform cfg-split preserved. Sequence it as its own phase entry rather than as cleanup inside the deletion phase: at that point the change is behaviour-preserving and the whole existing suite is its proof. jail.rs remains the argv builder's home and the script continues to consume the NUL-delimited prefix — the existing seam, confirmed rather than invented, which satisfies POL-002 by keeping harness specifics at the script tier while the mechanism stays in the binary."
+alternatives = ["Delete pretooluse.rs and fix the fallout. Rejected: it breaks the production arm mid-slice, and the behaviour-preservation gate that is supposed to prove the codex/pi arm undisturbed cannot run while the arm does not compile.", "Move the bwrap builder out of the binary to the script tier for POL-002. Rejected: POL-002 forbids host-project conventions in the engine, not mechanism. Research thread 1 assessed the collapse as satisfying POL-002 already, and moving a validated argv builder into shell would forfeit validate_policy and select_jailer for no governance gain."]
+rationale = "This is the single most likely breaks-unexpectedly moment in the slice and the only one whose mitigation is pure sequencing. Naming it as a phase makes the ordering a plan artefact rather than an implementer's memory. Keeping jail.rs as the home also answers OQ-1 in the conservative direction: the cut already exists and the design confirms it instead of redrawing it."
+consequences = ["SL-254 OQ-1 is answered: jail.rs's bwrap argv builder is the subprocess arm's home. Whether that builder is later SUPERSEDED by crates/doctrine-control's confinement_argv is a different question, carried by inq-2 — the re-home is unconditional and holds under either answer, because pretooluse.rs dies in every variant.", "The re-home phase's exit criterion is the existing suite green with no test edits, which is the behaviour-preservation gate applied at its cheapest point."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

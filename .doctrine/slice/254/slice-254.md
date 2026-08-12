@@ -257,3 +257,14 @@ was to be about. Carried in *Follow-Ups*.
 - **At reconcile — disposition the five plausibly-dissolved backlog items**
   (`OQ-2`): `IMP-269`, `IMP-342`, `IMP-334`, `IMP-337`, `IMP-407`, plus
   `IMP-401` and `IDE-024` themselves. Confirm; do not close by assumption.
+- **At reconcile — sweep the memory corpus for deleted claude-arm mechanisms.**
+  Surfaced at design (`explore.memory`), not at scoping. At least 25 memories
+  describe mechanisms this slice removes — `SubagentStart` stamping, `PreToolUse`
+  jail behaviour, `WorktreeCreate` provisioning, `worker_commit` resolution,
+  marker identity — several at `high` trust and `high` severity. Deleting the
+  mechanism converts them to **stale-but-plausible**, which is worse than wrong:
+  an agent retrieving them would act on a mechanism that no longer exists.
+  `mem.signpost.doctrine.dispatch-claude-arm-wrong-base` is indexed in the boot
+  snapshot, so the staleness reaches every session. Route through
+  `/reviewing-memory`; retire or re-anchor rather than editing in place where the
+  memory's whole subject is gone. Triage detail in `notes.md`.

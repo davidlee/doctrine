@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 212
+slug = "restate-the-behaviour-preservation-gate-as-a-contract"
+title = "Restate the behaviour-preservation gate as a contract"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-254's scope states the behaviour-preservation gate as 'the codex/pi suites stay green unchanged (behaviour preservation: that arm is production and must not move)'. DEC-203 makes that unachievable as written. The slice's thesis is ONE worker-spawn shape on EVERY harness, so the pi arm moves too — from linked worktree plus orchestrator-imports-the-working-tree-diff, to clone plus worker-self-commits plus orchestrator-fetches. Its transport tests pin precisely the thing being replaced, so 'green unchanged' would either fail or have to be relaxed test by test."
+choice = "Restate the gate at the level that is actually invariant. What must not move is the funnel's OBSERVABLE contract: one non-merge commit per phase with C^ == B, the two-tier scope belt's refusal set and its tokens, report-and-halt on any breach, and the phase state machine's transitions. Tests asserting those stay green unchanged and ARE the gate. Tests pinning the TRANSPORT — working-tree delta gathering, git apply, marker clear/restore — are retargeted onto the fetch path, which is a visible diff a reviewer can check against the contract rather than an invisible relaxation. Add the control the slice exists to establish: a worker spawned under the confinement prefix cannot write outside its own directory. The VA leg — a live end-to-end dispatch phase on the claude harness including self-commit from the clone — lands its evidence in an authored sink, never the gitignored scratchpad."
+alternatives = ["Keep the scoped gate and exempt transport tests case by case. Rejected: an exemption list grows to cover whatever fails, which makes the gate report the implementation instead of constraining it.", "Move the pi arm to clones in a later slice so its suites really do stay unchanged here. Rejected: it reinstates two worker-spawn shapes, which is the thing the slice deletes, and it would leave the scope belt with one caller per transport — exactly the divergence DEC-204's single-sourcing exists to prevent.", "Prove confinement by inspecting the argv rather than by attempting a write. Rejected: asserting the flags is asserting the intent. The deleted wall also had correct-looking configuration and failed open."]
+rationale = "A behaviour-preservation gate is only meaningful if it names the behaviour. 'The suites stay green unchanged' is a proxy that holds when a change is additive and breaks when a change replaces a transport, because the suites pin the transport too. The separation is already present in the code and the gate should be stated at the same seam: classify_import is a PURE classifier over resolved facts, so refusal sets and their tokens are contract while the facts fed to the classifier are mechanism. Stating the gate that way also makes the retarget column reviewable — a reviewer can ask of each retargeted test whether the assertion it now makes is the same claim about the contract, which is a question with an answer, unlike 'was this relaxation justified'."
+consequences = ["The scope's Verification/closure intent is corrected at design time: 'the codex/pi suites stay green unchanged' is replaced by the observable-contract formulation. This belongs in the reconciliation brief as a design-time scope correction, not as an audit finding.", "Research thread 2's e2e triage (10 keep, 2 delete, 1 retarget) is a FLOOR rather than the answer: any e2e pinning delta-gather or git apply joins the retarget column. Re-triage against the fetch path at plan.", "e2e_claude_install.rs's exact eleven-entry hook-count assertion moves by six entries — the four worktree pretooluse matchers plus the SubagentStart/SubagentStop pair (DEC-205) — not by four.", "The confinement control must SKIP rather than pass on a host without bwrap. A vacuous pass is the same fail-open shape the slice is deleting, and it would be the one test whose failure mode is invisible.", "crates/doctrine-control stays outside the default selection and is untouched (DEC-209), so no new workspace member joins just gate's named package list."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

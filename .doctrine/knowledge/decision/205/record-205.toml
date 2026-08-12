@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 205
+slug = "nominate-and-denominate-die-with-the-pretooluse-gate"
+title = "Nominate and denominate die with the pretooluse gate"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-254's scope does not list the SubagentStart nominate and SubagentStop denominate hooks among the deletions, and research thread 2 flagged that as a gap the design must close explicitly, since their handlers live in subagent.rs which dies with the arm. Reading subagent.rs:406-412 settles it as mechanical rather than discretionary: nominate/denominate form a CLOSED LOOP with pretooluse's Agent and Workflow gate legs. nominate WRITES an allowlist entry, denominate REMOVES it on SubagentStop as hygiene so a stale agent_id cannot be reused, and is_nominated (subagent.rs:502) is the READ side — consumed by pretooluse's gate and the jail PassThrough leg (T5) and by nothing else."
+choice = "Delete the SubagentStart nominate and SubagentStop denominate hooks together with their handlers, the settings.json matcher pair, and the now-unread allowlist. This is not a separate decision from deleting pretooluse: it is the same deletion followed to its read side."
+alternatives = ["Retain the hooks and re-home the handlers. Rejected: is_nominated's only readers are pretooluse's gate legs, so retaining the hooks preserves a write path with no reader — the orphan-wiring thread 2 warned about, dressed as caution.", "Retain the allowlist as a general subagent-permission surface independent of dispatch. Rejected: nothing else consults it, and inventing a consumer to justify keeping a mechanism inverts the slice."]
+rationale = "The gap in the scope is a reporting gap, not a design gap. Once the read side is located the disposition is forced — a write with no reader is dead code by definition, and the closed-loop comment in subagent.rs says so in the module's own words. Recording it as a decision rather than leaving it to execution matters because the knock-on deletions are larger than the hooks themselves and would otherwise look like scope creep to a reviewer."
+consequences = ["PRIVILEGED_AGENT_TYPES (jail.rs:115), classify_nominate, decide_agent and decide_workflow all become dead and go with the hooks, along with the drift test tying SUBAGENT_MATCHERS to the privileged types.", "Deleting pretooluse removes the Agent/Workflow gate for ORDINARY non-dispatch subagents too, which is precisely what SL-247 was mid-design trying to patch. This is the strongest evidence for SL-254 OQ-2's premise that IMP-269, IMP-334, IMP-337 and IMP-342 are dissolved rather than fixed — confirm at reconcile, do not close by assumption.", "e2e_claude_install.rs's exact eleven-entry hook-count assertion moves by the nominate/denominate pair as well as the four pretooluse matchers — the count change is larger than the scope's deletion list implies."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 208
+slug = "one-arm-no-degraded-in-session-rung"
+title = "One arm: no degraded in-session rung"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-254 OQ-3 asks whether the in-session arm survives as a degraded rung for an environment that cannot run `claude -p`. DEC-202 chose deletion and rejected 'keep the in-session Agent arm as a second supported backend' on the grounds that carrying both keeps every mechanism the collapse is meant to delete. The design's job is to confirm nothing depends on the fallback and to say what the unsupported case looks like."
+choice = "One arm. No degraded in-session rung. An environment that cannot spawn a confined subprocess cannot run dispatch, and fails closed with a named reason at spawn — exactly as the codex/pi arm does today via jail_prefix's REASON_NO_BWRAP on Linux and REASON_PROFILE_WRITE_FAILED on macOS. This is parity with the surviving arm, not a new restriction."
+alternatives = ["Keep the in-session arm as a fallback rung. Rejected on DEC-202's own grounds and reinforced by what the design found: the fallback's confinement is the fail-open pretooluse wall, so the rung would be 'dispatch, unconfined' — which is not a degraded version of the guarantee, it is the absence of it.", "Refuse dispatch loudly at config time rather than at spawn. Rejected as a false economy: bwrap availability is a property of the execution environment at spawn time, and the existing REASON_NO_BWRAP path already reports it there."]
+rationale = "A degraded rung is only worth carrying if the degradation preserves the property the mechanism exists for. Here it does not: the in-session arm's confinement was the wall the slice is deleting because it fails open. Offering it as a fallback would mean offering unconfined dispatch under the name of confined dispatch, which is worse than refusing. And the refusal is not new behaviour that has to be designed — the surviving arm already fails closed with a named reason on exactly this condition."
+consequences = ["The claude-force-subprocess-dispatch config key has no second mode to select and goes, along with its DispatchConfig field, its dtoml.rs round-trip, its doctrine.toml entry and the commented example (STD-001 governs the thoroughness — research thread 1).", "/dispatch's arm-routing branch and the CLAUDECODE=1 env-marker test go with it, which is what retires REQ-288 rather than narrowing it.", "No new refusal path is authored. The verification for this decision is that the existing REASON_NO_BWRAP / REASON_PROFILE_WRITE_FAILED legs are the only ones a claude operator can now reach."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

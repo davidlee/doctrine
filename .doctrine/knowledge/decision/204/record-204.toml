@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 204
+slug = "retire-worker-commits-transport-re-home-its-belts"
+title = "Retire worker_commit's transport, re-home its belts"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-203 retires worker_commit and replaces the working-tree-diff import belt with fetch-from-clone. Research thread 2 reported that every worker_commit check is worktree-topology-coupled and that its motivating premise — a deliberate bypass of read-only git — ceases to exist under a clone. Reading the tool settles that this is half right. src/mcp_server/worker_commit.rs is 1495 lines carrying SIX belts in cheap-first order: resolve, non-empty pre-fmt delta, the two-tier scope belt, HEAD==B, the mutating `check commit` gate, and the one-commit C^==B guard. Four are topology-coupled. Two are not — the scope belt (hard tier: the .doctrine/ and .claude/ prefix floor plus the [dispatch] worker-forbidden-writes matcher; soft tier: undeclared_paths against the design-target selectors) and the commit gate. The scope belt has exactly two callers, classify_import (import.rs:147) and worker_commit (worker_commit.rs:94), single-sourced from import.rs:24 so that per the tool's own DRY note and VT-3 the two cannot diverge. DEC-203 deletes one caller and replaces the other's transport, so absent deliberate action BOTH callers go and the authored-state write floor is unenforced on the fetch path."
+choice = "Retire worker_commit as a TRANSPORT and re-home its two non-topological belts. The scope belt becomes a caller at the orchestrator-side fetch/admit step, taking DOCTRINE_PREFIX, CLAUDE_PREFIX and the undeclared_paths predicate from the same single source, so VT-3's cannot-diverge property survives with the new caller substituted for the deleted one. classify_import itself is a PURE classifier over already-resolved facts (head_at_base, tree_clean, single_commit, delta_paths, selectors), so it re-homes nearly intact: only the fact-gathering shell changes, from a worktree delta to a fetched ref's delta against B, and tree_clean becomes trivially true. The `check commit` gate moves worker-side — the worker runs it in its own clone before committing, where the mutating fmt leg belongs now that there is no jail wall — and the orchestrator re-runs the non-mutating verification on the fetched branch as the enforcing belt. The four topology-coupled belts (resolve, HEAD==B, C^==B, marker clear/restore) die with the topology."
+alternatives = ["Delete worker_commit outright, as research thread 2's reading implies. Rejected: it deletes the .doctrine/ and .claude/ authored-state write floor along with the transport, on the one change that simultaneously removes the floor's only other caller.", "Keep worker_commit and provision headless MCP auth for it under `claude -p`. Rejected: four of its six belts are meaningless in a clone, and it pays exactly the auth-provisioning cost cross-thread finding 4 warns against paying for a tool the clone makes unnecessary.", "Re-home the commit gate orchestrator-side alongside the scope belt. Rejected: the gate's fmt leg is mutating, so running it after the worker's commit means amending the worker's commit from the orchestrator. The gate belongs where the mutation is legal, which under a clone is the worker."]
+rationale = "The belts and the transport were fused because the jail wall forced them to be. worker_commit exists as a server-side bypass of a read-only .git, so once the bypass is unnecessary the natural reading is that everything inside it is too. Two of the six belts were never about the wall: the scope belt enforces ADR-006's orchestrator-sole-writer posture and the code-vs-intent split ADR-012 D2 routes on, and it is single-sourced precisely so that a second caller cannot drift from the first. Deleting both callers in one slice is the failure mode single-sourcing was meant to make visible — and it is only visible if the belts are counted separately from the transport. The posture change is a net strengthening, not a weakening. Today INV-2 reads 'a worker cannot skip a belt' because the belts run server-side; afterwards a worker can skip its own gate and the orchestrator's admit-side belt is what enforces. But the worker is now OS-confined in its own clone with no reach into the coordination tree at all, so the blast radius of a skipped worker-side gate is a branch that fails admission — where today's fail-open hook wall was the only thing standing between an in-session worker and the coord tree."
+consequences = ["The fetch/admit step becomes the scope belt's second caller and must take DOCTRINE_PREFIX, CLAUDE_PREFIX and undeclared_paths from import.rs's single source. VT-3's two-caller framing is preserved rather than lapsing with the deleted caller.", "src/mcp_server/worker_commit.rs (1495 lines) is deleted. Confirm [dispatch] worker-forbidden-writes still has an enforcing reader at the admit step, or retire the key with the tool (STD-001).", "INV-2's statement changes from worker-cannot-skip-a-belt to orchestrator-enforces-at-admit. That is a governance-visible posture change and belongs in the REV beside ADR-011, not left implicit in code.", "inq-4 narrows sharply: with worker_commit gone the worker may need no doctrine MCP surface at all under `claude -p`, which would dissolve the headless MCP auth question rather than answer it.", "Research thread 2's 'every check is meaningless in a clone' is a second instance of cross-thread finding 7's failure mode — a thread scoped to what is topology-coupled reporting its answer as what dies. Two instances in one round makes it a standing hazard for the research skill rather than an incident; strengthen mem.pattern.research.collide-call-graph-against-intent at harvest."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

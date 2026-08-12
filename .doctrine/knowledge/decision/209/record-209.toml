@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 209
+slug = "generalise-the-incumbent-prefix-take-no-new-dependency"
+title = "Generalise the incumbent prefix, take no new dependency"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "QUE-215 asks whether the collapsed arm rides crates/doctrine-control's clone_inside (provision.rs:949) and confinement_argv (backend/bubblewrap.rs:1110) or keeps the shell prefix. Research thread 5 recommended riding, listing scripts/pi-spawn-confined.sh as a hand-rolled subset — no uid/gid mapping, no --clearenv, no --new-session, no placement validation, no resource bounds, no descriptor sweep. Design added two costs thread 5 did not price: the crate is Linux-only and deliberately outside every default test selection (just capsule-check), and it is the capsule programme's crate under active development, so riding it recouples the incumbent arm to machinery DEC-202 explicitly said it needs none of. Reading scripts/pi-spawn-confined.sh:113-131 settles what is actually at stake. The Linux PREFIX is `bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --bind $HOME/.pi $HOME/.pi --bind $D $D --chdir $D --die-with-parent --setenv DOCTRINE_WORKER 1`, wrapped in `timeout $BACKSTOP`, with a fail-closed guard refusing an empty PREFIX. The write floor — everything read-only but the worker's own directory — is already delivered, as is the env seam and a wall-clock bound. Thread 5's gaps are defence in depth, not the control SL-254's verification intent names."
+choice = "Take no new dependency and port no hardening. Generalise the existing scripts/pi-spawn-confined.sh PREFIX past `pi` — rebind the harness config dir and change the exec target, on BOTH the Linux inline array and the macOS jail-prefix --extra-rw path — and stop there. File the hardening delta as a backlog improvement citing thread 5's specific list. Owner's direction: one thing at a time."
+alternatives = ["Ride crates/doctrine-control. Rejected: it couples production dispatch to an in-flight, Linux-only capsule crate that sits outside every default test selection, and it reintroduces exactly the capsule-programme dependency DEC-202 rejected waiting on.", "Port the hardening into jail.rs's builder without taking the dependency — the design's own first recommendation. Rejected on the owner's direction and on merit: the write floor is already delivered, so the port buys defence in depth on a surface DEC-203 already schedules for replacement.", "Keep the shell prefix and ALSO adopt clone_inside for provisioning only. Rejected as the same dependency at a smaller surface: the clone invocation is a one-line git command whose only subtle part (--no-hardlinks, documented at provision.rs:957 as an EX-15 mitigation rather than tuning) can be carried as a comment."]
+rationale = "The slice's one thing is the collapse. The control its verification intent names — a worker under the confinement prefix cannot write outside its own directory, the guarantee the deleted fail-open wall was claiming — is delivered by --ro-bind / / today, so the hardening is not on the critical path for the property the slice exists to establish. DEC-203 already schedules dispatch for replacement by capsules, and the crate that will replace it already carries the hardening; building it a second time in the incumbent is investment in a surface with a scheduled deletion. Deferring is therefore not neglect but declining to build the same property twice. The --no-hardlinks detail is the one piece of thread 5's finding that must cross regardless, because it looks like a performance flag and is actually an isolation mitigation."
+consequences = ["A backlog improvement is filed for the hardening delta — uid/gid mapping, --clearenv, --new-session, placement validation, RLIMIT_FSIZE, descriptor sweep — citing research thread 5 and crates/doctrine-control's confinement_argv and wall_bounded_argv as the reference implementation.", "jail.rs's bwrap builder and doctrine-control's confinement_argv remain two builders in one repo. They converge at the capsule cutover by DELETION of dispatch's, not by merge. This is duplication and is named as such rather than explained away; the scheduled deletion is the argument for tolerating it, not a claim that it is absent.", "DEC-202's cost estimate holds literally: the claude-specific delta is rebinding the config dir and changing the exec target.", "The script is now the sole spawn shape for every harness, so renaming it past `pi` is part of the work rather than cosmetic.", "The clone invocation must carry --no-hardlinks with a comment naming it as an isolation mitigation, so a later reader does not remove it as a performance flag."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

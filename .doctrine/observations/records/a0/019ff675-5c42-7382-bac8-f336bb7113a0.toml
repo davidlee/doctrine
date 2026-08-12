@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff675-5c42-7382-bac8-f336bb7113a0"
+recorded_at = "2026-08-12T14:51:54.306313733Z"
+kind = "friction"
+summary = "/design: agent_declaration apply emits no event row, indistinguishable from ISS-346's silent-drop"
+detail = "design apply with an agent_declaration (blocking-set-declared) printed only 'revision 13 stage exploring' with ZERO event rows. mem.fact.design-run.apply-payload-vocabulary states the ISS-346 trap explicitly: an unknown or misspelled key is dropped silently, the revision still bumps, a receipt is still written, and 'if an apply reports no event rows, treat that as a refusal, not a success'. Every other writer act in this run (node_created, checkpoint_disposed, step_discharged) emitted a row. So a legitimate agent_declaration is wire-indistinguishable from the documented silent-drop failure. Confirming it landed took a second speculative apply — a stage transition purely to read whether the gate's outstanding-condition text had shrunk from 'no live graph-reviewed from user, no live blocking-set-declared from agent' to 'no live graph-reviewed from user'. Cost: one wasted apply plus the reasoning to design the probe. Either emit an event row for the act, or have the gate/show surface live attestations directly."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

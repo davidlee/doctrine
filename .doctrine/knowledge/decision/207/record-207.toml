@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 207
+slug = "worker-identity-becomes-env-only-delete-the-marker"
+title = "Worker identity becomes env-only; delete the marker"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-203 retires the disk marker as a mechanical consequence: is_linked_worktree is git_dir != common_git_dir (shared.rs:54-58) and a clone's git dir IS its common dir, so describe_mode's marker leg (marker_leg = is_linked && marker_present, marker.rs:89) can never fire for a dispatch worker. The residual is the truth table. With the marker leg inert, a clone worker's only signal is the env leg — (false, true) => Cause::Env, refused: true (marker.rs:90-98) — which refuses correctly but explains itself with DUAL_CAUSE (marker.rs:168-171): 'DOCTRINE_WORKER set outside a worker worktree: a worker was dropped on the coordination root -> re-dispatch isolated; or the env leaked into this process -> unset it'. In clone-world that is the normal state of every legitimate worker, so every worker would receive a message telling its operator to re-dispatch or unset the env."
+choice = "Collapse identity to the env leg alone. Delete the marker file, its writer (fork --worker's write_marker call), its readers, and the is_linked conjunct that only existed to make a marker in the primary tree inert. describe_mode becomes a function of one input, and its message loses the dual cause because there is no longer a second cause: DOCTRINE_WORKER set means this process IS a worker, and if that is wrong the remedy is to unset it. That is today's DUAL_CAUSE text with its first horn removed."
+alternatives = ["Keep a marker file inside the clone and re-cut the gate to marker_present alone. Rejected: it reintroduces the mechanism ADR-011 D3 graded as primary purely because claude had no env seam, on the very change that gives claude the env seam. It also re-opens the question is_linked was answering — a marker in the coordination root would now count.", "Keep the two-leg table and reword DUAL_CAUSE. Rejected: the marker leg has no writer left once fork --worker's flag goes, so the second leg would be permanently false. Rewording a message emitted by an unreachable branch is worse than deleting the branch.", "Keep the marker for solo /worktree. Rejected: solo forks never wrote it — write_marker is on the --worker path only."]
+rationale = "ADR-011 D1 justified disk-marker identity as 'identity rides disk — the one medium every harness has — not a process env seam, which not every harness has', and D3 graded the arrangement as disk-marker primary with DOCTRINE_WORKER env an optimisation for codex/pi. Once every arm is a subprocess every arm has the env seam, so the optimisation becomes the mechanism and the primary becomes dead weight. Deleting rather than rewording is what keeps the slice a simplification: a two-leg table whose second leg is unreachable is the same workaround-shaped residue the slice exists to remove. The lost capability is real but small — the env-leak case can no longer be distinguished from a legitimate worker by mechanism — and the honest message covers it, because unsetting the variable is the correct remedy in both readings."
+consequences = ["marker.rs shrinks to the env predicate and its status rendering. The marker_on_main test ('marker without a linked worktree is inert => allowed', mod.rs:289-294) loses its subject and retires with it.", "write_marker's callers — fork.rs:191, import.rs, land.rs, gc.rs, subagent.rs — all lose the call. Several of those modules are dying anyway; fork.rs and gc.rs survive for solo /worktree and must lose only the marker legs.", "ADR-011 D1's justification for disk-primary identity becomes false under the collapse and joins the D3 correction in the REV, rather than being left as a stale rationale beneath a corrected decision."]
+decided_by = "agent"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"
