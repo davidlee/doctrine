@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (scoped + researched, design not started) · eca536780
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 13) · 124c5e44b
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -17,18 +17,28 @@ fresh-as-of: 2026-08-13 · proposed (scoped + researched, design not started) ·
 - research round complete — 5 threads, `research/research.md` assembled. **Runtime tier, gitignored**: it does not survive a state wipe, so anything load-bearing must be lifted before then
 - 2 friction observations recorded; the second (`019ff631…`) is **uncommitted**
 - verification gate: `doctrine check gate` NOT run this session — no code was modified, `doctrine check commit` green at each commit
+- design run `dr-019ff653` opened; 10 inquiry nodes declared and all 10 resolved; exploring runbook discharged in full (124c5e44b)
+- minted: DEC-203..DEC-212 — one per node; see `## Design surface triage` below for the node→record table
+- minted: IMP-428 — harden the worker confinement prefix, deferred out by DEC-209
+- DEC-202's `choice` corrected in place (it read as a claim about worktrees, not dispatch workers)
+- 2 further friction observations recorded and committed — exploring runbook invisible until a stage transition refuses; `agent_declaration` apply emits no event row
 
 ### Learned
-- mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis
+- mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
 - The reuse finding: `crates/doctrine-control` already implements clone-inside-bwrap (`provision.rs:949`, `backend/bubblewrap.rs:1110`) — see QUE-215
+- `worker_commit` is **six belts**, not a bare ro-git bypass; two are not topology-coupled, and its scope belt has exactly two callers (`classify_import` import.rs:147, worker_commit.rs:94) single-sourced from import.rs:24 (DEC-204)
+- `nominate`/`denominate` are a **closed loop** with `pretooluse`'s gate legs — `is_nominated` has no other reader, so they die by construction (DEC-205)
+- The confinement prefix already delivers the write floor (`--ro-bind / /`, scripts/pi-spawn-confined.sh:113-131); thread 5's gaps are defence in depth (DEC-209)
+- ADR-006 §D2b's `SL-064` note identifies the **coordination tree by marker *absence***. Load-bearing against DEC-207 — see Open
 
 ### Open
-- QUE-214 — Pole A or Pole B: how far the demolition goes; decides slice size and phase count
-- QUE-215 — ride `doctrine-control`'s provisioning/bwrap backend, or keep the shell script
+- **The re-scope, PROPOSED AND UNCONFIRMED.** Owner's direction at end of session: scope SL-254 shy of carving out dispatch proper — separate concern, less clear-cut what stays useful under clone-backed workers, and more manageable split. Proposed line: SL-254 = *the claude arm becomes a pi arm* (confined subprocess, linked worktree, incumbent import transport); clone provisioning + worker self-commit + fetch transport split to a successor slice. Not yet executed
+- **DEC-207 is contested by a later finding of my own.** It deletes the disk marker. Under linked worktrees (i.e. under the re-scope) that appears wrong: ADR-006 §D2b identifies the coordination tree by marker *absence*, so deleting the marker makes everything read as coord. Under a clone it was safe because topology distinguishes. **This is the next session's task** — trace and critically evaluate before acting
+- Consequential on the re-scope: DEC-203, DEC-204, DEC-212 would be superseded and DEC-211's site list narrowed; DEC-205, DEC-206, DEC-208, DEC-209, DEC-210 survive untouched
+- QUE-214 disposed by DEC-203 but **not settled** — deliberately, pending the re-scope. QUE-215 disposed by DEC-209, safe to settle
+- Design run gate: `governance-confirmed` and `graph-reviewed` both outstanding, both require **user** authority (DEC-088). `blocking-set-declared` (agent half) is live
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
-- SL-254 `OQ-3` — one arm or a degraded second rung if an environment cannot run `claude -p`
-- Nominate/denominate hooks are orphaned by the collapse and the scope is silent — disposition explicitly at design
-- `worker_commit`'s fate: its enforcement path is wholly worktree-topology-coupled and its ro-git premise dies with the clone; settle before solving headless MCP auth
+- Memory-corpus sweep at reconcile — carried in the scope's Follow-Ups (25+ stale-but-plausible claude-arm memories, one in the boot snapshot)
 
 ## Design surface triage
 <!-- `explore.triage` runbook step, design run dr-019ff653, 2026-08-13 -->
