@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff4a1-088f-72e1-91be-2988e05b9016"
+recorded_at = "2026-08-12T06:20:22.031303501Z"
+kind = "friction"
+summary = "design apply: an agent_declaration lands with no event row and no change-log entry (/design, SL-253)"
+detail = """Submitting {"agent_declaration":{"act":{"blocking-set-declared":{...}},"basis":"..."}} printed only 'revision 24 stage exploring' — zero event rows. That is byte-identical to ISS-346's failure mode (an unknown payload key silently absorbed, revision bumped, receipt written, nothing changed), so the only way to tell a landed declaration from a dropped one was to grep the runtime design.toml for agd-blocking-set-declared. 'doctrine design show 253 --known-revision 18' then confirms the asymmetry: revisions 19-23 (the five step_discharged rows) appear in the change log, revision 24 does not appear at all. The five runbook discharges each printed their event row, so the agent learns to trust the row as the landing signal, then hits the one act that does not emit one. Cost: a grep of raw runtime state to verify a gate act, which the guardrails otherwise forbid reading. Related: ISS-346, mem_019ff439bede7fb29c7c09b7fd76d893."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

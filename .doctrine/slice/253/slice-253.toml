@@ -23,6 +23,18 @@ label = "governed_by"
 target = "ADR-020"
 
 [[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "governed_by"
+target = "STD-001"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
 label = "references"
 role = "concerns"
 descriptor = "action (1) — the epistemic kernel"
