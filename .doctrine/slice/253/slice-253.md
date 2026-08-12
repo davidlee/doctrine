@@ -57,25 +57,35 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
    `Unrowed`/`Reading`), `row_verdict`'s two-arm algebra, and `verify_over` keyed
    on row identity. Payload: `Row`, `Delta`, `ArmShape`, `Under`, `Arm`,
    `run_arm`, `run_row`, `verify`, `PropertyRemoval`, `AuthorityGrant` and
-   `ConformanceBackend` — construction, all of it. `DEC-156`'s control discipline
-   divides along that line: its portable half is `row_verdict`'s algebra and
-   stays; its construction half is mechanism-keyed and goes. `BackendId` does not
-   move (`DEC-197`) — the kernel imports it from `backend`, and mints its
-   assurance key on its precedent rather than taking the type. The kernel's own
-   unit **classifies as a leaf**, and that is a required exit criterion of this
-   slice, not a happy consequence.
+   `ConformanceBackend` and `ArmResult` — construction and diagnostics, all of
+   it. `DEC-156`'s control discipline divides along that line: its portable half
+   is `row_verdict`'s algebra and stays; its construction half is mechanism-keyed
+   and goes. `BackendId` **and** `Availability` **move into the kernel**
+   (`DEC-197`, re-cut 2026-08-12), which then imports no other module of
+   `doctrine-control` at all; `backend.rs` imports them back, a legal leaf→leaf
+   edge. The kernel's own unit **classifies as a leaf**, and that is a required
+   exit criterion of this slice, not a happy consequence.
 
-   **The review pass widened what goes to the payload** (design `D10`). Two
-   further backward references were found in `verify_over`'s *body*, where the
+   **Two review passes widened what goes to the payload.** The first (design
+   `D10`) found two backward references in `verify_over`'s *body*, where the
    three earlier enumerations had not looked: the `/bin/sh` precondition, which
    is a fact about the payload's probes, and `host_descriptor()`, which reads
    disk. Both move out, and with them the last use of `&dyn HostFacts`. The
    kernel's entry point therefore takes **values and three closures and nothing
    else** — `BackendId` and `Availability` rather than any backend trait,
-   `HostDescriptor` rather than a host trait plus a disk read. That is the
-   structural answer to a risk the design had been mitigating by inspection: the
-   `leaf` classification refuses a kernel that *imports* the payload, and would
-   have caught neither of the two references it missed.
+   `HostDescriptor` rather than a host trait plus a disk read.
+
+   The second (design `D12`) found a **sixth** reference, and the first in a
+   *field* rather than a signature or a body: `ArmResult::Indeterminate` carries
+   `termination: Termination` (`backend.rs:751`), which `row_verdict` never
+   reads. The kernel takes a projected `ArmJudgement` instead and the payload
+   keeps `ArmResult`. That finding also falsified the *machine check* the design
+   had named — the layering gate proves tier direction, not mechanism
+   neutrality, and `backend` is itself `leaf`, so a `backend`-resident type walks
+   straight through it. `DEC-197`'s placement rider was re-cut in response, and
+   the check is now a `harness = false` compile probe that builds the kernel as a
+   synthetic crate with **no fake module** — which is why the two types move
+   rather than being imported.
 2. **Publish the profile instead of collapsing it.** Replace the all-or-nothing
    AND over a fixed row set with a verdict carrying two structures of different
    semantics (`DEC-195`): a closed **authority floor**, reduced by exhaustive
@@ -98,9 +108,15 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
    the run, distinct from *the answer was no*, and which the rows that did run
    are still published alongside.
 3. **Apply `DEC-194`'s rename** across the extracted surface —
-   `QualificationVerdict`, `Qualification::{Qualified, Disqualified}`, the verb
-   `backend qualify`, exits `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`. This closes
-   the existing `EXIT_REFUSED` / `NotAdmitted` mismatch in passing.
+   `QualificationVerdict`, `Qualification`, the verb `backend qualify`, exits
+   `EXIT_QUALIFIED` / `EXIT_DISQUALIFIED`. This closes the existing
+   `EXIT_REFUSED` / `NotAdmitted` mismatch in passing. Note that `Qualification`'s
+   variants are `Unavailable` and `Ran`, **not** `Qualified` / `Disqualified` as
+   this objective first read: `DEC-194` named the axis, and design `D4` then
+   ruled that the summary word is *computed at the command tier from
+   `floor.standing()`* rather than stored, because a stored scalar can disagree
+   with the rows it was computed from — which is `DEC-191`'s original complaint
+   in miniature.
 4. **Isolate the bubblewrap payload** behind the kernel's seam, unmigrated and
    unported, so what is namespace-shaped is visibly namespace-shaped.
 5. **Carry the `REV` against `REQ-459`** as a phase of this slice. `REQ-459`
@@ -143,17 +159,24 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
   AND-reduction is `admission` at `:5166`, with one production call site
   (`:5326`); the verdict types are `:2682-2838`.
 - `crates/doctrine-control/src/main.rs` — `run_backend`, `run_backend_verify`,
-  `admit` (`:153`), `render_verdict` (`:177`), `render_outcome` (`:217`), and the
+  `admit` (`:153`), `render_verdict` (`:178`), `render_outcome` (`:217`), and the
   exit constants (`:60,63`). `admit` and `render_outcome` are the only two
   production consumers of the collapsed scalar, and are exactly what `DEC-191`
   changes. `render_verdict` emits `date=` on the verdict's header line, which is
   why the `today` → `observed_at` rename is **source-side only** (design `D9`):
-  changing the rendered key would be a fourth entry on a preservation licence
-  the design deliberately keeps closed at three.
-- `crates/doctrine-control/src/backend.rs` — `BackendId` at `:811`. It **stays
-  there** (`DEC-197`). The feared new `ADR-001` edge dissolved on reading the
-  map: `engine` imports `engine + leaf`, so engine-to-leaf is the permitted
-  direction, and `conformance`'s own row already declares an edge to `backend`.
+  the header line survives the split byte-identical under `DEC-199`'s
+  transformation contract, so re-spelling one of its keys is a difference nothing
+  derives. `render_verdict` also emits one flat `row {id:?}={row:?}` line per row
+  with no grouping structure — the shape the contract's rules 3, 4 and 5 derive
+  the post-split output from.
+- `crates/doctrine-control/src/backend.rs` — `BackendId` (`:811`) and
+  `Availability` (`:780`) **move out**, into the kernel (`DEC-197`, re-cut
+  2026-08-12), and `backend.rs` imports them back. The draft's competing fear —
+  that moving would invert an `ADR-001` edge and cascade into `transaction` and
+  `provision` — was a misreading of which direction the edge runs: the kernel is
+  a `leaf`, so `backend` importing it is a leaf→leaf edge this tree already has
+  several of. Import-line churn lands in five files: `backend.rs`,
+  `backend/bubblewrap.rs`, `transaction.rs`, `main.rs`, `conformance.rs`.
 - `.doctrine/spec/tech/030/` and `REQ-459` — via the `REV`, not by direct edit.
 - `.doctrine/adr/001/layering.toml` — `:257` carries the literal `backend verify`
   and is the *only* accepted-governance file in `DEC-194`'s rename radius. The
@@ -173,11 +196,23 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
   `DEC-198`) edit test source that names the moved types, so *green unchanged*
   cannot be literally true. The bar is stated in three layers: the **nineteen row
   verdicts**, four auxiliary claims and two unrowed readings reproduce exactly;
-  the outcome line, the exit constants and the row key spellings are permitted to
-  differ and that list is closed, so a difference not on it is a regression; test
+  the artefact's text is governed by a **closed transformation contract**; test
   source naming moved types is reviewed as a translation diff in which no
   asserted value moves. `EVD-022` is the pre-split half of the bracket, captured
   before any code lands and uncapturable later.
+
+  **Layer 2 was re-cut on 2026-08-12** (`DEC-199`), and the shape matters for
+  planning. It was an enumerated list of three permitted differences; the second
+  review pass showed that form cannot express what the split does — a front label
+  is new content on a line rather than a re-spelling, and the floor row leaves the
+  flat row list entirely, so its line has no successor at all. A deletion is not
+  an exception to a list of exceptions. Layer 2 is now a total map from the
+  pre-split artefact's lines to the post-split artefact's, held by two totality
+  clauses (every pre-split line has exactly one successor; every post-split line
+  has exactly one predecessor), seven derivation rules, and stated ordering and
+  exit-code clauses. Its instrument is a **whole-output golden test** committed in
+  the phase that changes row identity, which is also why the contract must be
+  written *before* that phase.
 - **"Not ranked" must not become "nothing can fail." — SETTLED by `DEC-195`.**
   `DEC-191` left the admission floor unset and `RFC-025` flagged it directly:
   that would be `ISS-341`'s defect family a fourth time. `EVD-021` showed the
@@ -197,12 +232,19 @@ states the resulting shape; read it rather than `DEC-191`'s sketch.
   `availability() == Available` and provision real capsules, and `EX-14` forbids
   them skipping. Nested `bwrap` works in the project jail, so the proof runs
   here; a host without `bwrap` has no instrument at all until `IMP-427` lands.
-- **Three enumerations of what crosses the seam backwards have been wrong** —
-  two of five, then three of five. Carried as a force rather than a risk (design
-  `F7`), because the answer is structural: the kernel's entry point removes the
-  parameters such a reference arrives on, rather than the design promising to
-  look harder. The residual — a kernel that re-derives a mechanism fact from
-  `std` alone — is caught by no gate here and is stated as such.
+- **Four enumerations of what crosses the seam backwards have been wrong** —
+  `DEC-196`'s, the draft's, and each of the two review passes'. The list has gone
+  from three to five to six, across three distinct location classes: a parameter
+  list, a function body, and a *field* of a parameter's type. Each class was
+  found only after the previous had been closed, and every enumeration was
+  careful and believed complete at the time. Carried as a force rather than a
+  risk (design `F7`), because the answer has to be structural: the kernel's entry
+  point removes the parameters such a reference arrives on (`I10`), and the
+  compile probe catches what rides inside a value's fields (`I7`) — neither is
+  the design promising to look harder. **The right prior for a further pass is
+  that there is a fourth location class.** The residual — a kernel that re-derives
+  a mechanism fact from `std` alone, or names an external dependency of the
+  `doctrine-control` package — is caught by no gate here and is stated as such.
 - The pure/imperative split is a **target** for this slice, not an inheritance.
   `verify_over` reads `/proc/sys/kernel/osrelease` from disk today; the split is
   where the constraint starts holding.
@@ -233,24 +275,32 @@ Done is: the kernel is separable and reviewable without loading a confinement
 mechanism, and **its unit classifies `leaf` and the architecture gate passes**
 (`DEC-197`) — necessary but not sufficient, so the kernel's entry point taking
 **values and closures only** (design `I10`) is a second, reviewed exit criterion
-alongside it; `RV-352`'s row-level baseline reproduces unchanged — the nineteen
-row verdicts exactly, with only `DEC-199`'s enumerated three permitted to differ
-— while the verdict publishes a floor and a profile instead of a scalar;
-`backend qualify` replaces `backend verify` with its exits renamed; the
-bubblewrap payload is behind the seam and unported; and `SPEC-030` no longer
-contradicts the binary.
+alongside it — and the **compile probe** is a third, because `I10` governs the
+parameter list and says nothing about what rides inside a parameter's type;
+`RV-352`'s row-level baseline reproduces unchanged — the nineteen row verdicts
+exactly, with the artefact's text derived line-for-line by `DEC-199`'s
+transformation contract — while the verdict publishes a floor and a profile
+instead of a scalar; `backend qualify` replaces `backend verify` with its exits
+renamed; the bubblewrap payload is behind the seam and unported; and `SPEC-030`
+no longer contradicts the binary.
 
 **How the proof is run** (`DEC-199`), since neither recipe is wired into
 `just gate`: `just capsule-check` is the per-phase gate, green at the end of
-every phase and needing no `bwrap`; `just capsule-verify` is a **phase exit
-criterion** for every phase touching the payload, and the default for any phase
-where it is arguable — only a phase that plainly cannot reach a row omits it.
-Two artefacts carry the comparison: a committed **key translation table**,
-authored in the phase that changes row identity so the post-split comparison is
-mechanical rather than a judgement made at audit; and a **characterisation test**
-recording the row-to-verdict mapping as data, written before the split and
-carried through it, so the invariance fails at the phase that broke it rather
-than at audit.
+every phase; `just capsule-verify` is a **phase exit criterion** for every phase
+touching the payload, and the default for any phase where it is arguable — only a
+phase that plainly cannot reach a row omits it. **Both need `bwrap`** — the
+re-cut withdrew this record's earlier claim that `capsule-check` does not, which
+had it contradicting the risk stated above.
+
+Three artefacts carry the comparison, all committed: a **key translation table**,
+authored in the phase that changes row identity, whose key and front columns are
+the transformation contract's rule 4 rather than a reader's aid; a
+**characterisation test** recording the row-to-verdict mapping as data, written
+before the split and carried through it, so a regression in the *algebra* fails
+at the phase that broke it; and a **whole-output golden test** in the same phase
+as the table, asserting the post-split artefact verbatim, so a regression in the
+*rendering* fails there too. The two tests are not redundant: the first pins
+layer 1, the second pins layer 2.
 
 ## Non-Goals
 
