@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 15, **both gates cleared**) · re-scope executed
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 15, **both gates cleared**) · 98b5d0675
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
