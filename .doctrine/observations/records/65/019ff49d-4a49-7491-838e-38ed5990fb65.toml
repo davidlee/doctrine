@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff49d-4a49-7491-838e-38ed5990fb65"
+recorded_at = "2026-08-12T06:16:16.713796841Z"
+kind = "friction"
+summary = "/design: design apply's mutation vocabulary is undiscoverable from the tool"
+detail = "Disposing an inquiry node needs a declare entry with a cp- subject carrying dispose{form,...}. design show's declaration_example advertises only node creation and traversal; --help says 'a JSON object'. The shape was only findable by reading ApplyRequest in src/design_run/submission.rs. Compounding it, neither ApplyRequest nor Declaration denies unknown fields, so two probe payloads were absorbed silently — revision bumped, receipt written, no events, no state change — leaving the run two revisions ahead of its own decisions with resolved=0. Cost: one agent's turn stopped dead plus a full context handover. Filed as ISS-346, banked as mem_019ff439bede7fb29c7c09b7fd76d893."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
