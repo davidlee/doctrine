@@ -6,16 +6,18 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/exploring · 66730c5a1
+fresh-as-of: 2026-08-12 · design/exploring · 9b5a0fae8
 
 ### Produced
 
 - `EVD-021` — the vacuous-admission finding.
 - `DEC-195` — verdict shape: reduced floor, published profile, named admission axis.
 - Design run `dr-019ff3ff-b227-7030-a75b-65981efd87ca`, revision 5, stage
-  `exploring`, eight inquiry nodes.
+  `exploring`, eight inquiry nodes, `changes 0 since the declared baseline`.
 - Research artefact at `.doctrine/slice/253/research/` (runtime tier, gitignored;
   `raw/governance.md`, `raw/codemap.md`, `research.md`).
+- Friction observation `019ff42b-2655-7aa3-b042-0a83272a328c` — `design apply`
+  silently absorbs unknown payload keys.
 
 ### Learned
 
