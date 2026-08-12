@@ -1,0 +1,49 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 20
+slug = "two-concurrent-capsules-declared-ram-is-a-ceiling-not-a-reservation"
+title = "Two concurrent capsules: declared RAM is a ceiling, not a reservation"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["capsule", "cluster:capsule", "concurrency", "microvm", "netns"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "sudo probe-two-capsules on Sleipnir, 28/28 first run: two capsules from one runner store path, in two namespaces with identical addressing, both answering ssh 7.12 s after launch (6.94 s for the first), provisioned from different base commits, each collecting into its own quarantine; both together consumed 1,488 MiB of host MemAvailable against 32,768 MiB declared, so the per-capsule 16 GiB is a ceiling and not a reservation; 2 processes match microvm@capsule host-wide and 1 in each capsule's namespace"
+provenance = "experiment"
+confidence = "medium"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the round's P1b import — REQ-454 priced"
+target = "IMP-426"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "corrects its inference that declared RAM binds at N"
+target = "EVD-019"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the namespace boot this rides on"
+target = "EVD-018"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "capsule round: two concurrent capsules measured"
+target = "RFC-025"

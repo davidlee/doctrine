@@ -53,11 +53,20 @@ The actual work costs ~36 MiB, consistent with a 32 MiB repository. So the
 volume *size declaration* is the tunable, not the content, and a capsule is
 cheap on disk in a way the sparse `ls -l` figure (32 GiB) actively hides.
 
-**The binding constraint at N is RAM, not disk or time.** `target.nix` reserves
-16 GiB per capsule. Two concurrent capsules is 32 GiB of the host's memory
-before anything else runs, against ~600 MiB of disk and one shared image. That
-is a configuration fact rather than a measurement, and it is what `REQ-454`
-(P1b) will run into first.
+**~~The binding constraint at N is RAM, not disk or time.~~ Withdrawn — see
+`EVD-020`.** This record reasoned from `target.nix`'s 16 GiB per capsule that two
+concurrent capsules would cost 32 GiB of host memory before anything else ran.
+P1b measured it: two booted capsules cost **1,488 MiB** of `MemAvailable`
+between them. Firecracker does not preallocate and the guest root is tmpfs, so
+the declaration is a *ceiling* on what a capsule may reach, not a charge levied
+at boot.
+
+The paragraph is struck rather than deleted, because the error is the more useful
+artefact: it was flagged in its own sentence as "a configuration fact rather than
+a measurement" and it still travelled as a finding — into this record's summary,
+into the spike's status doc, and into the next probe's design. `DEC-189`'s rule
+is that a row needs a falsifying delta; the corollary this earned is that a
+*number* needs one too, and a number read off a config file has none.
 
 **Provisioning is not the cost either.** 32 MiB in at 1.90 s (2.26 s in run 1 —
 the noisiest term measured, ±16%), against `EVD-016`'s 32 MiB out at 117 MiB/s.
@@ -123,8 +132,8 @@ cited.
   probe's namespace has no upstream at all, so nothing in the guest can fetch a
   crate. Measuring it needs the proxy joined to the namespace, i.e. the host
   module. Recorded as not-measured rather than estimated.
-* **One capsule, not two.** Nothing here bears on `REQ-454`. The one figure that
-  points at it is not a measurement: `target.nix`'s 16 GiB reservation.
+* **One capsule, not two.** Nothing here bears on `REQ-454` — `EVD-020` does,
+  and it corrects this record's one unmeasured claim.
 
 ## Related
 
