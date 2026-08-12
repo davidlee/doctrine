@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 215
+slug = "does-sl-254-ride-doctrine-controls-provisioning-and-bwrap-backend-or-keep-the-shell-script"
+title = "Does SL-254 ride doctrine-control's provisioning and bwrap backend, or keep the shell script"
+record_kind = "question"
+status = "open"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["area:dispatch", "cluster:capsule"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "The naive SL-254 implementation generalises the bwrap PREFIX array in scripts/pi-spawn-confined.sh and writes clone provisioning in shell. But crates/doctrine-control already does both: clone_inside at provision.rs:949 runs git clone --no-hardlinks inside the capsule then detaches at base and removes origin, confinement_argv at backend/bubblewrap.rs:1110 builds the full bwrap argv with --unshare-all, --clearenv, --new-session and uid/gid mapping, and wall_bounded_argv at :1234 adds timeout -k and RLIMIT_FSIZE. Does SL-254 ride that mechanism or keep the shell path?"
+why_matters = "No parallel implementation is a hard project rule, and the shell prefix is a hand-rolled subset of confinement_argv with no placement validation, no resource bounds and no descriptor sweep. Research thread 5 says ride the mechanism (provision.rs clone-inside, backend.rs placement vocabulary, bubblewrap.rs argv assembly, config.rs resource bounds) while explicitly NOT riding conformance.rs, the admission journal, or any SPEC-030 requirement — the boundary is that mechanism crosses and the evidentiary bar does not. Two complications: crates/doctrine-control is deliberately outside every default test selection (Linux-only, live-bwrap rows, reachable via just capsule-check), so riding it may pull a build-gating problem into the default path; and RFC-025's microVM turn moved the expected long-term capsule boundary off bubblewrap, though thread 5 assessed and dismissed that as irrelevant to an incumbent-parity slice."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

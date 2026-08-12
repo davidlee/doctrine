@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff631-b0f0-7e53-8669-a4bb505c3057"
+recorded_at = "2026-08-12T13:37:59.536513804Z"
+kind = "friction"
+summary = "/backlog: edit verb is status-only, unlike knowledge edit which takes --body and --tags"
+detail = "Populating ISS-347 during SL-254's research round. Reached for 'doctrine backlog edit ISS-347 --body - <<EOF' and '--tags', by analogy with 'doctrine knowledge edit' which accepts both (and --body-mode replace|append). Both were refused: backlog edit is 'Transition one item's status (and resolution) in place' and takes only --status/--resolution. Two failed invocations before re-reading --help. The body had to be hand-written into backlog-347.md and tags set via a separate 'doctrine tag set'. Same verb name, different capability across two entity kinds. Either backlog edit grows --body/--tags for parity, or its help text leads with the narrowness so the analogy does not form."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,50 @@
+memory_uid = "mem_019ff650d94a7960a638913a40416165"
+memory_key = "mem.pattern.research.collide-call-graph-against-intent"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Collide research threads that answer 'what calls this' against decisions that say 'what should exist'"
+summary = "A code-map thread reports today's call graph; a decision record says what should survive. Synthesis must collide them or the derived artefact silently overwrites the decision."
+created = "2026-08-12"
+updated = "2026-08-12"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["research", "design", "synthesis"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "aca0d6c1420d257eae1adaeaebee831adeff948e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c25db4aaaf96c15a9491fe2570076a84d7fbfe008149f97baa450ff6c1ed5e32"
+base_commit = "eca5367808a209f5737e0edab6630c4726eb48cc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-254"
+
+[[source]]
+kind = "decision"
+ref = "DEC-202"
+

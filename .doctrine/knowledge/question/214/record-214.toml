@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 214
+slug = "pole-a-or-pole-b-how-much-dispatch-machinery-does-sl-254-demolish"
+title = "Pole A or Pole B: how much dispatch machinery does SL-254 demolish"
+record_kind = "question"
+status = "open"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["area:dispatch", "area:worktree", "cluster:capsule"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+question = "SL-254 must choose how far to demolish the dispatch integration machinery. Pole A keeps basic worktree parallelisation and deletes only what the claude arm's retirement forces. Pole B commits to the clone capsule workflow and additionally deletes the marker identity system, the import belt, the branch-point guard, the coordination-worktree machinery, the live-diff import path, and the patch-application transport — the research thread estimates roughly 40 percent more deletion, with the surviving core (CAS journal, candidate layer, trunk resolution, funnel state machine) re-homing onto a strictly simpler fetch or bundle transport."
+why_matters = "It decides the slice's size and probably its phase count, so it must be settled before planning. It is also the pole on which several smaller questions hang: the disk marker survives untouched under Pole A and is inoperable under Pole B (describe_mode gates the marker leg on is_linked_worktree at marker.rs:89, and a clone is not a linked worktree by construction at shared.rs:54-58), and worker_commit's whole enforcement path is worktree-topology-coupled. Research thread 4 recommends Pole B and notes that git clone --reference would re-couple the object store via objects/info/alternates and violate the REQ-448 and DEC-191 authority floor, so the cheap way to buy back disk is the one way that forfeits the isolation. Solo /worktree use stays intact under either pole per the slice's stated scope boundary."
+answer      = ""
+answered_by = ""
+answered_on = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"
