@@ -6,7 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integrated
+fresh-as-of: 2026-08-13 · design/reviewing · rev 70, third (external) pass
+integrated through a verification round and a self-audit
 
 ### Produced
 
@@ -65,6 +66,29 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integr
 - Friction observation `019ff550-6459-7002-bb5e-28945ff4c51b` — a raised finding
   is visible only as a change-log row, so `design show` reports zero outstanding
   while blocking findings await disposition.
+- **`RV-354` — the external adversarial pass, now spent.** Codex (GPT-5.5),
+  thread `019ff622-0e71-7a81-a449-d705a9ce4fd4`, two rounds: raise, then a
+  verification round attacking the repairs. `F-1`/`F-3` blockers, `F-2` major,
+  `F-4` minor. All four disposed `fix-now`; `F-3`/`F-4` verified by the raiser,
+  `F-1`/`F-2` **contested and re-repaired**, and the ledger still awaits the
+  raiser on those two. Findings and dispositions are on the ledger — read them
+  with `doctrine review show RV-354 --format json`, since the table format
+  summarises findings to a count.
+- `D13` — the row runner returns `(ArmJudgement, ArmJudgement)`; the kernel
+  adjudicates. `D10` narrowed with it. Same treatment as `D1`–`D12`: in
+  `design.md`, not banked as a `DEC`.
+- `mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion` —
+  new, and the most portable thing this pass produced.
+- Two existing memories strengthened rather than duplicated:
+  `mem_019eda2fed8672d39214a5eeb3c86385` (pre-enumerated maps, broadened to a
+  repair's own footprint) and
+  `mem.pattern.rust.exhaustive-destructure-pins-hand-written-mappings` (the
+  construction-side `..` sibling). Both already existed under scopes too narrow
+  to surface when they would have helped.
+- Friction observations `019ff661-d3db-7550-ad84-29d319c6a0c8` (`design apply`
+  takes whole-section bodies, so a surgical edit needs a scripted
+  replace-with-assert-fires-once) and `019ff662-647b-7cd1-b6a0-1385c468d4bd`
+  (`review show`'s table format drops finding bodies; json carries them).
 
 ### Learned
 
@@ -117,6 +141,37 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integr
   keep front labels out of the verdict, and what makes § 9.1 layer 2 the *only*
   byte-level instrument there is. `just capsule-verify` does not redirect, so
   re-capturing the baseline needs `2>&1`.
+- **…and the fifth location class is the executable closure** (`RV-354` `F-1`).
+  A closure crosses the seam in **two independent ways** and the reduction test
+  finds only one: *authority delegation* (the return carries the adjudication
+  out — happens wherever, and only where, something reduces over the return) and
+  *type contamination* (the return names a mechanism type — indifferent to
+  reduction, and `I7`/the compile probe's business). Both were live on `run_row`,
+  which is why one fix looked like it closed one class. The captured environment
+  remains invisible to every instrument in this design.
+- **`D13` closes bypass, never fabrication.** A payload can report `(Held,
+  Failed)` for a row it never ran and the kernel computes `Proven` faithfully.
+  Fabrication is irreducible at this seam because the payload is the only layer
+  that can run a probe. What shrinks is the surface — from *any verdict for any
+  reason* to *the two arm judgements reported*.
+- **A golden proves `actual == expected` and nothing about where `expected` came
+  from.** Generalised and banked as
+  `mem.pattern.testing.classify-the-expectation-before-trusting-the-assertion`:
+  classify every authored expectation as observation-backed (must be derived),
+  reality-checked (safe because asserted against a reality that already exists —
+  the pre-split characterisation test), or intent-backed (no ground truth, stays
+  reviewer-checked — § 9.2's key translation table).
+- **A vacuity guard can itself be vacuous, and the first cut of this one was.**
+  Pinning `E0433` does not subsume a positive sentinel: the forbidden import is
+  independent of the include, so a `#[path]` aimed at any other valid file yields
+  the same diagnostic with the kernel uncompiled — and a positive `grep` asserts
+  containment, not equality, so a missing path emitting `E0583` *and* `E0433`
+  passes. A control needs a symbol only the subject defines, and must reject
+  every unexpected diagnostic.
+- **`D2`'s compile-time guarantee is unchecked, and that is `F-2`'s class.**
+  "Adding a floor member fails to compile" holds only while no construction site
+  uses `..` and the type derives no `Default`. Both are ordinary edits, neither
+  warns, either voids a guarantee `DEC-195` *requires*.
 - **`ISS-326` is a live trap for `DEC-197`'s exit criterion** — the layering gate
   exempts edgeless modules from classification. The kernel escapes it only
   because `backend`/`conformance`/`transaction`/`main` import it, and the gate
@@ -124,24 +179,39 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integr
 
 ### Open
 
-- **Stage is `reviewing` (rev 57). The second pass is fully integrated and all
-  five findings are dispositioned.** `DEC-197` and `DEC-199` are both re-cut.
-  What remains to lock, in order: every section attested (**all ten are
-  `outstanding`** — the integration invalidated the lot), the review pass
-  dispositioned (`conducted` naming an RV, or `waived` with a reason), and the
-  owner's `design-accepted`.
-- **`RV-354` still cannot carry the pass.** It is empty scaffolding — `done`, 0
-  findings, untracked — and needs reopening or replacing before it can be named.
-  **The external adversarial review is still unspent**: both passes so far were
-  run by the design's author, and the codex consultation was explicitly a
-  consultation and not a review. § 10 of `design.md` says so in its own preamble.
-- **What a third pass should be told.** § 10.1 now ends with it: four
-  enumerations of *what crosses the seam backwards* have been wrong, across three
-  location classes (parameter list, function body, a field of a parameter's
-  type), each found only after the previous was closed. **The right prior is that
-  there is a fourth location class**, not that the list is complete. § 10.2's
-  refreshed list marks which items each pass answered and which are untouched —
-  `D1`/`I3` and `D7` have survived two passes without being probed at all.
+- **Stage is `reviewing` (rev 70). The third (external) pass is integrated,
+  including a verification round that overturned half its repairs, and a
+  self-audit of those repairs.** What remains to lock, in order: every section
+  attested (**all ten are `outstanding`** — the integration invalidated the lot
+  again), the review pass dispositioned (`conducted` naming `RV-354`), and the
+  owner's `design-accepted`. Human section review is the v1 default; do not
+  invent a reviewer posture to discharge it.
+- **`RV-354` is `active`, `concluded`, `await=raiser`, and this does not block
+  the lock.** The run's gate reads *disposal*, and all four findings are
+  disposed. The `outstanding 1 blocker, 1 major` the run reports is `F-1` and
+  `F-2` awaiting the **raiser's verification** of their *second* repair — the
+  lamp counts findings whose status is not `verified`/`withdrawn`, which an
+  `answered` finding is not. Resuming the codex thread would clear it.
+- **Whether to run a fourth round is genuinely open.** The argument for: two of
+  four repairs failed verification, so the base rate is bad, and two of the
+  things landed since are unattacked — `D13`'s two-crossing-kinds generalisation
+  and the second cut of `F-2`'s recipe. The argument against: three codex
+  invocations on one design, and the owner has twice steered against
+  gold-plating.
+- **Known defect in the record, not fixable in place.** The `F-1` disposition
+  says "the five surviving `RowVerdict` returns" and then lists six categories
+  while omitting a seventh occurrence (`design.md:1933`, `D13`'s description of
+  the superseded shape). The ledger is append-only so the miscount stands. The
+  *design* is correct — the enumeration was re-run and every hit classified; only
+  the disposition's prose is wrong. Worth knowing before quoting it.
+- **What a fourth pass should be told.** The prior has now been right four times
+  running, so assume a **sixth** location class. § 10.1 carries the four earlier
+  ones plus the closure; the closure's *captured environment* is explicitly still
+  open and no instrument here sees it. Also unattacked: `D13`'s claim that
+  authority delegation happens *wherever and only where* something reduces over a
+  closure's return, and § 5.1's placement criterion, which § 10.2 has flagged
+  through three passes as new and self-certifying and which nothing has yet run
+  backwards over the calls already made.
 - **§ 5.1's placement criterion is new and self-certifying**, which § 10.2 flags
   as its own attack surface: the adjudicative normal form and the
   observational-equivalence test were written *in response to* five wrong
@@ -165,6 +235,17 @@ fresh-as-of: 2026-08-12 · design/reviewing · rev 57, second review pass integr
   table, whose key and front columns *are* the contract's rule 4; and the compile
   probe needs a **negative control** at implementation (`DEC-197`) or it can be
   present and prove nothing.
+- Added by the third pass, for `/plan` — three new work items, all small:
+  a **one-shot stdlib-only Python transform** in `scripts/` that derives the
+  golden from `EVD-022`'s transcript, run *before* the `RowId` phase so the code
+  goes green against it, owing four self-checks (exhaustive classification, exact
+  category counts, single consumption/production, duplicate rejection);
+  the compile probe's **negative control** now specified rather than deferred — a
+  second `harness = false` target behind `required-features`, naming a
+  kernel-only symbol, with a `capsule-check` leg that inverts the exit status and
+  asserts the diagnostic set is *exactly* `E0433`; and `Floor` **derives no
+  `Default` and is never built with `..`**, which is what makes `D2`'s stated
+  guarantee true rather than assumed.
 
 ## Agent hostile pass over the drafted design (stage `reviewing`)
 
