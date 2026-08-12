@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 22
+slug = "pre-split-nineteen-row-admission-baseline"
+title = "Pre-split nineteen-row admission baseline"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["capsule", "cluster:capsule", "conformance"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = "just capsule-verify at 4662e64eb — the last commit before any SL-253 code lands — inside the project bubblewrap jail: outcome=admitted with all nineteen rows Proven (fourteen Property rows and five freshness Axis rows), four auxiliary claims Passed and two unrowed observations Read. Reproduces RV-352's baseline claim. Nested bwrap works inside the jail so the run is repeatable on the development host, which is why ISS-339's never-run-off-jail note does not block this baseline. The body carries the verbatim run. Invariant across the split: the nineteen row-to-verdict mappings, the four claims and the two readings. Permitted to differ by design: the outcome line (DEC-191), the exit constants (DEC-194) and the row key spellings (DEC-198), since rendering is {:?} over RowId."
+provenance = "experiment"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the pre-split behaviour-preservation baseline"
+target = "SL-253"
