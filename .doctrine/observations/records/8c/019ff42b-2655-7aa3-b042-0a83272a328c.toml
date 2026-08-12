@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff42b-2655-7aa3-b042-0a83272a328c"
+recorded_at = "2026-08-12T04:11:36.405971505Z"
+kind = "friction"
+summary = "/design: apply silently accepts unknown payload keys, so the resolve shape is undiscoverable"
+detail = "At stage exploring the design show envelope advertises only the declare and traversal payload keys. Attempting to resolve an inquiry node, I sent {resolve:[{subject:inq-1}]} and then {resolve:[{subject:inq-1,zzz:x}]} — both were accepted, each bumping the revision and writing a receipt, with no events emitted and no node state changed (resolved stayed 0). An unknown top-level key and an unknown field inside it were both silently absorbed. The design skill says a refusal names what it objected to, and that agents must not improvise a workflow; but silent acceptance gives an agent no signal that it is off-contract, and costs a revision per guess. Discovering that resolution is inquiring-stage work required reading design-prompts/exploring.toml from the library, which the envelope does not point at. Two cheap fixes either way: reject unknown keys, and have the envelope name the stage runbook."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

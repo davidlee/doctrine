@@ -1,0 +1,54 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 195
+slug = "qualification-reduces-a-floor-and-publishes-a-profile"
+title = "Qualification reduces a floor and publishes a profile"
+record_kind = "decision"
+status = "accepted"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["admission-floor", "capsule", "cluster:capsule", "conformance", "naming"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "SL-253 inq-1 and inq-2. DEC-191 requires the verdict to stop collapsing to Admission::Admitted and to publish per-front standing instead. EVD-021 establishes that the existing reducer already admits an empty row list — .all() over an empty slice is vacuously true — and that its only guard is an external assertion that one fixed tables() is non-empty. DEC-189 makes row membership a function of the mechanism, which dissolves that guard. Reducing per front instead of per row does not fix this: a front carrying no rows is vacuously strong, and DEC-189 guarantees empty fronts exist. The vacuity is a property of reducing over a collection that can be empty, not of the axis reduced on."
+choice = "The verdict carries two structures with different semantics, and names a third axis it cannot establish. AUTHORITY FLOOR — a closed, mechanism-independent set, reduced by exhaustive match over a closed enum rather than by .all() over a Vec, so an empty floor is unrepresentable and adding a floor property fails to compile rather than passing silently. Its membership is {Property::DeniedCanonicalStateAndCredentials} — row 3 — and nothing else. ASSURANCE PROFILE — the remaining rows, an open Vec that varies per mechanism by DEC-189, published per row and never reduced; fronts are open grouping metadata over rows and are never a reduction target, since DEC-191 leaves the front list unclosed. ADMISSION — named in the model on equal footing and carrying no outcome field at all, on the Unrowed/Reading precedent, because ADR-020 gives it to the control plane alone and no backend property bears on it. Separately, backend unavailability lifts to the top of the verdict rather than sitting inside the row-failure enum: not-run and ran-and-failed are different claims."
+alternatives = ["Delete the outcome entirely and let the row set be the whole artefact — refused because POL-002's Unavailable{missing;remedy} has no row to live on and would be lost", "Reduce per front instead of per row — refused because an empty front is vacuously strong and DEC-189 guarantees empty fronts", "Keep the AND-reduction and guard emptiness with a wider external assertion — refused because EVD-021 shows an external guard over one fixed table set is exactly what DEC-189 dissolves", "Include row 8 TrustedTerminationObservation in the floor — refused on inspection: its control removes a file-size resource bound (conformance.rs:4176) so the property is a resource ceiling which DEC-191 lists as a front; only its observation discipline is epistemic"]
+rationale = "The floor and the profile are not two views of one thing; they are two different claims with different invariance. DEC-191 says authority is invariant across every backend — a composition that weakens it is not a weaker posture but not a capsule — while assurance legitimately differs. Invariant-and-closed wants exhaustiveness; varying-and-open wants a collection. Giving them one data structure is what forced the AND-reduction that DEC-191 removes. Exhaustive match also converts EVD-021's vacuous path from a documented hazard held shut by a test into a state the type system cannot express. The floor is row 3 alone because it quotes ADR-020's withheld-authority clause almost verbatim, and because the floor must be provable on every backend: DEC-189 names rows 10, 12, 13 and 14 as losing their host-facing delta under a hypervisor, so any floor containing them would be bubblewrap's shape promoted to a rule rather than an invariant."
+consequences = ["The floor is closed and mechanism-independent; widening it later is a governance act rather than a code edit", "An empty or short row list can no longer be silently admitted — the failure moves from runtime verdict to compile time", "Fronts remain open grouping metadata and never carry a reduction; closing the front list stays separate work", "The admission axis is present in the taxonomy and structurally cannot be proven by this suite — a reader who wants it measured is directed to the control plane and to CPT-002", "Backend unavailability becomes a top-level verdict variant rather than a row-failure reason preserving POL-002 facet 3's missing and remedy", "Row 8 stays in the profile and DEC-189 may have missed it as a fifth row losing its delta under a hypervisor — carried to SL-253 inq-8"]
+decided_by = "owner"
+decided_on = "2026-08-12"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "governed_by"
+target = "ADR-020"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "resolves inq-1 verdict shape and inq-2 the admission floor"
+target = "SL-253"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "DEC-189"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "DEC-191"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "EVD-021"
