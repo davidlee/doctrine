@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff662-647b-7cd1-b6a0-1385c468d4bd"
+recorded_at = "2026-08-12T14:31:11.227705985Z"
+kind = "friction"
+summary = "review show's table format omits finding bodies; --format json carries them (/code-review, RV-354)"
+detail = "Narrower and checked version of the superseded record. doctrine review show RV-354 (default table format) prints derived status, the reviews edge and the full prose Brief, but summarises the [[finding]] rows to a bare count — so an agent reading a ledger to learn what was raised gets nothing actionable and reaches for the raw toml, which is the read the 'entities via show, not raw files' guardrail forbids. --format json DOES carry finding.detail in full, verified. So this is a default-affordance gap rather than a missing capability: the format an agent reaches for first is the one that drops the payload, and nothing in the table output signals a richer format exists."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,8 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff662-6489-7f22-994a-27b755208cd7"
+recorded_at = "2026-08-12T14:31:11.241114006Z"
+kind = "supersession"
+old_uid = "019ff661-e3c3-7e90-9a28-c16926de0dfa"
+replacement_uid = "019ff662-647b-7cd1-b6a0-1385c468d4bd"
+reason = "Overstated: claimed --format json was unchecked. It was then checked and does render finding.detail in full, so the gap is the table format's default affordance, not the command's capability."

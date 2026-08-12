@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff661-d3db-7550-ad84-29d319c6a0c8"
+recorded_at = "2026-08-12T14:30:34.203637526Z"
+kind = "friction"
+summary = "design apply forces a full section-body resubmission for a surgical edit (/design, SL-253)"
+detail = "Integrating RV-354's four findings meant changing 6 spots in sec-5 (806 lines), 4 in sec-9, 2 in sec-7 and 7 in sec-10. Declaration.body is a whole-section replacement, so the cheapest correct path was to write a Python script per section that reads design.md, slices the section between its doctrine:section markers, applies exact-string replacements each asserted to fire exactly once, and emits the apply JSON. That worked well and is probably the right idiom to document — but the agent has to invent it, and the naive path (re-emitting 1400+ lines of prose across four sections) costs an order of magnitude more output tokens for the same diff. Worth noting the assert-fires-once discipline is load-bearing: one of my 19 replacements silently missed on a line-wrap difference and the script caught it, where a hand-rewrite would have dropped the edit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

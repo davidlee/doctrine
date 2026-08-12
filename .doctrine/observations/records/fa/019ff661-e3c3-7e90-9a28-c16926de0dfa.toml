@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff661-e3c3-7e90-9a28-c16926de0dfa"
+recorded_at = "2026-08-12T14:30:38.275568122Z"
+kind = "friction"
+summary = "review show renders the brief but not the finding bodies (/code-review, RV-354)"
+detail = "doctrine review show RV-354 prints the derived status, the reviews edge, and the full prose Brief from review-354.md — but not the [[finding]] rows' severity/title/detail from review-354.toml. To read what the external reviewer actually raised I had to cat .doctrine/review/354/review-354.toml directly, which is exactly the raw-file read the 'read entities via show, not raw files' guardrail exists to prevent. The two-tier synthesis show performs for other kinds (TOML structured + MD prose) appears to run in only one direction here: the MD tier is rendered in full, the TOML tier's findings are summarised to a count. --format json was not checked as an alternative; the table format is what an agent reaches for first."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
