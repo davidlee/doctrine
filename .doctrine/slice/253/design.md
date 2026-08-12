@@ -308,10 +308,12 @@ unrepresentable rather than externally guarded.
 behaviour-preservation gate and `DEC-191` cannot both be read literally, and three
 shape changes this design takes (`DEC-196`, `DEC-197`, `DEC-198`) each edit test
 source naming the moved types, so *green unchanged* is not merely awkward — it is
-false. **Resolved by `DEC-199`** — the bar drops to the row verdict, with a closed
-list of permitted differences. The list being *closed* is what makes it a
-constraint rather than a licence, and § 5.3's source-only rename is the first
-thing it decided (`RF-2`).
+false. **Resolved by `DEC-199`** — the bar drops to the row verdict, and what is
+permitted to differ is fixed in advance and closed. Its being *closed* is what
+makes it a constraint rather than a licence, and § 5.3's source-only rename is
+the first thing it decided (`RF-2`). `RF-11` then showed the first form of that
+licence could not express what the split does to the row block at all; § 9.1
+carries the repair.
 
 **F4 — The proof does not run under the default gate.** `just gate` names its
 packages and `doctrine-control` is not among them, so a phase can be green and
@@ -329,14 +331,21 @@ the derivation is discharged by a type rather than by prose.
 qualification rename touches the same types the split moves. Landing it
 separately means migrating twice. It rides this slice.
 
-**F7 — Inspection has failed three times on the same question.** *What crosses
-the seam backwards?* was enumerated by `DEC-196` and got two of five; by the
-draft and got three of five (§ 2.4). Each enumeration was careful and each was
-believed complete. A force rather than a risk, because it constrains the design's
-shape and not merely its verification: any answer that depends on someone reading
-the file correctly has already failed here. **Resolved in § 5.1** — the kernel's
-entry point admits values and closures only, so the reference class has no way in
-rather than needing to be found.
+**F7 — Inspection has failed four times on the same question.** *What crosses
+the seam backwards?* was enumerated by `DEC-196`, then by the draft, then by each
+of two review passes. Every enumeration was careful, every one was believed
+complete at the time, and every one was short: the list has gone from three to
+five to six (§ 2.4). Three distinct location classes have surfaced so far — a
+parameter list, a function body, and a *field* of a parameter's type — and each
+was found only after the previous had been closed. A force rather than a risk,
+because it constrains the design's shape and not merely its verification: any
+answer that depends on someone reading the file correctly has already failed
+here, four times. **Resolved in § 5.1, in two parts.** Structurally, the kernel's
+entry point admits values and closures only, so that reference class has no way
+in rather than needing to be found. Mechanically, `DEC-197`'s compile probe —
+because `RF-10` showed the structural half does not reach inside a value's
+fields, and the layering gate it was paired with proves tier direction rather
+than mechanism neutrality.
 
 ### 3.3 Hard constraints
 
