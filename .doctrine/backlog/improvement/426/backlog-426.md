@@ -137,9 +137,79 @@ source without running. Their figures — wall-clock cold and warm, disk and pac
 per instance, which freshness axes actually hold, teardown, two concurrent
 capsules — remain unmeasured, and are the work.
 
+**Correction to the paragraph above, 2026-08-12.** It was written before the run
+it describes, and one clause of it is still false: **that was not the
+host-module path.** `EVD-018` records the boot as it actually happened — the
+namespace and the tap made by the probe, the runner started by hand as the
+human, no systemd units and no host rebuild. The host-module wiring remains
+bookkeeping against a known-good result rather than something demonstrated. The
+paragraph is left standing rather than rewritten because the failure mode it
+illustrates — asserting a result from the reasoning that predicted it, in
+doctrine's record, ahead of the spike's own — is the same one `EVD-016`'s "a
+correction that was itself wrong" recorded, and it is worth being able to see
+twice.
+
+## P1a landed, 2026-08-12 — freshness is free at the boundary
+
+`EVD-019`. `sudo probe-freshness` on Sleipnir, twice, **22/22** on the second
+run: 8.31 s to a usable fresh capsule, one 12,175 MiB image shared by every
+capsule under netns, ~296 MiB of volume per instance of which ~260 MiB is empty
+filesystem, 3.63 s teardown.
+
+The result the round did not expect: **freshness has no wall-clock price at the
+capsule boundary.** Cold minus warm was −0.02 s, then +0.07 s — it changed sign,
+which is what separates *small* from *indistinguishable from zero* at two
+samples. Creating a 32 GiB sparse volume, making a filesystem on it and running
+the seed are all unmeasurable against a 6.4 s boot.
+
+So the question moves entirely onto what a fresh volume **discards**, and that
+is the one thing this probe cannot measure: the first build on a fresh volume
+needs egress, and the probe's namespace has no upstream at all. Recorded as
+not-measured rather than estimated. The discarded cache is asserted; its price
+is not.
+
+Four of `REQ-450`'s five axes are rowed and green (checkout, repository,
+runtime, temporary state). **Process is deliberately not a row** — a capsule is
+a separate kernel, so no delta can falsify the reading, and a permanently green
+row is misleading evidence rather than extra assurance. That is `DEC-189`
+applied rather than cited, which is the first time the re-derived row set has
+had a subject to be applied to.
+
+Two figures from run 1 were the harness's rather than the capsule's, and both
+are resolved in run 2. Do not carry the 22.68 s teardown anywhere: it timed a
+poll for a VMM exit firecracker never produces, so it bounds nothing.
+
+## P1b written, 2026-08-12 — and it has already cost something
+
+`probe/two-capsules.sh`, not yet run: two real capsules at `target.nix`'s
+declared 16 GiB each against a 63 GiB host, in two namespaces, from **one**
+runner store path. It asserts the four independences a verifier needs from the
+capsule it judges — addressing, storage, history, lifecycle — and collects from
+both, because attribution is the other half of `REQ-454`: a verdict that cannot
+be tied to the capsule that produced it is not evidence.
+
+The load-bearing assertion is a marker file. Both guests are the same image at
+the same address in their own namespace, so **a capsule cannot reach its sibling
+because it cannot name it** — the address it would use is its own. That is a
+stronger property than a dropped route, which is a control that can be
+misconfigured; this one has nothing to configure.
+
+Writing it exposed the instance-identity problem the round expected, in the
+place the round did not look. The one-image lever means every capsule is
+`microvm@capsule` in the process table, so the existing teardown's
+`pkill -f microvm@capsule` would have killed the sibling **and reported
+success** — it then asks whether a microvm is running of a host that has
+neither. A VMM is now identified by its namespace (`ip netns pids`): the thing
+that isolates a capsule is the same thing that names it, so no pidfile and no
+registry are needed. A second asymmetry fell out on the way: `capsule-collect`
+takes its capsule's name as an argument, `capsule-provision` bakes its socket
+path into a store path, so two capsules need two provision programs.
+
 ## Related
 
 `RSK-231`, `RFC-025`, `SPEC-030` `REQ-450`, `DEC-134`, `EVD-015`, `DEC-189`,
 `DEC-190`, `DEC-191`, `CPT-002`, `IMP-397` (capsule egress allowlist and
 build-input provisioning, which this will brush against). Round P0:
 `QUE-212` (blocking), `DEC-192`, `EVD-016`, `EVD-017`, `QUE-213`, `ASM-010`.
+Round P1: `EVD-018` (the namespace boot, which unblocked both), `EVD-019`
+(P1a priced), `REQ-454` (P1b's subject).
