@@ -1,0 +1,31 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 23
+slug = "claude-p-is-subscription-billed-under-the-claude-plan"
+title = "claude -p is subscription-billed under the Claude plan"
+record_kind = "evidence"
+status = "captured"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["area:dispatch", "cluster:capsule", "harness:claude"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum = """Anthropic's support article 'Use the Claude Agent SDK with your Claude plan' carries an Update dated June 15 that PAUSES the previously announced billing changes: "For now, nothing has changed: Claude Agent SDK, claude -p, and third-party app usage still draw from your subscription's usage limits." The previously announced monthly credit is withdrawn. Anthropic states it is working to update the plan and will share an update BEFORE anything takes effect. So: claude -p is subscription-billed today, provisionally, with advance notice promised before any change."""
+provenance = "citation"
+confidence = "high"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Falsifies-the-claude-p-billing-premise"
+target = "ADR-011"

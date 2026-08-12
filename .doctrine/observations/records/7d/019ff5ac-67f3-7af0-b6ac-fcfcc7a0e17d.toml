@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff5ac-67f3-7af0-b6ac-fcfcc7a0e17d"
+recorded_at = "2026-08-12T11:12:24.564009393Z"
+kind = "friction"
+summary = "/design: cold resume cannot read resolved inquiry dispositions via show — only the raw run TOML"
+detail = "Resuming SL-247's design run (dr-019fd215, stage inquiring, 8/8 nodes resolved) in a fresh context. 'doctrine design resume 247' and 'design show 247 --full [--format json]' both project frontier/blockers/active_path, which are empty once every node is resolved — so the envelope reports totals=8 resolved and shows none of them. The disposition notes (six 'non-durable' nodes carrying the actual settled reasoning: inq-2/3/4/6/7/8) exist only in .doctrine/state/slice/247/design.toml. To summarise the inquiry for the user's sufficiency-acceptance gate I had to read that raw TOML, which mem_019fc255625877e09ba55d5e11d7c5cb explicitly says not to do. Gap: no projection of the settled map. The sufficiency gate asks the user to judge whether the right questions were asked — that judgement needs the resolved set rendered, and the run declines to render it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

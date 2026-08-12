@@ -202,6 +202,52 @@ worktree subagent out of its worktree.**
 
 ## Summary
 
+**ABANDONED at design, 2026-08-12 — dissolved, not deferred.** See `DEC-202`
+("Collapse the claude arm onto the subprocess seam") and `EVD-023`
+(`claude -p` is subscription-billed under the Claude plan).
+
+This slice made a non-worktree subagent useful by changing how the PreToolUse
+confinement wall's fourth arm resolves. `EVD-023` falsified the premise the
+wall itself rests on. `ADR-011`'s Context concluded that *"for claude the only
+viable backend is the in-session `Agent` tool"* because `claude -p` was
+Anthropic-API-billed; its D3 table therefore recorded OS confinement as
+*"none — `Agent` is not a subprocess to wrap"*. With `claude -p` drawing from
+subscription usage limits, the claude worker becomes a subprocess, gets the
+pi arm's nested bwrap, and the wall has no remaining job. `DEC-202` retires
+the arm, the wall, the `SubagentStart` stamp, and worker marker stamping
+together.
+
+No part of this scope survives that. Objectives 1–3 targeted a wall being
+deleted; objective 4 ("state what the wall guarantees") collapses to *there is
+no in-harness wall — confinement is external, as on pi*. The verification
+intent proposed **new** e2e coverage (`tests/e2e_worktree_pretooluse.rs`) for a
+verb being removed.
+
+**What survives, and where it went:**
+
+- `DEC-152` and `DEC-154` remain **accepted** — accurate reasoning at a moment,
+  superseded by `DEC-202` rather than retracted. Both pre-argue their own
+  dissolution: `DEC-152`'s rationale argues the wall is not earning its keep,
+  and `DEC-154`'s residual names assert-at-spawn as the successor to
+  infer-at-deny — which is what clone provisioning does.
+- `inq-6`'s composite-guarantee finding changes character rather than dying:
+  the writable `mcp__*` punch-through was a hole in a wall; under a subprocess
+  it is ordinary tool-surface configuration.
+- `inq-4`'s `PRIVILEGED_AGENT_TYPES` fusion trap (nomination-eligibility fused
+  with `decide_agent`'s privileged deny-set) is now a cautionary note about
+  deleted code. Harvest it only if the successor slice finds it load-bearing.
+- **`OQ-3` is inherited, not closed.** Whether `IMP-269` (the same defect for
+  `/fork` subagents) and `IMP-342` (the Bash arm blocking read-only `doctrine`
+  CLI reads from research subagents) discharge here passes to the successor
+  slice. `IMP-401`, which originated this slice, returns to the pool.
+
+**One fact this slice's abandonment does not fix.** The committed
+`.claude/settings.json` still registers all four `worktree pretooluse`
+matchers, so the defect this slice was cut for remains live on the committed
+configuration until `DEC-202`'s successor lands. Local disabling is outside
+version control. Note also that two of the configured `PreToolUse` hooks are
+`memory surface`, not confinement — they are out of scope for deletion.
+
 ## Follow-Ups
 
 - **At reconcile — contribute the post-capsule finding to RFC-025** (DEC-154's

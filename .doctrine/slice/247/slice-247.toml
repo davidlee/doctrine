@@ -1,9 +1,9 @@
 id = 247
 slug = "usable-non-worktree-subagents"
 title = "Usable non-worktree subagents"
-status = "design"
+status = "abandoned"
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-12"
 tags = ["area:dispatch", "area:worktree", "harness:claude"]
 
 [relationships]
@@ -62,6 +62,12 @@ label = "references"
 role = "concerns"
 descriptor = "capsule successor programme — this slice must stay deletable"
 target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Decision-that-abandoned-this-slice"
+target = "DEC-202"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

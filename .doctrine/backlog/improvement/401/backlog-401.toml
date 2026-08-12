@@ -5,10 +5,10 @@ id = 401
 slug = "make-plain-subagents-work-keep-worktree-isolation"
 title = "Make plain subagents work; keep worktree isolation"
 kind = "improvement"
-status = "started"
+status = "open"
 resolution = ""
 created = "2026-08-05"
-updated = "2026-08-05"
+updated = "2026-08-12"
 tags = ["area:dispatch", "area:worktree", "harness:claude"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
@@ -29,6 +29,12 @@ target = "ADR-011"
 label = "references"
 role = "concerns"
 target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "Now-discharges-via-the-claude-arm-collapse"
+target = "DEC-202"
 
 [[relation]]
 label = "related"
