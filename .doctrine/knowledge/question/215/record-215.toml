@@ -5,7 +5,7 @@ id = 215
 slug = "does-sl-254-ride-doctrine-controls-provisioning-and-bwrap-backend-or-keep-the-shell-script"
 title = "Does SL-254 ride doctrine-control's provisioning and bwrap backend, or keep the shell script"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-08-12"
 updated = "2026-08-12"
 tags = ["area:dispatch", "cluster:capsule"]
@@ -13,9 +13,14 @@ tags = ["area:dispatch", "cluster:capsule"]
 [facet]                         # every field typed; seeded empty (captured later)
 question = "The naive SL-254 implementation generalises the bwrap PREFIX array in scripts/pi-spawn-confined.sh and writes clone provisioning in shell. But crates/doctrine-control already does both: clone_inside at provision.rs:949 runs git clone --no-hardlinks inside the capsule then detaches at base and removes origin, confinement_argv at backend/bubblewrap.rs:1110 builds the full bwrap argv with --unshare-all, --clearenv, --new-session and uid/gid mapping, and wall_bounded_argv at :1234 adds timeout -k and RLIMIT_FSIZE. Does SL-254 ride that mechanism or keep the shell path?"
 why_matters = "No parallel implementation is a hard project rule, and the shell prefix is a hand-rolled subset of confinement_argv with no placement validation, no resource bounds and no descriptor sweep. Research thread 5 says ride the mechanism (provision.rs clone-inside, backend.rs placement vocabulary, bubblewrap.rs argv assembly, config.rs resource bounds) while explicitly NOT riding conformance.rs, the admission journal, or any SPEC-030 requirement — the boundary is that mechanism crosses and the evidentiary bar does not. Two complications: crates/doctrine-control is deliberately outside every default test selection (Linux-only, live-bwrap rows, reachable via just capsule-check), so riding it may pull a build-gating problem into the default path; and RFC-025's microVM turn moved the expected long-term capsule boundary off bubblewrap, though thread 5 assessed and dismissed that as irrelevant to an incumbent-parity slice."
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = """
+Keep the shell script for SL-254; the provisioning half of the question moves to SL-255.
+
+DEC-209 settled the prefix: generalise the incumbent bwrap PREFIX in scripts/pi-spawn-confined.sh, take no doctrine-control dependency, and port no hardening. The reuse finding stands and was not dismissed — crates/doctrine-control genuinely implements clone-inside-bwrap (provision.rs:949) and full argv assembly (backend/bubblewrap.rs:1110) — but SL-254 needs neither, because DEC-213 re-scoped it to the arm collapse and it provisions no clones at all. The incumbent prefix already delivers the write floor (--ro-bind / /, scripts/pi-spawn-confined.sh:113-131), so thread 5's gaps are defence in depth and are deferred to IMP-428.
+
+The half this leaves genuinely open is provisioning, and it belongs to whoever provisions: it is carried as SL-255 OQ-2. The build-gating complication the question raises is the reason it deserves a fresh look there rather than an inherited answer — doctrine-control is deliberately outside every default test selection (Linux-only, live-bwrap rows, reachable via just capsule-check), so riding it would pull that into the default path."""
+answered_by = "agent"
+answered_on = "2026-08-12"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

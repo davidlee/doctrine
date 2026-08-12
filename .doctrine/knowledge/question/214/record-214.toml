@@ -5,7 +5,7 @@ id = 214
 slug = "pole-a-or-pole-b-how-much-dispatch-machinery-does-sl-254-demolish"
 title = "Pole A or Pole B: how much dispatch machinery does SL-254 demolish"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-08-12"
 updated = "2026-08-12"
 tags = ["area:dispatch", "area:worktree", "cluster:capsule"]
@@ -13,9 +13,14 @@ tags = ["area:dispatch", "area:worktree", "cluster:capsule"]
 [facet]                         # every field typed; seeded empty (captured later)
 question = "SL-254 must choose how far to demolish the dispatch integration machinery. Pole A keeps basic worktree parallelisation and deletes only what the claude arm's retirement forces. Pole B commits to the clone capsule workflow and additionally deletes the marker identity system, the import belt, the branch-point guard, the coordination-worktree machinery, the live-diff import path, and the patch-application transport — the research thread estimates roughly 40 percent more deletion, with the surviving core (CAS journal, candidate layer, trunk resolution, funnel state machine) re-homing onto a strictly simpler fetch or bundle transport."
 why_matters = "It decides the slice's size and probably its phase count, so it must be settled before planning. It is also the pole on which several smaller questions hang: the disk marker survives untouched under Pole A and is inoperable under Pole B (describe_mode gates the marker leg on is_linked_worktree at marker.rs:89, and a clone is not a linked worktree by construction at shared.rs:54-58), and worker_commit's whole enforcement path is worktree-topology-coupled. Research thread 4 recommends Pole B and notes that git clone --reference would re-couple the object store via objects/info/alternates and violate the REQ-448 and DEC-191 authority floor, so the cheap way to buy back disk is the one way that forfeits the isolation. Solo /worktree use stays intact under either pole per the slice's stated scope boundary."
-answer      = ""
-answered_by = ""
-answered_on = ""
+answer = """
+Neither pole as stated. SL-254 takes a NARROWED Bounded Pole B and the remainder splits to SL-255 (DEC-213, 2026-08-13).
+
+DEC-203 first answered Bounded Pole B — every deletion the clone forces on the worker side, with ADR-012's coordination topology untouched. DEC-213 then moved that boundary inward. SL-254 takes the SPAWN and IDENTITY deletions only: confined-subprocess spawn, and DOCTRINE_WORKER env identity in place of the disk marker, on a LINKED WORKTREE with the incumbent import transport. Clone provisioning, worker self-commit, worker_commit's replacement by fetch-from-clone, and the branch-point guard's re-homing onto fetched refs are SL-255's.
+
+The question's own framing carried a premise that did not survive: "the disk marker survives untouched under Pole A and is inoperable under Pole B". Both halves are wrong under the settled answer. The marker is deleted (DEC-207) even though workers stay on linked worktrees, where the marker leg CAN fire — the deletion is chosen rather than forced, on grounds verified independent of topology. Research thread 4's Pole B recommendation is honoured in direction and deferred in extent."""
+answered_by = "user"
+answered_on = "2026-08-12"
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

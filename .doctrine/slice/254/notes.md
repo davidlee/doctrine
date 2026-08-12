@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 13) · marker/confinement trace
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 15, **both gates cleared**) · re-scope executed
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -27,6 +27,16 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
   `DEC-211` `choice` extended with a second `ADR-006` §D2b correction site;
   minted `CHR-062` — prune the `SL-116` extraction `expect(unused)` in worktree
   `gc`/`import`
+- `mem.fact.dispatch.worker-confinement-is-actor-based` strengthened with the
+  process-vs-tree generalisation and re-attested; scoped to `shared.rs`/`land.rs`
+- **both design-run gates cleared** — `governance-confirmed` and `graph-reviewed`
+  accepted by the user (rev 13 → 15); `blocking-set-declared` already current
+- **the re-scope EXECUTED** (`DEC-213`): `SL-254` narrows to the arm collapse;
+  `SL-255` minted for clone provisioning. `DEC-203`/`204`/`211`/`212` corrected
+  in place (all `proposed`, per this slice's own `DEC-202` precedent);
+  `QUE-214`/`QUE-215` settled; scope document re-cut in six places
+- 1 friction observation recorded — `memory edit` resets attestation on any field
+  change, so one logical memory change costs a commit per step
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
@@ -40,7 +50,12 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
 - `IMP-065` — which `ADR-006` §D2b still names as "the real positive-marker close" — was **closed obsolete** 2026-07-02 (`REV-018`): a positive marker is a cooperative flag not a boundary, and confinement (`SL-182`/`183`/`185`) is the genuine close. The argument that retired it retires the *negative* marker identically
 
 ### Open
-- **The re-scope, PROPOSED AND UNCONFIRMED.** Owner's direction at end of session: scope SL-254 shy of carving out dispatch proper — separate concern, less clear-cut what stays useful under clone-backed workers, and more manageable split. Proposed line: SL-254 = *the claude arm becomes a pi arm* (confined subprocess, linked worktree, incumbent import transport); clone provisioning + worker self-commit + fetch transport split to a successor slice. Not yet executed
+- ~~**The re-scope, PROPOSED AND UNCONFIRMED**~~ — **EXECUTED 2026-08-13
+  (`DEC-213`).** `SL-254` = *the claude arm becomes a pi arm* (confined
+  subprocess, linked worktree, incumbent import transport). `SL-255` minted for
+  clone provisioning + self-commit + fetch transport, carrying `A1` as the
+  assumption it exists to verify and `DEC-204` as the analysis that becomes live
+  again there
 - ~~**DEC-207 is contested**~~ — **RESOLVED 2026-08-13 by the marker/confinement
   trace. `DEC-207` stands, and is now topology-INDEPENDENT** — it survives
   unchanged whether workers ride clones or linked worktrees, so the re-scope no
@@ -49,15 +64,31 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
   *another* tree; it needs the branch-shape classifier as substitute, which is
   strictly stronger) and one `REV` site `DEC-211` had missed (`ADR-006` §D2b's
   dangling forward-reference to the obsolete `IMP-065`). Both are now recorded
-- Consequential on the re-scope: DEC-203, DEC-204, DEC-212 would be superseded and DEC-211's site list narrowed; DEC-205, DEC-206, DEC-208, DEC-209, DEC-210 survive untouched
+- ~~Consequential on the re-scope~~ — **discharged.** All four corrected **in
+  place**, not superseded: they are `proposed`, and `DEC-203` set that precedent
+  when it corrected `DEC-202`'s choice text on exactly that ground. `DEC-204`'s
+  hazard *dissolved* rather than narrowing — `classify_import` survives as the
+  scope belt's enforcing caller, so `worker_commit` is deleted outright and
+  nothing re-homes. `DEC-205`/`206`/`207`/`208`/`209`/`210` untouched
+- **`governance-confirmed` may deserve re-taking.** The machine still reports all
+  three acts `current` after the re-scope — it did not stale them. But the user
+  confirmed governance against the *wider* scope, and the picture has since moved
+  (`DEC-211`'s REV narrowed, `SL-255` carries its own unsurveyed governance). The
+  gate is not blocking; this is a judgement call for the owner, not a refusal
 - **`DEC-211` under-counts `ADR-011`.** Its `choice` (A) says "at four sites" and
   lists four; this notes file's own *Governance constraining the surface* section
   says **five** — Context (28), D1 (43-45), D3's table (89, 93), D4 (98-100), and
   a consequences-register restatement at 263. Noticed during the marker trace and
   left unfixed deliberately: reconciling the count is a scope call, not a
   correction I should make unilaterally
-- QUE-214 disposed by DEC-203 but **not settled** — deliberately, pending the re-scope. QUE-215 disposed by DEC-209, safe to settle
-- Design run gate: `governance-confirmed` and `graph-reviewed` both outstanding, both require **user** authority (DEC-088). `blocking-set-declared` (agent half) is live
+- ~~QUE-214 / QUE-215 unsettled~~ — **both settled `answered` 2026-08-13.**
+  `QUE-214` by the user (neither pole as stated — narrowed Bounded Pole B, remainder
+  to `SL-255`); `QUE-215` by agent (keep the shell for `SL-254`; the provisioning
+  half moves to `SL-255` `OQ-2`, where the `doctrine-control` build-gating
+  complication deserves a fresh look rather than an inherited answer)
+- ~~Design run gate outstanding~~ — **both cleared 2026-08-13**, rev 15. Stage is
+  still `exploring`; the advance to `inquiring`/`drafting` is a separate `stage`
+  submission and is deliberately not yet sent
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
 - Memory-corpus sweep at reconcile — carried in the scope's Follow-Ups (25+ stale-but-plausible claude-arm memories, one in the boot snapshot)
 

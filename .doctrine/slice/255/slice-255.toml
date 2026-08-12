@@ -1,0 +1,57 @@
+id = 255
+slug = "provision-dispatch-workers-as-clones"
+title = "Provision dispatch workers as clones"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = ["area:dispatch", "area:worktree", "cluster:capsule"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = [{ to = "SL-254", rank = 0 }]                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-008"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-254"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-021"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-012"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-025"
+
+[[relation]]
+label = "references"
+role = "concerns"
+target = "IDE-024"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

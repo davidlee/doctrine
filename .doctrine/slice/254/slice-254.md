@@ -23,9 +23,18 @@ one workaround wearing four hats, each traceable to a clause of `ADR-011` D3:
 | mechanism | the clause it exists for | replacement |
 |---|---|---|
 | disk marker as sole worker identity | D2/D4 — `Agent` has no env channel | `--setenv DOCTRINE_WORKER 1` in the bwrap prefix |
-| `SubagentStart` stamp hook | D3 — the marker needs a writer and `Agent` has no exec wrapper | orchestrator stamps before exec, as on pi |
+| `SubagentStart` stamp hook | D3 — the marker needs a writer and `Agent` has no exec wrapper | nothing — the marker itself goes (`DEC-207`) |
 | `worktree pretooluse` confinement wall | D3 — *"OS confinement: none — `Agent` is not a subprocess to wrap"* | nested bwrap, as on pi |
-| gated `worker_commit` MCP tool | a hook-confined in-session worker cannot self-commit | a clone has a writable `.git` |
+| gated `worker_commit` MCP tool | a hook-confined in-session worker cannot self-commit | the orchestrator's incumbent import, as on pi |
+
+*Row 3 re-grounded and row 4 corrected, 2026-08-13 (`DEC-213`).* Row 4 read "a
+clone has a writable `.git`", which was the clone half's answer. Under the
+re-scope the claude worker inherits the pi arm's answer instead: it does not
+self-commit, and the orchestrator imports its working-tree diff. `worker_commit`
+is still deleted — it existed only for the in-session arm — but nothing replaces
+it, and `classify_import` survives as the scope belt's enforcing caller
+(`DEC-204`). Row 2's replacement is likewise not "stamp before exec": with
+identity on the env leg there is no marker left to stamp.
 
 `ADR-011` D4 lists three enhancements as "codex/pi-only until a free claude env
 backend lands" — env-arm worker identity, per-worktree env delivery, and nested
@@ -66,13 +75,26 @@ provisioning does.
 ## Scope & Objectives
 
 **One shippable change: dispatch has one worker-spawn shape — a confined
-subprocess in a clone — on every harness.**
+subprocess — on every harness.**
+
+*Re-scoped 2026-08-13 (`DEC-213`).* This originally read "a confined subprocess
+**in a clone**", and took the clone half with it. `SL-254` now stops at the arm
+collapse: **the claude arm becomes a pi arm** — a confined subprocess on a
+**linked worktree**, with the **incumbent import transport** the orchestrator
+already uses in production. Clone provisioning and everything it forces moved to
+`SL-255`. The split is safe because `DEC-207`'s identity collapse was verified
+*topology-independent*; had it depended on the clone, the identity work would
+have had to move too.
 
 1. **Spawn `claude -p` as a confined subprocess** under the pi arm's bwrap
    prefix, with the macOS `sandbox-exec` sibling kept at parity.
-2. **Provision workers as clones, not linked worktrees.** A clone's writable
-   `.git` is what lets the worker self-commit and dissolves the orchestrator's
-   import-the-diff trade.
+2. ~~**Provision workers as clones, not linked worktrees.**~~ **MOVED OUT to
+   `SL-255`** by `DEC-213`. Kept in place rather than renumbered so the
+   objectives other records cite by number still resolve. The clone's writable
+   `.git`, worker self-commit, `worker_commit`'s replacement by
+   fetch-from-clone, and the branch-point guard's re-homing onto fetched refs
+   are all that slice's. Workers here stay on linked worktrees and the
+   orchestrator keeps importing the working-tree diff.
 3. **Delete the in-session apparatus** — the four `worktree pretooluse` hook
    matchers, the `SubagentStart` stamp, **disk-marker worker identity**, and the
    `claude-force-subprocess-dispatch` config key, which has no second mode left
@@ -81,11 +103,18 @@ subprocess in a clone — on every harness.**
    *Corrected 2026-08-13.* This originally read "marker stamping", which
    understated it against `DEC-202`'s own list — the marker is mechanism #1 of
    its four, and `EVD-023` already names `--setenv DOCTRINE_WORKER 1` as the
-   replacement. Under a clone the marker is not merely redundant but
-   **inoperable**: `describe_mode` gates it on `is_linked_worktree`
-   (`marker.rs:89`), which is false for a clone by definition
-   (`shared.rs:54-58`). Scope and research both drifted off the record here; see
+   replacement. Scope and research both drifted off the record here; see
    `research.md` cross-thread finding 7.
+
+   *Re-grounded 2026-08-13 (`DEC-213`).* This paragraph previously argued the
+   marker is **inoperable** under a clone, because `describe_mode` gates it on
+   `is_linked_worktree` (`marker.rs:89`), which is false for a clone. That
+   argument **does not survive the re-scope** — workers stay on linked
+   worktrees, so the marker leg can fire. The marker still goes, but as a
+   *chosen* deletion rather than a forced one, on `DEC-207`'s topology-
+   independent grounds: worker-ness is a property of a process, the marker
+   models it as a property of a tree, and nothing anywhere reads marker
+   *absence* as coordination-tree identity.
 4. **Collapse the skills.** `/dispatch-agent` and `/dispatch-subprocess` merge;
    `/dispatch`'s arm-routing branch goes with them.
 5. **Land the governance.** `ADR-011` Context + D3, and the `SPEC-021`
@@ -103,6 +132,16 @@ subprocess in a clone — on every harness.**
   unrelated capability.
 - **Behaviour-preservation gate** — the codex/pi arm is production today. Its
   existing suites are the proof that the collapse did not disturb it.
+
+  *Restored 2026-08-13 (`DEC-213`).* `DEC-212` had to replace this with an
+  observable-contract formulation, because the original scope moved the pi arm
+  to clones too and its transport tests pin exactly what was being replaced.
+  Under the re-scope the pi arm **does not move at all** — the claude arm
+  changes *into* the pi arm's existing shape — so "the codex/pi suites stay
+  green unchanged" is achievable as written and is the gate again. What survives
+  from `DEC-212`: the confinement control (a worker under the prefix cannot
+  write outside its own directory), its **skip-rather-than-pass** rule on a host
+  without `bwrap`, and the VA leg's evidence landing in an authored sink.
 - The change must not pre-empt `ADR-020`'s capsule cutover, only shrink it.
 
 ## Non-Goals
@@ -154,10 +193,17 @@ Coarse and provisional — the exact touch-set is `/design`'s job.
   that by *removing* an arm. Accepted in `DEC-202` on the grounds that it
   shrinks the eventual capsule slice 5 rather than growing it — but it is the
   slice's sharpest governance tension and design should not soften it.
-- **`A1` — clone self-commit.** Assumed: a clone's writable `.git` dissolves the
-  pi arm's standing "worker cannot self-commit → orchestrator imports the
-  working-tree diff" trade. `IDE-024` reached the same conclusion independently.
-  **Not yet verified** — confirm before it becomes load-bearing for objective 2.
+
+  *Softened 2026-08-13 (`DEC-213`), and say so plainly rather than claiming it
+  away.* The re-scope keeps the incumbent import transport, so the breach is now
+  one axis rather than two: an arm is removed, but the funnel is not replaced
+  beside it. The tension is real and remains; it is smaller.
+- ~~**`A1` — clone self-commit.**~~ **MOVED OUT to `SL-255`** by `DEC-213`. The
+  assumption — a clone's writable `.git` dissolves the pi arm's standing "worker
+  cannot self-commit → orchestrator imports the working-tree diff" trade
+  (`IDE-024` reached it independently) — is **still unverified**, and that is
+  precisely why it left. Verifying it is `SL-255`'s job, not a precondition
+  this slice has to clear first.
 - **`A2` — `claude -p` reaches the worker's needs.** Tool-surface scoping,
   structured hand-back, and MCP availability under `-p` are assumed sufficient.
   `inq-6` of `SL-247` established that tool availability is definable per agent
@@ -236,12 +282,15 @@ was to be about. Carried in *Follow-Ups*.
   `e2e_worktree_*` files are triaged into keep / retarget / delete rather than
   deleted wholesale.
 - **By test** — a worker spawned as `claude -p` under the bwrap prefix cannot
-  write outside its clone. This is the control that matters: it is the guarantee
-  the deleted wall was claiming, now held by the OS instead of a fail-open hook.
+  write outside its own worktree. This is the control that matters: it is the
+  guarantee the deleted wall was claiming, now held by the OS instead of a
+  fail-open hook. It must **skip, not pass**, on a host without `bwrap`
+  (`DEC-212`) — a vacuous pass is the same fail-open shape the slice deletes.
 - **By agent** — a live dispatch phase driven end-to-end on the claude harness
-  through the subprocess arm, including self-commit from the clone (`A1`).
-  **Evidence lands in an authored sink** — `notes.md` or an `EVD` — never the
-  gitignored scratchpad (`mem_019fd1d862887d42b7a1f88c28fd28a7`).
+  through the subprocess arm, concluding with the orchestrator's **incumbent
+  import** of the worker's working-tree diff (`DEC-213`; self-commit belongs to
+  `SL-255`). **Evidence lands in an authored sink** — `notes.md` or an `EVD` —
+  never the gitignored scratchpad (`mem_019fd1d862887d42b7a1f88c28fd28a7`).
 - **By human** — `ADR-011`'s corrected text and the `SPEC-021` requirement
   dispositions accurately describe the shipped arm, and no `[[source]]` anchor
   points at a deleted file.

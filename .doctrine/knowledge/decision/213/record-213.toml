@@ -1,0 +1,56 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 213
+slug = "re-scope-sl-254-to-the-arm-collapse-alone"
+title = "Re-scope SL-254 to the arm collapse alone"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-12"
+updated = "2026-08-12"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = """
+SL-254 was scoped as one shippable change taking every deletion the clone forces on the worker side (DEC-203, Bounded Pole B): confined-subprocess spawn, clone provisioning, DOCTRINE_WORKER env identity, worker self-commit, worker_commit's retirement, and fetch-from-clone in place of the working-tree-diff import belt.
+
+At the close of the 2026-08-13 exploring session the owner judged that line too wide. Two reasons, and they are different in kind. The clone half is a separate concern from the arm collapse; and what stays useful under clone-backed workers is materially less clear-cut than what stays useful under a confined subprocess, so the two halves cannot be reasoned about at the same confidence. A narrower slice is also simply more manageable to land.
+
+The marker/confinement trace run before this decision removed the one thing that could have argued against splitting. DEC-207's collapse of worker identity onto the env leg was originally derived from clone topology — under a clone the marker leg is inert by construction, because is_linked_worktree is false. Had that derivation been the only one available, splitting the clone out would have dragged identity back to the disk marker and unwound DEC-205, DEC-206 and DEC-208 with it. The trace established the collapse INDEPENDENTLY of topology, so it holds on linked worktrees exactly as it holds on clones, and the arm-collapse half is self-contained."""
+choice = """
+Re-scope SL-254 to the ARM COLLAPSE alone: the claude arm becomes a pi arm.
+
+IN: a confined `claude -p` subprocess under the generalised bwrap prefix, on a LINKED WORKTREE, with the INCUMBENT import transport — the orchestrator imports the working-tree diff, exactly as the pi arm does in production today. Worker identity collapses to DOCTRINE_WORKER (DEC-207). The in-session apparatus goes: the four worktree pretooluse matchers, the SubagentStart stamp and its nominate/denominate loop (DEC-205), the jail primitives re-homed first (DEC-206), no degraded in-session rung (DEC-208), and the claude-force-subprocess-dispatch key. worker_commit is deleted outright with the in-session arm it served.
+
+OUT, to a successor slice: clone provisioning, worker self-commit, worker_commit's replacement by fetch-from-clone, the branch-point guard's re-homing onto fetched refs, and the scope belt's second caller at a fetch/admit step."""
+alternatives = ["Land the original Bounded Pole B line in one slice. Rejected by the owner on manageability and on a clarity asymmetry: the arm collapse is a well-understood substitution — one spawn shape replacing two — whereas clone-backed workers change the transport / the identity premises / the write floor's caller graph at once. The two cannot be reasoned about at the same confidence and should not share a gate.", "Split the other way — clone provisioning first and the arm collapse second. Rejected: the arm collapse is what EVD-023 unblocked and it is what deletes the four-mechanism workaround; it has a trigger and a bounded target. Clone provisioning has neither and RFC-025 already schedules it as capsule roadmap step 3.", "Drop the successor entirely and let the capsule cutover absorb clone provisioning. Rejected as premature: A1 is still unverified and deserves a slice that can verify it against the incumbent funnel rather than being folded into a programme carrying SPEC-030's heavier evidentiary bar — which is R1's failure mode exactly."]
+rationale = """
+The two halves fail differently, and that is the split.
+
+The arm collapse is a SUBSTITUTION with a known target. The pi arm's confined-subprocess spawn runs in production; scripts/pi-spawn-confined.sh already factors the prefix into an eight-token array with a macOS sandbox-exec sibling beside it; the claude delta is rebinding $HOME/.pi to $HOME/.claude and changing the exec target. Its risk is bounded by an incumbent that already works, and every deletion it makes is of apparatus that exists only because the in-session arm could not be a subprocess.
+
+Clone provisioning is a TOPOLOGY CHANGE that moves the transport, the write floor's caller graph and the self-commit trade all at once, and it rests on A1 — a clone's writable .git dissolves the orchestrator-imports-the-diff trade — which the scope itself marks not yet verified. Bundling a verified substitution with an unverified topology change means the whole slice inherits the unverified half's risk and cannot land until it clears.
+
+Keeping the incumbent transport also restores discipline the original scope knowingly broke. RFC-025 requires that every slice but the last land beside the incumbent worktree arms so the repo never sits half-cut-over; the scope's R3 accepts breaking that because the slice REMOVES an arm. With the import belt intact the breach is confined to one axis — an arm goes, the funnel does not move — rather than two.
+
+Correct-in-place rather than supersede, for the three affected decisions: all three are proposed rather than settled, and this slice already set that precedent when DEC-203 corrected DEC-202's choice text in place on exactly that ground. Superseding proposed records would mint successors for decisions that were never binding, and would bury the reasoning that survives the narrowing."""
+consequences = ["DEC-203's Bounded Pole B line moves inward: the worker side still goes capsule-shaped in SPAWN and IDENTITY but not in TOPOLOGY or TRANSPORT. Corrected in place rather than superseded — it is proposed and its worktrees-versus-dispatch reasoning is unaffected by the narrowing.", "DEC-204's central hazard DISSOLVES. It existed because DEC-203 deleted worker_commit AND replaced classify_import — both callers of the single-sourced scope belt — leaving the .doctrine/ and .claude/ authored-state write floor with no enforcing reader. With the incumbent import transport retained classify_import survives untouched and keeps the belt. worker_commit is therefore deleted OUTRIGHT and DEC-204's rejected first alternative becomes the chosen one. No belt re-homes; INV-2's posture does not change.", "DEC-212's premise is falsified in the useful direction. The pi arm no longer moves — so the scope's original behaviour-preservation gate — the codex/pi suites stay green unchanged — is achievable again and is restored. DEC-212's genuine additions survive the narrowing: the confinement control that a worker cannot write outside its own directory · its SKIP-rather-than-pass rule on a host without bwrap · and the VA leg landing its evidence in an authored sink rather than the gitignored scratchpad.", "DEC-211's REV narrows. ADR-011 and ADR-006 D2b still land — the arm collapse and DEC-207's marker deletion are both untouched by the split. SPEC-021's funnel-cadence responsibility no longer changes because the belt does not re-home — so DEC-204's INV-2 posture item leaves the REV. SPEC-012's stamp still goes with the marker.", "DEC-205 · DEC-206 · DEC-207 · DEC-208 · DEC-209 · DEC-210 survive untouched.", "A1 — a clone's writable .git dissolves the orchestrator-imports-the-diff trade — leaves SL-254 with the clone half and becomes the successor slice's to verify. It stops being load-bearing here. So does the two-provisioning-paths question DEC-203 called void.", "The scope document itself changes: objective 2 (provision workers as clones) moves out; the headline drops 'in a clone'; objective 3's clone-inoperability argument for the marker is replaced by DEC-207's topology-independent one; and the behaviour-preservation constraint returns to its original form."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"
+
+[[relation]]
+label = "shapes"
+target = "SL-255"
