@@ -1834,12 +1834,25 @@ three things came out of it that four review rounds had not.
   implying all of them are tested.
 
 The lesson generalises past this slice and is banked accordingly: **a reviewer
-who diagnoses well may still never remedy, and the framing is what decides
-which you get.** Four rounds of *what is wrong with this* bought four correct
-diagnoses and four author-built repairs with a bad survival rate. One round of
-*what would you write* bought a remedy with an author who is not the designer —
-which is the only thing § 10's opening paragraph says the author-run passes are
-constitutionally unable to supply.
+who diagnoses well may still never remedy, and the framing is what decides which
+you get.** Four reviewer/author cycles produced correct diagnoses followed by
+author-built repairs that did not survive the next adversarial read. At revision
+81 the method changed: `RV-354`'s raiser explicitly ceased acting as reviewer and
+co-authored the next repair. That change produced the callback grammar, the
+association invariant and the discriminating instruments recorded here; it also
+**spent the raiser's independence**, so the resulting repair is authored design
+rather than independent verification.
+
+That distinction is not bookkeeping, and it is the reason this paragraph does not
+end on the win. The raiser declined to verify `F-1` or `F-5` when offered, on the
+grounds that it would be adjudicating its own remedy and no longer holds the
+reviewer authority to adjudicate either — which is correct, and is the same
+authority argument § 10's opening paragraph makes against the two author-run
+passes. So the standing position is: this repair has a second author and no
+second opinion. If verification is wanted, the current text goes to a reviewer
+who has not been spent; if the owner disposes the pass without it, **the record
+should say that is what happened** rather than let a co-authored repair read as a
+verified one.
 
 ### 10.2 Attack these first
 
@@ -2448,17 +2461,16 @@ scope is the kernel-visible *behaviour* of invoking an opaque environment — th
 sixth class, and nothing else in this design was watching it.
 
 **Provenance, because it is the one thing that distinguishes this cut from the
-four before it.** The grammar, the striking of *observable effect*, the result-
-association clause and § 9.6's occurrence-distinct instrument were **co-authored
-with the external reviewer**, in an exchange conducted as design collaboration
-rather than as a review round — the reviewer was asked for the shape it would
-write, not for what was missing from mine. Every earlier `F-1` repair was
-author-constructed against a diagnosis, and every one was contested; the one
-finding on `RV-354` that closed cleanly, `F-2`, closed on a remedy the reviewer
-wrote out. That is a small sample and it is the sample there is. A later reader
-weighing how much to trust this section should know that its argument has an
-author who is not the designer, and should also know that this makes the *fifth*
-statement of a generalisation the first four attempts got wrong.
+four before it — and because it cuts both ways.** The callback grammar, the
+removal of *observable effect*, the association invariant and § 9.6's instrument
+were co-authored by the design author and `RV-354`'s raiser, after the raiser
+explicitly ceased acting as reviewer and assumed a co-author role. So this
+section's argument has an author who is not the designer, which no earlier `F-1`
+repair had. It also has **no independent verification**, which every earlier one
+at least had the opportunity of: the raiser cannot adjudicate a remedy it wrote,
+and said so when asked. A later reader should weigh both halves — and should
+know that this is the *fifth* statement of a generalisation the first four
+attempts got wrong.
 
 ### 7.3 What was considered and refused at design level
 
