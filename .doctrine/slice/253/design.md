@@ -56,8 +56,9 @@ document states the resulting system, not the route to it.
 ## 2. Current State
 
 All line numbers are against the working tree at `94d0b5603` and were read
-directly, not recalled. The review pass re-read every one of them; two were
-wrong and are corrected here (`RF-8`).
+directly, not recalled. Two review passes have now re-read every one of them:
+the first found two wrong (`RF-8`) and the second found two more (`RF-14`). All
+four are corrected here.
 
 ### 2.1 What the unit contains
 
@@ -94,6 +95,10 @@ This function is the design's centre of gravity and it names nothing
 mechanism-shaped. `Unproven` — probe held and control *also* held — is the
 `B4` defect class the round-6 split exists to expose: a control that cannot fire
 proves nothing.
+
+Note the two `..` patterns. The algebra reads `reason` and discards everything
+else `ArmResult::Indeterminate` carries; § 2.4's sixth backward reference is
+inside what those dots throw away.
 
 The verdict it feeds, at `:2689`:
 
@@ -162,9 +167,12 @@ fn verify_over(
 ) -> AdmissionVerdict
 ```
 
-**Five references point the wrong way for a split, not the three `DEC-196`
-enumerated.** Three are in the signature and two are in the body, and it is the
-body pair that every enumeration to date has walked past:
+**Six references point the wrong way for a split, not the three `DEC-196`
+enumerated.** Three sit in `verify_over`'s signature, two in its body, and the
+sixth in a *field* of a type the other kernel-bound function takes. Those are
+three distinct location classes, and each was found only after the previous one
+was closed — which is `F7`'s evidence and the reason § 5.1 stops relying on
+enumeration as the safeguard:
 
 - `rows: &[Row]` — `Row` owns `Delta`, which owns bubblewrap's removal
   vocabulary. A neutral function taking `&[Row]` drags the mechanism across.
@@ -176,17 +184,30 @@ body pair that every enumeration to date has walked past:
 - `Delta::Widened(fn(&Fixture) -> Vec<MountedPath>)` at `:2548` — a function
   pointer taking the bubblewrap fixture, sitting inside the type the neutral half
   would otherwise keep.
-- **The shell precondition at `:5299`** — `if !host.path_exists(Path::new(SHELL))`,
+- **The shell precondition at `:5300`** — `if !host.path_exists(Path::new(SHELL))`,
   returning `Unavailable { missing: SHELL, remedy: SHELL_REMEDY }`. `SHELL` is
-  `"/bin/sh"` at `:100` and the code's own comment says why it is tested:
-  *"Every payload runs under `/bin/sh -c`."* That is a statement about the
+  `"/bin/sh"` at `:100` and the code's own comment (`:5298-5299`) says why it is
+  tested: *"Every payload runs under `/bin/sh -c`."* That is a statement about the
   payload's probes, made inside the function that would become the kernel.
-  (Found by the review pass, `RF-3`.)
+  (Found by the first review pass, `RF-3`.)
 - **The host-descriptor derivation at `:5280`** — `host_descriptor()` at `:2825`
   reads `KERNEL_RELEASE` (`/proc/sys/kernel/osrelease`, `:491`) from disk. Not
   mechanism-shaped, but **I/O**, called from inside the would-be kernel and
   ignoring the `&dyn HostFacts` sitting in the parameter list beside it. (Found
-  by the review pass, `RF-9`.)
+  by the first review pass, `RF-9`.)
+- **`ArmResult::Indeterminate`'s `termination` field at `:848-853`** — the arm
+  result carries `termination: Termination` beside `stdout` and `stderr`, and
+  `Termination` is `backend.rs:751`, *"how a run ended"*, the same field
+  `Observation` (`backend.rs:770`) carries as the backend's own report of a run.
+  `row_verdict` is the second function bound for the kernel and takes `ArmResult`
+  on its parameter list, so this reference arrives through a type's **field** —
+  neither a signature nor a body, and never looked at. `row_verdict` does not
+  even read it (`:3177` matches `Indeterminate { reason, .. }`). It sits beside
+  an internal inconsistency worth naming: `Indeterminacy::BackendError`
+  deliberately launders `BackendError` to a `String` (`:881-884`) *"so the
+  verdict carries a rendering the backend cannot later change under it"* — the
+  sibling field escaped the same discipline. (Found by the second review pass,
+  `RF-10`.)
 
 `verify`'s fixture `OnceCell` at `:5217` was named as a further obstacle and is
 not one: `run_row` at `:5003` already takes `&Fixture` explicitly, so placing
@@ -217,17 +238,20 @@ never its name.
 `crates/doctrine-control/src/main.rs` holds the only two production consumers of
 the collapsed scalar — `admit` (`:153`) and `render_outcome` (`:217`) — and they
 are exactly the two functions `DEC-191` changes. Exit constants at `:60,63`.
-`render_verdict` (`:177`) builds the artefact's header line, which carries
+`render_verdict` (`:178`) builds the artefact's header line, which carries
 `backend=`, `os=`, `kernel=`, `arch=` and **`date=`** — the last of these is why
-§ 5.3's rename is source-side only.
+§ 5.3's rename is source-side only. It then emits one flat
+`row {id:?}={row:?}` line per row, with no grouping structure of any kind; § 5.4
+and § 9.1 are where that output's successor is constrained.
 
-`BackendId` lives at `backend.rs:811` and `Availability` at `:780`; both are
-imported by the kernel as types. `layering.toml` classifies `backend` as
+`BackendId` lives at `backend.rs:811` and `Availability` at `:780`; `DEC-197`'s
+re-cut moves both **into** the kernel, which is why § 5.1's edge argument runs
+the opposite way from the draft's. `layering.toml` classifies `backend` as
 `leaf` (`:261`) and `conformance` as `engine` (`:264`); `:257` carries the literal
 `backend verify` and is the only accepted-governance file in `DEC-194`'s rename
 radius. Leaf→leaf edges are already normal in this tree — `backend → config`,
-`capacity → config, host` (`:259-261`) — so a second leaf importing a leaf
-introduces no new edge class.
+`capacity → config, host` (`:259-261`) — so a leaf importing a leaf introduces no
+new edge class in either direction.
 
 The crate sits **outside every default gate selection**: `just gate`'s `test-all`
 names its packages (`-p doctrine -p cordage`) rather than using `--workspace`, and
@@ -370,6 +394,11 @@ at every boundary call in § 5 is *what does keeping this buy a reader, and what
 does it cost them*, and a size is the consequence of answering it, never the
 test.
 
+`P1` is a review check and not a machine one, which is why § 5.1 states a
+*positive* placement criterion beside it. Proportionality tells a reviewer what
+to weigh; it does not tell them where the boundary falls, and a principle that
+only ever argues against inclusion will eventually be argued past.
+
 The same lens applies to the work itself. `DEC-200`'s test carve costs real
 judgement across ~67 tests and is taken because the alternative spreads those 67
 calls thin across phases where each is made while doing something else.
@@ -386,8 +415,12 @@ not a better guard but a shape in which the failure cannot be written down — a
 closed enum reduced by exhaustive match has no empty case to be vacuously true
 about, and adding a floor member fails to compile.
 
-Applied again at the payload boundary: no kernel type names `Fixture`, so the two
-backward references (§ 2.4) vanish by construction rather than by re-plumbing.
+Applied again at the payload boundary: no kernel type names `Fixture`, so
+§ 2.4's `Fixture`-mediated references — `rows: &[Row]`, since `Row` owns `Delta`,
+and `Delta::Widened`'s fixture-typed function pointer — vanish by construction
+rather than by re-plumbing. **No count is stated here, deliberately** (`RF-13`):
+§ 2.4's has moved three times, and a principle is the wrong place to pin a
+number that keeps being wrong.
 
 ### P3 — Openness is a contract with a mechanism nobody has written
 
@@ -400,6 +433,11 @@ the *shape* of the name and never the membership.
 The converse is equally binding: where the kernel must **reason** about something
 — the floor — openness is a defect, because there is nothing to exhaustively
 match over.
+
+A corollary the design run had to learn the hard way, and which `DEC-197`'s
+re-cut now rests on: openness decides a type's *construction*, never its
+*ownership*. The consumer of a cross-mechanism contract owns the contract's
+shape, and mechanisms implement it.
 
 ### P4 — Publish the evidence; reduce only what must be reduced
 
@@ -420,9 +458,10 @@ The bar for a refactor of shared machinery is normally *suites green unchanged*.
 Here that is unachievable and asserting it would let the slice redefine its own
 bar silently (F3). So the invariant is stated at the level the suite actually
 measures — the nineteen row verdicts, four auxiliary claims and two unrowed
-readings — and everything permitted to differ is **enumerated in advance**, so
-the list is a closed licence rather than an open one. A difference not on the
-list is a regression, full stop.
+readings — and everything permitted to differ is fixed **in advance**, so the
+licence is closed rather than open and cannot be widened after the fact to fit
+whatever the code did. A difference the licence does not cover is a regression,
+full stop. § 9.1 carries the licence itself.
 
 This principle is what makes `EVD-022` load-bearing: the pre-split half of the
 bracket is uncapturable after the first line of code lands.
@@ -433,8 +472,9 @@ bracket is uncapturable after the first line of code lands.
 explicitly, and `conformance` already declares a layering edge to `backend`. The
 design's job is to re-key and narrow what is there — not to invent a new
 boundary beside it. Concretely: no generics ceremony for a second backend `OQ-1`
-has ruled out building, no second name for `BackendId` across the same dependency
-edge, and no re-classification of any existing layering unit.
+has ruled out building, no second name for `BackendId` anywhere (which is why
+`DEC-197` moves the type rather than re-exporting it), and no re-classification
+of any existing layering unit.
 
 The same instinct applies to the tests. They are carved into bands *before* the
 split, against stable types, so the split moves whole sub-modules instead of
@@ -448,9 +488,11 @@ at implementation, and nothing in this design depends on which spelling wins.
 What is settled is the *shape* — how many distinct things there are, which are
 closed and which are open, and which side of the seam each sits on.
 
-Several of this section's rulings were taken during the review pass rather than
-the draft, and they are marked `RF-n` where they appear. § 7.2 carries their
-reasoning; § 10 carries what the pass found.
+Several of this section's rulings were taken during a review pass rather than the
+draft, and they are marked `RF-n` where they appear — `RF-n` is this document's
+label for the design run's finding `fnd-n`. `RF-1`–`RF-9` are the first
+(agent hostile) pass; `RF-10`–`RF-14` the second. § 7.2 carries their reasoning;
+§ 10 carries what the passes found.
 
 ### 5.1 System Model
 
@@ -467,29 +509,31 @@ along files.
                         ┌──────────────▼───────────────────────┐
    engine tier          │ conformance.rs        (the PAYLOAD)  │
                         │   Row, Delta, ArmShape, Under, Arm   │
-                        │   run_arm, run_row, verify           │
+                        │   ArmResult, run_arm, run_row, verify│
                         │   PropertyRemoval, AuthorityGrant    │
                         │   ConformanceBackend                 │
+                        │   Table, Front, FrontCatalog         │
                         │   tables(), the fixture, the probes  │
-                        │   Front, host_descriptor(), the SHELL│
+                        │   host_descriptor(), the SHELL       │
                         └──────────────┬───────────────────────┘
                                        │  (one direction only)
    ┌───────────────────────────────────▼──────────────────────┐
    │ qualification.rs           (the KERNEL)      tier: leaf  │
-   │   RowId  = Floor | Assurance | Axis                      │
-   │   RowVerdict, row_verdict                                │
+   │   RowId = Floor | Assurance | Axis                       │
+   │   RowVerdict, ArmJudgement, Indeterminacy, row_verdict   │
    │   Floor, FloorReading, FloorStanding                     │
-   │   QualificationVerdict, Qualification, HostDescriptor    │
+   │   BackendId, Availability, HostDescriptor                │
+   │   QualificationVerdict, Qualification                    │
    │   Claim/AuxOutcome, Unrowed/Reading                      │
    │   qualify_over(...)          ← values only, no traits    │
-   └──────────────┬───────────────────────────┬───────────────┘
-                  │  BackendId, Availability  │
-   leaf tier   ┌──▼─────────┐          ┌──────▼──────┐
-               │ backend.rs │          │ host.rs     │
-               │ BackendId  │          │ HostFacts   │
-               │Availability│          │ SystemHost  │
-               │CapsuleBackend│        │             │
-               └────────────┘          └─────────────┘
+   │   imports std — and NO other module in this crate        │
+   └───────────────────────────────────▲──────────────────────┘
+                                       │  BackendId, Availability
+   leaf tier          ┌────────────────┴─────┐   ┌─────────────┐
+                      │ backend.rs           │   │ host.rs     │
+                      │ CapsuleBackend       │   │ HostFacts   │
+                      │ Termination, …       │   │ SystemHost  │
+                      └──────────────────────┘   └─────────────┘
 ```
 
 **Naming.** `qualification` for the kernel and `conformance` for the payload,
@@ -497,27 +541,86 @@ because `DEC-194` renames the mechanism axis to *qualification* and that is
 exactly what the kernel adjudicates; what remains in `conformance` is the
 bubblewrap suite that submits itself to it.
 
-**The kernel classifies as a `leaf`** (`DEC-197`). Its imports are `std` and two
-*types* from `backend` — `BackendId` and `Availability` — so it introduces no
-cycle and no new edge class. It names no trait and does not import `host` at all
-(`RF-3`, `RF-7`, `RF-9`; see below). `layering.toml` **gains one row** and
-nothing existing is re-classified:
+**What the kernel owns, stated as a criterion.** `P1` weighs each candidate but
+argues only against inclusion, and a boundary defended solely by *is this worth
+it?* drifts — five separate judgement calls have already been wrong in this run.
+So the positive rule, stated once:
+
+> The kernel owns the **adjudicative normal form** — the minimal
+> mechanism-independent inputs whose distinctions it actually observes, the
+> algebra of the claims it emits, and the identity and provenance that bind a
+> claim to what it is about. Nothing else.
+
+Read the three clauses as a filter. *Distinctions it observes* is why `Availability`
+moves and `ArmResult`'s diagnostics do not. *The claim algebra* is why
+`RowVerdict`, `Floor` and `Qualification` are kernel types. *Identity and
+provenance* is why `RowId`, `AssuranceKey`, `BackendId` and `HostDescriptor` are,
+and why `Front` — a label on a claim, reasoned about by nobody — is not.
+
+The criterion is deliberately **not** *whatever the verdict records*: that
+formulation would swallow any rendered diagnostic that happens to be printed
+beside a verdict, which is exactly how a kernel becomes a dumping ground. `P1`
+remains the review check on over-inclusion, and that residual is not
+machine-enforceable — no gate can ask whether a type earns its place.
+
+**The observational-equivalence test**, which makes the first clause mechanical
+rather than a feel:
+
+> Two payload values are **observationally equivalent** at the seam if
+> substituting one for the other can never change the kernel's verdict. Where
+> the quotient is *narrower* than the type, **project** it. Where the quotient
+> *is* the type, **move** it.
+
+Projecting a type whose quotient is the type produces an isomorphic copy: a
+second name, a second maintenance site, and a fresh judgement of the class that
+has now been wrong four times. Moving a type whose quotient is narrower drags the
+excess across the seam, which is `RF-10`. The test decides both, and it decides
+them the same way every time — which is its point.
+
+**The kernel classifies as a `leaf`** (`DEC-197`). Its only import is `std`: no
+module of `doctrine-control` is named in it at all, because `BackendId` and
+`Availability` move in rather than being imported. It names no trait and does not
+touch `host` (`RF-3`, `RF-7`, `RF-9`). `layering.toml` **gains one row**,
+`backend`'s existing row gains an edge to it, and nothing is re-classified:
 
 ```toml
-qualification = "leaf"      # the verdict algebra — → backend
+qualification = "leaf"      # the verdict algebra — imports nothing in-crate
 conformance   = "engine"    # the bubblewrap payload — → qualification, provision, …
 ```
 
 That classification is a **required exit criterion**, not an expected
 consequence: the architecture gate must classify the kernel `leaf` and pass.
+`ISS-326` does not void it — the gate exempts *edgeless* modules from
+classification, and `backend`, `conformance`, `transaction` and `main` all import
+the kernel, so it appears as an edge target and is flagged.
 
-**`BackendId` does not move.** The feared new `ADR-001` edge was a
-misreading — `engine` imports `engine + leaf`, and `conformance` already declares
-an edge to `backend`. Moving `BackendId` into the kernel would *invert* the edge
-and force `backend` to import the kernel, cascading into `transaction` and
-`provision`. Re-exporting it would be a second name for one type across one
-dependency edge (`P6`). `Availability` (`backend.rs:780`) is imported on the same
-terms and for the same reason.
+**`BackendId` and `Availability` move into the kernel** (`DEC-197`, re-cut
+2026-08-12). The draft left them in `backend.rs` for the kernel to import, on the
+argument that an open mechanism-minted newtype is the *contract's* business and
+not the verdict's. That argument never faced its counterexample: `inq-8` minted
+`AssuranceKey`, which § 5.2.1 describes as exactly `BackendId`'s shape and exactly
+its justification, and which `P3` places in the kernel. Two identically
+constructed identity atoms on opposite sides of one seam has no merits-based
+defence.
+
+The draft's edge argument was simply inverted. Moving `BackendId` does not force
+`backend` to import an *engine* unit and cascade into `transaction` and
+`provision`; it forces `backend` to import a **leaf**, which is a legal leaf→leaf
+edge with no cycle, and this tree already has several (`backend → config`,
+`capacity → config, host`). `transaction.rs`, `main.rs` and `conformance.rs`
+import from the kernel on the same terms. Nothing is re-exported, so one type
+keeps one name (`P6`).
+
+The prize is the boundary probe. A kernel that imports nothing from this crate
+compiles into a synthetic crate with **no fake module** — and therefore with no
+hand-maintained allowlist a later agent can widen to turn a red target green,
+which is the precise failure `R1` and `F7` exist to prevent.
+
+`Availability` **moves** rather than being projected, and the equivalence test is
+what settles it: every distinction an `Availability` carries is consumed by the
+kernel and reproduced in `Qualification::Unavailable`, so the quotient *is* the
+type and a projection would be an isomorphic copy. `ArmResult` is the same test
+answered the other way (§ 5.2.5).
 
 **`HostDescriptor` moves into the kernel; `host_descriptor()` does not.** The
 type (`conformance.rs:2803`) is three strings and names no mechanism, so it is a
@@ -526,38 +629,65 @@ verdict field like any other. Its *derivation* reads
 which is `RF-9`'s repair and § 5.3's purity claim made true rather than asserted.
 
 **What crosses the seam, and in which direction.** After the split, exactly one
-direction: payload → kernel. The current unit has **five** references pointing
-the other way, not the three `DEC-196` enumerated:
+direction: payload → kernel. The current unit has **six** references pointing the
+other way, not the three `DEC-196` enumerated:
 
 | # | reference | before | after |
 |---|---|---|---|
 | 1 | `rows: &[Row]` | kernel function takes the mechanism's row type | `qualify_over` takes `&[RowId]`; `Row` is payload-only |
-| 2 | `backend: &dyn ConformanceBackend` | kernel names a trait whose methods speak `PropertyRemoval`/`AuthorityGrant`/`Under` | kernel takes `BackendId` and `Availability` **as values**; no trait at all (`RF-7`) |
+| 2 | `backend: &dyn ConformanceBackend` | kernel names a trait whose methods speak `PropertyRemoval`/`AuthorityGrant`/`Under` | the parameter **drops**: the kernel takes `BackendId` and `Availability`, now its own types, as values (`RF-7`, `D10`) |
 | 3 | `Delta::Widened(fn(&Fixture) -> …)` | a fixture-typed fn pointer inside a would-be kernel type | `Delta` is payload-only; no kernel type names `Fixture` |
-| 4 | `host.path_exists(SHELL)` at `:5299` | the kernel tests for `/bin/sh`, a precondition of the *payload's* probes — the code's own comment reads *"Every payload runs under `/bin/sh -c`"* | the payload composes its own preconditions into the `Availability` it hands in (`RF-3`) |
+| 4 | `host.path_exists(SHELL)` at `:5300` | the kernel tests for `/bin/sh`, a precondition of the *payload's* probes — the code's own comment reads *"Every payload runs under `/bin/sh -c`"* | the payload composes its own preconditions into the `Availability` it hands in (`RF-3`) |
 | 5 | `host_descriptor()` at `:5280` | the kernel calls a disk read | the payload derives the descriptor and passes it as a value (`RF-9`) |
+| 6 | `ArmResult::Indeterminate { termination, … }` at `:848-853` | `Termination` (`backend.rs:751`) rides into the kernel inside a *field* of `row_verdict`'s parameter type, unread | the kernel takes `ArmJudgement`; the payload keeps `ArmResult` and projects into it (`RF-10`, § 5.2.5) |
 
 `verify`'s fixture `OnceCell` needed nothing: `run_row` already takes `&Fixture`
 explicitly, so placing both on the payload side dissolves it.
 
-**Two enumerations of this list have now been wrong** — `DEC-196`'s missed
-`ConformanceBackend`, and the draft's missed the shell precondition and the
-descriptor read. That is the third time the same class of error has been made by
-the same method, so the design stops relying on the method.
+**Three enumerations of this list have now been wrong.** `DEC-196`'s missed
+`ConformanceBackend`. The draft's missed the shell precondition and the descriptor
+read — both in `verify_over`'s *body*, where no enumeration had looked. The first
+review pass closed the body and missed a *field* of a type on the second
+kernel-bound function's parameter list. Signature, body, field: three location
+classes, each found only after the previous was closed, and every pass careful and
+believed complete at the time. The design therefore stops relying on the method.
 
 `R1`'s original answer — *the `leaf` classification is a machine check* — is
-necessary and **not sufficient**, because references 4 and 5 would both survive
-it: a kernel that re-declares `const SHELL: &str = "/bin/sh"` and calls
-`std::fs::read_to_string` imports nothing from `conformance` and classifies
-`leaf` cleanly. A leak by duplicated constant is invisible to a dependency gate.
+necessary and **not sufficient**, and the last three references each walk past it
+differently. References 4 and 5 survive it because a kernel that re-declares
+`const SHELL: &str = "/bin/sh"` and calls `std::fs::read_to_string` imports
+nothing from `conformance` and classifies `leaf` cleanly: a leak by duplicated
+constant is invisible to a dependency gate. Reference 6 survives it for a
+different reason — **the gate proves tier *direction*, not mechanism
+*neutrality***. `backend` is itself `leaf`, so a `backend`-resident mechanism type
+walks straight through. The six types `I7` enumerates only *appeared* to be
+gate-checked because they all happen to live in `conformance`.
 
-The design's answer is therefore structural rather than diagnostic: **the
-kernel's entry point takes values, and the only functions it takes are the three
-the payload supplies as closures.** No `&dyn` backend, no `&dyn HostFacts`, no
-path, no environment. A mechanism-shaped precondition then has no parameter to
-ride in on and nothing to be tested against — it cannot be *expressed* in the
-kernel, rather than being caught after it is. That is `P2` applied to the seam
-itself, and it is what `I10` pins.
+The design's answer is therefore in two parts, one structural and one mechanical.
+
+**Structural — the kernel's entry point takes values, and the only functions it
+takes are the three the payload supplies as closures.** No `&dyn` backend, no
+`&dyn HostFacts`, no path, no environment. A mechanism-shaped precondition then
+has no parameter to ride in on and nothing to be tested against — it cannot be
+*expressed* in the kernel, rather than being caught after it is. That is `P2`
+applied to the seam itself, and it is what `I10` pins.
+
+**Mechanical — a `harness = false` cargo test target `#[path]`-includes the
+kernel into a synthetic crate, and compilation is the assertion** (`DEC-197`).
+Because the kernel imports nothing else in this crate, that target needs no fake
+module, and so carries no allowlist to widen. `harness = false` is load-bearing:
+it stops `cfg(test)` activating and dragging `DEC-200`'s kernel test band in. A
+negative control is required at implementation, or the probe can be present and
+prove nothing.
+
+What the probe does **not** prove is std-only. The target stays inside the
+`doctrine-control` package, so that package's external dependencies remain
+nameable and a duplicated constant stays invisible. That residual is `R1`'s and it
+is the honest limit of the mechanical half. Rust offers no per-module import
+restriction inside one crate — `clippy.toml`'s `disallowed-types` is
+workspace-scoped — so the only shape that would make `I7` compiler-proven in
+production is a separate crate, which `IMP-404` holds and this slice declines on
+scope.
 
 ### 5.2 Interfaces & Contracts
 
@@ -588,10 +718,15 @@ pub(crate) enum FloorProperty {
 
 /// An assurance row's key. A `&'static str` newtype so it cannot be built from
 /// runtime text; no `Display`, so it cannot drift into a rendering. Exactly
-/// `BackendId`'s shape (backend.rs:811) and exactly its justification: the
-/// contract must bind mechanisms nobody has written yet.
+/// `BackendId`'s shape — which `DEC-197` now moves in here beside it — and
+/// exactly its justification: the contract must bind mechanisms nobody has
+/// written yet.
 pub(crate) struct AssuranceKey(&'static str);
 ```
+
+Placing these two side by side is what forced `DEC-197`'s re-cut. They are the
+same construction for the same reason, and the draft had them on opposite sides
+of the seam.
 
 **No `Front` type here** (`RF-5`, `D8`). Fronts are a payload concern; § 5.3
 says where they live and why the kernel does not name them.
@@ -694,6 +829,12 @@ over-engineering at one member and are not:
   would have made awkward and a third `Qualification` variant would have thrown
   away outright (`P4`).
 
+The floor's departure from the flat row list has a rendering consequence that is
+easy to miss and is not cosmetic: after the split, table A row 3 lives inside
+`Floor` and has **no** `(RowId, RowVerdict)` entry, so today's
+`row Property(DeniedCanonicalStateAndCredentials)=Proven` line has no successor
+unless one is derived. § 5.4 and § 9.1 derive it (`RF-11`).
+
 #### 5.2.3 The verdict
 
 ```rust
@@ -754,6 +895,9 @@ pub(crate) fn qualify_over(
 ) -> QualificationVerdict
 ```
 
+The first three are kernel-owned types after `DEC-197`'s re-cut, so this
+signature names nothing from another module of the crate.
+
 Five narrowings, each removing a mechanism name — or a way for one to arrive —
 from the kernel's vocabulary:
 
@@ -778,7 +922,8 @@ from the kernel's vocabulary:
   longer threaded through the kernel to reach the runner, because the runner
   already has one.
 
-The payload's side of the contract is one table type and one runner:
+The payload's side of the contract is one table, one label catalogue, one runner
+and one return envelope:
 
 ```rust
 // conformance.rs — the payload
@@ -787,7 +932,25 @@ struct Table { rows: Vec<Row> }
 impl Table {
     fn ids(&self) -> Vec<RowId>;                 // what it submits — DEC-189 membership
     fn row_for(&self, id: &RowId) -> &Row;       // total over its own ids — I9
-    fn front_of(&self, id: &RowId) -> Option<Front>;  // grouping, for rendering — D8
+    fn front_catalog(&self) -> FrontCatalog;     // the labels, lifted out — D8, D11
+}
+
+/// The front labels and nothing else — what the command tier is handed for
+/// rendering. Keyed by `AssuranceKey`, which is what the verdict actually
+/// carries; only assurance rows have fronts.
+struct FrontCatalog { /* AssuranceKey → Front */ }
+
+impl FrontCatalog {
+    /// Total over the keys the same table submitted (`I9`), so no `Option`.
+    fn front_of(&self, key: &AssuranceKey) -> &Front;
+}
+
+/// What the payload's entry point returns: the verdict, and the labels needed to
+/// render it. Transient — consumed by `main.rs` in the process that built it and
+/// never stored (`D8`, `D11`; § 10.2 carries the standing caveat).
+struct QualificationRun {
+    verdict: QualificationVerdict,
+    fronts: FrontCatalog,
 }
 
 fn run_row(backend: &BubblewrapBackend, row: &Row) -> RowVerdict;
@@ -800,18 +963,68 @@ refused — its error arm is unreachable from the production path, and an
 unreachable arm invites a fabricated verdict at the one place a fabricated
 verdict would be invisible.
 
-#### 5.2.5 The two-arm algebra, unchanged
+`FrontCatalog` is `RF-12`'s repair and its shape is `D11`. The draft gave `Table`
+a `front_of` method and told the command tier to call it, and nothing anywhere
+handed the command tier a `Table`: `render_verdict` takes only the verdict, and
+the payload builds its table inside its own entry point (`conformance.rs:5254`).
+The catalogue is what closes that, and it is keyed by `AssuranceKey` rather than
+by `RowId` because a key is what the verdict's `assurance` vector holds — the
+draft's `&RowId` signature would have made every call site rewrap
+`RowId::Assurance(key)` first.
 
-`row_verdict` moves into the kernel **byte-identical**. It is the one function
-in this slice that should not change at all, and § 9's characterisation test
-pins that.
+#### 5.2.5 The two-arm algebra — the judgement moves, the diagnostics do not
+
+`row_verdict` moves into the kernel; what it *takes* narrows on the way
+(`RF-10`). The draft moved it **byte-identical**, `ArmResult` and `Indeterminacy`
+travelling with it on the claim that they name no mechanism. That claim was
+false, and the byte-identical claim goes with it:
+`ArmResult::Indeterminate` (`conformance.rs:848-853`) carries
+`termination: Termination` beside `stdout` and `stderr`, and `Termination`
+(`backend.rs:751`) is the backend's own report of how a run ended — the same
+field `Observation` (`backend.rs:770`) carries.
+
+§ 5.1's equivalence test settles the repair mechanically. `row_verdict` matches
+`ArmResult::Indeterminate { reason, .. }` (`:3177`) and discards `termination`,
+`stdout` and `stderr`; two `ArmResult`s differing only in those three fields can
+never change the verdict. The quotient is strictly *narrower* than the type, so
+this one **projects**:
 
 ```rust
-pub(crate) fn row_verdict(probe: ArmResult, control: ArmResult) -> RowVerdict
+// the kernel — what an arm showed, reduced to what the algebra observes
+pub(crate) enum ArmJudgement {
+    Held,
+    Failed,
+    Indeterminate(Indeterminacy),
+}
+
+pub(crate) fn row_verdict(probe: ArmJudgement, control: ArmJudgement) -> RowVerdict
 ```
 
-`ArmResult` and `Indeterminacy` come with it: they describe what an arm showed,
-in vocabulary (`held`/`failed`/`indeterminate`) that names no mechanism.
+```rust
+// the payload — keeps the diagnostics that make an indeterminate arm triageable
+impl ArmResult {
+    fn into_judgement(self) -> ArmJudgement { /* … */ }
+}
+```
+
+`Indeterminacy` travels into the kernel with the judgement. It is closed at four
+variants (`EX-11`) and every one names a state of the *arm* rather than of the
+mechanism — and `Indeterminacy::BackendError` already launders `BackendError` to
+a `String` (`:881-884`) *"so the verdict carries a rendering the backend cannot
+later change under it"*. That laundering is the precedent; `termination` is the
+sibling field that escaped the same discipline, and the projection applies it.
+
+**What this costs.** The function's *body* is unchanged — the same nine-cell
+match, the same arms, the same comments — but its signature is not, so § 9.6's
+`row_verdict_is_unchanged` cannot be a byte comparison. It becomes a truth table
+over all nine probe/control pairs, plus a projection test asserting that no
+diagnostic field can move a judgement. The existing
+`an_indeterminate_arm_carries_its_termination_and_output` (`:6176`) survives
+unchanged on the payload side, where it now asserts what `ArmResult` carries
+rather than what the kernel receives.
+
+**The alternative refused** was to leave `row_verdict` payload-side entirely,
+which the finding offered as the cheaper repair. § 7.3 records why it is not.
 
 ### 5.3 Data, State & Ownership
 
@@ -839,9 +1052,10 @@ types are moving under `DEC-194` regardless, so the rename costs a line each and
 avoids a second pass over the same call sites.
 
 **The rename is source-side only** (`RF-2`, `D9`). `render_verdict` emits
-`date={}` on the verdict's header line, and § 9.1's list of permitted output
-differences is closed at three. Changing the rendered key would be a fourth, so
-the rendered key stays `date=` and the Rust identifiers change beneath it. The
+`date={}` on the verdict's header line, and § 9.1's licence does not cover a
+change to it: the header line survives the split unaltered, and re-spelling one
+of its keys buys a source reader nothing they do not already get from the Rust
+rename. So the rendered key stays `date=` and the identifiers change beneath it. The
 rendered spelling is worth revisiting; it is not worth spending this slice's
 preservation licence on.
 
@@ -850,9 +1064,12 @@ Ownership, stated as a table because the boundary calls are the design:
 | thing | owner | why |
 |---|---|---|
 | What a row verdict *means* | kernel | the judgement; mechanism-independent by construction |
+| Backend **identity** and **availability** | kernel | `DEC-197` re-cut: `BackendId` is `AssuranceKey`'s construction, and every `Availability` distinction is consumed by the verdict |
 | Floor **membership** | kernel | `ADR-020`'s territory; a mechanism may not vote on the authority floor |
 | Assurance **membership** | payload | `DEC-189` — a function of the mechanism's available deltas |
 | Assurance **key shape** | kernel | the contract binding mechanisms nobody has written (`P3`) |
+| What an arm **showed** | kernel | `ArmJudgement` — the distinctions the algebra observes |
+| An arm's **diagnostics** (`termination`, `stdout`, `stderr`) | payload | never read by the algebra; they make an arm triageable, not judgeable (`RF-10`) |
 | Fronts, wholly | payload | the kernel neither reduces over them nor validates them (`D8`) |
 | Axis membership | kernel | `REQ-450`'s five, a property of the transaction |
 | How a row is *run* | payload | arms, deltas, fixture, probes — all bubblewrap-shaped |
@@ -867,19 +1084,28 @@ define away the thing it is being tested for. The assurance profile is open and
 payload-owned because `REQ-459` criterion 3 — as narrowed by `DEC-201` — says a
 second mechanism proves the same floor and publishes *its own* profile.
 
-**Where the fronts live** (`RF-5`, `D8`). The draft made front-labelled
-rendering a `CPT-002` obligation and gave it nothing to compute from. They live
-wholly in the payload: its table declares each row's front, `Table::front_of`
-answers for one, and the command tier consults it when rendering. The kernel
-never names a front.
+**Where the fronts live** (`RF-5`, `D8`; transport by `RF-12`, `D11`). The draft
+made front-labelled rendering a `CPT-002` obligation and gave it nothing to
+compute from. They live wholly in the payload: its table declares each row's
+front, `FrontCatalog` is the lookup lifted out of that table, and the payload's
+entry point returns the catalogue beside the verdict so the command tier has it
+in hand at render time.
 
 Two arguments settle the placement, and they point the same way. The kernel
 neither reduces over fronts nor validates them, so a `Front` in the kernel would
-be a type a reader must load to understand nothing the kernel does (`P1`). And
-`A4` keeps the front list a sketch — a shape the kernel defines but never reasons
-about is the one case `P3` does *not* cover, because `P3`'s justification is that
-the kernel must name what it reasons about. The verdict is rendered by the same
-process that built it, so nothing is lost by the label arriving at render time.
+be a type a reader must load to understand nothing the kernel does (`P1`), and it
+fails the § 5.1 criterion outright — it is a label on a claim, not a distinction
+the claim algebra observes. And `A4` keeps the front list a sketch — a shape the
+kernel defines but never reasons about is the one case `P3` does *not* cover,
+because `P3`'s justification is that the kernel must name what it reasons about.
+The verdict is rendered by the same process that built it, so nothing is lost by
+the label arriving at render time.
+
+What the command tier is handed is the **catalogue and not the table**. Handing
+it a `Table` would put the probes, the deltas and the fixture in the command
+tier's hands for the sake of a string, and a free global front lookup could be
+asked about a key from a table nobody submitted — which weakens `I9`, the one
+thing making `run_row` infallible. `D11` records the call.
 
 **The empty profile is legal.** `DEC-189` guarantees a mechanism whose available
 deltas yield no row for some front. An empty `assurance` vector is a truthful
@@ -905,7 +1131,9 @@ the line are the payload's, and that placement is `RF-3`'s and `RF-9`'s repair:
         │                                     no observations to report)
         ▼
   for id in rows:  run_row(id)          ← payload maps id → Row, runs both arms,
-        │                                  calls kernel row_verdict(probe, control)
+        │                                  projects each ArmResult through
+        │                                  into_judgement(), then calls the
+        │                                  kernel's row_verdict(probe, control)
         ▼
   FloorReading::from_rows(&verdicts)
         │
@@ -913,10 +1141,15 @@ the line are the payload's, and that placement is `RF-3`'s and `RF-9`'s repair:
         ▼                                   (the rows that ran are still published)
   Qualification::Ran { floor, assurance, axes, auxiliary, observations }
         │
+  ── payload ──────────────────────────────────────────────────────────
+  QualificationRun { verdict, fronts: table.front_catalog() }
+        │
         ▼
-  main.rs:  floor.standing() ──► Held           → EXIT_QUALIFIED
-                              └► Breached       → EXIT_DISQUALIFIED
-                              └► NotEstablished → EXIT_DISQUALIFIED
+  ── command tier: main.rs ────────────────────────────────────────────
+  floor.standing() ──► Held           → EXIT_QUALIFIED
+                    └► Breached       → EXIT_DISQUALIFIED
+                    └► NotEstablished → EXIT_DISQUALIFIED
+  each assurance row rendered with fronts.front_of(&key)
 ```
 
 The shell-absence path keeps its current behaviour exactly — a host with no
@@ -940,13 +1173,34 @@ missed one leaves a recipe or a rule referring to a verb that no longer exists:
   and four comments (`:108`, `:114`, `:129`, `:143`) name the verb in prose;
 - `main.rs` — the verb's own definition and the exit constants.
 
-**What the operator sees changes, and that is the point.** Today: one word.
-After: the floor's standing as a claim, then every assurance row grouped under
-its front and every axis with its own verdict, rendered as **escape** fronts so a
-strong profile is not read as a strong safety claim (`CPT-002`). `main.rs` gets
-the grouping from the payload's `Table::front_of` (`D8`), which is the one place
-the front list lives. The rendering is `main.rs`'s and is on `DEC-199`'s
-permitted-to-differ list.
+**What the operator sees changes — and the change is *constrained*, not
+licensed** (`RF-11`). Today the artefact is a header line, one `outcome=` word,
+one flat `row {id:?}={row:?}` line per row, then claims and observations. After
+the split it is the same artefact with the floor's standing as a claim, every
+assurance row carrying its own front label, and the axes unchanged. The draft
+described this as *"grouped under its front … rendered as escape fronts"* and
+put the difference on § 9.1's permitted list, which does not reach: group headers
+are new lines, not a re-spelling of an existing one. So the rendering is
+constrained instead, and § 9.1 derives every line of it:
+
+- **No standalone group headers.** Grouping is carried by *ordering* alone: the
+  assurance block is ordered by front, and each line names the front it is under.
+  A header line has no pre-split predecessor and nothing would derive it.
+- **One self-contained line per assurance row**, carrying front, key and verdict
+  together. This is the direct successor of today's `row …=` line, and it is
+  where `CPT-002`'s **escape** framing is applied so a strong profile is not read
+  as a strong safety claim.
+- **The established floor row keeps a `row …=` successor**, derived from
+  `FloorReading` rather than from the row list. Without this the line simply
+  disappears when the row moves into `Floor` (§ 5.2.2) — a deletion, which no
+  key-spelling licence covers.
+- **The five axis lines are byte-identical.** The renderer reconstructs
+  `RowId::Axis(axis)` from the verdict's `axes` vector, so `{:?}` produces the
+  text it produces today, unchanged.
+
+`main.rs` reads the labels from the `FrontCatalog` the payload returns beside the
+verdict (`D8`, `D11`, § 5.2.4) — not from the `Table`, which would hand the
+command tier the probes and the fixture for the sake of a string.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -974,20 +1228,31 @@ permitted-to-differ list.
 - **`I6` — Unrowed observations carry no verdict.** There is no slot. Adding one
   is a type change visible in a diff.
 - **`I7` — No kernel type names a mechanism type.** No `Fixture`, no `Delta`, no
-  `PropertyRemoval`, no `AuthorityGrant`, no `Under`, no `ConformanceBackend`.
-  The architecture gate's `leaf` classification is the machine check — for this
-  invariant, and only for this one.
+  `PropertyRemoval`, no `AuthorityGrant`, no `Under`, no `ConformanceBackend` —
+  and no `Termination`, which is the one `RF-10` found riding in inside a field.
+  The machine check is § 5.1's **compile probe**, a `harness = false` target
+  building the kernel as a synthetic crate with no fake module. It is explicitly
+  **not** the architecture gate's `leaf` classification: the gate proves tier
+  direction, not mechanism neutrality, and `backend` is itself `leaf`, so a
+  `backend`-resident mechanism type walks straight through it. The probe's own
+  residual — a fact re-derived from `std`, or an external dependency of the
+  `doctrine-control` package — belongs to `R1`.
 - **`I8` — The nineteen row verdicts are invariant across the split.** Four
   auxiliary claims and two unrowed readings likewise. `DEC-199`; § 9 carries the
   instruments.
-- **`I9` — The row list and the row runner come from one payload table.**
-  `Table::ids()` produces what is submitted and `Table::row_for` is total over
-  it, so the kernel cannot be handed an identity the payload cannot construct.
-  This is why `run_row` is infallible (`RF-6`).
+- **`I9` — The row list, the row runner and the front catalogue come from one
+  payload table.** `Table::ids()` produces what is submitted, `Table::row_for` is
+  total over it, and `FrontCatalog` is derived from the same value, so the kernel
+  cannot be handed an identity the payload cannot construct and the command tier
+  cannot ask for a label on a key nobody submitted. This is why `run_row` is
+  infallible (`RF-6`) and why `front_of` returns no `Option` (`RF-12`).
 - **`I10` — The kernel takes values and closures, and nothing else.** No `&dyn`
   backend, no `&dyn` host, no path, no environment, no I/O. A mechanism-shaped
   precondition has no parameter to arrive on, which is what makes `RF-3`'s and
-  `RF-9`'s class unrepresentable rather than merely caught (§ 5.1).
+  `RF-9`'s class unrepresentable rather than merely caught (§ 5.1). Note its
+  limit, which `RF-10` demonstrated: `I10` is about the parameter *list*, and a
+  mechanism type can still arrive inside a *field* of a value that satisfies it.
+  `I7` and the compile probe are what cover that.
 
 #### Assumptions
 
@@ -1014,23 +1279,33 @@ permitted-to-differ list.
 | A floor row `Indeterminate` | `Breached` → disqualified | `I3`; indeterminacy is not a pass |
 | Backend unavailable | `Qualification::Unavailable`, no rows, no claims, no observations | nothing ran, so there is nothing read to report; `POL-002` facet 3 |
 | Host without a shell | `Unavailable`, not a violated row | preserved exactly; the payload now composes it (`RF-3`) |
+| An indeterminate arm with a `Termination` the kernel might key on | not representable — the kernel receives `ArmJudgement`, which has no such field | `RF-10`; the projection is where the field is dropped |
 | A mechanism mints a key colliding with another's | both publish under one key | keys are mechanism-scoped in meaning; the verdict records `backend: BackendId`, so a reader always knows whose profile they are reading |
-| Two rows share a front | both render under it | fronts label rather than key; nothing indexes or reduces by them |
+| Two rows share a front | both render under it, adjacent by the front ordering | fronts label rather than key; nothing indexes or reduces by them |
+| An axis is asked for a front | not representable — `FrontCatalog` is keyed by `AssuranceKey` | axes belong to no escape front (§ 5.2.1) |
 | A payload emits a `RowId::Floor` the kernel does not know | not representable — `FloorProperty` is closed | `P2` |
 | The kernel is handed an id the payload cannot construct | not reachable — `ids()` and `row_for` come from one table | `I9` |
 
 <!-- doctrine:section sec-10 -->
 ## 10. Review Notes
 
-One review pass has been conducted — an agent hostile pass at run revision 43,
-against the draft at `499c2ebbc`, with every code claim re-read in the working
-tree. It raised nine findings, `fnd-1` … `fnd-9`, all dispositioned; § 10.1
-records what they changed. This section is written by the author of the thing
-being reviewed and is still not to be trusted as a complete list.
+Two review passes have been conducted. Both were agent hostile passes run against
+the working tree rather than against the document alone, and **both were run by
+the design's author**, which is the one thing neither could do anything about:
+they cannot disagree with the design's own framing. The external adversarial pass
+is still unspent.
 
-### 10.1 What the first pass changed
+`RF-n` is this document's label for the design run's finding `fnd-n` — the two
+numbering schemes are the same sequence.
 
-Four findings changed the design's shape rather than its prose:
+| pass | run revision | against | findings | outcome |
+|---|---|---|---|---|
+| first | 43 | the draft at `499c2ebbc` | `RF-1` … `RF-9` | dispositioned at rev 45, integrated at rev 46 |
+| second | 50 | the integrated design | `RF-10` … `RF-14` | three blocking, two nits; integrated here |
+
+### 10.1 What the passes changed
+
+**The first pass — four shape changes.**
 
 - **`RF-1` → `D7`.** `FloorStanding::NotEstablished` was unreachable:
   `Qualification::Ran` held a total `Floor`, and `standing()` matched only `Held`
@@ -1045,57 +1320,98 @@ Four findings changed the design's shape rather than its prose:
 - **`RF-5` → `D8`.** Fronts were an obligation in § 5.4 with no type, field or
   contract function to compute them from. They are now wholly payload-side.
 - **`RF-2` → `D9`.** `D5`'s rename would have changed the rendered header line,
-  which § 9.1's closed licence does not permit. The rename is source-side only.
+  which this slice's preservation licence does not cover. The rename is
+  source-side only.
 
 Two changed a claim without changing the design: `RF-4` (both instruments need
 `bwrap`, not one) and `RF-8` (two line cites). `RF-6` was dispositioned by
 stating `I9` rather than by changing a type.
 
-**The finding that should worry a second reviewer most is `RF-3`/`RF-9`, and not
-because of what they were.** Three enumerations of *what crosses the seam
-backwards* have now been made, each careful, each believed complete, and each
-wrong — two of five, then three of five. The draft's answer to that risk was the
-`leaf` classification, and it would have caught neither of the two it missed.
-§ 3.2 `F7` and § 5.1 carry the structural answer taken instead.
+**The second pass — three more shape changes, and a governance re-cut.**
+
+- **`RF-10` → `D12`, and `DEC-197` re-cut.** A **sixth** backward reference, and
+  the first found in a *field* rather than in a signature or a body:
+  `ArmResult::Indeterminate` carries `termination: Termination`
+  (`backend.rs:751`), which `row_verdict` never reads. Two repairs followed. The
+  kernel now takes `ArmJudgement` and the payload projects into it (`D12`),
+  which costs § 5.2.5's byte-identical claim. And the finding's third
+  consequence — that `I7`'s named machine check *cannot fire*, because the
+  layering gate proves tier direction and `backend` is itself `leaf` — forced
+  `DEC-197`'s placement rider to be re-cut: `BackendId` and `Availability` move
+  **into** the kernel, which then imports nothing else in the crate, and `I7`'s
+  check becomes the compile probe.
+- **`RF-11` → the rendering is constrained, not licensed.** `D8`'s front-grouped
+  output was a fourth rendered difference on a licence closed at three, and the
+  floor row's departure from the flat row list was a fifth. Widening the licence
+  was refused for `D9`'s reason. § 5.4 now constrains the rendering so every
+  post-split line has a pre-split predecessor, and § 9.1 carries the relation.
+- **`RF-12` → `D11`.** `D8` gave the command tier a method it had no route to
+  call. The payload now returns a `FrontCatalog` beside the verdict.
+
+`RF-13` and `RF-14` were nits and changed prose: a stale count in `P2` and two
+off-by-one cites.
+
+**The finding that should worry a third reviewer most is `RF-10`, and not
+because of what it was.** Four enumerations of *what crosses the seam backwards*
+have now been made — `DEC-196`'s, the draft's, and each review pass's — every one
+careful, every one believed complete, and every one wrong. Three location classes
+have been found so far: parameter list, function body, and a field of a
+parameter's type. Each was found only after the previous had been closed, and the
+`leaf` classification the design originally leaned on would have caught none of
+them. § 3.2 `F7` and § 5.1 carry the structural and mechanical answers taken
+instead. **The right prior for a third pass is that there is a fourth location
+class**, not that the list is finally complete.
 
 ### 10.2 Attack these first
 
-- **`D1` / `I3` — only `Proven` holds the floor.** The one substantive ruling in
-  § 5 with no banked decision behind it. `DEC-195` settled that the floor is
-  reduced; it said nothing about what `Unproven` does to it. The ruling is
-  owner-confirmed and scoped to the floor, but the argument is mine: *a control
-  that did not fire licenses no inference, so it cannot hold an authority floor*.
-  If that is wrong, `FloorStanding` is wrong.
-- **`D10` — does the value-only entry point actually close `F7`'s class?** The
-  claim is that a mechanism-shaped precondition now has no parameter to ride in
-  on. Test it adversarially: construct a leak that survives. `R1`'s stated
-  residual is a kernel that re-derives a fact from `std` alone, and nothing in
-  this design catches that one — is there a cheaper leak than that?
-- **`D7` — is `FloorReading` a wrapper too many?** Two types and a
+Refreshed after the second pass; items it answered are marked and kept, because
+what a pass *closed* is as useful to a later reviewer as what is open.
+
+- **`D1` / `I3` — only `Proven` holds the floor.** Still open, and still the one
+  substantive ruling in § 5 with no banked decision behind it. `DEC-195` settled
+  that the floor is reduced; it said nothing about what `Unproven` does to it.
+  The ruling is owner-confirmed and scoped to the floor, but the argument is
+  mine: *a control that did not fire licenses no inference, so it cannot hold an
+  authority floor*. If that is wrong, `FloorStanding` is wrong. Neither pass
+  touched it.
+- **`D7` — is `FloorReading` a wrapper too many?** Still open. Two types and a
   three-variant standing for a set of size one. `D2` and `D3` were each defended
   on their own; `D7` is the third layer and was added under review pressure,
   which is exactly when ceremony gets added without noticing. If
   `floor: Result<Floor, FloorProperty>` reads acceptably in a verdict, `D7` is
   ceremony and `R6` is real rather than mitigated.
-- **`D8` — fronts in the payload.** The argument rests on the verdict being
-  rendered by the process that built it. If a verdict is ever serialised, stored,
-  or compared across runs, that argument fails and the front labels are lost.
-  Check whether anything downstream of this slice wants that.
-- **The `Qualification::Ran` shape.** Four collections in one variant
+- **The `Qualification::Ran` shape.** Still open. Four collections in one variant
   (`assurance`, `axes`, `auxiliary`, `observations`) plus a `floor`. Ask whether
   `axes` genuinely belongs beside `assurance` rather than inside it — the design
   says a freshness axis is a property of the transaction rather than of the
-  mechanism, which is a real distinction, but it is the boundary call in § 5.2
-  I am least sure of. The first pass endorsed keeping them separate on `CPT-002`
-  grounds; that endorsement came from the same author and is worth re-testing.
+  mechanism, which is a real distinction, but it is the boundary call in § 5.2 I
+  am least sure of. Both passes endorsed keeping them separate on `CPT-002`
+  grounds; both endorsements came from the same author.
+- **`D10` — does the value-only entry point close `F7`'s class?** **Answered:
+  no.** The second pass was invited to find a leak cheaper than `R1`'s
+  std-re-derivation residual and found one — `RF-10`, arriving inside a field of
+  a value that satisfies `D10` perfectly. The invitation stands in its new form:
+  `I10` covers the parameter list and the compile probe covers in-crate imports;
+  find the third thing neither sees.
+- **§ 5.1's placement criterion is new and untested.** The adjudicative normal
+  form and the observational-equivalence test were written *in response to* five
+  wrong judgement calls, which is the worst moment to trust a new rule. Run them
+  backwards over the boundary calls already made and check they reproduce them —
+  and if one does not, the criterion is wrong or the call was.
+- **`D8` / `D11` — fronts in the payload.** Partly answered. `RF-12` closed the
+  transport gap; the deeper argument still rests on the verdict being rendered by
+  the process that built it. If a verdict is ever serialised, stored, or compared
+  across runs, that argument fails and the front labels are lost. Check whether
+  anything downstream of this slice wants that.
 
 ### 10.3 Where the design is deliberately incomplete
 
 Not oversights; flagged so a reviewer does not spend effort finding them.
 
 - **Type names are provisional** (`DEC-198`). `qualification`, `FloorProperty`,
-  `AssuranceKey`, `FloorReading`, `FloorStanding` — all settle at implementation.
-  Argue the shapes, not the spellings.
+  `AssuranceKey`, `FloorReading`, `FloorStanding`, `ArmJudgement`,
+  `FrontCatalog`, `QualificationRun` — all settle at implementation. Argue the
+  shapes, not the spellings.
 - **`OQ-3` (a possible fifth `DEC-189` row) is not resolved here** and does not
   need to be: an open `AssuranceKey` admits whatever membership the analysis
   lands on. It belongs to `DEC-189`.
@@ -1105,8 +1421,14 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
   form *this is more than a few hundred lines* is answered by `P1` and § 3.4, and
   the owner has ruled that the numbers are not a criterion.
 - **The payload's `Table` type is sketched, not designed.** § 5.2.4 gives it
-  three methods because those are the three the kernel's contract needs. How it
-  is built, and whether it subsumes `tables()`, is implementation.
+  three methods, and `RF-12` corrected the reason: two of them (`ids`, `row_for`)
+  are what the kernel's contract needs, and the third (`front_catalog`) is what
+  the *command tier* needs, which is a different consumer and was the source of
+  the gap. How the table is built, and whether it subsumes `tables()`, is
+  implementation.
+- **The compile probe's negative control is not specified.** `DEC-197` requires
+  one — a probe that cannot fail is a probe that proves nothing — but what it
+  looks like is an implementation call.
 
 ### 10.4 Known weak points in the evidence
 
@@ -1116,26 +1438,33 @@ Not oversights; flagged so a reviewer does not spend effort finding them.
   baseline claim, which is the corroboration; but the pre half of the bracket is
   one execution, and it is now unrepeatable at that commit in this working tree's
   future.
-- **§ 2's line numbers are against `94d0b5603`.** They were re-read during
-  drafting — two cited in the research artefact were wrong and were corrected
-  then (`ConformanceBackend` is `:638` not `:630`; `Delta::Widened` is `:2548`
-  not `:2547`) — and re-read again by the first review pass, which found two more
+- **§ 2's line numbers are against `94d0b5603`, and "verified twice" was not
+  enough.** They were re-read during drafting (two cited in the research artefact
+  were wrong: `ConformanceBackend` is `:638` not `:630`; `Delta::Widened` is
+  `:2548` not `:2547`), re-read by the first review pass, which found two more
   (`RF-8`: `BackendId` is `:811` not `:805`; `AdmissionVerdict` is `:2689` not
-  `:2688`). Every cite in this document has now been verified twice. That is a
-  statement about this document only: a cite introduced after this point carries
-  no such provenance.
+  `:2688`) — and this document then claimed every cite had been verified twice.
+  The second pass falsified that immediately, finding two more (`RF-14`: the
+  shell precondition is `:5300` not `:5299`, the comment being `:5298-5299`;
+  `render_verdict` is `:178` not `:177`). Both were off-by-one against a
+  preceding comment line, which is now a known failure mode of this document's
+  cites rather than a coincidence. **No count of passes is claimed here.** What
+  can be said is narrower and checkable: `RF-14` re-read the remaining cites
+  against the same tree and reported them clean, and a cite introduced after this
+  point carries no provenance at all.
 
 ### 10.5 Conformance to governance, stated for checking
 
 | authority | how this design answers to it |
 |---|---|
 | `ADR-020` | The floor sits inside the authority the ADR already grants; step 5 admission is named and carries no outcome field. Not reopened (`A1`). |
-| `ADR-001` | Kernel classified `leaf`, importing `std` plus two types from `backend`; `layering.toml` gains one row, nothing re-classified. Leaf→leaf edges already exist in this tree. Machine-checked (`I7`). |
+| `ADR-001` | Kernel classified `leaf`, importing `std` and **no other module of this crate** (`DEC-197` re-cut); `layering.toml` gains one row and `backend`'s row gains an edge to it, with nothing re-classified. Leaf→leaf edges already exist in this tree. The gate is the check on the *classification*; `I7`'s neutrality claim is checked by § 5.1's compile probe instead, because the gate proves tier direction only. |
 | `STD-001` | Exit constants and the verb literal stay single-source through the rename; `layering.toml:257` carries the verb and is in the rename radius. |
 | `POL-002` | Facet 3's `Unavailable { missing, remedy }` survives, and is *promoted* — it lifts to the top of the verdict rather than sitting inside a row-failure enum. The shell-absence case keeps the same shape from the payload's side (`D10`). |
 | `RFC-025` | *"Not ranked"* does not become *"nothing can fail"*: the floor is closed, reduced, and cannot be vacuously held (`I2`, `I4`). |
 | `ADR-021` | No `unsafe` added in the kernel (`A3`). |
 | `AGENTS.md` pure/imperative split | Honoured by the kernel after the split, and **not** honoured by the code today (`RF-9`, § 3.3). The kernel performs no I/O (`I10`). |
+| `AGENTS.md` behaviour-preservation gate | Not literally satisfiable across three type-shape changes, which is why `DEC-199` restates the bar at the level the suite measures. § 9.1 carries the restatement and `EVD-022` the pre-split half of the bracket. |
 
 <!-- doctrine:section sec-6 -->
 ## 6. Open Questions & Unknowns
@@ -1203,7 +1532,7 @@ the design-local rulings taken while writing § 5 that no record covers.
 |---|---|---|
 | `DEC-195` | floor + profile + a named admission axis carrying no outcome | the verdict's shape; floor membership is row 3 alone |
 | `DEC-196` | the seam cuts at row **identity**, not at the row | what is kernel and what is payload |
-| `DEC-197` | the kernel classifies `leaf`; `BackendId` does not move | where the kernel sits in `ADR-001`'s map |
+| `DEC-197` | the kernel classifies `leaf`; `BackendId` and `Availability` move into it | where the kernel sits in `ADR-001`'s map, and what it may import |
 | `DEC-198` | row identity splits: closed floor key, open assurance key, closed axis | how one type stopped having to be both closed and open |
 | `DEC-199` | the preservation bar is the nineteen row verdicts | what *green* means for the rest of this slice |
 | `DEC-200` | test bands carved before the split, two bands | when the ~67-test triage is paid for |
@@ -1221,12 +1550,24 @@ the three *shape* changes (`DEC-196`, `DEC-197`, `DEC-198`) that make *suites
 green unchanged* literally false and force the bar to be restated. `DEC-200` and
 `DEC-201` are the two costs the others incur.
 
+The composition also runs backwards once, and that is what re-cut `DEC-197`.
+`DEC-198` minted `AssuranceKey` *after* `DEC-197` had ruled on `BackendId`'s
+placement, and the two are the same construction for the same reason — so a
+decision taken at `inq-4` was falsified by one taken at `inq-8`. A reader working
+forward through the records will not see that; it is why `DEC-197` carries a
+re-cut rider dated after its own acceptance.
+
+**A row in this table is a summary and never the record.** Two clauses of
+`DEC-197` in particular do not fit in one: that the kernel's imports are `std`
+alone, and that `D10` narrows the record's own `&dyn CapsuleBackend` clause
+(below). Read the record.
+
 ### 7.2 Design-local rulings, taken here
 
 These are `D`-numbered because they are doc-local: they refine the records
 without contradicting them, and none was large enough to warrant its own.
-`D7`–`D10` were taken during the review pass rather than the draft, and each
-names the finding that forced it.
+`D7`–`D10` were taken during the first review pass and `D11`–`D12` during the
+second; each names the finding that forced it.
 
 **`D1` — Only `Proven` holds the floor, and only the floor.** `DEC-195` says the
 floor is reduced by exhaustive match; it does not say what `Unproven` does to it.
@@ -1298,27 +1639,29 @@ did run and so contradict `P4`.
 **`D8` — fronts stay wholly in the payload.** Forced by `RF-5`: the draft made
 front-labelled rendering a `CPT-002` obligation and gave no type, field or
 contract function anything to compute it from. *Ruling:* the payload's table
-declares each row's front and answers `front_of`; the command tier consults it
-when rendering; the kernel never names a front. *Rationale:* the kernel neither
+declares each row's front and answers for one; the command tier consults it when
+rendering; the kernel never names a front. *Rationale:* the kernel neither
 reduces over fronts nor validates them, so a kernel `Front` would be a type a
-reader must load to understand nothing the kernel does (`P1`); and `A4` keeps the
-list a sketch, which is the one case `P3` does not cover — `P3` justifies naming
-shapes the kernel must *reason* about. *Alternative refused:* a `Front` newtype
-in the kernel with an `AssuranceRow { key, front, verdict }` triple, on the
-argument that a recorded verdict must carry its own labels. It does not: the
-verdict is rendered by the process that built it, so the label is available at
-render time without being stored.
+reader must load to understand nothing the kernel does (`P1`), and it fails
+§ 5.1's placement criterion — a label on a claim is not a distinction the claim
+algebra observes; and `A4` keeps the list a sketch, which is the one case `P3`
+does not cover — `P3` justifies naming shapes the kernel must *reason* about.
+*Alternative refused:* a `Front` newtype in the kernel with an
+`AssuranceRow { key, front, verdict }` triple, on the argument that a recorded
+verdict must carry its own labels. It does not: the verdict is rendered by the
+process that built it, so the label is available at render time without being
+stored. *Amended by `D11`*, which supplies the transport `D8` left missing.
 
 **`D9` — `D5`'s rename is source-side only; the rendered key stays `date=`.**
-Forced by `RF-2`: `render_verdict` emits `date={}` on the header line, and
-§ 9.1's permitted-difference list is closed at three, so changing it would be a
-fourth — a regression by the design's own rule. *Ruling:* rename the Rust
-identifiers, leave the rendered spelling. *Rationale:* `D5`'s argument is about a
-reader of the *source* being misled, and that is fully bought by the source
-rename. Widening the preservation licence costs a decision record and dilutes the
-one instrument standing between this slice and an unnoticed behaviour change; the
-rendered spelling is not worth that. *Follow-up:* the rendered key is worth
-revisiting once the licence is spent.
+Forced by `RF-2`: `render_verdict` emits `date={}` on the header line, and the
+header line is unchanged by the split, so re-spelling one of its keys is a
+difference this slice's preservation licence does not cover. *Ruling:* rename the
+Rust identifiers, leave the rendered spelling. *Rationale:* `D5`'s argument is
+about a reader of the *source* being misled, and that is fully bought by the
+source rename. Widening the preservation licence costs a decision record and
+dilutes the one instrument standing between this slice and an unnoticed behaviour
+change; the rendered spelling is not worth that. *Follow-up:* the rendered key is
+worth revisiting once the licence is spent.
 
 **`D10` — the kernel's entry point takes values and closures, and nothing
 else.** Forced by `RF-3`, `RF-7` and `RF-9` together, and by `F7` behind them.
@@ -1336,6 +1679,55 @@ refused:* narrowing to `&dyn CapsuleBackend`, which the draft took. It is
 strictly weaker — the trait still names a mechanism contract, and it leaves a
 `&dyn HostFacts` beside it that the shell check was riding in on.
 
+*Relation to `DEC-197`.* `D10` **narrows a clause of the record it sits under**,
+which is the one thing a doc-local ruling is normally not allowed to do, so it is
+stated rather than left to be noticed: `DEC-197`'s original rider had
+`verify_over`'s backend parameter *narrow* to `&dyn CapsuleBackend`; `D10` drops
+the parameter outright, so no backend trait survives in the kernel at all. The
+re-cut record now carries this. § 7.1's summary row cannot, which is why the row
+says to read the record.
+
+*Known limit, found by `RF-10`.* `D10` is a rule about the entry point's
+**parameter list**, and `row_verdict` is a second kernel-bound function the
+payload calls directly (§ 5.4). A mechanism type can therefore still arrive
+inside a *field* of a value that satisfies `D10` — which is exactly what
+`ArmResult::Indeterminate`'s `termination` did. `D12` is that repair; `I7` and
+the compile probe are what generalise it.
+
+**`D11` — the payload returns a `FrontCatalog` beside the verdict.** Forced by
+`RF-12`: `D8` told the command tier to ask the payload's table for a front, and
+nothing hands the command tier a table — `render_verdict` takes only the verdict,
+and the payload builds its table inside its own entry point
+(`conformance.rs:5254`). *Ruling:* the payload's entry point returns a transient
+`QualificationRun { verdict, fronts }`; `FrontCatalog::front_of` is keyed by
+`AssuranceKey` and is total. *Rationale:* keying by `AssuranceKey` rather than
+`RowId` matches what the verdict's `assurance` vector actually holds, so no call
+site has to rewrap `RowId::Assurance(key)` first; and totality follows from `I9`,
+because the catalogue is derived from the same table value that produced the ids.
+*Alternatives refused:* return the whole `Table` to the command tier — refused
+because it hands the probes, the deltas and the fixture to the tier that needs a
+string; and a free global front lookup over the payload's table constant —
+refused because it can be asked about a key from a table nobody submitted, which
+is precisely the guarantee `I9` exists to give and the reason `run_row` is
+infallible.
+
+**`D12` — the kernel takes `ArmJudgement`; an arm's diagnostics stay
+payload-side.** Forced by `RF-10`: `ArmResult::Indeterminate` carries
+`termination: Termination` (`backend.rs:751`), so moving `ArmResult` into the
+kernel would carry a mechanism type in with it — a sixth backward reference, in a
+location class (a type's field) no enumeration had looked at. *Ruling:*
+`row_verdict` takes `ArmJudgement { Held, Failed, Indeterminate(Indeterminacy) }`;
+the payload keeps `ArmResult` and projects with `into_judgement()`. *Rationale:*
+§ 5.1's equivalence test decides it mechanically — `row_verdict` matches
+`Indeterminate { reason, .. }` and discards `termination`, `stdout` and `stderr`,
+so the quotient is strictly narrower than the type and the type must be projected
+rather than moved. `Indeterminacy::BackendError` already launders `BackendError`
+to a `String` for exactly this reason (`:881-884`); `termination` is the sibling
+field that escaped the discipline. *Cost, and it is a real one:* § 5.2.5's
+**byte-identical** claim is surrendered, and § 9.6's `row_verdict_is_unchanged`
+becomes a truth table over all nine probe/control pairs plus a projection test.
+*Alternative refused:* leave `row_verdict` payload-side entirely — see § 7.3.
+
 ### 7.3 What was considered and refused at design level
 
 Recorded because a later reader will re-propose them:
@@ -1350,9 +1742,36 @@ Recorded because a later reader will re-propose them:
 - **Make `Property` wholly open and drop the enum.** Refused: with no closed set
   there is no exhaustive match, and `EVD-021`'s vacuous path returns as a runtime
   concern rather than a compile-time impossibility.
-- **Move or re-export `BackendId`.** Refused: moving inverts the `ADR-001` edge
-  and cascades into `transaction` and `provision`; re-exporting is a second name
-  for one type across one dependency edge.
+- **Re-export `BackendId` from the kernel through `backend`.** Refused: a second
+  name for one type across one dependency edge (`P6`). `DEC-197`'s re-cut *moves*
+  the type instead, so there is one name and the edge points the other way. The
+  draft's competing fear — that moving it would invert an `ADR-001` edge and
+  cascade into `transaction` and `provision` — was a misreading: the kernel is a
+  `leaf`, so `backend` importing it is a leaf→leaf edge this tree already has
+  several of (§ 5.1).
+- **Project `Availability` into a kernel-owned value instead of moving the
+  type.** Refused as an isomorphic copy: every distinction it carries is consumed
+  by the kernel and reproduced in `Qualification::Unavailable`, so the projection
+  preserves everything and buys nothing — a second name, a second maintenance
+  site, and a fresh judgement of the class that has already been wrong four times
+  (§ 5.1's equivalence test).
+- **Leave `row_verdict` on the payload side**, since its inputs are arms and
+  § 5.1 already places `Arm`, `ArmShape` and `run_arm` there. This was `RF-10`'s
+  own first-offered repair and it is the cheaper one. Refused: the two-arm algebra
+  *is* the judgement. `DEC-190`'s central claim is that a reader can form a
+  defensible opinion about a row without loading a confinement mechanism, and the
+  nine-cell match is the thing they must read to do it — a kernel that adjudicates
+  rows but not arms would leave the actual reasoning on the other side of the
+  seam. Projecting the input is the smaller move and keeps the kernel's reason for
+  existing inside it (`D12`).
+- **Extract the kernel as its own crate.** The only shape that makes `I7`
+  compiler-proven in production, since Rust has no per-module import restriction
+  within a crate. Refused for this slice on scope, not principle: it turns every
+  kernel item `pub(crate)` → `pub`, the layering gate is blind across crate
+  boundaries so `DEC-197`'s exit criterion would be falsified rather than met, and
+  `just gate`'s `test-all` names its packages so a new member would not be
+  auto-gated. `IMP-404` holds it, with structural promotion triggers rather than a
+  date.
 - **Parameterise the kernel over the mechanism's fixture type** (`Delta<F>`,
   `Row<F>`). Refused as generics ceremony for a second backend `OQ-1` has ruled
   out building.
