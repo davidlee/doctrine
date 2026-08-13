@@ -314,6 +314,12 @@ phase's re-grep. A REV that matches the design's counts exactly is a result \
 worth stating; a REV that merely asserts it re-derived is not."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-07 landed — the shipped surface is final, so the governance text is corrected against what exists rather than what is planned." },
+  # APPENDED (2026-08-13): PHASE-07's own EX-1 already predicted spec-021.toml's
+  # anchor at :34 resolves to a THIRD dangling anchor once PHASE-10 lands
+  # (plugins/doctrine/skills/dispatch-spawn/SKILL.md needs its own [[source]]
+  # entry) — EX-8 below must re-derive against PHASE-10's landed state, not
+  # PHASE-07's, or it undercounts a ninth time.
+  { id = "EN-2", text = "PHASE-10 landed — F-7's four Mode-B files are resolved (deleted/edited/confirmed-already-correct), so the shipped `install/` surface this REV describes is final, not mid-cleanup." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "The target set is re-derived FIRST, by sweeping `.doctrine/adr`, `.doctrine/spec`, `.doctrine/policy` and `.doctrine/standard` for the deleted mechanisms against the corpus as it then stands, reading every hit in context. Any entity or region beyond the six is RECORDED, not absorbed." },
@@ -355,6 +361,58 @@ exit_criteria = [
 verification = [
   { id = "VA-1", expects = "design §9.3 — a live dispatch phase driven end-to-end on the claude harness through the collapsed subprocess arm, concluding with the incumbent import. Evidence in an authored sink, with the host's bwrap availability stated either way." },
   { id = "VA-2", expects = "probe 3, carried from the design's review notes: the Darwin path held to EVERY claim §5.1 and §5.2.1 make about the two profiles differing in exactly two tokens. `F-2` found one instance where 'parity holds by construction' was false; one instance of a class is not a census. If no mac is available, record that this is UNVERIFIED rather than letting silence read as verified (IMP-429, OQ-5, §9.5)." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-10 ──────────────────────────────────────────────────────────────
+# APPENDED post-plan (2026-08-13), out of numeric sequence — phase ids are
+# immutable/append-only (STD conventions), so this is PHASE-10 despite
+# executing before PHASE-08. Raised as F-7 by the PHASE-07 orchestrator: an
+# entire shipped asset class instructing the retired Mode B arm was absent
+# from design §5.6's table and from every phase 01-09's criteria. Owner ruling
+# 2026-08-13: delete outright.
+[[phase]]
+id        = "PHASE-10"
+name      = "Delete Mode B's shipped implementation surface (F-7)"
+objective = """
+`DEC-217` retires Mode B — the confined in-session orchestrator role — as a \
+consequence of the unbound-fork settlement. PHASE-07 merged the two spawn \
+SKILL.md's and re-cut the reference docs, but four further shipped files, \
+absent from every earlier survey, still instruct or implement Mode B's \
+mechanics (`arm-spawn`, `worker_commit`, in-session confined-orchestrator \
+cadence) that PHASE-03/PHASE-06 already deleted from the binary: \
+`install/hymns/role/orchestrator.md` (a live role prompt resolved into an \
+agent's context via `doctrine prompt resolve --role orchestrator`), \
+`install/hymns/role/worker.md`, `install/workflows/drive-slice.js` (the \
+shipped `/drive-slice` workflow program), and \
+`install/agents/claude/dispatch-orchestrator.md`. Owner ruling: delete Mode \
+B's surface outright, not rewrite it onto the collapsed arm — the role's \
+mechanics are gone, not relocated. \
+\
+CAUTION for the phase's own execution: 'delete outright' is a ruling on \
+CONTENT, not a licence to `rm` four files unread. `drive-slice.js` at least \
+is NOT Mode-B-only prose — it is a program with ~6 `worker_commit`/arm-routing \
+SITES inside broader logic that may still serve the collapsed arm's landing \
+sequence (import/commit/record/verify/conclude). Read each file's full \
+content before deciding whole-file delete vs excising the Mode-B-specific \
+branches/sections; a file that turns out to be entirely Mode-B deletes \
+whole, one that is mixed keeps its non-Mode-B remainder. Record which was \
+which — that classification IS this phase's exit evidence, not a footnote."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 landed — the two spawn skills are merged and the reference docs describe one arm, so this phase's four files are read against a settled baseline rather than a moving one." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/hymns/role/orchestrator.md` — Mode B written as a role prompt end to end (arm-spawn → worker_commit → dispatch_import cadence). Read in full, then deleted whole unless it carries content beyond Mode B (record which)." },
+  { id = "EX-2", text = "`install/hymns/role/worker.md` — read in full; the `worker_commit`-branch content (the in-session worker's self-commit case) goes. If the file also describes the surviving subprocess-worker case, that remainder survives and the file is edited, not deleted; if it is Mode-B-only, it deletes whole. Record which." },
+  { id = "EX-3", text = "`install/workflows/drive-slice.js` — read in full; the ~6 `worker_commit`/arm-routing sites are Mode-B-specific branches inside a program that also serves the collapsed arm's landing sequence. Excise the Mode-B branches; the surviving `/drive-slice` workflow lands on the one path PHASE-06/07 already shipped (`/dispatch-spawn`, orchestrator-side import). Do not delete the file unless reading it in full shows it has no surviving purpose." },
+  { id = "EX-4", text = "`install/agents/claude/dispatch-orchestrator.md` — read in full BEFORE acting: its tools list, on a first grep, names no `worker_commit`-related MCP tool, which may mean it already describes the post-collapse role rather than Mode B, contrary to how it was surfaced in the PHASE-07 escalation. Confirm which is true before deleting or editing; do not delete a file that turns out to be already correct." },
+  { id = "EX-5", text = "Any surviving remnant of these four files' Mode-B content elsewhere in the shipped surface (cross-references from other hymns, skills, or `install/` docs) is swept — grep the retired mechanics' literal tokens (`arm-spawn`, `worker_commit`, `dispatch-orchestrator` where it names the deleted role) across `install/`, `plugins/`, `.claude/` after this phase's edits land." },
+  { id = "EX-6", text = "`just gate` green at zero clippy warnings; `doctrine install` re-run if any hook/agent registration changed; `doctrine boot --check` clean." },
+]
+verification = [
+  { id = "VA-1", expects = "each of the four files' fate (deleted whole / edited to drop a Mode-B branch / left alone because already correct) is recorded with the reasoning, not just a diff — this phase's whole point is that a symbol/skill-path census cannot see prose role prompts or workflow programs, so the record of HOW each was judged is the durable value." },
+  { id = "VH-1", expects = "a genuine read-side-by-side check that no surviving file instructs an agent to call a deleted tool or follow a deleted cadence — this is exactly the failure mode (a role prompt resolved live into an agent's context, giving it wrong instructions) that made F-7 an escalation rather than routine prose cleanup." },
 ]
 specs        = []
 requirements = []
