@@ -231,6 +231,18 @@ label = "governed_by"
 target = "ADR-008"
 
 [[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "governed_by"
+target = "STD-001"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
+
+[[relation]]
 label = "references"
 role = "concerns"
 descriptor = "Retires-REQ-288-and-rewrites-REQ-291"
@@ -264,12 +276,6 @@ label = "references"
 role = "concerns"
 descriptor = "Acute-leg-inherited-from-abandoned-SL-247"
 target = "IMP-401"
-
-[[relation]]
-label = "references"
-role = "concerns"
-descriptor = "the collapsed arm returns a fork branch, so D3's harness-synthesis rule and Verification M3 go stale; a REV target (DEC-218)"
-target = "ADR-012"
 
 [[relation]]
 label = "supersedes"

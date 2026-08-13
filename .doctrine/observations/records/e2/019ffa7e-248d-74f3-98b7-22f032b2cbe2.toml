@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa7e-248d-74f3-98b7-22f032b2cbe2"
+recorded_at = "2026-08-13T09:39:58.733345468Z"
+kind = "friction"
+summary = "/design: 'governance-confirmed — current' in design resume/show is snapshot-only and cannot see governance-edge drift"
+detail = "The governing-context-recorded contract binds ObservedFact::GovernanceEdges — the slice's outbound governed_by edges plus references(concerns) — and gate.rs:565 states the act's own coverage is inert, so the observed edge set does all the invalidating work. But the acts row in the turn envelope (render/envelope.rs:902) computes current/stale from live_acts(run), i.e. the snapshot alone, with no observed facts passed in. So changing a slice's governance edges expires the attestation at the gate (gate.rs:1402-1408, comparing stored vs freshly derived) while design resume and design show --format json both keep rendering 'governance-confirmed — current'. Cost here: an earlier reviewing-stage pass read the projection, saw 'current', and wrote a design subsection arguing from prose that the act OUGHT to be stale — inventing a wrong mechanism (that declaring inquiry nodes invalidated it) to explain a status the projection was never able to report. That subsection had to be retracted and rewritten. The projection is honest about inquiry-map-bound acts (graph-reviewed, sufficiency-accepted both flip correctly); it is silently wrong about the one act bound to a derived fact."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

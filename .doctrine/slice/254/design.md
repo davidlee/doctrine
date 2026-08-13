@@ -1120,10 +1120,32 @@ throughout on that basis.
 
 `DEC-214` records that the standing `governance-confirmed` attestation means
 *confirmed against a superset of the current scope* — a narrowing re-scope does
-not oblige re-confirmation. **That reading does not extend to `DEC-218`**: the
-target set *grew*, and two of its six entities (`ADR-008`, `ADR-012`) were never
-in the confirmed superset. `governance-confirmed` needs re-attesting against the
-six before lock, which is why declaring the two nodes above invalidated it.
+not oblige re-confirmation.
+
+**An earlier draft of this subsection got the mechanism wrong and is corrected
+here.** It argued that `DEC-218`'s growth of the `REV` target set obliged
+re-confirmation, and that declaring `inq-13`/`inq-14` had invalidated the act.
+Both halves were false. `governance-confirmed` binds the **governing edge set** —
+this slice's outbound `governed_by` edges plus its `references` edges in role
+`concerns` — which is what *binds* the design, not the `REV` target set, which is
+what the design *modifies*. The two overlap but are different sets. And the act's
+own coverage is inert by construction (`gate.rs:565`): the observed edge set does
+all the invalidating work, so declaring an inquiry node cannot touch it.
+
+**What actually obliged re-confirmation was the graph being wrong.** §3.1 named
+`POL-002` and `STD-001` as governing this design, and neither had an edge;
+`ADR-012` had been recorded as `references(concerns)` where every sibling slice
+and this slice's own three other ADRs use `governed_by` — an artefact of
+`--descriptor` being valid only on a `concerns` edge. Those three edges are now
+corrected, which moves the observed fingerprint and expires the attestation at the
+gate. Re-attesting is therefore not ceremony: it is confirmation over a governing
+set that genuinely changed, and the first one taken over a set that matches §3.1.
+
+One projection caveat for whoever reads this next: `doctrine design resume` and
+`design show` render `governance-confirmed — current` regardless, because that
+column is computed from the snapshot alone (`render/envelope.rs:902`) and never
+sees the derived edge fingerprint. Only the gate compares them
+(`gate.rs:1402-1408`). Do not read the projection as evidence the act still binds.
 
 ### 7.2 Decisions this drafting stage takes
 
