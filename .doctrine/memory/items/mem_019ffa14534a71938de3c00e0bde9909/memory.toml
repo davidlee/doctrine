@@ -1,0 +1,50 @@
+memory_uid = "mem_019ffa14534a71938de3c00e0bde9909"
+memory_key = "mem.fact.dispatch.mode-a-vs-mode-b-funnel"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Dispatch has two orchestration modes; only Mode B uses the funnel record"
+summary = "dispatch next and funnel rows are Mode B (confined orchestrator, MCP); Mode A drives the pi arm by hand and never lands a row"
+created = "2026-08-13"
+updated = "2026-08-13"
+
+[scope]
+paths = ["src/funnel_machine.rs", "src/dispatch.rs", "src/mcp_server/dispatch.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "funnel", "worktree"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "5cff14885f1b4c33d4e97d3bea2409dc3caae527"
+tree = "c40cdfdff65e555ce7d227b7f4f409864baeb1c9"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "5cff14885f1b4c33d4e97d3bea2409dc3caae527"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-355"
+
+[[source]]
+kind = "slice"
+ref = "SL-254"
+
