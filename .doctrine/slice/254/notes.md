@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage exploring rev 15, **both gates cleared**) · 98b5d0675
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inquiring** rev 19, runbook cleared, awaiting `sufficiency-accepted`) · 05223263c
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -43,6 +43,25 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
 - `DEC-211`'s `ADR-011` site enumeration corrected in place — four → **eight**
   regions, `D5`/`D7` deferred; 1 friction observation (line-number citations into
   an authored `.md` are unstable and self-check nothing)
+- **stage advanced `exploring` → `inquiring`** (rev 17), and the inquiring
+  runbook cleared in full (rev 18, 19)
+- `explore.research` had **regressed** — the re-scope re-cut `slice-254.md` under
+  the research stamp. Repaired by superseding `research.md` in place
+  (section-by-section marks for what the re-scope refuted or relocated) then
+  re-baselining — **not** by a bare restamp, which would have asserted currency
+  over conclusions known wrong
+- minted `DEC-214` — a *narrowing* re-scope does not stale a governance
+  confirmation (superset argument); a *widening* one always does. The asymmetry
+  is the durable content
+- scope reconciled against the accepted decisions (`inquire.scope`): two
+  `ADR-011` under-counts corrected, `ADR-006` §D2b de-hedged, `SPEC-012`'s
+  responsibility added as a `REV` target, `OQ-1`/`OQ-3`/the `REV-046` question
+  closed out, `A2` narrowed to its hand-back leg
+- 2 further friction observations — a concurrent agent's broad `git add` captured
+  my observation record seconds after capture (symptom is an *absence* in
+  `git status`, so it reads as a failed capture); and `inquire.scope` regresses
+  `explore.research` by construction, because one step edits the file the other
+  hashes
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
@@ -104,6 +123,21 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
 - ~~Design run gate outstanding~~ — **both cleared 2026-08-13**, rev 15. Stage is
   still `exploring`; the advance to `inquiring`/`drafting` is a separate `stage`
   submission and is deliberately not yet sent
+- **`sufficiency-accepted` outstanding — the last contract on the
+  `inquiring → drafting` edge, and a user act.** It asks the harder question:
+  not "was every raised question dealt with" but "was the raised *set*
+  adequate". Three areas nobody asked about, offered for that judgement rather
+  than as findings: (1) **the hand-back contract** — `A2`'s one surviving leg;
+  there is no typed subagent-return under `claude -p`, the `result` field and
+  `--json-schema` are the channel, and no `DEC` says what the worker returns or
+  who enforces its shape, though the funnel consumes it; (2) **macOS
+  `sandbox-exec` parity** — objective 1 asserts it and `DEC-206` re-homes
+  `write_seatbelt_profile`, but no decision covers whether the claude arm
+  reaches the seatbelt path or merely inherits the assertion; (3) **what
+  `doctrine install` seeds** — deleting the hook set changes install's seeded
+  `.claude/settings.json`, and the shipped-asset leg is a `RustEmbed` root.
+  (1) has real design weight; (2) and (3) are plausibly execution detail and
+  cheap to dismiss
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
 - Memory-corpus sweep at reconcile — carried in the scope's Follow-Ups (25+ stale-but-plausible claude-arm memories, one in the boot snapshot)
 
