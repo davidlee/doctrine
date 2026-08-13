@@ -1,0 +1,306 @@
+# Implementation plan for SL-254 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-254"
+
+# Canonical spec/requirement links — cite ids, never restate what they say. The
+# plan reader does not model these yet, so nothing downstream consumes them.
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# NOTE ON VT MANDATES. A mandate asserts PRESENCE (raw substrings that must
+# appear in one file). This slice is mostly deletion, and absence is not
+# directly expressible — so each deletion phase anchors its mandate on the
+# SURVIVING or RENAMED artefact that only exists once the deletion landed
+# (a renamed test fn, a re-cut assertion). That is a presence check which
+# proves the deletion, and it is deliberate rather than a workaround.
+#
+# Design-level VT ids (design §9.2, VT-1..VT-12) are cited inside `expects`.
+# Phase criterion ids are phase-local and restart at 1 in every phase.
+
+# ── PHASE-01 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Re-home the four jail primitives"
+objective = """
+Move the four non-decision primitives out of `pretooluse.rs` into `jail.rs`, \
+and re-point `jail_prefix.rs` at their new home. Behaviour-preserving by \
+construction: no call site changes meaning, no test changes at all. This is \
+DEC-206's ordering, stated in design §4 as a design fact rather than an \
+implementer's preference, and §9.1 names it the cheapest point at which the \
+behaviour-preservation gate does useful work."""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (run dr-019ff653 at stage `locked`); slice status `ready`." },
+  { id = "EN-2", text = "Tree green: `doctrine check gate` passes on the branch point." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`REASON_NO_BWRAP`, `REASON_PROFILE_WRITE_FAILED`, `have_bwrap` and `write_seatbelt_profile` are defined in `src/worktree/jail.rs`." },
+  { id = "EX-2", text = "`src/worktree/jail_prefix.rs` imports all four from `super::jail`; it no longer names `super::pretooluse` at all." },
+  { id = "EX-3", text = "`src/worktree/pretooluse.rs` retains only the wall — `run_pretooluse` and its decision plumbing — and no longer defines any of the four." },
+  { id = "EX-4", text = "ZERO edits to any file under `tests/`, and zero edits to any `#[cfg(test)]` block. If a test needed changing, the move was not behaviour-preserving and the phase has failed." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-1 — the four primitives are defined in jail.rs and the re-home is complete", test_file = "src/worktree/jail.rs", keywords = ["REASON_NO_BWRAP", "REASON_PROFILE_WRITE_FAILED", "fn have_bwrap", "fn write_seatbelt_profile"], waived = false },
+  { id = "VT-2", expects = "design VT-1 — jail_prefix sources all four from jail, closing the last pretooluse dependency of the SURVIVING path", test_file = "src/worktree/jail_prefix.rs", keywords = ["use super::jail::", "have_bwrap", "write_seatbelt_profile"], waived = false },
+  { id = "VA-1", expects = "the existing suite passes with zero test edits — `git diff --stat tests/` is empty and no `#[cfg(test)]` block moved. This is the behaviour-preservation gate (design §9.1) and it cannot be checked by a test that is itself allowed to change." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-02 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Generalise the spawn script to two harness profiles"
+objective = """
+Build the replacement before deleting what it replaces. Rename \
+`scripts/pi-spawn-confined.sh` to `scripts/spawn-confined.sh`, generalise it \
+past `pi` with a second `claude` profile (DEC-209, DEC-215), add the Linux \
+`have_bwrap` probe so the arm fails closed NAMED rather than merely closed \
+(D7, RV-355 F-6), and put `DOCTRINE_WORKER=1` on both confinement paths — the \
+bwrap prefix and `sandbox_exec_argv`'s trailing `env` token (RV-355 F-2). \
+Purely additive to the binary: nothing is deleted in this phase, so the tree \
+stays green throughout and the pi arm is untouched."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01/EX-1 holds — `have_bwrap` is reachable from `jail.rs`, so the Linux probe has a caller that is free to use." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`scripts/spawn-confined.sh` exists, takes `<harness> <B> <BRANCH> <DIR> <PROMPT_FILE> [BACKSTOP]` (design §5.2), and dispatches on the harness token to a `pi` or `claude` profile." },
+  { id = "EX-2", text = "The `pi` profile is byte-for-byte equivalent in behaviour to today's script: same PREFIX tokens, same `$HOME/.pi` bind, same reap path. Divergence must be argued, per design §4 'substitution, not construction'." },
+  { id = "EX-3", text = "The `claude` profile binds `$HOME/.claude` wholesale (DEC-210) and execs `claude -p --output-format stream-json` (DEC-215); it does NOT source `scripts/lib/pi-reap.sh` — its completion signal is process exit (§5.2.1, R4)." },
+  { id = "EX-4", text = "`scripts/lib/pi-reap.sh` is UNCHANGED: its `agent_settled`/`agent_end` either-match is correct and must survive the generalisation (ISS-293, RV-355 F-7)." },
+  { id = "EX-5", text = "A Linux capability probe runs BEFORE the inline PREFIX array; with `bwrap` absent the script exits non-zero naming `bwrap-unavailable` (the `REASON_NO_BWRAP` value) and spawns no fork." },
+  { id = "EX-6", text = "`sandbox_exec_argv` emits `DOCTRINE_WORKER=1` in its trailing `env` token — the one place macOS parity was NOT true by construction (RV-355 F-2)." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-10 — the macOS prefix carries worker identity. Pure over `ResolvedMac`, so this is Linux-testable and does not wait on a mac (OQ-5)", test_file = "src/worktree/jail.rs", keywords = ["sandbox_exec_argv", "DOCTRINE_WORKER"], patterns = ["^\\s*fn sandbox_exec_argv_.*worker"], waived = false },
+  { id = "VT-2", expects = "design VT-11 — the Linux arm refuses BY NAME, not merely by exec failure: the probe and the reason token are both in the shipped script", test_file = "scripts/spawn-confined.sh", keywords = ["bwrap-unavailable", "claude", "pi"], waived = false },
+  { id = "VT-3", expects = "design VT-2 + VT-3 — a worker under the prefix cannot write outside its directory, refused by the KERNEL not a hook; and on a host without bwrap the proof SKIPS rather than passing vacuously (DEC-212 — a vacuous pass is the fail-open shape being deleted)", test_file = "tests/e2e_worker_confinement.rs", keywords = ["bwrap", "skip", "DOCTRINE_WORKER"], waived = false },
+  { id = "VH-1", expects = "the pi arm is untouched in behaviour. Reviewed by eye against the pre-rename script, because 'the codex/pi suites stay green unchanged' (design §9.1) is the strongest evidence the collapse disturbed nothing, and a green suite alone does not prove the PREFIX tokens are identical." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-03 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Retire nomination and the spawn gate"
+objective = """
+Delete `nominate`/`denominate` and the `PreToolUse(Agent|Workflow)` spawn gate \
+they scope. DEC-205: these die with the wall as a closed loop, not as a \
+separate choice — the nomination allowlist exists only to exempt an in-session \
+orchestrator from a wall that is going away. Cut first because it is the \
+cleanest separable half of the wall: it takes `PRIVILEGED_AGENT_TYPES`, \
+`is_privileged_agent_type`, `decide_agent`, `decide_workflow` and \
+`resolve_target`'s `is_nominated` leg with it, and it is what forces doctor \
+check #10 out (which does not compile without it)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed — the surviving arm's spawn path exists and is proven, so removing the in-session arm's gate removes nothing still in use." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`worktree nominate` and `worktree denominate` are gone: the subcommand arms in `src/worktree/mod.rs`, the nomination half of `src/worktree/subagent.rs` (`append_nomination`, `remove_nomination`, `is_nominated`, `classify_nominate`, `act_nominate`, `act_denominate`, `run_nominate`, `run_denominate`, `NominateRefusal`)." },
+  { id = "EX-2", text = "`src/boot.rs` drops `HookSpec::nominate` and `::denominate` from the registry; ALL THREE eleven-entry comment sites move (`:1624`, `:1687`, `:4982`) — the survey said one." },
+  { id = "EX-3", text = "`.claude/settings.json` loses the `SubagentStart` and `SubagentStop` entries. Both EVENTS disappear entirely (each had exactly one entry), so the installed set goes from eleven entries across five events to nine across three." },
+  { id = "EX-4", text = "`src/commands/guard.rs` drops the `Nominate` and `Denominate` write-class arms — their `Command` variants are gone, so the match does not compile with them." },
+  { id = "EX-5", text = "`src/worktree/jail.rs` drops `PRIVILEGED_AGENT_TYPES` (`:121`), `is_privileged_agent_type` (`:126`), `decide_agent` (`:399`), `decide_workflow` (`:418`) and their unit tests; `resolve_target` loses its `is_nominated` parameter and the nomination leg." },
+  { id = "EX-6", text = "Doctor check #10 `SpawnSeamSymmetry` is DELETED from `src/doctor_checks.rs` (`:728-830`) — it reads `PRIVILEGED_AGENT_TYPES`, the `SubagentStart` matchers and `SEAM_REGISTRY`, so the deletion does not compile without it. `src/finding.rs` drops `Category::SpawnSeamSymmetry` (`:82`) and renumbers the ordinal (`:123`); `CATEGORY_ORDER` and the severity test move with it. `src/commands/doctor.rs` drops the #10 registration." },
+  { id = "EX-7", text = "`just gate` is green at ZERO clippy warnings — no orphaned `pub(crate)` left behind by the cascade." },
+]
+verification = [
+  { id = "VT-1", expects = "the spawn gate and its allowlist are gone from the jail leaf, and resolve_target no longer takes a nomination argument", test_file = "src/worktree/jail.rs", keywords = ["fn resolve_target", "cwd_is_project_worktree"], waived = false },
+  { id = "VT-2", expects = "the finding taxonomy lost the check-#10 category cleanly, ordinals renumbered", test_file = "src/finding.rs", keywords = ["CATEGORY_ORDER"], waived = false },
+  { id = "VA-1", expects = "`doctrine doctor` runs and reports a coherent check set with #10 absent and no gap in the numbering presented to the user." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-04 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Delete the PreToolUse wall"
+objective = """
+Delete `worktree pretooluse` and the whole pure decision layer it was the sole \
+caller of. This is the phase the symbol census resized: `jail.rs` loses ~300 of \
+its 981 production lines and about half its ~60 unit tests, because \
+`pub(crate)` with no caller is `dead_code` and `just gate` runs clippy at zero \
+warnings. `jail.rs` survives — but only its confinement mechanism, which is \
+what `jail_prefix.rs` consumes."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed — the nomination half is already out, so what remains in `pretooluse.rs` is the wall proper." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/worktree/pretooluse.rs` is deleted; the `Pretooluse` subcommand arm and re-export leave `src/worktree/mod.rs`." },
+  { id = "EX-2", text = "`src/worktree/jail.rs` deletes every item orphaned by that: `enum Decision` (`:231`), `enum Target` (`:248`), `resolve_target` (`:377`), `pathcheck` (`:433`), `opaque_wrap` (`:472`), `shell_single_quote` (`:491`), `acquire_policy` (`:761`), `resolve_inputs` (`:825`), `seatbelt_backend` (`:839`), `decide_bash` (`:928`), `decide_write` (`:964`), and the five `REASON_*` constants feeding only them (`:94`, `:95`, `:96`, `:103`, `:109`), with their unit tests." },
+  { id = "EX-3", text = "What SURVIVES in `jail.rs` is exactly the transitive closure of `jail_prefix.rs`'s imports plus `mod.rs`'s `JailPolicy` re-export: `resolve_with_policy`, `validate_policy`, `Backend`, `JailPolicy`, `RealEnv`, `ResolveEnv`, `select_jailer`, `Bwrap`, `Seatbelt`, `Jailer::wrap_argv`, `bwrap_argv`, `bwrap_core_argv`, `sandbox_exec_argv`, `seatbelt_profile`, `Topology`, `ResolveDeny`, `ResolvedMac`, `PolicyError`. Nothing else." },
+  { id = "EX-4", text = "`src/commands/guard.rs` drops the `Marker { stamp_subagent: true }` arm and the `WriteClass::MarkerClear` class with its pass-through leg (`:499`)." },
+  { id = "EX-5", text = "`src/boot.rs` drops `HookSpec::pretooluse`; `.claude/settings.json` loses the four `worktree pretooluse` entries across the `Bash`, `Edit|Write`, `Agent` and `Workflow` matchers. The two surviving `PreToolUse` entries are `memory surface` and are UNRELATED to this slice — do not touch them. Final installed set: FIVE entries across THREE events." },
+  { id = "EX-6", text = "`tests/e2e_claude_install.rs` is re-cut beyond its count: the test fn `install_wires_eleven_hook_entries_across_five_events` (`:285`) is RENAMED, the `total == 11` assertion (`:312`) becomes 5, the events list (`:307`) drops `SubagentStart`/`SubagentStop`, and the nominate assertions (`:184-199`, including 'SubagentStart carries nominate, NOT the retired SL-152 stamp hook') are deleted. The design said 'the exact hook-count assertion moves by six' — that was under-count #7." },
+  { id = "EX-7", text = "`just gate` green at zero clippy warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-7 — the installed hook set is five entries across three events; anchored on the RENAMED test fn, which can only exist once the deletion landed", test_file = "tests/e2e_claude_install.rs", keywords = ["five_hook_entries", "WorktreeCreate", "SessionStart"], waived = false },
+  { id = "VT-2", expects = "jail.rs retains its confinement mechanism and nothing of the wall — the surviving closure is intact", test_file = "src/worktree/jail.rs", keywords = ["fn bwrap_argv", "fn sandbox_exec_argv", "fn select_jailer", "fn validate_policy", "fn resolve_with_policy"], waived = false },
+  { id = "VA-1", expects = "no `pub(crate)` item in `src/worktree/jail.rs` lacks a caller outside its own `#[cfg(test)]` block. Verified by the clippy dead_code lint being clean at zero warnings, which is the mechanical form of this claim." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-05 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "Collapse worker identity onto the environment leg"
+objective = """
+Delete the disk marker. DEC-207: identity collapses to the env leg, \
+topology-independently. `DOCTRINE_WORKER` has no stale class by construction — \
+it dies with the process and is set by the same bwrap argv that establishes the \
+write floor (design §4). This phase also closes ISS-028, where a stamped tree \
+refused CLI writes and broke tests that shell the doctrine CLI."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02/EX-3 holds — the spawn profile sets `DOCTRINE_WORKER=1`, so the env leg has a writer before the marker leg is removed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/worktree/marker.rs` collapses to the env predicate plus the status render: `env_worker_set`, `describe_mode`, `resolve_mode`, `run_status`. Deleted: `marker_path`, `marker_present`, `write_marker`, `remove_marker`, `run_marker_clear`, `enum Cause`, `is_stale_marker`, `is_env_on_nonlinked`, `cause_token`, `DUAL_CAUSE`." },
+  { id = "EX-2", text = "The rest of `src/worktree/subagent.rs` goes — `Stamp`, `StampRefusal`, `classify_stamp`, `run_stamp_subagent`, plus `verify-worker` (`WorkerVerify`, `WorkerVerifyRefusal`, `classify_worker_verify`, `run_verify_worker`). The file is deleted; `mod.rs` drops the `Marker`/`VerifyWorker` arms." },
+  { id = "EX-3", text = "Call sites: `fork.rs` drops the `write_marker` call (`:192`); `land.rs` replaces `bears_marker` with the branch-shape classifier; `inventory.rs` drops the marker column and `Cause` override and folds `classify_worktree` into `shared.rs`; `gc.rs` and `import.rs` drop the unused marker imports and the SL-116 module-wide `expect(unused)` (CHR-062)." },
+  { id = "EX-4", text = "`src/commands/guard.rs`'s `worker_guard` marker leg collapses to the env leg: the two-branch `is_env_on_nonlinked` / named-verb message split (`:512-524`) degenerates to one branch." },
+  { id = "EX-5", text = "`justfile:37` drops the `[ -f .doctrine/state/dispatch/worker ]` leg from `validate`'s worker-context skip. `DOCTRINE_WORKER=1` and `DOCTRINE_DISPATCH_GATE` survive — a clean deletion, not a behaviour change. NOT in the design's file list; found by grepping the literal path string." },
+  { id = "EX-6", text = "`src/test_support.rs` drops `WORKER_MARKER_REL` (`:62`, an STD-001 carve-out duplicate) and `worker_marker_at`'s marker leg. `tests/common/mod.rs` stops stamping the marker into fixture roots (`:158-180`). The 31 callers of `under_worker_marker` do NOT change — the helper contains the blast radius." },
+  { id = "EX-7", text = "`src/mcp_server/tools.rs` (`:1389`) and `src/commands/observation.rs` (`:509`) drop the marker disjunct from their worker-context predicates. `src/regression_run.rs` drops marker-presence from selection state." },
+  { id = "EX-8", text = "Tests: `e2e_worktree_stamp.rs` and `e2e_worktree_verify_worker.rs` DELETE with their subjects; `e2e_worktree_status_marker.rs` retargets onto the env-only predicate; `e2e_worker_guard.rs`, `e2e_worker_guard_explicit_root.rs` and `e2e_worker_gate_skip.rs` retarget onto the env-only signal (all three unlisted in the design; found by census)." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-4 — worker mode is a function of the environment alone: `describe_mode` is a two-row truth table, not eight; the `marker_on_main` test retires with its subject", test_file = "src/worktree/marker.rs", keywords = ["fn describe_mode", "env_worker_set"], waived = false },
+  { id = "VT-2", expects = "design VT-6 — `land`'s dispatch-fork refusal survives the marker and fires on BRANCH SHAPE, including for a fork that was never stamped (strictly stronger than today)", test_file = "src/worktree/land.rs", keywords = ["DispatchFork"], waived = false },
+  { id = "VT-3", expects = "design VT-5 — the ISS-028 case: shelling the doctrine CLI inside a fork succeeds, because a stamped-but-unenvironed tree is no longer refused", test_file = "tests/e2e_worker_guard.rs", keywords = ["DOCTRINE_WORKER"], waived = false },
+  { id = "VA-1", expects = "`.doctrine/state/dispatch/worker` appears nowhere in the tree — not in `src/`, `tests/`, `justfile`, or any script. This is an absence claim over a literal string across file types a symbol census cannot reach, so it is checked by grep at agent altitude rather than by a presence mandate." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-06 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-06"
+name      = "Retire worker_commit, arm-spawn, the Fork arm and the config key"
+objective = """
+Delete the last four claude-arm-only surfaces. DEC-204: `worker_commit` retires \
+as transport and nothing re-homes — the orchestrator's incumbent import already \
+covers the surviving path, and `classify_import` survives as the scope belt's \
+enforcing reader (DEC-213). D1–D3 carry the other three, which the slice \
+scope's objective 3 does not name (R6) — each is the claude arm's substitute \
+for something `worktree fork --worker` already does."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 landed — the wall is gone, so `worker_commit`'s standing as a gated exception to it (ADR-008 N1) is already moot." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/mcp_server/worker_commit.rs` (1495 lines) is deleted and unregistered from `tools.rs` / `mod.rs`. Nothing re-homes (DEC-213)." },
+  { id = "EX-2", text = "`src/dispatch.rs` loses `arm-spawn` and the `Spawn`-row recorder path; `NextKind::Spawn`'s prose is de-armed. `dispatch_import`'s heal-forward already lands the `Spawn` row from the durable binding (`mcp_server/dispatch.rs:434-441`)." },
+  { id = "EX-3", text = "`src/worktree/create.rs` deletes the Fork arm, `ARMING_*`, `JAIL_SUBPATH` and `provision_jail_policy`; Passthrough and `run_provision` stay, and `create-fork` keeps its hook entry (D1 — a surviving Fork arm would mint an unmarked, unconfined worktree, which is a live hazard rather than dead code)." },
+  { id = "EX-4", text = "`src/worktree/dispatch_record.rs`'s intra-doc link to `super::create::JAIL_SUBPATH` (`:26`) is re-pointed or inlined; its own `provision_dispatch_record` is an independent mirror and SURVIVES." },
+  { id = "EX-5", text = "`claude_force_subprocess_dispatch` is gone from `src/dispatch_config.rs`, its `src/dtoml.rs` round-trip, `.doctrine/doctrine.toml`'s commented example (`:14`), and nowhere else (STD-001)." },
+  { id = "EX-6", text = "`install/doctrine.toml.example`'s `worker-forbidden-writes` doc comment (`:100`) is re-worded — it names `worker_commit` as the key's consumer. The KEY STAYS, with `classify_import` as its enforcing reader (DEC-204, DEC-213)." },
+  { id = "EX-7", text = "Doctor check #9 `AgentConformance` is re-cut: `TOOL_ALLOWED` is `mcp__doctrine__worker_commit` (`:489`), and a `--strict-mcp-config` worker holds no `mcp__*` token at all (DEC-216). `src/commands/doctor.rs` drops the AgentConformance-only filter (`:169`) if the re-cut leaves it empty." },
+  { id = "EX-8", text = "Tests: `tests/e2e_dispatch_arm_spawn.rs` DELETES outright (it is `arm-spawn` end to end — unlisted in the design); `tests/e2e_dispatch_h1_integration.rs` retargets off its 14 `arm-spawn` and 6 `verify-worker` references; `tests/e2e_mcp_server.rs`'s tool-registry assertion (`:208`) drops `worker_commit`; `tests/e2e_worktree_create_fork.rs` retargets onto the Passthrough arm." },
+]
+verification = [
+  { id = "VT-1", expects = "design VT-9 — the import belt is UNTOUCHED: `classify_import`'s refusal set and tokens are unchanged and its constants still single-sourced. This is the load-bearing survivor, so it is verified positively rather than assumed", test_file = "src/worktree/import.rs", keywords = ["classify_import"], waived = false },
+  { id = "VT-2", expects = "design VT-12 — the check gate moved altitude and the scope belt did not: the post-import gate resolves `CheckKind::Prove`, never `CheckKind::Commit` (§5.2.5, INV-2)", test_file = "src/dispatch.rs", keywords = ["Prove"], waived = false },
+  { id = "VT-3", expects = "design VT-8 — the config key is gone everywhere; anchored on the surviving DispatchConfig surface so the mandate proves the file was re-cut rather than merely existing", test_file = "src/dispatch_config.rs", keywords = ["DispatchConfig"], waived = false },
+  { id = "VA-1", expects = "`claude-force-subprocess-dispatch` and `claude_force_subprocess_dispatch` appear NOWHERE in the tree (src, tests, .doctrine, install, plugins, scripts). STD-001 absence claim, checked by grep at agent altitude." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-07 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-07"
+name      = "Merge the spawn skills and re-cut the reference docs"
+objective = """
+One arm means one spawn skill. Merge `/dispatch-agent` and \
+`/dispatch-subprocess` into a single skill, promote today's 'Fallback (A)' to \
+the primary and only landing path, correct `/dispatch`'s front-matter claim \
+that the funnel 'is driven by `doctrine dispatch next` … identical on both \
+arms' (untrue of an arm that never lands a funnel row — DEC-217, RV-355 F-1), \
+and retire the Mode B section of `dispatch-mechanics.md`."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed — every verb and tool the skills reference is in its final state, so the prose is written once against the shipped surface." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`plugins/doctrine/skills/dispatch-agent/SKILL.md` and `…/dispatch-subprocess/SKILL.md` are merged into one spawn skill; the arm-routing branch (step 4) leaves `…/dispatch/SKILL.md`." },
+  { id = "EX-2", text = "`…/dispatch/SKILL.md`'s front-matter no longer claims the funnel is identical on both arms (DEC-217, F-1)." },
+  { id = "EX-3", text = "`…/worktree/SKILL.md` drops the `/dispatch-agent` cross-references (`:17-19`, `:134`, `:200`)." },
+  { id = "EX-4", text = "`install/dispatch-mechanics.md` rewrites the arm-specific mechanics (`:73`, `:100`, `:118`) and RETIRES the Mode B section (`:152-200`) — its arming path is `arm-spawn` (DEC-217)." },
+  { id = "EX-5", text = "Skills are edited at their AUTHORED source under `plugins/doctrine/skills/`; `.agents/skills/` is the gitignored install projection and is never edited directly. `doctrine install` refreshes it." },
+]
+verification = [
+  { id = "VA-1", expects = "the merged spawn skill describes exactly one landing path and names no arm routing; a reader following it end to end reaches a spawned, confined worker without a decision point that no longer exists." },
+  { id = "VH-1", expects = "`/dispatch`'s front-matter and the merged skill tell the same story as the shipped code — read side by side. Skills are the agent-facing contract, and a skill that describes a retired arm is the failure mode this slice exists to remove." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-08 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-08"
+name      = "The governance REV over six entities"
+objective = """
+The larger half. One REV of this slice's own over six entities, with the target \
+set RE-DERIVED from the corpus at this phase rather than read off design §3.1's \
+table (DEC-218, R8, VH-2). Every count in the design is a floor: the survey has \
+under-counted eight times now, always low, and twice more during the plan \
+phase's re-grep. A REV that matches the design's counts exactly is a result \
+worth stating; a REV that merely asserts it re-derived is not."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 landed — the shipped surface is final, so the governance text is corrected against what exists rather than what is planned." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The target set is re-derived FIRST, by sweeping `.doctrine/adr`, `.doctrine/spec`, `.doctrine/policy` and `.doctrine/standard` for the deleted mechanisms against the corpus as it then stands, reading every hit in context. Any entity or region beyond the six is RECORDED, not absorbed." },
+  { id = "EX-2", text = "`ADR-011` — 11 regions, in-place amendment; `D2`/`D6` load-bearing; Consequences Positive/Neutral and References newly counted." },
+  { id = "EX-3", text = "`ADR-006` — 9 regions, reaching `D2a`'s decision body (not only `D2b`'s note), both `D9` amendments, and the dangling `IMP-065` forward reference (closed obsolete 2026-07-02 via REV-018)." },
+  { id = "EX-4", text = "`ADR-008` — 7 regions. The entity NO prior survey opened, and where the deletion is most load-bearing and least visible: project-local, so no `[[source]]` anchor and no `spec validate` leg points at it. `D-B3`'s codex/pi-only clause, `D-B6` entire, `N1`, and the `D2b`-discharge condition." },
+  { id = "EX-5", text = "`ADR-012` — 3 regions: `D3`'s harness-synthesis rule, Verification `M3`, and the `D2a` restatement in Boundary." },
+  { id = "EX-6", text = "`SPEC-012` — `REQ-192`/`248`/`250` rewrite, `REQ-252` narrow, plus 6 prose regions (responsibility lines 18 and 19, Overview keystone, guard section, the claude altitude bullet, the Concerns bullet)." },
+  { id = "EX-7", text = "`SPEC-021` — `REQ-288` retire (mooting ISS-347), `REQ-291` rewrite carrying §5.2.5's enforcement-altitude change, `REQ-384`/`387` narrow, responsibility lines 16 and 19a." },
+  { id = "EX-8", text = "Anchor sweep by hand: `spec-021.toml` has TWO dangling `[[source]]` anchors, not one — `:30` at `plugins/doctrine/skills/dispatch-agent/SKILL.md` AND `:34` at `…/dispatch-subprocess/SKILL.md`, both resolving by deletion. R7 named only the first; that is under-count #8. `spec-012.toml:30` and `spec-022.toml:45` are comment lists naming `pretooluse.rs` and `subagent.rs`." },
+  { id = "EX-9", text = "`doctrine boot` re-run after the governance edits; `doctrine boot --check` clean." },
+]
+verification = [
+  { id = "VH-1", expects = "design VH-1 — `ADR-011`'s corrected text and the `SPEC-012`/`SPEC-021` requirement dispositions accurately describe the SHIPPED arm, and no `[[source]]` anchor points at a deleted file. `spec validate` does NOT catch a dangling anchor (R7), so this leg is the only thing standing between the corpus and a silent regression." },
+  { id = "VH-2", expects = "design VH-2 — the REV's target set was re-derived from the entities AT THIS PHASE, not read off §3.1's table. The sweep was re-run against the corpus as it then stood, every hit read in context, and any entity or region beyond the six recorded rather than absorbed (DEC-218, R8)." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-09 ──────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-09"
+name      = "Live dispatch on the collapsed arm"
+objective = """
+The only evidence that the assembled path works. Nothing in the unit suites \
+exercises a real `claude -p` under bwrap, and A2's residue is provisioning — \
+which fails at runtime or not at all. Drive one real dispatch phase end to end \
+on the claude harness through the collapsed subprocess arm, concluding with the \
+orchestrator's incumbent import of the worker's working-tree diff."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed at minimum — the binary, scripts and hook set are in their final shape." },
+  { id = "EN-2", text = "A real host with `bwrap` available. On a host without it this phase SKIPS and says so; it does not pass vacuously (DEC-212)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "One dispatch phase driven end to end on the claude harness through `scripts/spawn-confined.sh claude`, concluding with the orchestrator's import of the worker's working-tree diff." },
+  { id = "EX-2", text = "The fork stays UNBOUND, as the pi arm's already are (OQ-1): the funnel row is named by the orchestrator's explicit `PHASE-NN`, and no reader on the retained path consults the binding." },
+  { id = "EX-3", text = "Evidence lands in an AUTHORED sink — `notes.md` or an `EVD` — never the gitignored scratchpad. A VA criterion over runtime state leaves nothing an audit can re-derive (DEC-212)." },
+]
+verification = [
+  { id = "VA-1", expects = "design §9.3 — a live dispatch phase driven end-to-end on the claude harness through the collapsed subprocess arm, concluding with the incumbent import. Evidence in an authored sink, with the host's bwrap availability stated either way." },
+  { id = "VA-2", expects = "probe 3, carried from the design's review notes: the Darwin path held to EVERY claim §5.1 and §5.2.1 make about the two profiles differing in exactly two tokens. `F-2` found one instance where 'parity holds by construction' was false; one instance of a class is not a census. If no mac is available, record that this is UNVERIFIED rather than letting silence read as verified (IMP-429, OQ-5, §9.5)." },
+]
+specs        = []
+requirements = []
