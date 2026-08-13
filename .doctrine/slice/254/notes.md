@@ -529,6 +529,49 @@ disproportionately the impure remainder plus the argv builders. The leaf
 classification deserves a deliberate look at that point rather than an inherited
 one — the module that emerges is not the module ADR-001 classified.
 
+### Escalation, PHASE-06: `worker-forbidden-writes` lost its only reader
+
+**The finding.** The Batch B orchestrator (PHASE-05/06) verified directly that
+`classify_import` (`import.rs:120`) — the belt `DEC-204`/`DEC-213` name as
+`worker_commit`'s surviving replacement — never read
+`DispatchConfig::worker_forbidden_writes`. It only ever enforced the two
+hard-coded floors, `.doctrine/**` and `.claude/**`. `worker_commit` was that
+config's *only* production reader, and PHASE-06 orphaned
+`ForbiddenWrites`/`is_forbidden` the moment it was deleted — confirmed by the
+compiler. So the config's configurable tail (`.agents/**`,
+`install/agents/**`, `flake.nix` — "the highest security leverage in the
+repo" per `install/doctrine.toml.example:121`) now enforces nothing. The two
+code floors are unaffected. No config in this repo sets the key today, so
+there is no live exposure — but the feature no longer does what it documents
+for a project that does set it. Left honestly marked
+(`expect(dead_code)` naming the gap) rather than silently dropped.
+
+**Why this escalated rather than being settled phase-locally.** Fixing it
+inside `SL-254` would reverse PHASE-06/VT-1 ("the import belt is UNTOUCHED")
+and `INV-2` with a same-slice `DEC` — a worse trade than carrying it forward,
+per the orchestrator's own read and the super-orchestrator's confirmation.
+
+**Owner decision, 2026-08-13.** Accept the gap for `SL-254`'s scope; resolve in
+`SL-255` instead, which is already building the clone-provisioning arm's new
+commit/import machinery and so can add a reader without contradicting a
+criterion this slice already closed. Refined by the owner: the fix should NOT
+be a Rust-side belt that runs after a worker has already written — that is
+strictly weaker than this slice's own confinement standard (`PHASE-02/VT-3`:
+"refused by the KERNEL not a hook"). Instead extend the confinement prefix
+builder to accept extra `--ro-bind` paths at spawn time, so
+`worker-forbidden-writes` gets the same kernel-level enforcement the worktree
+boundary already has. Captured as `IDE-051` ("Oubliette: enforce
+worker-forbidden-writes via bwrap read-only binds, not a post-import belt"),
+linked `originates_from SL-254` / `concerns SL-255`. `SL-255` should read
+`IDE-051` before designing its commit/import replacement.
+
+**PHASE-07 status at the time of this escalation.** Unblocked and independent
+— every verb/tool its prose references was already in final state, and
+PHASE-06 had already removed the retired config key's routing from
+`plugins/doctrine/skills/dispatch/SKILL.md` (a skill telling an orchestrator to
+read a deleted key is a live defect, not PHASE-07 prose). Proceeded without
+waiting on this decision.
+
 ### PHASE-01 `D1` — settled: collapse `BWRAP_BIN` onto `jail::BWRAP`
 
 Once `have_bwrap` moves out, `BWRAP_BIN` (`pretooluse.rs:71`) has exactly one
