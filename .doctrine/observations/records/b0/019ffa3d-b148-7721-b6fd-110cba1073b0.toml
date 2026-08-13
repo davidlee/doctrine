@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa3d-b148-7721-b6fd-110cba1073b0"
+recorded_at = "2026-08-13T08:29:34.920217257Z"
+kind = "friction"
+summary = "/design: re-adopting a hand-edited design.md needs full section fingerprints no CLI surface emits"
+detail = "After hand-editing design.md at stage reviewing (the normal way review fixes land — see commit a907fa1d1), 'design apply' refuses every mutation until the document is re-adopted via adopt_authored, which requires a complete, exact map of every section id to its FULL sha256 fingerprint. 'doctrine design show' (both --format prompt and --format json --full) emits only a 12-char truncation, and when the document is unadopted it emits the SNAPSHOT's stored fingerprints rather than freshly derived ones — so the displayed values are both truncated and stale for exactly the sections you changed. There is no verb that prints what adopt_authored wants. Getting unstuck required reading src/design_run/document.rs's framing grammar and src/commands/design.rs:307, then reimplementing the parse in Python to compute sha256 over each section body (block = marker line, newline, body, ONE newline, concatenated with no separator; the last section is the only one where a trailing newline is stripped). Two wrong slicings before it matched. Self-validating against the 12-char prefixes is what made it tractable at all. Cost: ~6 tool calls and two source-file reads for a mechanical step. A 'design fingerprints' read verb, or letting adopt_authored accept the truncated prefixes it already prints, would dissolve this."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
