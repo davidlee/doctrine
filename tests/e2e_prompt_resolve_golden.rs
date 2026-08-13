@@ -391,14 +391,14 @@ fn vt3_explain_multi_key_precedence_trace_spec_render() {
 
 // ── SL-193 PHASE-02 EX-2: exposed-slot self-`replaces` projection ─────────────
 //
-// After the producer (install forward-step 4) projects the 5 exposed slots, each
+// After the producer (install forward-step 4) projects the exposed slots, each
 // disk twin carries a self-`replaces` sidecar (`replaces = "<own slot>"`) that
 // suppresses its embedded framework origin at resolve — the single-emit MIRROR of
 // seal. These E2Es lock that corpus-wide over the built binary:
 //   - VT-3 (`exposed_projection_prompt_check_ok`): the projected sidecars are
 //     LEGAL — `prompt check` (⇒ validate_replaces) returns Ok. This is the sole
 //     guard against a NonTopReplacer/cycle that would make `prompt resolve` error.
-//   - VT-4 (`exposed_slots_single_emit_all_five`): EACH of the 5 exposed slots
+//   - VT-4 (`exposed_slots_single_emit_every_slot`): EACH of the exposed slots
 //     emits exactly once with its framework body suppressed — over `prompt resolve`
 //     (where the `replaces` graph is applied), not `prompt explain` (which prints
 //     the raw active set, ranked-but-present).
@@ -410,7 +410,7 @@ fn vt3_explain_multi_key_precedence_trace_spec_render() {
 // suppressed framework twin would leave its framework body in the output — the
 // assertion that it is absent is the suppression proof.
 
-/// The 5 exposed slots: (disk-relative `.md`/`.toml` stem, self-`replaces` target,
+/// The exposed slots: (disk-relative `.md`/`.toml` stem, self-`replaces` target,
 /// activating `prompt` args, distinct user-marker body, a framework-body substring
 /// that MUST vanish when the twin is suppressed).
 const EXPOSED: &[(&str, &str, &[&str], &str, &str)] = &[
@@ -436,13 +436,6 @@ const EXPOSED: &[(&str, &str, &[&str], &str, &str)] = &[
         "DeepSeek model family",
     ),
     (
-        "role/orchestrator",
-        "role/orchestrator",
-        &["--role", "orchestrator"],
-        "EXPOSED-USER-role-orchestrator",
-        "you own the process",
-    ),
-    (
         "role/worker",
         "role/worker",
         &["--role", "worker"],
@@ -451,7 +444,7 @@ const EXPOSED: &[(&str, &str, &[&str], &str, &str)] = &[
     ),
 ];
 
-/// Project the 5 exposed slots into `root/.doctrine/hymns/**`: a user-marker `.md`
+/// Project the exposed slots into `root/.doctrine/hymns/**`: a user-marker `.md`
 /// twin and its self-`replaces` sidecar (the producer's exact `.toml` emission).
 fn project_exposed(root: &Path) {
     let hymns = root.join(".doctrine/hymns");
@@ -486,11 +479,15 @@ fn exposed_projection_prompt_check_ok() {
     );
 }
 
-/// VT-4 — all 5 exposed slots single-emit corpus-wide (not just role/worker). Drive
+/// VT-4 — EVERY exposed slot single-emits corpus-wide (not just role/worker). Drive
 /// a context activating EACH slot; assert the user marker emits exactly once AND the
 /// framework body is suppressed (absent) over `prompt resolve`.
+///
+/// The table is deliberately count-free: SL-254 PHASE-10 dropped `role/orchestrator`
+/// when Mode B's role hymn was deleted, and a hardcoded count is a second place to
+/// forget to update.
 #[test]
-fn exposed_slots_single_emit_all_five() {
+fn exposed_slots_single_emit_every_slot() {
     let dir = tmp();
     project_exposed(dir.path());
 

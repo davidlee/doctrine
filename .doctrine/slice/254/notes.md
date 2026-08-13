@@ -6,9 +6,87 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-07 complete (7/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · see git log
 
 ### Produced
+- PHASE-10 done — Mode B's shipped implementation surface is gone (F-7). Four
+  files deleted whole, one edited. Deleted: `install/hymns/role/orchestrator.md`
+  (the live session-start role band; Mode B end to end — THE WALL, `arm-spawn`,
+  the six-step `worker_commit`→`dispatch_import`→`conclude`→`reap` cadence),
+  `install/workflows/drive-slice.js` (353 lines), and the two claude agent defs
+  `dispatch-orchestrator.md` (jailed under the `pretooluse.rs` wall PHASE-04
+  deleted) + `dispatch-probe.md` (orphaned — `drive-slice.js` was its only
+  caller). Edited: `install/hymns/role/worker.md`, one clause — the worker now
+  simply never commits. Nine lockstep sites updated (four
+  `publication/manifest.toml` entries, `install/manifest.toml`'s `expose`,
+  `src/install.rs`'s const + forward-step-3b leg + two tests + three stale
+  comments, `tests/e2e_prompt_resolve_golden.rs`'s `EXPOSED` table made
+  count-free). `just gate` exit 0, `publication validate` clean (90 entries),
+  `boot --check` clean, `prompt check` OK, `doctrine install` re-run and
+  resurrected nothing
+
+### Learned (PHASE-10)
+- **A tenth undercount, and the one that mattered most.** `EX-8` named the
+  `.claude/workflows/drive-slice.js` SYMLINK but not its target. That target,
+  `.doctrine/workflows/drive-slice.js`, is **git-tracked** — the materialised
+  install copy, and the actual payload Claude Code loads as the live
+  `/drive-slice` skill in this repo. Deleting only the shipped source plus the
+  symlink would have left a tracked, invocable program driving the deleted
+  Mode-B landing cadence — the exact failure `VH-1` exists to catch, surviving
+  the phase meant to remove it. Class: a *materialised installed copy* is a
+  distinct site from both the shipped source and the harness symlink. Also
+  swept: `.doctrine/agents/dispatch-probe.md` + its `.claude/agents/` symlink
+  (untracked).
+- **`EX-3`'s ruling is right; its stated reason was not the whole story.**
+  `drive-slice.js` is not pure Mode B — it carries a real (A)/pi subprocess arm
+  (`fork_tip: null`, worktree-diff import). What actually kills it for BOTH arms
+  is that its only landing verb is `dispatch_import`, and
+  `src/mcp_server/dispatch.rs:289-307` resolves the phase from the durable fork
+  binding via `require_binding`; the collapsed arm's forks are UNBOUND (`OQ-1`).
+  Its (B) path also spawns via in-session nested `agent(isolation:'worktree')`,
+  and its (A) path does not spawn at all. Verified before deleting, not assumed.
+- **`EX-8`'s golden-test wording was imprecise (conclusion unaffected).**
+  `tests/e2e_prompt_resolve_golden.rs` does not hardcode `orchestrator.md`'s
+  first line as a positive golden — `EXPOSED`'s 5th field is a framework-body
+  substring asserted ABSENT, and the orchestrator row's value matched this
+  repo's LOCAL twin, not the shipped body, so it was already vacuous and would
+  have stayed green either way. The row went for truth (it claimed a framework
+  slot that no longer ships, and is coupled to `expose`), not for redness.
+- **Coverage genuinely retired, not silently dropped.**
+  `install_agent_def`'s derived-dest-filename guard needed a MARKER-FREE shipped
+  def to prove it, and `dispatch-probe.md` was the only one. Both survivors
+  carry `WORKER_RESOLVE_MARKER`, and their basenames are exactly the name the
+  original bug hardcoded, so derived and hardcoded are now indistinguishable
+  from any real asset; `install_agent_def` reads the embed directly, so no
+  synthetic can be injected. Recorded in situ at the deletion site.
+- **`VH-1`'s trap is real and was avoided.** Checked in a fresh `mktemp -d` +
+  `git init` + `doctrine install`, NOT here: this repo's tracked local twins
+  `.doctrine/hymns/role/{orchestrator,worker}.md` override the shipped default
+  and would have false-greened any resolve run locally. In the clean project no
+  `role/orchestrator` is projected at all, and `prompt resolve` for BOTH roles
+  is free of every Mode-B token (`arm-spawn`, `worker_commit`, `dispatch_import`,
+  `dispatch_conclude_phase`, `dispatch_reap`, THE WALL, self-commit).
+  `prompt check` OK there too. The two local twins were separately read and are
+  arm-agnostic prose — they correctly survive as project overrides.
+
+### Open (PHASE-10)
+- `--role orchestrator` in a clean project now resolves to the sealed
+  `preamble/core.md`, whose first line reads *"You are a doctrine dispatch
+  worker"*. Pre-existing (the preamble is unconditional and always said this),
+  but with the orchestrator role band gone that worker framing is now
+  unopposed. Not fixed here — it is precisely what `IDE-053` (a stub `agent`
+  role + clone-workflow rewrites of the role prompts) was deferred to decide,
+  and this is a concrete datapoint for it.
+- `src/hymns.rs`'s `Role::Orchestrator` and `src/doctor_checks.rs`'s
+  `ROLE_ORCHESTRATOR` / `ROLE_PROBE` arms were deliberately LEFT IN PLACE. The
+  role remains a resolvable slot and a legal `--role` value, and those arms
+  validate the `doctrine-role:` marker on a project's OWN agent defs — deleting
+  them would invalidate a locally-authored orchestrator def. Consequence
+  recorded, not absorbed: both arms are now dead-in-production (no shipped def
+  carries `orchestrator` or `probe`) and are exercised only by synthetic
+  fixtures.
+
+### Produced (earlier phases)
 - PHASE-07 done — one spawn skill. `/dispatch-agent` + `/dispatch-subprocess` →
   `/dispatch-spawn` (both source dirs deleted, so PHASE-08's TWO dangling
   `spec-021.toml` anchors resolve as `EX-8` predicts — **and PHASE-08 should ADD

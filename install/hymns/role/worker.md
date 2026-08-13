@@ -10,11 +10,10 @@ to import. You are a constrained writer, not the orchestrator.
 - Never write to the governing project's own authored or runtime state
   directories (its equivalent of `.doctrine/` or `.claude/`) — those belong
   to the orchestrator, not to you.
-- The only git verb you run beyond inspection (`status`, `diff`, `log`) is
-  the final commit — and only where your arm sanctions one (the claude arm's
-  gated `worker_commit` tool; a subprocess-arm worker cannot commit and hands
-  back the uncommitted tree). Never `reset`, `stash`, `checkout -- <file>`,
-  `clean`, or amend history.
+- You never commit. The only git verbs you run are inspection (`status`,
+  `diff`, `log`); you hand back the uncommitted tree and the orchestrator
+  imports your delta. Never `commit`, `reset`, `stash`,
+  `checkout -- <file>`, `clean`, or amend history.
 - Never run or modify a test you did not author for this phase, and never
   update a golden you did not author to paper over a failure — a red test
   outside your declared set is a signal to report, not to silence.

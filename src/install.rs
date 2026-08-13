@@ -29,12 +29,6 @@ const RUNNER_BUNX: &str = "bunx";
 const RUNNER_NPX: &str = "npx";
 const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
-/// The claude-arm read-only probe def (SL-206 PHASE-13) — bootstrap phase-planner
-/// AND closing authored-divergence probe. Seeded alongside the worker/orchestrator
-/// defs via the same `install_agent_def` leg; dest filename is DERIVED from this
-/// asset's basename (no `_FILE` twin needed — see `install_agent_def`).
-const DISPATCH_PROBE_AGENT_ASSET: &str = "agents/claude/dispatch-probe.md";
-
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
 /// When `install_agent_def` sees this literal in a def, it resolves the role
 /// band (`Role::Worker`) through the prompt engine and replaces the marker with
@@ -477,20 +471,9 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             if let Err(e) = install_agents_for(root, "claude", None, args.global, false, &mut out) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
             }
-            // 3b. Probe def (SL-206 PHASE-13) — claude-arm only (read-only bootstrap
-            // + closing authored-divergence probe; no `agents/pi/dispatch-probe.md`
-            // counterpart exists).
-            if let Err(e) = install_agent_def(
-                root,
-                "claude",
-                None,
-                DISPATCH_PROBE_AGENT_ASSET,
-                args.global,
-                false,
-                &mut out,
-            ) {
-                writeln!(io::stdout(), "  claude probe-def install failed: {e:#}")?;
-            }
+            // 3b. RETIRED (SL-254 PHASE-10) — the claude-arm probe def
+            // (`agents/claude/dispatch-probe.md`) was orphaned when
+            // `workflows/drive-slice.js`, its only caller, was deleted with Mode B.
             // 3c. Workflows leg (SL-206 PHASE-13) — payload lands PHASE-14; a
             // no-op today (empty embed enumeration), mechanism only.
             if let Err(e) = install_workflows_for(root, args.global, false, &mut out) {
@@ -1833,8 +1816,7 @@ pub(crate) fn install_agents_for(
 ///
 /// The dest filename is DERIVED from `embed_asset`'s basename (SL-206
 /// PHASE-13) — never hardcoded — so this one function seeds every claude-arm
-/// def (`dispatch-worker.md`, `dispatch-probe.md`, …) rather than each needing
-/// its own copy-paste variant.
+/// def rather than each needing its own copy-paste variant.
 pub(crate) fn install_agent_def(
     root: &Path,
     agent_name: &str,
@@ -1896,9 +1878,10 @@ pub(crate) fn install_agent_def(
 // assets into the claude-arm `.claude/workflows/` dir the same way the agents
 // leg installs defs: materialize a canonical copy under `.doctrine/workflows/`,
 // then symlink the link dir at it — reusing `classify_link`/`write_link`/
-// `relative_target`/`install_base`, no parallel symlink impl. The `/drive-slice`
-// payload (`drive-slice.js`) landed in PHASE-14, so `embedded_workflow_defs()`
-// enumerates it and this leg is live in production.
+// `relative_target`/`install_base`, no parallel symlink impl. SL-254 PHASE-10
+// deleted the only payload (`drive-slice.js`, Mode B's driver), so
+// `embedded_workflow_defs()` enumerates nothing today and this leg is a no-op
+// in production again — mechanism only, ready for the next workflow asset.
 // ---------------------------------------------------------------------------
 
 /// The Claude workflows directory (project-local or, with `global`, user home).
@@ -1913,8 +1896,8 @@ fn workflow_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> 
 }
 
 /// Return every embedded workflow file (under `"workflows/"`) as
-/// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Carries the
-/// `/drive-slice` payload since SL-206 PHASE-14.
+/// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Empty since
+/// SL-254 PHASE-10 deleted `drive-slice.js`, its only payload.
 pub(crate) fn embedded_workflow_defs() -> Vec<(String, Vec<u8>)> {
     let prefix = "workflows/";
     crate::asset_source::iter()
@@ -3622,45 +3605,22 @@ mod tests {
         assert!(!written.contains(WORKER_RESOLVE_MARKER), "{written}");
     }
 
-    #[test]
-    fn install_agent_def_dispatch_probe_writes_bytes_identically_under_the_derived_dest() {
-        // SL-206 PHASE-13 (T4/VT-2): the dest filename is DERIVED from the
-        // embed-asset basename — a marker-free asset (the probe def has no
-        // WORKER_RESOLVE_MARKER) lands as a plain byte copy at its OWN name
-        // (`dispatch-probe.md`), not the previously-hardcoded
-        // `dispatch-worker.md` (the bug this generalization fixes).
-        let dir = tempfile::tempdir().unwrap();
-        let mut out = Vec::new();
-        install_agent_def(
-            dir.path(),
-            "claude",
-            None,
-            DISPATCH_PROBE_AGENT_ASSET,
-            false,
-            false,
-            &mut out,
-        )
-        .unwrap();
-
-        let expected = embedded_asset(DISPATCH_PROBE_AGENT_ASSET).unwrap();
-        let written = fs::read(dir.path().join(".doctrine/agents/dispatch-probe.md")).unwrap();
-        assert_eq!(written, expected.as_ref());
-    }
+    // SL-254 PHASE-10 retired two tests here with the assets they drove:
+    //   - `install_agent_def_dispatch_probe_writes_bytes_identically_under_the_
+    //     derived_dest` proved the dest filename is DERIVED from the embed-asset
+    //     basename rather than hardcoded to `dispatch-worker.md`. It needed a
+    //     MARKER-FREE shipped def to prove it, and `agents/claude/dispatch-probe.md`
+    //     was the only one; both surviving defs (claude + pi `dispatch-worker.md`)
+    //     carry `WORKER_RESOLVE_MARKER`, and their basenames are exactly the name
+    //     the old bug hardcoded — so derived and hardcoded are now
+    //     indistinguishable from any real asset. `install_agent_def` reads the
+    //     embed directly, so no synthetic asset can be injected either.
+    //   - `embedded_workflow_defs_carries_the_drive_slice_payload` asserted the
+    //     workflows leg was live in production. It is a no-op again: the embed
+    //     root ships no `workflows/*.js` since `drive-slice.js` went with Mode B.
+    // The leg's MECHANISM stays covered by the synthetic-asset tests below.
 
     // --- Workflows leg (SL-206 PHASE-13 T6) ---
-
-    #[test]
-    fn embedded_workflow_defs_carries_the_drive_slice_payload() {
-        // SL-206 PHASE-14 shipped `drive-slice.js` into the embed root — the leg
-        // is now live in production, not a no-op.
-        let defs = embedded_workflow_defs();
-        assert!(
-            defs.iter()
-                .any(|(rel, bytes)| rel == "drive-slice.js" && !bytes.is_empty()),
-            "expected drive-slice.js in embedded workflow defs, got {:?}",
-            defs.iter().map(|(r, _)| r).collect::<Vec<_>>()
-        );
-    }
 
     #[test]
     fn install_workflow_assets_materializes_and_links_a_synthetic_workflow() {
