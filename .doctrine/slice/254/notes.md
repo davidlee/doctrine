@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · see git log
+fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · PHASE-08 ESCALATED pre-authoring · see git log
 
 ### Produced
 - PHASE-10 done — Mode B's shipped implementation surface is gone (F-7). Four
@@ -170,6 +170,16 @@ fresh-as-of: 2026-08-13 · PHASE-10 complete (8/10) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **⚠ ESCALATED at PHASE-08, UNRESOLVED — `ADR-020` reserves `ADR-006`/`008`/`011`/
+  `012` to `REV-046`, and nobody asked whether it constrains this REV.** PHASE-08
+  stopped **before authoring anything**; the full re-derivation it completed first
+  (nine entities, ~191 regions — a 4× undercount, the eleventh) and the escalation's
+  three routes are in `### PHASE-08 re-derivation` and `### ESCALATION, PHASE-08`
+  at the end of this file. Coupled question in the same ruling: `ADR-011` is 56 of
+  ~70 regions falsified with a dead title-half and a Verification section it now
+  fails — is `EX-2`'s "in-place amendment" still the right instrument, or a
+  supersession? Anchor sweep (`EX-8`) is **done and confirms `EX-8` exactly**: two
+  dangling anchors, both `spec-021.toml` (`:30`, `:34`)
 - **⚠ ESCALATED at PHASE-07, UNRESOLVED — an entire shipped asset class still
   instructs the retired arm, and no phase in the plan reaches it.** Four files,
   ~500 lines, absent from design §5.6's table and from every phase's criteria:
@@ -723,3 +733,180 @@ deletes `pretooluse.rs` whole, at which point the duplicate would have gone
 anyway. Paying a lint suppression for three phases of duplication is the worse
 trade in every dimension. The test's assertion is untouched; only the symbol it
 names changes.
+
+### PHASE-08 re-derivation (`EX-1`, `VH-2`) — the target set is NINE entities, ~191 regions
+
+*Run 2026-08-13 at the head of PHASE-08, against the corpus as it then stood
+(PHASE-07 + PHASE-10 landed). Recorded here because the phase **escalated before
+authoring** — see the escalation below — so this derivation must not be lost with
+the session that produced it.*
+
+**Method (the `R8`/`DEC-218` obligation — re-derive, don't re-cite).** Two
+independent grep sweeps over `.doctrine/adr`, `.doctrine/spec`, `.doctrine/policy`,
+`.doctrine/standard`, then every hit read in context:
+
+1. *Mechanism sweep* — `pretooluse`, `nominat*`, `SubagentStart|Stop`,
+   `worker_commit`, `arm-spawn`, `claude-force-subprocess`, `dispatch-agent`,
+   `dispatch-subprocess`, `pi-spawn-confined`, `dispatch-orchestrator`,
+   `dispatch-probe`, `drive-slice`, `WorktreeCreate`, `marker`, `verify-worker`,
+   `in-session|claude arm|both arms`, `privileged.?agent`, `mode b`.
+2. *Consequence sweep* — the vocabulary a falsified region uses when it does
+   **not** name the mechanism: `stamp`, `subagent`, `altitude`, `self-commit`,
+   `commit gate`, `isolation.?worktree`, `claim.?lock`, `strict-mcp`,
+   `DOCTRINE_WORKER`, `jail.?prefix`, `arming`, `write_class`, `hook.?mint`,
+   `degraded`, `in-session`, `nested agent`, `harness capabilit`.
+
+Sweep 2 is what `DEC-218`'s method note predicted would be needed
+(`ADR-012` `D3` says "the Claude `Agent` arm", never "subagent") and it is what
+found `PRD-015` and `SPEC-022`, both of which `DEC-218`'s negative control had
+cleared. Positive control: `SPEC-011`/`SPEC-023`/`SPEC-024`/`ADR-018`/`PRD-006`/
+`PRD-014` all hit on `marker`/`nominat`/`altitude` in unrelated senses and were
+correctly discriminated as false positives, as `DEC-218` also found.
+
+**The count, against `DEC-218`'s floor.** Every entity read end to end.
+
+| entity | `DEC-218` floor | re-derived | delta |
+|---|---|---|---|
+| `ADR-011` | 11 | **56** | +45 |
+| `SPEC-012` | 10 | **44** | +34 |
+| `ADR-008` | 7 | **35** | +28 |
+| `ADR-006` | 9 | **23** | +14 |
+| `SPEC-021` | 6 | **~16** | +10 |
+| `ADR-012` | 3 | **~7** | +4 |
+| `ADR-001` | *not in set* | **~4** | new |
+| `PRD-015` | *not in set* | **~4** | new |
+| `SPEC-022` | *anchor-only* | **~2** | new |
+| **total** | **~46 / six entities** | **~191 / nine entities** | **4×** |
+
+**The eleventh undercount, and the first that changes the instrument.** The
+pattern held — always low, never high — but the size is new in kind, not only in
+degree. `ADR-011` is ~56 falsified regions out of ~70: its **title's** second
+half (*"per-harness capability altitude"*) is dead, and its **Verification**
+section is now unsatisfiable — `VA-2` requires that *"no harness-specific command
+(`claude -p`) appears as a required element"*, while `scripts/spawn-confined.sh:220`
+runs exactly `claude -p --output-format stream-json`. An `accepted` ADR that fails
+its own acceptance basis is a supersession question, not a 56-blockquote
+amendment. `ADR-008` has the same shape: `D-B6` entire (the nominate / spawn-gate
+/ `SubagentStop` mechanism) and `N1` entire (the `worker_commit` exception to the
+`PreToolUse` wall) are void — both the exception and the wall it excepts from.
+
+**The three entities beyond the six.**
+
+- **`ADR-001`** — `layering.toml` registers two modules that no longer exist:
+  `"worktree::pretooluse" = "command"` (`:139`) and `"worktree::subagent" = "engine"`
+  (`:148`), plus `:149`'s comment describing `marker.rs` as doing *"file I/O for
+  marker state"* when it is now a ~120-line env-only module. This is the candidate
+  seventh target `## Follow-up: jail.rs's ADR-001 posture` already flagged, now
+  confirmed with three more rows than that note anticipated.
+- **`PRD-015`** — two must-fix regions. Its **Alternate flow — degraded harness**
+  (`:129-131`) describes a harness that isolates and funnels at *"reduced
+  enforcement altitude"*; `DEC-208` abolished that rung outright (fail closed at
+  spawn, no unconfined fallback). And **`OQ-1`** (`:172-176`) rests the
+  coordinator's write-permission on marker-*absence* with `IMP-065` as *"the real
+  close"* — the marker is deleted and `IMP-065` closed **obsolete** 2026-07-02 via
+  `REV-018`. Considered and **kept**: the *"Harness parity of guarantee, honesty of
+  altitude"* success measure (`:110-112`) and the scope line (`:33`) — the promise
+  is *state your shortfalls honestly*, which survives and is now trivially met.
+- **`SPEC-022`** — `DEC-218` treated it as anchor-sweep-only, but `:205-210` is live
+  **prose**, not a comment: *"the funnel (claude arm) does not always commit
+  `boundaries.toml`"* (`ISS-039`). The `[[source]]` sibling comment at `:43-45` is
+  the separate, already-known item.
+
+**Anchor sweep (`EX-8`, `VH-1`) — complete, and `EX-8`'s count is exactly right.**
+Every uncommented `identifier` in every `spec-*.toml` in the corpus checked against
+disk. **Two** dangling anchors, both `spec-021.toml`: `:30`
+(`plugins/doctrine/skills/dispatch-agent/SKILL.md`) and `:34`
+(`…/dispatch-subprocess/SKILL.md`). Nothing else in the corpus dangles — the
+`doctrine/cli` hits are inside commented template blocks, not live rows. Still to
+do when the phase resumes: **add** the third anchor for
+`plugins/doctrine/skills/dispatch-spawn/SKILL.md` (PHASE-07's own prediction), and
+correct the two sibling comment lists (`spec-012.toml:28-30`, `spec-022.toml:43-45`)
+which name the deleted `pretooluse.rs`/`subagent.rs` **and** omit the live
+`claim_lock.rs`.
+
+**Considered and ruled OUT of the target set, with reasons.**
+
+- **`funnel-machine.md`** — a GENERATED artefact pinned byte-for-byte to
+  `src/funnel_machine.rs` by a golden test. The machine retains `WorkerCommitted` /
+  `RecordWorkerCommit`, and import's heal-forward still lands the
+  `[Spawn, RecordWorkerCommit, Import]` prefix, so the text is TRUE. Independently
+  reached, and it agrees with `DEC-218`. **Recorded, not absorbed:** the
+  `worker-committed` position is now reachable *only* via that synthetic
+  heal-forward prefix — no worker commits any more — so the name is a vestige.
+  Renaming it is a code change outside this slice; backlog candidate at reconcile.
+- **`ADR-020` / `SPEC-030`** — not targets. `SPEC-030:195-196` states *positively*
+  that harness-specific in-session subagent identity is outside the capsule
+  contract, which SL-254 confirms rather than falsifies. **But `ADR-020` is a
+  constraint** — see the escalation below.
+- **Pre-existing drift found while sweeping, NOT caused by this slice** — held out
+  of the REV deliberately, since folding it in would make SL-254 the reconciler of
+  other slices' debt: `SPEC-012`'s five-vs-eight `Tier` variants (`allowlist.rs`
+  now has eight); `SPEC-012`'s `descends_from = "PRD-015"` contradicting its own
+  body's *"carries no descent"*; the `CARGO_TARGET_DIR` redirect retired by SL-156
+  but still asserted in `ADR-008`'s Context, `ADR-006` `D9`, and `ADR-011`'s
+  References; `REQ-252`'s per-worktree env contract, dead since SL-156 (`fork.rs:216`
+  emits nothing) — of which only the *"subprocess-only (codex/pi)"* parenthetical is
+  SL-254's to narrow. Backlog candidates at reconcile; no ids minted (collision rule).
+
+### ESCALATION, PHASE-08: `ADR-020` reserves these four ADRs to `REV-046`
+
+**The finding.** `ADR-020` (**accepted**, "Adopt execution capsules as the dispatch
+authority boundary") carries two clauses that name exactly the ADRs this phase's
+REV revises:
+
+> This ADR establishes target architecture, not current implementation. ADR-011 and
+> the incumbent worktree dispatch remain authoritative until REV-046's cutover gates
+> are met. (`:86-88`)
+
+> ADR-006, ADR-008, ADR-011, ADR-012 — incumbent worktree, confinement, spawn,
+> and integration decisions **revised only at cutover through REV-046**. (`:145-146`)
+
+`REV-046` is `proposed · approval=none`, and its own rationale says it *"does not
+authorize deleting present-tense governance before an implementation exists"* and
+that *"ADR-011 and the existing dispatch specs remain authoritative for shipped
+dispatch until the capsule cutover."*
+
+**Why this was missed.** `DEC-211` and `DEC-218` both checked `ADR-020` and
+`REV-046` — but only as REV **targets** ("does ADR-020 need changing?"), and both
+cleared them as not-applicable. Neither asked whether `ADR-020` **constrains** what
+this REV may touch. That is the `/canon` question, and it was never put.
+
+**Why it is genuinely ambiguous rather than a simple blocker.** The `:145-146`
+clause sits in a References section and reads two ways, both defensible:
+
+- *(constraining)* those four ADRs may be revised **only** through `REV-046`, in
+  which case PHASE-08's REV is out of order as planned; or
+- *(self-scoping)* **`ADR-020` itself** revises them only at cutover — a statement
+  about ADR-020's own reach, not a prohibition binding other slices.
+
+The second is probably the author's intent, and SL-254 is not a capsule adoption
+(`DEC-203` bounded it). But the first reading is available on the words, and there
+is a sharper second-order question underneath it: **`REV-046`'s rationale
+enumerates precisely the mechanisms SL-254 has now deleted** — *"worktree marker
+identity, `DOCTRINE_WORKER`, SubagentStart stamping, base-by-placement, the gated
+`worker_commit` exception, per-harness arm routing and altitude"*. So either
+SL-254's arm collapse **is** part of `REV-046`'s cutover (and these corrections
+belong in `REV-046`, whose gates and status then need attention), or it is not
+(and `REV-046`'s rationale is itself now partly stale, describing as
+unimplemented-target a set of deletions that have shipped — which would make
+`REV-046` a **tenth** target of this REV).
+
+**Why it escalated rather than being settled phase-locally.** Every route out
+requires a call with governance weight beyond the `DEC-2xx` set this slice minted:
+route (A) proceeds with a new REV and appends a scoping note to `ADR-020` — this
+slice editing the accepted ADR that arguably forbids it; route (B) lands the
+corrections through `REV-046`, coupling SL-254 to capsule evidence it does not
+have; route (C) proceeds with a new REV on the self-scoping reading and records the
+rationale without touching `ADR-020`. **Recommendation: (C), falling back to (A)**
+— the corpus should not knowingly carry ~191 false regions until an unscheduled
+cutover, and the falsity is a consequence of shipped deletions, not of adopting the
+capsule architecture.
+
+**Second, coupled question for the same ruling.** Given `ADR-011` at 56/~70 regions
+with a dead title-half and a self-failing Verification section, is `EX-2`'s *"in-place
+amendment"* still the right instrument, or is `ADR-011` (and `ADR-008`'s `D-B6`/`N1`)
+now a **supersession**? `EX-2` was written when the count was 11.
+
+**State at escalation: nothing authored.** No governance file edited, no REV minted,
+no id minted, tree clean but for a pre-existing `skills-lock.json` modification that
+is not this session's. `just gate` untouched and green as PHASE-10 left it.

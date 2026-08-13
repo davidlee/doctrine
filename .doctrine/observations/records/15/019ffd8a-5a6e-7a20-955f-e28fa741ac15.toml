@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffd8a-5a6e-7a20-955f-e28fa741ac15"
+recorded_at = "2026-08-13T23:52:10.606980995Z"
+kind = "friction"
+summary = "PHASE-08 /execute: DEC-211 and DEC-218 both checked ADR-020 as a REV *target* and cleared it; neither asked whether ADR-020 *constrains* the REV. It does — it names ADR-006/008/011/012 as 'revised only at cutover through REV-046'."
+detail = "The re-derivation runbook (EX-1, R8, DEC-218) is entirely target-shaped: sweep the corpus for falsified text, enumerate regions. It has no leg that asks 'what governance constrains this REV's right to touch these entities'. That is the /canon question, and a target-sweep cannot surface it, because the constraining entity (ADR-020) contains no falsified text at all -- it was correctly cleared by the negative control twice. Generalisable: a governance-revision phase needs TWO sweeps, one for what is false and one for what governs the change, and the second cannot be derived from the first."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffd8a-7904-7272-8b71-b05d9c6bf301"
+recorded_at = "2026-08-13T23:52:18.436745432Z"
+kind = "friction"
+summary = "PHASE-08 /execute: the survey undercounted an eleventh time, 4x (46 -> 191 regions), and the size change flips the instrument rather than just the estimate."
+detail = "SL-254's plan and DEC-218 both carry the standing rule 'treat any count in this design as a floor', which correctly predicted direction but not magnitude. At 4x the phase stops being an amendment job: ADR-011 is 56 of ~70 regions falsified, its title's second half is dead, and its own VA-2 ('no harness-specific command (claude -p) appears as a required element') is contradicted by scripts/spawn-confined.sh:220. An accepted ADR that fails its own acceptance basis is a supersession question. Generalisable: a floor-not-ceiling warning is necessary but insufficient -- a re-derivation should also carry a threshold at which the PLANNED INSTRUMENT (amend in place vs supersede) is re-opened, because the plan fixes the instrument at a count taken before the re-derivation runs."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
