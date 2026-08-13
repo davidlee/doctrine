@@ -166,6 +166,62 @@ in the guest filesystem. Combined with F6 (access-token-only credentials are
 accepted and not persisted) this is a push, not a pull: mint per process start,
 accept the 8h ceiling, restart to renew.
 
+## Documented surface — and a correction to F9
+
+Third round, 2026-08-14. Source here is **official documentation**, fetched live
+(`code.claude.com/docs/en/{env-vars,authentication}.md`), not scraping. The local
+`docs/claude/` cache did not carry either page and was five weeks stale; that is
+fixed separately in `docs/claude/fetch.sh`.
+
+**F10 — `claude setup-token` mints a one-year OAuth token.** From the
+authentication doc: *"generate a one-year OAuth token with `claude setup-token`
+… It does not save the token anywhere; copy it and set it as the
+`CLAUDE_CODE_OAUTH_TOKEN` environment variable."* The bundle corroborates —
+`elt=31536000` is one year in seconds.
+
+**This corrects F9.** F9 concluded that `CLAUDE_CODE_OAUTH_TOKEN` implied an 8h
+ceiling with restart-to-renew. The pipe was right; the lifetime was wrong. The 8h
+of F2 governs an access token derived from a `/login` grant. A `setup-token`
+grant is **separate, year-long, and never written to `.credentials.json`** — so
+it does not join the rotation lineage at all. For a fan-out design this dissolves
+F1/F5 entirely: no fork, no CAS, no `invalid_grant` self-destruct, and no ~5-day
+re-login clock (F3) for a process authenticated this way.
+
+**F11 — the credential precedence is documented**, and `apiKeyHelper` outranks
+the OAuth token:
+
+1. gateway/provider sessions · 2. `ANTHROPIC_AUTH_TOKEN` (`Authorization: Bearer`)
+· 3. `ANTHROPIC_API_KEY` (`X-Api-Key`) · 4. `apiKeyHelper` · 5.
+`CLAUDE_CODE_OAUTH_TOKEN` · 6. Anthropic profile / federation · 7. subscription
+OAuth from `/login`.
+
+Consistent with F7: the doc describes `apiKeyHelper` as being for *"dynamic or
+rotating credentials, such as short-lived tokens fetched from a vault"* — the
+broker pattern exactly — but it remains the API-key-typed seam.
+
+**F12 — `CLAUDE_CODE_OAUTH_REFRESH_TOKEN` is a documented provisioning path.**
+With `CLAUDE_CODE_OAUTH_SCOPES` set, `claude auth login` exchanges the refresh
+token directly instead of opening a browser — *"useful for provisioning
+authentication in automated environments."* Note this hands the consumer a
+**refresh token**, so F1/F5 apply in full: only safe when the consumer owns its
+own grant, never when copies of one grant are distributed.
+
+**F13 — the SDK control-protocol path (F8) is undocumented.** The live Agent SDK
+TypeScript reference (4820 lines, vs the 3550-line five-week-old cached copy)
+documents no OAuth-refresh callback — only `ApiKeySource` (`"user" | "project" |
+"org" | "temporary" | "oauth"`) as a *reported* value on the init message. So
+`oauth_token_refresh` is internal, entrypoint-gated, and unsupported. **Do not
+build on it**; the documented env-var surface covers the same need.
+
+### Where that leaves a fan-out design
+
+Per-consumer `setup-token` grants need no broker, no shared lineage, and no
+re-login clock, at the cost of a year-long bearer credential living inside the
+consumer. A broker minting 8h tokens holds guest exposure to 8h — and is now
+cheaper than when first costed, because a `setup-token` can authenticate the
+*broker*, removing its own re-login problem. The trade is containment against
+moving parts; nothing here decides it.
+
 ## Limits of this evidence
 
 Single build (2.1.223), single subscription (`max`, `default_claude_max_5x`),

@@ -68,3 +68,28 @@ allowlisted `CLAUDE_CODE_ENTRYPOINT` (`claude-desktop`, `local-agent`,
 `claude-vscode`) — a plain CLI entrypoint does not get it.
 
 Detail and the re-greppable identifiers: `EVD-024` §§ F7–F9.
+
+## The rotation problem is avoidable — `claude setup-token`
+
+`claude setup-token` mints a **one-year** OAuth token, prints it, and **saves it
+nowhere**. Set it as `CLAUDE_CODE_OAUTH_TOKEN` and the process authenticates on a
+grant entirely separate from `~/.claude/.credentials.json` — so it never joins
+the rotation lineage. No fork, no CAS, no `invalid_grant` self-destruct, and no
+~5-day re-login clock for that process.
+
+Everything above about split homes applies to a `/login` grant. It does **not**
+apply to a `setup-token` grant. Before designing a broker to fan credentials out
+to isolated agents, check whether per-agent `setup-token` grants suffice — they
+usually will. The tradeoff is a year-long bearer credential living inside the
+agent's environment, which matters when the agent is confined precisely because
+it is not trusted.
+
+`CLAUDE_CODE_OAUTH_REFRESH_TOKEN` (with `CLAUDE_CODE_OAUTH_SCOPES`) is the other
+documented provisioning path — `claude auth login` exchanges it without a
+browser. But it hands over a *refresh* token, so the split-lineage rules apply in
+full: only safe when the consumer owns its own grant.
+
+Documented surface, all of it: `CLAUDE_CODE_OAUTH_TOKEN`,
+`CLAUDE_CODE_OAUTH_REFRESH_TOKEN`, `CLAUDE_CODE_OAUTH_SCOPES`, `claude
+setup-token`. The SDK control-protocol `oauth_token_refresh` is **not**
+documented — internal and entrypoint-gated; don't build on it. `EVD-024` §§F10–F13.
