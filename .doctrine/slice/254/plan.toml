@@ -117,7 +117,16 @@ exit_criteria = [
   { id = "EX-7", text = "`just gate` is green at ZERO clippy warnings — no orphaned `pub(crate)` left behind by the cascade." },
 ]
 verification = [
-  { id = "VT-1", expects = "the spawn gate and its allowlist are gone from the jail leaf, and resolve_target no longer takes a nomination argument", test_file = "src/worktree/jail.rs", keywords = ["fn resolve_target", "cwd_is_project_worktree"], waived = false },
+  # VT-1 WAIVED at PHASE-04 (2026-08-13), having PASSED at PHASE-03. It anchored on
+  # `fn resolve_target` surviving in `jail.rs` with its nomination argument gone —
+  # true and checked when PHASE-03 landed, but PHASE-04/EX-2 deletes `resolve_target`
+  # outright, so the anchor is destroyed BY DESIGN one phase later. This is the
+  # structural limit the plan's own "What the mandates can and cannot say" names: a
+  # presence mandate over a deleting slice must anchor on an artefact that survives
+  # the WHOLE slice, and this one anchored on a phase-local survivor. The claim is an
+  # absence, so it re-lands as VA-2 below, checked by grep at agent altitude.
+  { id = "VT-1", expects = "the spawn gate and its allowlist are gone from the jail leaf, and resolve_target no longer takes a nomination argument", test_file = "src/worktree/jail.rs", keywords = ["fn resolve_target", "cwd_is_project_worktree"], waived = true, waived_reason = "Satisfied and verified at PHASE-03; its anchor `fn resolve_target` is deleted by PHASE-04/EX-2 by design. Re-expressed as the absence claim VA-2." },
+  { id = "VA-2", expects = "APPENDED at PHASE-04. The nomination mechanism and the spawn gate appear NOWHERE in `src/` or `tests/`: no `nominate`/`denominate` verb, no `is_nominated`, no `PRIVILEGED_AGENT_TYPES`, no `is_privileged_agent_type`, no `decide_agent`, no `decide_workflow`, and no `SpawnSeamSymmetry`. Checked by grep at agent altitude, discounting the known homonyms — `nominates_reprobe` (comparison/elicitation domain), `denominate`/`denominator` in priority scoring, and the unrelated same-named `resolve_target` functions in `boot.rs` and `relation_graph.rs`." },
   # VT-2 CORRECTED at execution (SL-254 PHASE-03, 2026-08-13). The mandate named
   # `CATEGORY_ORDER`, which has never existed in this codebase — the symbol is
   # `CATEGORIES_BY_ORDINAL`, a fixed-length array whose length is the count. As
