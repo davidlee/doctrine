@@ -47,3 +47,24 @@ cannot revoke the grant for everyone via `/logout`.
 
 Blast radius to respect: any home sharing the file shares the failure. One
 misbehaving isolated agent can log out your interactive sessions.
+
+## Which pipe delivers the token
+
+Use **`CLAUDE_CODE_OAUTH_TOKEN`** (or its `_FILE_DESCRIPTOR` variant, which keeps
+the token off the guest filesystem). It is the unambiguous OAuth lane.
+
+Do **not** use `apiKeyHelper` for a subscription token. The client branches on
+credential *shape* — `"accessToken" in e` yields `Authorization: Bearer` plus the
+OAuth beta header, otherwise `x-api-key` — and `apiKeyHelper` produces an untyped
+string that is stamped into *both* headers, bypassing that discriminator. It is
+typed as an API key at the seam whatever you feed it; billing attribution is
+unverified.
+
+A first-class pull interface does exist — the SDK control protocol's
+`oauth_token_refresh` request, which returns an `accessToken` from the SDK host
+(distinct from `host_auth_token_refresh`, which is the Bedrock/Vertex/Foundry
+lane). But it is gated on `CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH` **and** an
+allowlisted `CLAUDE_CODE_ENTRYPOINT` (`claude-desktop`, `local-agent`,
+`claude-vscode`) — a plain CLI entrypoint does not get it.
+
+Detail and the re-greppable identifiers: `EVD-024` §§ F7–F9.

@@ -98,6 +98,74 @@ The token response also carries `account` and `organization` blocks, which the
 client folds into `~/.claude.json`'s `oauthAccount`. A broker should forward only
 what a consumer needs to function.
 
+## Delivery mechanisms — how a credential reaches a Claude Code process
+
+Probed 2026-08-14, same build. Static only; none of the three below was
+exercised live.
+
+**F7 — OAuth vs API key is a branch on credential *shape*, not a header
+preference.**
+
+```js
+let r = "accessToken" in e
+  ? { Authorization:`Bearer ${e.accessToken}`, "anthropic-beta": gL }
+  : { "x-api-key": e.apiKey };
+```
+
+A credential carrying `accessToken` is presented as `Authorization: Bearer` plus
+the OAuth beta header; one carrying `apiKey` is presented as `x-api-key`. The two
+are mutually exclusive by construction.
+
+This disqualifies **`apiKeyHelper`** as the pipe for a subscription token. It is
+a documented, live-reloaded settings key — a shell command producing an auth
+value, refreshed on `CLAUDE_CODE_API_KEY_HELPER_TTL_MS` — and mechanically it is
+the pull hook a broker wants. But it yields an untyped *string* which the docs
+state is sent as **both** `X-Api-Key` and `Authorization: Bearer`, bypassing the
+discriminator above. It is typed as an API key at the seam whatever is put in it.
+Billing attribution for an OAuth access token routed this way is **unverified**;
+do not assume subscription.
+
+**F8 — a first-class pull interface exists over the SDK control protocol.**
+
+```js
+async requestOAuthTokenRefresh(){
+  return (await this.sendRequest({subtype:"oauth_token_refresh"}, …)).accessToken }
+async requestHostAuthTokenRefresh(e=bbE){
+  return (await this.sendRequest({subtype:"host_auth_token_refresh"}, …)).authToken }
+```
+
+Two lanes, and they are not interchangeable: `oauth_token_refresh` → `accessToken`
+is first-party subscription; `host_auth_token_refresh` → `authToken` belongs to
+the third-party provider cluster (`CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST`, the AWS
+/ GCP credential vars → Bedrock / Vertex / Foundry). The child CLI *asks its SDK
+host* to refresh — exactly the broker topology, built in.
+
+**The gate is the catch.** The OAuth lane requires both the SDK-set flag and an
+allowlisted entrypoint:
+
+```js
+Mba = new Set(["claude-desktop","local-agent","claude-vscode"]);
+if (tr(env.CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH) && Mba.has(env.CLAUDE_CODE_ENTRYPOINT ?? ""))
+  _Ni(() => _.requestOAuthTokenRefresh());
+```
+
+A plain `cli` or `sdk-ts` entrypoint does not get it. (The host-auth lane is gated
+on a provider check plus `CLAUDE_CODE_HOST_AUTH_REFRESH_TIMEOUT_MS` instead, not
+on entrypoint.) `CLAUDE_CODE_ENTRYPOINT` is an ordinary env var and therefore
+settable, but that is leaning on an undocumented internal gate — fragile across
+releases and it misattributes telemetry. Treat as a known escape hatch, not a
+design foundation.
+
+**F9 — `CLAUDE_CODE_OAUTH_TOKEN` is the unambiguous pipe.** It sits in the auth
+env cluster beside `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`, is unset on
+logout (`te.unset("CLAUDE_CODE_OAUTH_TOKEN")`), and is cached through the
+OAuth-token setter. Its `_FILE_DESCRIPTOR` variant is resolved by a shared helper
+(`bcu({envVar, wellKnownPath, label:"OAuth token", getCached, setCached,
+skipInReviewOrigin})`) — the token arrives on a file descriptor and never lands
+in the guest filesystem. Combined with F6 (access-token-only credentials are
+accepted and not persisted) this is a push, not a pull: mint per process start,
+accept the 8h ceiling, restart to renew.
+
 ## Limits of this evidence
 
 Single build (2.1.223), single subscription (`max`, `default_claude_max_5x`),
