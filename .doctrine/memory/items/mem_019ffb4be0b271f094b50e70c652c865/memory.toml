@@ -1,0 +1,46 @@
+memory_uid = "mem_019ffb4be0b271f094b50e70c652c865"
+memory_key = "mem.pattern.refactor.move-closure-exceeds-consumer-imports"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A move's closure is the definition's needs, not the consumer's imports"
+summary = "A re-home set derived from what the surviving consumer imports under-counts: the moved definitions' own private dependencies come too."
+created = "2026-08-13"
+updated = "2026-08-13"
+
+[scope]
+paths = ["src"]
+globs = ["src/**/*.rs"]
+commands = []
+tags = ["rust", "refactoring", "census", "survey", "footgun"]
+workspace = "default"
+repo = "repo:git-root:04b048709e362ffa696cf4a778f9e3c947adea08"
+repo_id_kind = "local_root"
+repo_id_confidence = "medium"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b55f1b71eaf7a4833dfa779d97e20c399151c182"
+ref_name = "refs/heads/work"
+checkout_state_id = "562a78d4d2b1d5dfeb9605b5268c8740e7f87e0863cc4fa8ff8ee949358f5393"
+base_commit = "ef59ad0f5337e1024ddb68234b99bffd1733af35"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-254"
+
