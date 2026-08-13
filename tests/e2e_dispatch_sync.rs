@@ -35,6 +35,16 @@ use std::process::{Command, Output};
 
 mod common;
 
+/// SL-254 PHASE-05: the one worker-mode refusal cause
+/// (`marker::WORKER_ENV_CAUSE`). The VT-4 impersonation tests below used to check
+/// two different messages — a `signal: marker` one raised by a stamped linked
+/// worktree, and a dual-cause one raised by the env on the primary tree. `DEC-207`
+/// makes worker identity the `DOCTRINE_WORKER` env var ALONE, so both cases now
+/// raise THIS, and each test's two arms become a topology-independence proof:
+/// the same worker process is refused identically wherever it stands.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
+
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -354,7 +364,8 @@ fn prepare_review_refused_under_worker_mode() {
     let dir = repo.path();
     build_fixture(dir);
 
-    // (1) Marker-present linked worktree, env unset ⇒ refused, names verb.
+    // (1) A worker process in a linked worktree ⇒ refused, names verb.
+    // SL-254 PHASE-05: was a stamped linked worktree with the env unset.
     let holder = tempfile::tempdir().unwrap();
     let base = git(dir, &["rev-parse", "HEAD"]);
     let linked = holder.path().join("fork");
@@ -369,13 +380,10 @@ fn prepare_review_refused_under_worker_mode() {
             &base,
         ],
     );
-    let marker_dir = linked.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&marker_dir).unwrap();
-    std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
     let out = run(
         &linked,
-        None,
+        Some(true),
         &[
             "dispatch",
             "sync",
@@ -388,7 +396,7 @@ fn prepare_review_refused_under_worker_mode() {
     );
     assert!(
         !out.status.success(),
-        "refused from a marked linked worktree"
+        "refused from a worker process in a linked worktree"
     );
     assert!(
         stderr(&out).contains("dispatch-sync"),
@@ -396,11 +404,16 @@ fn prepare_review_refused_under_worker_mode() {
         stderr(&out)
     );
     assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "carries the named cause: {}",
+        stderr(&out)
+    );
+    assert!(
         !ref_exists(dir, "review/064"),
         "refused run creates no external ref"
     );
 
-    // (2) DOCTRINE_WORKER set ⇒ dual-cause refusal.
+    // (2) The SAME worker process on the primary tree ⇒ identical refusal.
     let out = run(
         dir,
         Some(true),
@@ -416,8 +429,8 @@ fn prepare_review_refused_under_worker_mode() {
     );
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause: {}",
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause: {}",
         stderr(&out)
     );
     assert!(!ref_exists(dir, "review/064"), "still no external ref");
@@ -1050,8 +1063,8 @@ fn integrate_report_emits_disposition_and_preserves_stdout_reflist() {
     );
 }
 
-/// VT-5: `--integrate` is the same Orchestrator verb class — a marker-present
-/// linked worktree AND `DOCTRINE_WORKER=1` each refuse it, writing no trunk.
+/// VT-5: `--integrate` is the same Orchestrator verb class — a worker process
+/// refuses it in a linked worktree and on the primary tree alike, writing no trunk.
 #[test]
 fn integrate_refused_under_worker_mode() {
     let repo = tempfile::tempdir().unwrap();
@@ -1060,7 +1073,8 @@ fn integrate_refused_under_worker_mode() {
     assert!(prepare_review(dir).status.success());
     let trunk_before = git(dir, &["rev-parse", "main"]);
 
-    // (1) Marker-present linked worktree, env unset ⇒ refused, names the verb.
+    // (1) A worker process in a linked worktree ⇒ refused, names the verb.
+    // SL-254 PHASE-05: was a stamped linked worktree with the env unset.
     let holder = tempfile::tempdir().unwrap();
     let base = git(dir, &["rev-parse", "HEAD"]);
     let linked = holder.path().join("fork");
@@ -1075,13 +1089,10 @@ fn integrate_refused_under_worker_mode() {
             &base,
         ],
     );
-    let marker_dir = linked.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&marker_dir).unwrap();
-    std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
     let out = run(
         &linked,
-        None,
+        Some(true),
         &[
             "dispatch",
             "sync",
@@ -1096,11 +1107,16 @@ fn integrate_refused_under_worker_mode() {
     );
     assert!(
         !out.status.success(),
-        "refused from a marked linked worktree"
+        "refused from a worker process in a linked worktree"
     );
     assert!(
         stderr(&out).contains("dispatch-sync"),
         "refusal names the verb: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "carries the named cause: {}",
         stderr(&out)
     );
     assert_eq!(
@@ -1109,7 +1125,8 @@ fn integrate_refused_under_worker_mode() {
         "no trunk write"
     );
 
-    // (2) DOCTRINE_WORKER set ⇒ dual-cause refusal, still no trunk write.
+    // (2) The SAME worker process on the primary tree ⇒ identical refusal, still
+    // no trunk write.
     let out = run(
         dir,
         Some(true),
@@ -1127,8 +1144,8 @@ fn integrate_refused_under_worker_mode() {
     );
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause: {}",
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause: {}",
         stderr(&out)
     );
     assert_eq!(
@@ -1244,7 +1261,10 @@ fn record_boundary_refused_under_worker_mode() {
     let fx = build_fixture(dir);
     let ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
 
-    // (1) Marker-present linked worktree, env unset ⇒ refused, names the verb.
+    // (1) A worker process in a linked worktree ⇒ refused, names the verb.
+    // SL-254 PHASE-05: was a stamped linked worktree with the env unset, spawned
+    // through `record_boundary` (which hardcodes env-unset); the env is now the
+    // signal, so the arm is spelled out rather than routed through that helper.
     let holder = tempfile::tempdir().unwrap();
     let base = git(dir, &["rev-parse", "HEAD"]);
     let linked = holder.path().join("fork");
@@ -1259,23 +1279,42 @@ fn record_boundary_refused_under_worker_mode() {
             &base,
         ],
     );
-    let marker_dir = linked.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&marker_dir).unwrap();
-    std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
-    let out = record_boundary(&linked, dir, "PHASE-09", &fx.base, &fx.code_end_1);
+    let out = run(
+        &linked,
+        Some(true),
+        &[
+            "dispatch",
+            "record-boundary",
+            "--slice",
+            "64",
+            "--phase",
+            "PHASE-09",
+            "--code-start",
+            &fx.base,
+            "--code-end",
+            &fx.code_end_1,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
     assert!(
         !out.status.success(),
-        "refused from a marked linked worktree"
+        "refused from a worker process in a linked worktree"
     );
     assert!(
         stderr(&out).contains("dispatch-record-boundary"),
         "refusal names the verb: {}",
         stderr(&out)
     );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "carries the named cause: {}",
+        stderr(&out)
+    );
     assert!(!ledger.exists(), "refused run records nothing");
 
-    // (2) DOCTRINE_WORKER set ⇒ refused, dual-cause token.
+    // (2) The SAME worker process on the primary tree ⇒ identical refusal.
     let out = run(
         dir,
         Some(true),
@@ -1296,8 +1335,8 @@ fn record_boundary_refused_under_worker_mode() {
     );
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause: {}",
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause: {}",
         stderr(&out)
     );
     assert!(!ledger.exists(), "still records nothing");

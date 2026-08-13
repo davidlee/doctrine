@@ -1,22 +1,12 @@
-#![expect(unused, reason = "extraction; PHASE-03 prunes")]
 // SPDX-License-Identifier: GPL-3.0-only
 //! land machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
-use super::allowlist::{
-    Allowlist, allowlist_violations, is_withheld, parse_allowlist, select_copies,
-};
-use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
-use super::shared::{
-    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
-};
-use crate::fsutil::{self, CopyOutcome};
+use super::shared::{gather_fork_worktree, gather_tree_clean, is_dispatch_fork_branch};
 use crate::git;
 use crate::root;
-use anyhow::{Context, bail};
-use std::fs;
-use std::io::{self, ErrorKind, Write};
-use std::path::{Path, PathBuf};
+use anyhow::bail;
+use std::io::{self, Write};
+use std::path::PathBuf;
 
 /// Verdict of the PURE land classifier: the preconds hold ⇒ the shell may run the
 /// `--no-ff` merge. Mirror of [`Apply`] for the import verb.
@@ -39,11 +29,11 @@ pub(crate) enum LandRefusal {
     TreeUnclean,
     /// `<fork>` branch does not exist.
     NoSuchFork,
-    /// `<fork>` exists but has NO live linked worktree — its marker would be
-    /// uncommitted/unreachable, so the dispatch-fork check would pass vacuously.
+    /// `<fork>` exists but has NO live linked worktree — there is nothing to land
+    /// from, so the dispatch-fork check below would be answering about a corpse.
     WorktreeGone,
-    /// `<fork>`'s live linked worktree bears the worker marker ⇒ it is a dispatch
-    /// worker; its delta must funnel through the belted `import`, never `land`.
+    /// `<fork>` is a dispatch worker branch (`dispatch/<agent>`) ⇒ its delta must
+    /// funnel through the belted `import`, never `land`.
     DispatchFork,
     /// `git merge --no-ff <fork>` conflicted; the merge was aborted FIRST (tree
     /// restored clean), THEN refused.
@@ -91,8 +81,9 @@ pub(crate) struct ForkState {
     pub(crate) exists: bool,
     /// `<fork>` has a live linked worktree checked out (per `git worktree list`).
     pub(crate) has_live_worktree: bool,
-    /// That live linked worktree bears the worker marker.
-    pub(crate) bears_marker: bool,
+    /// `<fork>` is a DISPATCH WORKER branch (`dispatch/<agent>`) — branch shape, not
+    /// a marker read (SL-254 DEC-207).
+    pub(crate) is_dispatch_fork: bool,
 }
 
 /// PURE land classifier (no git / disk / env — ADR-001 leaf, CLAUDE.md
@@ -105,11 +96,11 @@ pub(crate) struct ForkState {
 ///   It is intentionally UNUSED by the 7-token logic (design §6: that precond
 ///   carries NO refusal token; the verb runs at the coordination root by contract).
 ///   Kept in the signature to preserve the design's `classify_land` shape.
-/// * `fork_state` — `{exists, has_live_worktree, bears_marker}`.
+/// * `fork_state` — `{exists, has_live_worktree, is_dispatch_fork}`.
 ///
 /// Precond precedence (design §6): tree-unclean → no-such-fork → worktree-gone →
 /// dispatch-fork. `worktree-gone` gates `dispatch-fork` — refuse the worktree-less
-/// branch BEFORE the marker check can pass vacuously.
+/// branch BEFORE the dispatch-fork check, which would otherwise judge a corpse.
 pub(crate) fn classify_land(
     tree_status_clean: bool,
     _head: &str,
@@ -124,7 +115,7 @@ pub(crate) fn classify_land(
     if !fork_state.has_live_worktree {
         return Err(LandRefusal::WorktreeGone);
     }
-    if fork_state.bears_marker {
+    if fork_state.is_dispatch_fork {
         return Err(LandRefusal::DispatchFork);
     }
     Ok(Merge::Ok)
@@ -141,7 +132,7 @@ pub(crate) fn classify_land(
 /// Gather → pure-classify → act, patterned after [`run_import`]:
 /// 1. gather the precond FACTS (tracked-tree cleanliness via the SHARED
 ///    [`gather_tree_clean`]; `<fork>` existence; its live-linked-worktree path via
-///    [`gather_fork_worktree`]; the marker on that path via [`marker_present`]),
+///    [`gather_fork_worktree`]; the dispatch-fork verdict from the BRANCH SHAPE),
 /// 2. [`classify_land`] returns `Ok(Merge)` or one of the 4 PRECOND refusals,
 /// 3. on `Ok`, drive `git merge --no-ff <fork>`. On conflict → `git merge --abort`
 ///    FIRST (restore the clean tree), THEN refuse `merge-conflict`. The abort is
@@ -167,10 +158,13 @@ pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> 
     )?
     .is_some();
 
-    // --- gather: precond — <fork>'s live linked worktree (path) + its marker ---
+    // --- gather: precond — <fork>'s live linked worktree (path) ---
+    // The dispatch-fork leg is now BRANCH SHAPE, not a cross-tree marker read: the
+    // marker was the only signal that asked about another tree, and the env leg that
+    // replaced it describes THIS process (design §5.2.3 edge case, DEC-207).
     let fork_wt = gather_fork_worktree(&root, fork)?;
     let has_live_worktree = fork_wt.is_some();
-    let bears_marker = fork_wt.as_deref().is_some_and(marker_present);
+    let is_dispatch_fork = is_dispatch_fork_branch(Some(fork));
 
     // --- gather: contextual — HEAD branch (documents the coordination-root precond) ---
     let head = git::git_text(&root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
@@ -179,7 +173,7 @@ pub(crate) fn run_land(path: Option<PathBuf>, fork: &str) -> anyhow::Result<()> 
     let fork_state = ForkState {
         exists,
         has_live_worktree,
-        bears_marker,
+        is_dispatch_fork,
     };
     match classify_land(tree_clean, &head, fork_state) {
         // `no-such-fork` carries the path-vs-branch hint (ISS-058); the other

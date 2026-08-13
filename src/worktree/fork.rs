@@ -2,7 +2,6 @@
 //! fork machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
 use super::dispatch_record::{ForkBinding, coord_and_name};
-use super::marker::write_marker;
 use super::provision::run_provision;
 use crate::git;
 use crate::root;
@@ -130,7 +129,6 @@ pub(super) fn fork_core(
     base: &str,
     branch: &str,
     dir: &Path,
-    worker: bool,
     bind: &mut dyn FnMut() -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     // --- Step 0 refusals (pre-claim: leave NO fork) ---
@@ -187,10 +185,6 @@ pub(super) fn fork_core(
         // --- Step 4: provision via the sole copier (do NOT reimplement copying) ---
         run_provision(Some(repo.to_path_buf()), dir).context("provision fork")?;
 
-        // --- Step 5: stamp the worker marker BEFORE returning / any spawn window ---
-        if worker {
-            write_marker(dir).context("stamp worker marker")?;
-        }
         Ok(())
     })();
 
@@ -214,7 +208,7 @@ pub(super) fn fork_core(
 
 /// `doctrine worktree fork --base <B> --branch <name> --dir <path> [--worker]
 /// [--slice N --phase PHASE-NN]` — create an orchestrator-owned worktree fork off `B`,
-/// provision it, and optionally stamp the worker marker (design §5). The creation work
+/// provision it, and bind it when it is a worker fork (design §5). The creation work
 /// is [`fork_core`]; this CLI shell adds only the human status line. The fork compiles
 /// into its own in-tree `<dir>/target` — no env contract is emitted (SL-156: platform
 /// exited the build-env business).
@@ -253,18 +247,14 @@ pub(crate) fn run_fork(
         };
         super::dispatch_record::bind_dispatch_record(coord, name, base, dir, branch, Some(bound))
     };
-    fork_core(&repo, base, branch, dir, worker, &mut bind)?;
+    fork_core(&repo, base, branch, dir, &mut bind)?;
 
     // --- human status on stderr; stdout stays empty (machine-clean) ---
     writeln!(
         io::stderr(),
         "forked {branch} at {base} → {}{}",
         dir.display(),
-        if worker {
-            " (worker: marker stamped)"
-        } else {
-            ""
-        }
+        if worker { " (worker)" } else { "" }
     )?;
     Ok(())
 }

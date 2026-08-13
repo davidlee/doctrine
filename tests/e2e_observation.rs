@@ -51,11 +51,11 @@ fn init_repo(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "base"]);
 }
 
-/// Spawn `doctrine <args...>` in `cwd`. `worker_env` decides the env leg of the
-/// worker-mode predicate (`marker.rs` `describe_mode`): set it for the pi-arm
-/// dispatched shape, clear it for everything else. Cleared explicitly rather
-/// than inherited, so a `DOCTRINE_WORKER` in the runner's own environment
-/// cannot silently reclassify an unrelated test.
+/// Spawn `doctrine <args...>` in `cwd`. `worker_env` decides the worker-mode
+/// predicate (`marker.rs` `describe_mode`) — since SL-254 `DEC-207` it is the WHOLE
+/// of it: set it for a dispatched worker, clear it for everything else. Cleared
+/// explicitly rather than inherited, so a `DOCTRINE_WORKER` in the runner's own
+/// environment cannot silently reclassify an unrelated test.
 fn spawn(cwd: &Path, args: &[&str], worker_env: bool) -> Output {
     let mut cmd = common::doctrine_cmd(cwd);
     cmd.args(args);
@@ -72,8 +72,8 @@ fn run(cwd: &Path, args: &[&str]) -> Output {
     spawn(cwd, args, false)
 }
 
-/// Run `doctrine <args...>` in `cwd` with `DOCTRINE_WORKER=1` — the env leg the
-/// pi-arm dispatched worker carries alongside the marker.
+/// Run `doctrine <args...>` in `cwd` with `DOCTRINE_WORKER=1` — what makes the
+/// process a dispatched worker on either arm (`DEC-207`).
 fn run_as_env_worker(cwd: &Path, args: &[&str]) -> Output {
     spawn(cwd, args, true)
 }
@@ -1549,12 +1549,20 @@ fn non_ascii_uid_retract_shows_clean_diagnostic() {
 
 // ── Worker-fork refusal (RV-317 F-4.3) ───────────────────────────────────
 
-/// Build a linked worktree off `main_repo` carrying the dispatch worker marker
-/// — the shape the solo and dispatched refusal cases share. The marker leg only
-/// trips in a LINKED worktree (`marker.rs` `describe_mode`: `is_linked &&
-/// marker_present`), so the `git worktree add` is load-bearing, not scenery: the
-/// same marker on a non-linked tree is inert.
-fn marked_linked_fork(main_repo: &Path, fork: &Path) {
+/// SL-254 PHASE-05: the one refusal cause (`marker::WORKER_ENV_CAUSE`), replacing
+/// the `signal: marker` / `signal: both` / dual-cause tokens this section asserted.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
+
+/// Build a linked worktree off `main_repo` — the tree shape a dispatched worker
+/// occupies.
+///
+/// SL-254 PHASE-05: was `marked_linked_fork`, and the `git worktree add` was
+/// load-bearing because the marker leg required `is_linked && marker_present`. The
+/// marker is gone (`DEC-207`) and topology no longer participates in the verdict,
+/// so the linked worktree is now the realistic setting rather than half the signal;
+/// the refusal is provoked by making the CHILD PROCESS a worker.
+fn linked_fork(main_repo: &Path, fork: &Path) {
     git(
         main_repo,
         &[
@@ -1566,61 +1574,31 @@ fn marked_linked_fork(main_repo: &Path, fork: &Path) {
             "main",
         ],
     );
-    let marker = fork.join(".doctrine/state/dispatch/worker");
-    std::fs::create_dir_all(marker.parent().expect("marker parent")).unwrap();
-    std::fs::write(&marker, "").unwrap();
 }
 
-/// Design §3.4: an observation write inside a marked worker fork is refused
-/// with a diagnostic directing a confined worker to the `observation_record`
-/// broker, rather than the generic orchestrator-funnel text.
+/// Design §3.4: an observation write from a worker PROCESS is refused with a
+/// diagnostic directing a confined worker to the `observation_record` broker,
+/// rather than the generic orchestrator-funnel text.
 ///
-/// The SOLO half of PHASE-03 VT-4: a solo agent in a marked worktree carries no
-/// `DOCTRINE_WORKER`, so the marker leg alone trips and the signal token is
-/// `marker`. (The claude-arm confined worker has this same shape.)
+/// SL-254 PHASE-05: merges the old `solo_marked_fork_…` and
+/// `dispatched_marked_fork_…` pair. Those split the same refusal by which leg
+/// raised it — a claude-arm worker was marker-only (`signal: marker`), a pi-arm
+/// worker was marker-plus-env (`signal: both`). `DEC-207` gives BOTH arms the same
+/// single signal, so there are no longer two shapes to tell apart; the surviving
+/// subject is that a worker's observation write gets the broker advice.
 ///
-/// This lives in the e2e suite deliberately. `worker_guard` resolves the root
-/// from the process CWD, so a unit test would have to mutate process-global
-/// state that every concurrently-running test shares — `root::find` walks the
-/// CWD upward. A subprocess gets its own CWD, so there is nothing to race.
+/// This lives in the e2e suite deliberately: making the process a worker means
+/// setting an env var, and `set_var` is banned crate-wide because it would mutate
+/// state every concurrently-running test shares. A subprocess gets its own env, so
+/// there is nothing to race.
 #[test]
-fn solo_marked_fork_refusal_points_to_observation_record_broker() {
+fn worker_fork_refusal_points_to_observation_record_broker() {
     let dir = tmp();
     let main_repo = dir.path().join("main");
     init_repo(&main_repo);
 
     let fork = dir.path().join("fork");
-    marked_linked_fork(&main_repo, &fork);
-
-    let out = run(&fork, &["observation", "record", "friction", "from a fork"]);
-    assert!(
-        !out.status.success(),
-        "an observation write in a marked worker fork must be refused"
-    );
-    let err = stderr(&out);
-    assert!(
-        err.contains("observation_record"),
-        "refusal must name the MCP capture broker, got: {err}"
-    );
-    assert!(
-        err.contains("signal: marker"),
-        "a marker-only fork must report the marker signal, got: {err}"
-    );
-}
-
-/// The DISPATCHED half of PHASE-03 VT-4: the pi-arm worker carries the marker
-/// AND `DOCTRINE_WORKER`, so `describe_mode` resolves `Cause::Both`. Because the
-/// tree IS linked, `is_env_on_nonlinked()` is false and the refusal must still
-/// route to the observation branch — the broker advice, not the dual-cause text.
-/// This is the leg that distinguishes a dispatched worker from a leaked env.
-#[test]
-fn dispatched_marked_fork_refusal_points_to_observation_record_broker() {
-    let dir = tmp();
-    let main_repo = dir.path().join("main");
-    init_repo(&main_repo);
-
-    let fork = dir.path().join("fork");
-    marked_linked_fork(&main_repo, &fork);
+    linked_fork(&main_repo, &fork);
 
     let out = run_as_env_worker(
         &fork,
@@ -1633,46 +1611,87 @@ fn dispatched_marked_fork_refusal_points_to_observation_record_broker() {
     );
     assert!(
         !out.status.success(),
-        "an observation write in a dispatched worker fork must be refused"
+        "an observation write in a worker fork must be refused"
     );
     let err = stderr(&out);
     assert!(
         err.contains("observation_record"),
-        "a dispatched fork must still be pointed at the MCP capture broker, got: {err}"
+        "a worker fork must be pointed at the MCP capture broker, got: {err}"
     );
     assert!(
-        err.contains("signal: both"),
-        "marker plus env must report the dual signal, got: {err}"
+        err.contains(WORKER_CAUSE),
+        "the refusal must name its cause, got: {err}"
     );
 }
 
-/// The negative that fences the two above: `DOCTRINE_WORKER` on a NON-linked
-/// tree is an operator hazard (a worker dropped on the coordination root, or a
-/// leaked env), not a confined worker. It takes the `is_env_on_nonlinked()`
-/// branch, which deliberately WITHHOLDS the broker advice — directing an
-/// operator to an MCP tool they are not running would be wrong guidance.
+/// SL-254 PHASE-05: new, and the positive the old `solo_marked_fork_…` case
+/// inverted. A solo agent working in a linked worktree used to be refused — the
+/// marker made the TREE a worker regardless of who was running. Identity is now a
+/// property of the PROCESS, so a non-worker in a linked worktree can capture
+/// observations normally. Without this the collapse of the two refusal tests into
+/// one would leave the behaviour change itself unpinned.
 #[test]
-fn leaked_env_on_nonlinked_tree_refuses_without_broker_advice() {
+fn non_worker_in_a_linked_fork_may_capture_observations() {
+    let dir = tmp();
+    let main_repo = dir.path().join("main");
+    init_repo(&main_repo);
+
+    let fork = dir.path().join("fork");
+    linked_fork(&main_repo, &fork);
+
+    let out = run(&fork, &["observation", "record", "friction", "from a fork"]);
+    assert!(
+        out.status.success(),
+        "a non-worker process in a linked worktree must NOT be refused; stderr: {}",
+        stderr(&out)
+    );
+}
+
+/// The topology fence: `DOCTRINE_WORKER` on a NON-linked tree refuses IDENTICALLY.
+///
+/// SL-254 PHASE-05 — BEHAVIOUR CHANGE, pinned deliberately. This was
+/// `leaked_env_on_nonlinked_tree_refuses_without_broker_advice`, and it asserted
+/// `!err.contains("observation_record")`: the old guard treated env-set-on-a-
+/// non-linked-tree as an OPERATOR hazard (a leaked env, a worker dropped on the
+/// coordination root) and deliberately WITHHELD the broker advice, on the grounds
+/// that directing an operator to an MCP tool they are not running is wrong
+/// guidance. `DEC-207` removes topology from the verdict, so that discrimination is
+/// no longer expressible and the advice is now issued unconditionally — the
+/// operator's remedy has moved into the cause text ("if that is wrong, unset it").
+/// The assertion is therefore INVERTED rather than dropped, so the change stays
+/// visible and cannot silently drift back.
+#[test]
+fn worker_env_on_nonlinked_tree_refuses_identically() {
     let dir = tmp();
     let repo = dir.path().join("main");
     init_repo(&repo);
+    let fork_holder = tmp();
+    let main_repo = fork_holder.path().join("main");
+    init_repo(&main_repo);
+    let fork = fork_holder.path().join("fork");
+    linked_fork(&main_repo, &fork);
 
-    let out = run_as_env_worker(
-        &repo,
-        &["observation", "record", "friction", "from a leaked env"],
+    let args = &["observation", "record", "friction", "from a worker"];
+    let flat = run_as_env_worker(&repo, args);
+    let forked = run_as_env_worker(&fork, args);
+
+    assert!(
+        !flat.status.success(),
+        "a worker env on a non-linked tree must still refuse an authored write"
+    );
+    let err = stderr(&flat);
+    assert!(
+        err.contains(WORKER_CAUSE),
+        "must carry the named cause, which names the operator's remedy, got: {err}"
     );
     assert!(
-        !out.status.success(),
-        "a leaked worker env must still refuse an authored write"
+        err.contains("observation_record"),
+        "the broker advice is now UNCONDITIONAL — topology is not consulted, got: {err}"
     );
-    let err = stderr(&out);
-    assert!(
-        err.contains("DOCTRINE_WORKER"),
-        "must carry the named dual-cause diagnostic, got: {err}"
-    );
-    assert!(
-        !err.contains("observation_record"),
-        "the dual-cause leg must NOT direct an operator to the MCP broker, got: {err}"
+    assert_eq!(
+        err,
+        stderr(&forked),
+        "tree shape must not change the refusal by one byte (`DEC-207`)"
     );
 }
 

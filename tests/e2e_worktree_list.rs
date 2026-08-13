@@ -2,8 +2,13 @@
 //! SL-190 PHASE-05 — `doctrine worktree list` end-to-end over the BUILT binary
 //! (VT-2). Inventory + provenance: enumerate every linked worktree, classify each
 //! (primary / coordination / worker-fork / benign), and render the
-//! `path·role·slice·branch·head·marker·live?·landed` table (or `--json`), with a
+//! `path·role·slice·branch·head·live?·landed` table (or `--json`), with a
 //! role-conditional, fail-soft `landed` column.
+//!
+//! SL-254 PHASE-05 (`DEC-207`): the `marker` column is gone with the on-disk worker
+//! marker it reported. Role classification is unaffected — it was already branch- and
+//! topology-shaped for every role but `worker-fork`, whose marker leg dropped without
+//! loss because `dispatch/<agent>` already implies it.
 //!
 //! Fixture: a primary tree + two live coordination trees (`dispatch/190`,
 //! `dispatch/191`) + a worker fork (`dispatch/agent-x`, nested under an `SL-190`
@@ -200,13 +205,19 @@ fn worktree_list_json_is_a_valid_array_of_rows() {
     assert!(!rows.is_empty(), "at least the primary + linked rows");
 
     // Every row object carries the provenance keys, including landed.
+    // SL-254 PHASE-05: `marker` dropped from the key list — the column retired with
+    // the on-disk marker (`DEC-207`).
     for row in rows {
         let obj = row.as_object().expect("row is an object");
-        for key in [
-            "path", "role", "slice", "branch", "head", "marker", "live", "landed",
-        ] {
+        for key in ["path", "role", "slice", "branch", "head", "live", "landed"] {
             assert!(obj.contains_key(key), "row has `{key}`; row: {row}");
         }
+        // And it is GONE, not merely unasserted: a residual `marker` key would be a
+        // stale reader contract still reporting a signal nothing writes.
+        assert!(
+            !obj.contains_key("marker"),
+            "row must NOT carry a `marker` key; row: {row}"
+        );
     }
 
     // The worker-fork row's landed verdict is `landed`.

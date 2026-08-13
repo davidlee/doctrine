@@ -65,24 +65,6 @@ fn arm_spawn(root: &Path, base: &str) -> Output {
         .expect("spawn doctrine")
 }
 
-/// `doctrine worktree verify-worker --base <B> --dir <worktree> --branch <S>` —
-/// the post-spawn base==B belt the funnel runs against a returned worker.
-fn verify_worker(base: &str, dir: &Path, branch: &str) -> Output {
-    common::doctrine_cmd(dir)
-        .args([
-            "worktree",
-            "verify-worker",
-            "--base",
-            base,
-            "--branch",
-            branch,
-            "--dir",
-        ])
-        .arg(dir)
-        .output()
-        .expect("spawn doctrine")
-}
-
 /// `doctrine worktree create-fork` with `{cwd,name}` on STDIN, process cwd = `cwd`.
 fn create_fork(cwd: &Path, payload: &str) -> Output {
     let mut child = common::doctrine_cmd(cwd)
@@ -161,17 +143,41 @@ fn arm_spawn_then_create_fork_lands_at_base_b_under_moving_main() {
         "fork did NOT fall back to the moved main (H1 dead)"
     );
 
-    // VT-2 / F7: the worker is marked by the in-fork provision+mark (the NEW seam,
-    // not the retired SubagentStart stamp), so the post-spawn verify-worker belt
-    // passes — base==B holds, the marker is present, the tree is isolated.
+    // VT-2 / F7: the fork create-fork produced satisfies the post-spawn belt.
+    //
+    // SL-254 PHASE-05: this block used to assert the marker file existed and then
+    // shell `worktree verify-worker`. Both retired with the marker (`DEC-207` —
+    // identity is the process's `DOCTRINE_WORKER`, so there is nothing about the
+    // TREE left for a verify verb to inspect, and the verb no longer parses). The
+    // belt's other four conjuncts are NOT marker-derived, so rather than lose them
+    // they are asserted here directly, against the same fork: HEAD resolves, the
+    // tree is isolated (linked worktree), B is an ancestor of HEAD, and HEAD is the
+    // tip of the branch the funnel would import as S.
     assert!(
-        dir.join(".doctrine/state/dispatch/worker").exists(),
-        "worker marked via create-fork's in-fork provision+mark (F7)"
+        !git(&dir, &["rev-parse", "--verify", "HEAD"]).is_empty(),
+        "worker HEAD resolves in the fork"
     );
-    let verified = verify_worker(&b, &dir, "dispatch/agent-h1");
+    assert_ne!(
+        git(&dir, &["rev-parse", "--git-dir"]),
+        git(&dir, &["rev-parse", "--git-common-dir"]),
+        "the fork is ISOLATED — a linked worktree, not a second checkout of the root"
+    );
     assert!(
-        verified.status.success(),
-        "verify-worker passes for the create-fork'd worker; stderr: {}",
-        stderr(&verified)
+        Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(["merge-base", "--is-ancestor", &b, "HEAD"])
+            .status()
+            .expect("spawn git")
+            .success(),
+        "base B is an ancestor of the fork HEAD"
+    );
+    assert_eq!(
+        git(&dir, &["rev-parse", "--verify", "HEAD"]),
+        git(
+            &dir,
+            &["rev-parse", "--verify", "dispatch/agent-h1^{commit}"]
+        ),
+        "fork HEAD is the tip of `dispatch/agent-h1` — the branch the funnel imports as S"
     );
 }

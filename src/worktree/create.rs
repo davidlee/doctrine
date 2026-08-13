@@ -413,7 +413,7 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<CreatedFor
                 )
                 .with_context(|| format!("bind dispatch record for {name}"))
             };
-            fork_core(root, &base, &branch, &dir, true, &mut bind)?;
+            fork_core(root, &base, &branch, &dir, &mut bind)?;
 
             let canon = fs::canonicalize(&dir)
                 .with_context(|| format!("canonicalize fork dir {}", dir.display()))?;
@@ -1211,7 +1211,7 @@ mod tests {
             observed = Some((branch_exists(&root, branch), dir.exists()));
             Ok(())
         };
-        super::super::fork::fork_core(&root, &base, branch, &dir, true, &mut bind)
+        super::super::fork::fork_core(&root, &base, branch, &dir, &mut bind)
             .expect("the fork completes");
 
         assert_eq!(
@@ -1241,7 +1241,7 @@ mod tests {
             )?;
             anyhow::bail!("bind blew up")
         };
-        let err = super::super::fork::fork_core(&root, &base, &branch, &dir, true, &mut bind)
+        let err = super::super::fork::fork_core(&root, &base, &branch, &dir, &mut bind)
             .expect_err("a failed bind fails the fork");
         assert!(
             format!("{err:#}").contains("bind blew up"),

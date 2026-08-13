@@ -9,8 +9,12 @@
 //!
 //! * VT-1 — base==B drift-immune: a Fork pins the arming `base` even when HEAD moved.
 //! * VT-2/VT-3 — provision source = coord tree (I2): a gitignored sentinel present in
-//!   the coord tree (absent from any commit) lands in the created fork; Passthrough is
-//!   detached, provisioned, and NOT worker-marked; Fork IS worker-marked.
+//!   the coord tree (absent from any commit) lands in the created fork; a Fork lands
+//!   on the `dispatch/<name>` BRANCH at the arming base, a Passthrough on a DETACHED
+//!   HEAD at the coord tip. (SL-254 PHASE-05: the arms used to be told apart by the
+//!   worker marker too — "Fork IS worker-marked, Passthrough is NOT". The marker is
+//!   gone with `DEC-207`, so branch-vs-detached is now the whole discriminator, and
+//!   both halves are asserted explicitly rather than inferred from a stamp.)
 //! * VT-4 — fail-closed: malformed/empty/cwdless payload ⇒ named refusal (no panic);
 //!   a cwd outside any repo ⇒ `no-root`.
 //! * VT-5 — name collision: a live `dispatch/<name>`/`.worktrees/<name>` ⇒ refusal.
@@ -83,8 +87,8 @@ fn payload(cwd: &Path, name: &str) -> String {
 
 /// Run `doctrine <args>` with `payload` on STDIN. Process cwd = `cwd` (mirrors the
 /// hook firing with the orchestrator's cwd). CARGO_TARGET_DIR/DOCTRINE_WORKER cleared
-/// so provisioning into the fork is deterministic and the worker guard sees a clean
-/// (markerless) parent.
+/// so provisioning into the fork is deterministic and this Orchestrator-classed verb
+/// runs as the orchestrator process it models, not a worker.
 fn run(cwd: &Path, payload: &str, args: &[&str]) -> Output {
     let mut child = common::doctrine_cmd(cwd)
         .args(args)
@@ -124,8 +128,21 @@ fn assert_refusal(out: &Output, token: &str) {
     );
 }
 
-fn worker_marker(dir: &Path) -> PathBuf {
-    dir.join(".doctrine/state/dispatch/worker")
+/// The branch a worktree's HEAD points at, or `None` for a detached HEAD.
+///
+/// SL-254 PHASE-05: replaces the `worker_marker` helper. With the marker gone, this
+/// is what actually distinguishes the Fork arm (on `dispatch/<name>`) from the
+/// benign Passthrough arm (detached).
+fn head_branch(dir: &Path) -> Option<String> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["symbolic-ref", "-q", "--short", "HEAD"])
+        .output()
+        .expect("spawn git");
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
 /// Assert stdout is EXACTLY the created path — one line, no `KEY=value` env contract
@@ -147,7 +164,7 @@ fn assert_stdout_is_path_only(out: &Output) -> PathBuf {
 // --- VT-1 + VT-2 + VT-7(Fork): pin base B, provision from coord tree, path-only ---
 
 #[test]
-fn fork_pins_base_provisions_from_coord_tree_marks_worker_and_prints_path_only() {
+fn fork_pins_base_provisions_from_coord_tree_lands_on_branch_and_prints_path_only() {
     let root = tempfile::tempdir().unwrap();
     init_repo(root.path());
     let root_canon = std::fs::canonicalize(root.path()).unwrap();
@@ -186,17 +203,21 @@ fn fork_pins_base_provisions_from_coord_tree_marks_worker_and_prints_path_only()
         "from coord tree",
         "provision source is the coord tree (I2)"
     );
-    // Fork arm is worker-marked.
-    assert!(
-        worker_marker(&dir).exists(),
-        "Fork worktree is worker-marked"
+    // SL-254 PHASE-05: was `worker_marker(&dir).exists()` — "Fork worktree is
+    // worker-marked". The stamp is gone (`DEC-207`); what still tells the Fork arm
+    // apart from the benign Passthrough arm is that it lands on the dispatch BRANCH
+    // rather than a detached HEAD, so that is asserted directly.
+    assert_eq!(
+        head_branch(&dir).as_deref(),
+        Some("dispatch/agent-deadbeef"),
+        "Fork arm lands on the `dispatch/<name>` branch"
     );
 }
 
-// --- VT-3 + VT-7(Passthrough): benign detached tree, provisioned, NOT marked ---
+// --- VT-3 + VT-7(Passthrough): benign detached tree, provisioned, no branch ---
 
 #[test]
-fn passthrough_creates_detached_provisions_and_is_not_worker_marked() {
+fn passthrough_creates_detached_provisions_and_claims_no_dispatch_branch() {
     let root = tempfile::tempdir().unwrap();
     init_repo(root.path());
     let root_canon = std::fs::canonicalize(root.path()).unwrap();
@@ -218,25 +239,20 @@ fn passthrough_creates_detached_provisions_and_is_not_worker_marked() {
         git(root.path(), &["rev-parse", "HEAD"]),
         "detached at the coord tree HEAD"
     );
-    let symref = Command::new("git")
-        .arg("-C")
-        .arg(&dir)
-        .args(["symbolic-ref", "-q", "HEAD"])
-        .output()
-        .unwrap();
-    assert!(
-        !symref.status.success(),
-        "passthrough worktree is in detached HEAD state (no branch)"
+    // SL-254 PHASE-05: this was the `!worker_marker(&dir).exists()` negative — the
+    // proof that the benign arm is not mistaken for a worker. The marker retired
+    // (`DEC-207`), so the surviving negative is that the arm claims NO branch at
+    // all: it cannot be confused with a `dispatch/<name>` fork.
+    assert_eq!(
+        head_branch(&dir),
+        None,
+        "passthrough worktree is in detached HEAD state — it claims no dispatch branch"
     );
-    // Provisioned via the SAME copier, but NOT worker-marked (I2).
+    // Provisioned via the SAME copier (I2).
     assert_eq!(
         std::fs::read_to_string(dir.join("sentinel.txt")).unwrap(),
         "from coord tree",
         "passthrough provisioned from the coord tree"
-    );
-    assert!(
-        !worker_marker(&dir).exists(),
-        "passthrough worktree is NOT worker-marked"
     );
 }
 

@@ -17,9 +17,13 @@
 //! * VT-3 (idempotent rerun): crash AFTER each destructive step completes / names a
 //!   leftover on rerun — the W-removed-before-B ordering case, a fully-reaped no-op,
 //!   and a stale admin worktree entry folded via `git worktree prune`.
-//! * VT-4 (EXHAUSTIVE Orchestrator refusal): from a marked linked-worktree fork
-//!   (env unset) AND from a DOCTRINE_WORKER-set process, EACH of fork/import/land/gc
-//!   is refused. `marker --clear` is deliberately OUT of this class.
+//! * VT-4 (EXHAUSTIVE Orchestrator refusal): from a worker process — in a linked
+//!   worktree fork AND on the primary tree — EACH of fork/import/land/gc is
+//!   refused. (SL-254 PHASE-05: the two arms used to be "marked fork, env unset"
+//!   and "env set on a non-linked tree", the marker and env legs of a two-leg
+//!   identity. `DEC-207` makes the env var the whole of it, so both arms now carry
+//!   the same signal and the pair proves topology-independence instead. The
+//!   `marker --clear` carve-out this listed retired with the verb.)
 
 #![allow(
     clippy::expect_used,
@@ -73,11 +77,10 @@ fn init_repo(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "base"]);
 }
 
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
+/// SL-254 PHASE-05: the one worker-mode refusal cause
+/// (`marker::WORKER_ENV_CAUSE`), replacing the `signal: marker` / dual-cause pair.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
 /// DOCTRINE_WORKER=1; None removes it). CARGO_TARGET_DIR is removed so the spawned
@@ -123,9 +126,9 @@ fn assert_refusal(out: &Output, token: &str) {
 /// (`refusing authored write \`land\``, `src/commands/guard.rs`). The delimiters are
 /// the point (IMP-054): a bare `contains(verb)` is a PROXY that a regression naming
 /// the WRONG verb still satisfies, because the surrounding prose carries the token
-/// anyway — the marker-leg message opens `worker fork (signal: …)`, so bare `"fork"`
-/// passes for every member of the loop, and the env-leg dual-cause is a constant
-/// shared by all four. Asserting the delimited verb asserts the property.
+/// anyway — the refusal opens `worker fork (…)`, so bare `"fork"` passes for every
+/// member of the loop, and the cause is a constant shared by all four. Asserting
+/// the delimited verb asserts the property.
 fn assert_refusal_names_verb(out: &Output, verb: &str) {
     assert_refusal(out, &format!("`{verb}`"));
 }
@@ -570,9 +573,10 @@ fn add_linked_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     fork
 }
 
-/// Every Orchestrator-classed verb's argv (the verb name is asserted in the marker
-/// refusal). `marker --clear` is deliberately EXCLUDED — it is the bespoke
-/// MarkerClear class, never refused by the worker-mode conjunct.
+/// Every Orchestrator-classed verb's argv (the verb name is asserted in the
+/// refusal). SL-254 PHASE-05: the `marker --clear` exclusion this carried is gone
+/// with the verb — the `MarkerClear` write class no longer exists, so the loop is
+/// exhaustive over the whole Orchestrator class with nothing carved out.
 fn orchestrator_verbs() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
         (
@@ -591,15 +595,16 @@ fn orchestrator_verbs() -> Vec<(&'static str, Vec<&'static str>)> {
 }
 
 #[test]
-fn every_orchestrator_verb_refused_from_a_marked_linked_worktree() {
+fn every_orchestrator_verb_refused_from_a_worker_in_a_linked_worktree() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    let fork = add_linked_fork(src.path(), holder.path(), "guard-marker");
-    stamp_marker(&fork);
+    let fork = add_linked_fork(src.path(), holder.path(), "guard-worker");
 
     for (verb, argv) in orchestrator_verbs() {
-        assert_refusal_names_verb(&run(&fork, None, &argv), verb);
+        // SL-254 PHASE-05: the marker stamp that used to provoke this is gone; the
+        // linked worktree stays because it is the tree shape a real worker occupies.
+        assert_refusal_names_verb(&run(&fork, Some(true), &argv), verb);
     }
 }
 
@@ -612,12 +617,12 @@ fn every_orchestrator_verb_refused_under_worker_env() {
         let out = run(src.path(), Some(true), &argv);
         // The property: THIS verb is the one refused (IMP-054 / RV-016 F-11).
         assert_refusal_names_verb(&out, verb);
-        // Independently, the env leg on a non-linked tree must carry the dual-cause
-        // guidance rather than a bare worker refusal — a distinct claim about the
-        // message, kept because it is not implied by naming the verb.
+        // Independently, the refusal must carry the NAMED cause and its remedy
+        // rather than a bare worker refusal — a distinct claim about the message,
+        // kept because it is not implied by naming the verb.
         assert!(
-            stderr(&out).contains("DOCTRINE_WORKER"),
-            "{verb} env refusal carries the dual-cause; stderr: {}",
+            stderr(&out).contains(WORKER_CAUSE),
+            "{verb} refusal carries the named cause; stderr: {}",
             stderr(&out)
         );
     }

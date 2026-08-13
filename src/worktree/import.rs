@@ -1,21 +1,11 @@
-#![expect(unused, reason = "extraction; PHASE-03 prunes")]
 // SPDX-License-Identifier: GPL-3.0-only
 //! import machine — extracted from worktree/mod.rs (SL-116 PHASE-02).
 
-use super::allowlist::{
-    Allowlist, allowlist_violations, is_withheld, parse_allowlist, select_copies,
-};
-use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
-use super::shared::{
-    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
-};
-use crate::fsutil::{self, CopyOutcome};
+use super::shared::{gather_tree_clean, matches, resolve_commit};
 use crate::git;
 use crate::root;
 use anyhow::{Context, bail};
-use std::fs;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// The two coordination/runtime tier prefixes the import belt rejects. The
@@ -583,6 +573,7 @@ pub(crate) fn gather_worktree_delta_paths(wt: &Path) -> anyhow::Result<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fsutil;
     use crate::worktree::test_helpers::{git, init_repo};
     use std::fs;
 

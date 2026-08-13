@@ -1313,7 +1313,7 @@ fn run_observation_record(root: &Path, arguments: &Value) -> anyhow::Result<Stri
     // what routes the refusal to `-32602`, and that is an MCP fact.
     let explicit = request::parse_explicit_facets(arguments.get("facets"))
         .map_err(|reason| anyhow::anyhow!("invalid arguments: `facets`: {reason}"))?;
-    let facets = wire::merge_explicit_facets(enrich_mcp(enrich, root), explicit);
+    let facets = wire::merge_explicit_facets(enrich_mcp(enrich), explicit);
 
     // The wire builder validates BEFORE the store is touched, which is what lets
     // a refusal render its diagnostics through the escaper below.
@@ -1380,17 +1380,18 @@ fn render_refusal(diags: &[wire::Diagnostic]) -> String {
 /// rather than failing. There is therefore no enrichment failure mode that could
 /// block a capture — the property is held by the shape of this function, not by
 /// a rescue path around it.
-fn enrich_mcp(enrich: bool, root: &Path) -> Facets {
+fn enrich_mcp(enrich: bool) -> Facets {
     if !enrich {
         return Facets::default();
     }
 
-    let repository_context =
-        if crate::worktree::env_worker_set() || crate::worktree::marker_present(root) {
-            "worker"
-        } else {
-            "primary"
-        };
+    // Worker context is a property of THIS PROCESS (`DOCTRINE_WORKER`), so it no
+    // longer takes a root to answer — SL-254 `DEC-207` retired the marker leg.
+    let repository_context = if crate::worktree::env_worker_set() {
+        "worker"
+    } else {
+        "primary"
+    };
 
     Facets {
         execution: Some(wire::ExecutionFacet {

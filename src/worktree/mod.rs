@@ -36,12 +36,15 @@ pub(crate) use jail::JailPolicy;
 mod jail_prefix;
 
 mod marker;
+pub(crate) use marker::{WORKER_ENV_CAUSE, env_worker_set, resolve_mode, run_status};
+
+/// The `agent_type` the dispatch worker's harness agent definition must carry.
+/// Re-homed here from `marker.rs` at SL-254 PHASE-05: it never described the
+/// marker, and `marker.rs` is now the env predicate alone. Test-only — its two
+/// consumers are the drift guards below that pin the shipped agent definition and
+/// skill front-matter against this spelling.
 #[cfg(test)]
-pub(crate) use marker::{Cause, DISPATCH_WORKER_AGENT_TYPE, describe_mode};
-pub(crate) use marker::{
-    DUAL_CAUSE, env_worker_set, marker_present, remove_marker, resolve_mode, run_marker_clear,
-    run_status, write_marker,
-};
+pub(crate) const DISPATCH_WORKER_AGENT_TYPE: &str = "dispatch-worker";
 
 mod claim_lock;
 mod coordinate;
@@ -60,7 +63,6 @@ mod import;
 mod inventory;
 mod land;
 mod provision;
-mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
 pub(crate) use create::{
@@ -80,7 +82,6 @@ pub(crate) use import::{CLAUDE_PREFIX, DOCTRINE_PREFIX, gather_worktree_delta_pa
 pub(crate) use inventory::run_list;
 pub(crate) use land::run_land;
 pub(crate) use provision::{run_check_allowlist, run_provision};
-pub(crate) use subagent::{run_stamp_subagent, run_verify_worker};
 
 #[cfg(test)]
 pub(crate) use coordinate::{CoordAction, CoordRefusal, base_has_slice_plan, classify_coordinate};
@@ -93,10 +94,6 @@ pub(crate) use gc::{GcOutcome, GcRefusal, reap_fork};
 pub(crate) use gc::{GcPlan, GcState, GcVerdict, classify_gc};
 #[cfg(test)]
 pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork_message};
-#[cfg(test)]
-pub(crate) use subagent::{
-    Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
-};
 // SL-198 PHASE-02 (test-only): the record provisioner that `worker_commit`'s tests
 // cross-check against (VT-3 belt-agreement; integration fixtures that stand up a live
 // per-worktree record).
@@ -344,15 +341,10 @@ pub(crate) enum WorktreeCommand {
         path: Option<PathBuf>,
     },
 
-    /// Print the resolved worker-mode and cause.
-    /// `--assert` derives a non-zero `stale-marker` exit. Read-classed — open
-    /// to workers.
+    /// Print the resolved worker-mode. Read-classed — open to workers.
+    /// (`--assert` retired with the stale-marker class at SL-254: the env leg
+    /// cannot go stale, so there is nothing for an operator to be warned about.)
     Status {
-        /// Gate exit: non-zero with a `stale-marker` token if a stray marker sits
-        /// in this linked worktree (clean direct-writer entry ⇒ exit 0).
-        #[arg(long)]
-        assert: bool,
-
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -373,48 +365,6 @@ pub(crate) enum WorktreeCommand {
         /// Suppress the `landed` column.
         #[arg(long)]
         no_landed: bool,
-
-        /// Explicit project root (default: auto-detect from CWD).
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-
-    /// Verify a worker's base commit.
-    /// Post-spawn check: prove the worker worktree's HEAD descends from the
-    /// base `B` it was meant to fork off. Diagnostic only — fail-loud, NEVER
-    /// removes the fork. Read-classed (callable under worker-mode).
-    VerifyWorker {
-        /// The base commit `B` the worker was meant to fork off (the
-        /// orchestrator's coordination HEAD at spawn).
-        #[arg(long)]
-        base: String,
-
-        /// The worker worktree to verify — the git `-C` root for every probe.
-        #[arg(long)]
-        dir: PathBuf,
-
-        /// The worker fork branch S — binds HEAD(--dir) == tip(S) (dir↔branch coherence).
-        #[arg(long)]
-        branch: Option<String>,
-    },
-
-    /// Manage the worker-mode disk marker (SL-056 §3). `--clear` removes it at the
-    /// cwd tree root with a loud receipt — the self-brick cure; never refused by
-    /// the marker conjunct itself.
-    Marker {
-        /// Remove the marker at the cwd tree root.
-        #[arg(long)]
-        clear: bool,
-
-        /// Confirm a clear inside a linked worktree (the accident-fence).
-        #[arg(long)]
-        operator: bool,
-
-        /// Provision + stamp the worker marker into the `SubagentStart` payload's
-        /// worktree (SL-056 PHASE-10). Reads `{cwd, agent_type}` JSON on stdin;
-        /// the claude harness spawn path's mark step.
-        #[arg(long)]
-        stamp_subagent: bool,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -518,30 +468,13 @@ pub(crate) fn dispatch(
             dry_run,
             path,
         } => run_gc(path, &fork, superseded_head.as_deref(), force, dry_run),
-        WorktreeCommand::Status { assert, path } => run_status(path, assert),
+        WorktreeCommand::Status { path } => run_status(path),
         WorktreeCommand::List {
             slice,
             json,
             no_landed,
             path,
         } => run_list(path, slice, json, no_landed, landing),
-        WorktreeCommand::VerifyWorker { base, dir, branch } => {
-            run_verify_worker(&base, &dir, branch.as_deref())
-        }
-        WorktreeCommand::Marker {
-            clear,
-            operator,
-            stamp_subagent,
-            path,
-        } => {
-            if stamp_subagent {
-                run_stamp_subagent(path)
-            } else if clear {
-                run_marker_clear(path, operator)
-            } else {
-                anyhow::bail!("`worktree marker` requires `--clear` or `--stamp-subagent`")
-            }
-        }
     }
 }
 
@@ -561,11 +494,11 @@ mod tests {
 
     // --- SL-056 PHASE-08: land pure classifier + refusal-token table (design §6) ---
 
-    fn fork_state(exists: bool, has_live_worktree: bool, bears_marker: bool) -> ForkState {
+    fn fork_state(exists: bool, has_live_worktree: bool, is_dispatch_fork: bool) -> ForkState {
         ForkState {
             exists,
             has_live_worktree,
-            bears_marker,
+            is_dispatch_fork,
         }
     }
 
@@ -766,67 +699,6 @@ mod tests {
     #[test]
     fn gc_refusal_token_is_not_landed() {
         assert_eq!(GcRefusal::NotLanded.token(), "not-landed");
-    }
-
-    // --- SL-056 PHASE-05 T1: describe_mode truth table (the single source) ---
-
-    #[test]
-    fn describe_mode_truth_table() {
-        // Solo: neither signal, in or out of a linked worktree ⇒ allowed.
-        let solo_plain = describe_mode(false, false, false);
-        assert!(!solo_plain.refused, "no signal ⇒ writes allowed");
-        assert_eq!(solo_plain.cause, Cause::None);
-
-        // A marker on the PRIMARY tree is inert (mode needs a linked fork).
-        let marker_on_main = describe_mode(false, true, false);
-        assert!(
-            !marker_on_main.refused,
-            "marker without a linked worktree is inert ⇒ allowed"
-        );
-        assert_eq!(marker_on_main.cause, Cause::None);
-
-        // A linked worktree WITHOUT a marker (the clean direct-writer entry).
-        let linked_no_marker = describe_mode(true, false, false);
-        assert!(!linked_no_marker.refused, "linked, no marker ⇒ allowed");
-        assert_eq!(linked_no_marker.cause, Cause::None);
-
-        // PRIMARY signal: marker in a linked worktree, no env ⇒ refused: marker.
-        let marker = describe_mode(true, true, false);
-        assert!(marker.refused);
-        assert_eq!(marker.cause, Cause::Marker);
-        assert!(
-            marker.is_stale_marker(),
-            "marker-only in a fork is the stale-marker case"
-        );
-        assert!(!marker.is_env_on_nonlinked());
-
-        // Env on a NON-linked tree ⇒ refused: env, dual-cause hazard.
-        let env_main = describe_mode(false, false, true);
-        assert!(env_main.refused);
-        assert_eq!(env_main.cause, Cause::Env);
-        assert!(env_main.is_env_on_nonlinked(), "env on main ⇒ dual-cause");
-        assert!(!env_main.is_stale_marker());
-
-        // Env inside a linked worktree (no marker) ⇒ env, but NOT the dual-cause
-        // (it is genuinely a worker fork via the env optimisation).
-        let env_linked = describe_mode(true, false, true);
-        assert!(env_linked.refused);
-        assert_eq!(env_linked.cause, Cause::Env);
-        assert!(!env_linked.is_env_on_nonlinked());
-
-        // Both legs ⇒ signal: both.
-        let both = describe_mode(true, true, true);
-        assert!(both.refused);
-        assert_eq!(both.cause, Cause::Both);
-        assert!(
-            !both.is_stale_marker(),
-            "both is not the marker-only stale case"
-        );
-
-        assert_eq!(solo_plain.cause_token(), "none");
-        assert_eq!(marker.cause_token(), "marker");
-        assert_eq!(env_main.cause_token(), "env");
-        assert_eq!(both.cause_token(), "both");
     }
 
     // --- T1: WITHHELD authority + .gitignore parity (VT-4) ---
@@ -1117,152 +989,6 @@ mod tests {
             "refusal carries BASE_CORPUS_STALE; got: {msg}"
         );
         assert!(!dir.exists(), "no worktree dir created on the g2 bail");
-    }
-
-    // --- SL-056 PHASE-10: classify_stamp pure arms (T2) ---
-
-    #[test]
-    fn classify_stamp_ok_when_all_inputs_hold() {
-        // Valid dir + agent-type + marker ABSENT (the first stamp) ⇒ Ok.
-        assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, false),
-            Ok(Stamp::Ok)
-        );
-    }
-
-    #[test]
-    fn classify_stamp_missing_cwd_refuses() {
-        // cwd absent ⇒ missing-cwd, regardless of the other inputs.
-        assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, false, false, false),
-            Err(StampRefusal::MissingCwd)
-        );
-        assert_eq!(StampRefusal::MissingCwd.token(), "missing-cwd");
-    }
-
-    #[test]
-    fn classify_stamp_bad_dir_refuses_when_cwd_present_but_invalid() {
-        // cwd present but not under-repo-and-linked ⇒ bad-dir (checked before
-        // agent-type, so even a wrong agent_type still names the dir problem).
-        assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, false, false),
-            Err(StampRefusal::BadDir)
-        );
-        assert_eq!(
-            classify_stamp("anything", true, false, false),
-            Err(StampRefusal::BadDir)
-        );
-        assert_eq!(StampRefusal::BadDir.token(), "bad-dir");
-    }
-
-    #[test]
-    fn classify_stamp_missing_agent_type_refuses() {
-        // agent_type absent ("") OR present-but-wrong ⇒ missing-agent-type.
-        assert_eq!(
-            classify_stamp("", true, true, false),
-            Err(StampRefusal::MissingAgentType)
-        );
-        assert_eq!(
-            classify_stamp("some-other-agent", true, true, false),
-            Err(StampRefusal::MissingAgentType)
-        );
-        assert_eq!(StampRefusal::MissingAgentType.token(), "missing-agent-type");
-    }
-
-    #[test]
-    fn classify_stamp_already_marked_refuses() {
-        // Valid dir + agent-type but the worktree ALREADY bears the marker ⇒ a
-        // re-entrant stamp ⇒ already-marked (the marker check is LAST, F-9).
-        assert_eq!(
-            classify_stamp(DISPATCH_WORKER_AGENT_TYPE, true, true, true),
-            Err(StampRefusal::AlreadyMarked)
-        );
-        assert_eq!(StampRefusal::AlreadyMarked.token(), "already-marked");
-    }
-
-    // --- SL-064 PHASE-08: worker-verify pure classifier + token table (design §8.4) ---
-    // --- SL-123 PHASE-01: not-isolated + branch-mismatch belts (design §5.2) ---
-
-    // VT-3 (updated): existing goldens with the 5-arg signature, verdicts UNCHANGED.
-    #[test]
-    fn classify_worker_verify_ok_when_all_preconds_hold() {
-        // HEAD resolves, isolated, marker present, B is an ancestor, branch tip
-        // matches ⇒ base==B holds.
-        assert_eq!(
-            classify_worker_verify(true, true, true, true, true),
-            Ok(WorkerVerify::Ok)
-        );
-    }
-
-    #[test]
-    fn classify_worker_verify_no_worker_head_refuses_first() {
-        // HEAD unresolved ⇒ no-worker-head, regardless of the other inputs (the
-        // first precond — nothing to verify without a HEAD).
-        assert_eq!(
-            classify_worker_verify(false, true, true, true, true),
-            Err(WorkerVerifyRefusal::NoWorkerHead)
-        );
-        assert_eq!(
-            classify_worker_verify(false, false, false, false, false),
-            Err(WorkerVerifyRefusal::NoWorkerHead)
-        );
-        assert_eq!(WorkerVerifyRefusal::NoWorkerHead.token(), "no-worker-head");
-    }
-
-    #[test]
-    fn classify_worker_verify_unstamped_names_itself_before_base() {
-        // HEAD resolves but marker absent ⇒ unstamped, EVEN WHEN the base is also
-        // wrong — the marker check precedes the base check (precond order).
-        assert_eq!(
-            classify_worker_verify(true, true, false, false, true),
-            Err(WorkerVerifyRefusal::Unstamped)
-        );
-        assert_eq!(WorkerVerifyRefusal::Unstamped.token(), "unstamped");
-    }
-
-    #[test]
-    fn classify_worker_verify_wrong_base_refuses_last() {
-        // Resolvable, stamped fork, but B is NOT an ancestor of the worker HEAD ⇒
-        // wrong-base.
-        assert_eq!(
-            classify_worker_verify(true, true, true, false, true),
-            Err(WorkerVerifyRefusal::WrongBase)
-        );
-        assert_eq!(WorkerVerifyRefusal::WrongBase.token(), "wrong-base");
-    }
-
-    // VT-1: not-isolated refuses after NoWorkerHead but before marker.
-    #[test]
-    fn classify_worker_verify_not_isolated_refuses_after_head_before_marker() {
-        // HEAD resolves but is_isolated=false ⇒ NotIsolated, regardless of marker/base.
-        assert_eq!(
-            classify_worker_verify(true, false, true, true, true),
-            Err(WorkerVerifyRefusal::NotIsolated)
-        );
-        assert_eq!(
-            classify_worker_verify(true, false, false, false, false),
-            Err(WorkerVerifyRefusal::NotIsolated)
-        );
-        assert_eq!(WorkerVerifyRefusal::NotIsolated.token(), "not-isolated");
-    }
-
-    // VT-2: branch-mismatch refuses last.
-    #[test]
-    fn classify_worker_verify_branch_mismatch_refuses_last() {
-        // Everything ok except head_is_branch_tip=false ⇒ BranchMismatch.
-        assert_eq!(
-            classify_worker_verify(true, true, true, true, false),
-            Err(WorkerVerifyRefusal::BranchMismatch)
-        );
-        // No --branch (head_is_branch_tip=true) with all-true ⇒ Ok.
-        assert_eq!(
-            classify_worker_verify(true, true, true, true, true),
-            Ok(WorkerVerify::Ok)
-        );
-        assert_eq!(
-            WorkerVerifyRefusal::BranchMismatch.token(),
-            "branch-mismatch"
-        );
     }
 
     // --- SL-056 PHASE-10 T6 / VT-4: agent-def `name` ↔ const drift gate ---

@@ -5,8 +5,8 @@
 //! (`compare list` / `explain` / `findings`). `compare record`/`withdraw` are
 //! WRITE-classed (`commands/guard.rs`) and this suite runs inside a dispatch
 //! WORKER jail that refuses authored writes outside its declared delta — a
-//! spawned `compare record` hits `worker fork (signal: marker): refusing
-//! authored write` before it can mint anything. [`capture`]/[`withdraw`]
+//! spawned `compare record` hits `worker fork (…): refusing authored write`
+//! before it can mint anything. [`capture`]/[`withdraw`]
 //! below hand-author the SAME session-of-one TOML the real command would
 //! have minted (the exact wire shape `comparison::wire` documents) rather
 //! than shelling out — the only adaptation the A5 STOP condition anticipates

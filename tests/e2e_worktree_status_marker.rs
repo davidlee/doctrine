@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! SL-056 PHASE-05 — `doctrine worktree status [--assert]` and `worktree marker
-//! --clear --operator` end-to-end over the BUILT binary.
+//! SL-056 PHASE-05 / SL-254 PHASE-05 — `doctrine worktree status` end-to-end over
+//! the BUILT binary.
 //!
-//! * VT-2: the four-state `status` golden (force_no_tty-stable plain lines):
-//!   no-signal → allowed; marker-only → refused signal: marker; env-only → refused
-//!   signal: env; both → refused signal: both.
-//! * VT-3: `status --assert` gate — clean linked-worktree entry → exit 0; a stale
-//!   marker in a linked worktree → non-zero `stale-marker` naming the remedy; exit
-//!   0 after `marker --clear --operator`. The human line and the `--assert` exit
-//!   read ONE describe_mode and never disagree.
-//! * VT-4: `marker --clear` self-brick cure — a stale marker refuses writes;
-//!   `marker --clear --operator` (env unset) restores writes from within the CLI;
-//!   refused when DOCTRINE_WORKER set / cwd outside the marker's tree / bare
-//!   `--clear` in a linked worktree (the accident-fence).
+//! * VT-2: the `status` golden (force_no_tty-stable plain lines). SL-254 `DEC-207`
+//!   collapsed worker identity to the `DOCTRINE_WORKER` env var alone, so the
+//!   four-state table (no-signal / marker-only / env-only / both) is a TWO-state
+//!   table over one input, and it is topology-independent: the same two lines come
+//!   out of a linked worktree fork and a plain repo alike.
+//!
+//! RETIRED HERE (subject deleted, not skipped — SL-254 PHASE-05):
+//!   * `status_assert_gate` — `--assert` existed to detect a STALE marker. An env
+//!     var cannot go stale (it dies with the process), so the whole stale class,
+//!     the flag, and the `stale-marker` exit token retired together.
+//!   * `marker_clear_cures_self_brick` and the three `marker --clear` fence tests
+//!     (`--operator` confirmation, cwd-must-be-tree-root, refused-while-env-set) —
+//!     `worktree marker --clear` was the CURE for a stale marker. With no stale
+//!     class there is no self-brick to cure, and the verb no longer parses.
+//!     The one assertion inside them that was NOT about the marker — that
+//!     worker mode bricks `slice new` — survives in `e2e_worker_guard.rs`
+//!     (`worker_env_in_linked_worktree_refuses_writes`).
 
 #![allow(
     clippy::expect_used,
@@ -70,28 +76,14 @@ fn add_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     fork
 }
 
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
-
-fn marker_exists(root: &Path) -> bool {
-    root.join(".doctrine/state/dispatch/worker").exists()
-}
-
-/// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
-/// DOCTRINE_WORKER=1; None removes it).
-fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
+/// Run `doctrine <args>` in `cwd`; `worker` governs `DOCTRINE_WORKER`.
+fn run(cwd: &Path, worker: bool, args: &[&str]) -> Output {
     let mut cmd = common::doctrine_cmd(cwd);
     cmd.args(args);
-    match worker {
-        Some(true) => {
-            cmd.env("DOCTRINE_WORKER", "1");
-        }
-        Some(false) | None => {
-            cmd.env_remove("DOCTRINE_WORKER");
-        }
+    if worker {
+        cmd.env("DOCTRINE_WORKER", "1");
+    } else {
+        cmd.env_remove("DOCTRINE_WORKER");
     }
     cmd.output().expect("spawn doctrine")
 }
@@ -103,229 +95,103 @@ fn stderr(out: &Output) -> String {
     String::from_utf8(out.stderr.clone()).expect("utf8 stderr")
 }
 
-// --- VT-2: the four-state status golden ---
+const ALLOWED: &str = "worker fork: no — writes allowed\n";
+const REFUSED: &str = "worker fork: yes — writes refused; signal: env\n";
+
+// --- VT-2: the status golden ---
 
 #[test]
-fn status_four_states() {
+fn status_two_states_in_a_linked_fork() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
     let fork = add_fork(src.path(), holder.path(), "wkr-status");
 
-    // (1) no signal: a fresh fork, env unset ⇒ allowed.
-    let out = run(&fork, None, &["worktree", "status"]);
-    assert!(out.status.success());
-    assert_eq!(stdout(&out), "worker fork: no — writes allowed\n");
+    // (1) env unset ⇒ allowed, even standing in a genuine fork.
+    let out = run(&fork, false, &["worktree", "status"]);
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), ALLOWED);
 
-    // (2) marker only: stamp the marker, env unset ⇒ refused signal: marker.
-    stamp_marker(&fork);
-    let out = run(&fork, None, &["worktree", "status"]);
+    // (2) env set ⇒ refused, naming the one surviving signal.
+    let out = run(&fork, true, &["worktree", "status"]);
     assert!(
         out.status.success(),
-        "plain status (no --assert) always exits 0"
+        "status always exits 0 — it reports, it does not gate; stderr: {}",
+        stderr(&out)
     );
+    assert_eq!(stdout(&out), REFUSED);
+}
+
+// SL-254 PHASE-05: new. The four-state table's two deleted rows (marker-only, both)
+// were the only place `status` was proven to read something OTHER than the env, so
+// removing them would leave the topology-independence of `DEC-207` unpinned. This
+// replaces them: the primary (non-linked) tree reports the SAME two lines as the
+// fork above, so no residual tree-shape input can have crept back into the verdict.
+#[test]
+fn status_is_topology_independent() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+
+    let out = run(src.path(), false, &["worktree", "status"]);
     assert_eq!(
         stdout(&out),
-        "worker fork: yes — writes refused; signal: marker\n"
+        ALLOWED,
+        "a non-linked tree with the env unset reports allowed"
     );
 
-    // (3) env only: clear the marker, set the env ⇒ refused signal: env.
-    std::fs::remove_file(fork.join(".doctrine/state/dispatch/worker")).unwrap();
-    let out = run(&fork, Some(true), &["worktree", "status"]);
+    let out = run(src.path(), true, &["worktree", "status"]);
     assert_eq!(
         stdout(&out),
-        "worker fork: yes — writes refused; signal: env\n"
-    );
-
-    // (4) both: marker + env ⇒ refused signal: both.
-    stamp_marker(&fork);
-    let out = run(&fork, Some(true), &["worktree", "status"]);
-    assert_eq!(
-        stdout(&out),
-        "worker fork: yes — writes refused; signal: both\n"
+        REFUSED,
+        "a worker process on a NON-linked tree is still a worker (`DEC-207`)"
     );
 }
 
-// --- VT-3: status --assert gate (one describe_mode, never disagree) ---
-
+// SL-254 PHASE-05: new, and load-bearing. `--assert` retired with the stale-marker
+// class; this pins that it stayed retired rather than quietly resurfacing as an
+// ignored no-op flag, which would leave callers believing they still had a gate.
 #[test]
-fn status_assert_gate() {
+fn status_assert_flag_is_rejected_by_the_parser() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let fork = add_fork(src.path(), holder.path(), "wkr-assert");
 
-    // Clean linked-worktree entry (no marker, no env) ⇒ exit 0, human says allowed.
-    let plain = run(&fork, None, &["worktree", "status"]);
-    let asserted = run(&fork, None, &["worktree", "status", "--assert"]);
-    assert!(asserted.status.success(), "clean entry ⇒ --assert exit 0");
-    assert_eq!(stdout(&plain), "worker fork: no — writes allowed\n");
-    // The human line is identical whether or not --assert is passed (one source).
-    assert_eq!(stdout(&asserted), stdout(&plain));
-
-    // A stale marker in a linked worktree ⇒ non-zero `stale-marker` naming remedy.
-    stamp_marker(&fork);
-    let asserted = run(&fork, None, &["worktree", "status", "--assert"]);
-    assert!(
-        !asserted.status.success(),
-        "stale marker ⇒ --assert nonzero; stderr: {}",
-        stderr(&asserted)
-    );
-    let err = stderr(&asserted);
-    assert!(
-        err.contains("stale-marker"),
-        "must carry the stale-marker token; stderr: {err}"
-    );
-    assert!(
-        err.contains("marker --clear --operator"),
-        "must NAME the remedy; stderr: {err}"
-    );
-    // The human line still reports refused: marker (the SAME state the assert read).
-    assert!(
-        stdout(&asserted).contains("signal: marker"),
-        "human line and --assert read one describe_mode; stdout: {}",
-        stdout(&asserted)
-    );
-
-    // After marker --clear --operator (env unset) ⇒ --assert back to exit 0.
-    let cleared = run(
-        &fork,
-        None,
-        &["worktree", "marker", "--clear", "--operator"],
-    );
-    assert!(
-        cleared.status.success(),
-        "clear must succeed; stderr: {}",
-        stderr(&cleared)
-    );
-    let asserted = run(&fork, None, &["worktree", "status", "--assert"]);
-    assert!(
-        asserted.status.success(),
-        "after clear ⇒ --assert exit 0; stderr: {}",
-        stderr(&asserted)
-    );
-}
-
-// --- VT-4: marker --clear self-brick cure + fences ---
-
-#[test]
-fn marker_clear_cures_self_brick() {
-    let src = tempfile::tempdir().unwrap();
-    init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let fork = add_fork(src.path(), holder.path(), "wkr-cure");
-
-    // Stale marker ⇒ writes refused (the self-brick).
-    stamp_marker(&fork);
-    let refused = run(&fork, None, &["slice", "new", "x"]);
-    assert!(!refused.status.success(), "stale marker bricks writes");
-
-    // marker --clear --operator (env unset) restores writes from within the CLI.
-    let cleared = run(
-        &fork,
-        None,
-        &["worktree", "marker", "--clear", "--operator"],
-    );
-    assert!(
-        cleared.status.success(),
-        "clear must succeed; stderr: {}",
-        stderr(&cleared)
-    );
-    assert!(
-        stdout(&cleared).contains("CLEARED"),
-        "loud receipt; stdout: {}",
-        stdout(&cleared)
-    );
-    assert!(!marker_exists(&fork), "marker gone after clear");
-
-    // Writes restored: slice new now passes the guard (succeeds).
-    let allowed = run(&fork, None, &["slice", "new", "demo"]);
-    assert!(
-        allowed.status.success(),
-        "writes restored after clear; stderr: {}",
-        stderr(&allowed)
-    );
-}
-
-#[test]
-fn marker_clear_refused_when_worker_env_set() {
-    let src = tempfile::tempdir().unwrap();
-    init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let fork = add_fork(src.path(), holder.path(), "wkr-envfence");
-    stamp_marker(&fork);
-
-    let out = run(
-        &fork,
-        Some(true),
-        &["worktree", "marker", "--clear", "--operator"],
-    );
+    let out = run(src.path(), false, &["worktree", "status", "--assert"]);
     assert!(
         !out.status.success(),
-        "clear refused while DOCTRINE_WORKER set; stdout: {}",
+        "`--assert` must not be silently accepted; stdout: {}",
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "refusal names the env leg; stderr: {}",
+        stderr(&out).contains("unexpected argument '--assert'"),
+        "the PARSER must reject it; stderr: {}",
         stderr(&out)
     );
-    assert!(marker_exists(&fork), "marker untouched on a refused clear");
 }
 
+// SL-254 PHASE-05: new. `worktree marker` was the whole subject of the four deleted
+// tests in this file; this one line is what is left worth asserting about it —
+// that the verb is gone from the CLI rather than surviving as a stub that silently
+// succeeds.
 #[test]
-fn marker_clear_refused_in_linked_worktree_without_operator() {
+fn worktree_marker_verb_no_longer_parses() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let fork = add_fork(src.path(), holder.path(), "wkr-acc");
-    stamp_marker(&fork);
 
-    // Bare --clear (no --operator) in a LINKED worktree ⇒ refused (accident-fence).
-    let out = run(&fork, None, &["worktree", "marker", "--clear"]);
-    assert!(
-        !out.status.success(),
-        "bare --clear in a linked worktree must refuse; stdout: {}",
-        stdout(&out)
-    );
-    assert!(
-        stderr(&out).contains("--operator"),
-        "refusal names the --operator fence; stderr: {}",
-        stderr(&out)
-    );
-    assert!(marker_exists(&fork), "marker untouched on a refused clear");
-
-    // With --operator it goes through.
-    let out = run(
-        &fork,
-        None,
-        &["worktree", "marker", "--clear", "--operator"],
-    );
-    assert!(out.status.success(), "--operator confirms the clear");
-    assert!(!marker_exists(&fork));
-}
-
-#[test]
-fn marker_clear_refused_when_cwd_not_tree_root() {
-    let src = tempfile::tempdir().unwrap();
-    init_repo(src.path());
-    let holder = tempfile::tempdir().unwrap();
-    let fork = add_fork(src.path(), holder.path(), "wkr-cwd");
-    stamp_marker(&fork);
-
-    // A subdir of the fork: cwd != the marker's tree root ⇒ refused.
-    let sub = fork.join("sub");
-    std::fs::create_dir_all(&sub).unwrap();
-    let out = run(&sub, None, &["worktree", "marker", "--clear", "--operator"]);
-    assert!(
-        !out.status.success(),
-        "clear from a subdir (cwd != tree root) must refuse; stdout: {}",
-        stdout(&out)
-    );
-    assert!(
-        stderr(&out).contains("tree root"),
-        "refusal names the tree-root fence; stderr: {}",
-        stderr(&out)
-    );
-    assert!(marker_exists(&fork), "marker untouched on a refused clear");
+    for args in [
+        ["worktree", "marker", "--clear", "--operator"].as_slice(),
+        ["worktree", "marker", "--stamp-subagent"].as_slice(),
+        ["worktree", "verify-worker"].as_slice(),
+    ] {
+        let out = run(src.path(), false, args);
+        assert!(
+            !out.status.success(),
+            "{args:?} must not parse; stdout: {}",
+            stdout(&out)
+        );
+        assert!(
+            stderr(&out).contains("unrecognized subcommand"),
+            "{args:?} must be rejected by the PARSER; stderr: {}",
+            stderr(&out)
+        );
+    }
 }

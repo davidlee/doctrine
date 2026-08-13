@@ -6,9 +6,17 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-04 complete (4/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-05 complete (5/9) · see git log
 
 ### Produced
+- PHASE-05 done — the disk marker is gone; worker identity is `DOCTRINE_WORKER`
+  alone, topology-independently (DEC-207). `marker.rs` 439 → 128 lines,
+  `subagent.rs` (401) deleted, `describe_mode` is a two-row truth table over one
+  input, `worker_guard` lost its root resolution entirely (the verdict is a
+  property of the PROCESS). `worktree marker`, `verify-worker` and
+  `status --assert` no longer parse; `WriteClass::MarkerClear` AND `Hookmint` both
+  retired. ISS-028 closes. 39 files, 9 test suites retargeted, 2 deleted.
+  `just gate` green at zero clippy warnings
 - PHASE-04 done — `worktree pretooluse` and the whole pure decision layer it was
   the sole caller of are gone. `pretooluse.rs` deleted (877 lines); `jail.rs`
   2,267 → 1,652, keeping EXACTLY the transitive closure of `jail_prefix.rs`'s
@@ -57,6 +65,34 @@ fresh-as-of: 2026-08-13 · PHASE-04 complete (4/9) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **`design.md` §5.2.3's `land` substitute is WRONG AS WRITTEN — carry to PHASE-08.**
+  It says to substitute `classify_worktree_role` "returning `fork`" for `land`'s
+  `bears_marker` read. That classifier returns `fork` for EVERY linked non-coord
+  worktree, and `land` only ever runs against a linked worktree — so taken
+  literally it refuses every `land`, including the solo TDD branches the verb
+  exists for. PHASE-05 implemented `shared.rs::is_dispatch_fork_branch` (the
+  `dispatch/` prefix AND a non-numeric suffix) instead; the design's intent and its
+  "strictly stronger than a marker read" claim are unchanged. The design TEXT still
+  carries the wrong prescription and should be corrected in the REV
+- **VA-1 has one stated exception**: `.doctrine/state/dispatch/worker` survives as a
+  literal in `scripts/spike-capsule/control/audit-nohooks.sh`'s `NOHOOK_TOKENS`,
+  where it is an ABSENCE assertion over a separate spike rig rather than a consumer.
+  No reader or writer remains anywhere else. Left alone deliberately — rewriting a
+  spike's recorded evidence to satisfy a grep destroys more than it proves
+- **Accepted behaviour change at the guard (DEC-207 consequence, not a new call).**
+  The `observation` refusal's MCP-broker advice was previously withheld from the
+  env-on-non-linked-tree case; topology can no longer be consulted, so it is now
+  unconditional. Recorded rather than escalated because `DEC-207` states the
+  position directly; the remedy rides `WORKER_ENV_CAUSE`
+- **`base64` is confirmed unused** (verified at PHASE-05 against the current tree:
+  zero references in `src/` or `tests/`). Gate-neutral — cargo does not warn on an
+  unused dep — so still left for reconcile rather than touching `Cargo.toml`
+  mid-slice
+- ~~The per-arming jail policy file has no production reader~~ — **resolves inside
+  PHASE-06**, not a standing item: `create.rs`'s `provision_jail_policy` and
+  `dispatch.rs`'s `ARMING_JAIL_FILE` write are both deleted by PHASE-06/EX-2+EX-3,
+  so the live-write/dead-read asymmetry ends with the writer. Watch for
+  `JailPolicy::from_toml_str` orphaning at zero warnings when it lands
 - **PHASE-04's `EX-4` and `EX-8` are mis-phased and were DEFERRED to PHASE-05
   as its new `EX-9`** (annotated in `plan.toml` at all three sites). They ask
   `guard.rs` to drop the `Marker { stamp_subagent: true }` arm and the

@@ -4,13 +4,15 @@
 //! refuses piped stdin naming the posture, and `value clear` tombstones the
 //! active rows.
 //!
-//! The suite spawns the BUILT binary with the child cwd set to the TEMPDIR
-//! (`mem.pattern.testing.black-box-cli-golden`): these are WRITE / operator-gated
-//! verbs, so a spawn whose cwd is the marked dispatch worktree would hit the
-//! worker-mode guard's `signal: marker` refusal (masking the verb's own
-//! behaviour). Rooting the child in the markerless tempdir makes the guard
-//! resolve non-worker mode, so `value set|clear` write and `value pin`'s own TTY
+//! The suite spawns the BUILT binary through `common::doctrine_cmd`
+//! (`mem.pattern.testing.black-box-cli-golden`), which binds the child cwd to the
+//! TEMPDIR and — the part that matters here — strips `DOCTRINE_WORKER`. These are
+//! WRITE / operator-gated verbs, so a spawn that inherited a dispatch worker's env
+//! would hit the worker-mode guard's refusal, masking the verb's own behaviour.
+//! With the guard standing down, `value set|clear` write and `value pin`'s own TTY
 //! gate is what refuses the piped stdin — exactly the surface under test.
+//! (SL-254 PHASE-05: worker identity was a marker on the TREE, so the cwd was the
+//! decisive half of that seam; under `DEC-207` it is the env.)
 
 #![allow(
     clippy::expect_used,

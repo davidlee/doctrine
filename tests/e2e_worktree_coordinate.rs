@@ -3,14 +3,21 @@
 //! end-to-end over the BUILT binary. The markerless coordination-worktree
 //! create/resume path (design §2).
 //!
-//! * VT-1: create — markerless (NO `.doctrine/state/dispatch/worker`), branch
-//!   `dispatch/064` at the resolved trunk, worktree registered, human status on
-//!   stderr / machine-clean (empty) stdout, runtime phase sheets regenerated from
-//!   the committed `plan.toml`; a post-`add` provision failure rolls back the
-//!   worktree AND the freshly minted branch (Create rollback drops the branch).
-//! * VT-2: impersonation — a marker-present linked worktree AND a
-//!   `DOCTRINE_WORKER=1` process each refuse `coordinate` through the shared
-//!   Orchestrator-verb guard, naming the verb / the dual cause.
+//! * VT-1: create — the coordination tree resolves to ORCHESTRATOR mode (not worker
+//!   mode), branch `dispatch/064` at the resolved trunk, worktree registered, human
+//!   status on stderr / machine-clean (empty) stdout, runtime phase sheets
+//!   regenerated from the committed `plan.toml`; a post-`add` provision failure
+//!   rolls back the worktree AND the freshly minted branch (Create rollback drops
+//!   the branch).
+//! * VT-2: impersonation — a `DOCTRINE_WORKER=1` process refuses `coordinate`
+//!   through the shared Orchestrator-verb guard wherever it stands, naming the verb
+//!   and the cause.
+//!
+//! SL-254 PHASE-05 (`DEC-207`): "markerless" was how VT-1 said "this tree is the
+//! orchestrator" and how VT-2's first case impersonated a worker. Worker identity is
+//! now the `DOCTRINE_WORKER` env var of the PROCESS, so VT-1 asks the observability
+//! verb instead of the filesystem, and VT-2's two legs collapse into one signal
+//! asserted across two tree shapes.
 //! * VT-3: collision — a live worktree already on `dispatch/064` refuses
 //!   (`coordination-live`) before mutating refs or dirs (no second branch).
 //! * VT-4: resume — branch `dispatch/064` exists with no live worktree ⇒
@@ -30,6 +37,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 mod common;
+
+/// SL-254 PHASE-05: the one refusal cause (`marker::WORKER_ENV_CAUSE`).
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 /// The coordination branch for slice 64 — `dispatch/{64:03}`.
 const COORD_BRANCH: &str = "dispatch/064";
@@ -95,16 +106,6 @@ fn add_worktree(src: &Path, holder: &Path, branch: &str) -> PathBuf {
     fork
 }
 
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
-
-fn marker_exists(root: &Path) -> bool {
-    root.join(".doctrine/state/dispatch/worker").exists()
-}
-
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
 /// DOCTRINE_WORKER=1; None removes it).
 fn run(cwd: &Path, worker: Option<bool>, args: &[&str]) -> Output {
@@ -152,10 +153,10 @@ fn dispatch_branch_count(src: &Path) -> usize {
         .count()
 }
 
-// --- VT-1: create — markerless, at trunk, registered, sheets regenerated ---
+// --- VT-1: create — orchestrator-mode, at trunk, registered, sheets regenerated ---
 
 #[test]
-fn coordinate_create_is_markerless_at_trunk_with_sheets() {
+fn coordinate_create_is_orchestrator_mode_at_trunk_with_sheets() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     seed_plan(src.path(), 64);
@@ -181,11 +182,21 @@ fn coordinate_create_is_markerless_at_trunk_with_sheets() {
         stderr(&out)
     );
 
-    // MARKERLESS: the coordination tree is the orchestrator (worker-mode OFF),
-    // so it stamps no worker marker (D2a, never a positive coordination marker).
+    // The coordination tree IS the orchestrator: worker-mode must be OFF in it
+    // (D2a). SL-254 PHASE-05: was `!marker_exists(&coord)` — "coordination create
+    // stamps NO marker". The marker is gone (`DEC-207`), so this is re-pointed at
+    // the observability verb that reads the SAME `resolve_mode` the guard reads,
+    // which is what the file check was a proxy for all along.
+    let mode = run(&coord, None, &["worktree", "status"]);
     assert!(
-        !marker_exists(&coord),
-        "coordination create stamps NO marker"
+        mode.status.success(),
+        "worktree status must run in the coord tree; stderr: {}",
+        stderr(&mode)
+    );
+    assert_eq!(
+        stdout(&mode),
+        "worker fork: no — writes allowed\n",
+        "the coordination tree resolves to orchestrator mode, not worker mode"
     );
 
     // Branch `dispatch/064` exists, registered, and sits at the resolved trunk.
@@ -266,7 +277,7 @@ fn coordinate_create_rolls_back_branch_on_provision_failure() {
     assert!(!coord.exists(), "coordination dir reaped");
 }
 
-// --- VT-2: impersonation — marker-present + DOCTRINE_WORKER refuse ---
+// --- VT-2: impersonation — a worker process refuses `coordinate` anywhere ---
 
 #[test]
 fn coordinate_refused_under_worker_mode() {
@@ -275,12 +286,17 @@ fn coordinate_refused_under_worker_mode() {
     let holder = tempfile::tempdir().unwrap();
     let linked = add_worktree(src.path(), holder.path(), "wkr-guard");
 
-    // (1) Marked linked worktree, env unset ⇒ refused (signal: marker), names verb.
-    stamp_marker(&linked);
+    // SL-254 PHASE-05: the two cases below were "marked linked worktree, env unset"
+    // and "DOCTRINE_WORKER on the non-linked tree", asserting two DIFFERENT
+    // messages. One signal now answers for both, so they are re-pointed at what
+    // survived the merger: the same worker process is refused in a linked worktree
+    // and on the primary tree alike, with the same named cause (`DEC-207`).
+
+    // (1) A worker process standing in a linked worktree ⇒ refused, names verb.
     let target = holder.path().join("nope1");
     let out = run(
         &linked,
-        None,
+        Some(true),
         &[
             "worktree",
             "coordinate",
@@ -292,17 +308,22 @@ fn coordinate_refused_under_worker_mode() {
     );
     assert!(
         !out.status.success(),
-        "coordinate refused from a marked linked worktree; stdout: {}",
+        "coordinate refused in a worker process inside a linked worktree; stdout: {}",
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("coordinate"),
+        stderr(&out).contains("`coordinate`"),
         "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "refusal carries the NAMED cause; stderr: {}",
         stderr(&out)
     );
     assert!(!target.exists(), "refused coordinate creates nothing");
 
-    // (2) DOCTRINE_WORKER set on the non-linked tree ⇒ dual-cause refusal.
+    // (2) The SAME worker process on the primary (non-linked) tree ⇒ same refusal.
     let target = holder.path().join("nope2");
     let out = run(
         src.path(),
@@ -322,8 +343,13 @@ fn coordinate_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "env-on-nonlinked carries the dual-cause; stderr: {}",
+        stderr(&out).contains("`coordinate`"),
+        "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause; stderr: {}",
         stderr(&out)
     );
     assert!(!target.exists(), "refused coordinate creates nothing");

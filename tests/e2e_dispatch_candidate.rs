@@ -959,7 +959,7 @@ fn dispatch_candidate_is_orchestrator_classed() {
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
         stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause token: {}",
+        "carries the named worker cause: {}",
         stderr(&out)
     );
     assert!(
@@ -1078,7 +1078,7 @@ fn e2e_dispatch_candidate_create_refused_under_worker_mode() {
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
         stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause token: {}",
+        "carries the named worker cause: {}",
         stderr(&out)
     );
     assert!(
@@ -1688,7 +1688,7 @@ fn e2e_dispatch_candidate_admit_leaves_evidence_and_refused_under_worker() {
     assert!(!out.status.success(), "refused when DOCTRINE_WORKER set");
     assert!(
         stderr(&out).contains("DOCTRINE_WORKER"),
-        "carries the dual-cause token: {}",
+        "carries the named worker cause: {}",
         stderr(&out)
     );
     let toml = read_candidates(dir2);

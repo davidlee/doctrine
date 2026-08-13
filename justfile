@@ -33,8 +33,12 @@ validate:
   # In a dispatch worker fork the authored .doctrine/ state is coord's (the worker
   # cannot write it), so these governance self-checks add no worker-delta signal —
   # they can only false-red on a stale binary. Coord owns them. (SL-225 #1, DEC-003.)
-  if [ -n "${DOCTRINE_DISPATCH_GATE:-}" ] || [ "${DOCTRINE_WORKER:-}" = "1" ] \
-       || [ -f .doctrine/state/dispatch/worker ]; then
+  # SL-254 PHASE-05: the third leg, `-f .doctrine/state/dispatch/worker`, retired with
+  # the disk marker (DEC-207). Nothing writes that path any more, so the leg could only
+  # ever fire on a stale file left by a pre-upgrade tree — and it would SKIP the
+  # governance checks on the main arm if it did. A clean deletion, not a behaviour
+  # change: the two surviving signals are the ones a real worker actually carries.
+  if [ -n "${DOCTRINE_DISPATCH_GATE:-}" ] || [ "${DOCTRINE_WORKER:-}" = "1" ]; then
     echo "validate: skipping governance self-checks in a worker fork (coord owns them)"
     exit 0
   fi
@@ -42,7 +46,7 @@ validate:
   # corpus with the SOURCE-CONSISTENT binary — the fresh coord build when present, else
   # PATH. This is what closes the fork-skip's residual, at close, where coord IS built
   # (SL-225 #1 (ii)). Exact `= "1"` on DOCTRINE_WORKER matches env_worker_set()
-  # (marker.rs:127) — a stray non-`1` value must not false-skip.
+  # (marker.rs) — a stray non-`1` value must not false-skip.
   doc="${DOCTRINE_BIN:-./target/debug/doctrine}"
   command -v "$doc" >/dev/null 2>&1 || doc=doctrine
   "$doc" prompt check

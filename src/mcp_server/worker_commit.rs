@@ -147,35 +147,24 @@ fn run_commit_gate(dir: &Path, cfg: &VerificationConfig) -> anyhow::Result<GateO
     let (program, rest) = argv
         .split_first()
         .ok_or_else(|| anyhow::anyhow!("worker_commit: resolved commit-gate argv is empty"))?;
-    // The gate runs the TRUSTED verification suite (`cargo test`) in the fork. The fork
-    // carries the worker marker (`create-fork` stamps it, create.rs), so every e2e test
-    // that spawns an authored-write `doctrine` fixture (`backlog new`, `install`, …)
-    // resolves its root to the fork cwd and is REFUSED by the worker-mode guard's marker
-    // leg — collateral damage, not the worker agent writing authored state (the agent is
-    // blocked awaiting this MCP call, so no write can race the cleared window). Clear the
-    // marker for the gate so the suite runs as on a normal tree, and do NOT export
-    // DOCTRINE_WORKER (its env leg would re-trip the same guard). Restore the marker
-    // afterwards so worker-agent protection survives past this call. See SL-199 F2.
-    let had_marker = crate::worktree::marker_present(dir);
-    if had_marker {
-        crate::worktree::remove_marker(dir).context("clear worker marker for the commit gate")?;
-    }
-    let spawned = std::process::Command::new(program)
+    // The gate runs the TRUSTED verification suite (`cargo test`) in the fork. Every e2e
+    // test that spawns an authored-write `doctrine` fixture (`backlog new`, `install`, …)
+    // would be REFUSED by the worker-mode guard if this process's worker identity reached
+    // it — collateral damage, not the worker agent writing authored state (the agent is
+    // blocked awaiting this MCP call, so no write can race the window). Unsetting
+    // DOCTRINE_WORKER for the child is now the WHOLE of that cleanup: SL-254 deleted the
+    // disk marker, so SL-199 F2's clear-gate-restore dance has nothing left to clear and
+    // the window it opened — during which the fork was momentarily unmarked — is gone too.
+    let output = std::process::Command::new(program)
         .args(rest)
         .current_dir(dir)
         .env_remove("DOCTRINE_WORKER")
         // SL-225 #1: mark the gate window so `just validate` skips its governance self-checks
-        // (which read coord's authored state, inert in a fork — ISS-218). This is the only
-        // visible worker-context signal here: the marker is cleared and DOCTRINE_WORKER unset
-        // above. Neutral context flag — no path/binary/cargo policy (POL-002, DEC-003).
+        // (which read coord's authored state, inert in a fork — ISS-218). Neutral context
+        // flag — no path/binary/cargo policy (POL-002, DEC-003).
         .env("DOCTRINE_DISPATCH_GATE", "1")
         .output()
-        .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")));
-    if had_marker {
-        crate::worktree::write_marker(dir)
-            .context("restore worker marker after the commit gate")?;
-    }
-    let output = spawned?;
+        .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")))?;
     if output.status.success() {
         Ok(GateOutcome::Green)
     } else {
@@ -953,34 +942,27 @@ mod tests {
     }
 
     #[test]
-    fn worker_commit_gate_clears_marker_and_unsets_env_then_restores() {
-        // SL-199 F2: the gate runs the trusted suite in the MARKED fork. It must clear the
-        // worker marker AND leave DOCTRINE_WORKER unset so authored-write test fixtures are
-        // not refused by the worker-mode guard. A gate that passes IFF the marker file is
-        // absent AND the env is unset lands the commit only when both hold; the marker is
-        // then restored past the gate.
-        let gate = r#"["sh", "-c", "test ! -f .doctrine/state/dispatch/worker && test -z \"$DOCTRINE_WORKER\""]"#;
+    fn worker_commit_gate_unsets_the_worker_env() {
+        // SL-199 F2, re-cut at SL-254 PHASE-05. The gate runs the trusted suite in the
+        // fork, so authored-write test fixtures must not be refused by the worker-mode
+        // guard. With the disk marker deleted (DEC-207) that reduces to ONE condition —
+        // `DOCTRINE_WORKER` unset for the child — and the clear/restore dance around it
+        // is gone, along with the window in which the fork was momentarily unprotected.
+        let gate = r#"["sh", "-c", "test -z \"$DOCTRINE_WORKER\""]"#;
         let (_tmp, primary, wt, agent, base) = worker_fixture(gate, &[]);
-        // Stamp the marker exactly as `create-fork` does on the real fork.
-        crate::worktree::write_marker(&wt).unwrap();
         fs::write(wt.join("seed"), "worker change\n").unwrap();
         let out = run_worker_commit(&primary, &agent, "msg").unwrap();
         match out {
             WorkerCommitOutput::Committed { base: out_base, .. } => assert_eq!(out_base, base),
-            other => panic!("gate must see a cleared marker + unset env and pass; got {other:?}"),
+            other => panic!("gate must see an unset DOCTRINE_WORKER and pass; got {other:?}"),
         }
-        // Protection restored: the marker is back after the gate window.
-        assert!(
-            crate::worktree::marker_present(&wt),
-            "the worker marker must be restored after the gate"
-        );
     }
 
     #[test]
     fn worker_commit_gate_carries_dispatch_gate_signal() {
         // VT-1e (SL-225 #1): the gate spawn sets DOCTRINE_DISPATCH_GATE=1 so `just validate`
-        // knows it runs inside the worker_commit gate window — needed because the gate clears
-        // the marker AND unsets DOCTRINE_WORKER (SL-199 F2), leaving this the only visible
+        // knows it runs inside the worker_commit gate window — needed because the gate
+        // unsets DOCTRINE_WORKER (SL-199 F2), leaving this the only visible
         // worker-context signal. A gate that passes IFF the var == "1" commits only when the
         // engine sets it.
         let gate = r#"["sh", "-c", "test \"$DOCTRINE_DISPATCH_GATE\" = 1"]"#;

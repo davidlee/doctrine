@@ -95,6 +95,25 @@ fn coord_branch_suffix(branch: Option<&str>) -> Option<&str> {
         .filter(|suffix| !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()))
 }
 
+/// PURE — true iff `branch` names a DISPATCH WORKER fork: the `dispatch/` prefix with
+/// a NON-numeric suffix (`dispatch/<agent>`, as the funnel mints them), as distinct
+/// from a coordination branch's `dispatch/<NNN>` and from any non-dispatch branch.
+///
+/// SL-254 `DEC-207` substitutes this for `land`'s cross-tree marker read: a marker
+/// answered "is that tree a worker?" about ANOTHER tree, which the env leg cannot do.
+/// Branch shape can, and is **strictly stronger** — it fires whether or not the fork
+/// was ever stamped, catching the unstamped-worker case `ADR-011` `D6`/`M2` confesses.
+///
+/// Note the `dispatch/` conjunct is load-bearing and is NOT what
+/// [`classify_worktree_role`] alone gives: that returns `"fork"` for EVERY linked
+/// non-coord worktree, including the solo `/worktree` isolation branches `land` exists
+/// to land. Sharing [`coord_branch_suffix`] keeps the prefix and numeric rules stated
+/// once (STD-001).
+pub(crate) fn is_dispatch_fork_branch(branch: Option<&str>) -> bool {
+    branch.is_some_and(|b| b.starts_with(COORD_BRANCH_SHORT_PREFIX))
+        && coord_branch_suffix(branch).is_none()
+}
+
 /// PURE — the slice id a coordination branch names, iff `branch` is coord-shaped
 /// (IMP-268). `None` for every non-coord branch, and for a numeric suffix too large to
 /// be a slice id. Shares [`coord_branch_suffix`] with [`classify_worktree_role`], so the
@@ -119,9 +138,11 @@ pub(super) fn gather_fork_worktree(root: &Path, fork: &str) -> anyhow::Result<Op
     Ok(git::worktree_for_ref(root, &format!("refs/heads/{fork}"))?)
 }
 
-pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
-    Path::new("wt").join(branch)
-}
+// `target_dir_for_branch` (SL-056 PHASE-06, the `wt/<branch>` mapping) is deleted at
+// SL-254 PHASE-05. It had no production caller left — its apparent consumers in
+// `import.rs` / `land.rs` were unused imports masked by the SL-116 module-wide
+// `#![expect(unused)]`, which CHR-062 retires here. Only its own unit test still
+// referenced it, which is not a caller.
 
 // The `CLAUDE_PROJECT_DIR` anchor helper (`ENV_PROJECT_DIR` / `project_anchor`,
 // SL-182 PHASE-03) died with its sole consumer, the `worktree pretooluse` wall
@@ -135,7 +156,6 @@ pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     // --- SL-228 PHASE-01: whereami role classifier (pure — design §8).
     //     Relocated here from `dispatch` with the function (ISS-275). ---
@@ -209,19 +229,31 @@ mod tests {
         );
     }
 
-    // --- SL-056 PHASE-06: target_dir_for_branch pure mapping (VT-3 unit half) ---
+    // --- SL-254 PHASE-05: the dispatch-worker branch predicate (land's substitute
+    //     for the cross-tree marker read, DEC-207). ---
 
     #[test]
-    fn target_dir_for_branch_maps_under_wt() {
-        assert_eq!(
-            target_dir_for_branch("sl056-p06"),
-            PathBuf::from("wt/sl056-p06"),
-            "branch maps to wt/<branch>"
+    fn is_dispatch_fork_branch_splits_worker_forks_from_coord_and_solo() {
+        assert!(
+            is_dispatch_fork_branch(Some("dispatch/agent-1")),
+            "a non-numeric dispatch suffix is a worker fork"
         );
-        assert_eq!(
-            target_dir_for_branch("feature/x"),
-            PathBuf::from("wt/feature/x"),
-            "slashes in the branch survive as nested components"
+        assert!(
+            is_dispatch_fork_branch(Some("dispatch/wk1")),
+            "the funnel's own `dispatch/wk1` shape is a worker fork"
+        );
+        assert!(
+            !is_dispatch_fork_branch(Some("dispatch/254")),
+            "a NUMERIC suffix is the coordination branch, not a worker fork"
+        );
+        assert!(
+            !is_dispatch_fork_branch(Some("feat/x")),
+            "a solo isolation branch is NOT a worker fork — this is the conjunct that \
+             keeps `land` usable; the bare role classifier calls it `fork` too"
+        );
+        assert!(
+            !is_dispatch_fork_branch(None),
+            "a detached HEAD names no branch, so it cannot be proven a worker fork"
         );
     }
 }

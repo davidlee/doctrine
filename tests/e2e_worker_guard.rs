@@ -2,18 +2,17 @@
 //! SL-056 PHASE-05 — worker-mode guard (ADR-006 D2a / design §3) as BLACK-BOX
 //! goldens over the BUILT binary.
 //!
-//! Worker mode is now MARKER-PRIMARY: a disk marker in a LINKED worktree refuses
-//! writes harness-agnostically; the `DOCTRINE_WORKER` env is the codex/pi
-//! worker-on-main OPTIMISATION (the catch for a worker dropped on the coordination
-//! root). Both legs hard-refuse every authored/memory/runtime write BEFORE
-//! dispatch with a verb-named `bail!` (stderr `Error: <msg>\n`, nonzero exit);
-//! Read paths stay open (INV-3). The unit table (`write_class_tests`) proves the
-//! full Read/Write/MarkerClear split; these tests prove the gate fires end-to-end:
-//!   * VT-1: marker-in-a-linked-worktree refuses (env UNSET); solo / non-worktree
-//!     allow.
-//!   * VT-5: the env leg on a NON-linked tree carries the NAMED dual-cause message
-//!     (never a bare "worker refused"), still names the verb, still bare-`Error:`
-//!     shape with no `Caused by:` chain.
+//! SL-254 PHASE-05 (`DEC-207`): worker mode is the `DOCTRINE_WORKER` env var ALONE
+//! — a property of the PROCESS, not of a tree. The disk marker and the
+//! "marker-primary / env-optimisation" two-leg split it anchored are gone, so these
+//! goldens no longer discriminate between legs. In their place they pin the
+//! stronger property that replaced the split: the SAME refusal fires regardless of
+//! tree topology (genuine linked fork, plain repo, bare tempdir alike), and writes
+//! are allowed in all of them once the env is unset. The refusal is still a
+//! verb-named `bail!` (stderr `Error: <msg>\n`, nonzero exit) carrying the NAMED
+//! cause, never a bare "worker refused"; Read paths stay open (INV-3). The unit
+//! table (`write_class_tests`) proves the Read/Write split; these prove the gate
+//! fires end-to-end.
 
 #![allow(
     clippy::expect_used,
@@ -27,8 +26,11 @@ use std::process::{Command, Output};
 
 mod common;
 
-// The stable dual-cause tokens (design §3). Goldens assert this substance.
-const DUAL_CAUSE: &str = "`DOCTRINE_WORKER` set outside a worker worktree";
+// SL-254 PHASE-05: the stable refusal cause (`marker::WORKER_ENV_CAUSE`). Replaces
+// SL-056's `DUAL_CAUSE` — that message's "set outside a worker worktree" horn was a
+// claim about tree topology, and topology no longer participates in the verdict.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("tempdir")
@@ -88,8 +90,7 @@ fn stderr(out: &Output) -> String {
 // VT-5: ≥1 representative Write verb per top-level command + every nested arm.
 // Each must refuse under the worker env on a NON-linked tree: nonzero exit, the
 // verb named, the bare-`bail!` shape (`Error: …`, no `Caused by:`), AND the named
-// dual-cause substance (the migration from the old `DOCTRINE_WORKER=1: refusing …`
-// message).
+// cause substance (never a bare `DOCTRINE_WORKER=1: refusing …`).
 const WRITE_VERBS: &[(&[&str], &str)] = &[
     (&["install"], "install"),
     (&["slice", "new", "x"], "slice new"),
@@ -126,9 +127,9 @@ const WRITE_VERBS: &[(&[&str], &str)] = &[
 ];
 
 #[test]
-fn write_verbs_refuse_under_worker_env_with_dual_cause() {
-    // A bare (non-doctrine, non-worktree) cwd: the env leg trips on a NON-linked
-    // tree ⇒ the dual-cause message.
+fn write_verbs_refuse_under_worker_env_with_named_cause() {
+    // A bare (non-doctrine, non-worktree) cwd: the env is the whole verdict, so the
+    // guard trips here exactly as it does in a genuine fork.
     let dir = tmp();
     for (args, verb) in WRITE_VERBS {
         let out = run_worker(dir.path(), args);
@@ -150,22 +151,31 @@ fn write_verbs_refuse_under_worker_env_with_dual_cause() {
             "{args:?} refusal should name the verb `{verb}`; stderr: {err}"
         );
         assert!(
-            err.contains(DUAL_CAUSE),
-            "{args:?} env-leg refusal on a non-linked tree must carry the named dual-cause; stderr: {err}"
+            err.contains(WORKER_CAUSE),
+            "{args:?} refusal must carry the NAMED cause; stderr: {err}"
         );
     }
 }
 
-// VT-1(a): the PRIMARY signal — a marker in a LINKED worktree with the env UNSET
-// refuses an authoring verb AND a status-transition verb, naming the verb. NOT the
-// dual-cause (it is a genuine fork).
+// VT-1(a): a worker PROCESS standing in a genuine linked worktree fork refuses an
+// authoring verb AND a status-transition verb, naming the verb and the cause.
+//
+// SL-254 PHASE-05: was `marker_in_linked_worktree_refuses_writes_env_unset`, which
+// provoked the refusal by stamping `.doctrine/state/dispatch/worker` and left the
+// env UNSET. The marker leg is gone (`DEC-207`), so the provocation moves to
+// `DOCTRINE_WORKER=1` on the child. The linked worktree is kept — not as the signal
+// (it no longer is one) but because it is the tree shape a real worker occupies, so
+// this remains the in-situ proof rather than a bare-tempdir one. The old
+// `!err.contains(DUAL_CAUSE)` assertion, which discriminated the fork refusal from
+// the on-main one, retired with the second cause it discriminated against; the
+// positive cause assertion below is what replaces it.
 #[test]
-fn marker_in_linked_worktree_refuses_writes_env_unset() {
+fn worker_env_in_linked_worktree_refuses_writes() {
     let src = tmp();
     init_repo(src.path());
     let base = git(src.path(), &["rev-parse", "HEAD"]);
 
-    // Real linked worktree fork.
+    // Real linked worktree fork — the shape a dispatched worker actually runs in.
     let fork = tmp();
     let fork_dir = fork.path().join("fork");
     git(
@@ -180,11 +190,6 @@ fn marker_in_linked_worktree_refuses_writes_env_unset() {
         ],
     );
 
-    // Stamp the marker (orchestrator's job; we write the file directly).
-    let marker_dir = fork_dir.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&marker_dir).unwrap();
-    std::fs::write(marker_dir.join("worker"), b"").unwrap();
-
     for (args, verb) in [
         (["slice", "new", "x"].as_slice(), "slice new"),
         (
@@ -192,38 +197,41 @@ fn marker_in_linked_worktree_refuses_writes_env_unset() {
             "adr status",
         ),
     ] {
-        let out = run_no_env(&fork_dir, args);
+        let out = run_worker(&fork_dir, args);
         let err = stderr(&out);
         assert!(
             !out.status.success(),
-            "{args:?} should refuse via the marker (PRIMARY signal); stderr: {err}"
+            "{args:?} should refuse in a worker process; stderr: {err}"
         );
         assert!(
             err.contains(&format!("`{verb}`")),
             "{args:?} refusal should name the verb `{verb}`; stderr: {err}"
         );
         assert!(
-            err.contains("signal: marker"),
-            "{args:?} should refuse with signal: marker; stderr: {err}"
-        );
-        assert!(
-            !err.contains(DUAL_CAUSE),
-            "{args:?} marker refusal is a genuine fork, NOT the dual-cause; stderr: {err}"
+            err.contains(WORKER_CAUSE),
+            "{args:?} refusal should carry the NAMED cause; stderr: {err}"
         );
     }
 }
 
 // VT-5 (SL-088 PHASE-01): the consolidated `install` verb is a worker-mode write —
-// refused from BOTH a marked linked-worktree fork AND an env-set process.
-// Drives the real write seam (the spawned `run()`), and asserts the refusal
-// HAPPENED (nonzero exit + the `install` verb named).
+// refused wherever a worker process stands. Drives the real write seam (the spawned
+// `run()`), and asserts the refusal HAPPENED (nonzero exit + the `install` verb
+// named + the named cause).
+//
+// SL-254 PHASE-05: the old form ran the two legs — marked linked fork vs env-set
+// non-linked tree — and asserted a DIFFERENT message from each. One signal now
+// answers for both, so the two cases are re-pointed at the property that survived
+// their merger and is worth more than either: identity is a property of the
+// PROCESS, so topology is irrelevant — the linked fork and the bare tempdir must
+// produce the SAME refusal (`DEC-207`).
 #[test]
-fn install_refuses_in_worker_mode() {
+fn install_refuses_in_worker_mode_regardless_of_topology() {
     let src = tmp();
     init_repo(src.path());
     let base = git(src.path(), &["rev-parse", "HEAD"]);
 
-    // A real linked worktree with the worker marker (the PRIMARY signal).
+    // A real linked worktree — the shape a dispatched worker occupies.
     let fork = tmp();
     let fork_dir = fork.path().join("fork");
     git(
@@ -237,50 +245,45 @@ fn install_refuses_in_worker_mode() {
             &base,
         ],
     );
-    let marker_dir = fork_dir.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&marker_dir).unwrap();
-    std::fs::write(marker_dir.join("worker"), b"").unwrap();
 
-    let env_cwd = tmp();
+    // A non-linked, non-doctrine tree — a worker dropped anywhere else.
+    let plain_cwd = tmp();
     let entry: &[&str] = &["install"];
 
-    // Marker leg (env UNSET, in the linked fork).
-    let out = run_no_env(&fork_dir, entry);
-    let err = stderr(&out);
-    assert!(
-        !out.status.success(),
-        "install must refuse via the marker; stderr: {err}"
-    );
-    assert!(
-        err.contains("`install`"),
-        "marker refusal names the `install` verb; stderr: {err}"
-    );
-    assert!(
-        err.contains("signal: marker"),
-        "refuses with signal: marker; stderr: {err}"
-    );
-
-    // Env leg (DOCTRINE_WORKER set, on a non-linked tree).
-    let out = run_worker(env_cwd.path(), entry);
-    let err = stderr(&out);
-    assert!(
-        !out.status.success(),
-        "install must refuse via the env leg; stderr: {err}"
-    );
-    assert!(
-        err.contains("`install`"),
-        "env refusal names the `install` verb; stderr: {err}"
-    );
-    assert!(
-        err.contains(DUAL_CAUSE),
-        "env-leg refusal carries the named dual-cause; stderr: {err}"
+    let mut refusals = Vec::new();
+    for (label, cwd) in [
+        ("linked worktree fork", fork_dir.as_path()),
+        ("non-linked tempdir", plain_cwd.path()),
+    ] {
+        let out = run_worker(cwd, entry);
+        let err = stderr(&out);
+        assert!(
+            !out.status.success(),
+            "install must refuse in a worker process ({label}); stderr: {err}"
+        );
+        assert!(
+            err.contains("`install`"),
+            "refusal names the `install` verb ({label}); stderr: {err}"
+        );
+        assert!(
+            err.contains(WORKER_CAUSE),
+            "refusal carries the NAMED cause ({label}); stderr: {err}"
+        );
+        refusals.push(err);
+    }
+    assert_eq!(
+        refusals[0], refusals[1],
+        "topology must not change the refusal: a worker is a worker anywhere (`DEC-207`)"
     );
 }
 
-// VT-1(c): a linked worktree WITHOUT a marker, no env (solo) ⇒ writes allowed
+// VT-1(c): a linked worktree with the worker env UNSET (solo) ⇒ writes allowed
 // (the verb runs; it is not the worker refusal).
+//
+// SL-254 PHASE-05: renamed from `linked_worktree_without_marker_allows_writes` —
+// what makes the tree writable is now the absent env, not an absent marker.
 #[test]
-fn linked_worktree_without_marker_allows_writes() {
+fn linked_worktree_without_worker_env_allows_writes() {
     let src = tmp();
     init_repo(src.path());
     let base = git(src.path(), &["rev-parse", "HEAD"]);
@@ -299,12 +302,12 @@ fn linked_worktree_without_marker_allows_writes() {
     );
 
     // `slice list` is a Read; use a write verb to prove the guard does NOT fire:
-    // `slice new` succeeds (no marker, no env).
+    // `slice new` succeeds (env unset).
     let out = run_no_env(&fork_dir, &["slice", "new", "demo"]);
     let err = stderr(&out);
     assert!(
         out.status.success(),
-        "no marker + no env in a linked worktree ⇒ writes allowed; stderr: {err}"
+        "no worker env in a linked worktree ⇒ writes allowed; stderr: {err}"
     );
     assert!(
         !err.contains("refusing"),

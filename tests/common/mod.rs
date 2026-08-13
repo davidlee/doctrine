@@ -12,7 +12,7 @@
 #[path = "../../src/test_support.rs"]
 mod test_support;
 
-pub(crate) use test_support::{WORKER_MARKER_REL, doctrine_bin, repo_root, under_worker_marker};
+pub(crate) use test_support::{doctrine_bin, repo_root, under_worker_marker};
 
 /// Entity-tree roots, from the same bytes the binary compiles — `src/kinds/dirs.rs`
 /// imports nothing precisely so a fixture can plant `.doctrine/…` without typing
@@ -46,19 +46,17 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
 ///
 /// Two inputs a fixture must declare rather than inherit from the harness:
 ///
-/// * **cwd.** `worker_guard` resolves its root from CWD alone
-///   (`crate::root::find(None, …)` in `src/commands/guard.rs` — RV-319 F-1 pins
-///   that it ignores `-p`). So an unbound cwd silently roots the child in the
-///   *ambient* tree instead of the scratch root the fixture passes to `-p`.
-///   Inside a dispatch worker fork that ambient tree is marked, and the guard
-///   correctly refuses an authored write the fixture never aimed there.
-/// * **`DOCTRINE_WORKER`.** The env leg is root-independent, so binding cwd does
-///   not reach it — the two legs are orthogonal and both must be declared.
+/// * **cwd.** Bound so the child operates on the scratch root the fixture built,
+///   not the *ambient* tree it happens to be spawned from. (Since SL-254 PHASE-05
+///   the worker verdict no longer consults a root at all, but cwd still decides
+///   which tree the child's other verbs read.)
+/// * **`DOCTRINE_WORKER`.** Since `DEC-207` this is the WHOLE of worker identity,
+///   and it is inherited from the parent process — so a test run from inside a real
+///   worker would otherwise see every authored-write fixture refused.
 ///
 /// This is a *declared* stand-down, not a bypass: the child of a test binary is a
-/// fixture process operating on a scratch root, not the worker agent the marker
-/// identifies. It grants nothing a worker does not already have — the marker leg
-/// is CWD-keyed, so leaving the fork's directory already lifts it on any HEAD.
+/// fixture process operating on a scratch root, not the worker agent the env leg
+/// identifies.
 ///
 /// A test whose subject IS the ambient signal (the worker-guard goldens) sets it
 /// back: `doctrine_cmd(dir).env("DOCTRINE_WORKER", "1")` — a later `env` call
@@ -99,14 +97,20 @@ pub(crate) fn marker_free_base() -> std::path::PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// worker-fork fixtures (ISS-028 / SL-236 §9)
+// worker-fork fixtures (ISS-028 / SL-236 §9; re-cut at SL-254 PHASE-05)
 //
-// The worker-mode marker leg is `is_linked_worktree(root) && marker_present(root)`
-// (src/worktree/marker.rs `resolve_mode`). A marker file dropped in a bare tempdir
-// is therefore NEVER refused — a fixture built that way passes identically before
-// and after a guard change and proves nothing. These helpers build a GENUINE linked
-// worktree and self-validate both legs, so a test cannot silently degrade into that
-// vacuous shape.
+// Worker mode is now the `DOCTRINE_WORKER` env leg ALONE (`DEC-207`) — a property of
+// the process, not of the tree. So the anti-cheat these helpers used to enforce (a
+// marker file in a bare tempdir is never refused, because the marker leg required
+// `is_linked_worktree && marker_present`) no longer has a subject: there is no marker,
+// and topology does not participate in the verdict.
+//
+// What survives is the fixture's OTHER job — standing up a genuine linked worktree, so
+// a test exercising fork-shaped behaviour is exercising a real fork. The refusal itself
+// is now provoked by setting `DOCTRINE_WORKER=1` on the child process under test, which
+// is both simpler and closer to how a real worker is established (the confinement argv
+// sets it). ISS-028 closes here: a fork is no longer refused merely for standing in a
+// stamped tree, which is what broke tests that shell the doctrine CLI.
 // ---------------------------------------------------------------------------
 
 /// `git -C <dir> <args>`, asserting success; returns trimmed stdout.
@@ -145,25 +149,20 @@ pub(crate) fn is_linked_worktree(root: &std::path::Path) -> bool {
     git(root, &["rev-parse", "--git-dir"]) != git(root, &["rev-parse", "--git-common-dir"])
 }
 
-/// Assert BOTH marker-leg conditions hold at `root` (anti-cheat: a fixture that
-/// only plants the marker file is never refused, so it would prove nothing).
-pub(crate) fn assert_marked_linked_fork(root: &std::path::Path) {
+/// Assert `root` is a GENUINE linked worktree, not a bare tempdir standing in for one.
+pub(crate) fn assert_linked_fork(root: &std::path::Path) {
     assert!(
         is_linked_worktree(root),
-        "fixture at {} must be a GENUINE linked worktree, not a bare tempdir — \
-         `resolve_mode` requires is_linked && marker_present",
-        root.display()
-    );
-    assert!(
-        root.join(WORKER_MARKER_REL).exists(),
-        "fixture at {} must carry the worker marker at {WORKER_MARKER_REL}",
+        "fixture at {} must be a GENUINE linked worktree, not a bare tempdir",
         root.display()
     );
 }
 
-/// Fork `src` into a real linked worktree at `dest` on a new `branch`, stamp the
-/// worker marker, and self-validate. `src` must already be an initialised repo.
-pub(crate) fn marked_linked_fork(src: &std::path::Path, dest: &std::path::Path, branch: &str) {
+/// Fork `src` into a real linked worktree at `dest` on a new `branch`, and
+/// self-validate. `src` must already be an initialised repo. To make the fork's
+/// PROCESS a worker, set `DOCTRINE_WORKER=1` on the command under test — the tree
+/// itself no longer carries identity (`DEC-207`).
+pub(crate) fn linked_fork(src: &std::path::Path, dest: &std::path::Path, branch: &str) {
     let base = git(src, &["rev-parse", "HEAD"]);
     git(
         src,
@@ -177,8 +176,5 @@ pub(crate) fn marked_linked_fork(src: &std::path::Path, dest: &std::path::Path, 
             &base,
         ],
     );
-    let marker = dest.join(WORKER_MARKER_REL);
-    std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("create marker dir");
-    std::fs::write(&marker, b"").expect("stamp worker marker");
-    assert_marked_linked_fork(dest);
+    assert_linked_fork(dest);
 }

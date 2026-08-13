@@ -498,7 +498,7 @@ fn resolve_root(path: Option<PathBuf>) -> Result<PathBuf> {
 /// §3.3 request field — the CLI's opt-out `--no-enrich` spelling is inverted at
 /// the one place it is read, rather than carried as a double negative into a
 /// function both surfaces' requests now feed.
-fn enrich_cli(enrich: bool, root: &std::path::Path) -> Facets {
+fn enrich_cli(enrich: bool) -> Facets {
     if !enrich {
         return Facets::default();
     }
@@ -506,7 +506,7 @@ fn enrich_cli(enrich: bool, root: &std::path::Path) -> Facets {
     let mut facets = Facets::default();
 
     // Determine repository_context from worker mode
-    let repo_ctx = if crate::worktree::env_worker_set() || crate::worktree::marker_present(root) {
+    let repo_ctx = if crate::worktree::env_worker_set() {
         Some("worker".to_string())
     } else {
         Some("primary".to_string())
@@ -608,14 +608,14 @@ fn run_record(args: ObservationRecordArgs) -> Result<()> {
     let request = resolve_request(friction_args, &mut std::io::stdin())?;
 
     let service =
-        crate::observation::Service::new(root.clone(), crate::observation::SourceRegistry::empty());
+        crate::observation::Service::new(root, crate::observation::SourceRegistry::empty());
 
     let uid = request
         .uid
         .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
     let recorded_at = crate::clock::now_timestamp()?;
 
-    let auto_facets = enrich_cli(request.enrich, &root);
+    let auto_facets = enrich_cli(request.enrich);
     let facets = merge_explicit_facets(auto_facets, request.facets);
 
     let envelope = Envelope {

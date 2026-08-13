@@ -3,10 +3,10 @@
 //!
 //! ADR-001 tier: ENGINE (mirrors `worktree::gc`). The pure core
 //! ([`classify_worktree`] → [`WorktreeRole`]) takes gathered FACTS
-//! (`is_primary`, the branch name, the [`Cause`] marker signal) and no
+//! (`is_primary` and the branch name) and no
 //! disk/git/clock/rng — the CLAUDE.md pure/imperative split. The impure shell
 //! ([`run_list`]) gathers those facts: it enumerates worktrees via
-//! [`crate::git::list_worktrees`], reads each row's marker off disk, and computes
+//! [`crate::git::list_worktrees`] and computes
 //! the role-conditional `landed` verdict by REUSING the PHASE-04 shared oracle
 //! [`crate::worktree::gc::landed_against`] against the row-appropriate target
 //! (fail-soft: a missing/unresolvable target reads `unknown`, never a hard error —
@@ -21,12 +21,12 @@ use crate::git::{self, WorktreeRecord};
 use crate::root;
 
 use super::gc::landed_against;
-use super::marker::{Cause, describe_mode, marker_present};
+use super::shared::{classify_worktree_role, is_dispatch_fork_branch};
 
 /// The role of a worktree in the dispatch topology — the pure classification of a
 /// row (design: inventory provenance). `Coordination` is the isolated funnel tree
-/// (`dispatch/<slice>`); `WorkerFork` is a spawned worker (`dispatch/agent-*` or a
-/// worktree bearing the worker marker); `Benign` is any other linked worktree (a
+/// (`dispatch/<slice>`); `WorkerFork` is a spawned worker (`dispatch/<agent>`);
+/// `Benign` is any other linked worktree (a
 /// hand-made `/worktree` tree, a detached candidate, …); `Primary` is the main tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorktreeRole {
@@ -34,7 +34,7 @@ pub(crate) enum WorktreeRole {
     Primary,
     /// An isolated dispatch coordination tree (`dispatch/<slice>`).
     Coordination,
-    /// A spawned dispatch worker fork (`dispatch/agent-*` or marker-bearing).
+    /// A spawned dispatch worker fork (`dispatch/<agent>` — a non-numeric suffix).
     WorkerFork,
     /// Any other linked worktree — no dispatch provenance.
     Benign,
@@ -55,33 +55,31 @@ impl WorktreeRole {
 /// PURE role classifier (no git / disk / env — ADR-001 engine core, the
 /// pure/imperative split). Deduces the [`WorktreeRole`] from the gathered facts:
 ///
-/// * `is_primary` — the row is git's first (main) worktree ⇒ [`WorktreeRole::Primary`]
-///   (a marker on the primary is inert, mirroring `describe_mode`, so this wins).
-/// * `marker_cause` — a worker marker present ([`Cause::Marker`]/[`Cause::Both`]) is
-///   the strongest worker signal ⇒ [`WorktreeRole::WorkerFork`].
-/// * `branch` — a `dispatch/<name>` branch: `agent-*` ⇒ worker-fork; an all-numeric
-///   `<slice>` suffix ⇒ [`WorktreeRole::Coordination`]. Anything else ⇒
-///   [`WorktreeRole::Benign`].
-pub(crate) fn classify_worktree(
-    is_primary: bool,
-    branch: Option<&str>,
-    marker_cause: Cause,
-) -> WorktreeRole {
-    if is_primary {
-        return WorktreeRole::Primary;
+/// Now DERIVED from `shared.rs`'s branch-shape classifiers rather than restating the
+/// `dispatch/` prefix rule a third time (SL-254 PHASE-05, EX-3's fold — STD-001).
+/// `shared` answers the three-role question; this adds the one distinction the
+/// inventory needs on top, splitting its `"fork"` into worker-fork and benign.
+///
+/// * `is_primary` — git's first (main) worktree ⇒ [`WorktreeRole::Primary`].
+/// * a coord-shaped `dispatch/<NNN>` branch ⇒ [`WorktreeRole::Coordination`].
+/// * a worker-shaped `dispatch/<agent>` branch ⇒ [`WorktreeRole::WorkerFork`].
+/// * anything else linked ⇒ [`WorktreeRole::Benign`].
+///
+/// The marker leg is gone with the marker (`DEC-207`). Note that dropping it without
+/// this re-derivation would have been a REGRESSION, not a simplification: the old
+/// branch leg recognised only `dispatch/agent-*`, so every other worker fork
+/// (`dispatch/wk1`, …) was reaching `WorkerFork` via the marker and would have
+/// silently demoted to `Benign`. `shared`'s non-numeric-suffix rule is the one the
+/// funnel actually mints against.
+pub(crate) fn classify_worktree(is_primary: bool, branch: Option<&str>) -> WorktreeRole {
+    // `shared`'s helpers take the SHORT ref form; `list_worktrees` yields porcelain.
+    let short = branch.map(|b| b.strip_prefix("refs/heads/").unwrap_or(b));
+    match classify_worktree_role(short, !is_primary) {
+        "primary" => WorktreeRole::Primary,
+        "coord" => WorktreeRole::Coordination,
+        _ if is_dispatch_fork_branch(short) => WorktreeRole::WorkerFork,
+        _ => WorktreeRole::Benign,
     }
-    if matches!(marker_cause, Cause::Marker | Cause::Both) {
-        return WorktreeRole::WorkerFork;
-    }
-    if let Some(suffix) = dispatch_suffix(branch) {
-        if suffix.starts_with("agent-") {
-            return WorktreeRole::WorkerFork;
-        }
-        if !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()) {
-            return WorktreeRole::Coordination;
-        }
-    }
-    WorktreeRole::Benign
 }
 
 /// The `dispatch/<suffix>` tail of a branch ref, or `None` when the branch is not a
@@ -147,14 +145,13 @@ struct InventoryRow {
     slice: Option<u32>,
     branch: Option<String>,
     head: Option<String>,
-    marker: bool,
     live: bool,
     landed: LandedCell,
 }
 
 /// `doctrine worktree list [--slice N] [--json] [--no-landed]` — the worktree
 /// inventory verb (SL-190 PHASE-05, EX-3). Enumerates every linked worktree, prints
-/// `path·role·slice·branch·head·marker·live?·landed`, filtered by `--slice` when
+/// `path·role·slice·branch·head·live?·landed`, filtered by `--slice` when
 /// given, as a table or (`--json`) a structured array. The `landed` column is ON by
 /// default (`--no-landed` suppresses it) and is role-conditional + fail-soft (see
 /// [`landed_cell`]). Read-only — runs at the coordination root, safe under worker
@@ -185,7 +182,7 @@ pub(crate) fn run_list(
     }
 }
 
-/// Gather a record's derived facts (impure: disk marker read + the landed oracle).
+/// Gather a record's derived facts (impure: the landed oracle).
 fn resolve_row(
     root: &Path,
     rec: &WorktreeRecord,
@@ -194,11 +191,7 @@ fn resolve_row(
     landing: LandingOracle<'_>,
 ) -> InventoryRow {
     let branch = rec.branch.as_deref();
-    // The row's marker signal, via the SHARED marker verdict (env is irrelevant to
-    // another worktree's provenance — only the on-disk marker of a linked tree is).
-    let marker = !is_primary && marker_present(&rec.path);
-    let cause = describe_mode(!is_primary, marker, false).cause;
-    let role = classify_worktree(is_primary, branch, cause);
+    let role = classify_worktree(is_primary, branch);
     let slice = slice_of(&rec.path, branch);
     let landed = if no_landed {
         LandedCell::NotApplicable
@@ -211,7 +204,6 @@ fn resolve_row(
         slice,
         branch: rec.branch.clone(),
         head: rec.head.clone(),
-        marker,
         live: rec.path.exists() && !rec.prunable,
         landed,
     }
@@ -338,7 +330,7 @@ fn slice_label(slice: Option<u32>) -> String {
 /// Render the inventory as a padded table (EX-3). `landed` is the last column,
 /// dropped when `no_landed`.
 fn print_table(rows: &[InventoryRow], no_landed: bool) -> anyhow::Result<()> {
-    let mut header: Vec<&str> = vec!["path", "role", "slice", "branch", "head", "marker", "live?"];
+    let mut header: Vec<&str> = vec!["path", "role", "slice", "branch", "head", "live?"];
     if !no_landed {
         header.push("landed");
     }
@@ -350,7 +342,6 @@ fn print_table(rows: &[InventoryRow], no_landed: bool) -> anyhow::Result<()> {
             slice_label(row.slice),
             branch_label(row.branch.as_deref()),
             head_label(row.head.as_deref()),
-            yes_no(row.marker).to_string(),
             yes_no(row.live).to_string(),
         ];
         if !no_landed {
@@ -393,7 +384,6 @@ fn print_json(rows: &[InventoryRow], no_landed: bool) -> anyhow::Result<()> {
                 "slice": row.slice,
                 "branch": row.branch,
                 "head": row.head,
-                "marker": row.marker,
                 "live": row.live,
             });
             if !no_landed && let Some(map) = obj.as_object_mut() {
@@ -421,67 +411,49 @@ mod tests {
 
     #[test]
     fn classify_worktree_over_each_combination() {
-        // is_primary wins over everything (a marker on the primary is inert).
+        // is_primary wins over everything.
         assert_eq!(
-            classify_worktree(true, Some("refs/heads/edge"), Cause::None),
+            classify_worktree(true, Some("refs/heads/edge")),
             WorktreeRole::Primary
         );
         assert_eq!(
-            classify_worktree(true, Some("refs/heads/dispatch/190"), Cause::Marker),
+            classify_worktree(true, Some("refs/heads/dispatch/190")),
             WorktreeRole::Primary,
-            "the primary is primary even bearing a marker"
+            "the primary is primary even on a dispatch-shaped branch"
         );
 
-        // A worker marker is the strongest worker signal.
+        // Coordination: a numeric dispatch/<slice> suffix.
         assert_eq!(
-            classify_worktree(false, None, Cause::Marker),
-            WorktreeRole::WorkerFork
-        );
-        assert_eq!(
-            classify_worktree(false, Some("refs/heads/anything"), Cause::Both),
-            WorktreeRole::WorkerFork
-        );
-
-        // Coordination: a numeric dispatch/<slice> suffix, no marker.
-        assert_eq!(
-            classify_worktree(false, Some("refs/heads/dispatch/190"), Cause::None),
+            classify_worktree(false, Some("refs/heads/dispatch/190")),
             WorktreeRole::Coordination
         );
         // The bare (non-`refs/heads/`) form is accepted too.
         assert_eq!(
-            classify_worktree(false, Some("dispatch/007"), Cause::None),
+            classify_worktree(false, Some("dispatch/007")),
             WorktreeRole::Coordination
         );
 
-        // Worker fork: a dispatch/agent-* branch, no marker.
+        // Worker fork: any NON-numeric dispatch/<agent> suffix.
         assert_eq!(
-            classify_worktree(
-                false,
-                Some("refs/heads/dispatch/agent-ab9f5d9e"),
-                Cause::None
-            ),
+            classify_worktree(false, Some("refs/heads/dispatch/agent-ab9f5d9e")),
             WorktreeRole::WorkerFork
         );
+        // SL-254 PHASE-05: this row previously reached `WorkerFork` only via the disk
+        // marker — the old branch leg tested for an `agent-` prefix, which the funnel
+        // does not always mint. Deriving from `shared`'s non-numeric-suffix rule is what
+        // keeps it classified once the marker is gone.
+        assert_eq!(
+            classify_worktree(false, Some("refs/heads/dispatch/wk1")),
+            WorktreeRole::WorkerFork,
+            "a non-agent-prefixed worker fork is still a worker fork"
+        );
 
-        // Benign: a hand-made worktree branch, a detached tree, an env-only cause.
+        // Benign: a hand-made worktree branch, or a detached tree.
         assert_eq!(
-            classify_worktree(false, Some("refs/heads/w/SL-186-p02"), Cause::None),
+            classify_worktree(false, Some("refs/heads/w/SL-186-p02")),
             WorktreeRole::Benign
         );
-        assert_eq!(
-            classify_worktree(false, None, Cause::None),
-            WorktreeRole::Benign
-        );
-        assert_eq!(
-            classify_worktree(false, Some("refs/heads/dispatch/nonnumeric"), Cause::None),
-            WorktreeRole::Benign,
-            "a non-numeric, non-agent dispatch suffix is not coordination"
-        );
-        assert_eq!(
-            classify_worktree(false, None, Cause::Env),
-            WorktreeRole::Benign,
-            "env alone is not a per-row worker-fork signal for inventory"
-        );
+        assert_eq!(classify_worktree(false, None), WorktreeRole::Benign);
     }
 
     #[test]

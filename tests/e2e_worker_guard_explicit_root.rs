@@ -1,33 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! ISS-028 / SL-236 — the worker guard's CURRENT, ACTOR-BASED contract, pinned.
 //!
-//! `worker_guard` resolves its root by walking up from CWD, so the marker answers
-//! *"is the process that is running me confined?"* — not *"is the tree being written
-//! to protected?"*. That distinction is load-bearing and was, until RV-319 F-2, only
-//! implicit: **every tree a worker must not write to is markerless** (the
-//! coordination tree, the primary repo), and the only marked tree in a dispatch
-//! topology is the worker's own fork. Re-keying the guard to an explicit `-p` target
-//! therefore inverts the protection rather than sharpening it — measured, and the
-//! reason ISS-028's path-threading fix is not landed here.
+//! The guard answers *"is the process that is running me confined?"* — not *"is the
+//! tree being written to protected?"*. That distinction was load-bearing and only
+//! implicit until RV-319 F-2.
 //!
-//! These tests pin the parts of that contract that hold under ANY resolution of
-//! ISS-028, so a future fix cannot regress them silently:
+//! SL-254 PHASE-05 (`DEC-207`) settles ISS-028 at the root: worker identity is the
+//! `DOCTRINE_WORKER` env var ALONE, so the guard consults NO tree at all and the
+//! actor-vs-target skew that RV-319 F-2 left unsettled is now unrepresentable.
+//! What these tests pin is the resulting contract:
 //!
-//!   * a marked CWD refuses writes (the primary signal);
-//!   * the env leg stays root-independent and keeps its own distinct message;
+//!   * a worker process refuses writes with no `-p` at all (the CWD path);
+//!   * that refusal is root-INDEPENDENT — an innocent `-p` target cannot buy it off;
 //!   * a guarded verb that consumes no project root cannot be handed one;
 //!   * a Read verb never resolves a root at all (laziness).
 //!
-//! The two SKEW cases — `-p <markerless>` from a marked CWD, and `-p <marked>` from
-//! an unmarked CWD — are deliberately ABSENT. Their correct behaviour is exactly
-//! what is unsettled (RV-319 F-2); asserting either direction here would pin a
-//! disputed semantic as though it were settled.
-//!
-//! FIXTURES: every "marked tree" here is a GENUINE linked git worktree carrying the
-//! marker, built by `common::marked_linked_fork`, which self-validates both legs. A
-//! marker file in a bare tempdir is never refused (`resolve_mode` requires
-//! `is_linked && marker_present`), so a tempdir fixture would pass identically
-//! whatever the guard did, and prove nothing.
+//! FIXTURES: the fork here is a GENUINE linked git worktree, built by
+//! `common::linked_fork`, which self-validates the topology. Topology no longer
+//! decides the verdict, but a real fork is still the shape a real worker occupies,
+//! so the in-situ proof is kept rather than degraded to a bare tempdir.
 
 #![allow(
     clippy::expect_used,
@@ -49,11 +40,20 @@ fn stderr(out: &Output) -> String {
     String::from_utf8(out.stderr.clone()).expect("utf8 stderr")
 }
 
-/// `doctrine <args…>` in `cwd` with `DOCTRINE_WORKER` explicitly UNSET — isolates
-/// the MARKER leg, which is what root-resolution skew affects.
+/// `doctrine <args…>` in `cwd` with `DOCTRINE_WORKER` explicitly UNSET (the
+/// `doctrine_cmd` default) — a NON-worker process.
 fn run_no_env(cwd: &Path, args: &[&str]) -> Output {
     common::doctrine_cmd(cwd)
         .args(args)
+        .output()
+        .expect("spawn doctrine")
+}
+
+/// `doctrine <args…>` in `cwd` as a WORKER process.
+fn run_worker(cwd: &Path, args: &[&str]) -> Output {
+    common::doctrine_cmd(cwd)
+        .args(args)
+        .env("DOCTRINE_WORKER", "1")
         .output()
         .expect("spawn doctrine")
 }
@@ -65,66 +65,74 @@ fn target_root(dir: &Path) -> PathBuf {
     root
 }
 
-/// The marker-leg refusal substance (`src/worktree/marker.rs`).
-const MARKER_SIGNAL: &str = "signal: marker";
-/// The env-leg-on-a-non-linked-tree substance — VT-d asserts the legs stay distinct.
-const DUAL_CAUSE: &str = "`DOCTRINE_WORKER` set outside a worker worktree";
+/// The refusal substance (`src/worktree/marker.rs` `WORKER_ENV_CAUSE`).
+///
+/// SL-254 PHASE-05: replaces the pair of constants this file carried — `MARKER_SIGNAL`
+/// (`"signal: marker"`) and `DUAL_CAUSE`. With one signal there is one message, so
+/// the "the legs must stay distinguishable" assertions below collapse into asserting
+/// this exact substance.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
-// VT-c — no `-p` at all, CWD inside a marked fork ⇒ still REFUSED. The regression
-// guard: teaching the guard about explicit roots must not blunt the CWD path.
+// VT-c — no `-p` at all, a worker process CWD'd inside a genuine fork ⇒ REFUSED.
+// The regression guard: teaching the guard about explicit roots must not blunt the
+// no-`-p` path.
+//
+// SL-254 PHASE-05: was `marked_cwd_still_refuses_write_without_explicit_root`, which
+// provoked the refusal by stamping the fork. The fork fixture stays (it is the tree
+// shape a worker occupies); the provocation moves to the env.
 #[test]
-fn marked_cwd_still_refuses_write_without_explicit_root() {
+fn worker_process_still_refuses_write_without_explicit_root() {
     let src = tmp();
     common::init_repo(src.path());
     let fork = tmp();
     let fork_dir = fork.path().join("fork");
-    common::marked_linked_fork(src.path(), &fork_dir, "wkr-vtc");
+    common::linked_fork(src.path(), &fork_dir, "wkr-vtc");
 
-    let out = run_no_env(&fork_dir, &["adr", "new", "vt-c"]);
+    let out = run_worker(&fork_dir, &["adr", "new", "vt-c"]);
     let err = stderr(&out);
     assert!(
         !out.status.success(),
-        "a marked CWD with no -p must still refuse; stderr: {err}"
+        "a worker process with no -p must still refuse; stderr: {err}"
     );
     assert!(
-        err.contains(MARKER_SIGNAL),
-        "refusal must carry the marker signal; stderr: {err}"
+        err.contains(WORKER_CAUSE),
+        "refusal must carry the named cause; stderr: {err}"
     );
 }
 
-// VT-d — the ENV leg is root-independent (ADR-006 D2a) and must not be infected by
-// making the MARKER leg path-aware: `DOCTRINE_WORKER` set still refuses even when
-// `-p` names a perfectly innocent markerless root, and does so with the DUAL-CAUSE
-// message rather than the marker-leg one. Asserting only "refused" would let an
-// implementation that made the env leg path-aware pass.
+// VT-d — the verdict is root-INDEPENDENT (ADR-006 D2a, hardened by `DEC-207`):
+// `DOCTRINE_WORKER` set still refuses even when `-p` names a perfectly innocent
+// third-party root, from a CWD that is not a fork at all. Asserting only "refused"
+// would let a path-aware implementation pass, so the exact cause is asserted too.
+//
+// SL-254 PHASE-05: the old form additionally asserted `!err.contains(MARKER_SIGNAL)`
+// — "an env-leg refusal must not masquerade as a marker refusal". There is no second
+// leg left to masquerade as; the positive `WORKER_CAUSE` assertion is now the whole
+// discrimination.
 #[test]
-fn env_leg_stays_root_independent_under_explicit_root() {
+fn refusal_stays_root_independent_under_explicit_root() {
     let out_dir = tmp();
     let target = target_root(out_dir.path());
     let cwd = tmp();
 
-    let out = common::doctrine_cmd(cwd.path())
-        .args(["adr", "new", "vt-d", "-p", target.to_str().unwrap()])
-        .env("DOCTRINE_WORKER", "1")
-        .output()
-        .expect("spawn doctrine");
+    let out = run_worker(
+        cwd.path(),
+        &["adr", "new", "vt-d", "-p", target.to_str().unwrap()],
+    );
     let err = stderr(&out);
     assert!(
         !out.status.success(),
-        "the env leg must refuse regardless of -p; stderr: {err}"
+        "a worker process must refuse regardless of -p; stderr: {err}"
     );
     assert!(
-        err.contains(DUAL_CAUSE),
-        "env-leg refusal on a non-linked tree must carry the dual-cause, not the marker leg; stderr: {err}"
-    );
-    assert!(
-        !err.contains(MARKER_SIGNAL),
-        "an env-leg refusal must not masquerade as a marker refusal; stderr: {err}"
+        err.contains(WORKER_CAUSE),
+        "refusal must carry the named cause; stderr: {err}"
     );
 }
 
 // RV-319 F-1 — a guarded verb that CONSUMES no project root must not ACCEPT one
-// either. These are guarded (Write / Orchestrator / Hookmint) unit variants
+// either. These are guarded (Write / Orchestrator) unit variants
 // with no `path` field; `worktree create-fork` in particular derives its root from
 // the stdin payload cwd and never the process cwd, so a `-p` it accepted but ignored
 // would steer the guard away from the tree it actually writes to.
@@ -171,7 +179,7 @@ fn read_verb_in_rootless_cwd_never_trips_the_guard() {
         "a Read verb must never trip the worker guard; stderr: {err}"
     );
     assert!(
-        !err.contains(MARKER_SIGNAL),
-        "a Read verb must not resolve a root at all (laziness); stderr: {err}"
+        !err.contains(WORKER_CAUSE),
+        "a Read verb must never reach the worker verdict at all (laziness); stderr: {err}"
     );
 }

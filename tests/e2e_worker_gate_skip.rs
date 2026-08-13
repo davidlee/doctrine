@@ -17,8 +17,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output};
 
-use common::WORKER_MARKER_REL;
-
 /// True iff `just` is on PATH — these e2e proofs drive the real task runner.
 fn just_available() -> bool {
     Command::new("just")
@@ -85,10 +83,14 @@ fn no_signal_runs_governance_legs_and_reds_on_broken_state() {
     );
 }
 
-/// VT-1c — the three signal legs skip independently, and the exact-match negative
-/// (`DOCTRINE_WORKER=0`) does NOT skip (mirrors env_worker_set, marker.rs:127).
+/// VT-1c — the env signal legs skip independently, and the exact-match negative
+/// (`DOCTRINE_WORKER=0`) does NOT skip (mirrors `marker::env_worker_set`, which
+/// tests for exactly `"1"`).
+///
+/// SL-254 PHASE-05: the marker-file leg moved out to its own test below, so this one
+/// covers only the legs that are still reachable in a current tree.
 #[test]
-fn each_signal_leg_skips_and_worker_zero_does_not() {
+fn each_env_signal_leg_skips_and_worker_zero_does_not() {
     if !just_available() {
         eprintln!("skipping: `just` not on PATH");
         return;
@@ -112,16 +114,6 @@ fn each_signal_leg_skips_and_worker_zero_does_not() {
         "DOCTRINE_WORKER=1 leg must skip",
     );
 
-    // Leg 3: the marker file at the fixture root.
-    let f3 = tempfile::tempdir_in(common::marker_free_base()).expect("tempdir");
-    let marker = f3.path().join(WORKER_MARKER_REL);
-    std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("mkdir marker dir");
-    std::fs::write(&marker, b"").expect("write marker");
-    assert!(
-        run_validate(f3.path(), &[]).status.success(),
-        "marker-file leg must skip",
-    );
-
     // Exact-match negative: DOCTRINE_WORKER=0 must NOT skip → reds on broken fixture.
     let f4 = tempfile::tempdir_in(common::marker_free_base()).expect("tempdir");
     assert!(
@@ -131,7 +123,6 @@ fn each_signal_leg_skips_and_worker_zero_does_not() {
         "DOCTRINE_WORKER=0 must NOT skip (exact-match) — it must run and red",
     );
 }
-
 /// Write an executable stub binary that exits `code` regardless of its args, so
 /// `validate`'s resolved `"$doc" prompt check && "$doc" doctor` inherit that code.
 fn stub_binary(dir: &Path, code: u8) -> std::path::PathBuf {

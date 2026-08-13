@@ -54,63 +54,78 @@ pub(crate) fn doctrine_bin() -> PathBuf {
     p
 }
 
-/// The worker-marker path, relative to a repo root. CARVE-OUT (SL-225 #2, OQ-1):
-/// canonical form is `marker.rs`'s `marker_path` (`.doctrine/state/dispatch/worker`);
-/// that lib-crate `pub(crate)` const is unreachable from the separately-compiled
-/// integration-test crate (CHR-014 dual-compilation), so this is a documented
-/// duplicate. Keep in lockstep with `src/worktree/marker.rs:114`.
-pub(crate) const WORKER_MARKER_REL: &str = ".doctrine/state/dispatch/worker";
-
-/// PURE core of [`under_worker_marker`]: true iff a worker signal is present at
-/// `root` — the env leg (`env_present`, passed in) OR the marker file. No disk/env
-/// read of its own beyond the marker probe (the env read is the caller's), so it is
-/// deterministically testable against a temp root without poisoning the real tree.
-pub(crate) fn worker_marker_at(root: &std::path::Path, env_present: bool) -> bool {
-    env_present || root.join(WORKER_MARKER_REL).exists()
-}
-
-/// True when running inside a dispatch worker fork — the env leg (subprocess/pi arm)
-/// OR the marker file at the repo root (claude arm, marker-file-only). Authored-write
-/// e2e goldens early-return on this so a worker's own `cargo test` reflects delta
-/// health, not the worker-mode guard's (correct) refusals. The server-side commit gate
-/// CLEARS the marker before its run (SL-199 F2), so the goldens still execute there —
-/// coverage is preserved; only the worker's manual run skips. `is_some()` is a
-/// deliberately broader env test than `env_worker_set()`'s exact `= "1"` (marker.rs:127):
+/// True when running inside a dispatch worker — the `DOCTRINE_WORKER` env leg, which
+/// since SL-254 `DEC-207` is the whole of worker identity. Authored-write e2e goldens
+/// early-return on this so a worker's own `cargo test` reflects delta health, not the
+/// worker-mode guard's (correct) refusals. The server-side commit gate UNSETS the env
+/// for its run, so the goldens still execute there — coverage is preserved; only the
+/// worker's manual run skips.
+///
+/// `is_some()` is a deliberately broader test than `env_worker_set()`'s exact `= "1"`:
 /// any `DOCTRINE_WORKER` value conservatively skips a golden. (SL-225 #2, DEC-003.)
+///
+/// The `WORKER_MARKER_REL` carve-out this used to carry (a documented duplicate of
+/// `marker.rs`'s marker path, needed because the integration-test crate compiles
+/// separately — CHR-014) is gone with the marker: there is no longer a second place
+/// for the path to drift out of lockstep with. The NAME is retained despite now being
+/// a slight misnomer — it has 112 call sites across 33 test files, and renaming them
+/// would be a large diff for no behavioural gain (EX-6: the helper contains the blast
+/// radius).
 // Consumed only by the separately-compiled integration-test crate (via the `#[path]`
 // include in `tests/common/mod.rs`), never by the bin's own `#[cfg(test)]` unit tests —
 // so it reads as dead in the bin build. Same cross-crate carve-out as `common`'s
 // `#![allow(dead_code)]` (SL-162 D5).
 #[allow(dead_code)]
 pub(crate) fn under_worker_marker() -> bool {
-    worker_marker_at(&repo_root(), std::env::var_os("DOCTRINE_WORKER").is_some())
+    worker_env_says_worker(std::env::var_os("DOCTRINE_WORKER").as_deref())
+}
+
+/// The pure core of [`under_worker_marker`]: the shell reads the env, this decides.
+/// Split out so the decision stays testable — `set_var` is banned crate-wide, so a
+/// test cannot mutate the ambient `DOCTRINE_WORKER` to drive the cases.
+fn worker_env_says_worker(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // SL-254 PHASE-05: this was `worker_marker_at_reads_env_and_marker_legs`, a
+    // three-case table over (root, env_set). The marker-file leg is gone (`DEC-207`
+    // makes `DOCTRINE_WORKER` the whole of worker identity), so the root argument and
+    // its two marker rows have no subject left. What survives — and is what the 112
+    // call sites depend on — is that the skip-helper keys off `DOCTRINE_WORKER`
+    // presence, deliberately BROADER than `marker::env_worker_set`'s exact `= "1"`
+    // (SL-225 #2): any value at all conservatively skips an authored-write golden.
     #[test]
-    fn worker_marker_at_reads_env_and_marker_legs() {
-        let root = tempfile::tempdir_in(std::env::temp_dir()).expect("tempdir");
+    fn under_worker_marker_treats_any_doctrine_worker_value_as_worker() {
+        use std::ffi::OsStr;
 
-        // Neither leg → not under a worker.
+        assert!(!worker_env_says_worker(None), "unset ⇒ not under a worker");
         assert!(
-            !worker_marker_at(root.path(), false),
-            "no env, no marker ⇒ not under worker"
+            worker_env_says_worker(Some(OsStr::new("1"))),
+            "`1` ⇒ under a worker"
         );
-        // Env leg alone (subprocess/pi arm) → under a worker.
         assert!(
-            worker_marker_at(root.path(), true),
-            "env leg ⇒ under worker"
+            worker_env_says_worker(Some(OsStr::new("0"))),
+            "broader than `env_worker_set`: even `0` conservatively skips"
         );
-        // Marker-file leg alone (claude arm) → under a worker.
-        let marker = root.path().join(WORKER_MARKER_REL);
-        std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("mkdir marker dir");
-        std::fs::write(&marker, b"").expect("write marker");
         assert!(
-            worker_marker_at(root.path(), false),
-            "marker file at root ⇒ under worker"
+            worker_env_says_worker(Some(OsStr::new(""))),
+            "broader than `env_worker_set`: even empty conservatively skips"
+        );
+    }
+
+    /// The shell wired to the pure core above reads the ambient `DOCTRINE_WORKER`
+    /// (not some other name) — the one part `set_var`'s crate-wide ban leaves
+    /// observable only against the ambient environment.
+    #[test]
+    fn under_worker_marker_reads_the_doctrine_worker_variable() {
+        assert_eq!(
+            under_worker_marker(),
+            std::env::var_os("DOCTRINE_WORKER").is_some(),
+            "the skip-helper's verdict must track `DOCTRINE_WORKER` presence"
         );
     }
 

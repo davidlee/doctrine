@@ -3,7 +3,7 @@
 //! BUILT binary (design §6). Solo `/execute`'s non-squash coordination merge.
 //!
 //! * VT-1: happy path DRIVES `run()` — a solo MULTI-commit fork branch WITH a live
-//!   linked worktree, no marker, clean coordination tree → `land` succeeds with a
+//!   linked worktree, clean coordination tree → `land` succeeds with a
 //!   `--no-ff` MERGE commit (2 parents), the fork tip is an ANCESTOR of HEAD, and
 //!   the verb has NO `--squash` flag (structurally impossible).
 //! * VT-2: precond refusals — distinct named tokens: tree-unclean / no-such-fork /
@@ -13,9 +13,14 @@
 //!   not deterministically black-box reproducible (it needs `git merge --abort`
 //!   ITSELF to fail, i.e. corrupted git state); its token is pinned by a focused
 //!   unit test of the refusal table instead (see the note at that test).
-//! * VT-4: land Orchestrator refusal DRIVES `run()` — refused from a marked
-//!   linked-worktree fork (names the verb `land`) AND from a DOCTRINE_WORKER-set
-//!   process (carries the dual-cause). Mirrors `import_refused_under_worker_mode`.
+//! * VT-4: land Orchestrator refusal DRIVES `run()` — a worker process is refused
+//!   in a linked-worktree fork and on the primary tree alike, each naming the verb
+//!   `land` and the cause. Mirrors `import_refused_under_worker_mode`.
+//!
+//! SL-254 PHASE-05 (`DEC-207`): worker identity is the `DOCTRINE_WORKER` env var
+//! alone, and `land`'s own `dispatch-fork` precondition — previously a cross-tree
+//! read of the fork's worker marker — is now decided from the BRANCH SHAPE
+//! (`dispatch/<agent>`). Both fixtures move accordingly; no refusal token changes.
 
 #![allow(
     clippy::expect_used,
@@ -69,11 +74,11 @@ fn init_repo(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "base"]);
 }
 
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
+/// SL-254 PHASE-05: the one worker-mode refusal cause
+/// (`marker::WORKER_ENV_CAUSE`), replacing `stamp_marker` and the two-message
+/// (`signal: marker` / dual-cause) split it provoked.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
 /// DOCTRINE_WORKER=1; None removes it).
@@ -262,12 +267,50 @@ fn land_refuses_dispatch_fork() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
     let holder = tempfile::tempdir().unwrap();
-    // A live linked worktree that BEARS the worker marker ⇒ dispatch worker.
-    let wt = make_solo_fork(src.path(), holder.path(), "solo-df", &[("f.rs", "x")]);
-    stamp_marker(&wt);
+    // SL-254 PHASE-05: the dispatch-fork verdict was a cross-tree MARKER read on
+    // the fork's live worktree; `DEC-207` deleted the marker and `land` now decides
+    // from the BRANCH SHAPE (`is_dispatch_fork_branch` — `dispatch/<agent>` with a
+    // non-numeric suffix). The refusal token and its subject are unchanged; only the
+    // way the fixture makes the fork a dispatch fork moves.
+    make_solo_fork(
+        src.path(),
+        holder.path(),
+        "dispatch/agent-df",
+        &[("f.rs", "x")],
+    );
 
-    let out = run(src.path(), None, &["worktree", "land", "--fork", "solo-df"]);
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "land", "--fork", "dispatch/agent-df"],
+    );
     assert_refusal(&out, "dispatch-fork");
+}
+
+/// SL-254 PHASE-05: the negative that keeps the test above honest. `land`'s
+/// dispatch-fork leg is now branch-shaped, so a fixture that names its branch
+/// wrongly would silently stop testing anything — the old marker fixture proved
+/// nothing the moment the marker read was removed, and this file's suite went green
+/// on a `land` that had happily merged a fork it should have refused. A SOLO branch
+/// with the same live-worktree shape must still land.
+#[test]
+fn land_permits_a_solo_fork_that_is_not_a_dispatch_branch() {
+    let src = tempfile::tempdir().unwrap();
+    init_repo(src.path());
+    let holder = tempfile::tempdir().unwrap();
+    make_solo_fork(src.path(), holder.path(), "solo-not-df", &[("f.rs", "x")]);
+
+    let out = run(
+        src.path(),
+        None,
+        &["worktree", "land", "--fork", "solo-not-df"],
+    );
+    assert!(
+        out.status.success(),
+        "a non-dispatch branch must land; stdout: {}, stderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
 }
 
 // --- VT-3: merge-time refusals ---
@@ -375,12 +418,20 @@ fn land_refused_under_worker_mode() {
     let holder = tempfile::tempdir().unwrap();
     let fork = add_linked_fork(src.path(), holder.path(), "wkr-guard");
 
-    // (1) Marked linked worktree, env unset ⇒ refused (signal: marker), names verb.
-    stamp_marker(&fork);
-    let out = run(&fork, None, &["worktree", "land", "--fork", "wkr-guard"]);
+    // SL-254 PHASE-05: these two arms were "marked linked worktree, env unset" and
+    // "DOCTRINE_WORKER set on the primary tree", asserting two different messages.
+    // `DEC-207` makes the env var the whole of worker identity, so the pair now
+    // proves topology-independence: the same worker process, the same refusal.
+
+    // (1) A worker process in a linked worktree ⇒ refused, names verb.
+    let out = run(
+        &fork,
+        Some(true),
+        &["worktree", "land", "--fork", "wkr-guard"],
+    );
     assert!(
         !out.status.success(),
-        "land refused from a marked linked worktree; stdout: {}",
+        "land refused from a worker process in a linked worktree; stdout: {}",
         stdout(&out)
     );
     assert!(
@@ -388,8 +439,14 @@ fn land_refused_under_worker_mode() {
         "refusal names the verb; stderr: {}",
         stderr(&out)
     );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "refusal carries the named cause; stderr: {}",
+        stderr(&out)
+    );
 
-    // (2) DOCTRINE_WORKER set ⇒ refused before any land work, carries dual-cause.
+    // (2) The SAME worker process on the primary tree ⇒ refused before any land
+    // work, identically.
     let out = run(
         src.path(),
         Some(true),
@@ -401,8 +458,13 @@ fn land_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "env carries the dual-cause; stderr: {}",
+        stderr(&out).contains("`land`"),
+        "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause; stderr: {}",
         stderr(&out)
     );
 }

@@ -2,26 +2,28 @@
 //! IMP-352 — every integration test spawns the binary through one seam, and that
 //! seam binds cwd.
 //!
-//! `worker_guard` resolves its root by walking up from CWD alone
-//! (`crate::root::find(None, …)`, `src/commands/guard.rs`; RV-319 F-1 pins that it
-//! ignores `-p`). A fixture that spawns the binary without binding `.current_dir()`
-//! therefore roots the child in whatever tree the harness happened to stand in,
-//! not the scratch root it passes to `-p`. Inside a dispatch worker fork that
-//! ambient tree is marked, so the guard refuses an authored write the fixture
-//! never aimed there — about ten targets went red in every marked fork, and a
-//! worker consequently could not use its own test run as a green signal
-//! (ISS-028, ISS-267).
+//! A fixture that spawns the binary without binding `.current_dir()` roots the
+//! child in whatever tree the harness happened to stand in, not the scratch root it
+//! passes to `-p`. It also inherits the harness's ENVIRONMENT — and inside a
+//! dispatch worker that environment carries `DOCTRINE_WORKER`, so the guard refuses
+//! an authored write the fixture never aimed anywhere near a worker's business.
+//! About ten targets went red in every worker fork, and a worker consequently could
+//! not use its own test run as a green signal (ISS-028, ISS-267).
 //!
-//! The cwd is not the only inherited signal: the env leg (`DOCTRINE_WORKER`) is
-//! root-independent, so binding cwd does not reach it. `common::doctrine_cmd`
-//! declares BOTH, which is why the rule below is "go through the seam" rather
-//! than the weaker, easily-satisfied "call `.current_dir()` somewhere".
+//! SL-254 PHASE-05 (`DEC-207`) changes which of the two inherited signals is the
+//! dangerous one. Worker identity used to have a marker leg keyed on the CWD-derived
+//! root, so an inherited cwd alone was enough to red a fixture; identity is now the
+//! `DOCTRINE_WORKER` env var ALONE, and the guard resolves no root at all. So cwd
+//! still decides which TREE the child reads (which is why the seam binds it), but
+//! the inherited signal that turns a fixture red is now the env. `common::doctrine_cmd`
+//! declares BOTH, which is why the rule below is "go through the seam" rather than
+//! the weaker, easily-satisfied "call `.current_dir()` somewhere".
 //!
 //! Two halves, and both are needed:
 //!   * a SOURCE scan — the drift is invisible at runtime, because a fixture that
-//!     inherits cwd passes perfectly well in the primary tree;
+//!     inherits its harness's context passes perfectly well in the primary tree;
 //!   * a BEHAVIOURAL pin — that the seam does what the scan assumes, proved
-//!     against a genuine marked linked worktree rather than asserted.
+//!     against a genuine linked worktree rather than asserted.
 
 #![allow(
     clippy::expect_used,
@@ -153,10 +155,10 @@ fn every_test_spawns_the_binary_through_the_seam() {
     assert!(
         offenders.is_empty(),
         "these tests resolve the binary path themselves instead of going through \
-         `common::doctrine_cmd(cwd)`. A raw spawn inherits the harness's cwd, so \
-         the worker-mode guard roots the child in the ambient tree rather than the \
-         scratch root the fixture operates on — which refuses every authored write \
-         inside a dispatch worker fork (IMP-352):\n  {}",
+         `common::doctrine_cmd(cwd)`. A raw spawn inherits the harness's cwd AND \
+         its environment, so inside a dispatch worker fork the child inherits \
+         `DOCTRINE_WORKER` and the guard refuses every authored write the fixture \
+         aimed at its own scratch root (IMP-352):\n  {}",
         offenders.join("\n  ")
     );
 }
@@ -165,34 +167,38 @@ fn every_test_spawns_the_binary_through_the_seam() {
 // Half two: the behavioural pin
 // ---------------------------------------------------------------------------
 
-/// What the scan assumes, proved: cwd decides the guard's verdict, so a fixture
-/// rooted in its own scratch tree writes freely even when a marked worker fork is
-/// what the harness is standing in — while the SAME command rooted in that fork is
-/// still refused.
+/// What the scan assumes, proved: the seam's declared environment decides the
+/// guard's verdict, so a fixture spawned through it writes freely even while
+/// standing inside a dispatch worker's own fork — while the SAME command spawned
+/// with the worker's inherited env is refused.
 ///
-/// Both arms go through `doctrine_cmd`, differing only in the root handed to it.
-/// That keeps the rule above absolute (no allowlist) and isolates the variable
-/// under test to cwd alone: the env leg is stripped on both arms, so the refusal
-/// can only be the marker leg.
+/// SL-254 PHASE-05: this was `cwd_decides_the_guard_verdict_for_an_identical_write`,
+/// and its arms differed only in the ROOT handed to `doctrine_cmd`, because worker
+/// mode had a marker leg the guard reached via the CWD-derived root. `DEC-207`
+/// deleted that leg — the guard resolves no root — so cwd can no longer decide the
+/// verdict and the old arms would both pass vacuously. The variable under test moves
+/// to the other thing the seam declares: `DOCTRINE_WORKER`. The proof is the same
+/// shape and answers the same question (does the seam actually protect a fixture
+/// running inside a worker fork?), which is exactly what ISS-028 / ISS-267 needed.
 ///
-/// The fork is a GENUINE linked worktree carrying the marker
-/// (`common::marked_linked_fork` self-validates both legs) — `resolve_mode`
-/// requires `is_linked && marker_present`, so a marker file dropped in a bare
-/// tempdir would never be refused and this test would prove nothing.
+/// The fork is still a GENUINE linked worktree (`common::linked_fork`
+/// self-validates the topology), because the whole point is to prove the seam holds
+/// in the tree a real worker occupies.
 #[test]
-fn cwd_decides_the_guard_verdict_for_an_identical_write() {
+fn the_seam_decides_the_guard_verdict_for_an_identical_write() {
     let src = tempfile::tempdir().expect("tempdir");
     common::init_repo(src.path());
 
     let holder = tempfile::tempdir().expect("tempdir");
     let fork = holder.path().join("fork");
-    common::marked_linked_fork(src.path(), &fork, "imp352-wkr");
+    common::linked_fork(src.path(), &fork, "imp352-wkr");
 
     let scratch = tempfile::tempdir().expect("tempdir");
 
-    // Arm A — rooted in the marked fork (what an unbound cwd inherits inside a
-    // dispatch worker): the marker leg fires and the write is refused.
+    // Arm A — the worker's inherited environment (what a raw, unbound spawn picks
+    // up inside a dispatch worker): the guard fires and the write is refused.
     let refused = common::doctrine_cmd(&fork)
+        .env("DOCTRINE_WORKER", "1")
         .args(["backlog", "new", "issue", "probe", "-p"])
         .arg(scratch.path())
         .output()
@@ -200,29 +206,33 @@ fn cwd_decides_the_guard_verdict_for_an_identical_write() {
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
         !refused.status.success(),
-        "a write rooted in a marked fork must still be refused — confinement is \
+        "a write from a worker PROCESS must still be refused — confinement is \
          not what IMP-352 relaxed; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("signal: marker"),
-        "the refusal must be the MARKER leg (the env leg is stripped on both \
-         arms), else this test is measuring the wrong signal; stderr: {stderr}"
+        stderr.contains("`DOCTRINE_WORKER` is set, so this process is a worker"),
+        "the refusal must be the worker-mode guard naming its cause, else this \
+         test is measuring the wrong failure; stderr: {stderr}"
     );
 
-    // Arm B — the identical write, rooted in the scratch tree it actually targets.
-    let allowed = common::doctrine_cmd(scratch.path())
+    // Arm B — the identical write through the seam UNMODIFIED, still standing in
+    // the fork: `doctrine_cmd`'s `env_remove` stands the guard down and the write
+    // lands. This is the arm ISS-028 / ISS-267 needed: a fixture inside a worker
+    // fork must not go red for the fork's sake.
+    let allowed = common::doctrine_cmd(&fork)
         .args(["backlog", "new", "issue", "probe", "-p"])
         .arg(scratch.path())
         .output()
         .expect("spawn doctrine");
     assert!(
         allowed.status.success(),
-        "a fixture rooted in its own scratch tree must write regardless of the \
-         harness's tree; stderr: {}",
+        "a fixture spawned through the seam must write even from inside a worker \
+         fork; stderr: {}",
         String::from_utf8_lossy(&allowed.stderr)
     );
     assert!(
         scratch.path().join(".doctrine/backlog/issue/001").is_dir(),
-        "the write must actually land in the scratch root"
+        "the write must actually land in the scratch root the fixture named, not \
+         the tree it was standing in"
     );
 }

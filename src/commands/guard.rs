@@ -26,17 +26,6 @@ pub(crate) enum WriteClass {
     /// `Write`. REFUSED under worker-mode. (The pin family's separate TTY gate
     /// is enforced in the handler, not here.)
     Orchestrator(&'static str),
-    /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
-    /// worker-mode guard does NOT refuse (locking the marker's only remover behind
-    /// the marker is a self-brick we reject). Its own bespoke refusals live in
-    /// `run_marker_clear`.
-    MarkerClear,
-    /// `worktree marker --stamp-subagent` (SL-056 PHASE-10): the claude harness
-    /// spawn path's provision+mark step. REFUSED under worker-mode via the SAME
-    /// branch as `Orchestrator`/`Write` — NO verb-identity carve-out. The legit
-    /// first stamp passes automatically: the target worktree bears no marker yet,
-    /// so `worker_mode == false` (marker-absent ⇒ allow). Carries the verb label.
-    Hookmint(&'static str),
 }
 
 #[expect(
@@ -55,13 +44,13 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
     use crate::revision::{RevisionChangeCommand, RevisionCommand};
     use crate::spec::{SpecCommand, SpecReqCommand};
     use crate::worktree::WorktreeCommand;
-    use WriteClass::{Hookmint, MarkerClear, Orchestrator, Read, Write};
+    use WriteClass::{Orchestrator, Read, Write};
     match cmd {
         Command::Install { .. } => Write("install"),
         Command::Map { .. } => Write("map"),
         Command::Onboard => Write("onboard"),
         Command::ConceptMap { command } => match command {
-            ConceptMapCommand::New { .. } => Write("concept-map new"),
+ConceptMapCommand::New { .. } => Write("concept-map new"),
             ConceptMapCommand::Add { .. } => Write("concept-map add"),
             ConceptMapCommand::Remove { .. } => Write("concept-map remove"),
             ConceptMapCommand::RenameNode { .. } => Write("concept-map rename-node"),
@@ -235,27 +224,22 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // branch-point-check is a HEAD read + ref compare — no authored write,
             // callable under worker-mode by construction (§5.2, C-V).
             // status reads the resolved mode (SL-056 §3) — open to workers.
-            // verify-worker is a HEAD read + marker probe + is-ancestor compare on
-            // the worker dir — no authored write, diagnostic only; harmless under
-            // worker-mode (design §8.4/§8.6 lists no impersonation test for it).
             // list is the worktree inventory verb (SL-190 PHASE-05) — a
             // read-only enumeration + landed probe, no authored write; open to
             // workers.
             WorktreeCommand::Provision { .. }
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. }
-            | WorktreeCommand::VerifyWorker { .. }
             | WorktreeCommand::Status { .. }
             | WorktreeCommand::List { .. } => Read,
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the
             // first Orchestrator-classed verb; refused under worker-mode.
             WorktreeCommand::Fork { .. } => Orchestrator("fork"),
             // create-fork is the claude `WorktreeCreate` hook verb (SL-152) — it
-            // fires in the MARKERLESS parent coord tree (process cwd), so the
+            // fires in the parent coord tree (process cwd, no worker env), so the
             // worker_guard resolves non-worker mode and it is allowed; a spawn from
-            // inside a marked fork is refused fail-closed (acceptable — workers carry
-            // no Agent tool). Orchestrator and Hookmint are functionally identical
-            // under worker_guard; Orchestrator is the plan-locked class (G8).
+            // inside a worker process is refused fail-closed (acceptable — workers
+            // carry no Agent tool).
             WorktreeCommand::CreateFork => Orchestrator("create-fork"),
             // coordinate creates/resumes the orchestrator's OWN coordination
             // worktree (SL-064 §2) — markerless, but still an orchestrator funnel
@@ -276,16 +260,6 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // influences its own policy), so it is Orchestrator-classed and refused
             // under worker-mode.
             WorktreeCommand::JailPrefix { .. } => Orchestrator("jail-prefix"),
-            // marker --stamp-subagent is the claude harness spawn path's provision+mark
-            // step (SL-056 PHASE-10) — Hookmint, refused under worker-mode (the
-            // legit first stamp lands on a marker-absent worktree ⇒ allowed). All
-            // other marker forms (--clear, bare) are the bespoke self-brick cure —
-            // NOT refused by the worker-mode guard; their fences live in the handler.
-            WorktreeCommand::Marker {
-                stamp_subagent: true,
-                ..
-            } => Hookmint("marker --stamp-subagent"),
-            WorktreeCommand::Marker { .. } => MarkerClear,
         },
         // dispatch sync projects coordination refs (SL-064 PHASE-04 / ADR-012
         // §4) — Orchestrator-classed across the whole verb class; refused under
@@ -466,55 +440,35 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
     }
 }
 
-/// Worker-mode guard (ADR-006 D2a / SL-056 §3): refuse a Write-classed verb when
-/// the cwd tree resolves to worker mode (marker in a linked worktree OR the
-/// `DOCTRINE_WORKER` env optimisation). Read / `MarkerClear` pass through. The
-/// marker leg is evaluated LAZILY — only a Write verb resolves the root, so a Read
-/// verb in a non-doctrine cwd never gains a new failure path (design §3).
+/// Worker-mode guard (ADR-006 D2a): refuse a Write-classed verb when this PROCESS
+/// is a worker — `DOCTRINE_WORKER` set, and nothing else (SL-254 `DEC-207`). Read
+/// passes through.
+///
+/// The root resolution and the lazy marker leg it existed for are both gone: the
+/// verdict is a property of the process, not of the tree it happens to be standing
+/// in, so there is no tree to resolve and no cwd-shaped failure path to avoid.
 pub(crate) fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
-    // Write and Orchestrator are both refused under worker-mode with the SAME
-    // branches; Read and the bespoke MarkerClear pass through (SL-056 PHASE-06).
+    // Write and Orchestrator are refused under worker-mode by the SAME branch;
+    // Read passes through.
     let verb = match write_class(cmd) {
-        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) | WriteClass::Hookmint(verb) => {
-            verb
-        }
-        WriteClass::Read | WriteClass::MarkerClear => return Ok(()),
+        WriteClass::Write(verb) | WriteClass::Orchestrator(verb) => verb,
+        WriteClass::Read => return Ok(()),
     };
-    // No doctrine/project root above the cwd: the marker leg cannot apply. Fall
-    // back to the env leg alone (a leaked env on a rootless cwd), never a new error.
-    let Ok(root) = crate::root::find(None, &crate::root::default_markers()) else {
-        if crate::worktree::env_worker_set() {
-            anyhow::bail!(
-                "{}: refusing authored write `{verb}`",
-                crate::worktree::DUAL_CAUSE
-            );
-        }
+    if !crate::worktree::resolve_mode().refused {
         return Ok(());
-    };
-    let mode = crate::worktree::resolve_mode(&root);
-    if !mode.refused {
-        return Ok(());
-    }
-    // The env leg on a NON-linked tree carries the NAMED dual-cause message (never
-    // a bare "worker refused"); the marker / linked-fork legs name the verb plainly.
-    if mode.is_env_on_nonlinked() {
-        anyhow::bail!(
-            "{}: refusing authored write `{verb}`",
-            crate::worktree::DUAL_CAUSE
-        );
     }
     // Observation writes carry capability-aware guidance directing confined
     // Claude workers to the MCP capture broker and other workers to report
     // the signal for primary-tree capture (SL-231 design §6).
     if verb.starts_with("observation ") {
         anyhow::bail!(
-            "worker fork (signal: {}): refusing `{verb}` — workers cannot capture observations locally. Confined Claude workers: use the `observation_record` MCP tool. Other workers: report the friction signal for primary-tree capture via your phase sheet or handoff.",
-            mode.cause_token()
+            "worker fork ({cause}): refusing `{verb}` — workers cannot capture observations locally. Confined Claude workers: use the `observation_record` MCP tool. Other workers: report the friction signal for primary-tree capture via your phase sheet or handoff.",
+            cause = crate::worktree::WORKER_ENV_CAUSE
         );
     }
     anyhow::bail!(
-        "worker fork (signal: {}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
-        mode.cause_token()
+        "worker fork ({cause}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
+        cause = crate::worktree::WORKER_ENV_CAUSE
     );
 }
 

@@ -338,11 +338,8 @@ mod write_class_tests {
     fn cls(args: &[&str]) -> Option<&'static str> {
         match write_class(&Cli::try_parse_from(args).unwrap().command) {
             WriteClass::Read => None,
-            // All refused classes carry a verb label; the guard refuses each.
-            WriteClass::Write(v) | WriteClass::Orchestrator(v) | WriteClass::Hookmint(v) => Some(v),
-            // The bespoke MarkerClear class is neither Read nor a guarded Write;
-            // the dedicated `worktree_marker_is_bespoke_class` test pins it.
-            WriteClass::MarkerClear => None,
+            // Both refused classes carry a verb label; the guard refuses each.
+            WriteClass::Write(v) | WriteClass::Orchestrator(v) => Some(v),
         }
     }
 
@@ -604,40 +601,24 @@ mod write_class_tests {
         assert_eq!(cls(&["doctrine", "worktree", "status"]), None);
     }
 
-    // SL-056 §3/§5: `worktree marker --clear` is the bespoke MarkerClear class —
-    // NOT a guarded Write (locking the marker's remover behind the marker is a
-    // self-brick). The guard must not refuse it; its own fences live in the handler.
+    // SL-254 PHASE-05: `worktree marker` is gone entirely — the disk marker it
+    // managed no longer exists, so neither the bespoke `MarkerClear` class nor the
+    // `Hookmint` class it was the sole producer of survives. The verb must now fail
+    // to PARSE, which is a stronger property than any classification assertion: an
+    // unparseable verb cannot be misclassified.
     #[test]
-    fn worktree_marker_is_bespoke_class() {
-        let c = Cli::try_parse_from(["doctrine", "worktree", "marker", "--clear"])
-            .unwrap()
-            .command;
+    fn worktree_marker_verb_is_gone() {
         assert!(
-            matches!(write_class(&c), WriteClass::MarkerClear),
-            "marker --clear must be the bespoke MarkerClear class"
+            Cli::try_parse_from(["doctrine", "worktree", "marker", "--clear"]).is_err(),
+            "`worktree marker --clear` must no longer parse"
         );
-        // And therefore not seen as a guarded Write by `cls`.
-        assert_eq!(cls(&["doctrine", "worktree", "marker", "--clear"]), None);
-    }
-
-    // SL-056 PHASE-10: `worktree marker --stamp-subagent` is the Hookmint class —
-    // refused under worker-mode via the SAME branch as Orchestrator/Write (NO
-    // verb-identity carve-out), carries the "marker --stamp-subagent" verb label.
-    #[test]
-    fn worktree_marker_stamp_subagent_is_hookmint() {
-        let c = Cli::try_parse_from(["doctrine", "worktree", "marker", "--stamp-subagent"])
-            .unwrap()
-            .command;
         assert!(
-            matches!(
-                write_class(&c),
-                WriteClass::Hookmint("marker --stamp-subagent")
-            ),
-            "marker --stamp-subagent must be the Hookmint class"
+            Cli::try_parse_from(["doctrine", "worktree", "marker", "--stamp-subagent"]).is_err(),
+            "`worktree marker --stamp-subagent` must no longer parse"
         );
-        assert_eq!(
-            cls(&["doctrine", "worktree", "marker", "--stamp-subagent"]),
-            Some("marker --stamp-subagent")
+        assert!(
+            Cli::try_parse_from(["doctrine", "worktree", "verify-worker", "--base", "x"]).is_err(),
+            "`worktree verify-worker` must no longer parse"
         );
     }
 

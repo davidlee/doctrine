@@ -72,11 +72,11 @@ fn init_repo(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "base"]);
 }
 
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
+/// SL-254 PHASE-05: the one worker-mode refusal cause
+/// (`marker::WORKER_ENV_CAUSE`), replacing `stamp_marker` and the two-message
+/// (`signal: marker` / dual-cause) split it provoked.
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
 /// DOCTRINE_WORKER=1; None removes it).
@@ -470,16 +470,20 @@ fn import_refused_under_worker_mode() {
     let holder = tempfile::tempdir().unwrap();
     let fork = add_linked_fork(src.path(), holder.path(), "wkr-guard");
 
-    // (1) Marked linked worktree, env unset ⇒ refused (signal: marker), names verb.
-    stamp_marker(&fork);
+    // SL-254 PHASE-05: these two arms were "marked linked worktree, env unset" and
+    // "DOCTRINE_WORKER set on the primary tree", asserting two different messages.
+    // `DEC-207` makes the env var the whole of worker identity, so the pair now
+    // proves topology-independence: the same worker process, the same refusal.
+
+    // (1) A worker process in a linked worktree ⇒ refused, names verb.
     let out = run(
         &fork,
-        None,
+        Some(true),
         &["worktree", "import", "--base", &base, "--fork", "wkr-guard"],
     );
     assert!(
         !out.status.success(),
-        "import refused from a marked linked worktree; stdout: {}",
+        "import refused from a worker process in a linked worktree; stdout: {}",
         stdout(&out)
     );
     assert!(
@@ -487,8 +491,14 @@ fn import_refused_under_worker_mode() {
         "refusal names the verb; stderr: {}",
         stderr(&out)
     );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "refusal carries the named cause; stderr: {}",
+        stderr(&out)
+    );
 
-    // (2) DOCTRINE_WORKER set ⇒ refused before any import work.
+    // (2) The SAME worker process on the primary tree ⇒ refused before any import
+    // work, identically.
     let out = run(
         src.path(),
         Some(true),
@@ -500,8 +510,13 @@ fn import_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "env carries the dual-cause; stderr: {}",
+        stderr(&out).contains("`import`"),
+        "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause; stderr: {}",
         stderr(&out)
     );
 }

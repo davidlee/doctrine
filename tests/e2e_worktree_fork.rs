@@ -3,14 +3,20 @@
 //! <path> [--worker]` end-to-end over the BUILT binary.
 //!
 //! * VT-1: happy path — human status on stderr, machine-clean (empty) stdout, the
-//!   worktree+branch exist at `<B>`, marker WRITTEN under `--worker` and ABSENT
-//!   solo; the three pre-`add` refusals (dir-exists / branch-exists / B-not-a-
-//!   commit) each exit non-zero and leave NO fork.
+//!   worktree+branch exist at `<B>`, and the status line DECLARES `--worker` (and
+//!   does not, solo); the three pre-`add` refusals (dir-exists / branch-exists /
+//!   B-not-a-commit) each exit non-zero and leave NO fork.
 //! * VT-2: compensating cleanup — a provision failure after `git worktree add`
 //!   exits non-zero AND leaves NO leftover worktree/branch (asserted GONE).
-//! * VT-4: `fork` Orchestrator refusal drives the real CLI — refused from a marked
-//!   linked worktree AND from a DOCTRINE_WORKER-set process, naming the verb /
-//!   dual-cause.
+//! * VT-4: `fork` Orchestrator refusal drives the real CLI — refused in a worker
+//!   PROCESS whatever tree it stands in, naming the verb and the cause.
+//!
+//! SL-254 PHASE-05 (`DEC-207`): `--worker` no longer stamps
+//! `.doctrine/state/dispatch/worker` — nothing does; worker identity is the
+//! `DOCTRINE_WORKER` env var of the process. The flag survives as the fork's
+//! declaration of intent (it drives the durable `(slice, phase)` binding and the
+//! status line), so VT-1's marker-present/marker-absent pair becomes a
+//! declaration-present/absent pair on the observable status line.
 
 #![allow(
     clippy::expect_used,
@@ -23,6 +29,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 mod common;
+
+/// SL-254 PHASE-05: the one refusal cause (`marker::WORKER_ENV_CAUSE`).
+const WORKER_CAUSE: &str =
+    "`DOCTRINE_WORKER` is set, so this process is a worker: if that is wrong, unset it";
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -66,16 +76,6 @@ fn add_fork(src: &Path, holder: &Path, branch: &str) -> PathBuf {
         ],
     );
     fork
-}
-
-fn stamp_marker(root: &Path) {
-    let dir = root.join(".doctrine/state/dispatch");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("worker"), b"").unwrap();
-}
-
-fn marker_exists(root: &Path) -> bool {
-    root.join(".doctrine/state/dispatch/worker").exists()
 }
 
 /// Run `doctrine <args>` in `cwd`; env governed by `worker` (Some(true) sets
@@ -127,7 +127,7 @@ fn fork_happy_path_solo_and_worker() {
     let base = git(src.path(), &["rev-parse", "HEAD"]);
     let holder = tempfile::tempdir().unwrap();
 
-    // --- solo: no marker ---
+    // --- solo: no worker declaration ---
     let solo_dir = holder.path().join("solo");
     let out = run(
         src.path(),
@@ -171,10 +171,18 @@ fn fork_happy_path_solo_and_worker() {
         base,
         "fork branch sits at B"
     );
-    // Solo OMITS the marker.
-    assert!(!marker_exists(&solo_dir), "solo fork has no marker");
+    // SL-254 PHASE-05: was `!marker_exists(&solo_dir)` — "solo fork has no marker".
+    // Nothing stamps a marker any more, so that assertion would be vacuously true
+    // whatever `fork` did. The observable that still discriminates solo from
+    // `--worker` is the status line, so it is asserted in both directions here and
+    // below.
+    assert!(
+        !stderr(&out).contains("(worker)"),
+        "solo fork does NOT declare itself a worker fork; stderr: {}",
+        stderr(&out)
+    );
 
-    // --- worker: marker stamped ---
+    // --- worker: declared on the status line ---
     let wkr_dir = holder.path().join("wkr");
     let out = run(
         src.path(),
@@ -197,8 +205,9 @@ fn fork_happy_path_solo_and_worker() {
         stderr(&out)
     );
     assert!(
-        marker_exists(&wkr_dir),
-        "worker fork stamps the marker before returning"
+        stderr(&out).contains("(worker)"),
+        "worker fork DECLARES itself on the status line; stderr: {}",
+        stderr(&out)
     );
     assert_eq!(
         git(&wkr_dir, &["rev-parse", "HEAD"]),
@@ -336,12 +345,17 @@ fn fork_refused_under_worker_mode() {
     let holder = tempfile::tempdir().unwrap();
     let fork = add_fork(src.path(), holder.path(), "wkr-guard");
 
-    // (1) Marked linked worktree, env unset ⇒ refused (signal: marker), names verb.
-    stamp_marker(&fork);
+    // SL-254 PHASE-05: the two cases below were "marked linked worktree, env unset"
+    // and "DOCTRINE_WORKER on a non-linked tree", asserting two DIFFERENT messages.
+    // One signal now answers for both, so they are re-pointed at what survived their
+    // merger: the same worker process is refused in a linked fork and on the primary
+    // tree alike, both naming the verb and the cause (`DEC-207`).
+
+    // (1) A worker process standing in a linked worktree ⇒ refused, names verb.
     let target = holder.path().join("nope1");
     let out = run(
         &fork,
-        None,
+        Some(true),
         &[
             "worktree",
             "fork",
@@ -355,17 +369,22 @@ fn fork_refused_under_worker_mode() {
     );
     assert!(
         !out.status.success(),
-        "fork refused from a marked linked worktree; stdout: {}",
+        "fork refused in a worker process inside a linked worktree; stdout: {}",
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("fork"),
+        stderr(&out).contains("`fork`"),
         "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "refusal carries the NAMED cause; stderr: {}",
         stderr(&out)
     );
     assert!(!target.exists(), "refused fork creates nothing");
 
-    // (2) DOCTRINE_WORKER set on a NON-linked tree ⇒ dual-cause refusal.
+    // (2) The SAME worker process on the primary (non-linked) tree ⇒ same refusal.
     let target = holder.path().join("nope2");
     let out = run(
         src.path(),
@@ -387,8 +406,13 @@ fn fork_refused_under_worker_mode() {
         stdout(&out)
     );
     assert!(
-        stderr(&out).contains("DOCTRINE_WORKER"),
-        "env-on-nonlinked carries the dual-cause; stderr: {}",
+        stderr(&out).contains("`fork`"),
+        "refusal names the verb; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains(WORKER_CAUSE),
+        "topology does not change the cause; stderr: {}",
         stderr(&out)
     );
     assert!(!target.exists(), "refused fork creates nothing");

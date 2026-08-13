@@ -54,19 +54,19 @@ fn run_suite(root: &Path, argv: &[String]) -> FailureSet {
 }
 
 /// The run-fingerprint (INV-8): a stable hash over the suite argv, the
-/// test-selection / filter state (`DOCTRINE_WORKER` env, worker-marker presence)
+/// test-selection / filter state (the `DOCTRINE_WORKER` env leg — SL-254 collapsed
+/// worker identity onto it, so the marker term retired with the marker)
 /// and the doctrine-bin provenance (`current_exe`). Capture and diff that share
 /// an identical environment compute an identical fingerprint; any drift in filter
-/// state (a leaked marker / env, a swapped binary) changes it → cache miss.
-fn fingerprint(root: &Path, argv: &[String]) -> String {
+/// state (a leaked env, a swapped binary) changes it → cache miss.
+fn fingerprint(argv: &[String]) -> String {
     let exe = std::env::current_exe()
         .ok()
         .map(|p| p.display().to_string())
         .unwrap_or_default();
     let material = format!(
-        "argv={argv:?}\nenv_worker={}\nmarker={}\nbin={exe}\n",
+        "argv={argv:?}\nenv_worker={}\nbin={exe}\n",
         crate::worktree::env_worker_set(),
-        crate::worktree::marker_present(root),
     );
     git::sha256(material.as_bytes())
 }
@@ -110,7 +110,7 @@ pub(crate) fn run_capture(root: &Path, base: &str) -> Result<()> {
     use std::io::Write as _;
     let cfg = crate::coverage_store::load_config(root)?;
     let argv = cfg.regression_argv();
-    let fp = fingerprint(root, &argv);
+    let fp = fingerprint(&argv);
     let path = baseline_path(root, base, &fp);
     if path.exists() {
         writeln!(
@@ -148,7 +148,7 @@ pub(crate) fn run_diff(root: &Path, base: &str) -> Result<i32> {
     use std::io::Write as _;
     let cfg = crate::coverage_store::load_config(root)?;
     let argv = cfg.regression_argv();
-    let fp = fingerprint(root, &argv);
+    let fp = fingerprint(&argv);
     let path = baseline_path(root, base, &fp);
     if !path.exists() {
         bail!(
@@ -191,23 +191,23 @@ mod tests {
 
     #[test]
     fn fingerprint_is_stable_under_identical_env() {
-        let root = tmp();
+        let _root = tmp();
         let argv = vec!["cargo".to_string(), "test".to_string()];
         assert_eq!(
-            fingerprint(root.path(), &argv),
-            fingerprint(root.path(), &argv),
+            fingerprint(&argv),
+            fingerprint(&argv),
             "same env + argv ⇒ identical fingerprint (INV-1/INV-8)"
         );
     }
 
     #[test]
     fn fingerprint_differs_under_changed_filter_state() {
-        let root = tmp();
+        let _root = tmp();
         let a = vec!["cargo".to_string(), "test".to_string()];
         let b = vec!["cargo".to_string(), "nextest".to_string()];
         assert_ne!(
-            fingerprint(root.path(), &a),
-            fingerprint(root.path(), &b),
+            fingerprint(&a),
+            fingerprint(&b),
             "a changed suite argv ⇒ a different fingerprint"
         );
     }
