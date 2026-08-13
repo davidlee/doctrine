@@ -6,9 +6,21 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-06 complete (6/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-07 complete (7/9) · see git log
 
 ### Produced
+- PHASE-07 done — one spawn skill. `/dispatch-agent` + `/dispatch-subprocess` →
+  `/dispatch-spawn` (both source dirs deleted, so PHASE-08's TWO dangling
+  `spec-021.toml` anchors resolve as `EX-8` predicts — **and PHASE-08 should ADD
+  one for `plugins/doctrine/skills/dispatch-spawn/SKILL.md`**). `/dispatch`'s
+  front-matter no longer claims the funnel is "identical on both arms"; the
+  funnel is now described as bound-fork machinery that the shipped path
+  deliberately does not mint (`OQ-1`), so `dispatch next` sits at `spawn` and the
+  main-thread orchestrator drives the landing. `dispatch-mechanics.md` re-cut,
+  Mode B section retired. Six undercounts fixed and recorded, not absorbed —
+  incl. a Rust unit test that READ the deleted skill's text (second instance of
+  the class the symbol census cannot see) and four stale clap help strings.
+  `just gate` exit 0, `doctor` exit 0, `boot --check` clean (c4a596774)
 - PHASE-06 done — the last four claude-arm-only surfaces are gone:
   `mcp_server/worker_commit.rs` (1477) deleted and unregistered, `arm-spawn` and
   the `Spawn`-row recorder out of `dispatch.rs` (−861 lines), `create.rs`'s Fork
@@ -65,6 +77,13 @@ fresh-as-of: 2026-08-13 · PHASE-06 complete (6/9) · see git log
   in its own commit separate from the sheet/notes commit that preceded it
 
 ### Learned
+- **A skill-path grep of `src/` is a required leg of any skill deletion.** The
+  symbol census (Rust symbols outward, literal strings inward) reaches neither a
+  Rust test that *reads a markdown file by path* nor a clap doc-comment's prose.
+  PHASE-02 hit the first form on the spawn script; PHASE-07 hit it again on a
+  SKILL.md (`mod.rs`'s `subagent_type` pin) plus four stale `--help` strings.
+  Generalisable: before deleting or renaming any non-Rust shipped asset, grep
+  `src/` and `tests/` for its **path**, not just its symbols
 - mem.pattern.refactor.move-closure-exceeds-consumer-imports — a re-home set
   derived from the consumer's imports under-counts the definitions' own needs
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research
@@ -73,6 +92,39 @@ fresh-as-of: 2026-08-13 · PHASE-06 complete (6/9) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **⚠ ESCALATED at PHASE-07, UNRESOLVED — an entire shipped asset class still
+  instructs the retired arm, and no phase in the plan reaches it.** Four files,
+  ~500 lines, absent from design §5.6's table and from every phase's criteria:
+  `install/hymns/role/orchestrator.md` (59 lines) **is Mode B written as a role
+  prompt** — "your cwd is jailed to the coordination tree … the one raw-Bash
+  exception is `arm-spawn`", then a cadence over `arm-spawn` → nested `Agent
+  isolation:worktree` spawn → `worker_commit` → `dispatch_import` →
+  `dispatch_conclude_phase`. It is resolved into a live agent's context by
+  `doctrine prompt resolve --role orchestrator`, and the hymn bands are
+  role/harness/model/stage with **no arm band**, so nothing selects it away.
+  With it: `hymns/role/worker.md` (55, names both arms and the gated
+  `worker_commit`), `install/workflows/drive-slice.js` (353, the shipped
+  `/drive-slice` workflow — a program, not prose, with ~6 `worker_commit` /
+  arm-routing sites), and `install/agents/claude/dispatch-orchestrator.md` (31,
+  the agent def for that role). **Not absorbed into PHASE-07** because the
+  question is not prose: `DEC-217` retires Mode B, and these files *are* Mode B's
+  shipped implementation surface, so someone must rule whether the
+  confined-orchestrator ROLE is deleted, rewritten onto the main-thread posture,
+  or left standing — a delete-a-shipped-capability call with `DEC` weight
+  dragging a 353-line JS workflow behind it. PHASE-08 is the governance corpus
+  only; PHASE-09 is the live run. **Recommendation: a new phase between 07 and
+  08, or an explicit owner ruling carried into the reconciliation brief.**
+- **`doctrine install` cannot prune a retired SKILL's projection** — the same
+  mechanism already recorded here for a retired *hook* entry. After the merge,
+  `.agents/skills/`, `.doctrine/skills/` and `.claude/skills/` all still carried
+  `dispatch-agent` and `dispatch-subprocess`; install visits the skills in the
+  registry and never sees a directory whose source is gone. Cleared by hand
+  (disposable projection state). Note also that the `.agents/` tier is written by
+  the delegated `npx skills add` leg, which fetches from the **github** remote —
+  so a locally-added skill never lands there until published (CHR-049's known
+  `skills-lock.json` staleness). The claude-tier projections did pick up
+  `/dispatch-spawn`. Candidate backlog card at reconcile — no id minted
+  (collision rule)
 - **⚠ ESCALATED, UNRESOLVED — `DEC-204`/`DEC-213`'s premise is false and a
   documented security control is now inert.** Both say `worker_commit` may retire
   because "`classify_import` survives as the scope belt's enforcing reader", and
