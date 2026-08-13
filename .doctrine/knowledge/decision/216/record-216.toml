@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 216
+slug = "privileged-worker-tools-live-outside-the-confinement-in-their-own-binary"
+title = "Privileged worker tools live outside the confinement, in their own binary"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-13"
+updated = "2026-08-13"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "Under the claude `Agent` arm, `worker_commit` was an MCP tool letting a worker perform an act — committing — that the worker could not perform directly, guarded by six belts. DEC-204 deletes it. The question the deletion leaves is not whether SL-254 rebuilds it (it does not) but what the design INTENT is, so drafting does not invent one and SL-255 — where a worker genuinely needs to self-commit — has a settled shape to build to. The incumbent pi arm answers the near half outright: `pi` is spawned `--no-extensions`, so a confined pi worker has no MCP at all."
+choice = "Two-part. NOW: no MCP in the confined claude worker, at parity with pi's `--no-extensions`. SL-254 ships nothing here and the orchestrator performs every privileged act. LATER — the sanctioned shape the moment a worker does need a privileged act: the MCP server runs OUTSIDE the confinement and the worker reaches it over stdio, so the tool is privileged BY CONSTRUCTION because the process boundary is the trust boundary. Two riders on that shape. HTTP transport is admissible only where stdio demonstrably cannot be made to work and the reason is stated. And the privileged tool is NOT to be guarded by belts on the general server: mint a SEPARATE binary exposing the worker tools and nothing else — surface minimisation in place of defence in depth."
+alternatives = ["Run the MCP server inside the jail. Rejected as answering nothing: a tool confined alongside the agent cannot perform the privileged act either — so the gate buys no privilege. It stays admissible for read-only or purely local tools where no privilege is claimed. It is simply not an answer to this question.", "Rebuild `worker_commit`'s six belts on the full doctrine MCP server when the need returns. Rejected by the user: belts are a general-purpose server apologising for its own surface. A narrow binary makes most of them unnecessary rather than merely enforced.", "Say nothing and leave the intent to SL-255. Rejected: deleting `worker_commit` is what makes the intent ambiguous and SL-254 is the slice doing the deleting. Leaving the question where the evidence is not is how a deletion turns into a silent policy change."]
+rationale = "The load-bearing observation is that the gated-tool pattern means nothing unless the tool sits on the far side of a boundary the agent is inside. That is what `worker_commit` implicitly relied on and what ADR-011 never states. Once stated, the belts question changes character: the six belts were the entire security content of exposing a privileged tool from a server that ALSO exposes everything else. Remove the everything else and most of them have nothing left to defend — the residual is the tool's own argument validation, which any tool owes anyway. Stdio over HTTP follows the same reasoning the whole slice runs on: an inherited pipe is reachable by exactly one process, an HTTP port by anything that can route to it, and widening a trust boundary to save integration effort is the trade this decision exists to refuse."
+consequences = ["SL-255 inherits a shape rather than an open question. When it builds worker self-commit it builds a worker-tools binary reached over stdio from outside the jail — not a re-belted general server.", "DEC-204's six-belt analysis is re-aimed rather than lost. Each belt should be re-asked as 'does the narrow binary still need this' instead of ported wholesale. The survivors are those defending the tool's own arguments rather than the server's breadth.", "A future in-jail MCP server is not forbidden but may not claim privilege. Anything reached from inside the confinement is exactly as confined as the agent — so it must be argued on convenience grounds only.", "HTTP transport carries a stated burden of proof. Choosing it without recording why stdio could not be made to work is a defect rather than a preference.", "The worker-tools binary is new construction and therefore explicitly NOT SL-254's. This decision settles intent — SL-254's posture of building nothing stands."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

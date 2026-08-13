@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff8b4-a819-70c2-a631-2d788e465bf4"
+recorded_at = "2026-08-13T01:20:16.921862691Z"
+kind = "friction"
+summary = "/design — the inquiring runbook's inquire.scope step necessarily regresses the exploring runbook's explore.research step, because one edits the file the other hashes"
+detail = "explore.research verifies via doctrine verify research-current, which hashes .doctrine/slice/254/slice-254.md in research/baseline.toml. The very next runbook step the machine asks for — inquire.scope, 'update or explicitly confirm the slice scope against the decisions this inquiry accepted' — mandates editing that same file. So discharging step N+1 regresses step N by construction, and a --restamp is owed after every scope edit. Cost this session: two restamp cycles, and the first drift was mis-read as a stale research artefact when the second was purely annotation. The signal is also lossy in the dangerous direction: a real research staleness and a benign scope annotation produce the identical 'changed slice-254.md' line, so an agent that learns to reflex-restamp will eventually restamp over a genuine drift. Splitting the baseline hash by section, or excluding decision-provenance annotations, would separate the two."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

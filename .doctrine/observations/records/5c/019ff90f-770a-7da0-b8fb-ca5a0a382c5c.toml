@@ -1,0 +1,23 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff90f-770a-7da0-b8fb-ca5a0a382c5c"
+recorded_at = "2026-08-13T02:59:28.138876394Z"
+kind = "friction"
+summary = "design apply: CreateRecord silently swallowed an unknown facet key"
+detail = """
+Disposing two inquiry nodes with form=create, I sent the record's facet map under the key `facets`. The field is `facet` (src/design_run/submission.rs:302). CreateRecord has no deny_unknown_fields, so serde dropped the key without a word: the apply succeeded, the change log reported checkpoint_disposed with record=DEC-215/DEC-216, and both records landed with every facet empty. Nothing distinguished that from success — I only found it by reading the TOML back.
+
+The sting is that Declaration ITSELF carries deny_unknown_fields, and its doc comment (submission.rs:112-119) explains at length that without it a removed field 'would land as keys serde quietly swallows, so a caller still sending them would be told nothing and get a section with no title or a checkpoint with no disposition'. That is exactly what happened one struct further in, where the attribute is absent.
+
+Recovery cost: the disposition is not re-runnable (no refusal covers re-disposing a checkpoint, so retrying risks minting DEC-217/218 duplicates), so the facets had to be back-filled through `knowledge edit decision` — which splits list flags on ',' with no escape, so all eight alternatives/consequences elements had to be rewritten comma-free. A one-character key error cost two applies, a rewrite of eight prose elements, and a detour through a second verb."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

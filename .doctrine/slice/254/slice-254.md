@@ -88,6 +88,14 @@ have had to move too.
 
 1. **Spawn `claude -p` as a confined subprocess** under the pi arm's bwrap
    prefix, with the macOS `sandbox-exec` sibling kept at parity.
+
+   *Hand-back settled 2026-08-13 (`DEC-215`).* The spawn line also carries
+   `--output-format stream-json`, so the collapsed arm returns a **typed
+   completion event stream** at parity with the pi arm's RPC `agent_end` rather
+   than prose for the orchestrator to tail. This is argv — the same tier
+   `DEC-209` put the confinement prefix at — so it is a flag and no code.
+   `--json-schema` is deliberately **not** adopted: nothing consumes a shaped
+   hand-back today, and adopting one would be building.
 2. ~~**Provision workers as clones, not linked worktrees.**~~ **MOVED OUT to
    `SL-255`** by `DEC-213`. Kept in place rather than renumbered so the
    objectives other records cite by number still resolve. The clone's writable
@@ -167,6 +175,16 @@ have had to move too.
   deferred.
 - **Solo worktrees.** `/worktree` for non-dispatch isolation is untouched;
   `REV-046`'s cutover intent already commits to preserving them.
+- **Worker-side MCP, and the privileged-tool binary it would need**
+  (`DEC-216`, added 2026-08-13). The confined claude worker gets **no MCP at
+  all**, at parity with how the pi arm already spawns (`--no-extensions`); the
+  orchestrator keeps performing every privileged act. `DEC-216` settles the
+  *intent* for when a worker genuinely needs one — a separate worker-tools
+  binary run **outside** the confinement and reached over stdio, so the tool is
+  privileged by construction — but that binary is new construction and belongs
+  to `SL-255`, where worker self-commit actually arrives. Recorded here because
+  deleting `worker_commit` (`DEC-204`) is what made the intent ambiguous, and
+  this is the slice doing the deleting.
 
 ## Affected surface
 

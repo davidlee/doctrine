@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff873-31a9-7c13-a23f-ed1c8f59b496"
+recorded_at = "2026-08-13T00:08:46.761309112Z"
+kind = "friction"
+summary = "/design — a concurrent agent's broad git add committed my observation record seconds after capture, so git status showed no trace of it"
+detail = "Recorded a friction observation; git status --porcelain then showed only my two edited files, no untracked record. Diagnosing that cost four tool calls: ls confirmed the file existed, git ls-files showed it tracked, git cat-file -e showed it already in HEAD, and git log named the captor — b4dc1060e memory(SL-253), another agent's commit on the shared edge branch. AGENTS.md warns that a pathless commit rides another agent's staged files; the unremarked inverse is that YOUR new file rides THEIRS, and the symptom is an absence rather than a surprise. An agent that trusts git status to confirm its own capture landed will conclude the capture failed and re-record. Note the mis-attribution too: an SL-254 observation is now inside an SL-253 commit, so provenance survives only in the record body."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

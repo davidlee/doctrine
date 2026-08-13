@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 215
+slug = "typed-hand-back-by-argv-at-parity-with-the-pi-arm"
+title = "Typed hand-back by argv, at parity with the pi arm"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-13"
+updated = "2026-08-13"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = """The claude arm's `Agent`-tool return was a typed value the orchestrator read directly. Collapsing to a confined `claude -p` subprocess (DEC-208) removes that seam, and nothing in the accepted decisions says what replaces it. The incumbent pi arm was surveyed as the answer: `scripts/pi-spawn-confined.sh` spawns `pi --mode rpc`, whose RPC event stream carries a typed `agent_end` completion. The script's `tail -40 "$OUT"` plus `git -C "$D" log --oneline -1` / `rev-parse HEAD` is diagnostic material printed beside that channel, not the channel itself."""
+choice = "`claude -p` runs with `--output-format stream-json`, so the collapsed arm hands back a typed completion event stream at parity with pi's RPC `agent_end`. The transport is argv — the same tier DEC-209 put the confinement prefix at — so this is a flag on the spawn line and no code. No schema enforcement: `--json-schema` is deliberately NOT adopted, because nothing consumes a shaped hand-back today and adopting one would be building."
+alternatives = ["Let `claude -p` write prose to `$OUT` and have the orchestrator tail it — matching what the spawn script visibly does. Rejected: this reads as the conservative option and is not one. It is a REGRESSION against the arm being collapsed onto — pi already hands back typed completion. Parity is the cheaper end state as well as the truer one.", "Adopt `--json-schema` now and enforce the hand-back's shape. Rejected as building: no consumer requires a shape today and the funnel reads the worker's git state directly rather than parsing its prose. This is the natural next step the moment a consumer does."]
+rationale = "The survey nearly landed the wrong way, and how it nearly did is the durable part. Reading `pi-spawn-confined.sh` alone shows a stdout tail and suggests the incumbent hand-back is untyped — which would have made the prose option look like parity rather than regression. `pi --mode rpc` is what corrects it: RPC mode exists precisely to give a typed event stream and `agent_end` is its completion signal. The lesson this slice keeps re-learning: the script tier shows what the orchestrator PRINTS, not what it READS."
+consequences = ["The collapsed arm's spawn line gains one argv flag and no code. The hand-back stays orchestrator-parsed so the funnel's existing contract is untouched.", "`--json-schema` is now a named and deliberately unspent option rather than an oversight. Whoever first needs a shaped hand-back should reach for it rather than invent a wrapper.", "Parity with pi is a STATED property of the collapse rather than a coincidence — so a later divergence between the two arms' hand-backs becomes a change someone has to argue for and not drift."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"

@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inquiring** rev 19, runbook cleared, awaiting `sufficiency-accepted`) · 05223263c
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inquiring** rev 22, 12 nodes all resolved, awaiting re-declared `blocking-set-declared` → `graph-reviewed` → `sufficiency-accepted`) · 46507a9e0
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -57,14 +57,35 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inqu
   `ADR-011` under-counts corrected, `ADR-006` §D2b de-hedged, `SPEC-012`'s
   responsibility added as a `REV` target, `OQ-1`/`OQ-3`/the `REV-046` question
   closed out, `A2` narrowed to its hand-back leg
-- 2 further friction observations — a concurrent agent's broad `git add` captured
+- minted: IMP-429 — give the confinement prefix a home, and macOS parity with it
+  (46507a9e0); the sufficiency judgement's area (2), deliberately out of slice
+- minted: DEC-215 (typed hand-back by argv, at parity with the pi arm) and
+  DEC-216 (privileged worker tools live outside the confinement, in their own
+  binary), via `inq-11`/`inq-12` — the sufficiency judgement's area (1). Scope
+  objective 1 and the Non-Goals updated to match
+- 3 further friction observations — a concurrent agent's broad `git add` captured
   my observation record seconds after capture (symptom is an *absence* in
   `git status`, so it reads as a failed capture); and `inquire.scope` regresses
   `explore.research` by construction, because one step edits the file the other
-  hashes
+  hashes; and `design apply`'s `CreateRecord` silently swallowed an unknown
+  `facets` key (the field is `facet`), landing two records with every facet
+  empty and reporting success — while `Declaration` one struct out carries
+  `deny_unknown_fields` for exactly that failure mode
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
+- A gated tool is privileged **only** if it sits on the far side of a boundary the
+  agent is inside. `worker_commit` relied on that implicitly and `ADR-011` never
+  states it; an in-jail MCP server is exactly as confined as the agent and buys
+  nothing (`DEC-216`). Corollary the user drew: the six belts were the security
+  content of exposing a privileged tool from a server that also exposes
+  *everything else* — a narrow binary makes most of them unnecessary rather than
+  merely enforced
+- The script tier shows what the orchestrator **prints**, not what it **reads**.
+  `pi-spawn-confined.sh`'s `tail -40 "$OUT"` reads as an untyped hand-back; the
+  actual channel is `pi --mode rpc`'s typed event stream and its `agent_end`
+  completion. Nearly landed `DEC-215` backwards — prose-tailing would have been a
+  *regression* dressed as the conservative option
 - The reuse finding: `crates/doctrine-control` already implements clone-inside-bwrap (`provision.rs:949`, `backend/bubblewrap.rs:1110`) — see QUE-215
 - `worker_commit` is **six belts**, not a bare ro-git bypass; two are not topology-coupled, and its scope belt has exactly two callers (`classify_import` import.rs:147, worker_commit.rs:94) single-sourced from import.rs:24 (DEC-204)
 - `nominate`/`denominate` are a **closed loop** with `pretooluse`'s gate legs — `is_nominated` has no other reader, so they die by construction (DEC-205)
@@ -95,7 +116,8 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inqu
   hazard *dissolved* rather than narrowing — `classify_import` survives as the
   scope belt's enforcing caller, so `worker_commit` is deleted outright and
   nothing re-homes. `DEC-205`/`206`/`207`/`208`/`209`/`210` untouched
-- **`governance-confirmed` may deserve re-taking.** The machine still reports all
+- ~~**`governance-confirmed` may deserve re-taking.**~~ — **DECIDED 2026-08-13
+  (`DEC-214`): leave it standing.** The machine still reports all
   three acts `current` after the re-scope — it did not stale them. But the user
   confirmed governance against the *wider* scope, and the picture has since moved
   (`DEC-211`'s REV narrowed, `SL-255` carries its own unsurveyed governance). The
@@ -137,7 +159,16 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inqu
   `doctrine install` seeds** — deleting the hook set changes install's seeded
   `.claude/settings.json`, and the shipped-asset leg is a `RustEmbed` root.
   (1) has real design weight; (2) and (3) are plausibly execution detail and
-  cheap to dismiss
+  cheap to dismiss.
+
+  **All three dispositioned by the user 2026-08-13.** (1) → worked as `inq-11`
+  and `inq-12`, settling `DEC-215` (typed hand-back by argv, at parity with the
+  pi arm) and `DEC-216` (privileged worker tools live outside the confinement,
+  in their own binary). (2) → out of the slice as `IMP-429` — the real question
+  is *where the prefix lives*, which is construction, and the macOS leg needs a
+  different host to verify. (3) → not lifted to a decision: it follows from what
+  is already settled, and locks in `drafting` as a derived consequence rather
+  than an open question
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
 - Memory-corpus sweep at reconcile — carried in the scope's Follow-Ups (25+ stale-but-plausible claude-arm memories, one in the boot snapshot)
 
