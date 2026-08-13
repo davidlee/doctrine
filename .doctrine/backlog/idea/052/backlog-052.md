@@ -11,8 +11,21 @@
 fork and a **committed** fork tip (`dispatch_import`'s `require_binding` else
 `unprovable-fork`), and the collapsed single-arm path structurally produces
 neither — forks stay unbound by design (`OQ-1`) and the worker hands back an
-uncommitted working tree. Deletion commit: **TBD, patch in after PHASE-10
-lands** (see `SL-254`'s `notes.md` harvest for the exact SHA).
+uncommitted working tree. Deletion commit: **`dc7347152`** — recover the file
+with `git show dc7347152^:install/workflows/drive-slice.js`.
+
+Refinement from the execution itself (2026-08-13): the file is not the pure
+Mode-B artifact the ruling assumed. It carries a real `(A)`/pi subprocess arm
+(`fork_tip: null`, worktree-diff import) alongside the `(B)` claude arm. What
+kills it for BOTH arms is narrower and more useful to know when reviving it:
+its single landing verb is `dispatch_import`, which resolves the phase from the
+durable fork binding via `require_binding`
+(`src/mcp_server/dispatch.rs:289-307`). So a revived driver does not need a new
+landing *cadence* — it needs a landing verb that names its phase explicitly
+rather than reading it off a binding. Its `(B)` path additionally spawned via
+in-session nested `agent(isolation:'worktree')`, and its `(A)` path did not
+spawn at all (it assumed a prior orchestrator had), so the spawn half must come
+from `scripts/spawn-confined.sh` either way.
 
 ## The idea
 

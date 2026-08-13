@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffd7c-1c61-7100-8f60-3ae1a516c948"
+recorded_at = "2026-08-13T23:36:37.217209366Z"
+kind = "friction"
+summary = "/execute SL-254 PHASE-10: a materialised installed copy is a distinct lockstep site from the shipped source and the harness symlink"
+detail = "PHASE-10's EX-8 enumerated nine lockstep sites for deleting five shipped files, including the .claude/workflows/drive-slice.js symlink — but not what it pointed at. The target, .doctrine/workflows/drive-slice.js, is git-TRACKED: the materialised install copy, and the actual payload the harness loads as the live /drive-slice skill. Deleting the shipped source plus the symlink would have left a tracked, invocable program driving the deleted Mode-B landing cadence, i.e. the exact failure the phase's own VH-1 exists to catch, surviving the phase meant to remove it. This is the TENTH undercount on this slice and a new class: for any asset that doctrine install materialises, three sites exist (shipped source under install/, materialised copy under .doctrine/, harness symlink under .claude/) and a census that greps for the shipped path finds only the first. Same shape for .doctrine/agents/dispatch-probe.md. Cost: a full read of the census plus a manual git ls-files sweep of .doctrine/ to find it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

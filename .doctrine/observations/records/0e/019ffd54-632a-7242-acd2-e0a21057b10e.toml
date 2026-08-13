@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffd54-632a-7242-acd2-e0a21057b10e"
+recorded_at = "2026-08-13T22:53:13.898471588Z"
+kind = "friction"
+summary = "SL-254 PHASE-10 (/execute): shipped-file deletions have a per-file registry no SL-254 survey counted — publication/manifest.toml"
+detail = "PHASE-10's EX-1..EX-6 (and design 5.6's Code Impact table, and every prior phase survey) treat install/ files as free-standing. They are not: publication/manifest.toml carries a per-file [[entry]] for each shipped asset (all four PHASE-10 targets at :66, :75, :381, :390, :885). Deleting a file without removing its entry in lockstep hard-reds src/publication.rs:988 every_shipped_entry_resolves_and_is_mit and 'doctrine publication validate'. install/manifest.toml — the file the plan's readers would reach for — is per-directory policy only and does NOT list them; its sole relevant line is the [hymns] expose list. Cost: a full census round to discover the real registry before any delete could be attempted. Ninth undercount in this slice's running tally."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
