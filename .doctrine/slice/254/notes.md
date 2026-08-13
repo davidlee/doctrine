@@ -37,6 +37,12 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
   `QUE-214`/`QUE-215` settled; scope document re-cut in six places
 - 1 friction observation recorded — `memory edit` resets attestation on any field
   change, so one logical memory change costs a commit per step
+- `governance-confirmed` left standing after the re-scope (owner's call): the
+  confirmed survey was over a strict superset, and the clone half's governance
+  goes to `SL-255`, which does not inherit
+- `DEC-211`'s `ADR-011` site enumeration corrected in place — four → **eight**
+  regions, `D5`/`D7` deferred; 1 friction observation (line-number citations into
+  an authored `.md` are unstable and self-check nothing)
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
@@ -75,12 +81,21 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage explor
   confirmed governance against the *wider* scope, and the picture has since moved
   (`DEC-211`'s REV narrowed, `SL-255` carries its own unsurveyed governance). The
   gate is not blocking; this is a judgement call for the owner, not a refusal
-- **`DEC-211` under-counts `ADR-011`.** Its `choice` (A) says "at four sites" and
-  lists four; this notes file's own *Governance constraining the surface* section
-  says **five** — Context (28), D1 (43-45), D3's table (89, 93), D4 (98-100), and
-  a consequences-register restatement at 263. Noticed during the marker trace and
-  left unfixed deliberately: reconciling the count is a scope call, not a
-  correction I should make unilaterally
+- ~~**`DEC-211` under-counts `ADR-011`**~~ — **CORRECTED IN PLACE 2026-08-13**,
+  and the count was neither four nor five. Reading `ADR-011` end to end against
+  `DEC-207`/`208` found four *further* regions beyond the four named: **`D2`**
+  (58-74, the core contract — the marker leaves its agnostic core, and "claude's
+  `Agent` path has no worker env channel" is the load-bearing claim a confined
+  `claude -p` falsifies); **`D6`** (146-207, sixty lines of fail-closed altitude
+  resting entirely on deleted mechanisms, marked *asserted* not proposed, whose
+  "not fail-closable" conclusion inverts under `DEC-208`); **Consequences**
+  (248-259, three falsified bullets); **Verification** (265-275, two `VA` criteria
+  that invert — one forbids `claude -p` as a required element, one calls
+  `DOCTRINE_WORKER` "never the identity"). **Eight regions**, plus `D5` and `D7`
+  recorded as considered-and-deferred. Target set unchanged at four entities.
+  The old "five" mis-cited line 263 as a consequences restatement; 263 is the
+  `## Verification` heading, and Consequences and Verification are two distinct
+  regions
 - ~~QUE-214 / QUE-215 unsettled~~ — **both settled `answered` 2026-08-13.**
   `QUE-214` by the user (neither pole as stated — narrowed Bounded Pole B, remainder
   to `SL-255`); `QUE-215` by agent (keep the shell for `SL-254`; the provisioning
@@ -117,8 +132,11 @@ Ten inquiry nodes declared and resolved: `DEC-203`..`DEC-212`.
 Read directly this stage rather than through the research round's quotations —
 `DEC-211`'s body carries the site-by-site detail.
 
-- **`ADR-011`** — **five** amendment sites, not four: Context (28), D1 (43-45),
-  D3's table (89, 93), D4 (98-100), and a consequences-register restatement at 263.
+- **`ADR-011`** — **eight** amendment regions (superseding this section's earlier
+  "five", which mis-cited 263): Context (21-25), `D1` (39-56), `D2` (58-74),
+  `D3`'s table (82-92), `D4` (94-111), `D6` (146-207), Consequences (248-259),
+  Verification (265-275). `D5` (113-144) and `D7` (209-232) considered and
+  deferred. Site-by-site detail in `DEC-211`'s `choice`.
 - **`ADR-006` §D2b** — thread 1's claim verified; the `SL-181` note pattern is real
   at line 143. Second site at 308. Its "degenerate case" list already contemplates
   a standalone clone — `SL-254` makes that the *normal* case, so the note re-cuts
