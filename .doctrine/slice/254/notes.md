@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **drafting** rev 26, inquiry closed — 12 nodes resolved, all four evidence acts current) · 40f521540
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **drafting** rev 35, ten sections declared + materialised, `draft.selectors` discharged; stage deliberately NOT advanced — the draft is unvalidated) · 5a68bfd9e
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -80,6 +80,16 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **draf
   `facets` key (the field is `facet`), landing two records with every facet
   empty and reporting success — while `Declaration` one struct out carries
   `deny_unknown_fields` for exactly that failure mode
+- **design drafted in full 2026-08-13** — ten sections declared, materialised at
+  rev 34, `draft.selectors` discharged at rev 35 (35 design-target selectors over
+  the §5.6 code-impact table). Research baseline restamped: `design.md`'s *arrival*
+  tripped the verifier, and nothing in `research.md` needed marking
+- 1 further friction observation — section document order is *creation* order and
+  a batched `design apply` claims `seq` in **id-sorted** order, so `sec-10` landed
+  ahead of `sec-6`; no reorder verb exists, so the repair was rotating five bodies
+  onto the ids already in the right positions. Section ids now mismatch their
+  headings (`sec-10` holds §6, `sec-6` holds §7, …) — cite sections by **heading**,
+  not by id
 
 ### Learned
 - mem_019ff650d94a7960a638913a40416165 — collide "what calls this" research findings against "what should exist" decisions at synthesis. **Second instance this slice** (DEC-204 vs thread 2's `worker_commit` reading) — strengthen from incident to standing hazard
@@ -179,6 +189,23 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **draf
   different host to verify. (3) → not lifted to a decision: it follows from what
   is already settled, and locks in `drafting` as a derived consequence rather
   than an open question
+- **Design open questions, none blocking** (`design.md` §6). `OQ-1` is the sharp
+  one and is a **precondition of the VA leg**: `worktree fork --worker` binds a
+  fork's `(slice, phase)` only with both flags **and** a dir under
+  `<coord>/.worktrees/<name>` (`fork.rs:216-246`), and
+  `scripts/pi-spawn-confined.sh:56` passes neither — so the collapsed arm would
+  inherit unbound, `unprovable-fork` forks. `OQ-2`: `dispatch_import` loses its
+  producer (no confined worker can commit) and is deliberately **retained**, on
+  `DEC-211`'s narrowing of the funnel cadence out of the `REV`. `OQ-3`
+  `~/.claude.json` is a sibling *file* outside the `$HOME/.claude` bind. `OQ-4`
+  does `create-fork`'s Passthrough have a live consumer. `OQ-5` macOS parity is
+  asserted, not exercised (`IMP-429`)
+- **Deletion boundary widened at drafting** (`design.md` §7.2 `D1`-`D3`, §8 `R6`).
+  Four surfaces the scope's objective 3 does not name go too — `create-fork`'s
+  Fork arm, `dispatch arm-spawn`, the `Spawn`-row recorder, `worktree
+  verify-worker` — each being the claude arm's substitute for something `worktree
+  fork --worker` already does. Carry as a design-time scope correction in the
+  reconciliation brief
 - SL-254 `OQ-2` — five backlog items plausibly dissolved rather than fixed (IMP-269, IMP-342, IMP-334, IMP-337, IMP-407), plus IMP-401 and IDE-024; confirm at reconcile
 - Memory-corpus sweep at reconcile — carried in the scope's Follow-Ups (25+ stale-but-plausible claude-arm memories, one in the boot snapshot)
 
