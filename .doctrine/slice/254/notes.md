@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inquiring** rev 22, 12 nodes all resolved, awaiting re-declared `blocking-set-declared` → `graph-reviewed` → `sufficiency-accepted`) · 46507a9e0
+fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **drafting** rev 26, inquiry closed — 12 nodes resolved, all four evidence acts current) · 40f521540
 
 ### Produced
 - SL-247 abandoned at design; scope `## Summary` carries the dissolution (e788e1520)
@@ -63,6 +63,15 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inqu
   DEC-216 (privileged worker tools live outside the confinement, in their own
   binary), via `inq-11`/`inq-12` — the sufficiency judgement's area (1). Scope
   objective 1 and the Non-Goals updated to match
+- **inquiry closed 2026-08-13** — `graph-reviewed` and `sufficiency-accepted`
+  both taken (user, in-session), stage advanced `inquiring` → `drafting` at rev
+  26. All four evidence acts current. The `sufficiency-accepted` basis records
+  what became of each of the three offered areas, so the judgement is auditable
+  without this file
+- ISS-328 (an unknown key inside `CreateRecord` is dropped, not refused) already
+  had this filed from `SL-249`; added the second sighting — the first with a real
+  cost. Minted ISS-349 for the comma splitter, which had a standing memory and no
+  card (40f521540)
 - 3 further friction observations — a concurrent agent's broad `git add` captured
   my observation record seconds after capture (symptom is an *absence* in
   `git status`, so it reads as a failed capture); and `inquire.scope` regresses
@@ -145,8 +154,9 @@ fresh-as-of: 2026-08-13 · proposed (design run `dr-019ff653` live, stage **inqu
 - ~~Design run gate outstanding~~ — **both cleared 2026-08-13**, rev 15. Stage is
   still `exploring`; the advance to `inquiring`/`drafting` is a separate `stage`
   submission and is deliberately not yet sent
-- **`sufficiency-accepted` outstanding — the last contract on the
-  `inquiring → drafting` edge, and a user act.** It asks the harder question:
+- ~~**`sufficiency-accepted` outstanding — the last contract on the
+  `inquiring → drafting` edge, and a user act.**~~ — **TAKEN 2026-08-13**, with
+  `graph-reviewed`; stage now `drafting`. It asks the harder question:
   not "was every raised question dealt with" but "was the raised *set*
   adequate". Three areas nobody asked about, offered for that judgement rather
   than as findings: (1) **the hand-back contract** — `A2`'s one surviving leg;
