@@ -331,3 +331,43 @@ and the unbound-fork settlement it forced. Both are owner decisions taken on
 stated evidence. A finding that this slice should have taken the clone half, or
 should bind its forks, is a finding about those decisions — admissible as one,
 but not as a defect in the draft.
+
+---
+
+**Pass 1 closed 2026-08-13, rev 42 → 49.** All seven findings verified as raiser
+and `RV-355` concluded. Every section body moved, so the pass is `STALE` against
+current content by construction — a second pass reviews a different artefact, not
+a patched one.
+
+*Probe 1 above was discharged in the course of the fixes, and it found more than
+it expected.* Re-deriving the target set from the entities rather than from
+`DEC-211` grew the `REV` from four entities to **six**, not the five `F-4`/`F-5`
+implied: `ADR-008` was absent from every prior survey and carries seven regions
+(`D-B3`'s "codex/pi-only … not a subprocess to wrap" clause, `D-B6`'s whole
+nominate/gate/`SubagentStop` mechanism, `N1`'s `worker_commit` exception);
+`ADR-006` is nine regions rather than two, reaching `D2a`'s decision body and both
+`D9` amendments; `ADR-011` is eleven rather than eight. Recorded as `DEC-218`,
+which supersedes `DEC-211`'s enumeration and carries the derivation *method* so
+the next reader re-derives rather than re-cites. `R8` and the second `VH` claim
+(§9.4) are the standing guards.
+
+*Probe 2 is now written down as `DEC-217`* — Mode B retires with the in-session
+arm, as a consequence of the unbound-fork settlement rather than a choice. Its
+two sub-questions are answered in the record: what else rides Mode B is
+`SPEC-021` `REQ-384`/`REQ-387`, both narrowed in the `REV`; and `REQ-335`'s
+"stays pending" is honest **as a contract** while its one partial implementation
+retires, which the scope's Non-Goals now say explicitly. Still worth adversarial
+attention, but against a stated position rather than a silence.
+
+*Probe 3 (the macOS arm as a census, not one instance) is untouched and remains
+the sharpest open probe.* `F-2`'s fix is one token in `sandbox_exec_argv`; nobody
+has swept the Darwin path against every claim §5.1 and §5.2.1 make.
+
+**New, found while fixing, not by the pass.** Two `doctor` checks are live
+consumers of deleted symbols and were in no earlier list: #10 `SpawnSeamSymmetry`
+reads `PRIVILEGED_AGENT_TYPES` and the `SubagentStart`/`PreToolUse` registries, so
+**the deletion does not compile** without removing it; #9 `AgentConformance`
+allowlists `mcp__doctrine__worker_commit` as the worker's one MCP token, which
+`DEC-216` leaves empty. `src/finding.rs` loses a `Category` variant with #10. A
+second pass should ask what *else* consumes a deleted symbol — the design's §5.6
+is a hand-built list, and this was the second sweep to extend it.
