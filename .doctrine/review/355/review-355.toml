@@ -14,52 +14,115 @@ ref   = "SL-254"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected retained funnel to receive Spawn; observed the chosen unbound path has no Spawn writer"
 detail = "SL-254 design.md:577-579 mandates `fork --worker --slice N --phase PHASE-NN`, but its settled OQ-1 at design.md:739-762 requires the collapsed forks to stay unbound and explicitly declines those flags. D2 at design.md:842-849 then deletes `run_create_fork_and_record` and says `dispatch_import` will heal Spawn. The code does not support that combination: src/dispatch.rs:6645-6650 prescribes Spawn whenever a ready phase has no row; src/dispatch.rs:6932-6935 is the create-fork Spawn recorder being deleted; and src/mcp_server/dispatch.rs:286-315 refuses `dispatch_import` without the durable binding that OQ-1 forbids. The selected `worktree import --from-worktree` path records no funnel transition, so `dispatch next` has no route beyond Spawn and cannot drive verify, conclude, or reap."
+disposition = "design-wrong"
+response = """
+Confirmed as a defect, with the framing corrected — and the real damage is worse than stated.
+
+VALID AS RAISED: the internal contradiction. Design §5.4 step 2 prescribes `fork --worker --slice N --phase PHASE-NN` while §6 OQ-1 settles that both flags are declined. Step 2 was not re-cut when OQ-1 was settled. Strike the flags from step 2.
+
+MISFRAMED: the consequence. `dispatch next` and the funnel record are Mode B (install/dispatch-mechanics.md, "Mode B - the confined-orchestrator arm drives the funnel through MCP"). The retained landing path is Mode A, the main-thread orchestrator, which applies the delta, commits, flips the phase and records the boundary as separate acts and never consults the funnel record; "a fork with no funnel row" is an explicitly supported case for the reap oracle. Mode A is unaffected by the collapse.
+
+UNDERSTATED: funnel_machine's TABLE admits only `Spawn` from `current: None`. After this slice every production `Transition::Spawn` writer is gone — `land_spawn_row` (dispatch.rs:6958, deleted with create-fork's Fork arm), `worker_commit` (deleted), and `dispatch_import`'s heal-forward (requires the durable binding OQ-1 declines). Mode B therefore loses its ENTRY POINT, not merely `dispatch_import`'s producer, which is all OQ-2 admits. Mode B additionally rides `arm-spawn` (dispatch-mechanics.md, "The fork override"), which D2 deletes.
+
+REMEDY: (1) strike step 2's flags; (2) rewrite OQ-2 from "one tool loses its producer" to "Mode B retires with the in-session arm"; (3) add a decision recording that retirement as the CONSEQUENCE of the unbound-fork choice, not a new judgement — a Spawn row requires a bound fork, so unbound forks and a live Mode B are mutually exclusive, and the owner settled unbound on 2026-08-13. Reversing this means reversing that decision, not amending prose; (4) correct plugins/doctrine/skills/dispatch/SKILL.md, which claims the funnel is "identical on both arms" — untrue of an arm that never lands a row."""
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected every confined worker to carry env identity; observed the macOS prefix never sets DOCTRINE_WORKER"
 detail = "SL-254 design.md:545-548 makes `DOCTRINE_WORKER=1` the sole post-collapse identity and says the confinement argv sets it; INV-1 at design.md:609-614 then reduces refusal to that environment fact. The surviving Darwin path in scripts/pi-spawn-confined.sh:95-115 only reads the `jail-prefix` argv, and src/worktree/jail.rs:628-655 constructs that Seatbelt prefix as `sandbox-exec ... -- env TMPDIR=...` with no `DOCTRINE_WORKER` assignment. Only the Linux array sets it, at scripts/pi-spawn-confined.sh:120-127. Once the disk marker is deleted, a macOS worker therefore runs confined but is not recognized by the CLI worker-mode guard, contradicting the process-identity invariant and platform-parity claim."
+disposition = "design-wrong"
+response = """
+Confirmed. `sandbox_exec_argv` (src/worktree/jail.rs:627-655) emits the `-D` binds, `-f <profile>`, the `--` terminator and a trailing `env TMPDIR=<tmp>` token — no DOCTRINE_WORKER. Only the Linux inline array sets it (scripts/pi-spawn-confined.sh:120-127). macOS worker identity rides the disk marker today, so DEC-207's deletion leaves a confined macOS worker with NO identity signal and makes INV-1 false on that platform.
+
+This also falsifies OQ-5's standing claim that macOS "parity holds by construction, the claude profile changes exactly the two tokens the pi profile parameterises". The macOS path needs a change the Linux path does not, and it is in the binary rather than the script.
+
+REMEDY: `sandbox_exec_argv` sets DOCTRINE_WORKER=1 in the same trailing `env` token run as TMPDIR; state it in §5.1's prefix resolution and §5.2.1; add a VT over the macOS argv asserting the variable is present (pure, Linux-testable — the builder is pure over ResolvedMac); re-cut OQ-5 to record this as the one place parity is NOT by construction."""
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected worker_commit belts to remain enforced; observed check-commit is replaced by a different prove gate"
 detail = "SL-254 design.md:535-541 and design.md:616-618 say the funnel contract and INV-2 posture are unchanged because `classify_import` survives. The deleted path has an additional non-topological belt: src/mcp_server/worker_commit.rs:473-477 runs the mutating `CheckKind::Commit` gate before creating the worker commit, and src/mcp_server/worker_commit.rs:563-581 reruns it before adopting a pre-existing commit. The retained live-worktree path instead calls only `classify_import` at src/worktree/import.rs:464-472, applies the patch, and then resolves non-mutating `CheckKind::Prove` at src/worktree/import.rs:258-286 and runs it at src/worktree/import.rs:480-491. Scope still survives, but check-commit does not stay where it was and prove is not the same cadence or mutation contract. The claimed unchanged belt posture, and the resulting decision to omit this change from governance revision, are unsupported."
+disposition = "design-wrong"
+response = """
+Confirmed. worker_commit ran the MUTATING `CheckKind::Commit` gate worker-side before landing (src/mcp_server/worker_commit.rs:473-477, and again at :563-581 before adopting a pre-existing commit). The retained path runs NON-MUTATING `CheckKind::Prove` post-import (src/worktree/import.rs:480-491).
+
+The scope belt claim is sound — `classify_import` survives, single-sourced from import.rs:24, and remains the enforcing caller. But §5.2.5's "the funnel contract is untouched" and INV-2's "posture unchanged" cover the belt and silently drop the gate, and that omission is precisely what justified keeping the posture change out of DEC-211's REV. DEC-204's own pre-dissolution consequences named this: "INV-2's statement changes from worker-cannot-skip-a-belt to orchestrator-enforces-at-admit. That is a governance-visible posture change and belongs in the REV." DEC-213 dissolved that on the ground that classify_import survives — which answers the belt and not the gate.
+
+REMEDY: state the gate substitution explicitly in §5.2.5 and the §5.4 failure table (worker-side mutating commit gate -> orchestrator-side non-mutating prove gate); narrow INV-2 to the scope belt it actually covers; carry the enforcement-altitude change into SPEC-021 REQ-291's rewrite, which is ALREADY a REV target — this needs no new target, only honest text."""
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected SPEC-012 revision to cover every falsified contract; observed the design changes only the fork stamp wording"
 detail = "SL-254 design.md:268-270 and design.md:723-730 limit the SPEC-012 landing to responsibility 18 losing the stamp. `./target/debug/doctrine spec show SPEC-012` exposes several additional active contracts the design deletes or rewrites: REQ-192 requires the disk-marker-primary, marker-absent-linked-tree fail-closed guard; REQ-248 requires `fork --worker` to stamp the marker and emit the per-worktree env contract; REQ-250 requires `land` to refuse a marker-bearing dispatch fork; and REQ-252 says env delivery is subprocess-only for codex/pi. SPEC-012 also normatively describes per-harness spawn paths and marker identity. The proposed env-only identity, branch-shape land classifier, and Claude subprocess make those active requirements false, so a stamp-only REV would leave accepted specification contradicting the shipped mechanism."
+disposition = "design-wrong"
+response = """
+Confirmed, and it makes the REV target set wrong. Verified each via `doctrine spec req show`; all four are `active` members of SPEC-012:
+
+- REQ-192 — worker-mode guard is "disk-marker-primary": `worker_mode = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`, with a marker-absent linked worktree fail-closed. DEC-207 collapses this to the env leg alone. Falsified.
+- REQ-248 — `worktree fork` "stamps the worker marker before any spawn window". §5.6 drops the write_marker call. Falsified.
+- REQ-250 — `worktree land` refuses "a marker-bearing (dispatch-fork)" fork. §5.5 substitutes the branch-shape classifier. Falsified.
+- REQ-252 — env-contract "delivery is subprocess-only (codex/pi)". Once every arm is a subprocess the parenthetical is stale. Narrows rather than retires.
+
+§3.1 and §5.6 scope SPEC-012's landing to responsibility 18 losing the stamp. That is one line of a four-requirement change.
+
+REMEDY: widen the REV's SPEC-012 leg to those four requirements plus responsibility 18 — REQ-192 rewrite, REQ-248 rewrite, REQ-250 rewrite, REQ-252 narrow — and correct §3.1, §5.6 and DEC-211's own count. Of the seven findings this one most changes the slice's shape: the governance half grows again, exactly as the scope's "this is the larger half" warned."""
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected accepted integration topology to match the one-arm design; observed ADR-012 is excluded despite deleting its Claude synthesis case"
 detail = "SL-254 design.md:280-283 declares ADR-012 untouched and design.md:723-730 excludes it from the governance landing. `./target/debug/doctrine adr show ADR-012` makes the deleted arm normative: Decision 3 says, `on arms that do not return a per-worker fork branch — the Claude Agent arm ... the per-phase deliverable branch is cut from dispatch/<slice> at sync time`; its Verification section repeats, `on the Claude arm (no fork branch), phase/<slice>-NN is cut from dispatch/<slice> at sync`. The collapsed Claude subprocess does return an orchestrator-created worker fork, so both the topology rule and its verification fixture become stale. Transport of the delta may remain live-worktree import, but the branch-producing arm topology explicitly changes; ADR-012 cannot remain untouched."
+disposition = "design-wrong"
+response = """
+Confirmed. ADR-012 makes the deleted arm normative in two places:
+
+- Decision 3, the harness-synthesis rule: "on arms that do NOT return a per-worker fork branch — the Claude `Agent` arm (ADR-011), where the worker delta lands directly onto `dispatch/<slice>` — the per-phase deliverable branch is cut from `dispatch/<slice>` at sync time".
+- Verification, M3: "on the Claude arm (no fork branch), `phase/<slice>-NN` is cut from `dispatch/<slice>` at sync and is a valid deliverable."
+
+The collapsed claude arm returns an orchestrator-created `dispatch/<name>` fork branch, so the rule's case goes empty and its verification fixture goes stale.
+
+§3.1's "ADR-012 — not touched, and this is load-bearing: it is what keeps the REV inside the surveyed set" inverts. What the retained transport preserves is ADR-012's INTEGRATION decisions; the arm-topology clause is falsified regardless of transport, because the falsifying fact is that the arm now produces a fork branch at all.
+
+REMEDY: add ADR-012 to the REV as a fifth target entity at two regions (D3's synthesis rule, Verification's M3 fixture) — an in-place amendment on the precedent ADR-011 already sets — and correct §3.1's untouched claim and the "keeps the REV inside the surveyed set" reasoning."""
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected incumbent Linux spawn to name bwrap-unavailable; observed it performs no capability check"
 detail = "SL-254 design.md:374-377 says named Linux refusal through `REASON_NO_BWRAP` is already surviving-arm behavior, and design.md:580-583 relies on that exact outcome. In scripts/pi-spawn-confined.sh:116-140 the Linux branch puts literal `bwrap` in PREFIX and executes it through `timeout`; it never calls `have_bwrap` or `worktree jail-prefix`. The named check exists only in src/worktree/jail_prefix.rs:114-140, a path the script uses on macOS but not Linux. Missing bwrap still fails closed at exec, but not with the promised stable reason, so the design must add a new check or stop claiming behavior-preserved named refusal."
+disposition = "design-wrong"
+response = """
+Confirmed. scripts/pi-spawn-confined.sh's Linux branch builds PREFIX with a literal `bwrap` token and execs it under `timeout`. It never calls `have_bwrap` and never shells `worktree jail-prefix`; the named-refusal path exists only on the macOS arm via src/worktree/jail_prefix.rs. §4's "the surviving arm already fails closed at spawn through REASON_NO_BWRAP on Linux" and §5.4 step 3's "No bwrap => REASON_NO_BWRAP" both describe behaviour that does not exist on Linux.
+
+It does fail closed — a missing binary means a non-zero exec, and the empty-PREFIX guard is separate — but not with the stable named reason DEC-208's fail-closed argument leans on.
+
+REMEDY: prefer adding the Linux capability probe over weakening the claim. `have_bwrap` is one of the four primitives DEC-206 already re-homes to jail.rs, so the caller is free by the time the spawn phase runs, and a named refusal is the fail-closed story the design actually tells. If the probe is declined, §4 and §5.4 step 3 must be restated as "fails closed at exec, unnamed on Linux" — the claim cannot stand as written either way."""
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected reap design to name pi terminal event; observed it specifies the stale agent_end signal"
 detail = "SL-254 design.md:485-490 and R4 at design.md:927-933 say the pi profile polls for `agent_end`, and design.md:478 uses that event as the typed-parity basis. scripts/lib/pi-reap.sh:68-82 says the opposite from measured production behavior: `The terminal event is agent_settled, NOT agent_end`; `agent_end` can sit far behind EOF, while the poll matches both only for compatibility. Preserving `pi_await_and_reap` avoids an immediate regression, but the design records the wrong completion contract and could reintroduce the documented full-backstop burn if the generalized profile is implemented from that contract."
+disposition = "design-wrong"
+response = """
+Confirmed, and it carries a live hazard rather than a documentation nit. scripts/lib/pi-reap.sh:68-82 records ISS-293 directly: "The terminal event is `agent_settled`, NOT `agent_end`". `agent_end` carries accumulated conversation state and so is pushed arbitrarily far from EOF — measured 684,768 bytes on one census turn — so a windowed poll never fires on a real turn and every spawn runs to the backstop holding a live pi and an open API session, "and nothing warns, because the output lands on time so it looks clean". The incumbent matches either event for robustness.
+
+Design §5.2.1, §5.4 step 5 and R4 all name `agent_end` as the pi arm's completion signal. Retaining `pi_await_and_reap` unchanged avoids an immediate regression, but R4's whole point is that the generalised script is where the two profiles are merged — and a merge implemented from the design's stated contract reintroduces the full-backstop burn.
+
+REMEDY: name `agent_settled` (matching either, as the incumbent does) in §5.2.1, §5.4 step 5 and R4, and cite ISS-293 in R4 so the next reader meets the measurement rather than the folklore."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

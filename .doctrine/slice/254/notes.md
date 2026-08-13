@@ -283,3 +283,51 @@ Read directly this stage rather than through the research round's quotations —
   local measurement into the platform regardless.
 - `../microvm-spike`'s narrowed `~/.claude` mount set: deferred by `DEC-210`; its
   identity-section partial is not definitively proven.
+
+## Review passes — RV-355 and what a further pass would probe
+
+*Written 2026-08-13, after the first pass, per the reviewing runbook's
+`review.passes` obligation.*
+
+**Pass 1 (done).** External adversarial, codex/GPT-5.5, against the design at run
+`dr-019ff653` rev 41. Seven findings, all verified against the code before
+disposition, all dispositioned `design-wrong` — the defects are in the design
+artefact, not the implementation. Three blockers: `F-1` (Mode B loses its funnel
+entry point), `F-4` (`SPEC-012` carries four falsified requirements, not one
+responsibility), `F-5` (`ADR-012`'s harness-synthesis rule names the deleted arm
+normatively). The pass also reported eight claims it checked that held — the
+`require_binding` census, the nomination closed loop, `verify-worker`/`arm-spawn`
+having no surviving consumer, `classify_import`'s single-sourcing, the
+pi-specificity of the fifo/reap machinery, and no reachable unconfined fallback.
+That negative half is worth as much as the findings: it is what makes silence in
+those areas informative.
+
+**What a second pass should probe, once the `F-1`–`F-7` fixes land.**
+
+1. **The widened governance landing.** `F-4` and `F-5` grow the `REV` from four
+   target entities to five and `SPEC-012` from one responsibility to four
+   requirements plus that responsibility. The survey has now been wrong twice in
+   the same direction — under-counting — so a second pass should re-derive the
+   target set from the entities rather than from `DEC-211`, and specifically ask
+   what else in `SPEC-012` and `ADR-012` the first two sweeps missed.
+2. **Mode B's retirement, once it is written down.** `F-1`'s remedy records the
+   confined-orchestrator funnel arm as retiring with the in-session arm. That is
+   a consequence nobody chose directly — it falls out of the unbound-fork
+   settlement — so it deserves adversarial attention in its own right: does
+   anything else ride Mode B, and is `REQ-335`'s "stays pending" still honest
+   when the substrate it was pending on is deleted?
+3. **The macOS arm as a whole.** `F-2` found the seatbelt argv missing
+   `DOCTRINE_WORKER` — the one place `OQ-5`'s "parity holds by construction" was
+   false. One instance of a class is not a census. A pass over the Darwin path
+   specifically, holding it to every claim §5.1 and §5.2.1 make about the two
+   profiles differing in exactly two tokens, is the obvious next probe.
+4. **What a design pass structurally cannot reach.** Nothing here exercises a
+   real `claude -p` under bwrap. `A2`'s residue is provisioning, and provisioning
+   fails at runtime or not at all — that is the `VA` leg's job, not a reviewer's.
+   A second design pass should not spend effort simulating it.
+
+**What a second pass should not re-litigate.** `DEC-213`'s split into `SL-255`,
+and the unbound-fork settlement it forced. Both are owner decisions taken on
+stated evidence. A finding that this slice should have taken the clone half, or
+should bind its forks, is a finding about those decisions — admissible as one,
+but not as a defect in the draft.
