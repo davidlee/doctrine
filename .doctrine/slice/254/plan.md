@@ -100,6 +100,41 @@ Both are under-counts of the kind `R8` predicts, found by the mechanism `R8`
 prescribes. Neither invalidates a design premise, so neither warranted reopening
 the design — the plan is where the re-derivation is supposed to land.
 
+### What the critical pass changed
+
+The first draft of this plan had four defects, all found by checking its own
+assumptions against the tree rather than by re-reading it:
+
+1. **`PHASE-01` was unsatisfiable as written.** Its exit criterion demanded zero
+   edits to any `#[cfg(test)]` block, but `pretooluse.rs` holds two unit tests
+   for `write_seatbelt_profile` (`:1083`, `:1100`) that must relocate with their
+   subject. The criterion now distinguishes the two cases: `tests/` takes zero
+   edits, unit tests move verbatim, and a relocated test whose *assertions*
+   changed is the failure signal.
+2. **`PHASE-03` would have ended on a red tree.** `tests/e2e_claude_install.rs`
+   asserts the hook total, and `PHASE-03` takes it from eleven to nine — so the
+   test has to move in that phase, not wait for `PHASE-04`. Leaving it would have
+   broken the one property the whole phase cut exists to preserve. `EX-4b` now
+   carries it, and `PHASE-04/EX-6` is explicitly the *second* cut.
+3. **`src/main.rs` was under-attributed.** Its `mod write_class_tests` (`:326`)
+   is a table-driven exhaustiveness check naming `worktree_nominate_is_hookmint`
+   (`:650`), `worktree_marker_stamp_subagent_is_hookmint` (`:627`) and a
+   `MarkerClear` assertion (`:616`). The design said "drop the write-class tests
+   for the deleted verbs" and was right; the plan had folded it into
+   `guard.rs`. Split across `PHASE-03/EX-4` and `PHASE-04/EX-8`.
+4. **`PHASE-06/VT-2` pointed at the wrong file.** `CheckKind` lives in
+   `src/verify.rs`, which owns the enum and its resolution; `src/dispatch.rs`
+   never names it. The mandate would have been `UNCHECKABLE` — the exact inert
+   state `IMP-209` warns about — while looking well-formed.
+
+Two of the four (1 and 2) would have surfaced as a failed phase mid-execution.
+The other two would have passed silently while verifying nothing.
+
+Also settled: `.claude/settings.json` is tracked but is NOT hand-edited. It is
+reconciled by `doctrine install` against `boot.rs`'s `HookSpec` registry (design
+§5.6), so both phases that touch the hook set edit the registry and re-run
+`install`.
+
 ### The census facts the design's file list does not carry
 
 Three consumers were absent from design §5.6 until the sixth sweep, and they are
