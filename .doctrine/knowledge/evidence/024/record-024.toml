@@ -29,3 +29,7 @@ label = "references"
 role = "concerns"
 descriptor = "empirically measured OAuth refresh semantics: rotation, fixed 8h TTL, absolute ~5-day refresh-token expiry"
 target = "RFC-018"
+
+[[relation]]
+label = "supports"
+target = "DEC-220"
