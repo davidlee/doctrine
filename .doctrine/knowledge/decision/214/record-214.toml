@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 214
+slug = "governance-confirmation-survives-a-narrowing-re-scope"
+title = "Governance confirmation survives a narrowing re-scope"
+record_kind = "decision"
+status = "proposed"
+created = "2026-08-13"
+updated = "2026-08-13"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context = "DEC-213 re-scoped SL-254 mid-run, narrowing it from arm-collapse-plus-clone-provisioning to the arm collapse alone and minting SL-255 for the remainder. The design run's `governance-confirmed` evidence act had been performed by the user against the WIDER scope. The machine continued to report all three evidence acts `current` after the re-scope: it does not stale a confirmation when scope moves, so nothing blocked the stage advance. The question was therefore not whether the run permitted advancing, but whether the standing attestation was still truthful, or merely surviving."
+choice = "Leave `governance-confirmed` standing; do not re-take it. The confirmed survey covered a strict SUPERSET of what the narrowed slice touches, and narrowing removes governed surface rather than adding any. The one genuinely new governance surface — ADR-012's dispatch integration topology, and whatever binds clone provisioning — moved wholesale to SL-255, whose scope explicitly does NOT inherit SL-254's governance and names four surfaces to survey fresh. So no rule binds narrowed-SL-254 and went unread."
+alternatives = ["Re-take governance-confirmed in full. Rejected as spending a human act to change a record rather than a conclusion — yet it is the only option that makes the attestation mean 'confirmed against what SL-254 actually is now' and that is a real thing to want.", "Re-take narrowly over ADR-006 D2b alone — the one rule whose weight moved. Rejected as ceremony: D2b already sits inside DEC-211's REV target set so the re-read would change no downstream artefact."]
+rationale = "The honest counter, and the reason this is recorded rather than assumed: one rule's WEIGHT changed even though the membership of the governing set did not. DEC-203 originally reasoned that the disk marker's retirement was 'mechanical rather than chosen', because under a clone the marker leg cannot fire at all. Under the linked worktree SL-254 retains, `is_linked_worktree` is true and the marker leg CAN fire — so deleting the marker became a deliberate act against ADR-006 D2b's coordination-identity note rather than a consequence of the topology. D2b is already an amendment site in DEC-211's REV, so it is covered as a target; it was simply not re-read under the new picture. That gap is accepted knowingly. The superset argument is what makes it acceptable: a rule cannot bind the narrowed slice without having bound the wider one."
+consequences = ["The attestation on this run means 'confirmed against a superset of the current scope' and not 'confirmed against the current scope'. Anyone auditing the evidence acts at reconcile should read it that way rather than assume a fresh survey.", "SL-255 inherits nothing from this act. Its governance survey is owed in full and its scope already names ADR-012 as the chief surface — precisely because ADR-012 is untouched here only while the transport does not move.", "Sets a reusable precedent — a NARROWING re-scope does not oblige re-confirmation because the superset argument holds by construction. A WIDENING re-scope inverts it and always does oblige re-confirmation. That asymmetry is the durable content."]
+decided_by = "user"
+decided_on = "2026-08-13"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-254"
