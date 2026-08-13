@@ -266,6 +266,12 @@ descriptor = "Acute-leg-inherited-from-abandoned-SL-247"
 target = "IMP-401"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the collapsed arm returns a fork branch, so D3's harness-synthesis rule and Verification M3 go stale; a REV target (DEC-218)"
+target = "ADR-012"
+
+[[relation]]
 label = "supersedes"
 target = "SL-247"
 

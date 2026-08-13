@@ -138,11 +138,22 @@ have had to move too.
    any of the first four would leave a live fork trigger that, with the marker
    deleted, mints an unmarked and unconfined worktree — strictly worse than
    deleting it.
+
+   *Collateral found at review, 2026-08-13.* Two `doctor` checks go with the arm
+   and neither was in any earlier list. Check **#10 `SpawnSeamSymmetry`**
+   (`doctor_checks.rs:728-830`) reads `PRIVILEGED_AGENT_TYPES`, the `SubagentStart`
+   matchers and the `PreToolUse` seam registry — all deleted here, so the deletion
+   does not **compile** without removing the check. Check **#9
+   `AgentConformance`** allowlists exactly one worker MCP token,
+   `mcp__doctrine__worker_commit`, and a `--strict-mcp-config` worker holds none
+   (`DEC-216`), so it re-cuts. `src/finding.rs` loses a `Category` variant with
+   #10. Design §5.6 carries the sites.
 4. **Collapse the skills.** `/dispatch-agent` and `/dispatch-subprocess` merge;
    `/dispatch`'s arm-routing branch goes with them.
-5. **Land the governance.** `ADR-011`, `ADR-006` §D2b, `SPEC-021` and
-   `SPEC-012`, through one `REV` of this slice's own. See *Reconcile & closure
-   complexity* — this is the larger half of the slice, not a tail.
+5. **Land the governance.** `ADR-011`, `ADR-006`, `ADR-008`, `ADR-012`,
+   `SPEC-012` and `SPEC-021`, through one `REV` of this slice's own. See
+   *Reconcile & closure complexity* — this is the larger half of the slice, not a
+   tail.
 
    *Corrected 2026-08-13 (`DEC-211`).* This read "`ADR-011` Context + D3", which
    under-counts by four regions. `ADR-011` changes at **eight**: Context, `D1`,
@@ -154,6 +165,26 @@ have had to move too.
    both deleted here, whose "not fail-closable" conclusion inverts under
    `DEC-208`. `D5` and `D7` are recorded in `DEC-211` as considered and
    deferred. The `REV`'s target set is four entities.
+
+   *Widened 2026-08-13 (`DEC-218`, superseding `DEC-211`'s enumeration; raised by
+   `RV-355` `F-4`/`F-5` and by a re-derivation from the corpus).* **Six entities,
+   not four.** `SPEC-012` is not one responsibility line — `REQ-192`, `REQ-248`
+   and `REQ-250` rewrite and `REQ-252` narrows, with six prose regions beside
+   them. `ADR-012` is **touched**, at three regions: `D3`'s harness-synthesis rule
+   is normative on the deleted arm, and the collapsed arm *does* return a fork
+   branch, so the rule's case goes empty regardless of transport. `ADR-008` was
+   **absent from every prior survey** and carries seven regions — `D-B3`'s
+   "codex/pi-only … not a subprocess to wrap" clause, `D-B6`'s entire
+   nominate/gate/`SubagentStop` mechanism, and `N1`'s `worker_commit` exception.
+   `ADR-006` is nine regions, not the two `§D2b` corrections recorded above: the
+   falsification reaches `D2a`'s decision body and both `D9` amendments.
+   `ADR-011` is **eleven**, not eight — Consequences/Positive, Consequences/Neutral
+   and References were all missed.
+
+   **The count has been wrong five times, always low.** Treat every number here
+   as a floor: `DEC-218` records the derivation *method*, and the `REV` phase
+   re-derives from the entities rather than from this list (design `R8`, `VH`
+   leg 2).
 
 ### Constraints
 
@@ -198,6 +229,19 @@ have had to move too.
 - **`REQ-335` / `FR-007`, the confined-orchestrator mediated-write tier.** It is
   `pending` and `RFC-025` holds it so deliberately — the capsule contract is its
   successor. It stays pending.
+
+  *Qualified 2026-08-13 (`DEC-217`, raised by `RV-355` `F-1`).* The **contract**
+  stays pending, unchanged. Its one **partial implementation** — Mode B, the
+  confined-orchestrator arm — does not survive, and that is a consequence rather
+  than a choice made here. Mode B arms `create-fork` through `dispatch arm-spawn`
+  (deleted by objective 3) and needs a *bound* fork to land a `Spawn` funnel row;
+  the collapsed arm's forks stay **unbound**, as the pi arm's already are, so
+  after this slice no production path lands a `Spawn` row and Mode B has no entry
+  point. Reversing that means reversing the unbound-fork settlement, not amending
+  prose. The retained landing path is Mode A, the main-thread orchestrator, which
+  never consults the funnel record and is what the pi arm runs in production. The
+  funnel machine and its MCP tools are retained, not deleted; `SPEC-021`
+  `REQ-384` and `REQ-387` narrow in the `REV` to say so.
 - **Retiring the Claude plugin delivery channel** (`IMP-400`) and the
   per-worktree `.claude/` question — `SL-247`'s deferred companion legs remain
   deferred.
@@ -342,14 +386,22 @@ the surfaces the survey missed.
   slice deliberately leaves without a producer, and would move the production pi
   arm's behaviour against the behaviour-preservation gate. The binding belongs
   with the transport, and the transport is `SL-255`'s.
-- **`OQ-5` — `dispatch_import` is retained without a producer.** A knowingly
-  shipped residual, not an oversight (design §6 `OQ-2`, §7.2 `D6`): the MCP
-  funnel import needs a committed fork tip, no arm produces one after the
-  collapse, and the funnel cadence is governed prose `DEC-211` narrowed *out* of
-  this slice's `REV`. Deleting the tool would move code ahead of the spec that
-  governs it, in the direction that does not fail loudly. Revisit in `SL-255`,
-  which owns the transport — or widen `SL-255` if a reviewer judges the
-  code/spec gap unacceptable.
+- ~~**`OQ-5`**~~ — **SETTLED at review 2026-08-13 (`DEC-217`, raised by `RV-355`
+  `F-1`): Mode B retires with the in-session arm.** This read *"`dispatch_import`
+  is retained without a producer"*, which understates it by a tier. `funnel_machine`
+  admits only `Spawn` from no position, and **all three** production `Spawn`
+  writers go — `land_spawn_row` with `create-fork`'s Fork arm, `worker_commit`,
+  and `dispatch_import`'s heal-forward, which needs the durable binding `OQ-4`
+  declines. So the collapse retires **Mode B's entry point**, not one tool's
+  producer. Mode A — the main-thread orchestrator, which never consults the funnel
+  record — is unaffected and is the retained path; it is what the pi arm runs in
+  production. The machine and its MCP tools are still retained rather than deleted
+  (design §7.2 `D6`): the transport does not move, `SPEC-021`'s funnel-cadence
+  responsibility still does not change, and deleting a machine whose governing
+  prose is out of scope would put code ahead of spec in the direction that does not
+  fail loudly. What lands in the `REV` instead is `REQ-384` and `REQ-387`,
+  narrowed. A reviewer who judges this unacceptable should argue against `OQ-4`'s
+  unbound-fork settlement, not against this entry.
 
 ## Reconcile & closure complexity
 
@@ -388,6 +440,23 @@ be swept deliberately; nothing will fail red.
 it expected a cutover to rewrite the section. This is that cutover arriving
 early. Precedent for the shape is in `ADR-011` itself: D5 and D6 already read
 "AMENDED — FALSIFIED (SL-064 §8)" as in-place amendments.
+
+*Widened again 2026-08-13 (`DEC-218`, superseding `DEC-211`'s enumeration).* The
+paragraph below is the third of five surveys, and it was still low. The current
+set is **six entities**: `ADR-011` (11 regions), `ADR-006` (9 — `D2a`'s decision
+body and both `D9` amendments, not only `§D2b`), `ADR-008` (7 — a target no
+survey had opened: `D-B3`'s "codex/pi-only … not a subprocess to wrap" clause,
+`D-B6`'s whole nominate/gate/`SubagentStop` mechanism, `N1`'s `worker_commit`
+exception), `ADR-012` (3 — `D3`'s harness-synthesis rule and Verification `M3`,
+falsified regardless of transport because the collapsed arm now returns a fork
+branch at all), `SPEC-012` (`REQ-192`/`248`/`250` rewrite, `REQ-252` narrow, six
+prose regions), `SPEC-021` (`REQ-288` retire, `REQ-291` rewrite, `REQ-384`/`387`
+narrow, responsibility lines 16 and 19a). `REQ-291`'s rewrite additionally
+carries an **enforcement-altitude** change the earlier passes recorded as *no
+change*: `worker_commit` ran a mutating `CheckKind::Commit` gate worker-side
+before landing, and the retained path runs a non-mutating `CheckKind::Prove` gate
+orchestrator-side after import (`RV-355` `F-3`). The scope belt itself does not
+move. **Treat every count as a floor and re-derive at the `REV` phase.**
 
 *Settled and enlarged 2026-08-13 (`DEC-211`).* Both hedges are discharged.
 `ADR-011` is **eight** regions, not Context + D3 — see objective 5. `ADR-006`
@@ -437,9 +506,13 @@ was to be about. Carried in *Follow-Ups*.
   import** of the worker's working-tree diff (`DEC-213`; self-commit belongs to
   `SL-255`). **Evidence lands in an authored sink** — `notes.md` or an `EVD` —
   never the gitignored scratchpad (`mem_019fd1d862887d42b7a1f88c28fd28a7`).
-- **By human** — `ADR-011`'s corrected text and the `SPEC-021` requirement
-  dispositions accurately describe the shipped arm, and no `[[source]]` anchor
-  points at a deleted file.
+- **By human** — two claims. (1) `ADR-011`'s corrected text and the `SPEC-012` /
+  `SPEC-021` requirement dispositions accurately describe the shipped arm, and no
+  `[[source]]` anchor points at a deleted file. (2) **The `REV`'s target set was
+  re-derived from the entities at the `REV` phase, not read off this scope or the
+  design.** The survey has been wrong five times, always low, and the largest miss
+  (`ADR-008`) is project-local with nothing anchoring at it, so nothing would have
+  gone red (`DEC-218`, design `R8`).
 
 ## Summary
 

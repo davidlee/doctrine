@@ -45,9 +45,11 @@ construction**: the target shape runs in production today on the pi arm.
    order — re-home before delete).
 3. Worker identity as a property of the process, not of a tree (`DEC-207`).
 4. One arm, failing closed where confinement is unavailable (`DEC-208`).
-5. A governance landing — one `REV` over `ADR-011`, `ADR-006`, `SPEC-021`,
-   `SPEC-012` plus a hand source-anchor sweep (`DEC-211`). This is the larger
-   half of the slice, not a tail.
+5. A governance landing — one `REV` over **six** entities (`ADR-011`,
+   `ADR-006`, `ADR-008`, `ADR-012`, `SPEC-012`, `SPEC-021`) plus a hand
+   source-anchor sweep. `DEC-218` re-derives that set from the entities
+   themselves, superseding `DEC-211`'s enumeration of four. This is the larger
+   half of the slice, not a tail, and it has grown at every pass.
 
 ### What this design must NOT produce
 
@@ -56,9 +58,18 @@ belt, and the branch-point guard's re-homing onto fetched refs are **`SL-255`'s*
 (`DEC-213`). Workers here stay on **linked worktrees** with the **incumbent
 import transport**. The claude arm becomes a pi arm — no more and no less.
 
-The confined-orchestrator mediated-write tier (`REQ-335`) stays pending; the
-capsule contract (`ADR-020`, `SPEC-030`) is untouched; solo `/worktree`
+The capsule contract (`ADR-020`, `SPEC-030`) is untouched; solo `/worktree`
 isolation is untouched.
+
+`REQ-335`'s confined-orchestrator tier stays pending **as a contract** — but its
+one partial implementation, **Mode B**, retires with the arm. Mode B arms
+`create-fork` through `arm-spawn` and drives the funnel record from a *bound*
+fork; this slice deletes the first and `OQ-1` declines the second, and the two
+are mutually exclusive (`DEC-217`). The retained landing path is **Mode A**, the
+main-thread orchestrator, which applies the delta, commits, flips the phase and
+records the boundary as separate acts, and never consults the funnel record.
+That is what the pi arm runs in production.
+
 
 <!-- doctrine:section sec-2 -->
 ## 2. Current State
@@ -98,12 +109,25 @@ isolation is untouched.
             |                                                        |
             +---------------------------+---------------------------+
                                         |
-                        funnel: import -> verify -> conclude -> reap
-                          (identical on both arms, `dispatch next`)
+                     landing: import -> verify -> conclude -> reap
+                       (Mode A — the main-thread orchestrator — on both
+                        arms today, as separate unfunnelled acts)
 ```
 
-The funnel below the dashed line is already arm-agnostic. Everything above it is
+The landing below the dashed line is already arm-agnostic. Everything above it is
 duplicated, and the claude column is the duplicate that has to justify itself.
+
+**Two orchestration modes, and most prose does not say which.** `Mode A` is the
+main-thread orchestrator: unconfined, raw git, applies the delta, commits, flips
+the phase and records the boundary as *separate acts*, and **never consults the
+funnel record**. `Mode B` is the confined-orchestrator arm (`REQ-335`,
+`install/dispatch-mechanics.md` §"Mode B"): jailed to the coordination tree with
+a read-only `.git`, driving the same pipeline entirely through the dispatch MCP
+tools, with the funnel record as its state. Mode A is what both arms run in
+production. `plugins/doctrine/skills/dispatch/SKILL.md` currently claims the
+funnel "is driven by `doctrine dispatch next` … identical on both arms" — that
+is false of an arm that never lands a funnel row, and it is corrected in §5.6
+([[mem.fact.dispatch.mode-a-vs-mode-b-funnel]]).
 
 ### 2.2 The cut between reusable core and hook shell already exists
 
@@ -216,6 +240,11 @@ That is a parallel implementation of `worktree fork --worker`, forced by the
 - `dispatch next`'s `NextKind::Spawn` prose (`dispatch.rs:6702-6707`) names both
   arms and is deliberately arm-agnostic — one of the few binary-tier strings
   that has to change.
+- **Mode B's arming path is claude-arm-only.** `dispatch arm-spawn` writes the
+  spawn dir that `create-fork`'s Fork arm consumes, and `run_create_fork_and_record`
+  (`dispatch.rs:6931`) is what lands the Class-2 `Spawn` funnel row. Deleting the
+  arm therefore deletes Mode B's entry into the funnel machine (`DEC-217`, §6
+  `OQ-2`).
 
 ### 2.6 Installed hook set
 
@@ -235,39 +264,107 @@ exactly by `e2e_claude_install.rs` and seeded from `boot.rs:1257-1263` (seven
 Six entries go, not four — the count assertion moves by the nominate/denominate
 pair as well as the four wall matchers (`DEC-205`, `DEC-212`).
 
+
 <!-- doctrine:section sec-3 -->
 ## 3. Forces & Constraints
 
 ### 3.1 Governance that binds
 
-Read directly this stage rather than through the research round's quotations;
-`DEC-211` carries the site-by-site detail.
+Read directly this stage rather than through the research round's quotations.
+`DEC-218` carries the site-by-site detail and **supersedes `DEC-211`'s
+enumeration**: the target set is six entities, derived by reading the entities
+rather than by reading a prior count. The count has been wrong five times, always
+low — treat the numbers below as a floor and re-derive at reconcile.
 
 - **`ADR-011`** (harness-agnostic orchestrator spawn interface) — the ADR this
-  slice falsifies, at **eight** regions: Context (21-25), `D1` (39-56), `D2`
-  (58-74), `D3`'s table (82-92), `D4` (94-111), `D6` (146-207), Consequences
-  (248-259), Verification (265-275). `D2` is the core contract — its *"claude's
-  `Agent` path has no worker env channel and cannot consume it"* is exactly what
-  a confined `claude -p` subprocess falsifies — and `D6` is sixty lines of
-  fail-closed altitude resting on mechanisms this slice deletes, whose *"not
-  fail-closable"* conclusion inverts under `DEC-208`. `D5` (113-144) and `D7`
-  (209-232) are recorded as considered and deferred.
-- **`ADR-006` §D2b** (worktree posture) — its main body, *"the harness does not
-  confine workers to their worktree"*, becomes false for the claude dispatch
-  path. A new note on the existing `SL-181` note pattern (line 143), re-cut
-  rather than appended, plus the second correction at line 308: D2b still names
-  `IMP-065` as *"the real positive-marker close"*, and `IMP-065` was closed
-  **obsolete** on 2026-07-02 via `REV-018` — superseded by confinement, not
-  delivered. A live forward-reference to a close that will never arrive.
-- **`SPEC-021`** — `REQ-288` retires (its premise is a choice between two arms);
-  `REQ-291` **rewrites, not retires** (an altitude contract still exists, with
-  one column). Responsibility 16 (arm routing) and the **first half** of
-  responsibility 19 (enforcement altitude) change. Responsibility 15's funnel
-  cadence does **not** change — the belt does not re-home, because the incumbent
-  import transport is retained (`DEC-213`).
-- **`SPEC-012`** — responsibility at line 18 loses the *stamp* from
-  `fork = create + provision + stamp + emit per-wt env`. *"import as the belted
-  dispatch funnel"* is unchanged: import survives.
+  slice falsifies, at **eleven** regions. `D2` is the core contract — its
+  *"claude's `Agent` path has no worker env channel and cannot consume it"* is
+  exactly what a confined `claude -p` subprocess falsifies — and `D6` is sixty
+  lines of fail-closed altitude resting on mechanisms this slice deletes, whose
+  *"not fail-closable"* conclusion inverts under `DEC-208`. Three regions were
+  missed by every prior pass: Consequences/**Positive** still calls the marker
+  half of the agnostic floor *"identical and golden-testable under
+  claude/codex/pi"*; Consequences/**Neutral** scopes bwrap and the env arm
+  *"codex/pi-only until a free claude env backend (`IDE-004`) lands"* — falsified
+  by a subprocess, not by `IDE-004`; and **References** carries the `ADR-008`
+  cross-reference *"nested bwrap (`D-B3`) is the codex/pi OS floor this ADR's
+  claude cell lacks"* plus two stale `mem.pattern.dispatch.*` pointers. `D5` and
+  `D7` are checked and already falsified/withdrawn on their own terms.
+- **`ADR-006`** (worktree posture) — **nine** regions, not the two corrections
+  earlier drafts recorded. The falsification reaches `D2a`'s **decision body**,
+  not only `D2b`'s note: the `worker_mode` formula itself, the
+  *"disk marker is the harness-agnostic primary, the env leg a codex/pi
+  optimisation (claude has no env channel)"* clause, the `marker --stamp-subagent`
+  verb-identity exemption, the unstamped-claude-worker fence (`SubagentStart`
+  stamp failure, the `IMP-052` post-spawn check), and the SL-064 amendment whose
+  *"`env DOCTRINE_WORKER` must NOT leak"* hazard is scoped to codex/pi and becomes
+  universal. `D9`'s two amendments go with them — the SL-056 G2 claude
+  `SubagentStart` rung, and SL-064's markerless coordination-tree creation, whose
+  *one* difference from an ordinary fork is the marker this slice deletes. `D2b`
+  still names `IMP-065` as *"the real positive-marker close"*; `IMP-065` was
+  closed **obsolete** on 2026-07-02 via `REV-018` — superseded by confinement, not
+  delivered — so that is a live forward-reference to a close that will never
+  arrive. `D2b`'s main body, *"the harness does not confine workers to their
+  worktree"*, becomes false for the claude dispatch path; the SL-181 note (line
+  143) is the existing pattern to re-cut against rather than append to.
+- **`ADR-008`** (project-local jail build isolation and worker confinement) —
+  **seven** regions, and a target entity **no prior survey opened at all**. `D-B3`
+  states the confinement is *"codex/pi-only: claude's `Agent` tool is not a
+  subprocess and cannot be wrapped … so its worker-sole-writer stays
+  accident-fenced + prompt-enforced"* — the sentence this slice exists to
+  falsify — and *"ro-binds the marker only"*. `D-B6`, the nominated-unjailed
+  orchestrator, is **entirely** built from mechanisms deleted here: the
+  `SubagentStart` nominate hook, the `PreToolUse(Agent)` gate, `SubagentStop`
+  hygiene, and invariants `I1`/`I2`; its ledger names the confined Mode-B
+  orchestrator as the *"reversible escape hatch"*, and Mode B retires (`DEC-217`).
+  `N1` sanctions `worker_commit` as an exception to a `PreToolUse` wall — both
+  halves deleted. Consequences/Negative books `D-B6`'s *"standing obligation …
+  forever"*, Verification pins the `I1` doctor-check fixture, and References makes
+  `D2b`'s discharge conditional on `D-B3` landing *"(codex/pi, userns-permitting)"*
+  with the marker-primary CLI guard as the fallback. **This is the entity where
+  the deletion is most load-bearing and least visible**: it is project-local, so
+  no `[[source]]` anchor and no `spec validate` leg points at it.
+- **`ADR-012`** (dispatch integration topology) — **touched, at three regions**,
+  reversing this design's earlier claim. Decision 3's harness-synthesis rule is
+  normative on the deleted arm — *"on arms that do **not** return a per-worker fork
+  branch — the Claude `Agent` arm (`ADR-011`), where the worker delta lands
+  directly onto `dispatch/<slice>`"* — and Verification `M3` repeats it as a
+  fixture; the *Boundary* section restates `D2a`'s marker-absence permission
+  model. The collapsed arm **does** return an orchestrator-created fork branch, so
+  the rule's case goes empty. The earlier claim that `ADR-012` is *"not touched,
+  and this is load-bearing: it is what keeps the `REV` inside the surveyed set"*
+  **inverts**: what the retained import transport preserves is `ADR-012`'s
+  *integration* decisions (`D4`/`D5`), and the arm-topology clause is falsified
+  regardless of transport, because the falsifying fact is that the arm now
+  produces a fork branch at all. The amendment is in place, on the precedent
+  `ADR-011` already sets.
+- **`SPEC-012`** — **four active requirements** rewrite or narrow, not one
+  responsibility line. `REQ-192` (the `worker_mode` formula and its marker-absent
+  fail-closed leg) rewrites; `REQ-248` (`fork` *"stamps the worker marker before
+  any spawn window"*) rewrites; `REQ-250` (`land` refuses a *"marker-bearing
+  (`dispatch-fork`)"* fork) rewrites onto the branch-shape classifier; `REQ-252`
+  narrows — *"delivery is subprocess-only (codex/pi)"* goes stale when every arm is
+  a subprocess, but the requirement survives. Six prose regions go with them:
+  responsibility line 18 (`fork = create + provision + stamp + emit per-wt env`)
+  loses the *stamp*, responsibility line 19 is the guard itself, plus the Overview
+  keystone, the *worker-mode guard* body section, the *per-harness altitude*
+  section's whole **claude** bullet, and the *Concerns* "claude altitude is weaker"
+  bullet. *"import as the belted dispatch funnel"* is unchanged: import survives,
+  and `REQ-249` with it.
+- **`SPEC-021`** — **four requirements**, not two. `REQ-288` retires (its premise
+  is a choice between two arms; retirement also moots `ISS-347`, which records the
+  requirement stating the env-marker as *"`.claude/` presence"* while the router
+  actually tests `CLAUDECODE=1`). `REQ-291` **rewrites, not retires** — an altitude
+  contract still exists, with one column — and it carries the enforcement-altitude
+  change described in §5.2.5: the worker-side **mutating** commit gate is replaced
+  by an orchestrator-side **non-mutating** prove gate. `REQ-384` and `REQ-387`
+  **narrow**: the `spawned` and `worker-committed` funnel positions lose their
+  production writers and the *"through mediation"* leg loses its entry point
+  (`DEC-217`). Responsibility line 16 (arm routing) and the **first half** of line
+  19 (enforcement altitude) change. Responsibility line 15's funnel cadence does
+  **not** — the belt does not re-home, because the incumbent import transport is
+  retained (`DEC-213`) — and `REQ-335` stays `pending` as a contract while its one
+  partial implementation retires.
 - **`POL-002`** (platform independence from host-project conventions) —
   assessed and **satisfied, not strained**. Deleting harness-specific hook code
   from the binary and keeping spawn mechanics at the script tier reduces
@@ -277,14 +374,16 @@ Read directly this stage rather than through the research round's quotations;
   `claude-force-subprocess-dispatch` deletion (struct field, `dtoml.rs`
   round-trip, `doctrine.toml` entry, commented example) and of the belt
   constants' single-sourcing.
-- **`ADR-012`** (dispatch integration topology) — **not touched**, and this is
-  load-bearing: it is what keeps the `REV` inside the surveyed set. It stays
-  untouched only while the transport does not move, which is precisely the
-  `SL-254`/`SL-255` boundary.
 
-Checked and **not applicable**: `ADR-020`, `SPEC-030`, `REV-046` and the capsule
-programme's evidentiary bar. This is incumbent simplification, not capsule
-construction.
+Checked and **not applicable**: `ADR-020`, `SPEC-030` (which states positively
+that *"harness-specific in-session subagent identity is not part of the capsule
+contract"*), `REV-046` and the capsule programme's evidentiary bar. This is
+incumbent simplification, not capsule construction. `SPEC-011`, `SPEC-023`,
+`SPEC-024` and `ADR-018` are false positives on *in-session* / *nominated* /
+*denominated* in unrelated senses — they are the sweep's positive control that
+the search discriminates. `funnel-machine.md` is a **generated** artefact pinned
+byte-for-byte to `src/funnel_machine.rs`'s table; the table does not change, so it
+is not a `REV` target.
 
 ### 3.2 Constraints on the change
 
@@ -327,6 +426,14 @@ construction.
 - **Line-count vs. risk.** The three claude-arm modules total ~4000 lines, and
   the deletion is nearly mechanical. The *governance* half is smaller in bytes
   and much larger in judgement, because prose does not fail to compile.
+- **A survey that keeps under-counting.** The governance target set has been
+  wrong five times — always low, always found by reading an entity end to end
+  rather than by reading a summary of it (`DEC-218`). Two of the five were found
+  by an external reviewer, and the largest (`ADR-008`, absent from the set
+  entirely) by re-deriving from the corpus instead of from `DEC-211`. The tension
+  is real and unresolved: a design cannot cite a survey it has no reason to trust,
+  so §3.1's counts are stated as a **floor** and the `REV` phase re-derives.
+
 
 <!-- doctrine:section sec-4 -->
 ## 4. Guiding Principles
@@ -372,14 +479,22 @@ directory gets bound, are script-tier facts. This is what makes the collapse
 satisfy `POL-002` rather than strain it (`DEC-206`, `DEC-209`).
 
 **Fail closed, and name the reason.** An environment that cannot confine cannot
-dispatch. That is not new behaviour to author: the surviving arm already fails
-closed at spawn through `REASON_NO_BWRAP` on Linux and
-`REASON_PROFILE_WRITE_FAILED` on macOS (`DEC-208`).
+dispatch. The *fail-closed* half is already true on both platforms — an empty
+`PREFIX` aborts, and a missing `bwrap` binary is a non-zero exec. The *named*
+half is true only on macOS, where the script shells `worktree jail-prefix` and
+gets `REASON_PROFILE_WRITE_FAILED`; the Linux branch puts a literal `bwrap` token
+in `PREFIX` and never calls `have_bwrap` or the prefix verb, so it fails closed
+**unnamed** (`RV-355` `F-6`). This design adds the Linux capability probe rather
+than weakening the claim: `have_bwrap` is one of the four primitives `DEC-206`
+already re-homes to `jail.rs`, so the caller is free by the time the spawn phase
+runs, and a named refusal is the fail-closed story the design actually tells
+(§7.2 `D7`, `DEC-208`).
 
 **One thing at a time.** The hardening delta (`IMP-428`), the prefix's permanent
 home and macOS parity (`IMP-429`), the narrowed `~/.claude` mount set, and clone
 provisioning (`SL-255`) are all real and all deferred. Each was declined on
 scope, with a card, not overlooked.
+
 
 <!-- doctrine:section sec-5 -->
 ## 5. Proposed Design
@@ -395,11 +510,12 @@ ORCHESTRATOR (any harness, coordination worktree — unconfined, sole writer)
    |  scripts/spawn-confined.sh <harness> <B> <BRANCH> <DIR> <PROMPT> [BACKSTOP]
    |
    +-- doctrine worktree fork --base B --branch BR --dir D --worker
-   |        --slice N --phase PHASE-NN            (durable fork binding, §5.3)
-   |        => linked worktree at D, DispatchRecord written coord-side
+   |        => linked worktree at D. NO --slice/--phase: the fork stays
+   |           UNBOUND, as the pi arm's already are (§6 OQ-1, DEC-217)
    |
    +-- PREFIX resolution                          (harness parameterises ONE token pair)
-   |     Linux  : inline bwrap array
+   |     Linux  : have_bwrap probe -> REASON_NO_BWRAP if absent (D7), then
+   |              inline bwrap array
    |              bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp
    |                    --bind $HOME/<harness-cfg> $HOME/<harness-cfg>
    |                    --bind $D $D --chdir $D --die-with-parent
@@ -407,6 +523,8 @@ ORCHESTRATOR (any harness, coordination worktree — unconfined, sole writer)
    |     macOS  : doctrine worktree jail-prefix --dir $D --main-root $ROOT
    |                    --extra-rw $HOME/<harness-cfg> --out $D/.tmp/jail.argv
    |              (NUL-delimited sandbox-exec prefix, read back into PREFIX)
+   |              sandbox_exec_argv's trailing `env` token carries BOTH
+   |                TMPDIR=<tmp> and DOCTRINE_WORKER=1               (F-2)
    |     empty PREFIX => abort. bwrap/seatbelt unavailable => fail closed (DEC-208)
    |
    +-- timeout $BACKSTOP "${PREFIX[@]}" <harness exec>
@@ -428,7 +546,8 @@ ORCHESTRATOR (any harness, coordination worktree — unconfined, sole writer)
 
 | module | responsibility | change |
 |---|---|---|
-| `worktree/jail.rs` | the confinement core: argv build, policy validation, backend selection, **plus** the four re-homed primitives | gains `REASON_NO_BWRAP`, `have_bwrap`, `REASON_PROFILE_WRITE_FAILED`, `write_seatbelt_profile`; loses `PRIVILEGED_AGENT_TYPES` and `probe_backend`'s disk-policy branch |
+| `worktree/jail.rs` | the confinement core: argv build, policy validation, backend selection, **plus** the four re-homed primitives | gains `REASON_NO_BWRAP`, `have_bwrap`, `REASON_PROFILE_WRITE_FAILED`, `write_seatbelt_profile`; `sandbox_exec_argv` gains `DOCTRINE_WORKER=1` in its trailing `env` token; loses `PRIVILEGED_AGENT_TYPES` and `probe_backend`'s disk-policy branch |
+| `doctor_checks.rs` | the doctor check registry | check **#10 `SpawnSeamSymmetry`** deleted with its subject (it reads `PRIVILEGED_AGENT_TYPES`, `SubagentStart` matchers and the `PreToolUse` seam registry); check **#9 `AgentConformance`** re-cut — `TOOL_ALLOWED` names `mcp__doctrine__worker_commit`, and the confined worker holds no MCP token at all (`DEC-216`) |
 | `worktree/jail_prefix.rs` | the **sole** shell over that core: emit a confinement prefix for a spawn script | imports re-point from `pretooluse` to `jail`; otherwise untouched |
 | `worktree/pretooluse.rs` | — | **deleted** (1113 lines) |
 | `worktree/subagent.rs` | — | **deleted** (671 lines) |
@@ -483,12 +602,33 @@ Flag-by-flag justification, each tied to a decision rather than to taste:
 | *(not)* a narrowed mount set | `../microvm-spike`'s set is the known refinement, not the requirement; its identity-section partial is unproven | `DEC-210` |
 
 **A divergence from pi that is real and should be stated:** `pi --mode rpc` never
-self-exits, so the pi arm holds stdin open with a fifo and polls the event stream
-for `agent_end` (`scripts/lib/pi-reap.sh`). `claude -p` **exits on completion**.
-The claude profile therefore needs neither the fifo, the keepalive subshell, nor
-`pi_await_and_reap` — its completion signal is process exit, with the stream-json
-result on stdout. This is a simplification, not a gap, and the two profiles
-diverge exactly here and nowhere else.
+self-exits, so the pi arm holds stdin open with a fifo and polls the tail of the
+event stream for **`agent_settled`** (`scripts/lib/pi-reap.sh:68-82`).
+`claude -p` **exits on completion**. The claude profile therefore needs neither
+the fifo, the keepalive subshell, nor `pi_await_and_reap` — its completion signal
+is process exit, with the stream-json result on stdout. This is a simplification,
+not a gap, and the two profiles diverge exactly here and nowhere else.
+
+**Name the pi terminal event correctly, because the generalised script is where a
+wrong name becomes a defect.** It is `agent_settled`, **not** `agent_end`
+(`ISS-293`, measured). `agent_end` carries the accumulated conversation state, so
+it is pushed arbitrarily far from EOF — 684,768 bytes on one census turn — and a
+windowed poll for it never fires on a real turn: every spawn then runs to the
+backstop holding a live pi and an open API session, *and nothing warns, because
+the output lands on time so it looks clean*. The incumbent matches **either**
+event for robustness, and the generalised profile must keep matching either.
+Earlier drafts of this design named `agent_end` throughout, which is the folklore
+`ISS-293` was raised to correct (`RV-355` `F-7`, §8 `R4`).
+
+**macOS is the one place parity is *not* by construction.** `sandbox_exec_argv`
+(`jail.rs:627-655`) emits the `-D` binds, `-f <profile>`, the `--` terminator and
+a trailing `env TMPDIR=<tmp>` token — and **no `DOCTRINE_WORKER`**. Only the Linux
+inline array sets it. macOS worker identity rides the disk marker today, so
+`DEC-207`'s deletion would leave a confined macOS worker with *no* identity signal
+and make `INV-1` false on that platform. The fix is one token: `sandbox_exec_argv`
+sets `DOCTRINE_WORKER=1` in the same trailing `env` run as `TMPDIR`. It is a
+**binary** change, not a script change — the only such asymmetry between the two
+platforms (`RV-355` `F-2`, §6 `OQ-5`, `VT-10`).
 
 **5.2.2 `worktree fork --worker` — the binding contract, now on both arms.**
 Unchanged in code, but it becomes the **only** producer of a worker fork, so its
@@ -496,8 +636,14 @@ preconditions become the collapsed arm's preconditions (`fork.rs:216-246`): a
 fork binds its `(slice, phase)` iff `--worker`, both `--slice` and `--phase` are
 supplied, **and** `dir` resolves under `<coord>/.worktrees/<name>`. An unbound
 fork is not a parse failure — it is a fork whose phase cannot be proven, which
-`require_binding` turns into the typed `unprovable-fork` refusal. See `OQ-1`:
-today's `pi-spawn-confined.sh` passes neither flag.
+`require_binding` turns into the typed `unprovable-fork` refusal.
+
+**The collapsed arm supplies `--worker` alone**, exactly as
+`pi-spawn-confined.sh:56` does today, so its forks are **unbound** and no
+`DispatchRecord` is written (`OQ-1`, settled). That is a decision with a
+consequence, not a detail: a `Spawn` funnel row requires a bound fork, so unbound
+forks and a live Mode B are mutually exclusive, and Mode B retires with the arm
+(`DEC-217`). Mode A, the retained landing path, never asks.
 
 **5.2.3 `describe_mode` collapses to one input.**
 
@@ -532,13 +678,29 @@ unset it. That is today's `DUAL_CAUSE` text with its first horn removed
 harness-created worktree and is what solo `/worktree` isolation rides. Only the
 Fork arm goes (`D1`).
 
-**5.2.5 The funnel contract is untouched.** One non-merge commit per phase with
-`C^ == B`, the two-tier scope belt's refusal set and tokens, report-and-halt on
-any breach, and the phase state machine's transitions all stay exactly as they
-are. `classify_import` (`import.rs:147`) keeps its single-sourced constants from
-`import.rs:24` and remains the belt's enforcing caller, so `INV-2`'s posture —
-a worker cannot skip a belt — does **not** change (`DEC-213`, which is why this
-item left `DEC-211`'s `REV`).
+**5.2.5 The scope belt is untouched; the check gate moves altitude.** One
+non-merge commit per phase with `C^ == B`, the two-tier scope belt's refusal set
+and tokens, report-and-halt on any breach, and the phase state machine's
+transitions all stay exactly as they are. `classify_import` (`import.rs:147`)
+keeps its single-sourced constants from `import.rs:24` and remains the belt's
+enforcing caller — so the **belt** does not move.
+
+**The check gate does.** `worker_commit` ran a **mutating** `CheckKind::Commit`
+gate *worker-side, before landing* (`worker_commit.rs:473-477`, and again at
+`:563-581` before adopting a pre-existing commit). The retained path calls
+`classify_import` (`import.rs:464-472`), applies the patch, then resolves and runs
+a **non-mutating** `CheckKind::Prove` gate *orchestrator-side, post-import*
+(`import.rs:258-286`, `:480-491`). Neither the cadence nor the mutation contract
+survives unchanged: *worker-side mutating commit gate → orchestrator-side
+non-mutating prove gate*.
+
+Earlier drafts recorded the posture as wholly unchanged on the ground that
+`classify_import` survives — which answers the belt and not the gate, and that
+omission is precisely what justified keeping the posture change out of the `REV`
+(`RV-355` `F-3`). It is an **enforcement-altitude** change, and it is
+governance-visible. It needs no new `REV` target: `SPEC-021` `REQ-291` is already
+being rewritten, and this is what its rewrite has to say. `INV-2` narrows
+accordingly (§5.5).
 
 ### 5.3 Data, State & Ownership
 
@@ -575,17 +737,21 @@ Per phase, on every harness:
 1. **Pre-spawn.** `doctrine check prove` on the base (unchanged, once per batch).
    Capture `B = git rev-parse HEAD` from the coordination tree.
 2. **Fork.** `worktree fork --base B --branch dispatch/<name> --dir
-   <coord>/.worktrees/<name> --worker --slice N --phase PHASE-NN`. Fails
+   <coord>/.worktrees/<name> --worker`. **No `--slice` / `--phase`** — the fork
+   stays unbound, as the pi arm's already are (`OQ-1`; earlier drafts of this step
+   carried both flags and contradicted `OQ-1`'s settlement, `RV-355` `F-1`). Fails
    closed; the orchestrator halts on non-zero.
-3. **Confine.** Resolve `PREFIX`. Linux takes the inline array; macOS shells
-   `worktree jail-prefix`. An empty `PREFIX` aborts (the existing fail-closed
-   guard). No `bwrap` ⇒ `REASON_NO_BWRAP`; no writable seatbelt profile ⇒
-   `REASON_PROFILE_WRITE_FAILED`. **There is no unconfined fallback**
-   (`DEC-208`).
+3. **Confine.** Resolve `PREFIX`. Linux probes `have_bwrap` first (`D7`) and then
+   takes the inline array; macOS shells `worktree jail-prefix`. An empty `PREFIX`
+   aborts (the existing fail-closed guard). No `bwrap` ⇒ `REASON_NO_BWRAP`; no
+   writable seatbelt profile ⇒ `REASON_PROFILE_WRITE_FAILED`. **There is no
+   unconfined fallback** (`DEC-208`).
 4. **Spawn.** `timeout $BACKSTOP "${PREFIX[@]}" <harness exec>`, prompt on
    stdin, stdout to `$OUT`.
-5. **Hand back.** claude: process exit + stream-json result. pi: `agent_end` on
-   the RPC stream. Either way the delta is an **uncommitted working tree**.
+5. **Hand back.** claude: process exit + stream-json result. pi:
+   **`agent_settled`** on the RPC stream (matching either it or `agent_end`, as
+   the incumbent does — `ISS-293`, §5.2.1). Either way the delta is an
+   **uncommitted working tree**.
 6. **Import.** `worktree import --base B --from-worktree D --slice N` — the
    `classify_import` belt as a hard pre-apply gate, apply onto `B`
    non-committing, then the reject-and-halt prove gate. Any refusal is
@@ -601,6 +767,8 @@ Per phase, on every harness:
 | host cannot confine | the wall silently fails open — `PreToolUse` denies are data, and a missing binary means no deny at all | spawn aborts with a named reason before the worker exists |
 | worker writes outside its tree | denied by hook, if the hook ran | `EROFS` from the kernel |
 | worker cannot commit | it commits through `worker_commit`'s six belts | it does not commit; the orchestrator imports the diff |
+| a phase check fails | `worker_commit`'s **mutating** `CheckKind::Commit` gate, worker-side, before the commit is created | the orchestrator's **non-mutating** `CheckKind::Prove` gate, post-import, reject-and-halt (§5.2.5) |
+| host cannot confine, Linux | unnamed non-zero exec (the script never probes) | `have_bwrap` ⇒ `REASON_NO_BWRAP` before the fork is spawned (`D7`) |
 | stale marker left behind | `worktree status --assert` + `marker --clear --operator` | unrepresentable |
 | env leaked into a non-worker process | `DUAL_CAUSE` names two horns | one horn: unset it |
 
@@ -613,9 +781,15 @@ of two positive legs cannot convert a not-refused into a coordination claim,
 because no reader anywhere concludes *this is the coordination tree* from
 marker absence (`DEC-207` rationale (1); `mem_019fa94118a37c33ab54b06dfe4b1131`).
 
-**INV-2 — a worker still cannot skip a belt.** `classify_import` survives as the
-scope belt's enforcing caller, so the posture is unchanged and this is *not* a
-governance-visible change (`DEC-213`).
+**INV-2 — a worker still cannot skip the *scope belt*.** Narrowed deliberately to
+what it actually covers. `classify_import` survives as the scope belt's enforcing
+caller, single-sourced from `import.rs:24`, so **the belt** is unchanged and the
+worker cannot skip it. The **check gate** is a different claim and does move: from
+a worker-side mutating `CheckKind::Commit` to an orchestrator-side non-mutating
+`CheckKind::Prove` (§5.2.5). That is an enforcement-altitude change, it is
+governance-visible, and it lands in `SPEC-021` `REQ-291`'s rewrite (`RV-355`
+`F-3`). The earlier unqualified form of this invariant — *a worker cannot skip a
+belt, posture unchanged* — covered the belt and silently dropped the gate.
 
 **INV-3 — the confinement prefix is the boundary.** `--ro-bind / /` plus
 `--bind $D $D` is the write floor; every other guarantee in this design rests on
@@ -691,7 +865,7 @@ exception — it is tracked, and `doctrine install` reconciles it against
 
 | path | change |
 |---|---|
-| `src/worktree/jail.rs` | receive the four cfg-split primitives; drop `PRIVILEGED_AGENT_TYPES` (`:121`) and the disk-policy backend branch |
+| `src/worktree/jail.rs` | receive the four cfg-split primitives; **add `DOCTRINE_WORKER=1` to `sandbox_exec_argv`'s trailing `env` token** (`:627-655`, `F-2`); drop `PRIVILEGED_AGENT_TYPES` (`:121`) and the disk-policy backend branch |
 | `src/worktree/jail_prefix.rs` | re-point the four imports (`:39-49`) from `pretooluse` to `jail` |
 | `src/worktree/marker.rs` | collapse to the env predicate + status render; delete marker file ops, `Cause`, `is_stale_marker`, `DUAL_CAUSE`, `run_marker_clear` |
 | `src/worktree/mod.rs` | drop the deleted subcommand arms (`Pretooluse`, `Nominate`, `Denominate`, `VerifyWorker`) and re-exports; retire the `marker_on_main` truth-table test |
@@ -702,32 +876,49 @@ exception — it is tracked, and `doctrine install` reconciles it against
 | `src/worktree/gc.rs`, `src/worktree/import.rs` | drop the unused marker imports and the `SL-116` module-wide `expect(unused)` (`CHR-062`) |
 | `src/dispatch.rs` | delete `arm-spawn` and the `Spawn`-row recorder path; de-arm `NextKind::Spawn`'s prose |
 | `src/dispatch_config.rs`, `src/dtoml.rs` | delete `claude_force_subprocess_dispatch` and its round-trip (`STD-001`) |
-| `src/boot.rs` | drop `HookSpec::nominate`, `::denominate`, `::pretooluse` from the registry (`:1257-1263`); the eleven-entry comment becomes five |
+| `src/boot.rs` | drop `HookSpec::nominate`, `::denominate`, `::pretooluse` from the registry (`:1257-1263`); the eleven-entry comment becomes five; drop the `PRIVILEGED_AGENT_TYPES` consumers (`:639`, `:4573-4583`) |
+| `src/doctor_checks.rs` | **delete check #10 `SpawnSeamSymmetry`** (`:728-830`) — it reads `PRIVILEGED_AGENT_TYPES`, `SubagentStart` matchers and the `SEAM_REGISTRY`, all deleted, so the deletion does not compile without it; **re-cut check #9 `AgentConformance`** — `TOOL_ALLOWED` is `mcp__doctrine__worker_commit` (`:489`), and a `--strict-mcp-config` worker holds no `mcp__*` token at all (`DEC-216`) |
+| `src/finding.rs` | drop `Category::SpawnSeamSymmetry` (`:82`) and renumber the ordinal (`:123`); the `CATEGORY_ORDER` array and the severity test move with it |
+| `src/commands/doctor.rs` | drop the #10 registration and the `AgentConformance`-only filter (`:169`) if the re-cut leaves it empty |
 | `src/mcp_server/tools.rs`, `src/mcp_server/mod.rs` | unregister `worker_commit`; drop the marker disjunct in `repository_context` (`:1389`) |
 | `src/commands/observation.rs` | drop the marker disjunct (`:509`) |
 | `src/main.rs` | drop the write-class tests for the deleted verbs |
 | `src/test_support.rs`, `src/regression_run.rs` | drop marker-presence from filter/selection state |
-| `scripts/pi-spawn-confined.sh` → `scripts/spawn-confined.sh` | generalise past `pi`; add the claude profile; rename (`DEC-209`) |
-| `scripts/lib/pi-reap.sh` | sourced only by the pi profile after the merge — the claude profile's completion signal is process exit (§5.2.1, `R4`) |
+| `scripts/pi-spawn-confined.sh` → `scripts/spawn-confined.sh` | generalise past `pi`; add the claude profile; rename (`DEC-209`); **add the Linux `have_bwrap` probe** ahead of the inline array so the Linux arm fails closed *named*, not merely closed (`D7`, `F-6`) |
+| `scripts/lib/pi-reap.sh` | sourced only by the pi profile after the merge — the claude profile's completion signal is process exit (§5.2.1, `R4`). **Unchanged**: its `agent_settled`/`agent_end` either-match is correct and must survive the generalisation (`ISS-293`) |
 | `.claude/settings.json` | remove six entries (four `pretooluse`, nominate, denominate) |
 | `.doctrine/doctrine.toml` | remove the commented `claude-force-subprocess-dispatch` example (`:14`) — the only config-file site |
 | `install/doctrine.toml.example` | re-word the `worker-forbidden-writes` doc comment, which names `worker_commit` as the key's consumer (`:100`); the key itself **stays**, with `classify_import` as its enforcing reader (`DEC-204`, `DEC-213`) |
-| `plugins/doctrine/skills/dispatch/SKILL.md` | delete the arm-routing branch (step 4) |
+| `plugins/doctrine/skills/dispatch/SKILL.md` | delete the arm-routing branch (step 4); **correct the front-matter claim that the funnel "is driven by `doctrine dispatch next` … identical on both arms"** — untrue of an arm that never lands a funnel row (`DEC-217`, `F-1`) |
 | `plugins/doctrine/skills/dispatch-agent/SKILL.md` + `…/dispatch-subprocess/SKILL.md` | merge into one spawn skill; promote today's "Fallback (A)" to the primary and only landing path |
 | `plugins/doctrine/skills/worktree/SKILL.md` | drop the `/dispatch-agent` cross-references (`:17-19`, `:134`, `:200`) |
-| `install/dispatch-mechanics.md` | rewrite the arm-specific mechanics (`:73`, `:100`, `:118`) |
+| `install/dispatch-mechanics.md` | rewrite the arm-specific mechanics (`:73`, `:100`, `:118`); **retire the Mode B section** (`:152-200`) — its arming path is `arm-spawn` (`DEC-217`) |
 | `tests/e2e_claude_install.rs` | the exact hook-count assertion moves by **six** |
 | `tests/e2e_worktree_create_fork.rs` | retarget onto the Passthrough arm |
 | `tests/e2e_worktree_status_marker.rs` | retarget onto the env-only predicate |
 
-**Governance (the larger half)** — one `REV` of this slice's own, over
-`ADR-011` (eight regions), `ADR-006` §D2b (two corrections at one site),
-`SPEC-021` (`REQ-288` retire, `REQ-291` rewrite, responsibilities 16 and 19a),
-`SPEC-012` (responsibility 18, the stamp), plus a by-hand source-anchor sweep:
-`spec-021.toml:30`'s dangling `[[source]]` at
+**Governance (the larger half)** — one `REV` of this slice's own, over **six**
+entities. `DEC-218` carries the region-by-region derivation and supersedes
+`DEC-211`'s enumeration; §3.1 carries the argument. In summary:
+
+| entity | regions | shape |
+|---|---|---|
+| `ADR-011` | 11 | in-place amendment; `D2`/`D6` load-bearing; Consequences Positive/Neutral and References newly counted |
+| `ADR-006` | 9 | `D2a`'s **decision body**, not only `D2b`'s note; both `D9` amendments; the dangling `IMP-065` forward reference |
+| `ADR-008` | 7 | **new target** — `D-B3`'s codex/pi-only clause, `D-B6` entire, `N1`, and the `D2b`-discharge condition |
+| `ADR-012` | 3 | `D3`'s harness-synthesis rule, Verification `M3`, the `D2a` restatement in *Boundary* |
+| `SPEC-012` | `REQ-192`/`248`/`250` rewrite, `REQ-252` narrow + 6 prose regions | responsibility lines 18 and 19, Overview keystone, guard section, the claude altitude bullet, the Concerns bullet |
+| `SPEC-021` | `REQ-288` retire, `REQ-291` rewrite, `REQ-384`/`387` narrow + responsibility lines 16 and 19a | `REQ-291` also carries §5.2.5's enforcement-altitude change |
+
+Plus a by-hand source-anchor sweep: `spec-021.toml:30`'s dangling `[[source]]` at
 `plugins/doctrine/skills/dispatch-agent/SKILL.md` resolves by deletion, and
 `spec-012.toml:30` / `spec-022.toml:45` are comment lists naming
-`pretooluse.rs` and `subagent.rs` (`DEC-211`).
+`pretooluse.rs` and `subagent.rs`.
+
+**Treat every count here as a floor.** The survey has under-counted five times,
+always low; the `REV` phase re-derives from the entities rather than from this
+table (`DEC-218`).
+
 
 <!-- doctrine:section sec-10 -->
 ## 6. Open Questions & Unknowns
@@ -761,16 +952,40 @@ deliberately leaves without a producer, and it would move the production pi
 arm's runtime behaviour — records where none existed — against §9.1's gate. The
 binding belongs with the transport, and the transport is `SL-255`'s surface.
 
-**`OQ-2` — `dispatch_import` loses its producer.** The MCP funnel import
-requires a *committed* fork tip. A bwrap-confined worker cannot commit, so after
-the collapse no arm produces one, and the surviving landing path is the CLI
-`worktree import --from-worktree` that the pi arm uses today (what
-`/dispatch-agent` currently calls "Fallback (A)"). This design **does not delete**
-`dispatch_import` or the funnel positions it heals: the funnel cadence is
-governed prose that `DEC-211` explicitly narrowed *out* of this slice's `REV`,
-and the transport is `SL-255`'s surface. So the tool is retained with no
-producer, recorded here as a known residual rather than discovered later. If a
-reviewer judges that unacceptable, the fix is to widen `SL-255`, not this slice.
+*What settling it costs, stated plainly:* a `Spawn` funnel row requires a bound
+fork, so this settlement and a live Mode B are mutually exclusive. `OQ-2` below
+records the consequence. Reversing it means reversing this question, not amending
+prose (`DEC-217`).
+
+**`OQ-2` — settled: Mode B retires with the in-session arm.** Earlier drafts
+recorded this as *one tool loses its producer*. That understates it by a tier, and
+the correction is `RV-355` `F-1`'s.
+
+`funnel_machine`'s `TABLE` admits only `Transition::Spawn` from `current: None`,
+so a phase with no funnel row can reach no other position. All three production
+`Spawn` writers go: `land_spawn_row` (`dispatch.rs:6958`, deleted with
+`create-fork`'s Fork arm), `worker_commit` (deleted), and `dispatch_import`'s
+heal-forward (retained, but it refuses without the durable binding `OQ-1`
+declines — `mcp_server/dispatch.rs:286-315`). Mode B additionally rides
+`arm-spawn` for its create-fork arming, which `D2` deletes. So what the collapse
+retires is **Mode B's entry point**, not merely one tool's producer.
+
+**Mode A is unaffected, and Mode A is the retained path.** The main-thread
+orchestrator applies the delta, commits, flips the phase and records the boundary
+as separate acts; it never consults the funnel record, and
+`install/dispatch-mechanics.md` names "a fork with no funnel row" as an explicitly
+supported case for the reap oracle. This is what the pi arm runs in production
+today, and it is what the collapsed claude arm lands on. A reading of
+`dispatch next`'s prescription as universal is exactly what produced `RV-355`
+`F-1`'s claim that the collapse "cannot drive verify, conclude, or reap" — true of
+Mode B, false of the retained path.
+
+The MCP funnel tools and `funnel_machine` are still **retained, not deleted**
+(`D6`): `funnel-machine.md` is generated from the code table, the table does not
+change, and `REQ-335`'s tier stays `pending` as a contract. What lands in the
+`REV` is `SPEC-021` `REQ-384` and `REQ-387`, narrowed (`DEC-217`, `DEC-218`). If a
+reviewer judges retiring Mode B unacceptable, the argument to make is against
+`OQ-1`'s unbound-fork settlement — not against this entry.
 
 **`OQ-3` — `~/.claude.json`.** `$HOME/.pi` is a directory; binding it wholesale
 covers everything pi writes. Claude also writes `~/.claude.json`, a sibling
@@ -785,19 +1000,27 @@ worktrees (solo `/worktree` isolation) still ride it. Confirm at execute. A
 negative answer deletes one more entry and moves the hook-count assertion by
 seven rather than six; it changes no design.
 
-**`OQ-5` — macOS parity is asserted, not exercised.** Objective 1 asserts the
-`sandbox-exec` sibling stays at parity and `DEC-206` re-homes
-`write_seatbelt_profile`, but no decision covers whether the claude arm actually
-reaches the seatbelt path — and verifying it needs a different host. `IMP-429`
-owns the larger question of where the prefix lives and macOS parity with it. The
-design's position: the claude profile changes exactly the two tokens the pi
-profile parameterises, so parity holds by construction, and the residual is
-*execution* evidence rather than design uncertainty.
+**`OQ-5` — re-cut: macOS parity is *not* by construction, at exactly one place.**
+Earlier drafts claimed the claude profile changes exactly the two tokens the pi
+profile parameterises, so parity held by construction. `RV-355` `F-2` falsified
+that: `sandbox_exec_argv` (`jail.rs:627-655`) never emits `DOCTRINE_WORKER`, and
+macOS worker identity rides the disk marker `DEC-207` deletes. So the macOS path
+needs a change the Linux path does not, and it is **in the binary rather than the
+script** — the trailing `env` token gains `DOCTRINE_WORKER=1` beside `TMPDIR`
+(§5.2.1, `VT-10`).
+
+That is the whole of the exception, and it is now a design item rather than an
+open question. What remains open is unchanged and is *execution* evidence: whether
+the claude arm actually reaches the seatbelt path on a real mac, which needs a
+different host. `IMP-429` owns the larger question of where the prefix lives and
+macOS parity with it. `VT-10` is deliberately a pure argv assertion over
+`ResolvedMac`, so it is Linux-testable and does not wait on that host.
 
 **Carried to reconcile, not open here.** Five backlog items plausibly dissolved
 rather than fixed (`IMP-269`, `IMP-342`, `IMP-334`, `IMP-337`, `IMP-407`) plus
 `IMP-401` and `IDE-024`; the `RFC-025` post-capsule finding inherited from
 `SL-247`; and the memory-corpus sweep (§8 `R5`).
+
 
 <!-- doctrine:section sec-6 -->
 ## 7. Decisions, Rationale & Alternatives
@@ -817,15 +1040,29 @@ section states what each binds in this document, not a re-argument.
 | `DEC-208` | one arm, no degraded in-session rung; fail closed at spawn | §5.4, §5.2.4 |
 | `DEC-209` | generalise the incumbent prefix; no `doctrine-control` dependency, no hardening port | §5.2.1 |
 | `DEC-210` | subscription credential; bind `$HOME/.claude` wholesale | §5.2.1, §5.5 |
-| `DEC-211` | one `REV` over four entities plus a hand anchor sweep; `ADR-011` at eight regions | §3.1, §5.6 |
+| `DEC-211` | one `REV` of this slice's own plus a hand anchor sweep — **method retained, enumeration superseded by `DEC-218`** | §3.1, §5.6 |
 | `DEC-212` | (narrowed) the confinement control, its skip-not-pass rule, and the authored-sink evidence requirement | §9 |
 | `DEC-213` | re-scope to the arm collapse alone; linked worktree, incumbent import | §1, §5.1 |
 | `DEC-215` | typed hand-back by argv (`--output-format stream-json`); `--json-schema` unspent | §5.2.1 |
 | `DEC-216` | no MCP in the worker now; privileged worker tools later live **outside** the confinement in their own binary | §5.2.1, §4 |
 
+### 7.1b Records this review stage takes
+
+Two decisions were settled *during* the review pass, from `RV-355`. They are
+**proposed, not accepted** — the owner has not attested them — and they are cited
+throughout on that basis.
+
+| record | what it settles | where it lands here |
+|---|---|---|
+| `DEC-217` | Mode B retires with the in-session arm — a consequence of `OQ-1`'s unbound-fork settlement, not a new judgement | §1, §2.1, §2.5, §5.2.2, §6 `OQ-2` |
+| `DEC-218` | the `REV` target set, re-derived from the entities, at six | §3.1, §5.6 |
+
 `DEC-214` records that the standing `governance-confirmed` attestation means
 *confirmed against a superset of the current scope* — a narrowing re-scope does
-not oblige re-confirmation. Read the evidence acts that way at reconcile.
+not oblige re-confirmation. **That reading does not extend to `DEC-218`**: the
+target set *grew*, and two of its six entities (`ADR-008`, `ADR-012`) were never
+in the confirmed superset. `governance-confirmed` needs re-attesting against the
+six before lock, which is why declaring the two nodes above invalidated it.
 
 ### 7.2 Decisions this drafting stage takes
 
@@ -868,10 +1105,25 @@ it names one. This is one of the few binary-tier strings the change actually
 reaches.
 
 **`D6` — the MCP funnel tools are retained, not deleted.** See `OQ-2`. The
-boundary argument is `DEC-211`'s: `SPEC-021`'s funnel-cadence responsibility no
-longer changes in this slice, so the funnel is not this slice's surface, and
-deleting a tool whose governing prose is out of scope would put the code and the
-spec out of step in the direction that does not fail loudly.
+boundary argument survives `DEC-217` intact: `SPEC-021`'s funnel-*cadence*
+responsibility (line 15) still does not change, the transport does not move, and
+deleting a machine whose governing prose is out of scope would put the code and
+the spec out of step in the direction that does not fail loudly. What `DEC-217`
+adds is honesty about what retention buys — the machine is retained *unreachable*,
+and `REQ-384`/`REQ-387` say so in the `REV`.
+
+**`D7` — the Linux arm gains a `have_bwrap` capability probe.** `DEC-208`'s
+fail-closed argument leans on a *named* refusal, and §4 claimed the surviving arm
+already delivers one. It does not on Linux: `pi-spawn-confined.sh:116-140` puts a
+literal `bwrap` token in `PREFIX` and execs it under `timeout`, never calling
+`have_bwrap` or shelling `worktree jail-prefix`; the named path exists only on the
+macOS arm via `jail_prefix.rs:114-140`. Missing `bwrap` still fails **closed** — a
+missing binary is a non-zero exec, and the empty-`PREFIX` guard is separate — but
+**unnamed**. *Alternative considered:* restate §4 and §5.4 step 3 as "fails closed
+at exec, unnamed on Linux". Rejected — `have_bwrap` is one of the four primitives
+`DEC-206` already re-homes to `jail.rs`, so the caller is free by the time the
+spawn phase runs, and the probe is a handful of lines against a claim the design
+leans on twice. The claim could not stand as written either way (`RV-355` `F-6`).
 
 ### 7.3 Alternatives rejected at design, with their grounds
 
@@ -896,6 +1148,7 @@ spec out of step in the direction that does not fail loudly.
   returns.** Belts are a general-purpose server apologising for its own surface;
   a narrow binary outside the confinement makes most of them unnecessary rather
   than merely enforced (`DEC-216`).
+
 
 <!-- doctrine:section sec-7 -->
 ## 8. Risks & Mitigations
@@ -924,13 +1177,28 @@ import transport confines the breach to one axis — an arm goes, the funnel doe
 not move. It remains the slice's sharpest governance tension and this design
 does not soften it further.
 
-**`R4` — the two harness profiles diverge at the reap.** `pi --mode rpc` never
-self-exits and is polled for `agent_end`; `claude -p` exits. A generalised
-script that keeps pi's fifo/keepalive/reap machinery on the claude path would
-hang to the backstop on every phase, and one that drops it for pi would break
-the production arm. *Mitigation:* the divergence is named in §5.2.1 as the **one**
-place the profiles differ, and the behaviour-preservation gate (§9) is what
-catches a regression on the pi side.
+**`R4` — the two harness profiles diverge at the reap, and the design named the
+wrong event.** `pi --mode rpc` never self-exits and is polled for
+**`agent_settled`** — **not** `agent_end` (`ISS-293`, `scripts/lib/pi-reap.sh:68-82`);
+`claude -p` exits. A generalised script that keeps pi's fifo/keepalive/reap
+machinery on the claude path would hang to the backstop on every phase, and one
+that drops it for pi would break the production arm.
+
+*The sharper hazard is the contract, not the machinery.* Earlier drafts named
+`agent_end` as the pi arm's completion signal in §5.2.1, §5.4 step 5 and here.
+`agent_end` carries the accumulated conversation state, so it sits arbitrarily far
+from EOF — 684,768 bytes measured on one census turn — and a windowed poll for it
+**never fires on a real turn**: every spawn runs to the backstop holding a live pi
+and an open API session, *and nothing warns, because the output lands on time so it
+looks clean*. Retaining `pi_await_and_reap` unchanged avoids an immediate
+regression, but `R4`'s whole point is that the generalised script is where the two
+profiles merge — and a merge implemented from the design's stated contract would
+reintroduce the documented full-backstop burn. *Mitigation:* the correct event is
+now named in §5.2.1, §5.4 step 5 and here, with `ISS-293` cited so the next reader
+meets the measurement rather than the folklore; the incumbent's either-match
+(`agent_settled|agent_end`) is called out as behaviour to preserve, not to tidy;
+and the behaviour-preservation gate (§9) catches a regression on the pi side
+(`RV-355` `F-7`).
 
 **`R5` — a stale-but-plausible memory corpus.** At least 25 memories describe
 mechanisms this slice deletes — `SubagentStart` stamping, `PreToolUse` jail
@@ -950,12 +1218,25 @@ is recorded as a design decision with its own grounds (§7.2 `D1`–`D3`), so a
 reviewer sees a reasoned boundary rather than drift. The reconciliation brief
 should carry this as a design-time scope correction.
 
+**`R8` — the governance survey under-counts.** Five times now, always low, and
+twice found only by an external reviewer (`RV-355` `F-4`, `F-5`). The largest miss
+— `ADR-008`, seven regions, absent from the target set entirely — was found only by
+re-deriving from the corpus instead of from `DEC-211`. The failure mode is
+structural, not careless: a design that cites a *count* inherits whichever count it
+lands on, and prose does not fail to compile. `ADR-008` is the worst case of it —
+project-local, so no `[[source]]` anchor and no `spec validate` leg points at it,
+and nothing would have gone red. *Mitigation:* `DEC-218` records the derivation
+method rather than only its result, §3.1 and §5.6 state their counts explicitly as
+a **floor**, and the `REV` phase re-derives from the entities. `VH` (§9.4) is the
+leg that checks it.
+
 **`R7` — a silent governance regression.** `spec validate` does not catch a
 dangling `[[source]]` anchor, so nothing goes red and the rot is silent.
 *Mitigation:* `DEC-211` enumerates the anchors concretely rather than describing
 them — `spec-021.toml:30` is the only true dangling anchor; `spec-012.toml:30`
 and `spec-022.toml:45` are comment lists. The sweep is by hand and is a named
 `REV` item, not an execution detail.
+
 
 <!-- doctrine:section sec-8 -->
 ## 9. Quality Engineering & Validation
@@ -985,6 +1266,9 @@ at its cheapest point, and it is why the re-home is its own phase.
 | `VT-7` | the installed hook set is five entries | `e2e_claude_install.rs`'s exact count moves by **six** (four `pretooluse` + nominate + denominate) |
 | `VT-8` | the config key is gone everywhere | no `claude-force-subprocess-dispatch` in `DispatchConfig`, `dtoml.rs` round-trip, `doctrine.toml` or its commented example (`STD-001`) |
 | `VT-9` | the import belt is untouched | `classify_import`'s refusal set and tokens unchanged; its constants still single-sourced from `import.rs:24` |
+| `VT-10` | the macOS confinement prefix carries worker identity | `sandbox_exec_argv(&ResolvedMac)` emits `DOCTRINE_WORKER=1` in its trailing `env` token. **Pure over `ResolvedMac`, so Linux-testable** — it does not wait on a mac (`F-2`, `OQ-5`) |
+| `VT-11` | the Linux arm refuses by name, not merely by exec failure | with `bwrap` absent from `PATH`, the spawn script exits non-zero **naming `REASON_NO_BWRAP`** before any fork is spawned (`D7`, `F-6`) |
+| `VT-12` | the check gate moved altitude and the scope belt did not | `classify_import` still refuses the `.doctrine/`/`.claude/` touch (pre-apply, hard); the post-import gate resolves `CheckKind::Prove`, never `CheckKind::Commit` (§5.2.5, `INV-2`) |
 
 **Test triage** (research thread 2's table is a **floor**, re-checked here
 against the retained transport rather than a fetch path): 10 of 13
@@ -1013,16 +1297,25 @@ the binding.
 
 ### 9.4 By human (`VH`)
 
-`ADR-011`'s corrected text and the `SPEC-021` requirement dispositions
-accurately describe the shipped arm, and no `[[source]]` anchor points at a
-deleted file. This is the leg that the anchor sweep (`R7`) exists to make
-checkable.
+Two claims, and the second is the one `R8` exists for.
+
+1. `ADR-011`'s corrected text and the `SPEC-012` / `SPEC-021` requirement
+   dispositions accurately describe the shipped arm, and no `[[source]]` anchor
+   points at a deleted file (the anchor sweep, `R7`).
+2. **The `REV`'s target set was re-derived from the entities at the `REV` phase,
+   not read off §3.1's table.** The sweep of `.doctrine/adr`, `.doctrine/spec`,
+   `.doctrine/policy` and `.doctrine/standard` for the deleted mechanisms was
+   re-run against the corpus as it then stood, every hit was read in context, and
+   any entity or region beyond the six is recorded rather than absorbed
+   (`DEC-218`, `R8`). A `REV` that matches this design's counts exactly is a
+   result worth stating; a `REV` that merely *asserts* it re-derived is not.
 
 ### 9.5 What is deliberately not verified here
 
 The hardening delta (`IMP-428`), the narrowed `~/.claude` mount set, macOS
 seatbelt exercise on a real mac (`IMP-429`, `OQ-5`), and every clone-topology
 property (`SL-255`, carrying `A1` as the assumption it exists to verify).
+
 
 <!-- doctrine:section sec-9 -->
 ## 10. Review Notes
@@ -1036,19 +1329,22 @@ Where a reviewer's attention is worth most, in order.
    `verify-worker` or the `Spawn`-row recorder has a consumer on the surviving
    path, the boundary is wrong and the phase count changes.
 
-2. **`OQ-1`, the fork binding.** Settled at drafting rather than carried:
-   the collapsed arm's forks stay unbound, exactly as the pi arm's already are,
-   because the binding's only readers are the two surfaces this slice deletes
-   (`worker_commit`) or leaves without a producer (`dispatch_import`). The claim
-   worth attacking is the census, not the conclusion — a third reader of
-   `require_binding` reachable on the retained path reopens it.
+2. **`OQ-1`, the fork binding, and what it costs.** Settled at drafting: the
+   collapsed arm's forks stay unbound, exactly as the pi arm's already are. The
+   claim worth attacking is the census, not the conclusion — a third reader of
+   `require_binding` reachable on the retained path reopens it. Note the price
+   `RV-355` `F-1` surfaced: unbound forks and a live Mode B are mutually
+   exclusive, so this settlement *is* `DEC-217`.
 
-3. **`OQ-2`, `dispatch_import` without a producer.** Retaining an unreachable
-   tool is a deliberate choice with a governance argument behind it (`DEC-211`
-   narrowed the funnel cadence out of the `REV`). A reviewer may reasonably
-   judge that the code and the spec should move together and that `SL-255`
-   should widen instead. That is a scope argument, and it belongs here rather
-   than at audit.
+3. **`OQ-2`, Mode B's retirement.** Retiring an orchestration mode as a
+   *consequence* of a fork-binding choice is the largest thing this design does
+   that its scope does not name. Mode A — the main-thread orchestrator, which
+   never consults the funnel record — is the retained path and is what the pi arm
+   runs in production, so the collapse is not the funnel break it can look like
+   from `dispatch next`'s prescription. A reviewer may reasonably judge that a
+   retired mode should be deleted rather than left unreachable, or that `SL-255`
+   should widen. That is a scope argument, and it belongs here rather than at
+   audit.
 
 4. **`R4`, the reap divergence.** The generalised script has exactly one
    structural difference between profiles. If the merge is done carelessly, the
@@ -1056,14 +1352,21 @@ Where a reviewer's attention is worth most, in order.
    phase. The behaviour-preservation gate catches the first; only the `VA` leg
    catches the second.
 
-5. **`ADR-011`'s eight regions (§3.1).** The count was four, then five, then
-   eight, each correction found by reading the ADR end to end rather than
-   through quotations. `D2` and `D6` are the load-bearing ones and were absent
-   from the first two lists. A reviewer who reads only the decisions will
-   inherit whichever count they land on; read `ADR-011` itself.
+5. **The governance target set (§3.1, `DEC-218`, `R8`).** This is where the
+   design has been wrong most often and most quietly. `ADR-011`'s count went four
+   → five → eight → **eleven**; `SPEC-012` went one responsibility line → four
+   falsified requirements; `ADR-012` went "not touched" → three regions;
+   `ADR-006` went two corrections → nine; and `ADR-008` went **unlisted** → seven
+   regions and a sixth target entity. Every correction came from reading an entity
+   end to end rather than a summary of it, and two came from an external reviewer.
+   A reviewer who reads only the decisions will inherit whichever count they land
+   on. **Read the entities.** `ADR-008` is the one to read first — it is
+   project-local, nothing anchors at it, and `D-B6` is built entirely from
+   mechanisms this slice deletes.
 
 6. **What is *not* here.** Clone provisioning, worker self-commit, the fetch
    transport, capsule work, `REQ-335`'s mediated-write tier, and solo
    `/worktree` isolation. A finding that this design should have addressed any of
    them is a finding about `DEC-213`'s split, not about the draft.
+
 
