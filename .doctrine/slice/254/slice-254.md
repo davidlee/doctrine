@@ -117,9 +117,20 @@ have had to move too.
    *absence* as coordination-tree identity.
 4. **Collapse the skills.** `/dispatch-agent` and `/dispatch-subprocess` merge;
    `/dispatch`'s arm-routing branch goes with them.
-5. **Land the governance.** `ADR-011` Context + D3, and the `SPEC-021`
-   requirements that encode two arms. See *Reconcile & closure complexity* —
-   this is the larger half of the slice, not a tail.
+5. **Land the governance.** `ADR-011`, `ADR-006` §D2b, `SPEC-021` and
+   `SPEC-012`, through one `REV` of this slice's own. See *Reconcile & closure
+   complexity* — this is the larger half of the slice, not a tail.
+
+   *Corrected 2026-08-13 (`DEC-211`).* This read "`ADR-011` Context + D3", which
+   under-counts by four regions. `ADR-011` changes at **eight**: Context, `D1`,
+   `D2`, `D3`'s table, `D4`, `D6`, Consequences and Verification. The two a
+   Context+D3 reading loses are the load-bearing ones — `D2` is the core
+   contract, whose "claude's `Agent` path has no worker env channel" is exactly
+   what a confined `claude -p` subprocess falsifies, and `D6` is sixty lines of
+   fail-closed altitude resting on the `SubagentStart` stamp and the marker,
+   both deleted here, whose "not fail-closable" conclusion inverts under
+   `DEC-208`. `D5` and `D7` are recorded in `DEC-211` as considered and
+   deferred. The `REV`'s target set is four entities.
 
 ### Constraints
 
@@ -208,9 +219,29 @@ Coarse and provisional — the exact touch-set is `/design`'s job.
   structured hand-back, and MCP availability under `-p` are assumed sufficient.
   `inq-6` of `SL-247` established that tool availability is definable per agent
   definition or per invocation; whether that holds under `-p` is unconfirmed.
-- **`OQ-1`** — Does `jail.rs`'s bwrap argv builder become the subprocess arm's
-  home, or does the script keep owning the prefix? Bears on how much of
-  `src/worktree/` survives, and on `POL-002`.
+
+  *Narrowed 2026-08-13.* Research thread 3 reports the CLI surface complete —
+  tool-surface scoping, permission modes, MCP config, and a `--json-schema`
+  hand-back contract all exist as flags — so the work on this leg is
+  **provisioning, not capability**. That report is a researcher claim and is
+  **unverified**; `A2` stays an assumption. Two of its three legs are since
+  disposed: **auth** is settled by `DEC-210` on the subscription credential
+  (`ANTHROPIC_API_KEY` would forfeit the billing `EVD-023` establishes), and
+  **MCP availability** is moot — `DEC-204` deletes `worker_commit`, so no MCP
+  tool needs provisioning. What remains genuinely assumed is the **hand-back**:
+  there is no typed subagent-return equivalent under `-p`.
+- ~~**`OQ-1`**~~ — **ANSWERED at design 2026-08-13.** Does `jail.rs`'s bwrap
+  argv builder become the subprocess arm's home, or does the script keep owning
+  the prefix? **Both, split at the seam the tree already draws.** `DEC-206`
+  re-homes four jail primitives (`REASON_NO_BWRAP`, `have_bwrap`,
+  `write_seatbelt_profile`, `REASON_PROFILE_WRITE_FAILED`) from `pretooluse.rs`
+  to `jail.rs` **as the first step, before any deletion** — `jail_prefix.rs`
+  imports them today, so deleting `pretooluse.rs` first breaks the surviving
+  arm. `DEC-209` keeps the prefix itself at the script tier: generalise the
+  incumbent `scripts/pi-spawn-confined.sh`, take **no `doctrine-control`
+  dependency**, port **no** hardening (deferred to `IMP-428`). `POL-002` is
+  satisfied by that split rather than strained — the argv builder stays in the
+  binary and the harness specifics stay in the script.
 - **`OQ-2` — inherited from `SL-247`'s `OQ-3`.** Do `IMP-269` (same defect for
   `/fork` subagents) and `IMP-342` (Bash arm blocking read-only `doctrine` CLI
   reads from research subagents) discharge here? Add `IMP-334` (arm
@@ -218,10 +249,13 @@ Coarse and provisional — the exact touch-set is `/design`'s job.
   absolute-path reads silently hit the primary tree), and `IMP-407` (doctor leg
   naming the hook-activation blocker) — all five are plausibly dissolved rather
   than fixed. Confirm at reconcile; do not assume.
-- **`OQ-3`** — one arm or two rungs? If some environment cannot run `claude -p`,
-  does the in-session arm survive as a degraded rung, or is it simply
-  unsupported? `DEC-202` chose deletion; design should confirm nothing depends
-  on the fallback.
+- ~~**`OQ-3`**~~ — **ANSWERED at design 2026-08-13 (`DEC-208`): one arm.** No
+  degraded in-session rung. An environment that cannot run `claude -p` **fails
+  closed at spawn**, exactly as the pi arm already does today — so the answer is
+  not a new posture but the incumbent one, extended. Design confirmed nothing
+  depends on the fallback: `DEC-205` found `nominate`/`denominate` to be a
+  **closed loop** with `pretooluse`'s gate legs (`is_nominated` has no other
+  reader), so they die by construction rather than needing a disposition.
 
 ## Reconcile & closure complexity
 
@@ -261,12 +295,30 @@ it expected a cutover to rewrite the section. This is that cutover arriving
 early. Precedent for the shape is in `ADR-011` itself: D5 and D6 already read
 "AMENDED — FALSIFIED (SL-064 §8)" as in-place amendments.
 
+*Settled and enlarged 2026-08-13 (`DEC-211`).* Both hedges are discharged.
+`ADR-011` is **eight** regions, not Context + D3 — see objective 5. `ADR-006`
+§D2b is **not** "probably": it is definite, on thread 1's scope argument, and it
+carries a **second** correction the scoping survey did not see — D2b names
+`IMP-065` as "the real positive-marker close", but `IMP-065` was closed
+**obsolete** on 2026-07-02 via `REV-018`, superseded by confinement rather than
+delivered. The ADR therefore holds a live forward-reference to a close that will
+never arrive, hedging a marker-absence assumption `DEC-207` deletes outright.
+Both halves re-cut together. Two further targets the survey omitted: `SPEC-021`
+loses **three** responsibilities plus a half-rewrite rather than two, and
+**`SPEC-012`'s responsibility prose at `spec-012.toml:18`** is a `REV` target in
+its own right — "fork = create + provision + **stamp** + emit per-wt env" loses
+the stamp with the marker, while "import as the belted dispatch funnel" is
+unchanged because import survives the re-scope.
+
 **Does this ride `REV-046` or its own?** `REV-046` is `proposed`,
 `approval=none`, and gates the capsule **cutover** (slice 5). `RFC-025` says to
 approve and apply it "when there is an exact migration plan rather than an
 aspirational delete list, which is at slice 5 and not before." This slice is not
 slice 5. Recommendation: **its own `REV`**, so `REV-046` stays clean for the
-capsule cutover. Settle at design.
+capsule cutover. ~~Settle at design.~~ **SETTLED at design 2026-08-13
+(`DEC-211`): its own `REV`**, confirmed by research thread 1. Riding `REV-046`
+would couple this slice to hostile-ingestion, interpretation-policy and
+microVM-measurement evidence it does not need.
 
 **Orphaned obligation from `SL-247`.** Its Follow-Ups carried *"At reconcile —
 contribute the post-capsule finding to `RFC-025`"* (`DEC-154`'s sibling
