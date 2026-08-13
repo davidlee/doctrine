@@ -220,6 +220,14 @@ const PARAM_DUTMP: &str = "DUTMP";
 const PARAM_RW_PREFIX: &str = "RW";
 /// The `TMPDIR` env var name (`env TMPDIR=<tmp>` prefixes the wrapped command).
 const ENV_TMPDIR: &str = "TMPDIR";
+/// The worker-identity env var, and the value that means "on" (SL-254 `DEC-207`:
+/// after the marker's deletion this env leg is the ONLY worker signal). Named per
+/// STD-001 and single-sourced here for the whole crate — `marker.rs`'s predicate
+/// reads the same constants, so the argv that ESTABLISHES identity and the
+/// predicate that OBSERVES it cannot drift.
+pub(crate) const ENV_DOCTRINE_WORKER: &str = "DOCTRINE_WORKER";
+/// The `DOCTRINE_WORKER` value that means "this process is a worker".
+pub(crate) const ENV_WORKER_ON: &str = "1";
 /// The materialized `.sb` profile filename, under `<wt>/.tmp` (`resolve_inputs` sets
 /// `profile_path = <tmp>/jail.sb`; the command tier's `materialize_seatbelt_profile`
 /// writes the `seatbelt_profile` body there on the wrap path, fail-closed).
@@ -574,7 +582,7 @@ impl Jailer for Seatbelt {
 }
 
 /// The pi-arm core flag set (D5 parity, VT-7, EX-2). Byte-equivalent to
-/// `scripts/pi-spawn-confined.sh`'s core flags. Flag tokens are named constants
+/// `scripts/spawn-confined.sh`'s core flags. Flag tokens are named constants
 /// (STD-001), single-sourced. Excludes the program token and the `--` separator (those
 /// ride `bwrap_argv`), so this is exactly the parity-checked confinement set. PURE.
 pub(crate) fn bwrap_core_argv(wt: &Path) -> Vec<OsString> {
@@ -711,6 +719,17 @@ pub(crate) fn sandbox_exec_argv(resolved: &ResolvedMac) -> Vec<OsString> {
     tmpdir.push("=");
     tmpdir.push(resolved.tmp.as_os_str());
     argv.push(tmpdir);
+    // Worker identity rides the SAME `env` run (SL-254 `RV-355` F-2, VT-10). The
+    // Linux arm sets it with `--setenv DOCTRINE_WORKER 1` in the spawn script's
+    // inline bwrap array; macOS has no such token, and macOS worker identity rode
+    // the disk marker — which `DEC-207` deletes. Without this a confined macOS
+    // worker would have NO identity signal at all and `INV-1` would be false on
+    // that platform. This is the one asymmetry between the two platforms that is
+    // not parity-by-construction.
+    let mut worker = OsString::from(ENV_DOCTRINE_WORKER);
+    worker.push("=");
+    worker.push(ENV_WORKER_ON);
+    argv.push(worker);
     argv
 }
 
@@ -1218,13 +1237,21 @@ mod tests {
 
     // ---- VT-7 parity + VT-4: bwrap argv (T5) -----------------------------------
 
-    /// Extract-at-test-time (D-parity-source, MF-5): the pi script INTERLEAVES the
-    /// pi-specific `--bind "$HOME/.pi"` between core flags, so a line-slice would
-    /// wrongly capture it. Filter by excluding pi-specific token groups instead — a
-    /// script edit to the core flags then breaks this test loudly (R2).
-    fn pi_spawn_core_tokens() -> Vec<String> {
-        let path = crate::test_support::repo_root().join("scripts/pi-spawn-confined.sh");
-        let raw = std::fs::read_to_string(&path).expect("read pi-spawn-confined.sh");
+    /// The one confined spawn script, read at test time. SL-254 renamed it from
+    /// `pi-spawn-confined.sh` and made the harness a parameter; the parity claim is
+    /// unchanged and now covers BOTH profiles, since the core flags are shared.
+    fn spawn_script_text() -> String {
+        let path = crate::test_support::repo_root().join("scripts/spawn-confined.sh");
+        std::fs::read_to_string(&path).expect("read spawn-confined.sh")
+    }
+
+    /// Extract-at-test-time (D-parity-source, MF-5): the script INTERLEAVES the
+    /// harness config bind `--bind "$CFG_DIR" "$CFG_DIR"` between core flags, so a
+    /// line-slice would wrongly capture it. Filter by excluding harness-specific
+    /// token groups instead — a script edit to the core flags then breaks this test
+    /// loudly (R2).
+    fn spawn_core_tokens() -> Vec<String> {
+        let raw = spawn_script_text();
         // Drop comment lines (they mention "bwrap"), then splice `\`-continuations.
         let code = raw
             .lines()
@@ -1233,10 +1260,20 @@ mod tests {
             .join("\n")
             .replace("\\\n", " ");
         let toks: Vec<String> = code.split_whitespace().map(str::to_string).collect();
-        let start = toks
+        // Anchor on the ARRAY LITERAL, not on a bare `bwrap` token. SL-254 added a
+        // `command -v bwrap` capability probe ahead of the array (D7), so the first
+        // `bwrap` in the file is no longer the confinement prefix — anchoring on it
+        // would silently start comparing the rest of the script.
+        let open = toks
             .iter()
-            .position(|t| t == "bwrap")
-            .expect("bwrap invocation token");
+            .position(|t| t == "PREFIX=(")
+            .expect("inline PREFIX array literal");
+        assert_eq!(
+            toks.get(open + 1).map(String::as_str),
+            Some("bwrap"),
+            "the inline PREFIX array must open with the bwrap launcher token"
+        );
+        let start = open + 1;
         // Tokens strictly between `bwrap` and the `)` closing the `PREFIX=( … )`
         // array (SL-185 PHASE-03 hoisted the inline `bwrap … pi` flags into a bash
         // array driven through a single `timeout "${PREFIX[@]}" pi …` exec site, so
@@ -1247,12 +1284,16 @@ mod tests {
             .take_while(|t| t.as_str() != ")")
             .map(|t| t.trim_matches('"').to_string())
             .collect();
-        // Remove pi-specific groups: `--bind <…/.pi> <…/.pi>` and `--setenv NAME VAL`.
+        // Remove harness-specific groups: `--bind <$CFG_DIR> <$CFG_DIR>` and
+        // `--setenv NAME VAL`. SL-254: the bind target was the literal `$HOME/.pi`
+        // and is now the `$CFG_DIR` the harness case resolves, so the filter keys on
+        // that variable. Keying on `.pi` after the generalisation would silently
+        // stop matching and fold two extra tokens into the "core" set.
         let mut out = Vec::new();
         let mut i = 0;
         while i < between.len() {
             let t = &between[i];
-            if t == FLAG_BIND && i + 2 < between.len() && between[i + 1].contains(".pi") {
+            if t == FLAG_BIND && i + 2 < between.len() && between[i + 1].contains("$CFG_DIR") {
                 i += 3;
                 continue;
             }
@@ -1273,12 +1314,66 @@ mod tests {
     }
 
     #[test]
-    fn bwrap_core_argv_matches_pi_spawn_core_flags() {
-        // VT-7 / D5 / EX-2: byte-equivalence to pi-spawn-confined.sh's core flags. The
+    fn bwrap_core_argv_matches_spawn_core_flags() {
+        // VT-7 / D5 / EX-2: byte-equivalence to spawn-confined.sh's core flags. The
         // script writes the worktree as the shell var `$D`; build our core with that
         // placeholder so the comparison is over the flag structure, not a live path.
         let ours = to_strings(&bwrap_core_argv(Path::new("$D")));
-        assert_eq!(ours, pi_spawn_core_tokens());
+        assert_eq!(ours, spawn_core_tokens());
+    }
+
+    #[test]
+    fn spawn_script_names_the_no_bwrap_reason_and_both_harnesses() {
+        // SL-254 PHASE-02 EX-5 / VT-11 (design D7, RV-355 F-6). The Linux arm must
+        // refuse BY NAME, and a shell cannot import `REASON_NO_BWRAP` — so the
+        // duplicate is CHECKED here rather than left to a comment (STD-001), the
+        // same script-is-source-of-truth technique the core-flag parity test uses.
+        let raw = spawn_script_text();
+        assert!(
+            raw.contains(REASON_NO_BWRAP),
+            "spawn-confined.sh must name `{REASON_NO_BWRAP}` when bwrap is absent"
+        );
+        // The probe has to precede the fork, or the refusal costs a minted worktree
+        // (VT-11: "before any fork is spawned").
+        let probe = raw
+            .find("command -v bwrap")
+            .expect("Linux bwrap capability probe");
+        let fork = raw.find("worktree fork").expect("the fork call");
+        assert!(probe < fork, "the bwrap probe must run BEFORE the fork");
+        // Both harness profiles are dispatched on (EX-1).
+        for harness in ["pi", "claude"] {
+            assert!(
+                raw.contains(&format!("{harness})")),
+                "spawn-confined.sh must carry a `{harness}` harness profile"
+            );
+        }
+    }
+
+    #[test]
+    fn sandbox_exec_argv_env_token_carries_worker_identity() {
+        // VT-1 / design VT-10 (RV-355 F-2): the macOS prefix must establish worker
+        // identity, because `DEC-207` deletes the disk marker that carried it there.
+        // PURE over `ResolvedMac`, so this runs on a Linux host — it does not wait
+        // on a mac (OQ-5).
+        let r = resolved_mac();
+        let argv = to_strings(&sandbox_exec_argv(&r));
+        let expected = format!("{ENV_DOCTRINE_WORKER}={ENV_WORKER_ON}");
+        assert!(
+            argv.iter().any(|a| *a == expected),
+            "sandbox_exec_argv must emit `{expected}`; got {argv:?}"
+        );
+        // It rides the SAME `env` run as TMPDIR — after the `--` terminator, so
+        // `opaque_wrap`'s body still appends behind it.
+        let sep = argv
+            .iter()
+            .position(|a| a == FLAG_ARG_SEP)
+            .expect("-- separator");
+        let env_bin = argv.iter().position(|a| a == ENV_BIN).expect("env token");
+        let worker = argv
+            .iter()
+            .position(|a| *a == expected)
+            .expect("worker token");
+        assert!(sep < env_bin && env_bin < worker, "argv: {argv:?}");
     }
 
     #[test]

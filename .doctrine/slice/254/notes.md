@@ -6,9 +6,15 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-01 complete (1/9) · ef59ad0f5
+fresh-as-of: 2026-08-13 · PHASE-02 complete (2/9) · see git log
 
 ### Produced
+- PHASE-02 done — `scripts/pi-spawn-confined.sh` → `scripts/spawn-confined.sh`,
+  harness as its first argument, `claude` profile added alongside `pi`
+  (DEC-209/210/215/216), Linux `bwrap` probe naming `bwrap-unavailable` ahead of
+  the fork (D7/F-6), and `sandbox_exec_argv` now carries `DOCTRINE_WORKER=1` in
+  its trailing `env` run (F-2). New `tests/e2e_worker_confinement.rs` proves the
+  shipped PREFIX tokens confine live, and skips named where `bwrap` is absent
 - PHASE-01 done — the four jail primitives re-homed to `jail.rs`, `jail_prefix.rs`
   re-pointed, `BWRAP_BIN` collapsed onto `jail::BWRAP` (ef59ad0f5). Both relocated
   unit tests byte-identical; `just gate` and `doctrine check gate` exit 0
@@ -38,6 +44,18 @@ fresh-as-of: 2026-08-13 · PHASE-01 complete (1/9) · ef59ad0f5
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **`bwrap_argv` has the same hole `F-2` fixed on macOS** (PHASE-02 finding).
+  The BINARY's Linux prefix builder emits no `--setenv DOCTRINE_WORKER 1`; only
+  the spawn script's inline array does. Dormant today because nothing on Linux
+  shells `worktree jail-prefix` — but `IMP-429` (the prefix's permanent home) is
+  exactly the move that would wake it. Not fixed in PHASE-02: outside every
+  criterion, and it would move tokens `EX-2` freezes
+- **A Rust unit test consumes the spawn script's TEXT** — `jail.rs`'s core-flag
+  parity test opens the script by path and parses its inline array. Neither half
+  of the slice's two-direction census (Rust symbols outward, literal strings
+  inward) reaches a Rust consumer of a non-Rust file's *text*. Cost one red
+  cycle in PHASE-02; re-anchored on `PREFIX=(` and re-keyed to `$CFG_DIR`.
+  Observation `019ffbeb-d553` records the generalisable form
 - `ADR-001` posture of `jail.rs` — two unseamed impure functions now sit in a
   registered `leaf`; candidate seventh `REV` target for PHASE-08's re-derivation
 - macOS/Darwin path unverified — `jail_prefix.rs:40`/`:46` are cfg-stripped in

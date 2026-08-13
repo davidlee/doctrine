@@ -260,7 +260,7 @@ fn bwrap_present_writes_out() {
 
 // ── PHASE-03 VT-1: the shell NUL-array reader contract over a REAL --out file ─────
 //
-// `scripts/pi-spawn-confined.sh` is the SOURCE OF TRUTH for the confinement PREFIX
+// `scripts/spawn-confined.sh` is the SOURCE OF TRUTH for the confinement PREFIX
 // wiring (VA-1 guards the script's inline Linux array). This test re-encodes the
 // §1 reader contract — a portable NUL-delimited read into PREFIX then a
 // `${#PREFIX[@]} > 0` fail-closed guard — and drives it against a genuine
@@ -276,7 +276,7 @@ fn bwrap_present_writes_out() {
 
 /// The script's reader-and-guard contract, in portable shell (bash 3.2 + 5). `$OUT`
 /// is the argv file; a 0-length PREFIX ⇒ `exit 3` (abort), else the tokens are
-/// printed one per line. Mirrors the Darwin arm of `pi-spawn-confined.sh`.
+/// printed one per line. Mirrors the Darwin arm of `spawn-confined.sh`.
 const READER_SNIPPET: &str = "PREFIX=(); \
 while IFS= read -r -d '' tok || [ -n \"$tok\" ]; do PREFIX+=(\"$tok\"); done < \"$OUT\"; \
 [ \"${#PREFIX[@]}\" -gt 0 ] || { echo abort >&2; exit 3; }; \

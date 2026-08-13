@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffbeb-d553-7952-8585-27e20c1c3dac"
+recorded_at = "2026-08-13T16:19:24.627217104Z"
+kind = "friction"
+summary = "SL-254 PHASE-02 /execute — a Rust unit test consumes the spawn script's TEXT, and no plan/design file list reaches it"
+detail = "PHASE-02 renames scripts/pi-spawn-confined.sh and parameterises its $HOME/.pi bind. src/worktree/jail.rs:1226 (bwrap_core_argv_matches_pi_spawn_core_flags) opens that script BY PATH and parses its inline PREFIX array, filtering the harness bind by matching the literal '.pi' in the token and anchoring the array on the first bare 'bwrap' token. Both anchors are invalidated by this phase's own edits: the rename breaks the path, the CFG_DIR generalisation removes '.pi', and the new D7 capability probe introduces an earlier 'bwrap' token. Cost one red test cycle plus a re-anchor. The slice's symbol census is explicitly Rust-symbol-shaped and its literal-string sweep ran over non-Rust consumers of Rust symbols; neither direction catches a RUST consumer of a NON-Rust file's text. Generalisable: a cross-tier parity test is invisible to both halves of a two-direction census."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

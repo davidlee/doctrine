@@ -125,7 +125,11 @@ pub(crate) fn marker_present(root: &Path) -> bool {
 /// failure path. `pub(crate)` so the rootless-cwd guard fallback can consult the
 /// env leg alone when `root::find` errors (no marker leg without a root).
 pub(crate) fn env_worker_set() -> bool {
-    std::env::var_os("DOCTRINE_WORKER").as_deref() == Some(std::ffi::OsStr::new("1"))
+    // Name and value are single-sourced from the jail leaf (STD-001): the argv that
+    // ESTABLISHES worker identity and the predicate that OBSERVES it are the same
+    // two constants, so they cannot drift (SL-254 PHASE-02).
+    std::env::var_os(super::jail::ENV_DOCTRINE_WORKER).as_deref()
+        == Some(std::ffi::OsStr::new(super::jail::ENV_WORKER_ON))
 }
 
 /// Stamp the worker marker at `root` (mkdir-p the dispatch dir). Shell.

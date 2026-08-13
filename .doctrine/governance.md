@@ -99,7 +99,9 @@ local-exclusion tradeoffs.
 
 # orchestration
 
-pi dispatch under claude code - use: ./scripts/pi-spawn-confined.sh
+dispatch under claude code - use: `./scripts/spawn-confined.sh <harness> <B>
+<BRANCH> <DIR> <PROMPT_FILE> [BACKSTOP]`, where `<harness>` is `pi` or `claude`
+(SL-254 PHASE-02 renamed and generalised `pi-spawn-confined.sh`).
 note: on the **subprocess (pi) arm** the worker CANNOT self-commit (ro .git for
 linked worktrees) → orchestrator imports the working-tree diff. Worthwhile trade.
 (The **claude arm** now self-commits via the gated `worker_commit` MCP tool —

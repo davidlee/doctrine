@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-off: respawn a confined pi worker against an EXISTING fork dir (no re-fork,
-# preserves working tree + warm target/). Mirrors pi-spawn-confined.sh minus the
+# preserves working tree + warm target/). Mirrors spawn-confined.sh minus the
 # fork step. Usage: pi-respawn-nofork.sh <DIR> <PROMPT_FILE> [BACKSTOP_SECS]
 set -u
 D="$1"

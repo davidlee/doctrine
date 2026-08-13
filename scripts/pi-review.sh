@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pi-review.sh — confined, READ-ONLY pi reviewer. No worktree, no fork.
 #
-# Sibling of pi-spawn-confined.sh, stripped to a review posture. The dispatch
+# Sibling of spawn-confined.sh, stripped to a review posture. The dispatch
 # worker spawn forks a worktree because a worker WRITES; a reviewer does not.
 # Dropping the fork also drops the whole isolation-arm hazard class (ISS-034:
 # `isolation: worktree` losing the git-lock race and silently falling back to a

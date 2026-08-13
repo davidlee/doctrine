@@ -9,7 +9,7 @@
 //!
 //! **The flag tokens are named once, here** (`EX-4`, `STD-001`). The root
 //! package's `src/worktree/` carries its own bubblewrap vocabulary under a
-//! byte-parity contract with `scripts/pi-spawn-confined.sh`; `DEC-155` is the
+//! byte-parity contract with `scripts/spawn-confined.sh`; `DEC-155` is the
 //! decision *not* to reuse it, so nothing here imports from it (invariant 10)
 //! and nothing there is widened.
 //!
