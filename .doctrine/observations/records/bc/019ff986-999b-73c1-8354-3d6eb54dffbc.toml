@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff986-999b-73c1-8354-3d6eb54dffbc"
+recorded_at = "2026-08-13T05:09:35.771951324Z"
+kind = "friction"
+summary = "design drafting: section document order is creation order, and a batched declare claims seq in id-sorted order"
+detail = "Declared sec-6..sec-10 in one `design apply` batch. Section `seq` is claimed at creation, and the batch claimed it in lexical id order, so sec-10 sorted ahead of sec-6 and the materialised design.md read 1,2,3,4,5,10,6,7,8,9. There is no reorder verb and sections have no lifecycle transition, so the only repair available was re-declaring the five bodies rotated onto the ids that already sat in the right document positions — leaving sec-10 holding section 6, sec-6 holding section 7, and so on. Cost: one wasted apply, one repair apply, and a permanent id/heading mismatch a reviewer citing a finding by section id will trip over. Two cheap fixes: claim seq in payload order rather than sorted order, or refuse a batch whose ids are not already in the intended document order."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

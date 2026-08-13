@@ -16,19 +16,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch_config.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
 
 [[selector]]
 selector = "src/dtoml.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
 
 [[selector]]
 selector = "scripts/pi-spawn-confined.sh"
-intent = "scope-relevant"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
 
 [[selector]]
 selector = ".claude/settings.json"
-intent = "scope-relevant"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
 
 [[selector]]
 selector = "tests/e2e_worktree_*"
@@ -36,7 +40,178 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/dispatch-mechanics.md"
-intent = "scope-relevant"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/pretooluse.rs"
+intent = "design-target"
+note = "delete outright with the in-session arm (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/subagent.rs"
+intent = "design-target"
+note = "delete outright with the in-session arm (design §5.6)"
+
+[[selector]]
+selector = "src/mcp_server/worker_commit.rs"
+intent = "design-target"
+note = "delete outright with the in-session arm (design §5.6)"
+
+[[selector]]
+selector = "tests/e2e_worktree_stamp.rs"
+intent = "design-target"
+note = "delete outright with the in-session arm (design §5.6)"
+
+[[selector]]
+selector = "tests/e2e_worktree_verify_worker.rs"
+intent = "design-target"
+note = "delete outright with the in-session arm (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/jail.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/jail_prefix.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/marker.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/create.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/fork.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/land.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/inventory.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/shared.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/gc.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/worktree/import.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/mcp_server/mod.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/commands/observation.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "src/regression_run.rs"
+intent = "design-target"
+note = "modified by the collapse (design §5.6)"
+
+[[selector]]
+selector = "scripts/lib/pi-reap.sh"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
+
+[[selector]]
+selector = "install/doctrine.toml.example"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
+
+[[selector]]
+selector = "tests/e2e_worktree_create_fork.rs"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
+
+[[selector]]
+selector = "tests/e2e_worktree_status_marker.rs"
+intent = "design-target"
+note = "script/config/skill/test surface of the collapse (design §5.6)"
+
+[[selector]]
+selector = ".doctrine/doctrine.toml"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/SKILL.md"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-agent/SKILL.md"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-subprocess/SKILL.md"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/worktree/SKILL.md"
+intent = "design-target"
+note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
 
 [[relation]]
 label = "governed_by"
