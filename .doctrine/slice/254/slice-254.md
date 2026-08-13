@@ -123,6 +123,21 @@ have had to move too.
    independent grounds: worker-ness is a property of a process, the marker
    models it as a property of a tree, and nothing anywhere reads marker
    *absence* as coordination-tree identity.
+
+   *Enlarged 2026-08-13 (design `R6`, §7.2 `D1`–`D3`).* The honest deletion set
+   is wider than this list, and every addition is the claude arm's substitute
+   for something `worktree fork --worker` already does. Also deleted: **`dispatch
+   arm-spawn`** with its arming-dir contract, **`create-fork`'s Fork arm** (the
+   `WorktreeCreate` hook entry and its Passthrough arm survive), **`worktree
+   verify-worker`**, the **`Spawn`-row recorder** (`run_create_fork_and_record`),
+   the **`SubagentStop` `denominate` half** beside the `SubagentStart` stamp —
+   `DEC-205` found the nominate/denominate pair a closed loop with the wall's
+   own gate legs, so they die by construction — and the **`worker_commit` MCP
+   tool** (`DEC-204`, 1495 lines), which existed only because a hook-confined
+   in-session worker could not commit. Six hook entries go, not four. Retaining
+   any of the first four would leave a live fork trigger that, with the marker
+   deleted, mints an unmarked and unconfined worktree — strictly worse than
+   deleting it.
 4. **Collapse the skills.** `/dispatch-agent` and `/dispatch-subprocess` merge;
    `/dispatch`'s arm-routing branch goes with them.
 5. **Land the governance.** `ADR-011`, `ADR-006` §D2b, `SPEC-021` and
@@ -145,10 +160,13 @@ have had to move too.
 - **`POL-002`** — harness-specific knowledge stays out of the engine core. The
   collapse should *reduce* harness branching, and any residue that must stay
   belongs at the skill/script tier, not in the binary.
-- **Two `PreToolUse` hooks are `memory surface`, not confinement.** Only the
-  four `worktree pretooluse` matchers and the `SubagentStart` stamp are in
-  scope. Deleting the memory-surfacing hooks would be a silent regression of an
-  unrelated capability.
+- **Two `PreToolUse` hooks are `memory surface`, not confinement.** Deleting
+  them would be a silent regression of an unrelated capability. The six entries
+  in scope are the four `worktree pretooluse` matchers plus the
+  `SubagentStart`/`SubagentStop` nominate/denominate pair (`DEC-205`; corrected
+  2026-08-13 — this read "only … the four matchers and the `SubagentStart`
+  stamp", which under-counted the deletion by two and contradicted objective 3).
+  The `WorktreeCreate create-fork` entry stays; only its Fork arm goes.
 - **Behaviour-preservation gate** — the codex/pi arm is production today. Its
   existing suites are the proof that the collapse did not disturb it.
 
@@ -161,6 +179,16 @@ have had to move too.
   from `DEC-212`: the confinement control (a worker under the prefix cannot
   write outside its own directory), its **skip-rather-than-pass** rule on a host
   without `bwrap`, and the VA leg's evidence landing in an authored sink.
+- **No new dependency** (`DEC-209`, added 2026-08-13).
+  `crates/doctrine-control` is Linux-only, sits outside every default test
+  selection, and is under active development as the capsule programme's crate.
+  Generalise the incumbent bwrap prefix and port **no** hardening; the hardening
+  delta is filed as `IMP-428`.
+- **Subscription credential, bound wholesale** (`DEC-210`, added 2026-08-13).
+  `ANTHROPIC_API_KEY` would forfeit the billing property `EVD-023` establishes,
+  which is this slice's whole authorisation. Bind `$HOME/.claude` the way the pi
+  arm binds `$HOME/.pi` — wholesale and read-write, on both the Linux inline
+  array and the macOS `--extra-rw` path. Narrowing the mount set is deferred.
 - The change must not pre-empt `ADR-020`'s capsule cutover, only shrink it.
 
 ## Non-Goals
@@ -175,6 +203,12 @@ have had to move too.
   deferred.
 - **Solo worktrees.** `/worktree` for non-dispatch isolation is untouched;
   `REV-046`'s cutover intent already commits to preserving them.
+- **Everything `DEC-213` moved to `SL-255`** (added 2026-08-13). Clone
+  provisioning, worker self-commit, fetch-from-clone in place of the import
+  belt, and the branch-point guard's re-homing onto fetched refs. Workers here
+  stay on **linked worktrees** with the **incumbent import transport**; the
+  claude arm becomes a pi arm, no more and no less. Objective 2 records the move
+  at the point it was struck.
 - **Worker-side MCP, and the privileged-tool binary it would need**
   (`DEC-216`, added 2026-08-13). The confined claude worker gets **no MCP at
   all**, at parity with how the pi arm already spawns (`--no-extensions`); the
@@ -188,8 +222,19 @@ have had to move too.
 
 ## Affected surface
 
-Coarse and provisional — the exact touch-set is `/design`'s job.
+Coarse and provisional at scoping. **Design §5.6 now holds the exact touch-set
+and supersedes this list** (2026-08-13); what follows is the scoping record plus
+the surfaces the survey missed.
 
+- `src/mcp_server/worker_commit.rs` (1495) — **missed at scoping.** Deleted
+  outright with the arm it served (`DEC-204`); nothing re-homes, because the
+  retained import transport keeps `classify_import` as the scope belt's
+  enforcing caller.
+- `src/worktree/` beyond the three modules below — `marker.rs`, `create.rs`,
+  `fork.rs`, `land.rs`, `inventory.rs`, `gc.rs`, `import.rs` and `mod.rs` each
+  lose legs; `src/dispatch.rs`, `src/boot.rs`, `src/mcp_server/tools.rs` and
+  `src/commands/observation.rs` lose the deleted verbs, hook specs and marker
+  disjuncts.
 - `src/worktree/` — `pretooluse.rs` (1113), `subagent.rs` (671), `jail.rs`
   (2218). ~4000 lines, **not all deletable**: `jail.rs` also holds the bwrap
   argv builder, which the subprocess arm wants to keep and may want to own.
@@ -248,6 +293,14 @@ Coarse and provisional — the exact touch-set is `/design`'s job.
   **MCP availability** is moot — `DEC-204` deletes `worker_commit`, so no MCP
   tool needs provisioning. What remains genuinely assumed is the **hand-back**:
   there is no typed subagent-return equivalent under `-p`.
+
+  *Hand-back leg discharged 2026-08-13 (`DEC-215`).* `--output-format
+  stream-json` yields a typed completion event stream at parity with the pi
+  arm's RPC `agent_end`, at the argv tier — a flag, not code. All three legs are
+  now disposed, so what `A2` still assumes is **provisioning**: that a confined
+  `claude -p` with `$HOME/.claude` bound wholesale and no MCP actually starts,
+  authenticates and reaches its tools. That is precisely what the `VA` leg
+  exists to establish, and nothing short of it will.
 - ~~**`OQ-1`**~~ — **ANSWERED at design 2026-08-13.** Does `jail.rs`'s bwrap
   argv builder become the subprocess arm's home, or does the script keep owning
   the prefix? **Both, split at the seam the tree already draws.** `DEC-206`
@@ -274,6 +327,29 @@ Coarse and provisional — the exact touch-set is `/design`'s job.
   depends on the fallback: `DEC-205` found `nominate`/`denominate` to be a
   **closed loop** with `pretooluse`'s gate legs (`is_nominated` has no other
   reader), so they die by construction rather than needing a disposition.
+- ~~**`OQ-4`**~~ — **SETTLED at design 2026-08-13 (design §6 `OQ-1`): the
+  collapsed arm's forks stay unbound.** `worktree fork --worker` binds a fork to
+  its `(slice, phase)` only when `--slice` and `--phase` are both passed and the
+  dir sits under `<coord>/.worktrees/<name>`, and `bind_dispatch_record` is the
+  sole writer of a `DispatchRecord` — so an unbound fork leaves no record at
+  all. `scripts/pi-spawn-confined.sh` passes neither flag, making unbound forks
+  the surviving arm's production posture already. The binding's only readers are
+  `worker_commit` (deleted here) and MCP `dispatch_import` (which additionally
+  needs a committed fork tip the collapsed arm cannot produce). The retained CLI
+  import transport reads none of it, and the funnel row is named by the
+  orchestrator's explicit `PHASE-NN`. **Owner's call, 2026-08-13:** leave them
+  unbound. Passing the flags would write a durable record for a consumer this
+  slice deliberately leaves without a producer, and would move the production pi
+  arm's behaviour against the behaviour-preservation gate. The binding belongs
+  with the transport, and the transport is `SL-255`'s.
+- **`OQ-5` — `dispatch_import` is retained without a producer.** A knowingly
+  shipped residual, not an oversight (design §6 `OQ-2`, §7.2 `D6`): the MCP
+  funnel import needs a committed fork tip, no arm produces one after the
+  collapse, and the funnel cadence is governed prose `DEC-211` narrowed *out* of
+  this slice's `REV`. Deleting the tool would move code ahead of the spec that
+  governs it, in the direction that does not fail loudly. Revisit in `SL-255`,
+  which owns the transport — or widen `SL-255` if a reviewer judges the
+  code/spec gap unacceptable.
 
 ## Reconcile & closure complexity
 

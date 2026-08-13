@@ -213,6 +213,11 @@ selector = "plugins/doctrine/skills/worktree/SKILL.md"
 intent = "design-target"
 note = "authored config + skill sources (the .agents/ tree is the gitignored install projection)"
 
+[[selector]]
+selector = "scripts/spawn-confined.sh"
+intent = "design-target"
+note = "the generalised spawn script the pi one is renamed to (design §5.6, DEC-209)"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-011"

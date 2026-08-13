@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff9ea-b401-7ca3-82f2-39e5122d6747"
+recorded_at = "2026-08-13T06:58:56.129948536Z"
+kind = "friction"
+summary = "/design: design apply's payload schema is only discoverable by reading Rust source"
+detail = "Resuming a drafting run cold, the only spelled envelope anywhere in reach is the single 'declare' example on design show's last line (inquiry-node shaped). Revising a section body, attesting drafting-ready, and moving the stage each needed a different writer act, and none of the three is documented in design apply --help, design show, or design resume's fragment. Recovered them by reading src/design_run/submission.rs (Declaration.body, StageDeclaration) and src/design_run/attestation.rs (AgentAct, externally tagged kebab-case). ~6 tool calls and a few thousand tokens of Rust reading to learn three JSON shapes the run could have printed. The resume fragment names the acts in prose ('the agent performs drafting-ready') without their wire form, which is the gap: it tells you what to do and not how to say it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
