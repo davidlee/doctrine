@@ -252,7 +252,21 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "design VT-9 — the import belt is UNTOUCHED: `classify_import`'s refusal set and tokens are unchanged and its constants still single-sourced. This is the load-bearing survivor, so it is verified positively rather than assumed", test_file = "src/worktree/import.rs", keywords = ["classify_import"], waived = false },
-  { id = "VT-2", expects = "design VT-12 — the check gate moved altitude and the scope belt did not: the post-import gate resolves `CheckKind::Prove`, never `CheckKind::Commit` (§5.2.5, INV-2). Anchored in `verify.rs`, which OWNS `CheckKind` and its resolution — `dispatch.rs` never names the enum", test_file = "src/verify.rs", keywords = ["CheckKind::Prove", "resolve_check"], waived = false },
+  # VT-2 WAIVED at execution (SL-254 PHASE-06, 2026-08-13). The mandate is
+  # UNATTRIBUTABLE by construction, and the reason is instructive rather than
+  # incidental. It anchors on `src/verify.rs` because that module OWNS `CheckKind`
+  # and its resolution — which is true, and is exactly why the phase had no reason
+  # to touch it. `verify.rs` always owned BOTH kinds; what this slice changed is the
+  # CALLER, by deleting the worker-side mutating gate along with `worker_commit.rs`.
+  # A presence mandate cannot witness a claim whose evidence is a deletion in
+  # ANOTHER file, so the keywords match text that predates the slice and the gate
+  # correctly refuses to attribute them. Same structural limit as PHASE-03/VT-1, and
+  # the same remedy: waive the presence form, re-express the claim as an absence
+  # checked at agent altitude. Verified at execution: `CheckKind::Commit` now appears
+  # only as the user-facing `doctrine check commit` cadence (`verify.rs` + the
+  # `commands/check.rs` CLI arm); no worker-side gate resolves it.
+  { id = "VT-2", expects = "design VT-12 — the check gate moved altitude and the scope belt did not: the post-import gate resolves `CheckKind::Prove`, never `CheckKind::Commit` (§5.2.5, INV-2). Anchored in `verify.rs`, which OWNS `CheckKind` and its resolution — `dispatch.rs` never names the enum", test_file = "src/verify.rs", keywords = ["CheckKind::Prove", "resolve_check"], waived = true, waived_reason = "Unattributable by construction: `verify.rs` owns both CheckKinds and needed no edit — the change is the deletion of the worker-side caller in `worker_commit.rs`. Re-expressed as the absence claim VA-2." },
+  { id = "VA-2", expects = "APPENDED at PHASE-06. No worker-side mutating check gate survives: `CheckKind::Commit` is resolved ONLY by the user-facing `doctrine check commit` cadence (`src/verify.rs`'s table and `src/commands/check.rs`'s CLI arm), and by nothing on the dispatch/import path. Checked by grep at agent altitude, since the claim is an absence created by deleting a file rather than by editing the anchor." },
   { id = "VT-3", expects = "design VT-8 — the config key is gone everywhere; anchored on the surviving DispatchConfig surface so the mandate proves the file was re-cut rather than merely existing", test_file = "src/dispatch_config.rs", keywords = ["DispatchConfig"], waived = false },
   { id = "VA-1", expects = "`claude-force-subprocess-dispatch` and `claude_force_subprocess_dispatch` appear NOWHERE in the tree (src, tests, .doctrine, install, plugins, scripts). STD-001 absence claim, checked by grep at agent altitude." },
 ]
