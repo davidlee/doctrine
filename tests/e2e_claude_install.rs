@@ -171,9 +171,7 @@ fn assert_installed(dir: &Path) {
     );
 
     // SL-250 PHASE-04: the hooks are settings-wired, where nothing was between
-    // SL-152 PHASE-06 and here. The SubagentStart assertion changes MEANING
-    // rather than merely flipping: the retired SL-152 stamp hook stays gone, and
-    // what is present is the `worktree nominate` entry.
+    // SL-152 PHASE-06 and here.
     let settings = settings_path(dir);
     assert_eq!(
         event_entries(&settings, "WorktreeCreate").len(),
@@ -184,19 +182,6 @@ fn assert_installed(dir: &Path) {
         event_entries(&settings, "SessionStart").len(),
         2,
         "the emit and memory-sync hooks are settings-wired"
-    );
-    let subagent_start = event_entries(&settings, "SubagentStart");
-    assert_eq!(
-        subagent_start.len(),
-        1,
-        "the nominate hook is settings-wired"
-    );
-    let command = subagent_start[0]["hooks"][0]["command"]
-        .as_str()
-        .expect("command");
-    assert!(
-        command.ends_with("worktree nominate"),
-        "SubagentStart carries nominate, NOT the retired SL-152 stamp hook: {command}"
     );
 }
 
@@ -273,16 +258,16 @@ fn install_never_invokes_claude_plugin_machinery() {
     );
 }
 
-/// SL-250 PHASE-04 VT-3 / `EX-4`. A real install wires **eleven** entries across
-/// **five** events into the scope-selected settings file, where the Claude arm
+/// SL-250 PHASE-04 VT-3 / `EX-4`. A real install wires **nine** entries across
+/// **three** events into the scope-selected settings file, where the Claude arm
 /// wired none since SL-152 PHASE-06.
 ///
-/// Eleven is the number a human counts in `/hooks`. Seven is the spec count, and
-/// a criterion written against seven would pass a four-entries-short install —
+/// Nine is the number a human counts in `/hooks`. Five is the spec count, and
+/// a criterion written against five would pass a four-entries-short install —
 /// two specs carry multi-element matcher sets (four for `worktree pretooluse`,
 /// two for `memory surface`).
 #[test]
-fn install_wires_eleven_hook_entries_across_five_events() {
+fn install_wires_nine_hook_entries_across_three_events() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
@@ -297,8 +282,6 @@ fn install_wires_eleven_hook_entries_across_five_events() {
     let expected: &[(&str, usize)] = &[
         ("SessionStart", 2),
         ("WorktreeCreate", 1),
-        ("SubagentStart", 1),
-        ("SubagentStop", 1),
         ("PreToolUse", 6),
     ];
     let count = |dir: &Path| -> Vec<(&str, usize)> {
@@ -309,7 +292,7 @@ fn install_wires_eleven_hook_entries_across_five_events() {
     };
     assert_eq!(count(dir), expected.to_vec(), "entries per event");
     let total: usize = count(dir).iter().map(|(_, n)| n).sum();
-    assert_eq!(total, 11, "eleven entries across five events");
+    assert_eq!(total, 9, "nine entries across three events");
 
     // Two `PreToolUse` specs share the `Bash` matcher token, and ownership is
     // proven by COMMAND alone — so a re-install must refresh in place rather

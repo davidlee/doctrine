@@ -22,28 +22,6 @@
         ]
       }
     ],
-    "SubagentStart": [
-      {
-        "matcher": "dispatch-orchestrator",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${DOCTRINE_BIN:-doctrine} worktree nominate"
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "dispatch-orchestrator",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${DOCTRINE_BIN:-doctrine} worktree denominate"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

@@ -124,15 +124,14 @@ pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// project anchor (CLAUDE_PROJECT_DIR) — SL-182 PHASE-03 / SL-206 PHASE-11
+// project anchor (CLAUDE_PROJECT_DIR) — SL-182 PHASE-03
 // ---------------------------------------------------------------------------
 
 /// Harness-supplied project-root anchor (`docs/claude/hooks.md:462`). SINGLE
 /// SOURCE (STD-001): every hook handler that needs the FIXED, cwd-independent
-/// project root reads this ONE env var — `pretooluse`'s topology check, and
-/// SL-206's `nominate`/`denominate`/spawn-gate, which all fire in a hook
-/// process whose `cwd` may be the SPAWNED subagent's own tree, never the
-/// project root (design §5.6 / §4.3-1).
+/// project root reads this ONE env var — e.g. `pretooluse`'s topology check,
+/// which fires in a hook process whose `cwd` may be the SPAWNED subagent's own
+/// tree, never the project root (design §4.3-1).
 pub(crate) const ENV_PROJECT_DIR: &str = "CLAUDE_PROJECT_DIR";
 
 /// The harness-supplied project-root anchor, realpath'd. `None` ⇒ absent or

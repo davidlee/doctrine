@@ -124,7 +124,7 @@ fn env_leg_stays_root_independent_under_explicit_root() {
 }
 
 // RV-319 F-1 — a guarded verb that CONSUMES no project root must not ACCEPT one
-// either. These four are guarded (Write / Orchestrator / Hookmint) unit variants
+// either. These are guarded (Write / Orchestrator / Hookmint) unit variants
 // with no `path` field; `worktree create-fork` in particular derives its root from
 // the stdin payload cwd and never the process cwd, so a `-p` it accepted but ignored
 // would steer the guard away from the tree it actually writes to.
@@ -140,8 +140,6 @@ fn pathless_guarded_verbs_reject_explicit_root() {
     for args in [
         ["onboard", "-p", p].as_slice(),
         ["worktree", "create-fork", "-p", p].as_slice(),
-        ["worktree", "nominate", "-p", p].as_slice(),
-        ["worktree", "denominate", "-p", p].as_slice(),
     ] {
         let out = run_no_env(cwd.path(), args);
         let err = stderr(&out);

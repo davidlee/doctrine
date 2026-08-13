@@ -623,8 +623,6 @@ const WORKTREE_CREATE_MATCHER: &str = "*";
 /// inline (STD-001): a typo in an event key yields a silently-inert hook.
 const EVENT_SESSION_START: &str = "SessionStart";
 const EVENT_WORKTREE_CREATE: &str = "WorktreeCreate";
-const EVENT_SUBAGENT_START: &str = "SubagentStart";
-const EVENT_SUBAGENT_STOP: &str = "SubagentStop";
 const EVENT_PRE_TOOL_USE: &str = "PreToolUse";
 
 /// The matcher SETS a spec emits entries for, in emission order. Single-element
@@ -633,18 +631,6 @@ const EVENT_PRE_TOOL_USE: &str = "PreToolUse";
 const SESSION_MATCHERS: &[&str] = &[SESSION_MATCHER];
 const SESSION_MATCHERS_CODEX: &[&str] = &[SESSION_MATCHER_CODEX];
 const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
-
-/// The `SubagentStart` / `SubagentStop` matcher set: a subagent-event matcher IS
-/// an agent type, and the types these two hooks care about are exactly the
-/// nomination-eligible ones (`worktree::PRIVILEGED_AGENT_TYPES`).
-///
-/// Spelled out rather than aliased. Reaching into `worktree` for the const would
-/// buy single-sourcing at the price of a new command-tier edge (ADR-001), and
-/// the established answer here is a DRIFT TEST instead —
-/// `subagent_matchers_track_the_privileged_agent_types` fails the moment the two
-/// diverge, which is the actual hazard: a privileged type added to nomination
-/// without its hook matcher never fires the hook.
-const SUBAGENT_MATCHERS: &[&str] = &["dispatch-orchestrator"];
 
 /// The `PreToolUse` matcher sets. TWO specs share this event and both emit a
 /// `Bash` entry — safe because ownership is proven by COMMAND alone, so each
@@ -1038,12 +1024,10 @@ const SYNC_ARGS: &str = "memory sync";
 /// its ownership key. Multi-arg, so ownership matches by suffix-strip.
 const CREATE_FORK_ARGS: &str = "worktree create-fork";
 
-/// The four hooks SL-250 PHASE-04 moves off the plugin channel — each string is
+/// The hooks SL-250 PHASE-04 moves off the plugin channel — each string is
 /// both the command's argument suffix and its ownership key. Taken verbatim from
 /// `plugins/doctrine/hooks/hooks.json`, which stays the published plugin's
 /// payload.
-const NOMINATE_ARGS: &str = "worktree nominate";
-const DENOMINATE_ARGS: &str = "worktree denominate";
 const PRETOOLUSE_ARGS: &str = "worktree pretooluse";
 const MEMORY_SURFACE_ARGS: &str = "memory surface";
 
@@ -1083,19 +1067,6 @@ fn is_doctrine_emit_command(cmd: &str) -> bool {
 /// `WorktreeCreate` entry never clobbers the `SessionStart` ones.
 fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     is_doctrine_command(cmd, CREATE_FORK_ARGS)
-}
-
-/// Whether `cmd` is doctrine's own `worktree nominate` hook (`SubagentStart`).
-fn is_doctrine_nominate_command(cmd: &str) -> bool {
-    is_doctrine_command(cmd, NOMINATE_ARGS)
-}
-
-/// Whether `cmd` is doctrine's own `worktree denominate` hook (`SubagentStop`).
-/// Disjoint from the nominate predicate despite the shared tail: the suffix
-/// strip is anchored, so `… worktree denominate` never ends with the whole
-/// literal `worktree nominate`.
-fn is_doctrine_denominate_command(cmd: &str) -> bool {
-    is_doctrine_command(cmd, DENOMINATE_ARGS)
 }
 
 /// Whether `cmd` is doctrine's own `worktree pretooluse` hook — one command
@@ -1194,30 +1165,6 @@ impl HookSpec {
         }
     }
 
-    /// The `<exec> worktree nominate` hook — a `SubagentStart` entry that marks a
-    /// privileged orchestrator subagent unjailed.
-    fn nominate(exec: &Path) -> Self {
-        Self {
-            exec: exec.to_path_buf(),
-            args: NOMINATE_ARGS,
-            is_ours: is_doctrine_nominate_command,
-            event: EVENT_SUBAGENT_START,
-            matchers: SUBAGENT_MATCHERS,
-        }
-    }
-
-    /// The `<exec> worktree denominate` hook — the `SubagentStop` hygiene
-    /// counterpart to [`HookSpec::nominate`], on the same matcher set.
-    fn denominate(exec: &Path) -> Self {
-        Self {
-            exec: exec.to_path_buf(),
-            args: DENOMINATE_ARGS,
-            is_ours: is_doctrine_denominate_command,
-            event: EVENT_SUBAGENT_STOP,
-            matchers: SUBAGENT_MATCHERS,
-        }
-    }
-
     /// The `<exec> worktree pretooluse` hook — FOUR `PreToolUse` entries under
     /// one command, confining a subagent's tool calls to its worktree.
     fn pretooluse(exec: &Path) -> Self {
@@ -1246,10 +1193,10 @@ impl HookSpec {
 
 /// The Claude hook registry — the single enumeration of what doctrine activates.
 /// Order is emission order, both in the settings file and in the installer's
-/// output. Building it as a function rather than seven scattered calls is what
+/// output. Building it as a function rather than five scattered calls is what
 /// keeps a later manifest-vs-registry conformance check (IMP-407) cheap.
 ///
-/// Seven specs, ELEVEN entries: `pretooluse` carries four matchers and
+/// Five specs, NINE entries: `pretooluse` carries four matchers and
 /// `memory_surface` two. `sync` is here despite never having shipped in the
 /// plugin — it shares the file, the scope dial and the sweep.
 fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
@@ -1257,8 +1204,6 @@ fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
         HookSpec::boot_emit(exec, SESSION_MATCHERS),
         HookSpec::sync(exec),
         HookSpec::create_fork(exec),
-        HookSpec::nominate(exec),
-        HookSpec::denominate(exec),
         HookSpec::pretooluse(exec),
         HookSpec::memory_surface(exec),
     ]
@@ -1621,8 +1566,8 @@ fn install_refresh(
             })
         }
         Harness::Claude => {
-            // SL-250 PHASE-04: the arm merges the WHOLE registry — eleven entries
-            // across five events, where it wired none between SL-152 PHASE-06 and
+            // SL-250 PHASE-04: the arm merges the WHOLE registry — nine entries
+            // across three events, where it wired none between SL-152 PHASE-06 and
             // here (they shipped via the doctrine plugin, whose activation fails
             // silently at three independent layers). PHASE-06 retires the plugin
             // path; until then every hook exists on both channels and fires twice,
@@ -1684,7 +1629,7 @@ fn install_refresh(
 struct RefreshReport {
     /// One outcome per spec merged, in emission order. The Codex arm carries
     /// exactly one; the Claude arm carries the whole `claude_hook_specs`
-    /// registry — seven specs, eleven entries (SL-250 PHASE-04).
+    /// registry — five specs, nine entries (SL-250 PHASE-04).
     hooks: Vec<RefreshOutcome>,
     /// The scope written and what the sweep of its sibling found, folded across
     /// specs. `None` on the Codex arm, which has exactly one settings file and
@@ -2190,8 +2135,8 @@ pub(crate) fn write_scope_report(
             "  {tag}claude: could not sweep part of {abandoned} (malformed) — stale doctrine hooks may still fire there"
         )?;
     }
-    // Both flags are PER-SPEC facts folded across seven specs, so both lines are
-    // worded partially (RV-350 `F-3`). `removed > 0` and `skipped` co-occur
+    // Both flags are PER-SPEC facts folded across the registry's specs, so both
+    // lines are worded partially (RV-350 `F-3`). `removed > 0` and `skipped` co-occur
     // whenever one event's array in the TARGET is wrongly typed while the rest
     // merge: those specs sweep, that spec does not. A file-scoped "did not sweep
     // <abandoned>" would then sit directly beneath "evicted N entries from
@@ -4532,16 +4477,14 @@ mod tests {
         assert!(!is_doctrine_program("${DOCTRINE_BIN:-other}"));
     }
 
-    // SL-250 PHASE-04 VT-1. Each of the four new specs' arg strings is
-    // recognised by its own predicate — under a SPACED program path (the
+    // SL-250 PHASE-04 VT-1. Each of the specs moved off the plugin channel has
+    // its arg string recognised by its own predicate — under a SPACED program path (the
     // suffix-strip shape tolerates one, even though `sh -c` would split it) and
     // under the `/proc/self/exe` ` (deleted)` poison suffix, so a hook written
     // by a since-replaced binary is still healed rather than duplicated.
     #[test]
     fn is_doctrine_command_recognises_each_new_spec() {
         let cases: &[(&str, fn(&str) -> bool)] = &[
-            (NOMINATE_ARGS, is_doctrine_nominate_command),
-            (DENOMINATE_ARGS, is_doctrine_denominate_command),
             (PRETOOLUSE_ARGS, is_doctrine_pretooluse_command),
             (MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command),
         ];
@@ -4567,27 +4510,9 @@ mod tests {
         }
     }
 
-    /// SL-250 PHASE-04. The `SubagentStart`/`SubagentStop` matcher set and the
-    /// nomination-eligible set are the SAME set stated twice — the hooks exist
-    /// to act on privileged agents, so a type added to
-    /// `worktree::PRIVILEGED_AGENT_TYPES` without a matching hook matcher would
-    /// simply never fire the hook, silently.
-    ///
-    /// Pinned by a test rather than by aliasing the const: the alias is a
-    /// command-tier edge the ADR-001 gate counts, and this catches the same
-    /// drift at the same moment for none of that cost.
-    #[test]
-    fn subagent_matchers_track_the_privileged_agent_types() {
-        assert_eq!(
-            SUBAGENT_MATCHERS,
-            crate::worktree::PRIVILEGED_AGENT_TYPES,
-            "a privileged agent type without its hook matcher never fires the hook"
-        );
-    }
-
     // SL-250 PHASE-04 VT-1. The registry is internally safe: no spec's predicate
     // claims another spec's command. Asserted over `claude_hook_specs` itself
-    // rather than a hand-written list, so an eighth spec cannot join unchecked —
+    // rather than a hand-written list, so a further spec cannot join unchecked —
     // no longer self-evident now that two specs share `SessionStart` and two
     // share `PreToolUse`. A collision here does not fail loudly at runtime: the
     // normalize would silently drop the other spec's entries as its own stale
@@ -4596,7 +4521,7 @@ mod tests {
     fn predicates_are_pairwise_disjoint() {
         let exec = Path::new("/abs/doctrine");
         let specs = claude_hook_specs(exec);
-        assert_eq!(specs.len(), 7, "the registry is seven specs");
+        assert_eq!(specs.len(), 5, "the registry is five specs");
 
         for (i, spec) in specs.iter().enumerate() {
             // BOTH rendered forms, because both are owned and both can appear in
@@ -4979,7 +4904,7 @@ mod tests {
         let json = fs::read_to_string(&settings).unwrap();
         // The two SessionStart specs — the emit hook and `memory sync` — are
         // settings-wired now, where the arm wrote none since SL-152 PHASE-06.
-        // `commands` reads SessionStart only; the whole eleven-entry set is
+        // `commands` reads SessionStart only; the whole nine-entry set is
         // asserted by `every_wired_entry_carries_the_portable_command` and by
         // the e2e count.
         assert_eq!(
@@ -5016,9 +4941,9 @@ mod tests {
     }
 
     /// SL-250 PHASE-04 VT-2. SL-195's INV-1 — no absolute host path in a TRACKED
-    /// file — asserted across the whole eleven-entry set rather than the single
+    /// file — asserted across the whole nine-entry set rather than the single
     /// spec PHASE-02 could reach. The default scope is `Project`, which is
-    /// committed, so every one of the eleven commands must render portable; an
+    /// committed, so every one of the nine commands must render portable; an
     /// abspath in any one of them leaks this machine's layout into git.
     #[test]
     fn every_wired_entry_carries_the_portable_command() {
@@ -5034,8 +4959,6 @@ mod tests {
         for event in [
             EVENT_SESSION_START,
             EVENT_WORKTREE_CREATE,
-            EVENT_SUBAGENT_START,
-            EVENT_SUBAGENT_STOP,
             EVENT_PRE_TOOL_USE,
         ] {
             let entries =
@@ -5056,7 +4979,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(wired, 11, "eleven entries across five events: {json}");
+        assert_eq!(wired, 9, "nine entries across three events: {json}");
     }
 
     // --- SL-064 PHASE-08 T4 / VT-1: worktree.baseRef="head" installer ---
@@ -5724,9 +5647,8 @@ mod tests {
     // and both facts must print. An absorbing fold discards the `Removed(1)` and
     // reports only that it could not sweep a file it just deleted an entry from.
     //
-    // The design's example pairs SessionStart with SubagentStart; `nominate`
-    // arrives in PHASE-04, so this drives the identical shape through
-    // `create_fork` (WorktreeCreate) instead.
+    // The design's example pairs SessionStart with a second event; this drives
+    // the identical shape through `create_fork` (WorktreeCreate).
     #[test]
     fn a_partly_successful_sweep_reports_both_facts() {
         let dir = tempfile::tempdir().unwrap();
@@ -5813,8 +5735,8 @@ mod tests {
     }
 
     // RV-350 F-3. `removed` and `skipped` are both PER-SPEC facts folded across
-    // seven specs, so they co-occur: one wrongly-typed event array in the TARGET
-    // makes that spec `PrintedFallback` -> `NotAttempted` while the others merge
+    // the registry's specs, so they co-occur: one wrongly-typed event array in
+    // the TARGET makes that spec `PrintedFallback` -> `NotAttempted` while the others merge
     // and sweep. The rider then prints both lines about the SAME abandoned file,
     // and a file-scoped "did not sweep <abandoned>" would contradict the
     // "evicted N entries from <abandoned>" directly above it. Every line must

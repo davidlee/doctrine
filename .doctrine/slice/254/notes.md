@@ -6,9 +6,15 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-02 complete (2/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-03 complete (3/9) · see git log
 
 ### Produced
+- PHASE-03 done — `nominate`/`denominate`, the `PreToolUse(Agent|Workflow)` spawn
+  gate and doctor check #10 `SpawnSeamSymmetry` are gone (DEC-205), taking
+  `PRIVILEGED_AGENT_TYPES`, `is_privileged_agent_type`, `decide_agent`,
+  `decide_workflow`, `resolve_target`'s nomination parameter, seven orphaned
+  constants and `Category::SpawnSeamSymmetry` with them. ~1,265 lines net removed
+  across 18 files. `just gate` green at zero clippy warnings
 - PHASE-02 done — `scripts/pi-spawn-confined.sh` → `scripts/spawn-confined.sh`,
   harness as its first argument, `claude` profile added alongside `pi`
   (DEC-209/210/215/216), Linux `bwrap` probe naming `bwrap-unavailable` ahead of
@@ -44,6 +50,26 @@ fresh-as-of: 2026-08-13 · PHASE-02 complete (2/9) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **`doctrine install` CANNOT prune a retired hook entry, so `PHASE-03/EX-3`'s
+  and `PHASE-04/EX-5`'s prescribed mechanism does not reach their stated
+  outcome.** Hook reconciliation is per-`HookSpec` and ownership-keyed: install
+  visits each spec IN the registry and adds/refreshes its entry. An entry whose
+  spec has been *deleted* is never visited — and the predicate that could
+  recognise it (`is_doctrine_nominate_command`, keyed on `NOMINATE_ARGS`) was
+  deleted along with it. So the retirement of a hook is exactly what makes its
+  installed entry unownable and therefore unprunable. Verified live: after the
+  registry edit, `doctrine install` left both `SubagentStart`/`SubagentStop`
+  entries in `.claude/settings.json` untouched *and* re-added the four
+  `worktree pretooluse` entries. `PHASE-04` inherits this for its own four.
+  Candidate backlog card at reconcile — no id minted here (collision rule)
+- **Running `doctrine install` in this capsule RE-ARMS the wall mid-session.**
+  It restored the four `PreToolUse` `worktree pretooluse` entries the capsule
+  had locally stripped, and the wall immediately began refusing this session's
+  `Bash` *and* `Edit`/`Write` calls (`worktree-jail: cwd-not-a-worktree`) —
+  the primary checkout is not a linked worktree, so an agent-attributed call
+  resolves to `Target::Reject`. Recovery was via a tool outside the hook's
+  matcher set. The standing note that "confinement hooks are inert in this
+  capsule" holds only while nothing re-runs `install`
 - **`bwrap_argv` has the same hole `F-2` fixed on macOS** (PHASE-02 finding).
   The BINARY's Linux prefix builder emits no `--setenv DOCTRINE_WORKER 1`; only
   the spawn script's inline array does. Dormant today because nothing on Linux

@@ -155,8 +155,8 @@ function driveArm(a) {
 
 const arm = driveArm(args);
 // The bootstrap O₀ is PREP-ONLY (no previous worker to dispose). On the claude
-// arm that makes it READ-ONLY ⇒ the unprivileged, un-nominated dispatch-probe
-// role (least-privilege). Only the pi arm's O₀ needs unjail, because it
+// arm that makes it READ-ONLY ⇒ the unprivileged dispatch-probe role
+// (least-privilege). Only the pi arm's O₀ needs write access, because it
 // `git worktree add`s the first worker's tree.
 const bootstrapType = arm === 'pi' ? 'dispatch-orchestrator' : 'dispatch-probe';
 
@@ -188,7 +188,7 @@ function bootstrapPrompt(sliceId) {
 function hopPrompt(sliceId, phase, prep, forkTip) {
   const tip = forkTip == null ? 'null (import the worker WORKTREE DIFF — (A) path)' : forkTip;
   return [
-    `You are an interior ORCHESTRATOR (nominated-unjailed) for /drive-slice on`,
+    `You are an interior ORCHESTRATOR for /drive-slice on`,
     `slice ${sliceId}, phase ${phase}. You have TWO jobs in THIS one agent:`,
     `DISPOSE the just-run worker, then — iff its delta is accepted — PREP the next.`,
     ``,

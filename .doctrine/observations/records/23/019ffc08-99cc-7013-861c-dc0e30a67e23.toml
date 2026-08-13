@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffc08-99cc-7013-861c-dc0e30a67e23"
+recorded_at = "2026-08-13T16:50:49.932751773Z"
+kind = "friction"
+summary = "SL-254 PHASE-03 /execute — doctrine install cannot prune a retired hook entry; running it also re-armed the wall and locked the session out of Bash and Edit"
+detail = "PHASE-03/EX-3 prescribes 'edit the boot.rs HookSpec registry and re-run doctrine install, never hand-edit the JSON' to take .claude/settings.json from eleven hook entries to nine. That mechanism cannot work. Hook reconciliation is per-HookSpec and ownership-keyed: install iterates the specs currently IN the registry and adds/refreshes each one's entry. An entry whose spec was just deleted is never visited, and the ownership predicate that could identify it (is_doctrine_nominate_command, keyed on the NOMINATE_ARGS const) is deleted in the same edit. Retiring a hook is therefore precisely what makes its installed entry unownable and unprunable. Observed: after the registry edit, install left both SubagentStart/SubagentStop entries in place. Worse, it also RE-ADDED the four PreToolUse 'worktree pretooluse' entries that this capsule had locally stripped to keep the wall inert, and the wall went live immediately — the next Bash call and the next Edit/Write call were both refused with 'worktree-jail: cwd-not-a-worktree' (the primary checkout is not a linked worktree, so an agent-attributed call resolves to Target::Reject). That is a self-inflicted lockout with no shell and no file-write path; recovery required a tool outside the hook's matcher set. Two generalisable lessons: (1) a reconciler whose prune step is gated on ownership predicates that die with the thing being pruned has a structural blind spot for retirement, distinct from rename (which the codebase DOES self-heal, cf. LEGACY_EMIT_ARGS); (2) an agent editing the hook configuration that governs its own tool calls should treat every write to that file as potentially terminal and keep an out-of-band recovery path identified BEFORE writing. PHASE-04 inherits (1) for its own four pretooluse entries."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

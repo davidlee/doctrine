@@ -76,28 +76,6 @@
         "matcher": "startup|clear"
       }
     ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree nominate",
-            "type": "command"
-          }
-        ],
-        "matcher": "dispatch-orchestrator"
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree denominate",
-            "type": "command"
-          }
-        ],
-        "matcher": "dispatch-orchestrator"
-      }
-    ],
     "WorktreeCreate": [
       {
         "hooks": [
