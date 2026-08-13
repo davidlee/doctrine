@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa30-4e0d-74a0-9c29-c618b863b58a"
+recorded_at = "2026-08-13T08:14:57.549610318Z"
+kind = "friction"
+summary = "/design: the reviewing runbook can clear with a governance target set nobody re-derived"
+detail = "SL-254's governance survey under-counted five times in the same direction — ADR-011 four to five to eight to eleven, SPEC-012 one responsibility line to four falsified requirements, ADR-012 'not touched' to three regions, ADR-006 two corrections to nine, and ADR-008 unlisted to seven regions and a sixth target entity. Every correction came from reading an entity end to end rather than a summary of it. The governing-context-recorded contract asks that the surrounding rules were found and read, and its own prose warns the answer keeps moving — but the run has no obligation that distinguishes 'I derived the target set' from 'I cited the decision that recorded it', so a design can discharge the contract, take a hostile external pass, clear the reviewing runbook, and still be carrying a target set nobody re-derived. ADR-008 is the worst case: project-local, so no [[source]] anchor and no spec validate leg points at it, and nothing would have gone red at any stage. Captured as a skill/machine observation, not a slice one — the design's own R8 carries the SL-254 half."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

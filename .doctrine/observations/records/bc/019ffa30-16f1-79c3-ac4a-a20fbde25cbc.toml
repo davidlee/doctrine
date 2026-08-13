@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa30-16f1-79c3-ac4a-a20fbde25cbc"
+recorded_at = "2026-08-13T08:14:43.441188403Z"
+kind = "friction"
+summary = "/design: design apply's wire schema is only discoverable by reading submission.rs"
+detail = """The turn envelope's declaration_example shows only the 'declare' shape. Two enum encodings cost a failed apply each and a source read to fix: Declaration.provenance is INTERNALLY tagged (serde tag="provenance"), so it is {"provenance":{"provenance":"agent-proposed"}}, not a bare string; AgentActDeclaration.act is EXTERNALLY tagged, so it is {"blocking-set-declared":{"blocking":[]}}, not {"act":"blocking-set-declared",...}. The refusals were clear ('expected internally tagged enum Provenance', 'unknown variant act') but naming the accepted wire form in the refusal, or widening declaration_example past 'declare', would have saved two round trips and two file reads into src/design_run/."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

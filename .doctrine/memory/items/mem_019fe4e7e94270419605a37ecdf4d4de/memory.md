@@ -52,5 +52,40 @@ version of this memory you may have already read.
   `SL-249`, `slice conformance` owed nothing to anyone's recollection and was
   the only reader that found #6.
 
+## The eighth firing: a governance target set (`SL-254`, 2026-08-13)
+
+Same pattern, new class — and the most expensive shape of it, because there is no
+mechanical reader at all. `SL-254`'s `REV` target set was carried from `DEC-211`'s
+count and was wrong **five** times in the same direction, always low:
+
+| pass | correction |
+|---|---|
+| research → drafting | `ADR-011` four regions → five → eight |
+| `RV-355` `F-4` (external) | `SPEC-012`: one responsibility line → four falsified requirements |
+| `RV-355` `F-5` (external) | `ADR-012`: "not touched" → three regions |
+| re-derivation from the corpus | `ADR-006`: two corrections → nine regions |
+| re-derivation from the corpus | **`ADR-008`: unlisted → seven regions and a sixth target entity** |
+
+What generalises beyond the code-count case:
+
+- **Prose does not fail to compile, so there is no `slice conformance` to run.**
+  Every earlier firing here was ultimately caught by a mechanical check. This one
+  had none — `spec validate` does not follow a `[[source]]` anchor, and `ADR-008`
+  is project-local so nothing anchored at it. **Nothing would ever have gone red.**
+- **Grep for the mechanism misses the entity that names the *arm*.** `ADR-012`
+  `D3` falsifies on "the Claude `Agent` arm", never on `pretooluse`/`subagent`/
+  `worker_commit`. A mechanism-name sweep is the proxy, not the property; you have
+  to read every hit *in context* and accept that the sweep's recall is not 1.
+- **The design's own correction history is the tell.** `SL-254` recorded
+  "four, then five, then eight, each correction found by reading the ADR end to
+  end" as a *reviewer note* — evidence of care. It was actually the signal that the
+  count was still wrong. **A number that has been corrected twice should be
+  re-derived, not cited a third time.**
+- The fix that landed: record the derivation **method** in the decision, state
+  every count explicitly as a **floor**, and put the re-derivation on a `VH`
+  criterion at the phase that consumes it — so "we re-derived" is a claim someone
+  has to make, not an assumption the prose carries silently (`SL-254` `DEC-218`,
+  design `R8`).
+
 Related: [[mem.pattern.verification.guard-blind-to-its-own-residue]] — the same
 slice's fifth firing, and the argument for a second differently-shaped reader.

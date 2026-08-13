@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa30-2aec-7a93-be1e-aebb7b892a5c"
+recorded_at = "2026-08-13T08:14:48.556955079Z"
+kind = "friction"
+summary = "/design: no per-section read verb, so every section edit round-trips the whole body"
+detail = "Section prose moves only through 'design apply' with declare[].body, and body must be the section's ENTIRE text beginning with its heading. There is no 'design show --section sec-N' to read one back. The only safe edit path is to split the materialised design.md on its '<!-- doctrine:section sec-N -->' markers, patch the delta, and resubmit every touched body in full. For SL-254 that meant a 90KB apply payload to land what were, in several sections, one- and two-paragraph changes. Retyping a section from context instead would risk silent loss, so the split-and-patch loop is the correct move — but it is a scripting step every agent has to reinvent."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
