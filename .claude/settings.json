@@ -18,42 +18,6 @@
           }
         ],
         "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
-            "type": "command"
-          }
-        ],
-        "matcher": "Agent"
-      },
-      {
-        "hooks": [
-          {
-            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse",
-            "type": "command"
-          }
-        ],
-        "matcher": "Workflow"
       }
     ],
     "SessionStart": [

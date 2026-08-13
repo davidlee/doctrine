@@ -123,24 +123,10 @@ pub(crate) fn target_dir_for_branch(branch: &str) -> PathBuf {
     Path::new("wt").join(branch)
 }
 
-// ---------------------------------------------------------------------------
-// project anchor (CLAUDE_PROJECT_DIR) — SL-182 PHASE-03
-// ---------------------------------------------------------------------------
-
-/// Harness-supplied project-root anchor (`docs/claude/hooks.md:462`). SINGLE
-/// SOURCE (STD-001): every hook handler that needs the FIXED, cwd-independent
-/// project root reads this ONE env var — e.g. `pretooluse`'s topology check,
-/// which fires in a hook process whose `cwd` may be the SPAWNED subagent's own
-/// tree, never the project root (design §4.3-1).
-pub(crate) const ENV_PROJECT_DIR: &str = "CLAUDE_PROJECT_DIR";
-
-/// The harness-supplied project-root anchor, realpath'd. `None` ⇒ absent or
-/// uncanonicalizable ⇒ every consumer fails closed (never falls back to `cwd`,
-/// which a hook cannot trust — design §4.3-1).
-pub(crate) fn project_anchor() -> Option<PathBuf> {
-    let raw = std::env::var_os(ENV_PROJECT_DIR)?;
-    fs::canonicalize(PathBuf::from(raw)).ok()
-}
+// The `CLAUDE_PROJECT_DIR` anchor helper (`ENV_PROJECT_DIR` / `project_anchor`,
+// SL-182 PHASE-03) died with its sole consumer, the `worktree pretooluse` wall
+// (SL-254 PHASE-04, DEC-206). `memory surface` reads the same env var through its
+// own named constant, passed in as data rather than read here.
 
 // ---------------------------------------------------------------------------
 // Tests

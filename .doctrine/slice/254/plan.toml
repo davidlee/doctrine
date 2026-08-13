@@ -150,9 +150,22 @@ exit_criteria = [
   { id = "EX-1", text = "`src/worktree/pretooluse.rs` is deleted; the `Pretooluse` subcommand arm and re-export leave `src/worktree/mod.rs`." },
   { id = "EX-2", text = "`src/worktree/jail.rs` deletes every item orphaned by that: `enum Decision` (`:231`), `enum Target` (`:248`), `resolve_target` (`:377`), `pathcheck` (`:433`), `opaque_wrap` (`:472`), `shell_single_quote` (`:491`), `acquire_policy` (`:761`), `resolve_inputs` (`:825`), `seatbelt_backend` (`:839`), `decide_bash` (`:928`), `decide_write` (`:964`), and the five `REASON_*` constants feeding only them (`:94`, `:95`, `:96`, `:103`, `:109`), with their unit tests." },
   { id = "EX-3", text = "What SURVIVES in `jail.rs` is exactly the transitive closure of `jail_prefix.rs`'s imports plus `mod.rs`'s `JailPolicy` re-export: `resolve_with_policy`, `validate_policy`, `Backend`, `JailPolicy`, `RealEnv`, `ResolveEnv`, `select_jailer`, `Bwrap`, `Seatbelt`, `Jailer::wrap_argv`, `bwrap_argv`, `bwrap_core_argv`, `sandbox_exec_argv`, `seatbelt_profile`, `Topology`, `ResolveDeny`, `ResolvedMac`, `PolicyError`. Nothing else." },
+  # EX-4 DEFERRED TO PHASE-05 at execution (2026-08-13). Not satisfiable here, and
+  # not for a line-count reason: both classes still have LIVE PRODUCERS after this
+  # phase. `WriteClass::MarkerClear`'s producer is `WorktreeCommand::Marker { .. }`
+  # (the `--clear` form), which PHASE-05/EX-1 deletes, not this phase — and
+  # `write_class` is deliberately wildcard-free, so removing the class while the
+  # variant exists does not compile. Dropping only the `stamp_subagent: true` arm
+  # DOES compile, and that is the trap: `marker --stamp-subagent` would fall
+  # through to `MarkerClear`, which `worker_guard` passes through — the verb would
+  # silently stop being refused under worker mode while still existing. EX-8's own
+  # wording ("variants deleted by EX-1/EX-4") shows the mis-assignment: EX-1
+  # deletes `Pretooluse`, never `Marker`. Landed as PHASE-05/EX-9.
   { id = "EX-4", text = "`src/commands/guard.rs` drops the `Marker { stamp_subagent: true }` arm and the `WriteClass::MarkerClear` class with its pass-through leg (`:499`)." },
   { id = "EX-5", text = "`src/boot.rs` drops `HookSpec::pretooluse`; re-running `doctrine install` reconciles `.claude/settings.json`, removing the four `worktree pretooluse` entries across the `Bash`, `Edit|Write`, `Agent` and `Workflow` matchers. The two surviving `PreToolUse` entries are `memory surface` and are UNRELATED to this slice — do not touch them. Final installed set: FIVE entries across THREE events." },
   { id = "EX-6", text = "`tests/e2e_claude_install.rs` takes its SECOND cut: the count goes 9 → 5 and the test fn name settles at five-entries-across-three-events. PHASE-03/EX-4b already moved it 11 → 9 and dropped the nominate assertions; the design's 'the exact hook-count assertion moves by six' was one edit standing in for two phases' worth — under-count #7." },
+  # EX-8 DEFERRED TO PHASE-05 with EX-4 — it is the only pin on the classification
+  # EX-4 would have silently weakened, so it must not move before its subject does.
   { id = "EX-8", text = "`src/main.rs`'s `mod write_class_tests` drops `worktree_marker_stamp_subagent_is_hookmint` (`:627`) and the `WriteClass::MarkerClear` assertion (`:616`), both of which name variants deleted by EX-1/EX-4." },
   { id = "EX-7", text = "`just gate` green at zero clippy warnings." },
 ]
@@ -186,6 +199,14 @@ exit_criteria = [
   { id = "EX-6", text = "`src/test_support.rs` drops `WORKER_MARKER_REL` (`:62`, an STD-001 carve-out duplicate) and `worker_marker_at`'s marker leg. `tests/common/mod.rs` stops stamping the marker into fixture roots (`:158-180`). The 31 callers of `under_worker_marker` do NOT change — the helper contains the blast radius." },
   { id = "EX-7", text = "`src/mcp_server/tools.rs` (`:1389`) and `src/commands/observation.rs` (`:509`) drop the marker disjunct from their worker-context predicates. `src/regression_run.rs` drops marker-presence from selection state." },
   { id = "EX-8", text = "Tests: `e2e_worktree_stamp.rs` and `e2e_worktree_verify_worker.rs` DELETE with their subjects; `e2e_worktree_status_marker.rs` retargets onto the env-only predicate; `e2e_worker_guard.rs`, `e2e_worker_guard_explicit_root.rs` and `e2e_worker_gate_skip.rs` retarget onto the env-only signal (all three unlisted in the design; found by census)." },
+  # EX-9 APPENDED at execution (2026-08-13), carrying PHASE-04's EX-4 and EX-8 —
+  # ids are immutable and edits append, so this is a new criterion rather than a
+  # renumber. It lands HERE because this is the phase that deletes the producers:
+  # once `--clear` and `--stamp-subagent` are gone from `WorktreeCommand::Marker`,
+  # the write-class arms have no variant to classify and the guard cannot be
+  # silently weakened by their removal. See PHASE-04/EX-4's note for why it could
+  # not land there.
+  { id = "EX-9", text = "`src/commands/guard.rs` drops the `Marker { stamp_subagent: true }` arm and the `WriteClass::MarkerClear` class with its pass-through leg, and `src/main.rs`'s `mod write_class_tests` drops `worktree_marker_stamp_subagent_is_hookmint` and the `WriteClass::MarkerClear` assertion. Carried from PHASE-04/EX-4 + EX-8: `write_class` is wildcard-free, so these could only move once `WorktreeCommand::Marker`'s `--clear` / `--stamp-subagent` forms died (EX-1, EX-2). Deleting the `stamp_subagent` arm EARLY would have let `marker --stamp-subagent` fall through to `MarkerClear`, which `worker_guard` passes through — a silent loss of the worker-mode refusal while the verb still existed." },
 ]
 verification = [
   { id = "VT-1", expects = "design VT-4 — worker mode is a function of the environment alone: `describe_mode` is a two-row truth table, not eight; the `marker_on_main` test retires with its subject", test_file = "src/worktree/marker.rs", keywords = ["fn describe_mode", "env_worker_set"], waived = false },

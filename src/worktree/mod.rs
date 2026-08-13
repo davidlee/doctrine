@@ -23,17 +23,12 @@ pub(crate) use shared::{classify_worktree_role, coord_branch_slice, is_linked_wo
 
 mod allowlist;
 
-// SL-182 PHASE-02: pure jail core (leaf). Skeleton (T0) → TDD-filled T1..T8;
-// consumed by the PHASE-03 `pretooluse` shell. Dead-code is held by a module-inner
-// `expect` in jail.rs (covers both cfg while items are unconsumed).
+// SL-182 PHASE-02: pure jail core (leaf). Since SL-254 PHASE-04 its only
+// consumer is the `jail-prefix` command tier — the `PreToolUse` shell that drove
+// the decision layer is gone (DEC-206). Dead-code is held by a module-inner
+// `expect` in jail.rs (the macOS surface is unreachable on a Linux build).
 mod jail;
 pub(crate) use jail::JailPolicy;
-
-// SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
-// core (leaf) with impure inputs resolved here: git topology, host capability,
-// path canonicalization. `run_pretooluse` is the `WorktreeCommand::Pretooluse` entry.
-mod pretooluse;
-pub(crate) use pretooluse::run_pretooluse;
 
 // SL-185 PHASE-02: the `jail-prefix` command (command tier). Emits a confinement
 // wrap prefix (NUL-delimited argv terminating in `--`) to `--out` for the
@@ -214,16 +209,6 @@ pub(crate) enum WorktreeCommand {
     /// stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
     /// Orchestrator-classed — fires in the markerless parent coord tree.
     CreateFork,
-
-    /// Confine a subagent tool call for the claude `PreToolUse` hook (stdin
-    /// payload). Reads `{agent_id?, cwd, tool_name, tool_input}` JSON on stdin;
-    /// a subagent (`agent_id` present) whose `cwd` is a worktree of THIS project
-    /// is confined — Bash is rewritten via `updatedInput` into a nested bwrap
-    /// jail; Edit/Write escaping the worktree is denied. The orchestrator
-    /// (no `agent_id`) passes through. Emits `hookSpecificOutput` JSON (or
-    /// nothing) on stdout; **exit 0 always** — deny is data, not an exit code
-    /// (`mem.fact.claude.pretooluse-hook-fail-open`).
-    Pretooluse,
 
     /// Emit a confinement wrap PREFIX for the subprocess (pi) spawn arm (SL-185).
     /// Resolves a jail backend for `--dir` under an inline policy (`--network`,
@@ -478,7 +463,6 @@ pub(crate) fn dispatch(
         // the act. This arm stays correct for any direct caller — it just does not land
         // a row, because this module must not import `dispatch::` (ADR-001 back-cycle).
         WorktreeCommand::CreateFork => run_create_fork().map(drop),
-        WorktreeCommand::Pretooluse => run_pretooluse(),
         WorktreeCommand::JailPrefix {
             dir,
             main_root,

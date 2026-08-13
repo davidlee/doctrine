@@ -6,9 +6,16 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-03 complete (3/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-04 complete (4/9) · see git log
 
 ### Produced
+- PHASE-04 done — `worktree pretooluse` and the whole pure decision layer it was
+  the sole caller of are gone. `pretooluse.rs` deleted (877 lines); `jail.rs`
+  2,267 → 1,652, keeping EXACTLY the transitive closure of `jail_prefix.rs`'s
+  imports plus the `JailPolicy` re-export (EX-3 verified closed both ways —
+  nothing missing, nothing extra). Installed hook set 9 entries/3 events → 5/3;
+  the two surviving `PreToolUse` entries are `memory surface` and were not
+  touched. `just gate` green at zero clippy warnings, which IS VA-1's claim
 - PHASE-03 done — `nominate`/`denominate`, the `PreToolUse(Agent|Workflow)` spawn
   gate and doctor check #10 `SpawnSeamSymmetry` are gone (DEC-205), taking
   `PRIVILEGED_AGENT_TYPES`, `is_privileged_agent_type`, `decide_agent`,
@@ -50,6 +57,24 @@ fresh-as-of: 2026-08-13 · PHASE-03 complete (3/9) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **PHASE-04's `EX-4` and `EX-8` are mis-phased and were DEFERRED to PHASE-05
+  as its new `EX-9`** (annotated in `plan.toml` at all three sites). They ask
+  `guard.rs` to drop the `Marker { stamp_subagent: true }` arm and the
+  `WriteClass::MarkerClear` class, on the stated ground that these "name
+  variants deleted by EX-1/EX-4" — but `EX-1` deletes `Pretooluse`, never
+  `Marker`, whose `--clear` / `--stamp-subagent` forms die in PHASE-05. Since
+  `write_class` is wildcard-free, removing the class early does not compile;
+  removing only the `stamp_subagent` arm DOES compile and is the trap — the
+  verb would fall through to `MarkerClear`, which `worker_guard` passes
+  through, silently losing the worker-mode refusal while the verb still exists
+- **The per-arming jail policy file has no production reader after PHASE-04.**
+  `RealEnv::read_policy` and `JailPolicy::from_toml_str` are test-only now
+  (`jail-prefix` takes policy inline via `--extra-rw`/`--network`), yet
+  `create-fork` still WRITES `.doctrine/state/dispatch/jail/<name>.toml`. Live
+  write, dead read. Candidate PHASE-05/06 or reconcile item
+- **`base64` is now an unused dependency** — it existed for `opaque_wrap`, which
+  PHASE-04 deleted. `Cargo.toml` still declares it citing SL-182 `INV-5`. Left
+  alone rather than touch `Cargo.toml` mid-slice
 - **`doctrine install` CANNOT prune a retired hook entry, so `PHASE-03/EX-3`'s
   and `PHASE-04/EX-5`'s prescribed mechanism does not reach their stated
   outcome.** Hook reconciliation is per-`HookSpec` and ownership-keyed: install

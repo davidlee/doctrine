@@ -258,16 +258,18 @@ fn install_never_invokes_claude_plugin_machinery() {
     );
 }
 
-/// SL-250 PHASE-04 VT-3 / `EX-4`. A real install wires **nine** entries across
-/// **three** events into the scope-selected settings file, where the Claude arm
-/// wired none since SL-152 PHASE-06.
+/// SL-250 PHASE-04 VT-3 / `EX-4`; recounted by SL-254 PHASE-04, which deleted
+/// the four-entry `worktree pretooluse` confinement spec (DEC-206). A real
+/// install wires **five** entries across **three** events into the
+/// scope-selected settings file, where the Claude arm wired none since SL-152
+/// PHASE-06.
 ///
-/// Nine is the number a human counts in `/hooks`. Five is the spec count, and
-/// a criterion written against five would pass a four-entries-short install —
-/// two specs carry multi-element matcher sets (four for `worktree pretooluse`,
-/// two for `memory surface`).
+/// Five is the number a human counts in `/hooks`. Four is the spec count, and
+/// they differ by one because `memory surface` carries a two-element matcher
+/// set — so a criterion written against the spec count would pass an
+/// entry-short install.
 #[test]
-fn install_wires_nine_hook_entries_across_three_events() {
+fn install_wires_five_hook_entries_across_three_events() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
@@ -282,7 +284,7 @@ fn install_wires_nine_hook_entries_across_three_events() {
     let expected: &[(&str, usize)] = &[
         ("SessionStart", 2),
         ("WorktreeCreate", 1),
-        ("PreToolUse", 6),
+        ("PreToolUse", 2),
     ];
     let count = |dir: &Path| -> Vec<(&str, usize)> {
         expected
@@ -292,28 +294,20 @@ fn install_wires_nine_hook_entries_across_three_events() {
     };
     assert_eq!(count(dir), expected.to_vec(), "entries per event");
     let total: usize = count(dir).iter().map(|(_, n)| n).sum();
-    assert_eq!(total, 9, "nine entries across three events");
+    assert_eq!(total, 5, "five entries across three events");
 
-    // Two `PreToolUse` specs share the `Bash` matcher token, and ownership is
-    // proven by COMMAND alone — so a re-install must refresh in place rather
-    // than treat the sibling's entries as its own stale copies and drop them,
-    // or append a duplicate set. Idempotence is the assertion that says so.
+    // Ownership is proven by COMMAND alone — so a re-install must refresh in
+    // place rather than treat an entry as its own stale copy and drop it, or
+    // append a duplicate set. Idempotence is the assertion that says so.
     install(dir);
     assert_eq!(count(dir), expected.to_vec(), "re-install is idempotent");
 
-    // Both PreToolUse commands are present, four entries to two.
+    // The surviving `PreToolUse` spec is `memory surface`, across its two
+    // matchers. (Unrelated to the confinement wall SL-254 PHASE-04 deleted.)
     let pretooluse: Vec<String> = event_entries(&settings, "PreToolUse")
         .iter()
         .map(|e| e["hooks"][0]["command"].as_str().expect("command").into())
         .collect();
-    assert_eq!(
-        pretooluse
-            .iter()
-            .filter(|c| c.ends_with("worktree pretooluse"))
-            .count(),
-        4,
-        "four confinement entries: {pretooluse:?}"
-    );
     assert_eq!(
         pretooluse
             .iter()

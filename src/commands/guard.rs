@@ -238,11 +238,6 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             // verify-worker is a HEAD read + marker probe + is-ancestor compare on
             // the worker dir — no authored write, diagnostic only; harmless under
             // worker-mode (design §8.4/§8.6 lists no impersonation test for it).
-            // pretooluse is the claude `PreToolUse` hook verb (SL-182 PHASE-03) —
-            // it reads stdin + git topology and emits a decision, writing NO
-            // authored state. It fires INSIDE the confined subagent (worker
-            // context) on every tool call, so it MUST be open under worker-mode —
-            // Read.
             // list is the worktree inventory verb (SL-190 PHASE-05) — a
             // read-only enumeration + landed probe, no authored write; open to
             // workers.
@@ -250,7 +245,6 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | WorktreeCommand::CheckAllowlist { .. }
             | WorktreeCommand::BranchPointCheck { .. }
             | WorktreeCommand::VerifyWorker { .. }
-            | WorktreeCommand::Pretooluse
             | WorktreeCommand::Status { .. }
             | WorktreeCommand::List { .. } => Read,
             // fork creates an orchestrator-owned worktree (SL-056 PHASE-06) — the

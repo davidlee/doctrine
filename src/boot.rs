@@ -632,10 +632,9 @@ const SESSION_MATCHERS: &[&str] = &[SESSION_MATCHER];
 const SESSION_MATCHERS_CODEX: &[&str] = &[SESSION_MATCHER_CODEX];
 const WORKTREE_CREATE_MATCHERS: &[&str] = &[WORKTREE_CREATE_MATCHER];
 
-/// The `PreToolUse` matcher sets. TWO specs share this event and both emit a
-/// `Bash` entry — safe because ownership is proven by COMMAND alone, so each
-/// spec treats the other's entries as foreign and preserves them.
-const PRETOOLUSE_MATCHERS_WORKTREE: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
+/// The `PreToolUse` matcher set. One spec (`memory surface`) holds this event
+/// since SL-254 PHASE-04 deleted the `worktree pretooluse` confinement spec that
+/// shared it (DEC-206); the ordered-set shape is unchanged.
 const PRETOOLUSE_MATCHERS_SURFACE: &[&str] = &["Read|Edit|Write", "Bash"];
 
 // ---------------------------------------------------------------------------
@@ -1028,7 +1027,6 @@ const CREATE_FORK_ARGS: &str = "worktree create-fork";
 /// both the command's argument suffix and its ownership key. Taken verbatim from
 /// `plugins/doctrine/hooks/hooks.json`, which stays the published plugin's
 /// payload.
-const PRETOOLUSE_ARGS: &str = "worktree pretooluse";
 const MEMORY_SURFACE_ARGS: &str = "memory surface";
 
 /// Whether `cmd` is `<doctrine> <args>` — the shared suffix-strip ownership
@@ -1069,15 +1067,9 @@ fn is_doctrine_create_fork_command(cmd: &str) -> bool {
     is_doctrine_command(cmd, CREATE_FORK_ARGS)
 }
 
-/// Whether `cmd` is doctrine's own `worktree pretooluse` hook — one command
-/// across FOUR `PreToolUse` matchers, which is the shape command-only ownership
-/// (`DEC-161`) exists to express.
-fn is_doctrine_pretooluse_command(cmd: &str) -> bool {
-    is_doctrine_command(cmd, PRETOOLUSE_ARGS)
-}
-
-/// Whether `cmd` is doctrine's own `memory surface` hook — the second
-/// `PreToolUse` spec, sharing the `Bash` matcher with the first.
+/// Whether `cmd` is doctrine's own `memory surface` hook — the `PreToolUse`
+/// spec, one command across TWO matchers, which is the shape command-only
+/// ownership (`DEC-161`) exists to express.
 fn is_doctrine_memory_surface_command(cmd: &str) -> bool {
     is_doctrine_command(cmd, MEMORY_SURFACE_ARGS)
 }
@@ -1165,21 +1157,8 @@ impl HookSpec {
         }
     }
 
-    /// The `<exec> worktree pretooluse` hook — FOUR `PreToolUse` entries under
-    /// one command, confining a subagent's tool calls to its worktree.
-    fn pretooluse(exec: &Path) -> Self {
-        Self {
-            exec: exec.to_path_buf(),
-            args: PRETOOLUSE_ARGS,
-            is_ours: is_doctrine_pretooluse_command,
-            event: EVENT_PRE_TOOL_USE,
-            matchers: PRETOOLUSE_MATCHERS_WORKTREE,
-        }
-    }
-
     /// The `<exec> memory surface` hook — TWO `PreToolUse` entries surfacing
-    /// scope-relevant memories, sharing the `Bash` matcher with
-    /// [`HookSpec::pretooluse`].
+    /// scope-relevant memories.
     fn memory_surface(exec: &Path) -> Self {
         Self {
             exec: exec.to_path_buf(),
@@ -1196,15 +1175,14 @@ impl HookSpec {
 /// output. Building it as a function rather than five scattered calls is what
 /// keeps a later manifest-vs-registry conformance check (IMP-407) cheap.
 ///
-/// Five specs, NINE entries: `pretooluse` carries four matchers and
-/// `memory_surface` two. `sync` is here despite never having shipped in the
-/// plugin — it shares the file, the scope dial and the sweep.
+/// Four specs, FIVE entries: three carry a single matcher each and
+/// `memory_surface` carries two. `sync` is here despite never having shipped in
+/// the plugin — it shares the file, the scope dial and the sweep.
 fn claude_hook_specs(exec: &Path) -> Vec<HookSpec> {
     vec![
         HookSpec::boot_emit(exec, SESSION_MATCHERS),
         HookSpec::sync(exec),
         HookSpec::create_fork(exec),
-        HookSpec::pretooluse(exec),
         HookSpec::memory_surface(exec),
     ]
 }
@@ -1566,9 +1544,11 @@ fn install_refresh(
             })
         }
         Harness::Claude => {
-            // SL-250 PHASE-04: the arm merges the WHOLE registry — nine entries
-            // across three events, where it wired none between SL-152 PHASE-06 and
-            // here (they shipped via the doctrine plugin, whose activation fails
+            // SL-250 PHASE-04: the arm merges the WHOLE registry — five entries
+            // across three events (SL-254 PHASE-04 retired the four confinement
+            // entries with the `pretooluse` wall), where it wired none between
+            // SL-152 PHASE-06 and here (they shipped via the doctrine plugin,
+            // whose activation fails
             // silently at three independent layers). PHASE-06 retires the plugin
             // path; until then every hook exists on both channels and fires twice,
             // which is the intended cost of the safe ordering (`DEC-167`) — the
@@ -1629,7 +1609,7 @@ fn install_refresh(
 struct RefreshReport {
     /// One outcome per spec merged, in emission order. The Codex arm carries
     /// exactly one; the Claude arm carries the whole `claude_hook_specs`
-    /// registry — five specs, nine entries (SL-250 PHASE-04).
+    /// registry — four specs, five entries (SL-250 PHASE-04; SL-254 PHASE-04).
     hooks: Vec<RefreshOutcome>,
     /// The scope written and what the sweep of its sibling found, folded across
     /// specs. `None` on the Codex arm, which has exactly one settings file and
@@ -4484,10 +4464,8 @@ mod tests {
     // by a since-replaced binary is still healed rather than duplicated.
     #[test]
     fn is_doctrine_command_recognises_each_new_spec() {
-        let cases: &[(&str, fn(&str) -> bool)] = &[
-            (PRETOOLUSE_ARGS, is_doctrine_pretooluse_command),
-            (MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command),
-        ];
+        let cases: &[(&str, fn(&str) -> bool)] =
+            &[(MEMORY_SURFACE_ARGS, is_doctrine_memory_surface_command)];
         for (args, is_ours) in cases {
             assert!(is_ours(&format!("/x/doctrine {args}")), "abspath: {args}");
             assert!(
@@ -4513,15 +4491,15 @@ mod tests {
     // SL-250 PHASE-04 VT-1. The registry is internally safe: no spec's predicate
     // claims another spec's command. Asserted over `claude_hook_specs` itself
     // rather than a hand-written list, so a further spec cannot join unchecked —
-    // no longer self-evident now that two specs share `SessionStart` and two
-    // share `PreToolUse`. A collision here does not fail loudly at runtime: the
+    // no longer self-evident now that two specs share `SessionStart`. A
+    // collision here does not fail loudly at runtime: the
     // normalize would silently drop the other spec's entries as its own stale
     // copies, and the install would report success.
     #[test]
     fn predicates_are_pairwise_disjoint() {
         let exec = Path::new("/abs/doctrine");
         let specs = claude_hook_specs(exec);
-        assert_eq!(specs.len(), 5, "the registry is five specs");
+        assert_eq!(specs.len(), 4, "the registry is four specs");
 
         for (i, spec) in specs.iter().enumerate() {
             // BOTH rendered forms, because both are owned and both can appear in
@@ -4570,35 +4548,39 @@ mod tests {
 
     // --- SL-250 PHASE-01: the ordered matcher set (N>1) ---
     //
-    // Driven by a TEST-LOCAL spec, not a production constructor (EX-9): the four
-    // multi-matcher specs arrive in PHASE-04 with their caller, and shipping them
-    // early would buy an `expect(dead_code)` allowance that phase then has to
-    // clean up. It also keeps the merge core's own suite independent of whatever
-    // the registry happens to contain.
+    // Driven by a TEST-LOCAL spec, not a production constructor (EX-9): shipping a
+    // multi-matcher constructor early would buy an `expect(dead_code)` allowance a
+    // later phase has to clean up. It also keeps the merge core's own suite
+    // independent of whatever the registry happens to contain — which is why the
+    // fixture SURVIVED SL-254 PHASE-04's deletion of the real four-matcher spec
+    // (`worktree pretooluse`): it is synthetic, and named so since that phase.
 
-    const TEST_PRETOOLUSE_ARGS: &str = "worktree pretooluse";
-    const TEST_PRETOOLUSE_MATCHERS: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
-    const TEST_PRETOOLUSE_EVENT: &str = "PreToolUse";
+    const TEST_MULTI_MATCHER_ARGS: &str = "synth multi-matcher";
+    const TEST_MULTI_MATCHER_MATCHERS: &[&str] = &["Bash", "Edit|Write", "Agent", "Workflow"];
+    const TEST_MULTI_MATCHER_EVENT: &str = "PreToolUse";
+    /// The baked rendering of the synthetic spec's command, as it appears in a
+    /// settings file (`<program> <args>`).
+    const TEST_MULTI_MATCHER_CMD: &str = "/abs/doctrine synth multi-matcher";
 
-    fn is_test_pretooluse_command(cmd: &str) -> bool {
-        is_doctrine_command(cmd, TEST_PRETOOLUSE_ARGS)
+    fn is_test_multi_matcher_command(cmd: &str) -> bool {
+        is_doctrine_command(cmd, TEST_MULTI_MATCHER_ARGS)
     }
 
     /// A four-matcher spec over one command — the shape that could not be
     /// expressed before this phase (one predicate marked all four entries owned
     /// and the normalize collapsed them to one).
-    fn pretooluse_spec(exec: &Path) -> HookSpec {
+    fn multi_matcher_spec(exec: &Path) -> HookSpec {
         HookSpec {
             exec: exec.to_path_buf(),
-            args: TEST_PRETOOLUSE_ARGS,
-            is_ours: is_test_pretooluse_command,
-            event: TEST_PRETOOLUSE_EVENT,
-            matchers: TEST_PRETOOLUSE_MATCHERS,
+            args: TEST_MULTI_MATCHER_ARGS,
+            is_ours: is_test_multi_matcher_command,
+            event: TEST_MULTI_MATCHER_EVENT,
+            matchers: TEST_MULTI_MATCHER_MATCHERS,
         }
     }
 
-    fn pretooluse_entries(json: &str) -> Vec<Value> {
-        event_entries(json, TEST_PRETOOLUSE_EVENT).expect("PreToolUse entries")
+    fn multi_matcher_entries(json: &str) -> Vec<Value> {
+        event_entries(json, TEST_MULTI_MATCHER_EVENT).expect("PreToolUse entries")
     }
 
     fn matchers_of(entries: &[Value]) -> Vec<&str> {
@@ -4611,18 +4593,18 @@ mod tests {
     #[test]
     fn plan_hook_emits_one_entry_per_matcher() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
         let plan = plan_hook(None, &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
 
         let json = plan.new_json.expect("wired ⇒ json");
-        let entries = pretooluse_entries(&json);
-        assert_eq!(entries.len(), TEST_PRETOOLUSE_MATCHERS.len());
-        assert_eq!(matchers_of(&entries), TEST_PRETOOLUSE_MATCHERS);
+        let entries = multi_matcher_entries(&json);
+        assert_eq!(entries.len(), TEST_MULTI_MATCHER_MATCHERS.len());
+        assert_eq!(matchers_of(&entries), TEST_MULTI_MATCHER_MATCHERS);
         for entry in &entries {
             assert_eq!(
                 entry["hooks"][0]["command"],
-                Value::String("/abs/doctrine worktree pretooluse".into())
+                Value::String(TEST_MULTI_MATCHER_CMD.into())
             );
         }
     }
@@ -4630,7 +4612,7 @@ mod tests {
     #[test]
     fn plan_hook_is_a_no_op_on_the_canonical_set() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
         let wired = plan_hook(None, &spec, CommandForm::Baked)
             .new_json
             .expect("wired ⇒ json");
@@ -4643,7 +4625,7 @@ mod tests {
     #[test]
     fn plan_hook_heals_a_partial_hand_edit() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
         let wired = plan_hook(None, &spec, CommandForm::Baked)
             .new_json
             .expect("wired ⇒ json");
@@ -4651,7 +4633,7 @@ mod tests {
         // Hand-delete the third of four entries. Entry identity is the SET, so
         // the whole set is rewritten rather than the gap being patched.
         let mut value: Value = serde_json::from_str(&wired).expect("valid json");
-        value["hooks"][TEST_PRETOOLUSE_EVENT]
+        value["hooks"][TEST_MULTI_MATCHER_EVENT]
             .as_array_mut()
             .expect("array")
             .remove(2);
@@ -4661,23 +4643,23 @@ mod tests {
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.expect("refreshed ⇒ json");
         assert_eq!(
-            matchers_of(&pretooluse_entries(&json)),
-            TEST_PRETOOLUSE_MATCHERS
+            matchers_of(&multi_matcher_entries(&json)),
+            TEST_MULTI_MATCHER_MATCHERS
         );
     }
 
     #[test]
     fn plan_hook_heals_a_stale_matcher() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
 
         // An owned entry on a matcher the spec no longer carries. Ownership is
         // by command alone (DEC-161), so it is recognised as ours and rewritten
         // onto the canonical set — never orphaned beside a fresh duplicate.
         let seeded = serde_json::to_string_pretty(&serde_json::json!({
-            "hooks": { TEST_PRETOOLUSE_EVENT: [
+            "hooks": { TEST_MULTI_MATCHER_EVENT: [
                 { "matcher": "Retired", "hooks": [
-                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] }
+                    { "type": "command", "command": TEST_MULTI_MATCHER_CMD } ] }
             ] }
         }))
         .expect("serialisable");
@@ -4685,11 +4667,11 @@ mod tests {
         let plan = plan_hook(Some(&seeded), &spec, CommandForm::Baked);
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let json = plan.new_json.expect("refreshed ⇒ json");
-        let entries = pretooluse_entries(&json);
-        assert_eq!(matchers_of(&entries), TEST_PRETOOLUSE_MATCHERS);
+        let entries = multi_matcher_entries(&json);
+        assert_eq!(matchers_of(&entries), TEST_MULTI_MATCHER_MATCHERS);
         assert_eq!(
             entries.len(),
-            TEST_PRETOOLUSE_MATCHERS.len(),
+            TEST_MULTI_MATCHER_MATCHERS.len(),
             "no orphan left"
         );
     }
@@ -4697,16 +4679,16 @@ mod tests {
     #[test]
     fn plan_hook_preserves_foreign_entries_around_a_matcher_set() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
 
         // A foreign entry BEFORE and AFTER a stale owned one. The set replaces
         // the owned entry in place; neither neighbour moves or is dropped.
         let seeded = serde_json::to_string_pretty(&serde_json::json!({
-            "hooks": { TEST_PRETOOLUSE_EVENT: [
+            "hooks": { TEST_MULTI_MATCHER_EVENT: [
                 { "matcher": "Bash", "hooks": [
                     { "type": "command", "command": "/usr/bin/foreign before" } ] },
                 { "matcher": "Stale", "hooks": [
-                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] },
+                    { "type": "command", "command": TEST_MULTI_MATCHER_CMD } ] },
                 { "matcher": "Agent", "hooks": [
                     { "type": "command", "command": "/usr/bin/foreign after" } ] }
             ] }
@@ -4718,13 +4700,13 @@ mod tests {
             .expect("refreshed ⇒ json");
 
         assert_eq!(
-            event_commands(&json, TEST_PRETOOLUSE_EVENT),
+            event_commands(&json, TEST_MULTI_MATCHER_EVENT),
             vec![
                 "/usr/bin/foreign before".to_string(),
-                "/abs/doctrine worktree pretooluse".to_string(),
-                "/abs/doctrine worktree pretooluse".to_string(),
-                "/abs/doctrine worktree pretooluse".to_string(),
-                "/abs/doctrine worktree pretooluse".to_string(),
+                TEST_MULTI_MATCHER_CMD.to_string(),
+                TEST_MULTI_MATCHER_CMD.to_string(),
+                TEST_MULTI_MATCHER_CMD.to_string(),
+                TEST_MULTI_MATCHER_CMD.to_string(),
                 "/usr/bin/foreign after".to_string(),
             ],
             "the set inserts contiguously at the first owned slot, foreigns intact"
@@ -4734,16 +4716,16 @@ mod tests {
     #[test]
     fn plan_hook_preserves_a_foreign_hook_sibling() {
         let exec = Path::new("/abs/doctrine");
-        let spec = pretooluse_spec(exec);
+        let spec = multi_matcher_spec(exec);
 
         // One entry carrying BOTH an owned hook and a foreign one. The entry
         // survives the drop (it retains the foreign hook), so the set is
         // inserted AFTER it rather than at its slot.
         let seeded = serde_json::to_string_pretty(&serde_json::json!({
-            "hooks": { TEST_PRETOOLUSE_EVENT: [
+            "hooks": { TEST_MULTI_MATCHER_EVENT: [
                 { "matcher": "shared", "keepKey": "v", "hooks": [
                     { "type": "command", "command": "/usr/bin/foreign hook" },
-                    { "type": "command", "command": "/abs/doctrine worktree pretooluse" } ] }
+                    { "type": "command", "command": TEST_MULTI_MATCHER_CMD } ] }
             ] }
         }))
         .expect("serialisable");
@@ -4752,10 +4734,10 @@ mod tests {
             .new_json
             .expect("refreshed ⇒ json");
 
-        let entries = pretooluse_entries(&json);
+        let entries = multi_matcher_entries(&json);
         assert_eq!(matchers_of(&entries), {
             let mut expected = vec!["shared"];
-            expected.extend(TEST_PRETOOLUSE_MATCHERS);
+            expected.extend(TEST_MULTI_MATCHER_MATCHERS);
             expected
         });
         assert_eq!(
@@ -4904,7 +4886,7 @@ mod tests {
         let json = fs::read_to_string(&settings).unwrap();
         // The two SessionStart specs — the emit hook and `memory sync` — are
         // settings-wired now, where the arm wrote none since SL-152 PHASE-06.
-        // `commands` reads SessionStart only; the whole nine-entry set is
+        // `commands` reads SessionStart only; the whole five-entry set is
         // asserted by `every_wired_entry_carries_the_portable_command` and by
         // the e2e count.
         assert_eq!(
@@ -4941,9 +4923,9 @@ mod tests {
     }
 
     /// SL-250 PHASE-04 VT-2. SL-195's INV-1 — no absolute host path in a TRACKED
-    /// file — asserted across the whole nine-entry set rather than the single
+    /// file — asserted across the whole five-entry set rather than the single
     /// spec PHASE-02 could reach. The default scope is `Project`, which is
-    /// committed, so every one of the nine commands must render portable; an
+    /// committed, so every one of the five commands must render portable; an
     /// abspath in any one of them leaks this machine's layout into git.
     #[test]
     fn every_wired_entry_carries_the_portable_command() {
@@ -4979,7 +4961,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(wired, 9, "nine entries across three events: {json}");
+        assert_eq!(wired, 5, "five entries across three events: {json}");
     }
 
     // --- SL-064 PHASE-08 T4 / VT-1: worktree.baseRef="head" installer ---
@@ -5394,7 +5376,7 @@ mod tests {
     // write a key into a file doctrine was only supposed to read.
     #[test]
     fn eviction_never_inserts() {
-        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let spec = multi_matcher_spec(Path::new("/abs/doctrine"));
 
         let plan = plan_evict(None, &spec);
         assert!(matches!(plan.outcome, EvictOutcome::Nothing), "absent");
@@ -5412,7 +5394,7 @@ mod tests {
 
         let plan = plan_evict(
             Some(&seeded_event(
-                TEST_PRETOOLUSE_EVENT,
+                TEST_MULTI_MATCHER_EVENT,
                 serde_json::json!([entry("Bash", "/usr/bin/foreign")]),
             )),
             &spec,
@@ -5430,13 +5412,13 @@ mod tests {
     // the same file stay sweepable.
     #[test]
     fn plan_evict_is_fail_soft_on_malformed_json() {
-        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let spec = multi_matcher_spec(Path::new("/abs/doctrine"));
         for (label, seeded) in [
             ("malformed json", "{ not json".to_string()),
             ("hooks is a string", r#"{"hooks":"nope"}"#.to_string()),
             (
                 "hooks.<event> is a string",
-                seeded_event(TEST_PRETOOLUSE_EVENT, Value::String("nope".into())),
+                seeded_event(TEST_MULTI_MATCHER_EVENT, Value::String("nope".into())),
             ),
         ] {
             let plan = plan_evict(Some(&seeded), &spec);
@@ -5453,12 +5435,12 @@ mod tests {
     // destructive path.
     #[test]
     fn eviction_spares_foreign_entries() {
-        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let spec = multi_matcher_spec(Path::new("/abs/doctrine"));
         let seeded = seeded_event(
-            TEST_PRETOOLUSE_EVENT,
+            TEST_MULTI_MATCHER_EVENT,
             serde_json::json!([
                 entry("Bash", "/usr/bin/foreign before"),
-                entry("Bash", "/abs/doctrine worktree pretooluse"),
+                entry("Bash", TEST_MULTI_MATCHER_CMD),
                 entry("Agent", "/usr/bin/foreign after"),
             ]),
         );
@@ -5467,7 +5449,7 @@ mod tests {
         assert!(matches!(plan.outcome, EvictOutcome::Removed(1)));
         let json = plan.new_json.expect("removed ⇒ json");
         assert_eq!(
-            event_commands(&json, TEST_PRETOOLUSE_EVENT),
+            event_commands(&json, TEST_MULTI_MATCHER_EVENT),
             vec![
                 "/usr/bin/foreign before".to_string(),
                 "/usr/bin/foreign after".to_string(),
@@ -5484,14 +5466,14 @@ mod tests {
     // reach it.
     #[test]
     fn eviction_heals_a_stale_matcher_in_the_abandoned_file() {
-        let spec = pretooluse_spec(Path::new("/abs/doctrine"));
+        let spec = multi_matcher_spec(Path::new("/abs/doctrine"));
         let seeded = seeded_event(
-            TEST_PRETOOLUSE_EVENT,
+            TEST_MULTI_MATCHER_EVENT,
             serde_json::json!([
-                entry("Retired", "/abs/doctrine worktree pretooluse"),
+                entry("Retired", TEST_MULTI_MATCHER_CMD),
                 entry(
                     "AlsoRetired",
-                    "${DOCTRINE_BIN:-doctrine} worktree pretooluse"
+                    "${DOCTRINE_BIN:-doctrine} synth multi-matcher"
                 ),
             ]),
         );
@@ -5503,7 +5485,7 @@ mod tests {
         );
         let json = plan.new_json.expect("removed ⇒ json");
         assert!(
-            event_commands(&json, TEST_PRETOOLUSE_EVENT).is_empty(),
+            event_commands(&json, TEST_MULTI_MATCHER_EVENT).is_empty(),
             "no orphan left behind: {json}"
         );
     }

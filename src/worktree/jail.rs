@@ -3,47 +3,45 @@
 //!
 //! Graduates the proven bwrap flag set + path logic (RSK-014 probe-h1) into a
 //! PURE leaf: no clock / git / disk / rng — every impure input is passed in as
-//! data by the PHASE-03 shell (`pretooluse`, command tier). Behavioural reference:
-//! the harvested probe scripts at `.doctrine/slice/182/probe-evidence/scripts/`.
+//! data by its command-tier caller. Behavioural reference: the harvested probe
+//! scripts at `.doctrine/slice/182/probe-evidence/scripts/`.
+//!
+//! ## What survives here (SL-254 PHASE-04, DEC-206)
+//! The `PreToolUse` wall — the per-tool-call decision layer (`Decision`,
+//! `Target`, `resolve_target`, `pathcheck`, `opaque_wrap`, `decide_bash`,
+//! `decide_write`) and the disk-policy resolver it drove (`acquire_policy`,
+//! `resolve_inputs`, `seatbelt_backend`) — is DELETED with its sole caller,
+//! `worktree pretooluse`. What remains is the WRAP-PREFIX core the surviving
+//! `jail-prefix` command tier rides: policy parse + validation, the backend
+//! seam, and the two per-arm argv/profile builders.
 //!
 //! ## Purity contract (leaf, ADR-001 — no clock/git/disk/rng)
 //! Classified `"worktree::jail" = "leaf"`. `worktree::shared` (which owns
 //! `is_linked_worktree`, a git read) is **engine** — a leaf cannot import engine,
 //! so git-topology recognition CANNOT live here. The layering gate enforces the
-//! pure/imperative split: the shell performs the git-topology check + the policy
-//! disk read + the host capability probe + **all path canonicalization**, and
-//! passes the *resolved* answers in as data:
-//!   - `cwd_is_project_worktree: bool`  (was `worktrees_root` in design §5.2 — see R1)
-//!   - `JailPolicy`                     (parsed from the ro policy file by the shell)
+//! pure/imperative split: the command tier performs the git-topology check + the
+//! policy disk read + the host capability probe + **all path canonicalization**,
+//! and passes the *resolved* answers in as data:
+//!   - `JailPolicy`                     (parsed from the ro policy file)
 //!   - `Backend`                        (capability-as-data descriptor, RV-202)
 //!   - **canonical paths**              (see D-canon below)
 //!
-//! ## D-canon — the canonicalization cut (twin of R1, MF-1/MF-2)
+//! ## D-canon — the canonicalization cut (MF-1/MF-2)
 //! `realpath` resolves symlinks against the live filesystem — a **disk read**, so it
 //! cannot live in this leaf, exactly as the git-topology read cannot (R1). Every path
 //! the pure surface compares MUST arrive already **symlink-resolved and absolute**,
-//! canonicalized by the shell with `realpath -m` semantics (non-existent-safe — a
-//! write target or `extra_rw` entry need not exist yet), matching the proven probe
-//! (`pretooluse-pathcheck.sh`: relative→`cwd`-join, then `realpath -m` on both `real`
-//! and `wt`). Security-load-bearing: an un-canonicalized `file_path`/`extra_rw`
-//! bypasses the INV-2 (repo-root) / INV-3 (`.git`) / INV-4 (allowlist) walls via
-//! symlink/`..`/relative. The leaf therefore does PURE **component-wise**
-//! `Path::starts_with` (never string prefix — the sibling-prefix guard: `/wt` must
-//! not match `/wt-evil`). The canonicalization *impl* is the PHASE-03/04 shell's,
-//! tested at that boundary (R4-canon). (`decide_write`'s param is `real`, not the raw
-//! stdin `file_path`, to make the precondition load-bearing at the type site.)
+//! canonicalized by the caller with `realpath -m` semantics (non-existent-safe — an
+//! `extra_rw` entry need not exist yet). Security-load-bearing: an un-canonicalized
+//! `extra_rw` bypasses the INV-2 (repo-root) / INV-3 (`.git`) walls via
+//! symlink/`..`/relative. The canonicalization *impl* is the command tier's, tested
+//! at that boundary (R4-canon).
 //!
 //! ## Adjudicated interface decisions (T0 codex pass — see the phase sheet)
-//! - **R1 / D-resolve-purity (CONFIRMED).** `resolve_target` takes a shell-resolved
-//!   `cwd_is_project_worktree: bool`, not a `worktrees_root` path-prefix (A1: topology,
-//!   not prefix).
 //! - **Typed `PolicyError` (ACCEPTED).** `validate_policy` / `from_toml_str` return a
 //!   typed enum, not `Result<_, String>` — tests assert on VARIANTS, not prose (STD-001,
 //!   security-boundary). Diverges from design §5.2's literal `String`; flagged for
-//!   reconcile coherence. Deny *reasons* that ride to the user (`Backend::Deny{reason}`,
-//!   `Target::Reject`) stay `String` — they ARE the JSON payload.
-//! - **`base64` crate (ACCEPTED).** `opaque_wrap` uses the leaf-legal `base64` crate
-//!   (cf. `worktree::allowlist` imports `glob`), not a hand-rolled encoder.
+//!   reconcile coherence. Deny *reasons* that ride to the user
+//!   (`Backend::Deny{reason}`) stay `String`.
 //! - **Seatbelt seam + SL-183 additive channel (HELD to locked design + reserved).**
 //!   `select_jailer(Backend::Seatbelt) ⇒ Some` (VT-8 / D8 / EX-5). The macOS backend
 //!   is never constructed on Linux, so its `wrap_argv` stub is unreachable in
@@ -51,28 +49,26 @@
 //!   capability-as-data shape as `Deny{reason}`) so SL-183 slots its shell-resolved
 //!   inputs in with NO SL-182 signature refactor (OQ-mac3 seam-gap; SL-183 coherence).
 
-// The pure surface has no `not(test)` consumer until the PHASE-03 `pretooluse` shell
-// lands, so under the bin build every item is legitimately dead. Under `test` the VT
-// suite consumes the surface, so the expectation is scoped to `not(test)` — else it
-// would go unfulfilled (and fire) once the tests reference every item.
+// Under the bin build the whole macOS surface is unreachable on a Linux host (the
+// Seatbelt backend is never constructed there), so those items are legitimately
+// dead. Under `test` the VT suite consumes the surface, so the expectation is
+// scoped to `not(test)` — else it would go unfulfilled (and fire).
 #![cfg_attr(
     not(test),
     expect(
         dead_code,
-        reason = "SL-182 PHASE-02 pure jail core; consumed by the PHASE-03 pretooluse shell"
+        reason = "SL-182 PHASE-02 pure jail core; the macOS arm is unreachable on a Linux build"
     )
 )]
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 // ---- bwrap flag vocabulary (STD-001: single-sourced, no inline literals) --------
 /// `pub(crate)` since SL-254 PHASE-01: the SINGLE source of the `bwrap` binary
-/// name for the whole subsystem. `pretooluse.rs` carried a duplicate (`BWRAP_BIN`)
-/// that died with [`have_bwrap`]'s re-home; STD-001 wants one, and this is it.
+/// name for the whole subsystem (STD-001).
 pub(crate) const BWRAP: &str = "bwrap";
 const FLAG_RO_BIND: &str = "--ro-bind";
 const FLAG_DEV: &str = "--dev";
@@ -89,23 +85,10 @@ const PATH_DEV: &str = "/dev";
 const PATH_PROC: &str = "/proc";
 const PATH_TMP: &str = "/tmp";
 
-// ---- opaque-wrap payload vocabulary --------------------------------------------
-const SHELL_BIN: &str = "bash";
-const SHELL_CMD_FLAG: &str = "-c";
-
-// ---- deny/reject reason stems (STD-001) ----------------------------------------
-const REASON_NOT_WORKTREE: &str = "cwd-not-a-worktree";
-const REASON_NO_FILE_PATH: &str = "no-file-path";
-const REASON_ESCAPES_WORKTREE: &str = "escapes-worktree";
-/// Defensive stem for the structurally-unreachable `Jail + no-jailer + non-Deny`
-/// arm (only `Backend::Deny` yields `None` from `select_jailer`, and that reason is
-/// preferred). Never a panic — fail-closed to a deny.
-const REASON_NO_BACKEND: &str = "no-jail-backend";
-
 // ---- SL-183 PHASE-03 fail-closed derivation reason stems (STD-001, §5.5 F-B4).
-//      Every `resolve_inputs` failure branch (a–f) renders one of these; the arm
-//      emits `deny worktree-subagent Bash` carrying the stem. NEVER a fallback path
-//      template, NEVER unwrapped pass-through (POL-002). -----------------------------
+//      Every macOS derivation failure branch (a–f) renders one of these through
+//      `ResolveDeny::reason()`; the command tier refuses carrying the stem. NEVER a
+//      fallback path template, NEVER unwrapped pass-through (POL-002). --------------
 /// (a) `cwd` is not inside any git worktree — `git rev-parse --show-toplevel` failed.
 const REASON_MAC_NOT_WORKTREE: &str = "seatbelt-cwd-not-a-worktree";
 /// (b) toplevel IS the main checkout, not a linked subagent worktree — no per-arming
@@ -121,23 +104,32 @@ const REASON_MAC_POLICY_MISSING: &str = "seatbelt-policy-missing";
 const REASON_MAC_POLICY_MALFORMED: &str = "seatbelt-policy-malformed";
 
 // ---- SL-254 PHASE-01: host-capability + profile-write vocabulary, re-homed from
-//      `pretooluse.rs` ahead of that module's deletion (DEC-206). These four items
+//      `pretooluse.rs` ahead of that module's deletion (DEC-206). These items
 //      (with `have_bwrap` and `write_seatbelt_profile` below) are the ONLY things
 //      `jail_prefix.rs` — the surviving consumer — needed from the dying wall, so
-//      they move first, while the change is behaviour-preserving and the existing
-//      suite is its proof (design §9.1). ---------------------------------------------
-/// The per-arm `Backend::Deny` reason when the Linux host has no `bwrap`.
-/// Unreferenced on macOS prod (the arm probes Seatbelt instead) but named by the
-/// arm-neutral `decide()` tests — hence always-compiled with dead-code allowed there.
+//      they moved first, while the change was behaviour-preserving and the existing
+//      suite was its proof (design §9.1). PHASE-04 then deleted the wall, leaving
+//      each of them cfg-scoped to the arm that still consumes it. ------------------
+/// The per-arm refusal reason when the Linux host has no `bwrap`. Unreferenced on
+/// macOS prod (the arm probes Seatbelt instead) but named by the arm-neutral
+/// spawn-script parity test — hence always-compiled with dead-code allowed there.
 #[cfg_attr(
     all(target_os = "macos", not(test)),
-    expect(dead_code, reason = "Linux prod arm + arm-neutral decide() tests only")
+    expect(
+        dead_code,
+        reason = "Linux prod arm + the arm-neutral spawn-script test only"
+    )
 )]
 pub(crate) const REASON_NO_BWRAP: &str = "bwrap-unavailable";
 /// Fail-closed reason (F-B4) when the macOS Seatbelt profile body cannot be written
-/// to `resolved.profile_path`: the arm DENIES rather than emit an allow+wrap whose
+/// to `resolved.profile_path`: the arm REFUSES rather than emit a wrap whose
 /// `sandbox-exec -f <profile>` points at a missing/partial floor. A wrap we cannot
-/// back with a real profile is strictly worse than a deny.
+/// back with a real profile is strictly worse than a refusal.
+///
+/// macOS-only since SL-254 PHASE-04: its one consumer is `jail_prefix.rs`'s macOS
+/// arm (the Linux arm has no profile to write), so it is cfg-scoped there rather
+/// than left dead in every Linux `cfg(test)` build.
+#[cfg(target_os = "macos")]
 pub(crate) const REASON_PROFILE_WRITE_FAILED: &str = "seatbelt-profile-write-failed";
 /// The `PATH` environment variable, read by the Linux-only [`have_bwrap`] probe.
 #[cfg(not(target_os = "macos"))]
@@ -178,7 +170,7 @@ const FLAG_D: &str = "-D";
 /// `-f <profile>` — the materialized `.sb` profile file (PHASE-03 writes it).
 const FLAG_F: &str = "-f";
 /// The `env` launcher — sets `TMPDIR` for the wrapped command without touching the
-/// shared `opaque_wrap` body (D2 seam-preserving choice; the proven
+/// command body the caller appends (D2 seam-preserving choice; the proven
 /// `seatbelt-jail.sh` exported TMPDIR inside the body, `env` is its argv analog).
 const ENV_BIN: &str = "env";
 
@@ -200,9 +192,9 @@ const ENV_TMPDIR: &str = "TMPDIR";
 pub(crate) const ENV_DOCTRINE_WORKER: &str = "DOCTRINE_WORKER";
 /// The `DOCTRINE_WORKER` value that means "this process is a worker".
 pub(crate) const ENV_WORKER_ON: &str = "1";
-/// The materialized `.sb` profile filename, under `<wt>/.tmp` (`resolve_inputs` sets
-/// `profile_path = <tmp>/jail.sb`; the command tier's `materialize_seatbelt_profile`
-/// writes the `seatbelt_profile` body there on the wrap path, fail-closed).
+/// The materialized `.sb` profile filename, under `<wt>/.tmp`
+/// (`resolve_with_policy` sets `profile_path = <tmp>/jail.sb`; the command tier
+/// calls [`write_seatbelt_profile`] there on the wrap path, fail-closed).
 const SEATBELT_PROFILE_FILE: &str = "jail.sb";
 
 /// `/private/tmp` — coarse-denied FIRST (F-A). A literal, not a resolved param:
@@ -245,35 +237,6 @@ const XCRUN_DB_REGEX: &str = r#"#"/xcrun_db[^/]*$""#;
 /// omitted on a valid network==true policy.
 const DENY_NETWORK: &str = "(deny network*)";
 
-/// The hook's verdict for a single tool call. Deny is expressed as **data**, never
-/// an exit code (the shell always exits 0 — `mem.fact.claude.pretooluse-hook-fail-open`).
-/// - `PassThrough` → emit nothing (orchestrator / non-jailed).
-/// - `Deny { reason }` → `permissionDecision:"deny"`, `"worktree-jail: <reason>"`.
-/// - `WrapBash { command, description }` → `permissionDecision:"allow"` + `updatedInput`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Decision {
-    PassThrough,
-    Deny {
-        reason: String,
-    },
-    WrapBash {
-        command: String,
-        description: String,
-    },
-}
-
-/// Who the caller is, resolved from `agent_id` presence + shell-supplied topology.
-/// - `Orchestrator` → no `agent_id` (INV-1): never jailed.
-/// - `Jail(worktree)` → `agent_id` present AND `cwd` is a worktree of THIS project.
-/// - `Reject(reason)` → `agent_id` present but `cwd` is not such a worktree
-///   (the `isolation:none` arm — proven denied, RSK-014 Exp 3).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Target {
-    Orchestrator,
-    Jail(PathBuf),
-    Reject(String),
-}
-
 /// Capability descriptor — resolved by the shell's host probe (§5.1), passed in as
 /// DATA (RV-202, `mem.pattern.design.capability-as-data-seam`). Three-valued, not a
 /// bare `Option`: `Deny` also carries *present-but-degraded*, so SL-183 flips a `Deny`
@@ -290,10 +253,10 @@ pub(crate) enum Backend {
 
 /// SL-183 macOS Seatbelt inputs, shell-resolved. The ADDITIVE data channel on
 /// `Backend::Seatbelt` — SL-183 slots its builders in with NO SL-182 signature
-/// refactor (OQ-mac3 / D-mac2). PHASE-03's `resolve_inputs` populates these
+/// refactor (OQ-mac3 / D-mac2). `resolve_with_policy` populates these
 /// (impure: `getconf DARWIN_USER_TEMP_DIR`, realpath, `<wt>/.tmp` creation); the
 /// PHASE-02 pure builders consume them, and the command tier writes the profile BODY
-/// to `profile_path` on the wrap path (PHASE-04). **Every path is
+/// to `profile_path` on the wrap path. **Every path is
 /// already shell-canonicalized (realpath'd)** — the purity fence: no resolution in
 /// this layer (INV-M2, D-canon). `#[derive(Default)]` is retained so SL-182's
 /// `ResolvedMac {}` / `..Default::default()` test constructors compile unchanged
@@ -315,8 +278,8 @@ pub(crate) struct ResolvedMac {
     /// open — reused as-is, never widened).
     pub network: bool,
     /// The materialized `.sb` profile file → `sandbox-exec -f <profile_path>`. The
-    /// command tier writes the `seatbelt_profile` body here on the wrap path
-    /// (`pretooluse::materialize_seatbelt_profile`); this is only the intended path.
+    /// command tier writes the `seatbelt_profile` body here on the wrap path (via
+    /// [`write_seatbelt_profile`]); this is only the intended path.
     pub profile_path: PathBuf,
 }
 
@@ -375,40 +338,6 @@ impl JailPolicy {
     }
 }
 
-/// Map `(agent_id, cwd, shell-resolved topology)` → `Target` (VT-1).
-/// PURE. `cwd_is_project_worktree` is computed by the shell via `is_linked_worktree`
-/// AND git-common-dir == this project's main `.git` (A1, git-topology not
-/// path-prefix); see the module R1 note. A sibling repo's worktree ⇒ `false` ⇒
-/// `Reject`.
-///
-/// **Precondition (D-canon, codex-blocker-1): `cwd` is already
-/// shell-canonicalized** (symlink-resolved, absolute). `Target::Jail(cwd)`
-/// carries it forward as `wt` into both `pathcheck` and `bwrap_argv`, so a
-/// non-canonical `cwd` here poisons every downstream wall — the canonicality
-/// obligation is the shell's, load-bearing at the entry to the whole pure
-/// surface.
-pub(crate) fn resolve_target(
-    agent_id: Option<&str>,
-    cwd: &Path,
-    cwd_is_project_worktree: bool,
-) -> Target {
-    match agent_id {
-        None => Target::Orchestrator,
-        Some(_) if cwd_is_project_worktree => Target::Jail(cwd.to_path_buf()),
-        Some(_) => Target::Reject(format!("{REASON_NOT_WORKTREE}: {}", cwd.display())),
-    }
-}
-
-/// `real ∈ {wt} ∪ extra_rw` (VT-2). PURE **component-wise** prefix test
-/// (`Path::starts_with`, never string prefix — sibling-prefix guard: `/wt` must not
-/// match `/wt-evil`). **Precondition (D-canon): all args are shell-canonicalized**
-/// (symlink-resolved, absolute); this leaf does not touch disk. INV-4: safe as the
-/// Edit/Write allowlist ONLY because `validate_policy` has already rejected dangerous
-/// `extra_rw` (root-ancestors / `.git`) — the pathcheck trusts a validated policy.
-pub(crate) fn pathcheck(real: &Path, wt: &Path, extra_rw: &[PathBuf]) -> bool {
-    real.starts_with(wt) || extra_rw.iter().any(|allowed| real.starts_with(allowed))
-}
-
 /// Reject an `extra_rw` equal to `/`, an ancestor of `main_root`, or touching `.git`
 /// (INV-3, VT-6). STRICTLY platform-agnostic (D): zero bwrap/namespace assumptions —
 /// this is the shared cross-arm contract SL-183 reuses UNCHANGED as its parity proof.
@@ -438,39 +367,9 @@ pub(crate) fn validate_policy(policy: &JailPolicy, main_root: &Path) -> Result<(
     Ok(())
 }
 
-/// Assemble the `updatedInput.command` shell string (VT-5, INV-5). **Wrapper-agnostic
-/// (B):** single-quote-escapes and assembles ANY given `argv` (not a bwrap-shaped one),
-/// then appends the original command as charset-safe base64 (`bash -c 'printf %s <b64>
-/// | base64 -d | bash'`, never re-parsed). Taking arbitrary `argv` is what lets SL-183
-/// Seatbelt reuse this unchanged. All interpolated tokens are single-quote-escaped
-/// (paths may carry spaces + quotes).
-pub(crate) fn opaque_wrap(orig_cmd: &str, argv: &[OsString]) -> String {
-    let b64 = base64::engine::general_purpose::STANDARD.encode(orig_cmd.as_bytes());
-    let payload = format!("printf %s {b64} | base64 -d | bash");
-    let mut parts: Vec<String> = argv
-        .iter()
-        .map(|a| shell_single_quote(a.to_string_lossy().as_ref()))
-        .collect();
-    parts.push(SHELL_BIN.to_string());
-    parts.push(SHELL_CMD_FLAG.to_string());
-    parts.push(shell_single_quote(&payload));
-    parts.join(" ")
-}
-
-/// POSIX single-quote escaping: wrap in `'…'`, and render an embedded `'` as `'\''`.
-/// Safe for arbitrary bytes (spaces, quotes, globs) — nothing inside `'…'` is special
-/// except `'` itself. The canonical INV-5 escaper: `opaque_wrap` uses it for the
-/// wrapper argv, and the PHASE-03 install templating reuses it (via the worktree
-/// re-export) to single-quote the baked absolute exec into every plugin hook
-/// command (design §5.4 — "same quoting discipline as INV-5").
-pub(crate) fn shell_single_quote(s: &str) -> String {
-    let escaped = s.replace('\'', "'\\''");
-    format!("'{escaped}'")
-}
-
 /// The SINGLE fork point (D8): everything above is platform-agnostic; only the
-/// wrapper argv builder differs per backend. `opaque_wrap` consumes whatever this
-/// returns. Object-safe so `select_jailer` can hand back a `Box<dyn Jailer>`.
+/// wrapper argv builder differs per backend. The command tier consumes whatever
+/// this returns. Object-safe so `select_jailer` can hand back a `Box<dyn Jailer>`.
 pub(crate) trait Jailer {
     fn wrap_argv(&self, wt: &Path, policy: &JailPolicy) -> Vec<OsString>;
 }
@@ -496,10 +395,10 @@ pub(crate) struct Seatbelt {
 
 impl Jailer for Seatbelt {
     /// The `wt`/`policy` the trait passes are already folded into `self.resolved`
-    /// (PHASE-03's `resolve_inputs` derives the realpath'd `ResolvedMac` FROM them),
-    /// so the builder reads the canonical resolved set — not the raw trait args. The
-    /// profile body is materialized separately (PHASE-03) at `resolved.profile_path`,
-    /// which the argv references via `-f`.
+    /// (`resolve_with_policy` derives the realpath'd `ResolvedMac` FROM them), so
+    /// the builder reads the canonical resolved set — not the raw trait args. The
+    /// profile body is materialized separately at `resolved.profile_path`, which
+    /// the argv references via `-f`.
     fn wrap_argv(&self, _wt: &Path, _policy: &JailPolicy) -> Vec<OsString> {
         sandbox_exec_argv(&self.resolved)
     }
@@ -532,7 +431,7 @@ pub(crate) fn bwrap_core_argv(wt: &Path) -> Vec<OsString> {
 
 /// The full bwrap launcher argv: `bwrap` + `bwrap_core_argv` + one `--bind` per
 /// validated `extra_rw` + `--unshare-net` when `!policy.network`, terminated by `--`
-/// (so `opaque_wrap` appends the wrapped command after it). VT-4. PURE.
+/// (so the caller appends the wrapped command after it). VT-4. PURE.
 pub(crate) fn bwrap_argv(wt: &Path, policy: &JailPolicy) -> Vec<OsString> {
     let mut argv: Vec<OsString> = vec![BWRAP.into()];
     argv.extend(bwrap_core_argv(wt));
@@ -611,10 +510,10 @@ pub(crate) fn write_seatbelt_profile(resolved: &ResolvedMac) -> std::io::Result<
 /// Build the `sandbox-exec` launcher argv PREFIX (§5.1, SL-183 PHASE-02). PURE:
 /// resolved paths in, `Vec<OsString>` out. Binds realpath'd `-D` params (paths ride
 /// argv, NEVER the profile body — F-A footgun, INV-M2), points `-f` at the
-/// materialized profile, and terminates with `--`. `opaque_wrap` appends the wrapped
+/// materialized profile, and terminates with `--`. The caller appends the wrapped
 /// command after; TMPDIR is set via a trailing `env TMPDIR=<tmp>` token (D2 — keeps
-/// the shared `opaque_wrap` body unchanged, the argv analog of the proven shell's
-/// in-body `export TMPDIR`). VT-2.
+/// the command body the caller appends unchanged, the argv analog of the proven
+/// shell's in-body `export TMPDIR`). VT-2.
 pub(crate) fn sandbox_exec_argv(resolved: &ResolvedMac) -> Vec<OsString> {
     let mut argv: Vec<OsString> = vec![SANDBOX_EXEC.into()];
     // -D <name>=<realpath> bindings — OsString to preserve non-UTF-8 paths.
@@ -636,8 +535,8 @@ pub(crate) fn sandbox_exec_argv(resolved: &ResolvedMac) -> Vec<OsString> {
     argv.push(FLAG_F.into());
     argv.push(resolved.profile_path.as_os_str().to_os_string());
     argv.push(FLAG_ARG_SEP.into());
-    // TMPDIR export for the wrapped command, via `env` (opaque_wrap appends `bash
-    // -c <body>` after this tail).
+    // TMPDIR export for the wrapped command, via `env` (the caller appends the
+    // command body after this tail).
     argv.push(ENV_BIN.into());
     let mut tmpdir = OsString::from(ENV_TMPDIR);
     tmpdir.push("=");
@@ -673,16 +572,15 @@ pub(crate) fn select_jailer(backend: &Backend) -> Option<Box<dyn Jailer>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────
-// SL-183 PHASE-03 — impure `resolve_inputs` (fail-closed) + `Backend` mapper.
+// SL-183 PHASE-03 — the impure macOS resolver seam (fail-closed).
 //
-// The macOS twin of SL-182's fail-closed posture (§5.5 F-B4). `resolve_inputs` is the
-// THIN IMPURE SHELL that derives a `ResolvedMac` from the PreToolUse `cwd`: git topology
-// → realpath → basename → per-arming policy → getconf DUTMP → `<wt>/.tmp`. Every
-// impurity is injected via `ResolveEnv` so the branch LOGIC is pure and unit-testable on
-// any host (Linux CI included — no real `getconf`). `RealEnv` is the only site that
-// actually touches git/fs/getconf (D-p3-1). Any ambiguity ⇒ `Err(ResolveDeny)` ⇒
-// `Backend::Deny{reason}` ⇒ `Decision::Deny` — NEVER a fallback path template, NEVER
-// unwrapped pass-through (POL-002, F-B4). SL-182's shared surface is reused UNCHANGED.
+// The macOS twin of SL-182's fail-closed posture (§5.5 F-B4). `resolve_with_policy` is
+// the THIN IMPURE core that derives a `ResolvedMac` from a resolved topology + policy:
+// realpath → getconf DUTMP → `<wt>/.tmp`. Every impurity is injected via `ResolveEnv`
+// so the branch LOGIC is pure and unit-testable on any host (Linux CI included — no
+// real `getconf`). `RealEnv` is the only site that actually touches git/fs/getconf
+// (D-p3-1). Any ambiguity ⇒ `Err(ResolveDeny)` ⇒ the command tier REFUSES — NEVER a
+// fallback path template, NEVER unwrapped pass-through (POL-002, F-B4).
 // ─────────────────────────────────────────────────────────────────────────────────
 
 /// Why the macOS `cwd`→worktree derivation failed. Typed (not stringly) so tests assert
@@ -721,7 +619,7 @@ impl ResolveDeny {
     }
 }
 
-/// The injected impurity seam (D-p3-1). `resolve_inputs` takes a `&dyn ResolveEnv` so its
+/// The injected impurity seam (D-p3-1). The resolver takes a `&dyn ResolveEnv` so its
 /// branch logic stays PURE and every fail-closed branch is unit-testable off-host. The
 /// real implementation (`RealEnv`) is the ONLY place git / getconf / realpath / mkdir /
 /// policy-file reads actually run — the thin shell the design names (§5.2). Each method's
@@ -738,13 +636,15 @@ pub(crate) trait ResolveEnv {
     fn ensure_dir(&self, path: &Path) -> Result<PathBuf, ResolveDeny>;
     /// Read the per-arming policy body for `basename`. `Ok(None)` ⇒ absent ⇒ branch (e);
     /// `Err` ⇒ unreadable ⇒ branch (e); `Ok(Some(body))` ⇒ parse it (branch (f) on
-    /// malformed). Impure (disk read).
+    /// malformed). Impure (disk read). The disk-policy CALLER died with the
+    /// `pretooluse` wall (SL-254 PHASE-04); the read itself is retained as the
+    /// per-arming lookup the macOS arm still owns.
     fn read_policy(&self, basename: &std::ffi::OsStr) -> std::io::Result<Option<String>>;
 }
 
 /// The resolved git topology for a `cwd` (the pure output of the impure probe). Carries
 /// the realpath'd linked-worktree root and whether it is the main checkout, so the
-/// branch (b)/(d) decisions are made in the PURE `resolve_inputs`, not the env impl.
+/// branch (b)/(d) decisions are made in the PURE resolver, not the env impl.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Topology {
     /// Realpath'd `--show-toplevel`.
@@ -754,42 +654,12 @@ pub(crate) struct Topology {
     pub is_linked: bool,
 }
 
-/// Disk lookup of the per-arming jail policy by worktree basename, keyed from the
-/// resolved `Topology`. Rejects the main checkout (branch b: no per-arming policy for
-/// the primary tree), absent/unreadable policies (branch c/e), and malformed bodies
-/// (branch f — `from_toml_str`). Returns the parsed `JailPolicy`; does NOT validate
-/// (validation is `resolve_with_policy`'s). Pure over the injected `env`.
-pub(crate) fn acquire_policy(
-    topo: &Topology,
-    env: &dyn ResolveEnv,
-) -> Result<JailPolicy, ResolveDeny> {
-    // (b): the main checkout has no per-arming policy — deny, never guess one.
-    if !topo.is_linked {
-        return Err(ResolveDeny::IsMainCheckout);
-    }
-    // (c)/(e): per-arming policy lookup by basename. Absent/unreadable ⇒ Deny.
-    let basename = topo
-        .toplevel
-        .file_name()
-        .ok_or(ResolveDeny::PolicyMissing)?
-        .to_os_string();
-    // absent (`Ok(None)`) OR unreadable (`Err`) ⇒ branch (e) Deny — never a permissive
-    // default (the PreToolUse fail-OPEN memory: an absent policy must DENY).
-    let Ok(Some(body)) = env.read_policy(&basename) else {
-        return Err(ResolveDeny::PolicyMissing);
-    };
-    // (f): malformed / unknown-key ⇒ Deny (never a silent permissive default).
-    let policy = JailPolicy::from_toml_str(&body)
-        .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
-    Ok(policy)
-}
-
 /// SHARED core: validate a policy (`validate_policy`), realpath every path the
 /// PHASE-02 builders will bind, and assemble a fully-resolved `ResolvedMac`. Takes
-/// an ALREADY-PARSED policy (from `acquire_policy` for disk, or an inline-crafted
-/// `JailPolicy` for testing) so both sources share one validate→realpath chain.
-/// Behaviour-preserving: `from_toml → validate → realpath` ordering matches the
-/// original `resolve_inputs` body exactly (EX-2).
+/// an ALREADY-PARSED policy (`from_toml_str` off disk, or an inline-crafted
+/// `JailPolicy` from `jail-prefix`'s `--extra-rw`) so both sources share one
+/// validate→realpath chain. The `from_toml → validate → realpath` ordering is
+/// load-bearing and behaviour-preserved (EX-2).
 pub(crate) fn resolve_with_policy(
     policy: &JailPolicy,
     topo: &Topology,
@@ -820,32 +690,6 @@ pub(crate) fn resolve_with_policy(
     })
 }
 
-/// Behaviour-preserving recomposition (EX-1): ONE `worktree_topology` probe, then
-/// `resolve_with_policy(acquire_policy(topo,env)?, topo, main_root, env)`. No second
-/// topology probe. Match the original `resolve_inputs` contract exactly.
-pub(crate) fn resolve_inputs(
-    cwd: &Path,
-    main_root: &Path,
-    env: &dyn ResolveEnv,
-) -> Result<ResolvedMac, ResolveDeny> {
-    let topo = env.worktree_topology(cwd)?;
-    resolve_with_policy(&acquire_policy(&topo, env)?, &topo, main_root, env)
-}
-
-/// Map a `resolve_inputs` outcome onto SL-182's existing `Backend` so the funnel's Deny
-/// path is reused UNCHANGED (D-p3-2): `Ok ⇒ Seatbelt(resolved)` (⇒ `select_jailer` yields
-/// the Seatbelt jailer); `Err ⇒ Deny{reason}` (⇒ `select_jailer` yields `None` ⇒
-/// `decide_bash` denies with the reason — fail-closed, never pass-through). No new decision
-/// surface; the macOS routing IS this two-line map plus the untouched `select_jailer`.
-pub(crate) fn seatbelt_backend(resolved: Result<ResolvedMac, ResolveDeny>) -> Backend {
-    match resolved {
-        Ok(mac) => Backend::Seatbelt(mac),
-        Err(deny) => Backend::Deny {
-            reason: deny.reason(),
-        },
-    }
-}
-
 /// The per-arming policy directory under the main checkout (design §5.3, SL-182
 /// convention): `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`. Segments are
 /// single-sourced (STD-001); the provisioning WRITE is PHASE-04/SL-182's, this is only the
@@ -855,7 +699,7 @@ const POLICY_FILE_EXT: &str = "toml";
 
 /// The real impure `ResolveEnv` — the ONLY site in this module that touches git / getconf /
 /// realpath / mkdir / disk (D-p3-1, the "thin shell" the design names, §5.2). Everything
-/// else in the PHASE-03 surface (`resolve_inputs`, `seatbelt_backend`, the two PHASE-02
+/// else in the PHASE-03 surface (`resolve_with_policy`, the two PHASE-02
 /// builders) is PURE over its output. Holds the realpath'd `main_root` (to locate policy
 /// and to feed `validate_policy`'s ancestor check upstream).
 pub(crate) struct RealEnv {
@@ -922,64 +766,6 @@ impl ResolveEnv for RealEnv {
     }
 }
 
-/// Compose a Bash-tool decision. PURE. Orchestrator ⇒ `PassThrough`;
-/// `Reject(reason)` ⇒ `Deny{reason}`; `Jail(wt)` with `backend == Deny{reason}` ⇒
-/// `Deny{reason}` (per-arm reason, NEVER pass-through — the capability-keyed deny, C);
-/// `Jail(wt)` with `Some(jailer)` ⇒ `WrapBash(opaque_wrap(cmd, jailer.wrap_argv(wt, policy)))`.
-pub(crate) fn decide_bash(
-    target: &Target,
-    cmd: &str,
-    desc: &str,
-    policy: &JailPolicy,
-    backend: &Backend,
-) -> Decision {
-    match target {
-        Target::Orchestrator => Decision::PassThrough,
-        Target::Reject(reason) => Decision::Deny {
-            reason: reason.clone(),
-        },
-        Target::Jail(wt) => match select_jailer(backend) {
-            Some(jailer) => Decision::WrapBash {
-                command: opaque_wrap(cmd, &jailer.wrap_argv(wt, policy)),
-                description: desc.to_string(),
-            },
-            // Only `Backend::Deny` yields `None`; carry its reason (fail-closed, never
-            // pass-through). The `_` arm is structurally unreachable — defensive deny,
-            // not a panic.
-            None => Decision::Deny {
-                reason: match backend {
-                    Backend::Deny { reason } => reason.clone(),
-                    _ => REASON_NO_BACKEND.to_string(),
-                },
-            },
-        },
-    }
-}
-
-/// Compose an Edit/Write decision. PURE. `Jail(wt)` ⇒ `pathcheck(real, wt, extra_rw)`
-/// ⇒ `PassThrough` / `Deny`. Edit/Write bypass the bwrap wrap entirely, so this is the
-/// second wall (design §5.4). Orchestrator ⇒ `PassThrough`; `Reject` ⇒ `Deny`.
-/// `real` is the write target **already canonicalized by the shell** (cwd-joined +
-/// `realpath -m`, D-canon/MF-1) — NOT the raw stdin `file_path`; the param name pins
-/// the precondition at the type site. `None` (no path in the tool input) ⇒ `Deny`.
-pub(crate) fn decide_write(target: &Target, real: Option<&Path>, policy: &JailPolicy) -> Decision {
-    match target {
-        Target::Orchestrator => Decision::PassThrough,
-        Target::Reject(reason) => Decision::Deny {
-            reason: reason.clone(),
-        },
-        Target::Jail(wt) => match real {
-            None => Decision::Deny {
-                reason: REASON_NO_FILE_PATH.to_string(),
-            },
-            Some(real) if pathcheck(real, wt, &policy.extra_rw) => Decision::PassThrough,
-            Some(real) => Decision::Deny {
-                reason: format!("{REASON_ESCAPES_WORKTREE}: {}", real.display()),
-            },
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -989,77 +775,6 @@ mod tests {
 
     fn pb(s: &str) -> PathBuf {
         PathBuf::from(s)
-    }
-
-    // ---- VT-1: resolve_target (T2) ---------------------------------------------
-
-    #[test]
-    fn resolve_target_no_agent_is_orchestrator() {
-        // No agent_id ⇒ orchestrator, regardless of topology (INV-1).
-        assert_eq!(
-            resolve_target(None, &pb("/anywhere"), false),
-            Target::Orchestrator
-        );
-        assert_eq!(
-            resolve_target(None, &pb("/anywhere"), true),
-            Target::Orchestrator
-        );
-    }
-
-    #[test]
-    fn resolve_target_agent_in_project_worktree_is_jail() {
-        let wt = pb("/root/.worktrees/agent-1");
-        assert_eq!(
-            resolve_target(Some("agent-1"), &wt, true),
-            Target::Jail(wt.clone())
-        );
-    }
-
-    #[test]
-    fn resolve_target_agent_in_sibling_repo_worktree_is_reject() {
-        // A1: a sibling repo's worktree resolves to `false` (git-topology, not
-        // path-prefix) ⇒ Reject, never Jail.
-        let sibling = pb("/other-repo/.worktrees/agent-9");
-        match resolve_target(Some("agent-9"), &sibling, false) {
-            Target::Reject(reason) => assert!(reason.contains(REASON_NOT_WORKTREE)),
-            other => panic!("expected Reject, got {other:?}"),
-        }
-    }
-
-    // ---- VT-2: pathcheck (T3) --------------------------------------------------
-
-    #[test]
-    fn pathcheck_inside_worktree_passes() {
-        assert!(pathcheck(&pb("/wt/src/main.rs"), &pb("/wt"), &[]));
-        assert!(pathcheck(&pb("/wt"), &pb("/wt"), &[])); // the wt itself
-    }
-
-    #[test]
-    fn pathcheck_escape_denies() {
-        assert!(!pathcheck(&pb("/etc/passwd"), &pb("/wt"), &[]));
-        assert!(!pathcheck(&pb("/home/u/.ssh/id_rsa"), &pb("/wt"), &[]));
-    }
-
-    #[test]
-    fn pathcheck_extra_rw_hit_passes() {
-        let extra = vec![pb("/opt/cache")];
-        assert!(pathcheck(&pb("/opt/cache/blob"), &pb("/wt"), &extra));
-        assert!(!pathcheck(&pb("/opt/other/blob"), &pb("/wt"), &extra));
-    }
-
-    #[test]
-    fn pathcheck_sibling_prefix_denies() {
-        // MF-6 / probe trailing-slash guard: component-wise, `/wt` must NOT match
-        // `/wt-evil` (a string-prefix test would wrongly pass this).
-        assert!(!pathcheck(&pb("/wt-evil/x"), &pb("/wt"), &[]));
-        assert!(!pathcheck(&pb("/wt-evil"), &pb("/wt"), &[]));
-    }
-
-    #[test]
-    fn pathcheck_dotgit_under_worktree_passes() {
-        // pathcheck does NOT reject `.git` — that is validate_policy's job (T7). A
-        // path under the worktree is in-bounds here (design INV-4 division of labour).
-        assert!(pathcheck(&pb("/wt/.git/config"), &pb("/wt"), &[]));
     }
 
     // ---- VT-3: JailPolicy parse + PolicyError (T4) -----------------------------
@@ -1112,7 +827,7 @@ mod tests {
     #[test]
     fn to_toml_string_round_trips_through_from_toml_str() {
         // PHASE-04 T1: `arm-spawn` writes a declared policy via `toml::to_string`;
-        // `create-fork` copies it; `pretooluse` reads it back through `from_toml_str`.
+        // `create-fork` copies it; the wrap path reads it back through `from_toml_str`.
         // The written form MUST re-parse to the same value (one schema, both ends).
         let p = JailPolicy {
             extra_rw: vec![pb("/nix/store"), pb("/cache")],
@@ -1294,44 +1009,6 @@ mod tests {
         assert!(!argv.iter().any(|t| t == FLAG_UNSHARE_NET));
     }
 
-    // ---- VT-5 / INV-5: opaque_wrap (T6) ----------------------------------------
-
-    #[test]
-    fn opaque_wrap_roundtrips_and_executes_space_and_quote_path() {
-        // INV-5: a value carrying BOTH a space AND a single quote must survive the
-        // single-quote escaping AND the wrapped command must execute. `env` sets P from
-        // the tricky-valued argv token, then the decoded orig_cmd echoes it back —
-        // stdout == the tricky value ⟺ argv round-trips AND orig_cmd ran. Hermetic:
-        // needs sh/env/base64/bash (present on the coreutils CI host).
-        let tricky = "/x/a b'c/wt";
-        let argv = vec![OsString::from("env"), OsString::from(format!("P={tricky}"))];
-        let orig = r#"printf %s "$P""#;
-        let wrapped = opaque_wrap(orig, &argv);
-
-        let out = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&wrapped)
-            .output()
-            .expect("run assembled shell string");
-        assert!(
-            out.status.success(),
-            "wrapped command failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        assert_eq!(String::from_utf8_lossy(&out.stdout), tricky);
-    }
-
-    #[test]
-    fn opaque_wrap_appends_base64_bash_payload() {
-        // Structure check: the orig command never appears verbatim (opaque); it rides
-        // as base64 in a `bash -c 'printf %s … | base64 -d | bash'` tail.
-        let wrapped = opaque_wrap("rm -rf /", &[OsString::from(BWRAP)]);
-        assert!(!wrapped.contains("rm -rf /"));
-        assert!(wrapped.contains("base64 -d | bash"));
-        let b64 = base64::engine::general_purpose::STANDARD.encode(b"rm -rf /");
-        assert!(wrapped.contains(&b64));
-    }
-
     // ---- VT-6 / INV-3: validate_policy (T7) ------------------------------------
 
     const MAIN_ROOT: &str = "/home/u/project";
@@ -1389,7 +1066,7 @@ mod tests {
         );
     }
 
-    // ---- VT-8: Jailer seam + select_jailer + decide_* (T8) ---------------------
+    // ---- VT-8: Jailer seam + select_jailer (T8) --------------------------------
 
     #[test]
     fn select_jailer_is_a_pure_map_over_backend() {
@@ -1403,167 +1080,33 @@ mod tests {
         );
     }
 
+    // ---- Fail-closed reason stems (SL-183 §5.5 F-B4) ---------------------------
+    // The macOS resolver's refusal REASONS outlive the SL-254 PHASE-04 wall
+    // deletion: `jail_prefix.rs`'s macOS arm renders `ResolveDeny::reason()` onto
+    // stderr, and each stem is a single-sourced named constant (STD-001). The
+    // deleted `decide_bash` / `seatbelt_backend` tests pinned these stems in
+    // passing; pinning them directly keeps the security-boundary vocabulary proven
+    // by something other than a since-deleted caller.
     #[test]
-    fn decide_bash_orchestrator_passes_through() {
+    fn resolve_deny_renders_its_named_reason_stem() {
+        assert_eq!(ResolveDeny::NotAWorktree.reason(), REASON_MAC_NOT_WORKTREE);
         assert_eq!(
-            decide_bash(
-                &Target::Orchestrator,
-                "ls",
-                "list",
-                &JailPolicy::default(),
-                &Backend::Bwrap
-            ),
-            Decision::PassThrough
+            ResolveDeny::IsMainCheckout.reason(),
+            REASON_MAC_MAIN_CHECKOUT
         );
-    }
-
-    #[test]
-    fn decide_bash_reject_denies_with_reason() {
-        let target = Target::Reject("cwd-not-a-worktree: /x".to_string());
         assert_eq!(
-            decide_bash(
-                &target,
-                "ls",
-                "list",
-                &JailPolicy::default(),
-                &Backend::Bwrap
-            ),
-            Decision::Deny {
-                reason: "cwd-not-a-worktree: /x".to_string()
-            }
+            ResolveDeny::AmbiguousGitDirs.reason(),
+            REASON_MAC_AMBIGUOUS_GITDIRS
         );
-    }
-
-    #[test]
-    fn decide_bash_jail_with_bwrap_wraps() {
-        let target = Target::Jail(pb("/wt"));
-        match decide_bash(
-            &target,
-            "echo hi",
-            "greet",
-            &JailPolicy::default(),
-            &Backend::Bwrap,
-        ) {
-            Decision::WrapBash {
-                command,
-                description,
-            } => {
-                assert_eq!(description, "greet");
-                assert!(command.starts_with(&format!("'{BWRAP}'")));
-                assert!(!command.contains("echo hi")); // opaque
-            }
-            other => panic!("expected WrapBash, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn decide_bash_jail_with_deny_backend_denies_never_passes_through() {
-        // C: capability-keyed deny — a degraded backend in a jailed context must DENY
-        // with the per-arm reason, never fall through to unwrapped execution.
-        let target = Target::Jail(pb("/wt"));
-        let backend = Backend::Deny {
-            reason: "bwrap-unavailable".to_string(),
-        };
         assert_eq!(
-            decide_bash(
-                &target,
-                "echo hi",
-                "greet",
-                &JailPolicy::default(),
-                &backend
-            ),
-            Decision::Deny {
-                reason: "bwrap-unavailable".to_string()
-            }
+            ResolveDeny::PolicyMissing.reason(),
+            REASON_MAC_POLICY_MISSING
         );
-    }
-
-    // ---- EX-3 (PHASE-04) · macOS-arm degrade contract, end-to-end -------------
-    // The macOS twin of the bwrap-reason test above. Proves the FULL Seatbelt
-    // resolver→backend→decision chain fails CLOSED: every `resolve_inputs` Deny
-    // branch (the "resolve-Deny" and "nesting-refused" framings both land here as
-    // `Err ⇒ Backend::Deny`) rides through `seatbelt_backend` into a jailed
-    // `decide_bash` as a `Decision::Deny` carrying the macOS reason — NEVER
-    // `WrapBash` (unwrapped-through-a-wrapper) and NEVER `PassThrough`. This is
-    // the unit proof of the degrade posture that pass-2 left un-triggered
-    // (nesting composed, so the contract never fired live).
-    #[test]
-    fn seatbelt_resolve_deny_degrades_to_bash_deny_never_wraps_or_passes() {
-        let target = Target::Jail(pb("/wt"));
-        // One representative per fail-closed family; the malformed branch carries a
-        // detail suffix so we assert the stem, not exact equality, for it.
-        let branches = [
-            ResolveDeny::NotAWorktree,
-            ResolveDeny::IsMainCheckout,
-            ResolveDeny::AmbiguousGitDirs,
-            ResolveDeny::PolicyMissing,
-            ResolveDeny::PolicyMalformed("unknown key `frobnicate`".to_string()),
-        ];
-        for branch in branches {
-            let expected_reason = branch.reason();
-            // resolver Err ⇒ Seatbelt backend degrades to Deny{reason}
-            let backend = seatbelt_backend(Err(branch.clone()));
-            assert_eq!(
-                backend,
-                Backend::Deny {
-                    reason: expected_reason.clone()
-                },
-                "seatbelt_backend must map Err({branch:?}) to Backend::Deny"
-            );
-            // …and a Deny backend in a jailed context denies Bash with that reason,
-            // never wrapping and never passing through.
-            match decide_bash(
-                &target,
-                "echo hi",
-                "greet",
-                &JailPolicy::default(),
-                &backend,
-            ) {
-                Decision::Deny { reason } => assert_eq!(
-                    reason, expected_reason,
-                    "degrade must carry the macOS reason for {branch:?}"
-                ),
-                other => panic!(
-                    "expected Decision::Deny for {branch:?}, got {other:?} \
-                     (fail-open regression: never WrapBash/PassThrough on a degraded arm)"
-                ),
-            }
-        }
-    }
-
-    #[test]
-    fn decide_write_inside_worktree_passes_escape_denies() {
-        let target = Target::Jail(pb("/wt"));
-        let policy = JailPolicy::default();
-        assert_eq!(
-            decide_write(&target, Some(&pb("/wt/src/x.rs")), &policy),
-            Decision::PassThrough
-        );
-        match decide_write(&target, Some(&pb("/etc/passwd")), &policy) {
-            Decision::Deny { reason } => assert!(reason.contains(REASON_ESCAPES_WORKTREE)),
-            other => panic!("expected Deny, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn decide_write_no_path_denies() {
-        let target = Target::Jail(pb("/wt"));
-        match decide_write(&target, None, &JailPolicy::default()) {
-            Decision::Deny { reason } => assert!(reason.contains(REASON_NO_FILE_PATH)),
-            other => panic!("expected Deny, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn decide_write_honours_extra_rw() {
-        let target = Target::Jail(pb("/wt"));
-        let policy = JailPolicy {
-            extra_rw: vec![pb("/opt/cache")],
-            network: true,
-        };
-        assert_eq!(
-            decide_write(&target, Some(&pb("/opt/cache/blob")), &policy),
-            Decision::PassThrough
+        // The malformed branch carries a parse detail behind the stem.
+        assert!(
+            ResolveDeny::PolicyMalformed("unknown key `frobnicate`".to_string())
+                .reason()
+                .starts_with(REASON_MAC_POLICY_MALFORMED)
         );
     }
 
@@ -1762,7 +1305,7 @@ mod tests {
         );
     }
 
-    // ---- SL-183 PHASE-03: resolve_inputs fail-closed (VT-1) + wiring (VT-2) ------
+    // ---- SL-183 PHASE-03: the macOS resolver, fail-closed (VT-1) + wiring (VT-2) --
     //
     // Every branch is driven through an injected `FakeEnv` — no real git/getconf/fs,
     // so the whole fail-closed matrix runs on Linux CI (the design's pure/shell split).
@@ -1825,184 +1368,54 @@ mod tests {
 
     const MAC_MAIN: &str = "/home/u/project";
 
-    fn resolve(env: &FakeEnv) -> Result<ResolvedMac, ResolveDeny> {
-        resolve_inputs(&pb("/private/tmp/wt-abc"), Path::new(MAC_MAIN), env)
-    }
-
-    // branch (a) — cwd not a worktree.
-    #[test]
-    fn resolve_inputs_branch_a_not_a_worktree_denies() {
-        let env = FakeEnv {
-            topology: Err(ResolveDeny::NotAWorktree),
-            ..Default::default()
-        };
-        assert_eq!(resolve(&env), Err(ResolveDeny::NotAWorktree));
-        assert_eq!(resolve(&env).unwrap_err().reason(), REASON_MAC_NOT_WORKTREE);
-    }
-
-    // branch (b) — toplevel is the main checkout.
-    #[test]
-    fn resolve_inputs_branch_b_main_checkout_denies() {
-        let env = FakeEnv {
-            topology: Ok(Topology {
-                toplevel: pb("/private/tmp/wt-abc"),
-                is_linked: false,
-            }),
-            ..Default::default()
-        };
-        assert_eq!(resolve(&env), Err(ResolveDeny::IsMainCheckout));
-    }
-
-    // branch (d) — ambiguous gitdirs (the env probe reports it).
-    #[test]
-    fn resolve_inputs_branch_d_ambiguous_gitdirs_denies() {
-        let env = FakeEnv {
-            topology: Err(ResolveDeny::AmbiguousGitDirs),
-            ..Default::default()
-        };
-        assert_eq!(resolve(&env), Err(ResolveDeny::AmbiguousGitDirs));
-    }
-
-    // branch (c/e) — policy absent (None) OR a nested-repo basename never provisioned.
-    #[test]
-    fn resolve_inputs_branch_e_policy_absent_denies() {
-        let env = FakeEnv {
-            policy: Ok(None),
-            ..Default::default()
-        };
-        assert_eq!(resolve(&env), Err(ResolveDeny::PolicyMissing));
-    }
-
-    // branch (c/e) — policy unreadable (io error) also denies (never a permissive default).
-    #[test]
-    fn resolve_inputs_policy_unreadable_denies() {
-        let env = FakeEnv {
-            policy: Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "boom",
-            )),
-            ..Default::default()
-        };
-        assert_eq!(resolve(&env), Err(ResolveDeny::PolicyMissing));
-    }
-
-    // branch (f) — malformed / unknown-key policy denies (covers the network ambiguity).
-    #[test]
-    fn resolve_inputs_branch_f_malformed_policy_denies() {
-        let env = FakeEnv {
-            policy: Ok(Some("network = \"maybe\"\n".to_string())), // wrong type
-            ..Default::default()
-        };
-        match resolve(&env) {
-            Err(ResolveDeny::PolicyMalformed(_)) => {}
-            other => panic!("expected PolicyMalformed, got {other:?}"),
-        }
-        // an UNKNOWN key also denies (deny_unknown_fields, F-B6) — never a silent open.
-        let env2 = FakeEnv {
-            policy: Ok(Some("network_egress = true\n".to_string())),
-            ..Default::default()
-        };
-        match resolve(&env2) {
-            Err(ResolveDeny::PolicyMalformed(_)) => {}
-            other => panic!("expected PolicyMalformed for unknown key, got {other:?}"),
+    /// The linked-worktree topology every resolver test resolves against.
+    fn linked_topo() -> Topology {
+        Topology {
+            toplevel: pb("/private/tmp/wt-abc"),
+            is_linked: true,
         }
     }
 
-    // branch (f-adjacent) — a dangerous extra_rw (root-ancestor) is rejected by the
-    // reused validate_policy, still a Deny (behaviour-preservation of the shared check).
-    #[test]
-    fn resolve_inputs_dangerous_extra_rw_denies() {
-        let env = FakeEnv {
-            policy: Ok(Some("extra_rw = [\"/\"]\n".to_string())),
-            ..Default::default()
-        };
-        match resolve(&env) {
-            Err(ResolveDeny::PolicyMalformed(_)) => {}
-            other => panic!("expected Deny for root extra_rw, got {other:?}"),
-        }
+    /// Parse a policy body and resolve it through the shared core — the chain the
+    /// command tier runs (`from_toml_str` → `resolve_with_policy`) once SL-254
+    /// PHASE-04 deleted `resolve_inputs`'s disk-policy lookup with its caller.
+    fn resolve_body(env: &FakeEnv, body: &str) -> Result<ResolvedMac, ResolveDeny> {
+        let policy = JailPolicy::from_toml_str(body)
+            .map_err(|e| ResolveDeny::PolicyMalformed(format!("{e:?}")))?;
+        resolve_with_policy(&policy, &linked_topo(), Path::new(MAC_MAIN), env)
     }
 
-    // happy path (EX-1) — Ok ⇒ a fully realpath'd ResolvedMac; network defaults open.
-    #[test]
-    fn resolve_inputs_happy_path_builds_resolved_mac() {
-        let env = FakeEnv::default();
-        let mac = resolve(&env).expect("happy path resolves");
-        assert_eq!(mac.wt, pb("/private/tmp/wt-abc"));
-        assert_eq!(mac.tmp, pb("/private/tmp/wt-abc/.tmp"));
-        assert_eq!(mac.dutmp, pb("/private/var/folders/xy/T"));
-        assert!(mac.extra_rw.is_empty());
-        assert!(mac.network, "a policy omitting network defaults OPEN");
-        assert_eq!(mac.profile_path, pb("/private/tmp/wt-abc/.tmp/jail.sb"));
-    }
-
-    // happy path with extra_rw — each grant is realpath'd and carried through.
-    #[test]
-    fn resolve_inputs_happy_path_carries_validated_extra_rw() {
-        let env = FakeEnv {
-            policy: Ok(Some("extra_rw = [\"/opt/cache\"]\n".to_string())),
-            ..Default::default()
-        };
-        let mac = resolve(&env).expect("valid extra_rw resolves");
-        assert_eq!(mac.extra_rw, vec![pb("/opt/cache")]);
-    }
-
-    // ---- VT-2: seatbelt_backend map + select_jailer macOS routing ---------------
-
-    // Ok(resolved) ⇒ Seatbelt ⇒ select_jailer Some ⇒ wrap_argv delegates to the builder.
-    #[test]
-    fn seatbelt_backend_ok_routes_to_seatbelt_jailer() {
-        let mac = resolve(&FakeEnv::default()).unwrap();
-        let backend = seatbelt_backend(Ok(mac.clone()));
-        assert_eq!(backend, Backend::Seatbelt(mac.clone()));
-        let jailer = select_jailer(&backend).expect("Seatbelt ⇒ Some");
-        assert_eq!(
-            jailer.wrap_argv(&mac.wt, &JailPolicy::default()),
-            sandbox_exec_argv(&mac)
-        );
-    }
-
-    // Err(deny) ⇒ Backend::Deny ⇒ select_jailer None ⇒ decide_bash DENIES, never wraps.
-    #[test]
-    fn seatbelt_backend_err_denies_never_passes_through() {
-        let backend = seatbelt_backend(Err(ResolveDeny::PolicyMalformed("bad".into())));
-        assert!(matches!(backend, Backend::Deny { .. }));
-        assert!(select_jailer(&backend).is_none());
-        let decision = decide_bash(
-            &Target::Jail(pb("/private/tmp/wt-abc")),
-            "rm -rf /",
-            "danger",
-            &JailPolicy::default(),
-            &backend,
-        );
-        match decision {
-            Decision::Deny { reason } => {
-                assert!(reason.starts_with(REASON_MAC_POLICY_MALFORMED));
-            }
-            other => panic!("malformed policy MUST deny, got {other:?}"),
-        }
-    }
-
-    // EX-4 / T10 — the network bool flows resolver → profile: false ⇒ deny line,
-    // omitted ⇒ default open ⇒ no deny line. Malformed already covered (branch f).
+    // EX-4 / T10 — the network bool flows policy → resolved → profile: false ⇒ deny
+    // line, omitted ⇒ default open ⇒ no deny line.
     #[test]
     fn network_bool_flows_from_policy_to_profile() {
-        let closed = FakeEnv {
-            policy: Ok(Some("network = false\n".to_string())),
-            ..Default::default()
-        };
-        let mac = resolve(&closed).expect("valid closed-network policy");
+        let env = FakeEnv::default();
+        let mac = resolve_body(&env, "network = false\n").expect("valid closed-network policy");
         assert!(!mac.network);
         assert!(
             seatbelt_profile(&mac).contains(DENY_NETWORK),
             "network=false MUST emit the deny line"
         );
 
-        let open = resolve(&FakeEnv::default()).unwrap();
-        assert!(open.network);
+        let open = resolve_body(&env, "").expect("empty policy is the default floor");
+        assert!(open.network, "a policy omitting network defaults OPEN");
         assert!(
             !seatbelt_profile(&open).contains(DENY_NETWORK),
             "default-open policy MUST NOT emit the deny line"
         );
+    }
+
+    // A malformed / unknown-key policy body never reaches a resolved wrap — it is a
+    // parse Err (deny_unknown_fields, F-B6), never a silent permissive default.
+    #[test]
+    fn malformed_policy_body_never_resolves() {
+        let env = FakeEnv::default();
+        for body in ["network = \"maybe\"\n", "network_egress = true\n"] {
+            match resolve_body(&env, body) {
+                Err(ResolveDeny::PolicyMalformed(_)) => {}
+                other => panic!("expected PolicyMalformed for {body:?}, got {other:?}"),
+            }
+        }
     }
 
     // ---- RealEnv host-agnostic legs (git topology + policy read) ----------------
@@ -2024,11 +1437,6 @@ mod tests {
             .worktree_topology(&primary)
             .expect("primary is a worktree");
         assert!(!topo.is_linked, "primary tree is the main checkout");
-        // and the full resolver denies at branch b (no getconf/policy reached).
-        assert_eq!(
-            resolve_inputs(&primary, &primary, &env),
-            Err(ResolveDeny::IsMainCheckout)
-        );
     }
 
     // branch (a) real — a non-git dir ⇒ NotAWorktree.
@@ -2046,9 +1454,9 @@ mod tests {
         );
     }
 
-    // linked worktree real — is_linked true; then read_policy absent ⇒ branch e.
+    // linked worktree real — is_linked true, and no policy provisioned for it.
     #[test]
-    fn real_env_linked_worktree_then_policy_absent_is_branch_e() {
+    fn real_env_linked_worktree_then_policy_absent() {
         let tmp = tempfile::tempdir().unwrap();
         let primary = init_repo(&tmp.path().join("src"));
         let fork = tmp.path().join("wt-xyz");
@@ -2069,10 +1477,11 @@ mod tests {
         };
         let topo = env.worktree_topology(&fork).expect("fork is a worktree");
         assert!(topo.is_linked, "a linked worktree");
-        // no policy provisioned under <main>/.doctrine/state/dispatch/jail/ ⇒ branch e.
+        // nothing provisioned under <main>/.doctrine/state/dispatch/jail/ ⇒ absent.
         assert_eq!(
-            resolve_inputs(&fork, &primary, &env),
-            Err(ResolveDeny::PolicyMissing)
+            env.read_policy(fork.file_name().expect("basename"))
+                .expect("read is not an error"),
+            None
         );
     }
 
@@ -2105,30 +1514,6 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(JailPolicy::from_toml_str(&bad).is_err());
-    }
-
-    // ---- VT-1 (EX-1 verify): resolve_inputs is a recomposition — ONE topology probe ----
-    // Prove that `resolve_inputs` delegates to `acquire_policy` + `resolve_with_policy`
-    // and that the topology probe happens exactly once (the shell layer calls
-    // `worktree_topology`, then chains the two factored functions).
-
-    #[test]
-    fn resolve_inputs_is_a_recomposition_one_topology_probe() {
-        // Happy path: `resolve_inputs` must produce the same result as manually chaining
-        // `acquire_policy` + `resolve_with_policy` with the ONE topology probe.
-        let env = FakeEnv::default();
-        // The recomposed resolve_inputs:
-        let mac_from_recomposed =
-            resolve_inputs(&pb("/private/tmp/wt-abc"), Path::new(MAC_MAIN), &env)
-                .expect("recomposed resolve_inputs");
-        // The equivalent manual chain:
-        let topo = env
-            .worktree_topology(&pb("/private/tmp/wt-abc"))
-            .expect("topology probe");
-        let policy = acquire_policy(&topo, &env).expect("acquire_policy");
-        let mac_from_chain = resolve_with_policy(&policy, &topo, Path::new(MAC_MAIN), &env)
-            .expect("resolve_with_policy");
-        assert_eq!(mac_from_recomposed, mac_from_chain);
     }
 
     // ---- VT-2: resolve_with_policy from a SUPPLIED inline policy (no disk read) -------
@@ -2211,12 +1596,12 @@ mod tests {
 
     // ---- SL-254 PHASE-01: relocated from `pretooluse.rs` with their subject -----
     // Moved verbatim (DEC-206, design §9.1) — a changed ASSERTION here would mean
-    // the re-home was not behaviour-preserving. `resolved_at` is COPIED, not moved:
-    // `pretooluse`'s `materialize_seatbelt_profile` tests still use it and both
-    // copies die with that module in PHASE-04.
+    // the re-home was not behaviour-preserving. `resolved_at` was COPIED alongside
+    // `pretooluse`'s own `materialize_seatbelt_profile` tests; PHASE-04 deleted that
+    // module, so this is now the only copy.
 
     /// A `ResolvedMac` whose `.tmp` exists and whose `profile_path` sits under it —
-    /// the shape `resolve_inputs` produces (`<wt>/.tmp/jail.sb`).
+    /// the shape `resolve_with_policy` produces (`<wt>/.tmp/jail.sb`).
     fn resolved_at(tmp_dir: &Path) -> ResolvedMac {
         ResolvedMac {
             wt: tmp_dir.parent().unwrap().to_path_buf(),
