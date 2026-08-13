@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ff9d1-7991-7072-8d2d-537abaac9c66"
+recorded_at = "2026-08-13T06:31:22.769500634Z"
+kind = "friction"
+summary = "design show --full does not project open inquiry nodes outside the frontier (RV-353 step 2 evidence gathering)"
+detail = "Reading SL-252's live design run for pre-chewed tier-3 candidates: 'doctrine design show SL-252 --full' and '--format json' both report totals open=6 / open_outside_frontier=4 but project only the 2 frontier nodes, with omitted.frontier=0 — so the projection reports nothing was omitted while four open questions are unreachable. The only route to them was grepping .doctrine/state/slice/252/design.toml directly, which the guardrails tell agents not to do (read entities via show, not raw files). Cost: one wasted --full call, one wasted --format json call, then a raw-file read anyway. A --stage/--open selector, or counting non-frontier open nodes in 'omitted', would close it."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

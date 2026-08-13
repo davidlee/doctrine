@@ -279,3 +279,219 @@ overstated reasoning without disturbing the holding.
 
 > *Heresis uritor; doctrina manet* — and the doctrine that remains is narrower
 > than the fire that found it.
+
+## Complexity partition (`F-13`)
+
+> Written 2026-08-13 as **penance step 2**. Step 3 (vacate the governance) and
+> step 4 (triage `cluster:capsule`) take their sort order from here. This
+> section is a classification, not a work plan: nothing below is an instruction
+> to delete, keep, or build anything.
+
+### The test, applied literally
+
+`F-13`'s three tiers are defined against **the requirement**, never against the
+code that serves it:
+
+| Tier | The obligation | Disposition |
+|---|---|---|
+| **1 — intrinsic** | Survives any successor that confines anything at all | Salvage |
+| **2 — incumbent transaction** | Predates the programme and **returns unsolved** when the capsule is abandoned | Carry on the register |
+| **3 — self-inflicted** | Exists *only because* environments are derived from arbitrary host state (`F-2`), and dies with that error | The only tier that may be called waste |
+
+So the question asked of every entry below is `F-12`'s: **does this mechanism's
+requirement die with the architectural error?** — never the easier question,
+*is this mechanism a consequence of the architectural error?* Almost everything
+in `crates/doctrine-control` is a consequence of `F-2`; that is what `F-2`
+means. Very little of it has a requirement that dies with `F-2`. The first pass
+conflated the two, `F-12` caught it, and the difference is the whole content of
+this section. Where the argument would not close either way, the entry is tier
+2, which is the conservative call: tier 2 says *still a real problem, still
+unsolved*.
+
+**Two things this partition does not decide.**
+
+1. **Tier is not code disposition.** A tier-2 obligation whose implementation is
+   deleted is still tier 2 — the problem returns to the register, not to the
+   bin. The Salvage manifest's *Discard* list answers "what code goes"; this
+   section answers "what problem stays". They diverge in three places, recorded
+   below, and both are correct about their own question.
+2. **Tier is not salvage value.** Tier-3 code can carry a fragment worth
+   keeping, exactly as salvage item 3 keeps `SL-241`'s findings as knowledge
+   while its rig stays disposable. Where that applies it is noted at the entry.
+
+### Scope
+
+`F-13`'s wording names `crates/doctrine-control` and `SPEC-030`. Tier 2 is
+defined by what the abandonment *hands back*, and much of that was never inside
+either — it is owned today by `src/dispatch.rs`, `src/worktree/` and
+`src/interpretation.rs`. A partition confined to the crate would under-populate
+tier 2 and make the successor look cheaper than it is. So the crate and the
+spec supply the inventory, and tier 2 additionally pulls in mechanisms from
+wherever they live, naming their home.
+
+### Tier 1 — intrinsic
+
+Survives any successor. This is the salvage list at mechanism granularity.
+
+| Mechanism | Home | Why it survives |
+|---|---|---|
+| Namespace and mount semantics — `--unshare-all`, `--new-session`, `--die-with-parent`, `--clearenv`, the bind flags, and their ordering rules | `backend/bubblewrap.rs` § flag tokens, `confinement_argv` | How to invoke the mechanism correctly is dearly bought and mechanism-shaped, not architecture-shaped (salvage 2) |
+| Wall bound and per-file size cap applied **outside** the namespace — `timeout -k`, `RLIMIT_FSIZE` via `pre_exec` | `bubblewrap.rs` `T10`, `wall_bounded_argv` | "A bound a capsule can reach is not a bound" holds under any provisioning model |
+| Descriptor closure above the standard streams — the `/proc/self/fd` sweep, marked in the parent before the fork | `bubblewrap.rs` `T9` | An already-open descriptor is not a namespace, a mount or an environment entry; no provisioning choice changes that |
+| Standard-stream ownership — parent-owned endpoints, no inbound channel | `bubblewrap.rs` `T8`, row 12 | Intrinsic to running anything untrusted |
+| Process teardown, and termination classification as a closed table | `classify_termination`, the measured termination table (`D12`) | Signals and exit shapes are the platform's, not the architecture's |
+| Credential posture — a declared, **non-configurable** uid/gid, and capability confinement | `CAPSULE_UID`/`CAPSULE_GID`, rows 13 and 14 | An operator-chosen identity is a second way to weaken a capsule under any design |
+| `no_new_privs` | `conformance.rs` `Unrowed` (`EX-12`, `sec-9` `R8`) | Intrinsic property. Recorded as an unrowed *observation* because bubblewrap sets it unconditionally, so no differential removal exists — a fact about the mechanism, not a gap in the design |
+| The inner layout as **reserved** destinations — `/source`, `/capsule`, `/agent`, `/proc`, `/dev`, `/tmp` | `backend.rs` `INNER_*` | Any confined workspace has an inner layout, and shadowing the input is a substitution attack regardless of where the input came from |
+| The rule that **the mount set is the confinement**, so an unvalidated placement is an unconfined capsule with a confined shape | `backend.rs` `CapsulePlacement` doc | Intrinsic. Note: the *apparatus* enforcing it is tier 3 — see there — because its input is what `F-2` creates |
+| A confinement contract that is **property-shaped, never flag-shaped** | `backend.rs` `CapsuleBackend` | A flag-shaped vocabulary is one mechanism's and cannot be asked of a second |
+| The fourteen properties of Table A | `conformance.rs` `Property` | These are claims about a running confined process. They are what a successor must still prove; only their *fixture* is architecture-shaped |
+| Differential probe/control, and `Unproven ≠ Violated` | `RowVerdict` | The distinction between "the property held" and "removing it changed nothing" is method, not architecture, and it is the single most transferable idea in the suite |
+| Liveness first, observation second | `conformance.rs` § classification | A payload that never ran and a payload that was denied are opposite facts; conflating them is the default failure mode of any probe suite |
+| A removal named by the **property**, never by the flag; every removal states what it does *not* change | `PropertyRemoval` | A removal that moves two things names no mechanism when its row fails |
+| Weakenings **recorded rather than merely absent** | `Unrowed`, `the_identity_is_exactly` | An unrecorded weakening reads as an oversight; this is the discipline that made `F-3`'s soundness limb findable at all |
+| The suite's self-guard: no `#[ignore]` in the crate stands in for a claim unless reasoned `"instrument: …"` | `conformance.rs:11163` | Mechanism-independent, and it is the guard that keeps a suite honest as it ages |
+| Capability probes must be **structural, not existential** | `ISS-339`'s measured lesson | A `path_exists("/bin/sh")` guard passes on a host that cannot exec it — true of every host, under every architecture |
+| Unavailability names what is missing **and the remedy** | `Availability`, `SHELL_REMEDY`, `REV-051`'s `setsid`/`socat` contract | `POL-002` facet 3: a red row for a reason that is not a defect must say so |
+
+### Tier 2 — incumbent transaction
+
+**Returns unsolved.** Every entry here is a problem the successor will meet
+because abandoning the capsule dissolves nothing about it. Several are visibly
+hard; that difficulty is *not* evidence of relapse into this failure. Read this
+list as the standing debt the programme did not create and did not discharge.
+
+#### Owned inside the crate or the spec today
+
+| Obligation (successor-neutral wording) | Where it sits now | Note |
+|---|---|---|
+| Provision a **fresh, deterministic workspace from an immutable base**, and prove two units of work share no writable state | `provision.rs` steps 8–13; `conformance.rs` Table B's five freshness axes | The capsule framing dies; freshness does not. The incumbent solves a weaker version with worktrees |
+| Publish or adopt a **per-base immutable input**, once, under concurrency | `provision.rs` `T4` publish-or-adopt | This is deterministic workspace creation plus concurrency, both on the returned list |
+| **Own a workspace exclusively**, and roll back completely on any later failure | `provision.rs` `create_exclusively`, the creation token, `roll_back` | "A refused provision leaves no transaction and removes nothing it did not create" is an orchestration invariant, not a confinement one |
+| Bind what one unit of work is **about** — base, phase identity, bounds, mechanism, policy identity | `transaction.rs` | The incumbent's version is `src/worktree/dispatch_record.rs` |
+| Decide **where isolated work lives** on disk, with a platform-sensible default | `config.rs` capsule root, XDG resolution | Returns immediately; the incumbent answers it in-repo |
+| **Advisory capacity**: warn before starting, halt on exhaustion, never evict or auto-delete work | `capacity.rs`, `REQ-461` | Any successor provisioning fresh workspaces meets this. See divergence 1 |
+| **Property equivalence across platforms**, and stronger isolation on demand | `backend.rs` `CapsuleBackend`, `REQ-459`'s equivalence clause | Explicitly on the returned list ("non-Nix platforms") |
+| **Interpretation authority** — who may execute worker-controlled content — and monotonic phase restriction of it | `src/interpretation.rs` (1,624), `provision.rs` steps 4–6, `REQ-449` | **Conditional (`F-12`).** Carries iff the successor retains a trusted/untrusted execution split. Answer that question before deleting anything here; the *mechanism* is separately judged disproportionate on its own evidence, which is a different finding |
+
+#### Owned outside both — the scope ruling's additions
+
+| Obligation | Home today |
+|---|---|
+| Deterministic workspace creation and provisioning | `src/worktree/create.rs`, `fork.rs`, `provision.rs`, `mod.rs` |
+| Agent lifecycle and harness-agnostic spawn | `src/worktree/subagent.rs`, `src/dispatch.rs`, `scripts/pi-spawn-confined.sh`, `ADR-011` |
+| Control-plane communication and the per-phase funnel | `src/dispatch.rs` (12,463), the `worker_commit` / `observation_record` MCP seam |
+| Result transport and hostile ingestion | `src/worktree/import.rs`, `dispatch import`, the `worker_commit` gate; `SL-241`'s 16-row hazard matrix as evidence |
+| Teardown and reaping | `src/worktree/gc.rs`, `claim_lock.rs`, `dispatch reap` |
+| Recovery, staleness, and repair | `src/worktree/dispatch_record.rs`, `inventory.rs`, `land.rs`; the candidate engine (`SPEC-022`) |
+| Concurrency — claims, markers, prefix collision, allowlists | `src/worktree/claim_lock.rs`, `marker.rs`, `jail_prefix.rs`, `allowlist.rs` |
+| Confinement on non-Nix hosts | `src/worktree/jail.rs` (2,218), `pretooluse.rs`, `flake.nix`; `IMP-426`'s microVM spike |
+| Admission: journal-before-mutation, expected-tip compare-and-swap, idempotent replay | `SPEC-022` substrate, partly shipped |
+
+### Tier 3 — self-inflicted
+
+**Dissolves with `F-2`.** Each entry carries the argument that its *requirement*
+— not merely its code — dies when environments are selected rather than derived.
+This is the only tier the verdict may call waste.
+
+| Mechanism | Home | Why the requirement dies |
+|---|---|---|
+| The `readable-roots` / `closure-roots` / `closure-resolver` configuration surface | `config.rs` `KEY_READABLE_ROOTS`, `KEY_CLOSURE_ROOTS`, `KEY_CLOSURE_RESOLVER` | It exists to let an operator declare **arbitrary host paths** from which an environment is assembled. Under selection the bind list is a manifest the provisioner already holds; there is nothing for an operator to declare, so the keys, their emptiness rules and their six refusals have no subject |
+| Declared-entry resolution and probing — `resolve_or_refuse`, `resolved_readable_root`, `readable_paths`, `readable_set` | `bubblewrap.rs` `T5` | Resolution-before-validation exists because bwrap dereferences the source of a `--ro-bind` and a declared root may point elsewhere (`RV-346` `F-1`). A provisioner-emitted manifest names realised paths; the hazard has no input |
+| Closure expansion of a **declared host root** — `resolved_closure_root`, `expand_closure_root`, `ClosureQuery`, `SpawnedClosureQuery` | `bubblewrap.rs` `T5` | The requirement is "given an arbitrary host path, discover what else must be bound for it to work". Selection replaces it with "realise the thing you chose". **Salvage note:** `closure_members`' *parse* of a resolver's output into paths is the reusable fragment (salvage 2's direction — take a nix closure); `expand_closure_root`'s *expansion of a declared root* is the part that dies |
+| Resolver admission against the interpretation policy | `provision.rs` step 6, `admit_resolver` | A step whose whole subject is "may this project-supplied command be run to compute a bind list". No resolver, no admission question |
+| Inner-`PATH` synthesis — `derived_inner_path`, `is_within`, `render_path_list` | `bubblewrap.rs` `T6` | Keeps host `$PATH` entries that lie beneath a bound path. `SL-252`'s `DEC-187` already killed it in favour of discovered reach. A selected environment carries its own `PATH` |
+| Validation apparatus over **operator-declared** placement entries — the reserved-destination, inner-collision, bidirectional-overlap and forbidden-scope rules, and their mirror-defect guards | `backend.rs` `CapsulePlacement::try_new`, `ForbiddenScopes`, `PlacementRefusal` | The *invariant* (a placement must not expose canonical state, credentials, or a sibling transaction) is tier 1 and stated there. This apparatus is tier 3 because its **input** is what `F-2` creates: arbitrary declared paths that can name anything. Under selection the input is a trusted manifest and the check collapses to an assertion. `RV-346` `F-10` and `F-25` are both defects of the untrusted-input form |
+| The capsule-input half of `HostFacts` — `canonicalize`, `path_exists`, and the environment read | `host.rs` | Three of the four impure inputs exist to resolve and probe declared host paths. `available_bytes` is tier 2 and stays |
+| The conformance fixture's readable-set derivation — binding whole host top-level roots | `conformance.rs` fixture, `ISS-341` | This is `F-3`'s soundness limb in one line: the fixture derived its inputs from the host exactly as production did, so its capsules were more permissive than the ones it certified. It is the design's own error reproduced inside the instrument that was supposed to detect it |
+| Row 2's per-root exec coverage set | `execs_only_what_is_bound`, `ISS-340` | Derives coverage from the inner `$PATH`, which is tier 3; it is unsatisfiable on a real host for that reason |
+| The whole of `SL-252` — all eleven inquiry nodes, six still open | live design run `dr-019feb6b…`, `DEC-184`…`DEC-188` | Every node is a question about the *unit of a derived readable set*, the *inner `PATH` it empties*, or *who computes a closure of a host path*. Not one of them is a question a selection-based successor can be asked. `DEC-188`'s "that is a slice, not a phase" is `F-8` in the accused's own words |
+| The root package's `lib` target, its curated leaf-only export set, the `EXPORTED` assertion, and the `sec-6`/`sec-9` invariants guarding them | `src/lib.rs`, `SL-248` design `sec-6` | `F-12`/`F-5`: the tangle reached into the root package's *target layout* to serve one capsule-only module. **Conditional twice over** — it dies with `crates/doctrine-control`'s consumer, but `IMP-404` (`SL-112`'s deferred engine/leaf extraction) is an independent motive for a library boundary that survives. Decide it separately, as `F-12` instructs |
+| `doctrine-control`'s `provision` verb and its CLI shell | `main.rs` | The entry point of the dissolved transaction. `backend verify` is the exception: "report a mechanism's admission verdict on the host that will run it" is tier 1 and should outlive the binary |
+
+### Where this diverges from the Salvage manifest's *Discard* list
+
+The Discard list was written before this partition existed and answers a
+different question (what code goes). Three of its parenthetical tier labels do
+not survive the test above. Recorded rather than silently overridden.
+
+1. **`capacity.rs` (391) is listed as tier 3; it is tier 2.** `REQ-461`'s
+   obligation — warn against a configurable expectation, halt on exhaustion,
+   never evict — is met by any successor that provisions fresh workspaces on
+   disk. The code is discardable; the problem is not.
+2. **`provision.rs`'s thirteen steps are listed as tier 3; the protocol splits.**
+   Steps 1, 6 and 7 are tier 3 (config lists, resolver admission, readable-set
+   expansion). Steps 8–13 — publish-or-adopt, exclusive creation, the creation
+   token, rollback, workspace materialisation — are **deterministic workspace
+   creation and concurrency**, which is the reviewer's own tier-2 list. Delete
+   the file; keep the obligations on the register.
+3. **`SPEC-030`'s fourteen requirements are listed as tier 3; none of them is.**
+   See the roster below. This is the largest correction in this section, and it
+   matters most: withdrawing the spec (step 3) must not be read as dissolving
+   the obligations it names.
+
+`conformance.rs` is not a divergence but needs its split stated: the file is
+correctly on the Discard list, while its method (differential arms, the verdict
+algebra, the self-guard, recorded weakenings) is tier 1 and its fixture is tier
+3. `F-3`'s soundness limb condemns the fixture. `F-11` already withdrew the LOC
+argument as proof of anything.
+
+### `SPEC-030`'s roster, requirement by requirement
+
+The declared mechanism set. Tier, then the obligation restated without capsule
+vocabulary — which is what a successor actually inherits.
+
+| Req | Label | Tier | The carried obligation |
+|---|---|---|---|
+| `REQ-448` | `FR-001` | 2 | One trusted writer owns canonical mutation; a worker's output, exit status and prose are evidence, never authority. The incumbent has this problem today (`ADR-006`) |
+| `REQ-449` | `FR-002` | 2 (conditional) | Bind an immutable base to a unit of work, and let a phase only narrow the project's execution policy. The base half returns unsolved; the interpretation half is `F-12`'s open retention question |
+| `REQ-450` | `FR-003` | 2 | Fresh mutable state per unit of work; no formal resumption of harvested state. Freshness is orthogonal to how the environment is obtained |
+| `REQ-451` | `FR-004` | 2 | Get a result out of a less-trusted execution context as bounded, quiescent, parent-owned bytes. Bundle-as-transport is one mechanism; the requirement is result transport |
+| `REQ-452` | `FR-005` | 2 | Never let trusted Git use a worker-authored repository as repository or working context. `SL-241`'s hazard matrix is the evidence and survives as knowledge |
+| `REQ-453` | `FR-006` | 2 | Check the actual delta against the contract from objects, not from prose. The incumbent's `authored-divergence` probe is a weaker form of the same |
+| `REQ-454` | `FR-007` | 2 | Verify the exact artefact that could land, not an approximation of it |
+| `REQ-455` | `FR-008` | 2 | Journal intent before mutation; advance by expected-old compare-and-swap; replay idempotently. Partly shipped in `SPEC-022` |
+| `REQ-456` | `FR-009` | 2 | Route stale work through object-only three-way classification with durable clean/conflicted state |
+| `REQ-457` | `FR-010` | 2 | Repair as a new unit of work; cleanup requires mechanically recorded incorporation or explicit operator disposition |
+| `REQ-458` | `FR-011` | 2 | Durable admission truth, small and permanent; unresolved work is never automatically destroyed; exhibits expire separately |
+| `REQ-459` | `FR-012` | **1 / 2 / 3** | **Splits.** The fourteen properties are tier 1. Cross-platform property *equivalence*, and the refusal to claim an unmeasured backend, are tier 2. The fixture that derives its readable inputs from host roots is tier 3 (`ISS-341`), and so is row 2's coverage rule (`ISS-340`) |
+| `REQ-460` | `NF-001` | 2 | No force, no silent resolution, no resumption of harvested state, no automated loss of unresolved work. Pure orchestration safety |
+| `REQ-461` | `NF-002` | 2 | Warn early against a configurable expectation, halt visibly, reserve/evict/backpressure nothing |
+
+**Zero requirements are tier 3 outright; one splits.** That is not a rescue of
+`SPEC-030` — the spec is still `active` with no shipped consumer and step 3
+should withdraw or reduce it. It is the statement that withdrawing the document
+returns thirteen-and-a-half problems to the register unsolved, and that the
+successor's design must answer for them rather than inherit a clean sheet.
+
+### What step 4 does with this
+
+The triage rule, stated once so `cluster:capsule` can be sorted mechanically:
+
+- An item is **dissolved** iff the mechanism it is about appears in tier 3 above
+  — and the item's own argument must name that entry. An item whose tier-3
+  claim rests only on "the capsule is abandoned" is not dissolved; it is tier 2.
+- An item is **carried** if its mechanism is tier 1 or tier 2. Carried items
+  should be re-homed onto the obligation, not onto the capsule.
+- `F-4`'s items are **live** and already discharged by step 1.
+- Where the argument does not close, the item is **carried**. Under-dissolving
+  costs a register entry; over-dissolving loses a real problem and hands the
+  successor a clean sheet it has not earned.
+
+`SL-252` is dissolved in full, by the eleven-node argument in the tier-3 table.
+
+### The tier-2 register, as returned-unsolved work
+
+Recorded here as `F-13`'s verification asks. The successor inherits, unsolved
+and not by its own doing: **deterministic workspace creation** · **agent
+lifecycle and spawn** · **control-plane communication** · **result transport
+and hostile ingestion** · **conformance of a result to its contract** ·
+**verification of the exact landable artefact** · **admission journalling and
+compare-and-swap** · **staleness, conflict and repair** · **retention of
+unresolved work** · **teardown** · **concurrency** · **capacity** ·
+**confinement on non-Nix hosts** · **stronger isolation on demand** ·
+**interpretation authority, conditionally**.
+
+Meeting difficulty in any of the above is not relapse. It is the bill the
+programme never paid and never could have, because none of it was the
+programme's to solve.
