@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019ffa3a-e480-7bf3-a6c4-255578ccd3c2"
+recorded_at = "2026-08-13T08:26:31.424304709Z"
+kind = "friction"
+summary = "/design: §5.6's code-impact list is hand-built; six sweeps under-counted, twice with compile/gate-breakers"
+detail = "SL-254's design carries a Code Impact section enumerating every file the change touches. It was built and extended by reading code and asking 'what does this touch'. Six sweeps under-counted, always low. Two misses would not have compiled (doctor_checks.rs check #10 reads deleted symbols; jail.rs orphans ~300 lines of pub(crate) decision layer, which is dead_code under a zero-warning clippy gate). The fix was to invert the question: enumerate every pub item in the dying modules, grep each across src/ and tests/, subtract consumers that are themselves dying. That is mechanical and reproduced the known find as a positive control. The /design skill has no step that does this — the code-impact section is authored prose with no derivation discipline attached, unlike the governance half which now has DEC-218's method. Cost: three review rounds and an external adversarial pass that still missed both compile-breakers."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

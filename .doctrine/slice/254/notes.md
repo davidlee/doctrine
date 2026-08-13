@@ -371,3 +371,59 @@ allowlists `mcp__doctrine__worker_commit` as the worker's one MCP token, which
 `DEC-216` leaves empty. `src/finding.rs` loses a `Category` variant with #10. A
 second pass should ask what *else* consumes a deleted symbol — the design's §5.6
 is a hand-built list, and this was the second sweep to extend it.
+
+---
+
+## The symbol census — sixth sweep of §5.6, and the method change
+
+*Run 2026-08-13 at rev 49, before section attestation, so §5.6's edits do not
+stale an attestation twice.*
+
+The `doctor_checks.rs` find above was a compile-breaker sitting behind a symbol
+the design had already marked for deletion — which said the *method* was wrong,
+not that one entry was missing. Sweeps one to five read the code and asked "what
+does this change touch", which is answered from a mental model. The sixth
+inverted it: enumerate every `pub` item in the three dying modules and in
+`jail.rs`, grep each across `src/` and `tests/`, subtract consumers that are
+themselves dying. Mechanical, and it reproduced `doctor_checks.rs` as a positive
+control before finding anything new.
+
+**What it found.**
+
+1. **`jail.rs` loses its entire pure decision layer** — ~300 of 981 production
+   lines and about half its ~60 unit tests. `pretooluse.rs` was the sole caller of
+   `resolve_target`, `decide_agent`, `decide_workflow`, `decide_bash`,
+   `decide_write`, `pathcheck`, `opaque_wrap`, `shell_single_quote`,
+   `acquire_policy`, `resolve_inputs`, `seatbelt_backend`, `is_privileged_agent_type`,
+   `enum Decision`, `enum Target` and five `REASON_*` constants. `pub(crate)` with
+   no caller is `dead_code`, and `just gate` is clippy-at-zero-warnings, so this is
+   a gate-breaker in the same class as `doctor_checks.rs`. §5.6's old jail.rs row
+   read as a four-item edit; it is a third of the module.
+2. **`src/commands/guard.rs` is where the write-class registry lives**, not
+   `main.rs` as §5.6 said. Its `Marker { stamp_subagent: true }`, `Nominate` and
+   `Denominate` arms don't compile once those `Command` variants go; the bespoke
+   `WriteClass::MarkerClear` class retires with `run_marker_clear`; and
+   `worker_guard`'s two-branch dual-cause message collapses when the marker leg does.
+3. **`justfile:37`** — `validate`'s worker-context skip has a marker-file leg
+   alongside the two env legs. Non-Rust, so no symbol grep would have found it; it
+   surfaced only by grepping the literal path string.
+4. **Six unlisted test files**, one of them (`e2e_dispatch_arm_spawn.rs`) an
+   outright delete, plus `tests/common/mod.rs`, whose fixture helper *stamps* the
+   marker.
+
+**Two positives worth as much as the findings.** `F-2`'s fix is on live code —
+`sandbox_exec_argv` is reached from `jail_prefix.rs:168` via `Seatbelt::wrap_argv`,
+not from the dying wall, so the census does not undercut it. And `DEC-206`'s
+re-homing set is provably complete: `jail_prefix.rs` imports exactly those four
+primitives from `pretooluse.rs` and nothing else. No fifth primitive is hiding.
+
+**Method limits, recorded so the plan phase inherits them.** A negative grep is
+worthless without a positive control — `e2e_priority_golden.rs`'s three
+`denominate` hits are the arithmetic denominator, and `boot.rs`/`relation_graph.rs`
+both define unrelated `resolve_target` functions. And the census sees Rust symbols
+only; every non-Rust consumer (`justfile`, `.claude/settings.json`, the scripts,
+the `spec-*.toml` source anchors) needs a separate literal-string sweep.
+
+**Probe 3 (the macOS/Darwin census) is still untouched** and remains the sharpest
+open probe for a second adversarial pass. This sweep touched the Darwin path only
+where it intersected the orphan question.

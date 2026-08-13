@@ -860,12 +860,13 @@ exception — it is tracked, and `doctrine install` reconciles it against
 | `src/mcp_server/worker_commit.rs` | 1495 | nothing re-homes (`DEC-213`) |
 | `tests/e2e_worktree_stamp.rs` | — | subject deleted |
 | `tests/e2e_worktree_verify_worker.rs` | — | subject deleted |
+| `tests/e2e_dispatch_arm_spawn.rs` | — | subject deleted (`D2`); the file is `arm-spawn` end to end |
 
 **Modify**
 
 | path | change |
 |---|---|
-| `src/worktree/jail.rs` | receive the four cfg-split primitives; **add `DOCTRINE_WORKER=1` to `sandbox_exec_argv`'s trailing `env` token** (`:627-655`, `F-2`); drop `PRIVILEGED_AGENT_TYPES` (`:121`) and the disk-policy backend branch |
+| `src/worktree/jail.rs` | receive the four cfg-split primitives; **add `DOCTRINE_WORKER=1` to `sandbox_exec_argv`'s trailing `env` token** (`:627-655`, `F-2`); **delete the whole pure decision layer** — see *The wall's blast radius* below, which is where `PRIVILEGED_AGENT_TYPES` (`:121`) and the disk-policy backend branch sit |
 | `src/worktree/jail_prefix.rs` | re-point the four imports (`:39-49`) from `pretooluse` to `jail` |
 | `src/worktree/marker.rs` | collapse to the env predicate + status render; delete marker file ops, `Cause`, `is_stale_marker`, `DUAL_CAUSE`, `run_marker_clear` |
 | `src/worktree/mod.rs` | drop the deleted subcommand arms (`Pretooluse`, `Nominate`, `Denominate`, `VerifyWorker`) and re-exports; retire the `marker_on_main` truth-table test |
@@ -883,7 +884,10 @@ exception — it is tracked, and `doctrine install` reconciles it against
 | `src/mcp_server/tools.rs`, `src/mcp_server/mod.rs` | unregister `worker_commit`; drop the marker disjunct in `repository_context` (`:1389`) |
 | `src/commands/observation.rs` | drop the marker disjunct (`:509`) |
 | `src/main.rs` | drop the write-class tests for the deleted verbs |
-| `src/test_support.rs`, `src/regression_run.rs` | drop marker-presence from filter/selection state |
+| `src/commands/guard.rs` | **the write-class registry, not `main.rs`** — delete the `Marker { stamp_subagent: true }`, `Nominate` and `Denominate` arms (`:285-307`); their `Command` variants go, so **the match does not compile** with them. Retire the bespoke `WriteClass::MarkerClear` class and its pass-through leg (`:499`) — it exists only for `worktree marker --clear`. In `worker_guard`, the marker leg of `resolve_mode` collapses to the env leg, so the two-branch `is_env_on_nonlinked` / named-verb message split (`:512-524`) degenerates to one branch |
+| `justfile` | `validate`'s worker-context skip reads three signals; drop the `[ -f .doctrine/state/dispatch/worker ]` leg (`:37`). `DOCTRINE_WORKER=1` and `DOCTRINE_DISPATCH_GATE` survive and are what `DEC-207` leaves standing — a clean deletion, not a behaviour change |
+| `src/worktree/dispatch_record.rs` | doc-anchor only: `:26`'s intra-doc link to `super::create::JAIL_SUBPATH` dangles once that const goes. Its own `provision_dispatch_record` (`:110`) is an independent mirror and survives |
+| `src/test_support.rs`, `src/regression_run.rs` | drop marker-presence from filter/selection state — in `test_support` that is `WORKER_MARKER_REL` (`:62`, an `STD-001` carve-out duplicate of `marker_path`) and `worker_marker_at`'s marker leg (`:68`). **The helper contains the blast radius**: `under_worker_marker` has 31 test-file callers and none of them change |
 | `scripts/pi-spawn-confined.sh` → `scripts/spawn-confined.sh` | generalise past `pi`; add the claude profile; rename (`DEC-209`); **add the Linux `have_bwrap` probe** ahead of the inline array so the Linux arm fails closed *named*, not merely closed (`D7`, `F-6`) |
 | `scripts/lib/pi-reap.sh` | sourced only by the pi profile after the merge — the claude profile's completion signal is process exit (§5.2.1, `R4`). **Unchanged**: its `agent_settled`/`agent_end` either-match is correct and must survive the generalisation (`ISS-293`) |
 | `.claude/settings.json` | remove six entries (four `pretooluse`, nominate, denominate) |
@@ -896,6 +900,47 @@ exception — it is tracked, and `doctrine install` reconciles it against
 | `tests/e2e_claude_install.rs` | the exact hook-count assertion moves by **six** |
 | `tests/e2e_worktree_create_fork.rs` | retarget onto the Passthrough arm |
 | `tests/e2e_worktree_status_marker.rs` | retarget onto the env-only predicate |
+| `tests/e2e_dispatch_h1_integration.rs` | 14 `arm-spawn` references and 6 `verify-worker` ones — the integration path it drives is the deleted arm's. Retarget onto `fork --worker`, or delete with it |
+| `tests/e2e_worker_guard.rs`, `tests/e2e_worker_guard_explicit_root.rs` | both assert the `DUAL_CAUSE` message and stamp the marker file directly (`e2e_worker_guard.rs:183`); the explicit-root one also drives `nominate`/`denominate`. Retarget onto the env-only signal |
+| `tests/e2e_worker_gate_skip.rs` | `SL-225 PHASE-01`'s proof of the real `just validate` skip; its fixture writes the marker (`:117`) to simulate worker context. Moves with the `justfile` leg above |
+| `tests/common/mod.rs` | the shared fixture helper *stamps* the marker into fixture roots (`:158-180`) — unlike `test_support`'s read-side helper, this one changes |
+| `tests/e2e_mcp_server.rs` | the tool-registry assertion names `worker_commit` (`:208`) |
+
+**The wall's blast radius in `jail.rs`.** `jail.rs` survives, but the row above
+understates what it loses. After the collapse its only importers are
+`jail_prefix.rs:40-43` (`resolve_with_policy`, `validate_policy`, `Backend`,
+`JailPolicy`, `RealEnv`, `ResolveEnv`, `select_jailer`) and `mod.rs:30`'s
+`JailPolicy` re-export for `dispatch.rs`'s `from_toml_str`. Everything outside the
+transitive closure of those eight has **no surviving consumer** — `pretooluse.rs`
+was its only caller — and `pub(crate)` with no caller is a `dead_code` warning, so
+this is not optional tidying: `just gate` runs clippy at zero warnings.
+
+The orphaned set is the wall's entire **pure decision layer**:
+`is_privileged_agent_type` (`:126`, sole consumer `decide_agent`), `enum Decision`
+(`:231`), `enum Target` (`:248`), `resolve_target` (`:377` — the four-arg jail one;
+`boot.rs:875` and `relation_graph.rs:329` are unrelated same-named functions),
+`decide_agent` (`:399`), `decide_workflow` (`:418`), `pathcheck` (`:433`, sole prod
+consumer `decide_write:974`), `opaque_wrap` (`:472`, sole prod consumer
+`decide_bash:942`), `shell_single_quote` (`:491`, sole consumer `opaque_wrap`),
+`acquire_policy` (`:761`, sole consumer `resolve_inputs:831`), `resolve_inputs`
+(`:825`), `seatbelt_backend` (`:839` — this is the "disk-policy backend branch"),
+`decide_bash` (`:928`), `decide_write` (`:964`), and the five `REASON_*` constants
+that feed only them (`:94`, `:95`, `:96`, `:103`, `:109`). That is roughly 300 of
+`jail.rs`'s 981 production lines, and about half of its ~60 unit tests
+(`resolve_target` ×5, `pathcheck` ×5, `opaque_wrap` ×2, `decide_bash` ×5,
+`decide_write` ×3, `decide_agent` ×4, `decide_workflow` ×2, `resolve_inputs` ×6,
+plus the `seatbelt_backend` rows).
+
+This is a consequence rather than a defect: the wall decided *per tool call*, and
+confinement now happens once at spawn through `jail_prefix`. But it moves the
+deletion phase's size materially, and two things fall out of it worth stating.
+**`F-2`'s fix is on live code** — `sandbox_exec_argv` is reached from
+`jail_prefix.rs:168` through `Seatbelt::wrap_argv` (`jail.rs:529`), not from the
+dying wall. And **`DEC-206`'s re-homing set is exactly right**: `jail_prefix.rs`
+imports precisely the four primitives it names from `pretooluse.rs`
+(`REASON_NO_BWRAP`, `REASON_PROFILE_WRITE_FAILED`, `have_bwrap`,
+`write_seatbelt_profile`) and nothing else, so the re-home is complete and no fifth
+primitive is hiding.
 
 **Governance (the larger half)** — one `REV` of this slice's own, over **six**
 entities. `DEC-218` carries the region-by-region derivation and supersedes
@@ -915,9 +960,25 @@ Plus a by-hand source-anchor sweep: `spec-021.toml:30`'s dangling `[[source]]` a
 `spec-012.toml:30` / `spec-022.toml:45` are comment lists naming
 `pretooluse.rs` and `subagent.rs`.
 
-**Treat every count here as a floor.** The survey has under-counted five times,
+**Treat every count here as a floor.** The survey has under-counted six times,
 always low; the `REV` phase re-derives from the entities rather than from this
 table (`DEC-218`).
+
+**How the sixth sweep was done, and why it should be the last hand-built one.**
+Sweeps one through five read the code and asked *what does this change touch*.
+That question kept missing consumers, because it is answered from the reader's
+model of the system rather than from the symbol graph. The sixth sweep inverted it:
+enumerate every `pub` item in the three dying modules and every `pub` item in
+`jail.rs`, then grep each one across `src/` and `tests/` and subtract the consumers
+that are themselves dying. It reproduced the `doctor_checks.rs` find as a positive
+control and then found the `jail.rs` decision layer, `commands/guard.rs`, the
+`justfile` leg and six unlisted test files. Two limits to record: a negative grep
+result is only trustworthy against a positive control (`e2e_priority_golden.rs`'s
+three `denominate` hits are the arithmetic denominator, not the verb), and the
+method sees Rust symbols — the `justfile` leg was found by grepping the *string*
+`.doctrine/state/dispatch/worker`, which is how non-Rust consumers surface at all.
+The plan phase should run this census mechanically against the real deletion
+rather than re-reading this table (`R8`).
 
 
 <!-- doctrine:section sec-10 -->
@@ -1218,17 +1279,29 @@ is recorded as a design decision with its own grounds (§7.2 `D1`–`D3`), so a
 reviewer sees a reasoned boundary rather than drift. The reconciliation brief
 should carry this as a design-time scope correction.
 
-**`R8` — the governance survey under-counts.** Five times now, always low, and
-twice found only by an external reviewer (`RV-355` `F-4`, `F-5`). The largest miss
-— `ADR-008`, seven regions, absent from the target set entirely — was found only by
-re-deriving from the corpus instead of from `DEC-211`. The failure mode is
-structural, not careless: a design that cites a *count* inherits whichever count it
-lands on, and prose does not fail to compile. `ADR-008` is the worst case of it —
-project-local, so no `[[source]]` anchor and no `spec validate` leg points at it,
-and nothing would have gone red. *Mitigation:* `DEC-218` records the derivation
-method rather than only its result, §3.1 and §5.6 state their counts explicitly as
-a **floor**, and the `REV` phase re-derives from the entities. `VH` (§9.4) is the
-leg that checks it.
+**`R8` — this design's own surveys under-count.** Six times now, always low, and
+twice found only by an external reviewer (`RV-355` `F-4`, `F-5`). It has fired on
+**both halves**. On the governance half the largest miss — `ADR-008`, seven
+regions, absent from the target set entirely — was found only by re-deriving from
+the corpus instead of from `DEC-211`. On the code half, §5.6's hand-built impact
+list missed `doctor_checks.rs` (a compile-breaker), `jail.rs`'s whole decision
+layer (a clippy gate-breaker, ~300 production lines), `commands/guard.rs`, a
+`justfile` leg and six test files.
+
+The failure mode is structural, not careless, and it is the same one twice: a
+survey answered from the author's model of the system inherits that model's blind
+spots, and prose does not fail to compile. `ADR-008` is the worst case — project
+local, so no `[[source]]` anchor and no `spec validate` leg points at it, and
+nothing would have gone red.
+
+*Mitigation:* derive, don't recall, and record the derivation method rather than
+only its result. `DEC-218` does that for governance; §5.6's closing note does it
+for code. §3.1 and §5.6 state their counts explicitly as a **floor**, the `REV`
+phase re-derives from the entities, and the plan phase runs the symbol census
+mechanically against the real deletion rather than reading §5.6's table. `VH`
+(§9.4) is the leg that checks the governance half; the code half is checked by
+the build itself, which is why the two misses that would not compile matter less
+than the ones that would.
 
 **`R7` — a silent governance regression.** `spec validate` does not catch a
 dangling `[[source]]` anchor, so nothing goes red and the rot is silent.
