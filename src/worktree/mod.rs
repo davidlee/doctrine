@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use clap::Subcommand;
 
 mod shared;
-pub(crate) use shared::{classify_worktree_role, coord_branch_slice, is_linked_worktree};
+pub(crate) use shared::{classify_worktree_role, is_linked_worktree};
 
 mod allowlist;
 
@@ -27,8 +27,11 @@ mod allowlist;
 // consumer is the `jail-prefix` command tier — the `PreToolUse` shell that drove
 // the decision layer is gone (DEC-206). Dead-code is held by a module-inner
 // `expect` in jail.rs (the macOS surface is unreachable on a Linux build).
+// `JailPolicy` is NOT re-exported here: `jail_prefix.rs` reaches it as
+// `super::jail::JailPolicy` (its whole import set comes straight off the module), and
+// the crate-wide re-export existed only for `dispatch arm-spawn`'s declaration writer,
+// deleted at SL-254 PHASE-06. The type itself is load-bearing and stays.
 mod jail;
-pub(crate) use jail::JailPolicy;
 
 // SL-185 PHASE-02: the `jail-prefix` command (command tier). Emits a confinement
 // wrap prefix (NUL-delimited argv terminating in `--`) to `--out` for the
@@ -49,10 +52,10 @@ pub(crate) const DISPATCH_WORKER_AGENT_TYPE: &str = "dispatch-worker";
 mod claim_lock;
 mod coordinate;
 mod create;
-// SL-198 PHASE-01: per-worktree dispatch record + lifecycle (ENGINE tier, sibling to
-// the jail policy). create-fork writes it, gc/reap deletes it, `resolve_agent` maps an
-// opaque sanitised agent-id → the record on one live consistent hit. PHASE-02
-// `worker_commit` is the consumer.
+// SL-198 PHASE-01: per-worktree dispatch record + lifecycle (ENGINE tier).
+// `worktree fork --worker` writes it, gc/reap deletes it, `resolve_agent` maps an
+// opaque sanitised agent-id → the record on one live consistent hit. Since SL-254
+// PHASE-06 the sole consumer is the funnel's `dispatch_import`.
 mod dispatch_record;
 mod fork;
 mod gc;
@@ -65,20 +68,14 @@ mod land;
 mod provision;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
-pub(crate) use create::{
-    ARMING_BASE_FILE, ARMING_JAIL_FILE, ARMING_PHASE_FILE, ARMING_SLICE_FILE, ARMING_SUBPATH,
-    CreatedFork, SpawnFacts, run_create_fork,
-};
-// SL-198 PHASE-02: the PHASE-01 resolver + the import scope seams `worker_commit`
-// (`crate::mcp_server::worker_commit`) reuses — the resolver maps an opaque agent-id
-// to its record; the prefix consts + delta-gather are the shared scope belt (DRY —
-// no forked copy, so the two callers cannot diverge, design §8 R3 / VT-3).
-pub(crate) use dispatch_record::{
-    DispatchRecord, ForkBinding, ForkExpect, ResolveRefusal, require_binding, resolve_agent,
-};
+pub(crate) use create::run_create_fork;
+// SL-198 PHASE-02: the PHASE-01 resolver, which maps an opaque agent-id to its
+// per-worktree record. Its second consumer (`worker_commit`) went with the claude arm
+// at SL-254 PHASE-06; `mcp_server::dispatch`'s import path is the remaining one.
+pub(crate) use dispatch_record::{ForkExpect, ResolveRefusal, require_binding, resolve_agent};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
-pub(crate) use import::{CLAUDE_PREFIX, DOCTRINE_PREFIX, gather_worktree_delta_paths, run_import};
+pub(crate) use import::run_import;
 pub(crate) use inventory::run_list;
 pub(crate) use land::run_land;
 pub(crate) use provision::{run_check_allowlist, run_provision};
@@ -94,11 +91,12 @@ pub(crate) use gc::{GcOutcome, GcRefusal, reap_fork};
 pub(crate) use gc::{GcPlan, GcState, GcVerdict, classify_gc};
 #[cfg(test)]
 pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork_message};
-// SL-198 PHASE-02 (test-only): the record provisioner that `worker_commit`'s tests
-// cross-check against (VT-3 belt-agreement; integration fixtures that stand up a live
-// per-worktree record).
+// SL-198 PHASE-02 (test-only): the record provisioner test fixtures use to stand up a
+// live per-worktree record, and the binding they stamp into it (the funnel's import
+// tests, gc's reap tests). `ForkBinding` left the prod re-export at SL-254 PHASE-06
+// with `worker_commit`, its only caller that named the type.
 #[cfg(test)]
-pub(crate) use dispatch_record::provision_dispatch_record;
+pub(crate) use dispatch_record::{ForkBinding, provision_dispatch_record};
 // SL-199 PHASE-03: the shared import scope belt is now a PROD surface — the dispatch
 // funnel's `dispatch_import` MCP tool composes it as its hard pre-compose gate
 // (mcp_server::dispatch), so `Apply`/`classify_import` leave the `#[cfg(test)]` island.
@@ -269,8 +267,8 @@ pub(crate) enum WorktreeCommand {
         base: String,
 
         /// The fork branch carrying the single non-merge commit `S` (`S^ == B`) —
-        /// a committed-fork source (the claude arm's `worker_commit` delta, when
-        /// landing via CLI instead of `dispatch_import`). Mutually exclusive with
+        /// a committed-fork source, for landing a fork that already carries its
+        /// commit via CLI instead of `dispatch_import`. Mutually exclusive with
         /// `--from-worktree`.
         #[arg(long, conflicts_with = "from_worktree")]
         fork: Option<String>,

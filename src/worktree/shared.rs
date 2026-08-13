@@ -119,6 +119,12 @@ pub(crate) fn is_dispatch_fork_branch(branch: Option<&str>) -> bool {
 /// be a slice id. Shares [`coord_branch_suffix`] with [`classify_worktree_role`], so the
 /// prefix rule is stated once: a caller pairing this with `linked` gets the same coord
 /// verdict the role classifier gives.
+///
+/// Its production caller was `dispatch arm-spawn`'s defaulted-base guard, deleted with
+/// the claude arm at SL-254 PHASE-06. Kept (test-only) rather than deleted: the shape
+/// rule it states is the one `classify_worktree_role` shares, and the table below is
+/// what pins a worker fork from being misread as a coordination tree.
+#[cfg(test)]
 pub(crate) fn coord_branch_slice(branch: Option<&str>) -> Option<u32> {
     coord_branch_suffix(branch)?.parse().ok()
 }

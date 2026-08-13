@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 25 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! 29 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
-//! `worker_commit` (the gated dispatch-worker self-commit, SL-198), the SL-199
+//! the SL-199
 //! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
 //! `dispatch_reap`), and the SL-206 dispatch funnel read surface
 //! (`dispatch_phase_receipt`, `dispatch_next_ready`, `dispatch_authored_divergence`),
@@ -394,24 +394,6 @@ fn tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {},
                 "required": []
-            }),
-        },
-        McpTool {
-            name: "worker_commit".to_owned(),
-            description: "Gated server-side self-commit for a jailed dispatch worker (SL-198). The worker passes ONLY its opaque `agent` id (its worktree name) — never a path — and the unconfined server resolves the target, runs the belts (non-empty pre-fmt delta → two-tier scope → HEAD==B → the `check commit` gate), and lands exactly ONE non-merge commit on the worker's own `dispatch/<agent>` branch. Belts are the security boundary; a `.doctrine/`/`.claude/` or `[dispatch].worker-forbidden-writes` write hard-refuses.\n\nReturns: {\"Committed\": { oid: string, base: string, undeclared: [string] }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-agent | ambiguous-agent | stale-record | unprovable-fork | empty-delta | forbidden-zone | not-at-base | late-recommit | commit-gate-red | the machine's `already-<position>` family (SL-228 PHASE-04).".to_owned(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "agent": {
-                        "type": "string",
-                        "description": "The worker's own worktree name (self-reported, opaque). Resolved server-side; NOT a path."
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "The commit message (worker-authored; the orchestrator may amend)."
-                    }
-                },
-                "required": ["agent", "message"]
             }),
         },
         McpTool {
@@ -1177,22 +1159,6 @@ fn call_tool(
             Ok(String::from_utf8(buf)?)
         }
         "doctrine_onboard" => render_onboard(root, model_keys),
-        "worker_commit" => {
-            // Opaque-id resolution: the `agent` comes from the tool INPUT and is resolved
-            // server-side (no caller agent_id, no worker-supplied path — INV-4). A belt
-            // refusal is a structured `Ok` result, not a JSON-RPC error.
-            let fields = ExtractFields::from_value(arguments, &["agent", "message"]);
-            let agent = fields.str_field("agent");
-            let message = fields.str_field("message");
-            if agent.is_empty() {
-                anyhow::bail!("invalid arguments: agent is required");
-            }
-            if message.is_empty() {
-                anyhow::bail!("invalid arguments: message is required");
-            }
-            let out = super::worker_commit::run_worker_commit(root, &agent, &message)?;
-            Ok(serde_json::to_string(&out)?)
-        }
         TOOL_OBSERVATION_RECORD => run_observation_record(root, &arguments),
         super::dispatch::TOOL_DISPATCH_IMPORT => {
             // The coord tree is resolved SERVER-SIDE from `slice` (no caller path). `name`
@@ -1838,12 +1804,13 @@ mod tests {
         }
     }
 
-    // VT-3: tool list response contains exactly 10 tools with correct names
+    // VT-3: tool list response contains exactly the registered tools, by name.
+    // 30 → 29 at SL-254 PHASE-06 (`worker_commit` retired with the claude arm).
 
     #[test]
-    fn tool_list_has_30_tools() {
+    fn tool_list_has_29_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 30);
+        assert_eq!(list.tools.len(), 29);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -1887,7 +1854,6 @@ mod tests {
         assert!(names.contains(&"memory_record"));
         assert!(names.contains(&"memory_edit"));
         assert!(names.contains(&"doctrine_onboard"));
-        assert!(names.contains(&"worker_commit"));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE));
@@ -2255,7 +2221,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 30);
+        assert_eq!(tools.len(), 29);
     }
 
     #[test]

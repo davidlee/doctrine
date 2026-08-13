@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Routes to `/dispatch-subprocess` (codex/pi) or `/dispatch-agent` (claude); overridable via `[dispatch] claude-force-subprocess-dispatch` in `doctrine.toml`. The per-phase funnel is driven by `doctrine dispatch next`, which prescribes exactly one action at a time and is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
+description: Use to drive a slice's phases to completion through sub-agent workers in isolated worktrees — you orchestrate and are the sole writer, the workers execute. Workers spawn via `/dispatch-subprocess`. The per-phase funnel is driven by `doctrine dispatch next`, which prescribes exactly one action at a time and is identical on both arms. Default serial (one worker per phase); parallelize file-disjoint phases. Conflicts report-and-halt, never auto-merge.
 ---
 # Dispatch (router)
 Drive a slice's phases to completion through sub-agent **workers** — you are the
@@ -22,15 +22,9 @@ orchestrator funnel."
    writes with `dispatch commit --slice N -m <msg> -- <path>…` (pathspec-mandatory,
    ISS-234-guarded), never a raw `git commit`.
 3. `dispatch plan-next --slice <N>` — find next actionable phase(s); plan parallel batches when file-disjoint
-4. Route to the correct arm:
-   - Check `doctrine.toml` → `[dispatch]` → `claude-force-subprocess-dispatch`
-     (default `false` if the file or key is absent).
-   - If `true`, route workers via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
-     (default to `pi` arm until `preferred-subprocess-harness` selection is wired — IMP-101).
-   - Otherwise, route per env-marker: `CLAUDECODE=1` in env →
-     [`/dispatch-agent`](../dispatch-agent/SKILL.md); otherwise →
-     [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md).
-   Then spawn worker(s) per the chosen arm's template.
+4. Spawn worker(s) via [`/dispatch-subprocess`](../dispatch-subprocess/SKILL.md)
+   (default to the `pi` arm until `preferred-subprocess-harness` selection is
+   wired — IMP-101).
 5. Drive the batch's funnel by `doctrine dispatch next --slice <N>` (below) until it
    says `all-reaped`
 6. Conclude: `slice verify-vt <id>` (VT gate, coord tree) → on green

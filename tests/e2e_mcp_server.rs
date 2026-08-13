@@ -183,7 +183,8 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 30, "expected 30 tools, got {tools:?}");
+    // 30 → 29 at SL-254 PHASE-06: `worker_commit` retired with the claude dispatch arm.
+    assert_eq!(tools.len(), 29, "expected 29 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -205,7 +206,6 @@ fn vt2_tools_list() {
         "memory_record",
         "memory_edit",
         "doctrine_onboard",
-        "worker_commit",
         // SL-199 PHASE-03 dispatch funnel write surface.
         "dispatch_import",
         "dispatch_conclude_phase",

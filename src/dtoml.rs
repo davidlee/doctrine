@@ -163,16 +163,19 @@ mod tests {
 
     #[test]
     fn dispatch_table_combined_keys() {
-        // SL-117: prove both dispatch keys survive the full dtoml::parse round-trip.
+        // SL-117: prove a MULTI-key `[dispatch]` table survives the full dtoml::parse
+        // round-trip (not just the single-key path). Retargeted at SL-254 PHASE-06:
+        // the second key was the claude-arm routing override, deleted with the
+        // claude dispatch arm; `verify-suite` carries the claim now.
         let doc =
-            parse("[dispatch]\npreferred-subprocess-harness = \"pi\"\nclaude-force-subprocess-dispatch = true\n")
+            parse("[dispatch]\npreferred-subprocess-harness = \"pi\"\nverify-suite = \"commit\"\n")
                 .unwrap();
         use crate::dispatch_config::SubprocessHarness;
         assert_eq!(
             doc.dispatch.preferred_subprocess_harness,
             SubprocessHarness::Pi
         );
-        assert!(doc.dispatch.claude_force_subprocess_dispatch);
+        assert_eq!(doc.dispatch.verify_suite, "commit");
     }
 
     // RV-085 F-1 regression: a malformed [estimation] confidence config must NOT

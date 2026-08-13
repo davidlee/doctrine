@@ -636,9 +636,16 @@ pub(crate) trait ResolveEnv {
     fn ensure_dir(&self, path: &Path) -> Result<PathBuf, ResolveDeny>;
     /// Read the per-arming policy body for `basename`. `Ok(None)` ⇒ absent ⇒ branch (e);
     /// `Err` ⇒ unreadable ⇒ branch (e); `Ok(Some(body))` ⇒ parse it (branch (f) on
-    /// malformed). Impure (disk read). The disk-policy CALLER died with the
-    /// `pretooluse` wall (SL-254 PHASE-04); the read itself is retained as the
-    /// per-arming lookup the macOS arm still owns.
+    /// malformed). Impure (disk read).
+    ///
+    /// **Dead end as of SL-254 PHASE-06 — no reader AND no writer.** Its production
+    /// CALLER died with the `pretooluse` wall (PHASE-04); its production WRITER —
+    /// `create-fork`'s `provision_jail_policy`, fed by `dispatch arm-spawn`'s
+    /// declaration — died with the Fork arm (PHASE-06). Nothing creates a file under
+    /// [`POLICY_DIR_SEGMENTS`] any more, so in production this can only ever return
+    /// `Ok(None)`. Retained (with `JailPolicy`'s parser) because the per-arming policy
+    /// lookup is the shape a future confinement source would re-enter through; it is
+    /// NOT a live mechanism, and should be deleted outright if that never lands.
     fn read_policy(&self, basename: &std::ffi::OsStr) -> std::io::Result<Option<String>>;
 }
 
@@ -692,8 +699,11 @@ pub(crate) fn resolve_with_policy(
 
 /// The per-arming policy directory under the main checkout (design §5.3, SL-182
 /// convention): `<main>/.doctrine/state/dispatch/jail/<worktree-name>.toml`. Segments are
-/// single-sourced (STD-001); the provisioning WRITE is PHASE-04/SL-182's, this is only the
-/// READ location.
+/// single-sourced (STD-001); this is the READ location only.
+///
+/// SL-254 PHASE-06: the corresponding WRITE (`create.rs`'s `provision_jail_policy`)
+/// is deleted with the claude arm, so nothing populates this directory — see
+/// [`ResolveEnv::read_policy`].
 const POLICY_DIR_SEGMENTS: &[&str] = &[".doctrine", "state", "dispatch", "jail"];
 const POLICY_FILE_EXT: &str = "toml";
 
@@ -826,9 +836,10 @@ mod tests {
 
     #[test]
     fn to_toml_string_round_trips_through_from_toml_str() {
-        // PHASE-04 T1: `arm-spawn` writes a declared policy via `toml::to_string`;
-        // `create-fork` copies it; the wrap path reads it back through `from_toml_str`.
-        // The written form MUST re-parse to the same value (one schema, both ends).
+        // PHASE-04 T1: a declared policy written via `toml::to_string` MUST re-parse to
+        // the same value (one schema, both ends). SL-254 PHASE-06: the producer half of
+        // that loop (`arm-spawn` → `create-fork`) is deleted, so this now pins the
+        // schema alone — see `ResolveEnv::read_policy`.
         let p = JailPolicy {
             extra_rw: vec![pb("/nix/store"), pb("/cache")],
             network: false,

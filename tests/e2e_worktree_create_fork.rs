@@ -2,22 +2,27 @@
 //! SL-152 PHASE-02 — `doctrine worktree create-fork` end-to-end over the BUILT
 //! binary (design §5.1/§5.2). The claude `WorktreeCreate` hook verb: reads the thin
 //! `{cwd, name}` payload on STDIN, resolves the coord-tree root from the PAYLOAD cwd
-//! (`git -C <cwd> --show-toplevel`, NOT the process cwd — G2/I5), discriminates
-//! POSITIONALLY (cwd IS the arming dir `<root>/.doctrine/state/dispatch/spawn` ⇒ Fork
-//! off the arming `base`; anywhere else ⇒ benign Passthrough), and prints the created
-//! absolute path ALONE on stdout.
+//! (`git -C <cwd> --show-toplevel`, NOT the process cwd — G2/I5), and prints the
+//! created absolute path ALONE on stdout.
 //!
-//! * VT-1 — base==B drift-immune: a Fork pins the arming `base` even when HEAD moved.
-//! * VT-2/VT-3 — provision source = coord tree (I2): a gitignored sentinel present in
-//!   the coord tree (absent from any commit) lands in the created fork; a Fork lands
-//!   on the `dispatch/<name>` BRANCH at the arming base, a Passthrough on a DETACHED
-//!   HEAD at the coord tip. (SL-254 PHASE-05: the arms used to be told apart by the
-//!   worker marker too — "Fork IS worker-marked, Passthrough is NOT". The marker is
-//!   gone with `DEC-207`, so branch-vs-detached is now the whole discriminator, and
-//!   both halves are asserted explicitly rather than inferred from a stamp.)
+//! **SL-254 PHASE-06 — retargeted onto the Passthrough arm.** The Fork arm and its
+//! positional arming-dir discriminator are deleted with the claude dispatch arm (D1):
+//! `worktree fork --worker` is the sole worker-fork writer, so every harness-created
+//! worktree reaching this verb is benign. The Fork-arm cases die with their subject;
+//! the base-pinning claim they carried survives in `e2e_dispatch_h1_integration.rs`,
+//! retargeted onto that writer. Everything below is the Passthrough contract, which
+//! is unchanged and still load-bearing — the hook entry stays precisely so a
+//! harness-created tree is still provisioned rather than left bare.
+//!
+//! * VT-3 — provision source = coord tree (I2): a gitignored sentinel present in the
+//!   coord tree (absent from any commit) lands in the created tree, which is DETACHED
+//!   at the coord tip and claims no branch. (SL-254 PHASE-05: the arms used to be
+//!   told apart by the worker marker too. The marker went with `DEC-207`; the
+//!   detached-HEAD/no-branch property is asserted directly, and is now the proof that
+//!   this verb cannot mint a worker fork at all.)
 //! * VT-4 — fail-closed: malformed/empty/cwdless payload ⇒ named refusal (no panic);
 //!   a cwd outside any repo ⇒ `no-root`.
-//! * VT-5 — name collision: a live `dispatch/<name>`/`.worktrees/<name>` ⇒ refusal.
+//! * VT-5 — name collision: a live `.worktrees/<name>` ⇒ refusal.
 //! * VT-7 — stdout discipline (G1/D11): stdout is EXACTLY the path, no `KEY=value`.
 //! * VT-8 — pass-through compensation (G3): a forced provision failure leaves NO tree.
 
@@ -72,15 +77,6 @@ fn seed_sentinel(root: &Path) {
     std::fs::write(root.join("sentinel.txt"), "from coord tree").unwrap();
 }
 
-/// Arm a dispatch-worker spawn: write `<root>/.doctrine/state/dispatch/spawn/base`
-/// and return the canonicalised arming dir (the payload cwd for a Fork).
-fn arm(root: &Path, base: &str) -> PathBuf {
-    let dir = root.join(".doctrine/state/dispatch/spawn");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("base"), base).unwrap();
-    std::fs::canonicalize(&dir).unwrap()
-}
-
 fn payload(cwd: &Path, name: &str) -> String {
     format!("{{\"cwd\": \"{}\", \"name\": \"{}\"}}", cwd.display(), name)
 }
@@ -130,9 +126,10 @@ fn assert_refusal(out: &Output, token: &str) {
 
 /// The branch a worktree's HEAD points at, or `None` for a detached HEAD.
 ///
-/// SL-254 PHASE-05: replaces the `worker_marker` helper. With the marker gone, this
-/// is what actually distinguishes the Fork arm (on `dispatch/<name>`) from the
-/// benign Passthrough arm (detached).
+/// SL-254 PHASE-05: replaced the `worker_marker` helper. With the marker gone, this
+/// was what distinguished the Fork arm (on `dispatch/<name>`) from the benign
+/// Passthrough arm (detached). PHASE-06 deleted the Fork arm, so it now pins the
+/// stronger claim: this verb NEVER claims a branch.
 fn head_branch(dir: &Path) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
@@ -161,60 +158,7 @@ fn assert_stdout_is_path_only(out: &Output) -> PathBuf {
     PathBuf::from(s.trim())
 }
 
-// --- VT-1 + VT-2 + VT-7(Fork): pin base B, provision from coord tree, path-only ---
-
-#[test]
-fn fork_pins_base_provisions_from_coord_tree_lands_on_branch_and_prints_path_only() {
-    let root = tempfile::tempdir().unwrap();
-    init_repo(root.path());
-    let root_canon = std::fs::canonicalize(root.path()).unwrap();
-    seed_sentinel(root.path());
-
-    // Capture B, then ADVANCE HEAD past it with a tracked commit.
-    let b = git(root.path(), &["rev-parse", "HEAD"]);
-    std::fs::write(root.path().join("drift.txt"), "post-B").unwrap();
-    git(root.path(), &["add", "drift.txt"]);
-    git(root.path(), &["commit", "-q", "-m", "advance HEAD past B"]);
-    assert_ne!(b, git(root.path(), &["rev-parse", "HEAD"]), "HEAD advanced");
-
-    let spawn = arm(root.path(), &b);
-    let out = run(&spawn, &payload(&spawn, "agent-deadbeef"), CREATE);
-    assert!(
-        out.status.success(),
-        "fork create must succeed; stderr: {}",
-        stderr(&out)
-    );
-
-    let dir = assert_stdout_is_path_only(&out);
-    assert_eq!(
-        dir,
-        root_canon.join(".worktrees/agent-deadbeef"),
-        "created at <root>/.worktrees/<name>"
-    );
-    // VT-1: the fork HEAD is EXACTLY B though HEAD advanced (base explicit, drift-immune).
-    assert_eq!(
-        git(&dir, &["rev-parse", "HEAD"]),
-        b,
-        "fork pinned to base B, not the moved HEAD"
-    );
-    // VT-2: the gitignored sentinel was provisioned FROM the coord tree.
-    assert_eq!(
-        std::fs::read_to_string(dir.join("sentinel.txt")).unwrap(),
-        "from coord tree",
-        "provision source is the coord tree (I2)"
-    );
-    // SL-254 PHASE-05: was `worker_marker(&dir).exists()` — "Fork worktree is
-    // worker-marked". The stamp is gone (`DEC-207`); what still tells the Fork arm
-    // apart from the benign Passthrough arm is that it lands on the dispatch BRANCH
-    // rather than a detached HEAD, so that is asserted directly.
-    assert_eq!(
-        head_branch(&dir).as_deref(),
-        Some("dispatch/agent-deadbeef"),
-        "Fork arm lands on the `dispatch/<name>` branch"
-    );
-}
-
-// --- VT-3 + VT-7(Passthrough): benign detached tree, provisioned, no branch ---
+// --- VT-3 + VT-7: benign detached tree, provisioned, no branch, path-only ---
 
 #[test]
 fn passthrough_creates_detached_provisions_and_claims_no_dispatch_branch() {
@@ -223,7 +167,12 @@ fn passthrough_creates_detached_provisions_and_claims_no_dispatch_branch() {
     let root_canon = std::fs::canonicalize(root.path()).unwrap();
     seed_sentinel(root.path());
 
-    // Benign: payload cwd = the coord ROOT (NOT the arming dir) ⇒ Passthrough.
+    // ADVANCE HEAD before the spawn: a detached passthrough tracks the coord tip, and
+    // pinning that explicitly is what keeps this from silently reading as "base B".
+    std::fs::write(root.path().join("drift.txt"), "post-B").unwrap();
+    git(root.path(), &["add", "drift.txt"]);
+    git(root.path(), &["commit", "-q", "-m", "advance HEAD"]);
+
     let out = run(&root_canon, &payload(&root_canon, "bold-oak-a3f2"), CREATE);
     assert!(
         out.status.success(),
@@ -242,11 +191,16 @@ fn passthrough_creates_detached_provisions_and_claims_no_dispatch_branch() {
     // SL-254 PHASE-05: this was the `!worker_marker(&dir).exists()` negative — the
     // proof that the benign arm is not mistaken for a worker. The marker retired
     // (`DEC-207`), so the surviving negative is that the arm claims NO branch at
-    // all: it cannot be confused with a `dispatch/<name>` fork.
+    // all: it cannot be confused with a `dispatch/<name>` fork. PHASE-06 deleted the
+    // Fork arm outright, which makes this the whole verb's property, not one arm's.
     assert_eq!(
         head_branch(&dir),
         None,
-        "passthrough worktree is in detached HEAD state — it claims no dispatch branch"
+        "the created worktree is in detached HEAD state — it claims no dispatch branch"
+    );
+    assert!(
+        !git(root.path(), &["branch", "--list", "dispatch/*"]).contains("dispatch/"),
+        "create-fork minted no `dispatch/<name>` branch — it cannot produce a worker fork"
     );
     // Provisioned via the SAME copier (I2).
     assert_eq!(
@@ -293,33 +247,27 @@ fn malformed_empty_and_rootless_payloads_refuse_without_panic() {
     );
 }
 
-// --- VT-5: name collision on BOTH arms (distinct token per arm) ---
+// --- VT-5: name collision on a live `.worktrees/<name>` dir ---
 
 #[test]
-fn name_collision_refuses_on_both_arms() {
+fn name_collision_refuses() {
     let root = tempfile::tempdir().unwrap();
     init_repo(root.path());
     let root_canon = std::fs::canonicalize(root.path()).unwrap();
-    let b = git(root.path(), &["rev-parse", "HEAD"]);
-    let spawn = arm(root.path(), &b);
 
-    // First Fork lands `dispatch/agent-dup` + `.worktrees/agent-dup`.
+    // First spawn lands `.worktrees/agent-dup`.
     assert!(
-        run(&spawn, &payload(&spawn, "agent-dup"), CREATE)
+        run(&root_canon, &payload(&root_canon, "agent-dup"), CREATE)
             .status
             .success(),
-        "first fork succeeds"
+        "first spawn succeeds"
     );
-    // Re-arm: the first Fork consumed the base one-shot (SL-199 EX-3), so re-write the
-    // base slot before the second Fork probe or it would hit `missing-base` before
-    // reaching fork_core's collision refusal.
-    arm(root.path(), &b);
-    // Fork arm collision ⇒ fork_core's `fork-refused` (shared-machinery token).
-    assert_refusal(
-        &run(&spawn, &payload(&spawn, "agent-dup"), CREATE),
-        "fork-refused",
-    );
-    // Passthrough arm collision on the live `.worktrees/agent-dup` dir ⇒ name-collision.
+    // SL-254 PHASE-06: the Fork-arm half of this case (its distinct `fork-refused`
+    // token, raised by `fork_core`'s branch claim) died with the arm — `fork_core`
+    // itself and that refusal are still pinned, in `create.rs`'s unit suite, through
+    // the worker-fork path that survives.
+    //
+    // Passthrough collision on the live dir ⇒ `name-collision`.
     assert_refusal(
         &run(&root_canon, &payload(&root_canon, "agent-dup"), CREATE),
         "name-collision",

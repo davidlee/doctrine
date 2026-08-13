@@ -103,12 +103,13 @@ mod tests {
     //! def, a marked def with an extra writable MCP token, and a bare
     //! `mcp__doctrine` grant; it passes the pinned dispatch-worker.
     //!
-    //! VT-3 (SL-231 PHASE-04): the pinned fixture below carries the SAME
-    //! capability set as the shipped `install/agents/claude/dispatch-worker.md`
-    //! — `mcp__doctrine__worker_commit` PLUS `mcp__doctrine__observation_record`.
-    //! The fixture and the shipped definition agreeing IS the assertion: a
-    //! ceiling widened in one and not the other shows up here as a finding on
-    //! `dispatch-worker.md`, which this test forbids.
+    //! VT-3 (SL-231 PHASE-04, re-cut SL-254 PHASE-06): the pinned fixture below
+    //! carries the SAME capability set as the shipped
+    //! `install/agents/claude/dispatch-worker.md` — which since the arm collapse
+    //! is NO `mcp__*` token at all, because a confined worker reaches no MCP
+    //! server (DEC-216). The fixture and the shipped definition agreeing IS the
+    //! assertion: a ceiling changed in one and not the other shows up here as a
+    //! finding on `dispatch-worker.md`, which this test forbids.
     //!
     //! Scan roots are the authored trees `install/agents` + `.doctrine/agents`,
     //! never the installed `.claude` copy.
@@ -127,11 +128,11 @@ mod tests {
         let root = dir.path();
 
         // PASS: the pinned dispatch-worker — marked, and holding EXACTLY the
-        // shipped def's two sanctioned tokens (self-commit + bounded capture).
+        // shipped def's surface: plain tools and no `mcp__*` grant.
         write_def(
             root,
             "claude/dispatch-worker.md",
-            "---\nname: dispatch-worker\ndoctrine-role: worker\ntools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit, mcp__doctrine__observation_record\n---\nbody\n",
+            "---\nname: dispatch-worker\ndoctrine-role: worker\ntools: Read, Edit, Write, Bash, Grep, Glob\n---\nbody\n",
         );
         // FAIL a: unmarked def (deny-by-default).
         write_def(
@@ -143,7 +144,7 @@ mod tests {
         write_def(
             root,
             "claude/extra.md",
-            "---\nname: extra\ndoctrine-role: worker\ntools: Read, mcp__doctrine__worker_commit, mcp__slack__post\n---\nbody\n",
+            "---\nname: extra\ndoctrine-role: worker\ntools: Read, mcp__slack__post\n---\nbody\n",
         );
         // FAIL c: bare mcp__doctrine server grant.
         write_def(

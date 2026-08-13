@@ -116,9 +116,12 @@ pub(super) fn rollback_fork(repo: &Path, branch: &str, dir: &Path) -> Vec<String
 ///    left exactly that window: a crash inside it stranded a live fork as permanently
 ///    `unprovable-fork`.
 ///
-/// The window is additionally held under the per-name CLAIM LOCK by the dispatch caller
-/// (see `super::claim_lock`), which closes the spawn–gc race the branch claim alone
-/// cannot: gc must not mistake an active claimant's branch for crash residue.
+/// The window WAS additionally held under the per-name CLAIM LOCK by the claude arm's
+/// `create-fork` caller (see `super::claim_lock`), which closed the spawn–gc race the
+/// branch claim alone cannot: gc must not mistake an active claimant's branch for crash
+/// residue. That caller is deleted (SL-254 PHASE-06) and this one never took the lock,
+/// so today only the atomic branch claim guards the window — gc's non-blocking probe
+/// has no live spawn to contend with.
 ///
 /// Atomic via COMPENSATING ROLLBACK (not a git transaction): any failure AFTER the
 /// claim reverses EVERY leg via [`rollback_fork`] — including the claim itself, so a

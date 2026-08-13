@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Per-worktree dispatch record — the trust anchor `worker_commit` consumes (SL-198
-//! PHASE-01, design §5.2/§5.3/§5.5).
+//! Per-worktree dispatch record — the trust anchor the dispatch funnel resolves a
+//! fork through (SL-198 PHASE-01, design §5.2/§5.3/§5.5). Its original consumer was
+//! `worker_commit`, deleted at SL-254 PHASE-06; `dispatch_import`'s heal-forward is
+//! the surviving one.
 //!
-//! A SIBLING concern to the jail policy (`create.rs`): the trusted create-fork hook
-//! writes an atomic record at the fork point (before the worker's first tool call);
+//! The trusted fork verb (`worktree fork --worker`) writes an atomic record at the
+//! fork point (before the worker's first tool call);
 //! gc/reap deletes it when it removes the worker worktree; and a resolver maps an
 //! OPAQUE, sanitised agent-id → that record on exactly one live, consistent hit, else
 //! a typed refusal. No worker-supplied path ever enters resolution.
@@ -22,18 +24,21 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 /// Where the per-worktree dispatch record lives under the coordination root:
-/// `<coord>/.doctrine/state/dispatch/record/<name>.toml`. A SIBLING subpath to the
-/// jail policy ([`super::create::JAIL_SUBPATH`], STD-001 single-source named const —
-/// no magic strings), OUTSIDE every worktree and ro to the worker. Runtime state:
-/// gitignored, deleted by gc with teardown (design §5.3).
+/// `<coord>/.doctrine/state/dispatch/record/<name>.toml`. Single-source named const
+/// (STD-001 — no magic strings), OUTSIDE every worktree and ro to the worker. Runtime
+/// state: gitignored, deleted by gc with teardown (design §5.3).
+///
+/// It was a SIBLING subpath to the per-arming jail policy (`create.rs`'s
+/// `JAIL_SUBPATH`), which SL-254 PHASE-06 deleted along with the claude arm's Fork
+/// path — the record is the last occupant of `.doctrine/state/dispatch/`'s
+/// per-worktree tier.
 pub(crate) const RECORD_SUBPATH: &str = ".doctrine/state/dispatch/record";
 
 /// The DURABLE FORK BINDING (SL-228 PHASE-04, design §3): which `(slice, phase)` a
 /// fork belongs to, snapshotted at fork creation exactly as `base` is. This is what
-/// lets a Class-2 recorder (`worker_commit`) and heal-forward (`dispatch_import`)
-/// name the funnel row a live fork's commit belongs to WITHOUT re-reading mutable
-/// arming state — the arming slots are consumed one-shot at the fork point, so a
-/// stale arm can never mis-bind the next spawn.
+/// lets heal-forward (`dispatch_import`) name the funnel row a live fork's commit
+/// belongs to WITHOUT re-deriving it from anything mutable — the binding travels by
+/// value from the fork point, so nothing later can mis-bind it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ForkBinding {
     /// The slice being dispatched.
@@ -42,11 +47,11 @@ pub(crate) struct ForkBinding {
     pub(crate) phase: String,
 }
 
-/// The per-worktree dispatch record (design §5.3) — the single source of truth
-/// `worker_commit` (PHASE-02) consumes. Snapshotted at the fork point by the trusted
-/// create-fork hook and NEVER re-derived from mutable arming state: `base` is B
-/// captured at fork time (supersedes the racy live-arming-slot read), and `slice` +
-/// `phase` are the durable fork binding captured the same way (SL-228 PHASE-04).
+/// The per-worktree dispatch record (design §5.3) — the single source of truth the
+/// funnel's import path consumes. Snapshotted at the fork point by the trusted fork
+/// verb and NEVER re-derived afterwards: `base` is B captured at fork time, and
+/// `slice` + `phase` are the durable fork binding captured the same way (SL-228
+/// PHASE-04).
 ///
 /// `slice`/`phase` are OPTIONAL on the wire so a record written before the binding
 /// existed still parses — an unbound record is not a parse failure, it is a fork whose
@@ -89,9 +94,9 @@ impl DispatchRecord {
 
 /// The durable binding, or the typed refusal (design §3). PURE. A live, consistent fork
 /// whose record carries no `(slice, phase)` is not PROVABLE: no verb may guess which
-/// phase its commit belongs to, so both Class-2 consumers (`worker_commit` now,
-/// `dispatch_import`'s heal-forward next) refuse identically through this ONE seam —
-/// there is no "skip and let the other heal" arm, because the other refuses too.
+/// phase its commit belongs to, so `dispatch_import`'s heal-forward refuses through
+/// this ONE seam rather than guessing. (It was one of TWO Class-2 consumers refusing
+/// identically here; `worker_commit`, the other, went at SL-254 PHASE-06.)
 pub(crate) fn require_binding(record: &DispatchRecord) -> Result<ForkBinding, ResolveRefusal> {
     record.binding().ok_or(ResolveRefusal::UnprovableFork)
 }
@@ -102,11 +107,14 @@ fn record_path(coord: &Path, name: &str) -> PathBuf {
     coord.join(RECORD_SUBPATH).join(format!("{name}.toml"))
 }
 
-/// Write the per-worktree record atomically beside the jail policy at the fork point
-/// (design §5.3, EX-1). Mirror of `create.rs`'s `provision_jail_policy`: build the dest
-/// under [`RECORD_SUBPATH`], `create_dir_all`, then `write_atomic` the serialised TOML
-/// (no torn temp). Fail-closed — a failed provision propagates and aborts the spawn,
-/// exactly like the jail-policy write, so a worker never spawns without its trust anchor.
+/// Write the per-worktree record atomically at the fork point (design §5.3, EX-1):
+/// build the dest under [`RECORD_SUBPATH`], `create_dir_all`, then `write_atomic` the
+/// serialised TOML (no torn temp). Fail-closed — a failed provision propagates and
+/// aborts the spawn, so a worker never spawns without its trust anchor.
+///
+/// This is an INDEPENDENT implementation, not a delegation: `create.rs`'s sibling
+/// jail-policy provisioner (which it once mirrored) went with the claude arm at SL-254
+/// PHASE-06, and this one survives because the record survives.
 pub(crate) fn provision_dispatch_record(
     coord: &Path,
     name: &str,
@@ -223,12 +231,23 @@ impl ResolveRefusal {
 /// parallel raw record read exists — this is still the single door.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ForkExpect {
-    /// The fork has NOT been committed on yet: `HEAD == base`. Declared by
-    /// `worker_commit`'s FIRST-COMMIT leg (its pre-act base guard, INV-1).
+    /// The fork has NOT been committed on yet: `HEAD == base`. Its production
+    /// declarer was `worker_commit`'s FIRST-COMMIT leg (its pre-act base guard,
+    /// INV-1), deleted at SL-254 PHASE-06 — the variant is kept because it is half of
+    /// the expectation the classifier discriminates on, and dropping it would fold
+    /// the classifier back to the `HEAD != base ⇒ stale-record` conflation RV-304 F-7
+    /// found.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-254 PHASE-06: worker_commit, its only production declarer, is deleted"
+        )
+    )]
     AtBase,
     /// The fork has advanced by EXACTLY ONE commit `C` with `C^ == base` — the
-    /// import / heal-forward state, and `worker_commit`'s RETRY SIGNATURE
-    /// (RV-305 F-1). A multi-commit or unrelated advance is still `stale-record`.
+    /// import / heal-forward state (and formerly `worker_commit`'s RETRY SIGNATURE,
+    /// RV-305 F-1). A multi-commit or unrelated advance is still `stale-record`.
     Advanced,
 }
 

@@ -87,6 +87,14 @@ fn open_lock_file(coord: &Path, name: &str) -> anyhow::Result<File> {
 /// BLOCKING acquire — the SPAWN side (design §3): taken before the branch claim and
 /// held across bind and act, so no second spawn for the same name can interleave and
 /// no gc sweep can mistake this live claimant's branch for crash residue.
+///
+/// **SL-254 PHASE-06 — no production spawn-side caller.** Its one caller was
+/// `create.rs`'s Fork arm, deleted with the claude dispatch arm; the surviving worker
+/// fork (`worktree fork --worker`) has never taken this lock. So the spawn↔gc race the
+/// lock closed is currently guarded only by `fork_core`'s atomic branch-ref claim, and
+/// gc's [`try_acquire`] can no longer contend with a live spawn. Kept (test-only) so
+/// the mechanism and its gc-side tests survive for the caller that should re-take it.
+#[cfg(test)]
 pub(crate) fn acquire(coord: &Path, name: &str) -> anyhow::Result<ClaimLock> {
     let file = open_lock_file(coord, name)?;
     rustix::fs::flock(&file, rustix::fs::FlockOperation::LockExclusive)

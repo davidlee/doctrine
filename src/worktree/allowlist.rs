@@ -308,8 +308,11 @@ mod tests {
             is_withheld(".doctrine/state/slice/029/phases/phase-01.md"),
             Some(Tier::State)
         );
-        // SL-152 PHASE-03 VT-2: the arm-spawn arming dir is withheld State tier, so
-        // the provision copier never copies it into a worker fork.
+        // SL-152 PHASE-03 VT-2: everything under `.doctrine/state/dispatch/` is
+        // withheld State tier, so the provision copier never copies coordination
+        // runtime state into a worker fork. (The path below was the `arm-spawn`
+        // arming slot, deleted at SL-254 PHASE-06; the tier rule it witnessed is
+        // per-prefix, not per-file, and still governs the live `record/` sibling.)
         assert_eq!(
             is_withheld(".doctrine/state/dispatch/spawn/base"),
             Some(Tier::State)

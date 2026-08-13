@@ -17,6 +17,20 @@ use serde::Deserialize;
 /// config matcher, so an absent / emptied / `!`-negated config can never
 /// un-fence doctrine's own state (where the config itself lives). Fail-closed.
 /// STD-001 single-source named constant (no magic strings).
+///
+/// **SL-254 PHASE-06 — currently reader-less in production.** Its one enforcing
+/// caller was `mcp_server::worker_commit`, deleted with the claude arm. See
+/// [`ForbiddenWrites`] for what that costs and why the matcher is kept rather than
+/// deleted with it.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-254 PHASE-06: the forbidden-write belt's production caller \
+                  (worker_commit) is deleted and its replacement reader is not yet \
+                  wired; kept live and visible rather than silently unfencing the tier"
+    )
+)]
 const DOCTRINE_FLOOR: &str = ".doctrine/";
 
 /// The subprocess harness for dispatch workers.
@@ -53,12 +67,6 @@ pub(crate) struct DispatchConfig {
     /// unless explicitly set to `pi`.
     #[serde(default)]
     pub(crate) preferred_subprocess_harness: SubprocessHarness,
-    /// Force Claude orchestrators to use the subprocess dispatch arm
-    /// (codex/pi) even though the native `Agent` subagent tool is available.
-    /// Defaults to `false` (use native subagents where available).
-    /// Inert on non-Claude orchestrators.
-    #[serde(default)]
-    pub(crate) claude_force_subprocess_dispatch: bool,
     /// The trunk delivery ref dispatch advances to / the close-integration
     /// gate checks against (IMP-124). The same value becomes the PR *base*
     /// under a future delivery-mode key. NOT the fork-base resolver
@@ -82,10 +90,13 @@ pub(crate) struct DispatchConfig {
     /// is a g2 false negative (g3 still backstops the advance regardless).
     #[serde(default)]
     pub(crate) authoring_branch: Option<String>,
-    /// The HARD scope tier for `worker_commit` (SL-198 PHASE-02, design §5.3 /
-    /// EX-6). Gitignore-syntax lines (positive + negative globs, precedence)
-    /// compiled into the [`ForbiddenWrites`] matcher: a worker-committed path
-    /// matching a forbidden line is hard-refused (`forbidden-zone`). Defaults ship
+    /// The HARD scope tier for the dispatch import belt (SL-198 PHASE-02, design
+    /// §5.3 / EX-6; re-aimed at SL-254 PHASE-06 when `worker_commit` retired and
+    /// `classify_import` became its sole enforcing reader — DEC-204/DEC-213).
+    /// Gitignore-syntax lines (positive + negative globs, precedence)
+    /// compiled into the [`ForbiddenWrites`] matcher: a path in an imported
+    /// worker delta matching a forbidden line is hard-refused (`forbidden-zone`).
+    /// Defaults ship
     /// pre-populated in the install template (`install/doctrine.toml.example`),
     /// NOT as Rust defaults (owner steer) — absent config ⇒ empty here, and only
     /// the code floor [`DOCTRINE_FLOOR`] blocks. A project negates (`!path`) or
@@ -106,7 +117,6 @@ impl Default for DispatchConfig {
     fn default() -> Self {
         Self {
             preferred_subprocess_harness: SubprocessHarness::default(),
-            claude_force_subprocess_dispatch: false,
             deliver_to: default_deliver_to(),
             authoring_branch: None,
             worker_forbidden_writes: Vec::new(),
@@ -122,6 +132,29 @@ impl Default for DispatchConfig {
 /// [`DOCTRINE_FLOOR`] code check is applied SEPARATELY, with precedence over the
 /// gitignore matcher (PIN-2: gitignore is last-match-wins, so a user `!.doctrine`
 /// line in a merged list would fail OPEN — the floor is never a matcher line).
+///
+/// # SL-254 PHASE-06 — no production reader
+///
+/// This matcher had exactly ONE enforcing caller, `mcp_server::worker_commit`'s
+/// `forbidden-zone` belt, and that module is deleted with the claude dispatch arm.
+/// `worktree::import::classify_import` — the surviving import belt — does **not**
+/// consult it: it enforces the `.doctrine/` and `.claude/` prefixes literally, plus
+/// the design-selector scope leg, and nothing else. So the rest of the shipped
+/// default set (`.agents/**`, `install/agents/**`, `flake.nix`) is currently
+/// unenforced.
+///
+/// The matcher and its config key are kept rather than deleted with their caller,
+/// because deleting them would turn a missing reader into a silently removed
+/// security tier. Wiring a reader is a behaviour change to the import belt and
+/// therefore not this phase's to make.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-254 PHASE-06: enforcing caller (worker_commit) deleted; replacement \
+                  reader not yet wired — see the module note above"
+    )
+)]
 pub(crate) struct ForbiddenWrites {
     matcher: Gitignore,
 }
@@ -131,6 +164,13 @@ impl ForbiddenWrites {
     /// [`DOCTRINE_FLOOR`] fail-closed check runs FIRST, overriding the config
     /// matcher; only then is the gitignore matcher consulted (last-match-wins over
     /// the config lines).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-254 PHASE-06: see the [`ForbiddenWrites`] note — no production reader"
+        )
+    )]
     pub(crate) fn is_forbidden(&self, path: &str) -> bool {
         if path.starts_with(DOCTRINE_FLOOR) {
             return true;
@@ -144,6 +184,13 @@ impl DispatchConfig {
     /// into a [`ForbiddenWrites`] matcher (design §5.3, EX-6). A line that fails to
     /// parse is skipped (the matcher never panics); an empty / all-negated config
     /// still fails closed on the [`DOCTRINE_FLOOR`] via [`ForbiddenWrites::is_forbidden`].
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "SL-254 PHASE-06: see the [`ForbiddenWrites`] note — no production reader"
+        )
+    )]
     pub(crate) fn forbidden_writes(&self) -> ForbiddenWrites {
         let mut builder = GitignoreBuilder::new("");
         for line in &self.worker_forbidden_writes {
@@ -209,42 +256,17 @@ mod tests {
         );
     }
 
-    // --- claude-force-subprocess-dispatch (SL-117) ---
-
-    #[test]
-    fn claude_force_defaults_false() {
-        // Both the Rust Default and the serde absent-key path must yield false.
-        assert!(!DispatchConfig::default().claude_force_subprocess_dispatch);
-        let doc: DispatchConfig = toml::from_str("").unwrap();
-        assert!(!doc.claude_force_subprocess_dispatch);
-        // [dispatch] present but key absent → false
-        let doc: DispatchConfig =
-            toml::from_str("preferred-subprocess-harness = \"pi\"\n").unwrap();
-        assert!(!doc.claude_force_subprocess_dispatch);
-    }
-
-    #[test]
-    fn parse_claude_force_true() {
-        let doc: DispatchConfig =
-            toml::from_str("claude-force-subprocess-dispatch = true\n").unwrap();
-        assert!(doc.claude_force_subprocess_dispatch);
-    }
-
-    #[test]
-    fn parse_claude_force_false() {
-        let doc: DispatchConfig =
-            toml::from_str("claude-force-subprocess-dispatch = false\n").unwrap();
-        assert!(!doc.claude_force_subprocess_dispatch);
-    }
-
     #[test]
     fn parse_combined_keys() {
-        let doc: DispatchConfig = toml::from_str(
-            "preferred-subprocess-harness = \"pi\"\nclaude-force-subprocess-dispatch = true\n",
-        )
-        .unwrap();
+        // Two keys in ONE `[dispatch]` table both bind — the container-level
+        // `rename_all = "kebab-case"` applies per field, not once. Retargeted at
+        // SL-254 PHASE-06 off the retired claude-arm routing key (deleted with the
+        // claude arm) onto `verify-suite`, so the multi-key claim keeps its subject.
+        let doc: DispatchConfig =
+            toml::from_str("preferred-subprocess-harness = \"pi\"\nverify-suite = \"commit\"\n")
+                .unwrap();
         assert_eq!(doc.preferred_subprocess_harness, SubprocessHarness::Pi);
-        assert!(doc.claude_force_subprocess_dispatch);
+        assert_eq!(doc.verify_suite, "commit");
     }
 
     #[test]

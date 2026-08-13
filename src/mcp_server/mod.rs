@@ -9,7 +9,6 @@ pub(crate) mod dispatch;
 pub(crate) mod protocol;
 pub(crate) mod tools;
 pub(crate) mod transport;
-pub(crate) mod worker_commit;
 
 use std::path::{Path, PathBuf};
 use tokio::io::{self, BufReader, BufWriter};

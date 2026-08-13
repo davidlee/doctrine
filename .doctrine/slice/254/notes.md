@@ -6,9 +6,17 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-08-13 · PHASE-05 complete (5/9) · see git log
+fresh-as-of: 2026-08-13 · PHASE-06 complete (6/9) · see git log
 
 ### Produced
+- PHASE-06 done — the last four claude-arm-only surfaces are gone:
+  `mcp_server/worker_commit.rs` (1477) deleted and unregistered, `arm-spawn` and
+  the `Spawn`-row recorder out of `dispatch.rs` (−861 lines), `create.rs`'s Fork
+  arm + `ARMING_*` + `JAIL_SUBPATH` + `provision_jail_policy` gone (−969) with
+  Passthrough and `run_provision` kept (D1), and
+  `claude-force-subprocess-dispatch` removed from every live surface (VA-1).
+  Doctor check #9 re-cut: a `--strict-mcp-config` worker holds NO `mcp__*` token
+  (DEC-216). `just gate` green, `doctrine doctor` exit 0
 - PHASE-05 done — the disk marker is gone; worker identity is `DOCTRINE_WORKER`
   alone, topology-independently (DEC-207). `marker.rs` 439 → 128 lines,
   `subagent.rs` (401) deleted, `describe_mode` is a two-row truth table over one
@@ -65,6 +73,38 @@ fresh-as-of: 2026-08-13 · PHASE-05 complete (5/9) · see git log
   process-vs-tree generalisation and re-attested
 
 ### Open
+- **⚠ ESCALATED, UNRESOLVED — `DEC-204`/`DEC-213`'s premise is false and a
+  documented security control is now inert.** Both say `worker_commit` may retire
+  because "`classify_import` survives as the scope belt's enforcing reader", and
+  `PHASE-06/EX-6` keeps `worker-forbidden-writes` on that basis. Verified against
+  `import.rs:120`: `classify_import` enforces HEAD/tree/single-commit, the
+  `.doctrine/` and `.claude/` prefixes, and the selector-scope leg — it has NEVER
+  read `worker-forbidden-writes`. Its enforcing caller was `worker_commit`, now
+  deleted. `.doctrine/**` and `.claude/**` stay fenced (classify_import's own
+  constants); what loses enforcement is the configurable remainder —
+  `.agents/**`, `install/agents/**`, `flake.nix` ("highest security leverage in
+  the repo"). The template ships that block commented, so no default silently
+  degrades, but a project that enabled it loses the fence with no signal. Key and
+  matcher KEPT under an `expect(dead_code)` naming the gap, so the loss is visible.
+  Wiring `classify_import` to read the key would contradict PHASE-06's own `VT-1`
+  and §5.2.5's `INV-2` — **a decision is required, not a comment**
+- **`observation_record` is now unreachable for a confined dispatch worker.**
+  PHASE-06/EX-7's re-cut forced stripping both `mcp__*` tokens from the authored
+  `install/agents/claude/dispatch-worker.md` (otherwise `doctor` check #9 is
+  permanently red on doctrine's own corpus, reddening `just validate`). This
+  follows from `DEC-216`, but it contradicts `CLAUDE.md`'s instrumentation table
+  row prescribing that exact tool for a confined worker. Recorded nowhere else
+- **The spawn-side claim lock lost its last production caller.** `create.rs`'s
+  Fork arm was the only prod caller of `claim_lock::acquire`; `fork --worker`
+  never took it. The spawn↔gc race `SL-228 §3` bought it for is now guarded only
+  by `fork_core`'s atomic branch-ref claim. `acquire` gated to `#[cfg(test)]`,
+  `fork.rs`'s contrary doc corrected. A real behaviour change the plan omits
+- **`PHASE-06/VA-1` is unsatisfiable as written** — ~60
+  `claude-force-subprocess-dispatch` hits remain in `.doctrine/` historical
+  entities (settled ledgers, closed slices, `SPEC-021`/`REQ-288`, this slice's own
+  design). Scrubbing them would falsify the record, and the governance ones are
+  what PHASE-08's REV retires. Clean across every LIVE surface; the criterion
+  should be scoped to those
 - **`design.md` §5.2.3's `land` substitute is WRONG AS WRITTEN — carry to PHASE-08.**
   It says to substitute `classify_worktree_role` "returning `fork`" for `land`'s
   `bears_marker` read. That classifier returns `fork` for EVERY linked non-coord

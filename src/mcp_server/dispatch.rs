@@ -213,9 +213,10 @@ const CLAIM_BUSY: &str = "claim-busy";
 const AMBIGUOUS_FORK_ROW: &str = "ambiguous-fork-row";
 
 /// The outcome every funnel tool returns — a landed result or a typed refusal.
-/// Serialised externally-tagged (`{"Imported": {…}}` / `{"Refused": {…}}`), matching
-/// the `worker_commit` shape: a belt refusal is a normal `Ok` carrying its token, never
-/// a JSON-RPC error, so the orchestrator reads the reason structurally.
+/// Serialised externally-tagged (`{"Imported": {…}}` / `{"Refused": {…}}`): a belt
+/// refusal is a normal `Ok` carrying its token, never a JSON-RPC error, so the
+/// orchestrator reads the reason structurally. (The shape was shared with
+/// `worker_commit`, retired at SL-254 PHASE-06.)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) enum FunnelOutcome {
     /// `dispatch_import` landed the worker delta; `coord_tip` is the advanced tip.
@@ -275,9 +276,11 @@ fn commit_author(root: &Path, rev: &str) -> anyhow::Result<Identity> {
 /// worktree are NEVER touched — the compose is object-db only.
 /// # The one-commit HEAL-FORWARD (SL-228 PHASE-05, T6/D6)
 ///
-/// Import is the funnel's catch-up point. `worker_commit` records its own row Class-2
-/// (strictly AFTER the fork ref advanced), and `create-fork`'s `Spawn` row is
-/// non-fatal, so the row can legitimately LAG the git reality by up to two milestones.
+/// Import is the funnel's catch-up point, and since SL-254 PHASE-06 it is the ONLY
+/// writer of the prefix: the two Class-2 recorders that used to land rows ahead of it
+/// (`worker_commit`'s own row, and `create-fork`'s non-fatal `Spawn` row) went with
+/// the claude arm, so the row lags git reality by up to two milestones as a matter of
+/// course rather than only after a crash.
 /// Import heals the whole provable prefix — `[Spawn, RecordWorkerCommit, Import]` —
 /// in ONE splice over its own composed merge tree and ONE commit, so a kill mid-heal
 /// lands NOTHING and position can never durably rest at `worker-committed` via any
@@ -287,7 +290,8 @@ fn commit_author(root: &Path, rev: &str) -> anyhow::Result<Identity> {
 /// — the very record PHASE-04 added `slice`/`phase` for), never from a caller arg:
 /// `dispatch_import{slice, name}` carries no phase and the funnel row is phase-keyed.
 /// An unbound fork cannot prove which row its commit belongs to, so it refuses
-/// (`unprovable-fork`) exactly as `worker_commit` does — there is no guess arm.
+/// (`unprovable-fork`) rather than guess — zero-rescue, and now the only refusal on
+/// that path (`worker_commit` shared it until SL-254 PHASE-06).
 pub(crate) fn dispatch_import(
     root: &Path,
     slice: u32,
@@ -297,8 +301,8 @@ pub(crate) fn dispatch_import(
         Ok(coord) => coord,
         Err(refusal) => return Ok(funnel_refused(refusal.token(), String::new())),
     };
-    // D6 — the durable fork binding names the funnel row. One record read, the same
-    // seam `worker_commit` uses; no second fork→phase derivation to drift.
+    // D6 — the durable fork binding names the funnel row. One record read through the
+    // single resolver seam; no second fork→phase derivation to drift.
     let fork = match resolve_agent(&coord.root, fork_agent(name), ForkExpect::Advanced)
         .and_then(|record| require_binding(&record).map(|binding| (record, binding)))
     {
@@ -1658,8 +1662,9 @@ mod tests {
         #[test]
         fn an_unbound_fork_refuses_unprovable_fork_and_lands_nothing() {
             // D6 / zero-rescue: nothing can prove which funnel row this fork's commit
-            // belongs to, and import refuses rather than guessing — exactly as
-            // `worker_commit` does, so there is no "the other one will heal it" arm.
+            // belongs to, and import refuses rather than guessing. Import is the only
+            // writer of the prefix since SL-254 PHASE-06, so there is not even a
+            // notional "the other recorder will heal it" arm.
             let (_tmp, primary, coord, base, _bt) = primary_with_coord(SLICE);
             seed_slice(&coord, &["src/**"]);
             live_fork(&coord, &base, None);

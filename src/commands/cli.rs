@@ -1722,14 +1722,6 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             crate::boot::dispatch(command, check, emit_mode, path, color, render_boot_map)
         }
         Command::Catalog { command } => crate::catalog::dispatch(command, color),
-        // SL-228 PHASE-04 (D1/D3): the create-fork path is the Class-2 recorder for the
-        // `Spawn` funnel row, but `worktree` must not import `dispatch` (the command-tier
-        // back-cycle SL-204 removed). So THIS arm — and only this arm — is routed through
-        // the `dispatch::` tier, which calls `worktree::run_create_fork` and lands the row
-        // after the act. Every other worktree verb dispatches unchanged.
-        Command::Worktree {
-            command: crate::worktree::WorktreeCommand::CreateFork,
-        } => crate::dispatch::run_create_fork_and_record(),
         // SL-228 PHASE-08 (T10 / D-P8-10): the funnel's landing authority is INJECTED
         // here, the one place that already depends on `crate::dispatch`. `worktree` is
         // command tier and `dispatch → worktree` already exists, so no `worktree`
